@@ -1,0 +1,47 @@
+# Build and tooling
+node_modules
+dist
+.vite
+coverage
+*.log
+.DS_Store
+
+# Secrets. Nothing here should ever exist in this repo, and the day one does,
+# it must not be one `git add -A` away from being published forever.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.keystore
+id_rsa
+id_ecdsa
+id_ed25519
+*.local
+
+# Working notes, and anything written by or for an agent that is not a manual.
+# AGENTS.md, CLAUDE.md, PLAN.md and the README files are the manuals and are
+# tracked. Everything else of that shape is thinking, not product: session
+# records, audits, transcripts, scratch analysis, private lists. Thinking is
+# often about people, prices and plans, and it is not for publication.
+#
+# internal/ holds the design specimens and the shelved wallet mechanism. They
+# are binding on whoever builds a screen, and they are not published. They then
+# live only on the machine that has them: keep a backup outside git.
+private/
+internal/
+notes/
+*.private.md
+*.notes.md
+SESSION-*.md
+AUDIT-*.md
+TRANSCRIPT-*.md
+scratch/
+
+# Agent tool state. Shared config under .claude/ is tracked on purpose;
+# per-machine and credential-bearing files are not.
+.claude/settings.local.json
+.claude/*.local.json
+.grok/
+.aider*
+.cursorignore

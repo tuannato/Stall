@@ -1,0 +1,1 @@
+export { renderStall } from './render';

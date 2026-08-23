@@ -1,0 +1,335 @@
+/* One stall DOM. Theme colours and font arrive as --s-* on .stall only. */
+/* Sheet positioning is app chrome on .sheet, never a theme property on .stall. */
+
+.frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+}
+
+.stall {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: var(--s-bg);
+    color: var(--s-text);
+    font-family: var(--s-font);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.stall,
+.stall * {
+    box-sizing: border-box;
+}
+
+.stall-head {
+    padding: 16px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    border-bottom: 1px solid var(--s-muted);
+}
+
+.stall-name {
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.stall-sub {
+    font-size: 12px;
+    color: var(--s-muted);
+}
+
+.stall-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 13px 14px;
+    gap: 11px;
+    min-height: 0;
+}
+
+.items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.layout-shelf .items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.layout-vending .items {
+    gap: 7px;
+}
+
+.item {
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    gap: 11px;
+    align-items: center;
+    width: 100%;
+    margin: 0;
+    padding: 14px;
+    border: 0;
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.layout-vending .item {
+    padding: 12px;
+}
+
+.item-ic {
+    width: 38px;
+    height: 38px;
+    border-radius: calc(var(--s-radius) * 0.7);
+    background: var(--s-accent);
+    color: var(--s-bg);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.item-b {
+    min-width: 0;
+}
+
+.item-n {
+    font-size: 14.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-q {
+    font-size: 11.5px;
+    color: var(--s-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.item-p {
+    text-align: right;
+}
+
+.item-x {
+    font-size: 14px;
+    font-weight: 660;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-family: var(--s-font);
+}
+
+.item-u {
+    font-size: 10.5px;
+    color: var(--s-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.stall-foot {
+    padding: 12px 14px 16px;
+    border-top: 1px solid var(--s-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.addr {
+    font-family: var(--s-font);
+    font-size: 11px;
+    color: var(--s-muted);
+    word-break: break-all;
+    line-height: 1.45;
+}
+
+.buy {
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 14.5px;
+    font-weight: 670;
+    border: 0;
+    cursor: pointer;
+    background: var(--s-accent);
+    color: var(--s-bg);
+    border-radius: calc(var(--s-radius) * 0.75);
+    padding: 12px;
+    width: 100%;
+}
+
+.buy:disabled {
+    background: var(--s-muted);
+    color: var(--s-bg);
+    cursor: not-allowed;
+}
+
+.mid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 9px;
+    text-align: center;
+    padding: 6px 4px;
+}
+
+.mid-t {
+    font-size: 15px;
+    font-weight: 620;
+    line-height: 1.35;
+}
+
+.mid-p {
+    font-size: 12.5px;
+    color: var(--s-muted);
+    line-height: 1.55;
+    margin: 0;
+}
+
+.hosts {
+    font-family: var(--s-font);
+    font-size: 9.5px;
+    color: var(--s-muted);
+    line-height: 1.7;
+    text-align: left;
+    background: var(--s-surface);
+    border-radius: 8px;
+    padding: 9px 10px;
+}
+
+.hosts-time {
+    color: var(--s-text);
+    font-weight: 600;
+}
+
+.mini {
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 620;
+    border: 1px solid var(--s-accent);
+    color: var(--s-accent);
+    background: var(--s-bg);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    align-self: center;
+}
+
+.sk {
+    background: var(--s-surface);
+    border-radius: 10px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.sk-ic {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--s-muted);
+}
+
+.sk-n {
+    height: 9px;
+    width: 74px;
+    border-radius: 3px;
+    background: var(--s-muted);
+    margin-bottom: 6px;
+}
+
+.sk-q {
+    height: 8px;
+    width: 44px;
+    border-radius: 3px;
+    background: var(--s-muted);
+}
+
+.dash {
+    font-family: var(--s-font);
+    font-size: 15px;
+    color: var(--s-muted);
+    letter-spacing: 0.06em;
+}
+
+.sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgba(12, 16, 20, 0.42);
+    display: flex;
+    align-items: flex-end;
+}
+
+.sheet-c {
+    background: var(--s-bg);
+    color: var(--s-text);
+    font-family: var(--s-font);
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 16px 14px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+}
+
+.sheet-t {
+    font-size: 15.5px;
+    font-weight: 640;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    margin: 0;
+}
+
+.row dt {
+    color: var(--s-muted);
+    margin: 0;
+}
+
+.row dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    font-family: var(--s-font);
+}
+
+.row.big dd {
+    font-size: 16px;
+    font-weight: 660;
+}
+
+.ctx {
+    font-size: 12px;
+    color: var(--s-danger);
+    background: var(--s-surface);
+    border-radius: 7px;
+    padding: 8px 10px;
+    line-height: 1.45;
+}
+
+.fine {
+    font-size: 11px;
+    color: var(--s-muted);
+    line-height: 1.5;
+    margin: 0;
+}
