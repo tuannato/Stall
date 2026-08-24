@@ -161,3 +161,57 @@ describe('missing-asset-is-not-a-success', () => {
         expect(rules.some((rule) => rule.startsWith('/s/* '))).toBe(true);
     });
 });
+
+describe('unhashed-path-is-not-cacheable', () => {
+    /** `_headers` as a map of path pattern to the headers it sets. */
+    function rules(): Map<string, Map<string, string>> {
+        const out = new Map<string, Map<string, string>>();
+        let current: Map<string, string> | undefined;
+        for (const raw of read('public/_headers').split('\n')) {
+            if (raw.trim() === '' || raw.trimStart().startsWith('#')) {
+                continue;
+            }
+            if (!raw.startsWith(' ') && !raw.startsWith('\t')) {
+                current = new Map();
+                out.set(raw.trim(), current);
+                continue;
+            }
+            const [name, ...rest] = raw.trim().split(':');
+            current?.set(name!.trim().toLowerCase(), rest.join(':').trim());
+        }
+        return out;
+    }
+
+    /**
+     * Pages merges every rule whose path matches instead of letting the most
+     * specific win, so a Cache-Control on `/*` reaches `/assets/*` too and
+     * no-store beats immutable. That shipped: hashed assets were served
+     * `no-store, public, max-age=31536000, immutable` and never cached.
+     */
+    it('keeps Cache-Control off the catch-all so it cannot merge into assets', () => {
+        expect(rules().get('/*')?.has('cache-control')).toBe(false);
+
+        const assets = rules().get('/assets/*');
+        expect(assets?.get('cache-control')).toContain('immutable');
+        expect(assets?.get('cache-control')).not.toContain('no-store');
+    });
+
+    /**
+     * Declaring Cache-Control per path means a path nobody remembers to list
+     * becomes cacheable in silence. These are the paths the document is
+     * reachable at; the stall one is taken from `_redirects` rather than
+     * repeated here, so adding a route without its header rule fails.
+     */
+    it('gives every document path an explicit no-store', () => {
+        const declared = rules();
+        const stallSource = read('public/_redirects')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== '' && !line.startsWith('#'))
+            .map((line) => line.split(/\s+/)[0]!);
+
+        for (const path of ['/', '/404.css', '/404.html', ...stallSource]) {
+            expect(declared.get(path)?.get('cache-control'), path).toBe('no-store');
+        }
+    });
+});
