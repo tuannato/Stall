@@ -146,8 +146,8 @@ describe('missing-asset-is-not-a-success', () => {
     });
 
     it('rewrites nothing under the asset path', () => {
-        // The bare-/* case is already refused by `answers a stall with
-        // index.html at 200`; repeating it here would be a second lock on the
+        // The bare-/* case is already refused by `answers a stall with the
+        // document at 200`; repeating it here would be a second lock on the
         // same door. This is the other way back to the same defect: a rewrite
         // scoped to /assets/ puts the app behind exactly the path the 404 was
         // measured on.
