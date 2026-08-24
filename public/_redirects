@@ -2,10 +2,16 @@
 # crawlers and link unfurlers read as gone, and the shared link is the whole
 # product.
 #
-# Scoped to /s/* on purpose. A bare /* rewrite would serve index.html for a
+# The destination is "/" and not "/index.html". Pages answers a request for an
+# .html URL with a 308 to its extensionless form, so a rewrite aimed at
+# /index.html never resolves: the request falls through to 404.html instead,
+# and every stall link returns 404. Measured against the Pages emulator and
+# against a deployed origin, not inferred — the interaction is undocumented.
+#
+# Scoped to /s/* on purpose. A bare /* rewrite would serve the document for a
 # missing hashed asset, which means HTML delivered as JavaScript.
-/s/* /index.html 200
+/s/* / 200
 
-# One origin, or browser storage splits in two. Cloudflare may also need this
-# as a dashboard redirect rule for the apex to own the www hostname.
-https://www.stall.cash/* https://stall.cash/:splat 301
+# www belongs in a Cloudflare Redirect Rule, not here: a _redirects source must
+# be a path beginning with "/", so a rule written against a hostname is ignored.
+# One origin either way, or browser storage splits in two.

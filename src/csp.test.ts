@@ -93,13 +93,15 @@ describe('deploy-spec-matches-the-app', () => {
         }
     });
 
-    it('answers a stall with index.html at 200 and never caches the document', () => {
+    it('answers a stall with the document at 200 and never caches it', () => {
         const redirects = read('public/_redirects');
-        expect(redirects).toMatch(/^\/s\/\*\s+\/index\.html\s+200$/m);
+        // Destination "/" and not "/index.html": Pages 308s an .html URL to
+        // its extensionless form, so a rewrite aimed at the file never
+        // resolves and every stall link falls through to the 404 page.
+        expect(redirects).toMatch(/^\/s\/\*\s+\/\s+200$/m);
+        expect(redirects).not.toMatch(/\/index\.html\s+200/);
         // A bare /* rewrite would serve HTML for a missing hashed asset.
         expect(redirects).not.toMatch(/^\/\*\s/m);
-        // Two origins would mean two separate browser stores.
-        expect(redirects).toContain('www.stall.cash');
 
         const headers = read('public/_headers');
         expect(headers).toMatch(/Cache-Control:\s*no-store/);
