@@ -131,9 +131,14 @@ Stage 1 is exactly when someone adds a logger "temporarily".
 
 - Never log, print, commit, or paste a mnemonic, seed, xprv, WIF, or raw
   entropy. Not in a fixture, not in a screenshot, not to test the UI.
-- No backend, no accounts, no custody, no analytics, no error-reporting service,
-  no CDN. A storefront that becomes a wallet cannot grow a server that might see
-  a seed.
+- No backend, no accounts, no custody, no analytics, no error-reporting service.
+  A storefront that becomes a wallet cannot grow a server that might see a seed.
+- **A CDN is accepted only while this origin neither holds a key nor asks a
+  wallet to send.** Whoever serves the document decides what the visitor runs,
+  and the buy control is a payload byte: a rewritten origin retargets it without
+  touching a seed. Leave the CDN the day any of these becomes true — keys here,
+  any `send` verb wired to an extension, or a control this origin composes that
+  moves money. `PLAN.md` names the current host and that condition.
 - Separate domain from ecashlive.net. That site tells people in amber text that
   it never sees their seed phrase. That sentence cannot travel here, and reusing
   its branding around a key screen is how you build a well-designed phish.

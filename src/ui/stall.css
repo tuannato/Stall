@@ -125,6 +125,19 @@
     text-align: right;
 }
 
+.item-a {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.item-from {
+    font-size: 10.5px;
+    color: var(--s-muted);
+    font-family: var(--s-font);
+}
+
 .item-x {
     font-size: 14px;
     font-weight: 660;
@@ -277,6 +290,12 @@
 }
 
 .sheet-c {
+    /* Measured at exactly the backdrop height with the handoff rows in place.
+       One more row would push the asked amount off the top, which is the thing
+       theme-cannot-hide-the-asked-amount exists to prevent — by a different
+       route. Scroll the card instead of clipping it. */
+    max-height: 100%;
+    overflow-y: auto;
     background: var(--s-bg);
     color: var(--s-text);
     font-family: var(--s-font);

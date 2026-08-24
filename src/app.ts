@@ -1,8 +1,7 @@
 import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
-import { cheaperOfferCount } from './domain/money';
-import { parseSellerParam, sellerFromPath } from './domain/route';
+import { isHomePath, parseSellerParam, sellerFromPath } from './domain/route';
 import type {
     FetchStatus,
     Overlay,
@@ -21,13 +20,23 @@ const sessionTokens = new Map<string, TokenMeta>();
 const sessionNames = new Map<string, string>();
 const sessionThemes = new Map<string, DecodedTheme>();
 
-type AppState = {
+export type AppState = {
     view: StallView;
     offers: StallOffer[];
     pubkeyHex?: string;
 };
 
-export function boot(root: HTMLElement): void {
+export function boot(
+    root: HTMLElement,
+    load: () => Promise<AppState> = loadCurrent,
+): void {
+    /**
+     * Every refresh claims a generation. A response that resolves after a newer
+     * refresh started belongs to a page the visitor already left, so it is
+     * dropped rather than painted. Comparing the seller instead would not catch
+     * A -> B -> A.
+     */
+    let generation = 0;
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -46,10 +55,7 @@ export function boot(root: HTMLElement): void {
                 void refresh();
             },
             onCloseSheet: () => {
-                state = {
-                    ...state,
-                    view: { ...state.view, overlay: { kind: 'idle' }, cheaperCount: undefined },
-                };
+                state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
         });
@@ -57,18 +63,17 @@ export function boot(root: HTMLElement): void {
 
     const onBuy = async (outpoint: Outpoint): Promise<void> => {
         const overlay: Overlay = { kind: 'buy', outpoint };
-        const selected = state.offers.find(
-            (o) => o.outpoint.txid === outpoint.txid && o.outpoint.outIdx === outpoint.outIdx,
-        );
-        const cheaperCount = selected
-            ? cheaperOfferCount(selected, state.offers.filter((o) => o !== selected))
-            : undefined;
-        state = { ...state, view: { ...state.view, overlay, cheaperCount } };
+        state = { ...state, view: { ...state.view, overlay } };
         paint();
     };
 
     const refresh = async (): Promise<void> => {
-        state = await loadCurrent();
+        const claimed = ++generation;
+        const next = await load();
+        if (claimed !== generation) {
+            return;
+        }
+        state = next;
         paint();
     };
 
@@ -79,6 +84,13 @@ export function boot(root: HTMLElement): void {
 }
 
 async function loadCurrent(): Promise<AppState> {
+    if (isHomePath(location.pathname)) {
+        return {
+            view: { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
+            offers: [],
+        };
+    }
+
     const raw = sellerFromPath(location.pathname);
     if (raw === undefined) {
         return {
@@ -158,7 +170,11 @@ async function loadCurrent(): Promise<AppState> {
         fetch = unreachableNow();
     }
 
-    if (fetch.kind === 'unreachable' || fetch.kind === 'plugin-missing') {
+    if (
+        fetch.kind === 'unreachable' ||
+        fetch.kind === 'plugin-missing' ||
+        fetch.kind === 'unreadable'
+    ) {
         const later = Boolean(cachedName) || cachedTokens.size > 0;
         return {
             view: {
@@ -186,8 +202,11 @@ async function loadCurrent(): Promise<AppState> {
 
     let stallName = cachedName;
     let theme = cachedTheme;
+    let settingsTruncated = false;
     try {
-        const manifest = await loadManifest(chronik, { address, hash }, hint);
+        const lookup = await loadManifest(chronik, { address, hash }, hint);
+        settingsTruncated = lookup.truncated;
+        const manifest = lookup.manifest;
         if (manifest) {
             stallName = manifest.name;
             theme = manifest.theme;
@@ -215,6 +234,7 @@ async function loadCurrent(): Promise<AppState> {
             address,
             tokens,
             theme,
+            settingsTruncated,
         },
         offers,
         pubkeyHex: route.pubkeyHex,

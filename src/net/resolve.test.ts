@@ -2,7 +2,7 @@ import { encodeCashAddress } from 'ecashaddrjs';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import { parseSellerParam } from '../domain/route';
-import type { ChainTx } from './chain';
+import { MAX_HISTORY_PAGES, type ChainTx } from './chain';
 import { resolveSeller } from './resolve';
 
 function compressedPk(fill: number, prefix = 0x02): Uint8Array {
@@ -134,5 +134,58 @@ describe('resolveSeller', () => {
             },
         );
         expect(resolved).toEqual({ kind: 'invalid', raw: 'nope' });
+    });
+});
+
+describe('truncated-history-is-not-never-spent', () => {
+    /**
+     * The walk is capped, so a spend can sit beyond the last page we read.
+     * Reporting that as unresolvable would put "this address has never sent"
+     * on screen as a fact about the seller, hiding a real stall behind it.
+     */
+    it('says the history was not read, not that the address never spent', async () => {
+        const pk = compressedPk(0xbb);
+        const { address, hash } = addressOf(pk);
+        const parsed = parseSellerParam(address);
+        expect(parsed.kind).toBe('address');
+
+        // Nothing on any page we are allowed to read.
+        const noise: ChainTx[] = [
+            {
+                txid: 'aa'.repeat(32),
+                inputs: [{ inputScript: '', outputScript: p2shOutputScript(hash) }],
+                outputs: [],
+            },
+        ];
+        const deep = await resolveSeller(
+            parsed,
+            historyChronik(noise, 5000, MAX_HISTORY_PAGES + 1),
+        );
+        expect(deep.kind).toBe('unresolved');
+
+        // A history short enough to finish still gets the confident answer.
+        const shallow = await resolveSeller(parsed, historyChronik(noise, 1, 1));
+        expect(shallow.kind).toBe('unresolvable');
+    });
+
+    it('still resolves from page 0, which is where a live stall always is', async () => {
+        const pk = compressedPk(0xcc);
+        const { address, hash } = addressOf(pk);
+        const parsed = parseSellerParam(address);
+        const spend: ChainTx[] = [
+            {
+                txid: 'bb'.repeat(32),
+                inputs: [
+                    { inputScript: p2pkhScriptSig(pk), outputScript: p2pkhOutputScript(hash) },
+                ],
+                outputs: [],
+            },
+        ];
+        const resolved = await resolveSeller(
+            parsed,
+            historyChronik(spend, 5000, MAX_HISTORY_PAGES + 1),
+        );
+        expect(resolved.kind).toBe('pubkey');
+        expect(resolved.kind === 'pubkey' && resolved.pubkeyHex).toBe(toHex(pk));
     });
 });

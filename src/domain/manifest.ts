@@ -42,30 +42,40 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
 
 export type ManifestRank = {
     height: number | undefined;
-    blockPos: number | undefined;
     txid: string;
 };
 
-/** Highest block, then position in block, then txid. Mempool (no height) ranks above any mined tx. */
+/**
+ * Highest block, then txid.
+ *
+ * No position-in-block term: chronik's block metadata carries height, hash and
+ * timestamp and no index within the block, so the only way to order two records
+ * mined together would be another paginated walk on the critical path. Txid
+ * decides instead — arbitrary, but identical in every browser, which is the
+ * property that matters.
+ */
 export function compareManifestRank(a: ManifestRank, b: ManifestRank): number {
-    const ah = a.height ?? Number.MAX_SAFE_INTEGER;
-    const bh = b.height ?? Number.MAX_SAFE_INTEGER;
+    const ah = a.height ?? -1;
+    const bh = b.height ?? -1;
     if (ah !== bh) {
         return ah - bh;
-    }
-    const ap = a.blockPos ?? Number.MAX_SAFE_INTEGER;
-    const bp = b.blockPos ?? Number.MAX_SAFE_INTEGER;
-    if (ap !== bp) {
-        return ap - bp;
     }
     return a.txid < b.txid ? -1 : a.txid > b.txid ? 1 : 0;
 }
 
+/**
+ * Unconfirmed records do not compete at all.
+ *
+ * Two browsers reading different nodes see different mempools, so letting an
+ * unconfirmed record win means one link renders two different stalls — the
+ * exact failure this ordering exists to prevent. A freshly published manifest
+ * is therefore invisible until it is mined, which costs minutes and buys the
+ * only guarantee worth having here.
+ */
 export function pickManifestWinner<T extends ManifestRank>(records: T[]): T | undefined {
-    if (records.length === 0) {
+    const mined = records.filter((record) => record.height !== undefined);
+    if (mined.length === 0) {
         return undefined;
     }
-    return records.reduce((best, cur) =>
-        compareManifestRank(cur, best) > 0 ? cur : best,
-    );
+    return mined.reduce((best, cur) => (compareManifestRank(cur, best) > 0 ? cur : best));
 }

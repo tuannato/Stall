@@ -26,6 +26,8 @@ export type RouteParse =
       };
 
 export type RouteResolution =
+    /** The apex. No seller was asked for, so nothing failed. */
+    | { kind: 'home' }
     | { kind: 'invalid'; raw: string }
     | { kind: 'unresolvable'; address: string }
     /** Address parsed; history was not read (index down). Not unresolvable. */
@@ -55,6 +57,12 @@ export type TokenMeta = {
 export type FetchStatus =
     | { kind: 'offers'; offers: StallOffer[] }
     | { kind: 'empty' }
+    /**
+     * The index returned listings and none of them could be read. Our failure,
+     * never an empty shop — `empty` is a statement about the seller. No host
+     * list: nothing timed out, the answer was the part we could not use.
+     */
+    | { kind: 'unreadable'; triedAtMs: number; returned: number }
     | { kind: 'unreachable'; triedAtMs: number; hosts: HostAttempt[] }
     | { kind: 'plugin-missing'; triedAtMs: number; hosts: HostAttempt[] };
 
@@ -72,6 +80,7 @@ export type StallView = {
     /** Cashaddr to show in the footer when known. */
     address?: string;
     tokens: SessionTokenCache;
-    cheaperCount?: number;
     theme?: DecodedTheme;
+    /** The settings walk hit its cap, so this look may not be the current one. */
+    settingsTruncated?: boolean;
 };

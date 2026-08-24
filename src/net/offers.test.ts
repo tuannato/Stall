@@ -95,3 +95,24 @@ describe('loadOffers', () => {
         }
     });
 });
+
+describe('unreadable-offers-are-not-empty', () => {
+    it('does not call a shop empty when the index answered with listings we could not read', async () => {
+        const agora = {
+            activeOffersByPubKey: async () => [
+                {
+                    variant: { type: 'PARTIAL', params: {} },
+                    outpoint: { txid: 'ab'.repeat(32), outIdx: 0 },
+                    token: { tokenId: 'cd'.repeat(32), atoms: 12n },
+                    askedSats: () => {
+                        throw new Error('cannot price');
+                    },
+                },
+            ],
+        };
+        const status = await loadOffers(agora as never, '02'.repeat(33));
+        // "Empty" is a statement about the seller. This is a statement about us.
+        expect(status.kind).toBe('unreadable');
+        expect(status.kind === 'unreadable' && status.returned).toBe(1);
+    });
+});

@@ -32,6 +32,11 @@ export function isCompressedPubKeyHex(value: string): value is PubKeyHex {
     return PUBKEY_RE.test(value);
 }
 
+/** The apex and nothing else. `/s/...` is a stall; anything else is unreadable. */
+export function isHomePath(pathname: string): boolean {
+    return pathname === '/' || pathname === '';
+}
+
 export function sellerFromPath(pathname: string): string | undefined {
     const match = pathname.match(/^\/s\/([^/]+)\/?$/);
     if (!match) {

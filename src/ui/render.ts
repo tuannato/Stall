@@ -1,4 +1,5 @@
-import { formatAtoms, formatXec } from '../domain/money';
+import { cashtabTokenUrl } from '../domain/cashtab';
+import { formatAtoms, formatXec, isUnbuyable } from '../domain/money';
 import type {
     FetchStatus,
     HostAttempt,
@@ -34,6 +35,9 @@ export function renderStall(
     applyTheme(stall, view.theme ?? DEFAULT_THEME);
 
     switch (view.route.kind) {
+        case 'home':
+            paintHome(stall);
+            break;
         case 'invalid':
             paintInvalid(stall, view.route.raw);
             break;
@@ -61,6 +65,13 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
         LAYOUT_CLASSES[clampIndex(theme.layoutIndex, LAYOUT_CLASSES.length)] ??
         LAYOUT_CLASSES[0];
     stall.classList.add(layout!);
+}
+
+function paintHome(stall: HTMLElement): void {
+    stall.append(header(copy.HOME_TITLE, copy.HOME_LEDE));
+    const body = el('div', 'stall-body');
+    body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
+    stall.append(body);
 }
 
 function paintInvalid(stall: HTMLElement, raw: string): void {
@@ -116,6 +127,9 @@ function paintPubkey(
         case 'plugin-missing':
             paintUnreachable(stall, view, fetch, handlers);
             break;
+        case 'unreadable':
+            paintUnreadable(stall, view, handlers);
+            break;
         case 'offers':
             paintOffers(stall, view, fetch.offers, handlers);
             break;
@@ -126,6 +140,29 @@ function paintEmpty(stall: HTMLElement, view: StallView): void {
     stall.append(header(view.stallName, copy.EMPTY_SUB));
     const body = el('div', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY]));
+    stall.append(body);
+    stall.append(footer(identityOf(view)));
+}
+
+/**
+ * The index answered and we could not read what it said. Our failure, so it
+ * takes the same shape as unreachable — but never its copy, because "no index
+ * answered" would be a second untruth on top of the first.
+ */
+function paintUnreadable(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    stall.append(header(view.stallName ?? identityOf(view), copy.UNREADABLE_SUB));
+    const body = el('div', 'stall-body');
+    body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
+    const retry = el('button', 'mini', copy.TRY_AGAIN);
+    retry.type = 'button';
+    retry.addEventListener('click', () => {
+        handlers.onRetry();
+    });
+    body.append(retry);
     stall.append(body);
     stall.append(footer(identityOf(view)));
 }
@@ -187,20 +224,11 @@ function paintOffers(
     body.append(items);
     stall.append(body);
 
-    const first = offers[0];
-    stall.append(
-        footer(
-            identityOf(view),
-            first
-                ? {
-                      enabled: true,
-                      onClick: () => {
-                          handlers.onBuy(first.outpoint);
-                      },
-                  }
-                : undefined,
-        ),
-    );
+    if (view.settingsTruncated === true) {
+        // Without this the shipped default reads as a choice the seller made.
+        body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
+    }
+    stall.append(footer(identityOf(view)));
 
     if (view.overlay.kind === 'buy') {
         const selected = findOffer(offers, view.overlay.outpoint);
@@ -225,10 +253,22 @@ function offerRow(
     info.append(el('div', 'item-q', copy.remainingAtoms(formatAtoms(offer.atoms, d))));
     row.append(info);
     const price = el('div', 'item-p');
-    const asked = el('div', 'item-x', formatXec(offer.askedSats));
-    asked.setAttribute('data-role', 'price');
-    price.append(asked);
-    price.append(el('div', 'item-u', copy.XEC));
+    if (isUnbuyable(offer)) {
+        // The price we hold is for a take the covenant will refuse. Printing
+        // it would advertise a purchase that cannot happen.
+        price.append(el('div', 'dash', copy.DASHED_PRICE));
+        price.append(el('div', 'item-u', copy.UNBUYABLE_BADGE));
+    } else {
+        const amount = el('div', 'item-a');
+        if (offer.askedAtoms < offer.atoms) {
+            amount.append(el('span', 'item-from', copy.PRICE_FROM));
+        }
+        const asked = el('div', 'item-x', formatXec(offer.askedSats));
+        asked.setAttribute('data-role', 'price');
+        amount.append(asked);
+        price.append(amount);
+        price.append(el('div', 'item-u', copy.XEC));
+    }
     row.append(price);
     row.addEventListener('click', () => {
         handlers.onBuy(offer.outpoint);
@@ -252,7 +292,26 @@ function buySheet(
 
     const d = decimalsOf(view.tokens, offer.tokenId);
     card.append(el('div', 'sheet-t', tokenName(view.tokens, offer.tokenId)));
-    card.append(sheetRow(copy.YOU_PAY, copy.payAmount(formatXec(offer.askedSats)), true));
+
+    if (isUnbuyable(offer)) {
+        card.append(
+            el(
+                'div',
+                'ctx',
+                copy.unbuyableLine(
+                    formatAtoms(offer.minAcceptedAtoms!, d),
+                    formatAtoms(offer.atoms, d),
+                ),
+            ),
+        );
+        // No link out: Cashtab will not show this row either.
+        card.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+        sheet.append(card);
+        return sheet;
+    }
+
+    const asked = formatXec(offer.askedSats);
+    card.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
     card.append(
         sheetRow(
             copy.YOU_RECEIVE,
@@ -262,23 +321,26 @@ function buySheet(
             ),
         ),
     );
-    card.append(sheetRow(copy.NETWORK_FEE, copy.NETWORK_FEE_PLACEHOLDER));
 
-    if (view.cheaperCount !== undefined && view.cheaperCount > 0) {
-        card.append(el('div', 'ctx', copy.cheaperOffersLine(view.cheaperCount)));
+    // No network fee row: this origin builds nothing, so it has no fee to
+    // quote. Cashtab shows its own before it signs.
+
+    // The sheet used to precede a signature here. It now precedes a market,
+    // so the thing worth saying is which offer that market will preselect.
+    card.append(el('div', 'ctx', copy.HANDOFF_MAY_PRESELECT));
+    card.append(el('div', 'ctx', copy.lookForPriceLine(asked)));
+
+    const href = cashtabTokenUrl(offer.tokenId);
+    if (href !== undefined) {
+        const cta = el('a', 'buy', copy.OPEN_IN_CASHTAB);
+        cta.href = href;
+        cta.target = '_blank';
+        // No opener: Stall has no reason to reach into that tab, and leaving
+        // the handle would let it reach back into this one.
+        cta.rel = 'noopener noreferrer';
+        card.append(cta);
     }
-
-    const cta = el('button', 'buy', copy.BUY_WITH_STALL);
-    cta.type = 'button';
-    cta.addEventListener('click', () => {
-        if (card.querySelector('.stage1-note')) {
-            return;
-        }
-        const note = el('p', 'fine stage1-note', copy.STAGE1_BUY_NOTE);
-        card.append(note);
-    });
-    card.append(cta);
-    card.append(el('p', 'fine', copy.BUY_FINE_PRINT));
+    card.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
     sheet.append(card);
     return sheet;
 }
@@ -310,7 +372,7 @@ function footer(
         ft.append(el('div', 'addr', address));
     }
     if (buy) {
-        const btn = el('button', 'buy', copy.BUY_WITH_STALL);
+        const btn = el('button', 'buy', copy.OPEN_IN_CASHTAB);
         btn.type = 'button';
         if (!buy.enabled) {
             btn.disabled = true;

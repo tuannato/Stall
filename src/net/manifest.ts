@@ -8,8 +8,8 @@ import {
 } from '../domain/manifest';
 import {
     HISTORY_PAGE_SIZE,
+    MAX_HISTORY_PAGES,
     type ChainTx,
-    type HistoryEndpoint,
     type HistoryPage,
     type ManifestChronik,
 } from './chain';
@@ -17,40 +17,55 @@ import { isP2shOutputScript, opReturnPushes, p2pkhHashFromOutputScript } from '.
 
 export type LoadedManifest = StallManifest & ManifestRank;
 
+export type ManifestLookup = {
+    manifest?: LoadedManifest;
+    /**
+     * The walk stopped at its page cap. A newer record may sit beyond it, so
+     * the look on screen is not known to be current — and an unthemed stall is
+     * not known to be a seller who never published one.
+     */
+    truncated: boolean;
+};
+
 export async function loadManifest(
     chronik: ManifestChronik,
     stall: { address: string; hash: string },
     hintTxid?: string,
-): Promise<LoadedManifest | undefined> {
+): Promise<ManifestLookup> {
     const hash = stall.hash.toLowerCase();
-    const records: LoadedManifest[] = [];
+    let best: LoadedManifest | undefined;
 
     if (hintTxid !== undefined && hintTxid.length > 0) {
         try {
-            const hinted = recordFromTx(await chronik.tx(hintTxid), hash);
-            if (hinted) {
-                records.push(hinted);
-            }
+            best = better(best, recordFromTx(await chronik.tx(hintTxid), hash));
         } catch {
-            // Hint is a cache, not an authority.
+            // Hint is a candidate, never an authority.
         }
     }
 
     const walked = await walkShorter(chronik, stall.address, hash);
-    for (const rec of walked) {
-        if (!records.some((r) => r.txid === rec.txid)) {
-            records.push(rec);
-        }
-    }
+    return { manifest: better(best, walked.best), truncated: walked.truncated };
+}
 
-    return pickManifestWinner(records);
+/** One winner is all this returns, so one is all it holds. */
+function better(
+    a: LoadedManifest | undefined,
+    b: LoadedManifest | undefined,
+): LoadedManifest | undefined {
+    if (a === undefined) {
+        return b === undefined ? undefined : pickManifestWinner([b]);
+    }
+    if (b === undefined) {
+        return pickManifestWinner([a]);
+    }
+    return pickManifestWinner([a, b]);
 }
 
 async function walkShorter(
     chronik: ManifestChronik,
     address: string,
     hash: string,
-): Promise<LoadedManifest[]> {
+): Promise<{ best?: LoadedManifest; truncated: boolean }> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STL1_HEX);
     const [addrPage, lokadPage] = await Promise.all([
@@ -61,31 +76,26 @@ async function walkShorter(
     const useAddr = addrPage.numTxs <= lokadPage.numTxs;
     const first = useAddr ? addrPage : lokadPage;
     const rest = useAddr ? addrEp : lokadEp;
-    const records: LoadedManifest[] = [];
-    collectRecords(first, hash, records);
-    await collectRemaining(rest, first.numPages, hash, records);
-    return records;
+
+    const total = Math.max(first.numPages, 1);
+    const pages = Math.min(total, MAX_HISTORY_PAGES);
+    let best = bestInPage(first, hash, undefined);
+    for (let page = 1; page < pages; page++) {
+        best = bestInPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, best);
+    }
+    return { best, truncated: total > pages };
 }
 
-async function collectRemaining(
-    endpoint: HistoryEndpoint,
-    numPages: number,
+function bestInPage(
+    page: HistoryPage,
     hash: string,
-    into: LoadedManifest[],
-): Promise<void> {
-    for (let page = 1; page < numPages; page++) {
-        const next = await endpoint.history(page, HISTORY_PAGE_SIZE);
-        collectRecords(next, hash, into);
-    }
-}
-
-function collectRecords(page: HistoryPage, hash: string, into: LoadedManifest[]): void {
+    best: LoadedManifest | undefined,
+): LoadedManifest | undefined {
+    let out = best;
     for (const tx of page.txs) {
-        const rec = recordFromTx(tx, hash);
-        if (rec && !into.some((r) => r.txid === rec.txid)) {
-            into.push(rec);
-        }
+        out = better(out, recordFromTx(tx, hash));
     }
+    return out;
 }
 
 function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
@@ -99,7 +109,6 @@ function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
     return {
         ...decoded,
         height: tx.block?.height,
-        blockPos: undefined,
         txid: tx.txid,
     };
 }

@@ -57,3 +57,19 @@ export function cheaperOfferCount(
     }
     return n;
 }
+
+/**
+ * The covenant's minimum accept exceeds what is left on the UTXO, so no
+ * quantity satisfies the script and the offer can only be cancelled by its
+ * maker. Reached in the wild as the remainder of a partial fill, not at
+ * listing time — `AgoraPartial` refuses to create one this way.
+ *
+ * Not a display preference: the asked price we hold for such an offer is the
+ * price of a take that cannot happen, so it must not be shown as a price.
+ */
+export function isUnbuyable(offer: {
+    minAcceptedAtoms?: bigint;
+    atoms: bigint;
+}): boolean {
+    return offer.minAcceptedAtoms !== undefined && offer.minAcceptedAtoms > offer.atoms;
+}

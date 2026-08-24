@@ -50,7 +50,9 @@ export async function loadOffers(agora: AgoraReader, pubkeyHex: string): Promise
         }
     }
     if (offers.length === 0) {
-        return { kind: 'empty' };
+        // The index had listings; every one of them failed to map. Calling
+        // that empty would blame the seller for our failure.
+        return { kind: 'unreadable', triedAtMs: Date.now(), returned: raw.length };
     }
     return { kind: 'offers', offers };
 }

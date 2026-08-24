@@ -1,0 +1,11 @@
+# A stall must answer HTTP 200, not 404. A 404 fallback is a shop that
+# crawlers and link unfurlers read as gone, and the shared link is the whole
+# product.
+#
+# Scoped to /s/* on purpose. A bare /* rewrite would serve index.html for a
+# missing hashed asset, which means HTML delivered as JavaScript.
+/s/* /index.html 200
+
+# One origin, or browser storage splits in two. Cloudflare may also need this
+# as a dashboard redirect rule for the apex to own the www hostname.
+https://www.stall.cash/* https://stall.cash/:splat 301

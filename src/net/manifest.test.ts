@@ -4,6 +4,7 @@ import { STL1_ASCII, STL1_HEX } from '../domain/manifest';
 import { THEME_BYTES } from '../domain/theme';
 import type { ChainTx, HistoryPage, ManifestChronik } from './chain';
 import { loadManifest } from './manifest';
+import { MAX_HISTORY_PAGES } from './chain';
 
 function compressedPk(fill: number): Uint8Array {
     const pk = new Uint8Array(33);
@@ -113,10 +114,10 @@ describe('loadManifest', () => {
             height: 99,
             foreignInput: true,
         });
-        const got = await loadManifest(
+        const got = (await loadManifest(
             fakeChronik({ addressTxs: [ours, foreign], lokadTxs: [ours, foreign] }),
             { address: 'ecash:qtest', hash },
-        );
+        )).manifest;
         expect(got?.name).toBe('Nato');
         expect(got?.txid).toBe(ours.txid);
     });
@@ -126,10 +127,10 @@ describe('loadManifest', () => {
         const hash = toHex(shaRmd160(pk));
         const old = stallTx({ txid: '11'.repeat(32), pk, hash, name: 'Old', height: 5 });
         const newer = stallTx({ txid: '22'.repeat(32), pk, hash, name: 'New', height: 8 });
-        const got = await loadManifest(fakeChronik({ addressTxs: [old, newer], lokadTxs: [old, newer] }), {
+        const got = (await loadManifest(fakeChronik({ addressTxs: [old, newer], lokadTxs: [old, newer] }), {
             address: 'ecash:qtest',
             hash,
-        });
+        })).manifest;
         expect(got?.name).toBe('New');
     });
 
@@ -138,7 +139,7 @@ describe('loadManifest', () => {
         const hash = toHex(shaRmd160(pk));
         const hinted = stallTx({ txid: '33'.repeat(32), pk, hash, name: 'Hint', height: 3 });
         const later = stallTx({ txid: '44'.repeat(32), pk, hash, name: 'Later', height: 9 });
-        const got = await loadManifest(
+        const got = (await loadManifest(
             fakeChronik({
                 addressTxs: [later],
                 lokadTxs: [later, hinted],
@@ -146,7 +147,70 @@ describe('loadManifest', () => {
             }),
             { address: 'ecash:qtest', hash },
             hinted.txid,
-        );
+        )).manifest;
         expect(got?.name).toBe('Later');
+    });
+});
+
+describe('truncated-manifest-is-not-silent-default', () => {
+    /**
+     * The walk is capped, so a stall's settings can sit beyond the last page.
+     * Painting the shipped default without saying so would read as a seller who
+     * never published one — the same collapse as calling our failure an empty
+     * shop, applied to identity instead of stock.
+     */
+    it('reports that the settings walk stopped early', async () => {
+        const chronik = {
+            address() {
+                return {
+                    async history() {
+                        return { txs: [], numTxs: 9000, numPages: MAX_HISTORY_PAGES + 5 };
+                    },
+                };
+            },
+            lokadId() {
+                return {
+                    async history() {
+                        return { txs: [], numTxs: 9999, numPages: 400 };
+                    },
+                };
+            },
+            async tx() {
+                throw new Error('no hint');
+            },
+        };
+        const lookup = await loadManifest(chronik as never, {
+            address: 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09',
+            hash: 'ab'.repeat(20),
+        });
+        expect(lookup.manifest).toBeUndefined();
+        expect(lookup.truncated).toBe(true);
+    });
+
+    it('does not claim truncation when the whole history fitted', async () => {
+        const chronik = {
+            address() {
+                return {
+                    async history() {
+                        return { txs: [], numTxs: 3, numPages: 1 };
+                    },
+                };
+            },
+            lokadId() {
+                return {
+                    async history() {
+                        return { txs: [], numTxs: 90, numPages: 2 };
+                    },
+                };
+            },
+            async tx() {
+                throw new Error('no hint');
+            },
+        };
+        const lookup = await loadManifest(chronik as never, {
+            address: 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09',
+            hash: 'ab'.repeat(20),
+        });
+        expect(lookup.truncated).toBe(false);
     });
 });

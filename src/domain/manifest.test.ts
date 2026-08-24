@@ -27,18 +27,32 @@ describe('decodeManifestPushes', () => {
     });
 });
 
-describe('pickManifestWinner', () => {
-    it('prefers higher block, then position, then txid', () => {
+describe('prefers-higher-block-then-txid', () => {
+    it('orders by block, then by txid, with no position term', () => {
         const winner = pickManifestWinner([
-            { height: 10, blockPos: 2, txid: 'bb' },
-            { height: 11, blockPos: 0, txid: 'aa' },
-            { height: 11, blockPos: 1, txid: 'cc' },
+            { height: 10, txid: 'bb' },
+            { height: 11, txid: 'aa' },
+            { height: 11, txid: 'cc' },
         ]);
         expect(winner?.txid).toBe('cc');
-        const mempool = pickManifestWinner([
-            { height: 11, blockPos: 9, txid: 'aa' },
-            { height: undefined, blockPos: undefined, txid: 'zz' },
+    });
+});
+
+describe('unconfirmed-manifest-is-not-a-winner', () => {
+    /**
+     * Two browsers on different nodes see different mempools. An unconfirmed
+     * record that could win would mean one printed link renders two different
+     * stalls, which is the failure this ordering exists to prevent.
+     */
+    it('never lets an unconfirmed record decide the stall', () => {
+        const mined = pickManifestWinner([
+            { height: 11, txid: 'aa' },
+            { height: undefined, txid: 'zz' },
         ]);
-        expect(mempool?.txid).toBe('zz');
+        expect(mined?.txid).toBe('aa');
+
+        // Published but not yet mined: the stall keeps its previous look
+        // rather than picking one node's view of the mempool.
+        expect(pickManifestWinner([{ height: undefined, txid: 'zz' }])).toBeUndefined();
     });
 });

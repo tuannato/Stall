@@ -10,8 +10,12 @@ Overwrite in place as stages complete. History is `git log`.
 
 ## Where things stand
 
-**Stage 1 is in source.** `pnpm test` is the runner. Completing a purchase is
-still stages 2–4.
+**The read-only stall is in source and the wallet is shelved indefinitely.**
+`pnpm test` is the runner. Completing a purchase happens in Cashtab.
+
+The pivot, in one line: Stall stopped trying to become the wallet and became a
+shop window that links out. What that costs is recorded honestly below — the
+link cannot be aimed at the seller whose stall you are standing in.
 
 **The design is done and lives in `internal/`.** Open those four files in a
 browser before writing any screen — they carry their own reasoning, and several
@@ -76,46 +80,64 @@ ownership if a build needs to write there.
 
 ## Build order
 
-Each stage is independently useful. A later stage changing must not waste an
-earlier one.
+**Shipped — the read-only stall.** `/s/<seller>`, live offers, the three
+themes, the manifest reader, the three-layer stall UI, the sheet. Plus, this
+session: honest list prices (`from` when the price buys less than the stock), a
+generation guard so a slow page cannot paint over a newer one, a contrast floor
+so a theme cannot hide the price, and the deploy policy in three agreeing
+copies. A seller can share a working link.
 
-**1 — Read-only stall.** `/s/<seller>`, live offers, the three themes, the
-manifest reader, the three-layer stall UI, the buy sheet. **No keys anywhere,
-no Cashtab handoff.** Completing a purchase is stages 2–4. Ships as: a seller
-can share a working link the same day.
+**Next — the apex.** `/` is a static landing with no identity: what a stall is,
+how `/s/<seller>` works. It is not a dashboard and not a login. Then DNS and the
+first real deploy.
 
-**2 — Keys, receive, watch.** Generate or import, backup ceremony, derivation
-pinned to the incumbent path, balance and tokens. **No spend.** This is where
-chronik and derivation are proven real.
+**Shelved indefinitely — the wallet.** Keys, receive, watch, XEC send, accept an
+outpoint, cancel, create a listing. The mechanism is kept verbatim in
+`internal/SHELVED-WALLET.md` and the ceremony in `internal/03-key-ceremony.html`.
+Neither is to be deleted; if keys return they must not be redesigned from
+memory. The un-shelve forces the hosting condition above, and forces the origin
+to be final first — browser storage is scoped to it and nothing migrates.
 
-**3 — Plain XEC send.** Fee, dust, change, broadcast retry, two-tab lock. Small
-amounts. If Agora vanished this would still be a wallet. **Do not skip it** — an
-accept is this plus a covenant.
+**Not in scope, and each for a reason that is written down.** A whole-market
+Agora feed (no API for it; a live feed on one operator's three hostnames makes
+an outage the product). Watching for "purchase completed" (unknowable). Wiring
+`cashtab-connect` send verbs (money composed by a document a CDN serves). The
+`makerPk` deep-link patch upstream (a fight with a published MUST, ~30% odds,
+and not on Stall's buy path).
 
-**4 — Accept a specific outpoint.** Discrete atoms, encoded preview, fresh
-random covenant key, `take()`, already-spent versus retry, confirm through
-chronik. This is the product.
-
-**5 — Cancel own offer.** Mandatory before 6. Proves we can unlock a P2SH.
-
-**6 — Create a listing.** Preview the *encoded* price and minimum, refuse to
-list when the encoding differs from intent beyond a stated tolerance. Last on
-purpose: this is the stage where a seller can lock up their own inventory.
-
-Theme sales and attachments arrive after 4, not before. They are not stage 1.
+Theme sales and attachments are not next either. They were always after a
+working accept, and there is no accept.
 
 ---
 
 ## Decided — do not re-argue
 
-- **Own domain**, not a subdomain of ecashlive.net. The wallet origin is
-  stall.cash; registration availability is still unchecked (see Open).
-- **Buyers pay in Stall's wallet on this origin**, never via a Cashtab handoff.
-  Stage 1 paints the sheet; stages 2–4 sign. Seller flows stay on Cashtab until
-  stage 6. A licence is paid from the stall address, which in stage 1 is Cashtab.
+- **Own domain**, not a subdomain of ecashlive.net. **stall.cash is purchased**
+  and sits on Cloudflare. **Host is Cloudflare Pages** — `public/_headers` and
+  `public/_redirects` are in source, DNS is not set up yet.
+  **Condition to leave Pages**, so it is not re-argued: keys on this origin, any
+  `cashtab-connect` `send` verb wired, or any control this origin composes that
+  moves money. The buy link is already a payload byte a rewritten origin could
+  retarget — that is the accepted risk, taken because the retarget is visible to
+  the buyer in Cashtab, unlike a silent seed exfiltration.
+  `deploy/nginx.conf` is the spec for the day that condition trips.
+- **Buyers complete the purchase in Cashtab.** Stall paints the sheet as
+  disclosure and links out to Cashtab's token page. Reversed from the earlier
+  decision, which was that this origin would sign; that decision and its
+  reasoning are in `internal/SESSION-2026-08-23.md` and still explain why the
+  wallet was wanted.
+- **The link is `#/token/<tokenId>` with no `action`.** Never `action=BUY`:
+  Cashtab's deep-link confirm screen selects the cheapest affordable offer and
+  never names the maker, so on a per-seller stall it can sell a competitor's
+  tokens. With no action the buyer lands on the order book, where every offer
+  is listed and a row can be picked. Verified in `agora-deeplink.md`,
+  `DeepLinkBuy` and `OrderBook` in the ABC checkout.
+- **Stall does not claim a purchase happened.** It cannot know. Watching the
+  offer's outpoint sees only this listing; the buyer may have filled another.
+  Cashtab closes its own tab after a successful buy; that is its behaviour, not
+  a signal to us.
 - **XEC only.** Agora prices in satoshis; there is no token-denominated path.
-- **Stall never mints, never lists, never signs on the seller's behalf** in
-  stage 1, and never holds a key before stage 2.
+- **Stall never mints, never lists, never signs, and never holds a key.**
 - **Themes ship in the app.** tuannato is the editor. Third-party designers make
   contact and get added; there is no permissionless theme upload, because
   loading third-party assets into a key-holding origin is an XSS path to a seed.
@@ -132,8 +154,28 @@ Theme sales and attachments arrive after 4, not before. They are not stage 1.
 
 ## Open — ask before assuming
 
-- **Domain registration.** Product origin is stall.cash. Whether the name is
-  free to register is unchecked.
+- **stall.cash host — leaning, not settled.** Current preference: **nginx on the
+  existing VPS, with Cloudflare left DNS-only.** Reasons, so this is not
+  re-derived: ecashlive.net already stays DNS-only so that Cloudflare never
+  fronts visitors, and a seed-holding origin is a stronger case for that than a
+  read-only dashboard, not a weaker one; nginx already runs on that box for
+  chronik, so the marginal work is one server block, a certificate and
+  `try_files $uri /index.html`; and nobody but us then terminates TLS on the
+  document that handles a seed.
+
+  Accepted costs: uptime and certificate renewal become ours, and no edge
+  caching. The first is tolerable only because derivation matches Cashtab — a
+  Stall outage is not a funds outage, since the same words restore there
+  (`CLAUDE.md` §8). Redirect `www` to the apex so there is exactly one origin;
+  two origins means two separate wallet stores.
+
+  Left open on purpose: the same box runs chronik, so if `agora.py` is ever
+  added there, one incident takes down both. GitHub stays the repo, never the
+  server.
+
+  **This blocks stage 2, not stage 1.** Stage 1 can run anywhere for looking at;
+  the first wallet must be created on the final origin, because browser storage
+  is scoped to it and nothing migrates.
 - **Does tuannato's own chronik node get the `agora` plugin?** Until it does,
   Stall depends entirely on three community nodes run by one operator. That is
   one point of failure wearing three hostnames.
@@ -163,17 +205,21 @@ to shape, so drawing them now would be drawing them blind.
 
 ## Next action
 
-**Build stage 1.** Scaffold the Vite app, then the read-only stall.
+Point **stall.cash** at Cloudflare Pages. The procedure, including the two
+checks no test here can do, is `deploy/README.md`. Read step 0 first: Pages
+builds from a fresh clone, so anything uncommitted simply does not ship, and
+`public/_headers` and `public/_redirects` are the two whose absence is silent —
+the site comes up, sends no CSP, and 404s every stall link.
 
-Suggested order, each independently reviewable: scaffold and prove the wasm
-boots under the test runner · `src/domain` types and the manifest decoder ·
-`src/net` chronik and Agora reads · `src/ui` the stall (route / fetch / overlay)
-· wiring.
+Then the apex landing, so the first public URL is not `This link is unreadable`.
 
-Two things to settle in the first hour, because they are expensive later: the
-route shape for `/s/:seller`, and whether the repo is initialised as git with
-`internal/` committed. These specimens are design deliverables, not secrets —
-committing them is probably right, unlike the `internal/` next door.
+Claim `STL1` before anyone publishes a themed stall.
+
+Still unresolved and worth saying plainly: the buy link cannot be aimed at the
+seller whose stall the buyer is standing in. The sheet names the price to look
+for, which is the only handle Cashtab's order book gives. If that proves too
+weak in practice, the options are an upstream patch or no buy control at all —
+not a warning with a louder colour.
 
 Before trusting any claim in these files, re-read the source — including this
 one.

@@ -2,7 +2,12 @@ import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { extractP2pkhPubKey, pubKeyMatchesHash } from '../domain/pubkey';
 import type { RouteParse, RouteResolution } from '../domain/state';
-import { HISTORY_PAGE_SIZE, type AddressChronik, type ChainTx } from './chain';
+import {
+    HISTORY_PAGE_SIZE,
+    MAX_HISTORY_PAGES,
+    type AddressChronik,
+    type ChainTx,
+} from './chain';
 import { isP2shOutputScript } from './script';
 
 export async function resolveSeller(
@@ -27,7 +32,8 @@ export async function resolveSeller(
     }
 
     const hash = parse.hash.toLowerCase();
-    const pages = Math.max(first.numPages, 1);
+    const total = Math.max(first.numPages, 1);
+    const pages = Math.min(total, MAX_HISTORY_PAGES);
     for (let page = 0; page < pages; page++) {
         const batch = page === 0 ? first : await endpoint.history(page, HISTORY_PAGE_SIZE);
         const found = pubkeyFromSpends(batch.txs, hash);
@@ -38,6 +44,12 @@ export async function resolveSeller(
                 address: parse.address,
             };
         }
+    }
+
+    if (total > pages) {
+        // We stopped looking. Saying "this address has never sent" here would
+        // hide a real stall behind a confident statement about its owner.
+        return { kind: 'unresolved', address: parse.address };
     }
 
     return { kind: 'unresolvable', address: parse.address };
