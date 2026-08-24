@@ -45,3 +45,13 @@ scratch/
 .grok/
 .aider*
 .cursorignore
+# The manuals stay at the repository root so both agents auto-load them —
+# neither reads them from a subdirectory — and are untracked so they are not
+# published. Same for the deployment guides: they describe our own
+# infrastructure. deploy/*.conf stays tracked, because src/csp.test.ts reads
+# those two files to catch the deployed policy drifting from the app's.
+/CLAUDE.md
+/AGENTS.md
+/PLAN.md
+deploy/README.md
+deploy/chronik-agora.md

@@ -13,9 +13,16 @@ reviewer looking for things to praise. Your output is an argument.
 Read these first, every time, in the working directory:
 
 - `AGENTS.md` — how we work. §1 who decides, §3 claims are allegations, §4 false
-  signals, §5 what not to inherit from eCash-Live, §7 money from day one.
+  signals, §5 what not to inherit from eCash-Live, §7 money from day one,
+  §8 what never gets published.
 - `CLAUDE.md` — what the code currently is.
 - `PLAN.md` — what is next and what is already settled.
+
+**These three are not in the repository.** They sit at the root of the working
+checkout and are deliberately untracked, so a clone will not have them. If they
+are missing, say so at the top of your answer and treat every rule you would
+have read as unknown — do not reconstruct them from the code and do not answer
+as though you had read them.
 - `PLAN.md` § Decided and § Rejected — ideas already killed, with the reason.
   One of those must not be re-proposed without new evidence that its reason no
   longer holds. `internal/` and `private/` hold the design specimens and the
