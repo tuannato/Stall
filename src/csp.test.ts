@@ -143,10 +143,19 @@ describe('missing-asset-is-not-a-success', () => {
         read('public', '404.css');
     });
 
-    it('keeps the SPA rewrite scoped to stall paths', () => {
-        const redirects = read('public', '_redirects');
-        expect(redirects).toContain('/s/* /index.html 200');
-        // A bare rewrite would put the app behind every missing asset again.
-        expect(redirects).not.toMatch(/^\/\*\s/m);
+    it('rewrites nothing under the asset path', () => {
+        // The bare-/* case is already refused by `answers a stall with
+        // index.html at 200`; repeating it here would be a second lock on the
+        // same door. This is the other way back to the same defect: a rewrite
+        // scoped to /assets/ puts the app behind exactly the path the 404 was
+        // measured on.
+        const rules = read('public', '_redirects')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== '' && !line.startsWith('#'));
+        for (const rule of rules) {
+            expect(rule.startsWith('/assets'), rule).toBe(false);
+        }
+        expect(rules.some((rule) => rule.startsWith('/s/* '))).toBe(true);
     });
 });
