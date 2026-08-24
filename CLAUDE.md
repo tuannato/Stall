@@ -15,7 +15,7 @@ chain and holds no key.** A buyer who wants to complete a purchase is handed to
 Cashtab, which signs.
 
 The wallet that would have made Stall self-contained is shelved indefinitely
-(`internal/SHELVED-WALLET.md`). What replaces it is a link, and a link cannot
+(kept in `internal/`, outside this repo). What replaces it is a link, and a link cannot
 be aimed: Cashtab's token page preselects the cheapest offer and never labels
 which maker a row belongs to. **So Stall promises a shop window, not a
 checkout,** and every control has to be named for what it does.
@@ -100,11 +100,11 @@ unreachable has only the route:** no stall name, no item names. A later visit
 may show cached names with dashed prices and a dead buy control.
 
 **Endpoints.** Only chronik nodes running `agora.py`. At time of writing the
-three `chronik-native*.fabien.cash` hosts have it; `chronik.e.cash` and
-`a node that also serves something else` return `404: Plugin "agora" not loaded`. Use
-constructor order, not closest-first. **Do not add a node that lacks the plugin**
-— the failover proxy does not skip a protocol-level 404, so it breaks the app
-rather than slowing it.
+three `chronik-native*.fabien.cash` hosts have it; most public nodes, including
+`chronik.e.cash`, return `404: Plugin "agora" not loaded`. Use constructor
+order, not closest-first. **Do not add a node that lacks the plugin** — the
+failover proxy does not skip a protocol-level 404, so it breaks the app rather
+than slowing it.
 
 ---
 
@@ -222,8 +222,8 @@ Two rules survive the shelving because they govern what is on screen now:
 The rest — derivation, entropy, the backup ceremony, change to self, fuel
 UTXOs, re-fetch before signing, never re-sign after a failed broadcast, a fresh
 covenant keypair per accept — is shelved with the wallet and kept verbatim in
-`internal/SHELVED-WALLET.md`. Do not re-derive those from memory if keys
-return, and do not delete that file.
+`internal/`, which is outside this repository and needs its own backup. Do
+not re-derive those from memory if keys return.
 
 ---
 

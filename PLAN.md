@@ -17,7 +17,8 @@ The pivot, in one line: Stall stopped trying to become the wallet and became a
 shop window that links out. What that costs is recorded honestly below — the
 link cannot be aimed at the seller whose stall you are standing in.
 
-**The design is done and lives in `internal/`.** Open those four files in a
+**The design is done and lives in `internal/`, which is not in this
+repository** — it is working design, kept beside the checkout. Open those four files in a
 browser before writing any screen — they carry their own reasoning, and several
 of the decisions are not recoverable from the picture alone. `internal/README.md`
 maps each file to what it settles.
@@ -49,8 +50,8 @@ Settled and not to be redone:
 Stall depends on packages from a Bitcoin ABC checkout. That checkout is **not**
 part of this repo and Stall must never import from it by path.
 
-The checkout lives outside this repository, beside this one on the build machine, and all
-eight workspace modules are built green: `chronik-client` 4.3.0, `ecash-lib`
+The checkout lives outside this repository, beside it on the build machine,
+and all eight workspace modules are built green: `chronik-client` 4.3.0, `ecash-lib`
 4.13.0, `ecash-agora` 4.2.5, `ecash-wallet` 6.1.0, `ecashaddrjs` 2.0.0, plus
 `b58-ts`, `mock-chronik-client`, `ecash-parse`. Cashtab's own suite runs 15/15
 there, which is the proof the toolchain is sound.
@@ -123,9 +124,9 @@ working accept, and there is no accept.
   `deploy/nginx.conf` is the spec for the day that condition trips.
 - **Buyers complete the purchase in Cashtab.** Stall paints the sheet as
   disclosure and links out to Cashtab's token page. Reversed from the earlier
-  decision, which was that this origin would sign; that decision and its
-  reasoning are in `internal/SESSION-2026-08-23.md` and still explain why the
-  wallet was wanted.
+  decision that this origin would sign — the wallet is shelved, not deleted, and
+  `internal/SHELVED-WALLET.md`, outside this repo, holds the mechanism
+  verbatim for the day it returns.
 - **The link is `#/token/<tokenId>` with no `action`.** Never `action=BUY`:
   Cashtab's deep-link confirm screen selects the cheapest affordable offer and
   never names the maker, so on a per-seller stall it can sell a competitor's
@@ -149,6 +150,26 @@ working accept, and there is no accept.
 - **No file inherited from eCash-Live** (`AGENTS.md` §6).
 - **Market size is a closed topic.** This is groundwork built to try something.
   Do not reopen it.
+
+**Rejected — do not re-propose without new evidence.** Each died for a reason
+that is still true:
+
+- **Gifting as the product.** A gift is consumed, an asset is held; making the
+  gift a token purchase leaves the giver holding something that trends to zero.
+- **Any token as the payment unit**, FIRMA included. Agora is XEC-denominated;
+  `AgoraPartial` enforces one output of satoshis to one maker address. Accepting
+  a token means manual fulfilment — an invoice, not a vending machine.
+- **A pretty handle namespace (`/name`).** With no backend there is no takedown,
+  so first-come is a squatting and impersonation factory. The identity is the
+  seller's own key, which is why there is no name to fight over.
+- **eCash Alias as that namespace.** Right data shape, nothing else: no alias
+  server exists in ABC's `apps/`, Cashtab's own vectors pin `chicken.xec` as
+  invalid, and the spec documents a front-running attack.
+- **Themes as code, CSS, or fetched assets** (`CLAUDE.md` §6).
+- **Revenue share enforced by covenant.** Only oneshot carries multiple enforced
+  outputs, and a oneshot is grouped under `cancel_pk` while its payout is an
+  arbitrary output list — so an offer grouped under your key can pay someone
+  else.
 
 ---
 
@@ -177,8 +198,15 @@ working accept, and there is no accept.
   the first wallet must be created on the final origin, because browser storage
   is scoped to it and nothing migrates.
 - **Does tuannato's own chronik node get the `agora` plugin?** Until it does,
-  Stall depends entirely on three community nodes run by one operator. That is
-  one point of failure wearing three hostnames.
+  Stall depends entirely on three community nodes run by one operator — one
+  point of failure wearing three hostnames. The procedure is written up in
+  `deploy/chronik-agora.md`, and the cost is now known rather than guessed:
+  `BUILD_CHRONIK_PLUGINS` is off by default so bitcoind must be rebuilt, and a
+  plugin added to a synced node forces a full `-chronikreindex` because
+  `AGR0` transactions already exist on chain. The reindex wipes the index at
+  process start, before anything is verified. That is why the guide's dry run
+  matters, and why doing this on a second node is the standing recommendation
+  whenever the node in question also serves something else.
 - **The `STL1` LOKAD prefix is unclaimed in ABC's registry**, but whether it is
   squatted on-chain is unverified. Claim it before minting anything.
 - **A Cashtab patch** that preselects a maker on the token market is not on

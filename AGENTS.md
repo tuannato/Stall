@@ -153,7 +153,49 @@ Mechanism lives in `CLAUDE.md`. This section is the ethic, and it applies now.
 
 ---
 
-## 8. How to write a rule that ages
+## 8. What never gets published
+
+This repository is one `git push` from being permanent and public. Git history
+is published too, so deleting a file later does not unpublish it.
+
+**Never write these into code, comments, commit messages, test fixtures, or a
+manual — not even as an example, not even labelled fake:**
+
+- A mnemonic, seed, xprv, WIF, or raw entropy. **Words from the BIP39 wordlist
+  are not a placeholder**, even in a design mock with an invalid checksum: a
+  scraper does not read the label. Use `word-01`-style tokens that are not in
+  any wordlist.
+- **API keys and tokens of any kind, including the ones for AI agents.** An
+  agent's key belongs in the environment or the agent's own config, never in a
+  file this repo tracks and never pasted into a prompt that gets committed. A
+  key in git history is a key that must be rotated, not edited out.
+- Private keys, certificates, `.env` files.
+- A real mailbox, in file contents or in commit authorship. Decide the public
+  identity before the first push; afterwards it needs a history rewrite and a
+  force-push, and it does not unsay clones.
+- Absolute paths from a development machine, and hostnames that identify
+  personal infrastructure as *ours* rather than as a public endpoint.
+- URLs into a private workspace — an artifact, a document, a dashboard. The URL
+  is a durable handle into an account, and it outlives what it pointed at.
+- Someone else's address, wallet, or shop used as a fixture. On-chain data is
+  public; a permanent association with this project is not something a stranger
+  volunteered for, and their inventory snapshot rots into a stale claim.
+- Working notes: session records, audits, transcripts, scratch analysis, private
+  lists. They are about people, prices and plans. `.gitignore` catches
+  `private/`, `notes/`, `SESSION-*`, `AUDIT-*`, `*.private.md` — that is a net,
+  not permission to be careless above it.
+
+**Own addresses are a choice, not a default.** A tip jar or a personal stall in
+a fixture is not a leak, but it ties this project to a wallet forever. Prefer an
+address derived from an obviously-dummy pubkey, which nobody holds the key to.
+
+**Before any first push to a new remote:** grep the tree *and the history* for
+the list above, and check `git log --format='%an <%ae>'`. Both surfaces, not
+just the working tree.
+
+---
+
+## 9. How to write a rule that ages
 
 Bind a rule to something that survives a rewrite:
 
@@ -172,7 +214,7 @@ says why it exists. Once that pointer works, the story is eviction fodder.
 
 ---
 
-## 9. What "done" means
+## 10. What "done" means
 
 - Syntax checks prove syntax. Nothing else.
 - Green means the runner's own exit code was 0 **and** you saw the summary line.
@@ -182,7 +224,7 @@ says why it exists. Once that pointer works, the story is eviction fodder.
 
 ---
 
-## 10. Eviction
+## 11. Eviction
 
 **These files shrink on purpose.** When a footgun gets a test, it leaves
 `CLAUDE.md`. When a war story becomes a one-line rule, the story leaves this

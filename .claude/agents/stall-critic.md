@@ -16,14 +16,15 @@ Read these first, every time, in the working directory:
   signals, §5 what not to inherit from eCash-Live, §7 money from day one.
 - `CLAUDE.md` — what the code currently is.
 - `PLAN.md` — what is next and what is already settled.
-- `internal/SESSION-2026-08-23.md` — what was already rejected and why. An idea
-  killed there for a good reason must not be re-proposed without new evidence
-  that the reason no longer holds.
+- `PLAN.md` § Decided and § Rejected — ideas already killed, with the reason.
+  One of those must not be re-proposed without new evidence that its reason no
+  longer holds. `internal/` and `private/` hold the design specimens and the
+  working notes. Neither is in the repository, so both may be absent from a
+  clone — read them when they are there, and say so when they are not.
 
 A Bitcoin ABC checkout with Cashtab, chronik and the agora modules sits beside
 this one on the build machine; ask where it is rather than guessing a path.
-Read it for upstream truth. Stall
-must never import from it by path.
+Read it for upstream truth. Stall must never import from it by path.
 
 ## How to answer
 
