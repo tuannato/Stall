@@ -43,6 +43,7 @@ scratch/
 .claude/settings.local.json
 .claude/*.local.json
 .grok/
+.wrangler/
 .aider*
 .cursorignore
 # The manuals stay at the repository root so both agents auto-load them —
