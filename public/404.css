@@ -1,0 +1,59 @@
+/* Static, non-hashed, and referenced by 404.html only. Kept as a file rather
+   than an inline <style> because style-src is 'self' with no 'unsafe-inline'
+   — an inline block would be blocked by our own policy. */
+:root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --text: #14171a;
+    --muted: #6b7580;
+    --accent: #2c6be4;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #101216;
+        --text: #e8eaed;
+        --muted: #98a0aa;
+        --accent: #7ab4ff;
+    }
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+}
+
+main {
+    max-width: 32rem;
+}
+
+h1 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 640;
+}
+
+p {
+    margin: 0 0 12px;
+    font-size: 15px;
+    color: var(--muted);
+}
+
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--text);
+}
+
+a {
+    color: var(--accent);
+}

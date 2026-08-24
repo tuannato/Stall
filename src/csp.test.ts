@@ -115,3 +115,38 @@ describe('deploy-spec-matches-the-app', () => {
         expect(nginx).toContain('Cache-Control "no-store"');
     });
 });
+
+describe('missing-asset-is-not-a-success', () => {
+    /**
+     * Without a 404 page at the build root, Cloudflare Pages treats every
+     * unmatched path as single-page-application routing and answers with
+     * index.html at HTTP 200 — including a missing hashed asset, which then
+     * arrives as HTML claiming to be JavaScript. The `_redirects` rule is
+     * scoped to `/s/*` precisely so that everything else can 404, and this
+     * file is what lets it.
+     *
+     * Proven here by mechanism: that the page ships and cannot be blocked by
+     * our own policy. That the host returns 404 with it is observable only on
+     * a deployed origin.
+     */
+    it('ships a 404 page that the policy will not block', () => {
+        const page = read('public', '404.html');
+        expect(page).toContain('<!doctype html>');
+
+        // style-src is 'self' with no 'unsafe-inline', so an inline block
+        // would be refused and the page would render unstyled.
+        expect(directives(CSP).get('style-src')).toBe("'self'");
+        expect(page).not.toMatch(/<style[\s>]/i);
+        expect(page).not.toMatch(/\sstyle\s*=/i);
+        expect(page).not.toMatch(/<script/i);
+        expect(page).toMatch(/<link rel="stylesheet" href="\/404\.css"/);
+        read('public', '404.css');
+    });
+
+    it('keeps the SPA rewrite scoped to stall paths', () => {
+        const redirects = read('public', '_redirects');
+        expect(redirects).toContain('/s/* /index.html 200');
+        // A bare rewrite would put the app behind every missing asset again.
+        expect(redirects).not.toMatch(/^\/\*\s/m);
+    });
+});
