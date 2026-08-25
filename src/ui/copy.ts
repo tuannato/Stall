@@ -137,7 +137,7 @@ export function tokenTypeLabel(type: string, protocol: string): string | undefin
 
 /** The apex. No identity, because Stall has no account to show. */
 export const HOME_TITLE = 'Stall';
-export const HOME_LEDE = 'A shop page for anything listed on eCash Agora.';
+export const HOME_LEDE = "A shop page for one seller's listings on eCash Agora.";
 export const HOME_HOW =
     'Every stall lives at /s/ followed by the seller\u2019s eCash address. Open that link and you see what they have listed right now, priced as the contract on chain encodes it.';
 export const HOME_NO_ACCOUNT =
