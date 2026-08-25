@@ -246,6 +246,10 @@ function paintOffers(
     body.append(items);
     stall.append(body);
 
+    if (view.settingsUnreadable === true) {
+        // They did publish. Silence here would say they never did.
+        body.append(el('p', 'fine', copy.SETTINGS_UNREADABLE));
+    }
     if (view.settingsTruncated === true) {
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));

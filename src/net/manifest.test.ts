@@ -214,3 +214,64 @@ describe('truncated-manifest-is-not-silent-default', () => {
         expect(lookup.truncated).toBe(false);
     });
 });
+
+describe('unparseable-manifest-is-not-silent-default', () => {
+    /**
+     * A record this stall signed, carrying our LOKAD, that the decoder cannot
+     * read — here a fourth push. The seller published settings. Painting the
+     * shipped default without a word says they never did, which is the same
+     * claim `truncated` exists to refuse.
+     */
+    function brokenStl1(): string {
+        const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
+        const name = new TextEncoder().encode('Nato');
+        const theme = new Uint8Array(THEME_BYTES);
+        const extra = new Uint8Array([1, 2, 3]);
+        return `6a${pushHex(lokad)}${pushHex(name)}${pushHex(theme)}${pushHex(extra)}`;
+    }
+
+    /** An OP_RETURN that was never addressed to us: a plain stall memo. */
+    function memo(): string {
+        return `6a${pushHex(new TextEncoder().encode('hello there'))}`;
+    }
+
+    function txWith(outputScript: string, pk: Uint8Array, hash: string): ChainTx {
+        return {
+            txid: 'cd'.repeat(32),
+            block: { height: 100 },
+            inputs: [
+                {
+                    inputScript: p2pkhScriptSig(pk),
+                    outputScript: p2pkhOutputScript(hash),
+                },
+            ],
+            outputs: [{ outputScript }],
+        };
+    }
+
+    it('says so when a record of ours cannot be decoded', async () => {
+        const pk = compressedPk(0xaa);
+        const hash = toHex(shaRmd160(pk));
+        const tx = txWith(brokenStl1(), pk, hash);
+        const lookup = await loadManifest(
+            // walkShorter reads whichever index is shorter; give it both.
+            fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+            { address: 'ecash:stall', hash },
+        );
+        expect(lookup.manifest).toBeUndefined();
+        expect(lookup.unreadable).toBe(true);
+    });
+
+    it('stays silent for an OP_RETURN that was never addressed to us', async () => {
+        const pk = compressedPk(0xbb);
+        const hash = toHex(shaRmd160(pk));
+        const tx = txWith(memo(), pk, hash);
+        const lookup = await loadManifest(
+            fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+            { address: 'ecash:stall', hash },
+        );
+        expect(lookup.manifest).toBeUndefined();
+        // A stall memo is not a broken manifest.
+        expect(lookup.unreadable).toBe(false);
+    });
+});

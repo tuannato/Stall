@@ -88,4 +88,6 @@ export type StallView = {
     theme?: DecodedTheme;
     /** The settings walk hit its cap, so this look may not be the current one. */
     settingsTruncated?: boolean;
+    /** The seller published settings this page could not read. */
+    settingsUnreadable?: boolean;
 };

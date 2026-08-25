@@ -251,9 +251,11 @@ async function loadCurrent(): Promise<AppState> {
     let stallName = cachedName;
     let theme = cachedTheme;
     let settingsTruncated = false;
+    let settingsUnreadable = false;
     try {
         const lookup = await loadManifest(chronik, { address, hash }, hint);
         settingsTruncated = lookup.truncated;
+        settingsUnreadable = lookup.unreadable;
         const manifest = lookup.manifest;
         if (manifest) {
             stallName = manifest.name;
@@ -283,6 +285,7 @@ async function loadCurrent(): Promise<AppState> {
             tokens,
             theme,
             settingsTruncated,
+            settingsUnreadable,
         },
         offers,
         pubkeyHex: route.pubkeyHex,
