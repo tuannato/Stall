@@ -42,10 +42,19 @@ export const HANDOFF_FINE_PRINT =
 /**
  * The one thing a buyer cannot work out for themselves. Cashtab's order book
  * preselects the cheapest offer the viewer can afford and never labels which
- * maker a row belongs to, so a buyer who wants this seller has to be told.
+ * maker a row belongs to. "Every offer" would overstate it: Cashtab hides
+ * some (FIRMA/XECX/unacceptable) and the preselect is cheapest *affordable*.
  */
 export const HANDOFF_MAY_PRESELECT =
-    'Cashtab opens every offer for this token and preselects the cheapest one, which may belong to another seller.';
+    'Cashtab opens this token’s offers and preselects the cheapest one the viewer can afford, which may belong to another seller.';
+/**
+ * Cashtab's depth bars are a per-token spot of the remaining lot (or fiat),
+ * not the covenant minimum this card shows as YOU_PAY. Naming that minimum as
+ * "the one priced at …" tells the buyer to hunt a number that is not on the
+ * book. Say so; do not invent a second figure Stall cannot typeset.
+ */
+export const HANDOFF_PRICE_IS_NOT_THE_ROW =
+    'Cashtab does not name the seller. Its prices are per token, and sometimes in fiat — not the minimum take on this card.';
 /**
  * The covenant prices the minimum accept, not the whole shelf. A list row that
  * shows that figure beside the full remaining stock reads as the price of the
@@ -63,14 +72,7 @@ export const DASHED_PRICE = '—';
 export const XEC = 'XEC';
 export const TRIED = 'tried';
 
-/**
- * Rows in Cashtab's order book carry a price and nothing else that identifies
- * the maker, so the price is the only handle a buyer has on this seller's
- * offer.
- */
-export function lookForPriceLine(formattedXec: string): string {
-    return `This seller's offer is the one priced at ${formattedXec} ${XEC}.`;
-}
+export const OPEN_ANOTHER_STALL = 'Open another stall';
 
 export function itemsForSale(n: number): string {
     return n === 1 ? '1 item for sale' : `${n} items for sale`;

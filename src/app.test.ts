@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { boot, type AppState } from './app';
 import { sellerFromPath, stallPath } from './domain/route';
-import { HOME_LEDE, OPENING_BODY } from './ui/copy';
+import { EMPTY_TITLE, HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
 
 const PK = '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
@@ -26,6 +26,20 @@ function homeState(): AppState {
     return {
         view: { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
         offers: [],
+    };
+}
+
+function stallUnnamedEmpty(): AppState {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'empty' },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        },
+        offers: [],
+        pubkeyHex: PK,
     };
 }
 
@@ -158,5 +172,65 @@ describe('open-stall-from-apex', () => {
         );
         expect(root.textContent).toContain(OPENING_BODY);
         expect(root.textContent).not.toContain(HOME_LEDE);
+        expect(document.title).not.toBe(HOME_TITLE);
+    });
+
+    it('paste that loads an unnamed stall keeps the address, not the site name', async () => {
+        const root = document.createElement('div');
+        const pending: Array<(state: AppState) => void> = [];
+        boot(
+            root,
+            () =>
+                new Promise<AppState>((resolve) => {
+                    pending.push(resolve);
+                }),
+        );
+
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = ADDR;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+        pending[1]!(stallUnnamedEmpty());
+        await flush();
+        expect(root.textContent).toContain(EMPTY_TITLE);
+        expect(root.querySelector('.stall-name')?.textContent).toBe(ADDR);
+        expect(document.title).toBe(ADDR);
+        expect(document.title).not.toBe(HOME_TITLE);
+        expect(root.textContent).not.toContain(HOME_LEDE);
+    });
+});
+
+describe('open-another-stall', () => {
+    it('pushState to / then load paints the apex paste', async () => {
+        const root = document.createElement('div');
+        const pending: Array<(state: AppState) => void> = [];
+        boot(
+            root,
+            () =>
+                new Promise<AppState>((resolve) => {
+                    pending.push(resolve);
+                }),
+        );
+
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = ADDR;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pending[1]!(stallUnnamedEmpty());
+        await flush();
+
+        const back = root.querySelector('[data-role="open-another"]') as HTMLButtonElement;
+        expect(back.textContent).toBe(OPEN_ANOTHER_STALL);
+        back.click();
+        expect(location.pathname).toBe('/');
+        expect(pending).toHaveLength(3);
+        expect(root.textContent).toContain(HOME_LEDE);
+
+        pending[2]!(homeState());
+        await flush();
+        expect(root.textContent).toContain(HOME_LEDE);
+        expect(root.querySelector('.paste-in')).not.toBeNull();
+        expect(document.title).toBe(HOME_TITLE);
     });
 });
