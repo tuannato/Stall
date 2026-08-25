@@ -527,8 +527,17 @@ function applyTitle(view: StallView): void {
         case 'unresolvable':
             document.title = copy.UNRESOLVABLE_HEADER;
             return;
-        default:
-            document.title = copy.HOME_TITLE;
+        default: {
+            // A stall's own address, not the site name. stallName only exists
+            // once a manifest has been published, and nothing can publish one
+            // yet — so without this every real stall shares the apex's title,
+            // which is exactly what an unfurled link shows.
+            const identity = identityOf(view);
+            document.title =
+                identity === undefined || identity === ''
+                    ? copy.HOME_TITLE
+                    : identity;
+        }
     }
 }
 

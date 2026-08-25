@@ -395,6 +395,17 @@ describe('document-title-follows-identity', () => {
         });
         expect(document.title).toBe(LINK_UNREADABLE_TITLE);
     });
+
+    /**
+     * The case every stall on chain is in today: a name comes from a manifest,
+     * and nothing can publish one yet. Falling back to the site name here gives
+     * every seller the apex's title, which is what an unfurled link shows.
+     */
+    it('names the stall by its address when no manifest has named it', () => {
+        paint(idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] } }));
+        expect(document.title).toBe(ADDR);
+        expect(document.title).not.toBe(HOME_TITLE);
+    });
 });
 
 describe('copy-link', () => {
