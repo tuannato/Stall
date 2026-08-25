@@ -64,6 +64,7 @@ describe('loadOffers', () => {
             expect(status.offers[0]?.askedSats).toBe(80000n);
             expect(status.offers[0]?.askedAtoms).toBe(1n);
             expect(status.offers[0]?.variant).toBe('ONESHOT');
+            expect(status.offers[0]?.priceNanoSatsPerAtom).toBe(80_000n * 1_000_000_000n);
         }
     });
 
@@ -92,6 +93,45 @@ describe('loadOffers', () => {
             expect(status.offers[0]?.askedAtoms).toBe(10n);
             expect(status.offers[0]?.minAcceptedAtoms).toBe(10n);
             expect(status.offers[0]?.atoms).toBe(100n);
+            // Rate of the remaining lot (100 × 2), not the min take (10 × 2).
+            expect(status.offers[0]?.priceNanoSatsPerAtom).toBe(2n * 1_000_000_000n);
+        }
+    });
+
+    it('carries a lot rate that does not invert to the asked sats', async () => {
+        const askedLot = 1_945_601n;
+        const offer: AgoraOfferView = {
+            variant: {
+                type: 'PARTIAL',
+                params: {
+                    minAcceptedAtoms: () => 55n,
+                    prepareAcceptedAtoms: (a: bigint) => a,
+                },
+            },
+            outpoint: { txid: '33'.repeat(32), outIdx: 0 },
+            token: { tokenId: 'aa'.repeat(32), atoms: 1024n },
+            askedSats: (atoms) => {
+                if (atoms === undefined) {
+                    throw new Error('Must provide acceptedAtoms for PARTIAL offers');
+                }
+                if (atoms === 55n) {
+                    return 104_501n;
+                }
+                if (atoms === 1024n) {
+                    return askedLot;
+                }
+                throw new Error(`unexpected ${atoms}`);
+            },
+        };
+        const status = await loadOffers(agoraWith([offer]), PK);
+        expect(status.kind).toBe('offers');
+        if (status.kind === 'offers') {
+            expect(status.offers[0]?.askedSats).toBe(104_501n);
+            expect(status.offers[0]?.askedAtoms).toBe(55n);
+            expect(status.offers[0]?.priceNanoSatsPerAtom).toBe(1_900_000_976_562n);
+            expect(status.offers[0]?.priceNanoSatsPerAtom).not.toBe(
+                (104_501n * 1_000_000_000n) / 55n,
+            );
         }
     });
 });

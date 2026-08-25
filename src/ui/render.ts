@@ -1,5 +1,11 @@
 import { cashtabTokenUrl } from '../domain/cashtab';
-import { formatAtoms, formatXec, isUnbuyable } from '../domain/money';
+import {
+    formatAtoms,
+    formatTokenRate,
+    formatXec,
+    isUnbuyable,
+    RATE_TOO_SMALL,
+} from '../domain/money';
 import { parseSellerParam } from '../domain/route';
 import type {
     FetchStatus,
@@ -268,33 +274,38 @@ function paintOffers(
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
     stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
+}
 
-    if (view.overlay.kind === 'buy') {
-        const selected = findOffer(offers, view.overlay.outpoint);
-        if (selected) {
-            stall.append(buySheet(view, selected, handlers));
-        }
-    }
+function isExpanded(view: StallView, offer: StallOffer): boolean {
+    return (
+        view.overlay.kind === 'buy' &&
+        view.overlay.outpoint.txid === offer.outpoint.txid &&
+        view.overlay.outpoint.outIdx === offer.outpoint.outIdx
+    );
 }
 
 function offerRow(
     offer: StallOffer,
     view: StallView,
     handlers: StallHandlers,
-): HTMLButtonElement {
-    const row = el('button', 'item');
-    row.type = 'button';
+): HTMLElement {
+    const expanded = isExpanded(view, offer);
+    const card = el('div', expanded ? 'item open' : 'item');
     const name = tokenName(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
     const d = decimalsOf(view.tokens, offer.tokenId);
-    row.append(el('div', 'item-ic', initials(name)));
+
+    const head = el('button', 'item-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    head.append(el('div', 'item-ic', initials(name)));
     const info = el('div', 'item-b');
     info.append(el('div', 'item-n', name));
     const left = copy.remainingAtoms(formatAtoms(offer.atoms, d));
     info.append(
         el('div', 'item-q', ticker !== undefined ? `${ticker} · ${left}` : left),
     );
-    row.append(info);
+    head.append(info);
     const price = el('div', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
@@ -311,38 +322,59 @@ function offerRow(
         amount.append(asked);
         price.append(amount);
         price.append(el('div', 'item-u', copy.XEC));
+        price.append(rateLine(offer, view));
     }
-    row.append(price);
-    row.addEventListener('click', () => {
-        handlers.onBuy(offer.outpoint);
+    head.append(price);
+    head.addEventListener('click', () => {
+        if (expanded) {
+            handlers.onCloseSheet();
+        } else {
+            handlers.onBuy(offer.outpoint);
+        }
     });
-    return row;
+    card.append(head);
+    if (expanded) {
+        card.append(itemDetail(view, offer));
+    }
+    return card;
 }
 
-function buySheet(
-    view: StallView,
-    offer: StallOffer,
-    handlers: StallHandlers,
-): HTMLElement {
-    const sheet = el('div', 'sheet');
-    sheet.addEventListener('click', () => {
-        handlers.onCloseSheet();
-    });
-    const card = el('div', 'sheet-c');
-    card.addEventListener('click', (event) => {
-        event.stopPropagation();
-    });
+/**
+ * A labelled unit rate under the asked amount. Never written into the
+ * price node: `askedSats` is what the covenant takes, and this is not it.
+ */
+function rateLine(offer: StallOffer, view: StallView): HTMLElement {
+    const line = el('div', 'item-rate');
+    line.setAttribute('data-role', 'rate');
+    const decimals = knownDecimals(view.tokens, offer.tokenId);
+    const formatted =
+        decimals !== undefined && offer.priceNanoSatsPerAtom !== undefined
+            ? formatTokenRate(offer.priceNanoSatsPerAtom, decimals)
+            : undefined;
+    if (formatted === undefined) {
+        line.textContent = copy.DASHED_PRICE;
+    } else if (formatted === RATE_TOO_SMALL) {
+        line.textContent = copy.tokenRateBound(formatted);
+    } else {
+        line.textContent = copy.tokenRate(formatted);
+    }
+    return line;
+}
+
+/**
+ * In-place detail. Lives next to the row button, never inside it: an `<a>`
+ * nested in `button.item` would fire the row's own click.
+ */
+function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
+    const panel = el('div', 'item-detail');
+    panel.setAttribute('data-role', 'detail');
 
     const d = decimalsOf(view.tokens, offer.tokenId);
-    const name = tokenName(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
-    card.append(el('div', 'sheet-t', name));
-    if (ticker !== undefined) {
-        card.append(el('div', 'sheet-tick', ticker));
-    }
+    const meta = tokenMeta(view.tokens, offer.tokenId);
 
     if (isUnbuyable(offer)) {
-        card.append(
+        panel.append(
             el(
                 'div',
                 'ctx',
@@ -352,32 +384,34 @@ function buySheet(
                 ),
             ),
         );
+        panel.append(tokenFacts(offer, meta, ticker));
         // No link out: Cashtab will not show this row either.
-        card.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
-        sheet.append(card);
-        return sheet;
+        panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+        return panel;
     }
 
     const asked = formatXec(offer.askedSats);
-    card.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
-    card.append(
+    const minAtoms = formatAtoms(offer.askedAtoms, d);
+    const stock = formatAtoms(offer.atoms, d);
+    panel.append(
         sheetRow(
-            copy.YOU_RECEIVE,
-            copy.youReceiveAmount(
-                formatAtoms(offer.askedAtoms, d),
-                formatAtoms(offer.atoms, d),
-            ),
+            copy.MIN_PURCHASE,
+            ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms,
         ),
     );
+    panel.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
+    panel.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
+
+    panel.append(tokenFacts(offer, meta, ticker));
 
     // No network fee row: this origin builds nothing, so it has no fee to
     // quote. Cashtab shows its own before it signs.
 
-    // The sheet used to precede a signature here. It now precedes a market.
+    // The panel used to precede a signature here. It now precedes a market.
     // Cashtab's depth bars are a per-token spot (sometimes fiat), not the
     // covenant minimum on this card — so there is no hunt figure to print.
-    card.append(el('div', 'ctx', copy.HANDOFF_MAY_PRESELECT));
-    card.append(el('div', 'ctx', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
+    panel.append(el('div', 'ctx', copy.HANDOFF_MAY_PRESELECT));
+    panel.append(el('div', 'ctx', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
 
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
@@ -387,11 +421,36 @@ function buySheet(
         // No opener: Stall has no reason to reach into that tab, and leaving
         // the handle would let it reach back into this one.
         cta.rel = 'noopener noreferrer';
-        card.append(cta);
+        cta.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        panel.append(cta);
     }
-    card.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
-    sheet.append(card);
-    return sheet;
+    panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+    return panel;
+}
+
+function tokenFacts(
+    offer: StallOffer,
+    meta: TokenMeta | undefined,
+    ticker: string | undefined,
+): HTMLElement {
+    const box = el('div', 'token-facts');
+    if (ticker !== undefined) {
+        box.append(sheetRow(copy.TOKEN_TICKER, ticker));
+    }
+    if (meta !== undefined) {
+        box.append(sheetRow(copy.TOKEN_DECIMALS, String(meta.decimals)));
+    }
+    box.append(sheetRow(copy.TOKEN_ID, offer.tokenId));
+    const type = meta?.tokenType;
+    if (type !== undefined) {
+        const label = copy.tokenTypeLabel(type.type, type.protocol);
+        if (label !== undefined) {
+            box.append(sheetRow(copy.TOKEN_TYPE, label));
+        }
+    }
+    return box;
 }
 
 function sheetRow(label: string, value: string, big = false): HTMLElement {
@@ -534,18 +593,24 @@ function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {
     return tokenMeta(tokens, tokenId)?.decimals ?? 0;
 }
 
+/**
+ * Genesis decimals, or undefined when metadata did not load. Distinct from
+ * `decimalsOf`, which defaults to 0 and would throw a rate off by 10^decimals.
+ */
+function knownDecimals(tokens: StallView['tokens'], tokenId: string): number | undefined {
+    const decimals = tokenMeta(tokens, tokenId)?.decimals;
+    if (decimals === undefined || !Number.isInteger(decimals) || decimals < 0) {
+        return undefined;
+    }
+    return decimals;
+}
+
 function initials(name: string): string {
     const parts = name.trim().split(/\s+/).filter((p) => p.length > 0);
     if (parts.length >= 2) {
         return (parts[0]!.slice(0, 1) + parts[1]!.slice(0, 1)).toUpperCase();
     }
     return name.slice(0, 2).toUpperCase();
-}
-
-function findOffer(offers: StallOffer[], outpoint: Outpoint): StallOffer | undefined {
-    return offers.find(
-        (o) => o.outpoint.txid === outpoint.txid && o.outpoint.outIdx === outpoint.outIdx,
-    );
 }
 
 function formatTriedAt(ms: number): string {

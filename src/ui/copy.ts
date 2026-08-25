@@ -36,7 +36,12 @@ export const UNREACHABLE_BODY = "We can't read prices right now. No index answer
 export const OPEN_IN_CASHTAB = 'Open in Cashtab';
 export const TRY_AGAIN = 'Try again';
 export const YOU_PAY = 'You pay';
-export const YOU_RECEIVE = 'You receive';
+export const MIN_PURCHASE = 'Minimum purchase';
+export const THIS_STALLS_STOCK = "This stall's stock";
+export const TOKEN_TICKER = 'Ticker';
+export const TOKEN_DECIMALS = 'Decimals';
+export const TOKEN_ID = 'Token ID';
+export const TOKEN_TYPE = 'Token type';
 export const HANDOFF_FINE_PRINT =
     'Cashtab builds and signs the payment, not this site. Stall never holds a key, never sees one, and cannot reverse a purchase.';
 /**
@@ -78,16 +83,56 @@ export function itemsForSale(n: number): string {
     return n === 1 ? '1 item for sale' : `${n} items for sale`;
 }
 
-export function youReceiveAmount(asked: string, remaining: string): string {
-    return `${asked} of ${remaining}`;
-}
-
 export function remainingAtoms(formatted: string): string {
     return `${formatted} left`;
 }
 
 export function payAmount(formattedXec: string): string {
     return `${formattedXec} ${XEC}`;
+}
+
+/** Labelled unit rate. The ≈ is the point: this is not the asked amount. */
+export function tokenRate(formattedXec: string): string {
+    return `≈ ${formattedXec} ${XEC}/token`;
+}
+
+/**
+ * A positive rate that rounded to 0. A bound, not a figure, so no `≈`.
+ */
+export function tokenRateBound(formattedXec: string): string {
+    return `${formattedXec} ${XEC}/token`;
+}
+
+/**
+ * Chronik's tokenType.type, mapped to the short labels a reader already
+ * sees on explorer.e.cash / eCash-Live. Unknown strings pass through rather
+ * than being invented; empty input is omitted by the caller.
+ */
+export function tokenTypeLabel(type: string, protocol: string): string | undefined {
+    switch (type) {
+        case 'SLP_TOKEN_TYPE_FUNGIBLE':
+            return 'SLP V1 (fungible)';
+        case 'SLP_TOKEN_TYPE_NFT1_GROUP':
+            return 'SLP NFT1 group';
+        case 'SLP_TOKEN_TYPE_NFT1_CHILD':
+            return 'SLP NFT1 child';
+        case 'SLP_TOKEN_TYPE_MINT_VAULT':
+            return 'SLP mint vault';
+        case 'ALP_TOKEN_TYPE_STANDARD':
+            return 'ALP standard';
+        case 'SLP_TOKEN_TYPE_UNKNOWN':
+            return 'SLP';
+        case 'ALP_TOKEN_TYPE_UNKNOWN':
+            return 'ALP';
+        default:
+            if (type !== '') {
+                return type;
+            }
+            if (protocol !== '') {
+                return protocol;
+            }
+            return undefined;
+    }
 }
 
 /** The apex. No identity, because Stall has no account to show. */

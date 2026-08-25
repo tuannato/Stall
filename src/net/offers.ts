@@ -1,4 +1,5 @@
 import { toHex } from 'ecash-lib';
+import { nanoSatsPerAtom } from '../domain/money';
 import type { FetchStatus, HostAttempt, StallOffer } from '../domain/state';
 import { isPluginMissing, isTimeout, isUnreachable, messageOf } from './errors';
 import { CHRONIK_HOSTS } from './hosts';
@@ -76,7 +77,7 @@ function mapOffer(offer: AgoraOfferView): StallOffer | undefined {
     if (priced === undefined) {
         return undefined;
     }
-    return {
+    const mapped: StallOffer = {
         outpoint: {
             txid: outpointTxid(offer.outpoint.txid),
             outIdx: offer.outpoint.outIdx,
@@ -88,6 +89,50 @@ function mapOffer(offer: AgoraOfferView): StallOffer | undefined {
         askedAtoms: priced.askedAtoms,
         minAcceptedAtoms: priced.minAcceptedAtoms,
     };
+    const rate = rateOf(offer, priced);
+    if (rate !== undefined) {
+        mapped.priceNanoSatsPerAtom = rate;
+    }
+    return mapped;
+}
+
+/**
+ * Per-atom rate of the remaining lot, which is what `AgoraPartial.priceNanoSatsPerAtom()`
+ * defaults to. Computed here so `src/ui` never touches agora params. Falls
+ * back to the already-priced take when the lot cannot be asked.
+ */
+function rateOf(
+    offer: AgoraOfferView,
+    priced: { askedSats: bigint; askedAtoms: bigint },
+): bigint | undefined {
+    if (offer.variant.type === 'ONESHOT') {
+        return nanoSatsPerAtom(priced.askedSats, offer.token.atoms);
+    }
+    const lotAtoms = preparedRemaining(offer);
+    if (lotAtoms !== undefined) {
+        const lot = tryAsked(offer, lotAtoms);
+        if (lot !== undefined) {
+            const fromLot = nanoSatsPerAtom(lot.askedSats, lot.askedAtoms);
+            if (fromLot !== undefined) {
+                return fromLot;
+            }
+        }
+    }
+    return nanoSatsPerAtom(priced.askedSats, priced.askedAtoms);
+}
+
+function preparedRemaining(offer: AgoraOfferView): bigint | undefined {
+    const partial = partialParams(offer.variant.params);
+    let atoms = offer.token.atoms;
+    try {
+        const prepared = partial?.prepareAcceptedAtoms?.(atoms);
+        if (prepared !== undefined) {
+            atoms = prepared;
+        }
+    } catch {
+        atoms = offer.token.atoms;
+    }
+    return atoms;
 }
 
 function priceOffer(offer: AgoraOfferView):

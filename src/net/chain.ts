@@ -49,6 +49,10 @@ export type TokenChronik = {
             tokenTicker: string;
             decimals: number;
         };
+        tokenType?: {
+            protocol: string;
+            type: string;
+        };
     }>;
 };
 

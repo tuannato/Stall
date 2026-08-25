@@ -45,6 +45,17 @@ export type StallOffer = {
     /** Atoms the askedSats figure is for (all remaining, or a prepared take). */
     askedAtoms: bigint;
     minAcceptedAtoms?: bigint;
+    /**
+     * Floor-divided nanosats per atom of the remaining lot (oneshot: the
+     * asked take). An annotation, not a second asked amount — multiplying
+     * back does not recover `askedSats`. Absent when it cannot be formed.
+     */
+    priceNanoSatsPerAtom?: bigint;
+};
+
+export type TokenTypeMeta = {
+    protocol: string;
+    type: string;
 };
 
 export type TokenMeta = {
@@ -52,6 +63,7 @@ export type TokenMeta = {
     name: string;
     ticker: string;
     decimals: number;
+    tokenType?: TokenTypeMeta;
 };
 
 export type FetchStatus =
