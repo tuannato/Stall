@@ -22,7 +22,10 @@ export const CSP = [
     "object-src 'none'",
     "frame-src 'none'",
     "worker-src 'none'",
-    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')}`,
+    // Both schemes, from the one constant. chronik-client turns each https
+    // host into wss://<host>/ws for its subscription socket, and CSP does not
+    // infer one from the other — a missing wss:// is a silent dead socket.
+    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')} ${CHRONIK_HOSTS.map((h) => h.replace('https://', 'wss://')).join(' ')}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

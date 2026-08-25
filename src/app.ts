@@ -13,6 +13,7 @@ import type {
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
 import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller } from './net';
+import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { renderStall } from './ui';
 
@@ -37,6 +38,8 @@ export function boot(
      * A -> B -> A.
      */
     let generation = 0;
+    /** One socket per painted stall. Closed before the next one opens. */
+    let live: LiveHandle | undefined;
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -69,12 +72,42 @@ export function boot(
 
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
+        live?.close();
+        live = undefined;
         const next = await load();
         if (claimed !== generation) {
             return;
         }
         state = next;
         paint();
+        watch(claimed);
+    };
+
+    /**
+     * Keep the painted book current. Only a fact about the seller is applied:
+     * a refetch that fails leaves the last good list on screen rather than
+     * turning a working stall into an error, and the offers are replaced
+     * without disturbing an open sheet.
+     */
+    const watch = (claimed: number): void => {
+        const pubkeyHex = state.pubkeyHex;
+        if (pubkeyHex === undefined || state.view.fetch?.kind !== 'offers') {
+            return;
+        }
+        live = watchStall(createChronik() as never, pubkeyHex, () => {
+            void (async () => {
+                const status = await loadOffers(new Agora(createChronik()), pubkeyHex);
+                if (claimed !== generation || !isDefiniteResult(status)) {
+                    return;
+                }
+                state = {
+                    ...state,
+                    offers: status.kind === 'offers' ? status.offers : [],
+                    view: { ...state.view, fetch: status },
+                };
+                paint();
+            })();
+        });
     };
 
     window.addEventListener('popstate', () => {
