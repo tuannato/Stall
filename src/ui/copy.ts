@@ -13,6 +13,9 @@ export const UNRESOLVABLE_HINT =
 export const SETTINGS_TRUNCATED =
     "We stopped reading this seller's history before the end, so their stall settings may be newer than what is shown.";
 
+export const SETTINGS_UNREADABLE =
+    'This seller published stall settings that this page could not read, so it is showing the default look.';
+
 export const EMPTY_SUB = 'Nothing for sale right now';
 export const EMPTY_TITLE = 'This stall is empty';
 export const EMPTY_BODY =

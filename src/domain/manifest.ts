@@ -20,16 +20,29 @@ export class ManifestDecodeError extends Error {
  * STL1 payload after OP_RETURN: push "STL1", push utf-8 name (1–32 bytes),
  * push exactly 28 theme bytes. Extra pushes reject the record.
  */
+/**
+ * True when an OP_RETURN claims to be ours. Checked before anything else, so a
+ * record we cannot read can be told apart from one that was never addressed to
+ * us — a stall memo and a broken manifest must not look the same.
+ */
+export function isStl1(pushes: Uint8Array[]): boolean {
+    const lokad = pushes[0];
+    return (
+        lokad !== undefined &&
+        lokad.length === 4 &&
+        String.fromCharCode(...lokad) === STL1_ASCII
+    );
+}
+
 export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
+    if (!isStl1(pushes)) {
+        throw new ManifestDecodeError('LOKAD is not STL1');
+    }
     if (pushes.length !== 3) {
         throw new ManifestDecodeError(`STL1 expects 3 pushes, got ${pushes.length}`);
     }
-    const lokad = pushes[0]!;
     const nameBytes = pushes[1]!;
     const themeBytes = pushes[2]!;
-    if (lokad.length !== 4 || String.fromCharCode(...lokad) !== STL1_ASCII) {
-        throw new ManifestDecodeError('LOKAD is not STL1');
-    }
     if (nameBytes.length < 1 || nameBytes.length > MAX_STALL_NAME) {
         throw new ManifestDecodeError('stall name length');
     }

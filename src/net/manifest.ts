@@ -1,6 +1,7 @@
 import { extractP2pkhPubKey, pubKeyMatchesHash } from '../domain/pubkey';
 import {
     decodeManifestPushes,
+    isStl1,
     pickManifestWinner,
     STL1_HEX,
     type ManifestRank,
@@ -25,6 +26,13 @@ export type ManifestLookup = {
      * not known to be a seller who never published one.
      */
     truncated: boolean;
+    /**
+     * An `STL1` record signed by this stall was found and could not be read.
+     * The seller did publish settings; we failed to decode them. Painting the
+     * shipped default in silence would say they never published, which is the
+     * same lie `truncated` exists to refuse.
+     */
+    unreadable: boolean;
 };
 
 export async function loadManifest(
@@ -44,7 +52,14 @@ export async function loadManifest(
     }
 
     const walked = await walkShorter(chronik, stall.address, hash);
-    return { manifest: better(best, walked.best), truncated: walked.truncated };
+    const manifest = better(best, walked.best);
+    return {
+        manifest,
+        truncated: walked.truncated,
+        // Only worth saying when there is nothing to show instead. A readable
+        // record wins on its own terms and the broken one is simply older.
+        unreadable: manifest === undefined && walked.unreadable,
+    };
 }
 
 /** One winner is all this returns, so one is all it holds. */
@@ -65,7 +80,7 @@ async function walkShorter(
     chronik: ManifestChronik,
     address: string,
     hash: string,
-): Promise<{ best?: LoadedManifest; truncated: boolean }> {
+): Promise<{ best?: LoadedManifest; truncated: boolean; unreadable: boolean }> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STL1_HEX);
     const [addrPage, lokadPage] = await Promise.all([
@@ -79,21 +94,28 @@ async function walkShorter(
 
     const total = Math.max(first.numPages, 1);
     const pages = Math.min(total, MAX_HISTORY_PAGES);
-    let best = bestInPage(first, hash, undefined);
+    const broken = { seen: false };
+    let best = bestInPage(first, hash, undefined, broken);
     for (let page = 1; page < pages; page++) {
-        best = bestInPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, best);
+        best = bestInPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, best, broken);
     }
-    return { best, truncated: total > pages };
+    return { best, truncated: total > pages, unreadable: broken.seen };
 }
 
 function bestInPage(
     page: HistoryPage,
     hash: string,
     best: LoadedManifest | undefined,
+    broken: { seen: boolean },
 ): LoadedManifest | undefined {
     let out = best;
     for (const tx of page.txs) {
-        out = better(out, recordFromTx(tx, hash));
+        try {
+            out = better(out, recordFromTx(tx, hash));
+        } catch {
+            // Ours, signed by this stall, and undecodable.
+            broken.seen = true;
+        }
     }
     return out;
 }
@@ -141,8 +163,17 @@ function txSignedByStall(tx: ChainTx, hash: string): boolean {
     return false;
 }
 
+/** A record addressed to us that we could not decode. */
+export class Stl1Unreadable extends Error {
+    constructor() {
+        super('STL1 record could not be decoded');
+        this.name = 'Stl1Unreadable';
+    }
+}
+
 function firstStl1(tx: ChainTx): StallManifest | undefined {
     let found: StallManifest | undefined;
+    let sawBroken = false;
     for (const output of tx.outputs) {
         const pushes = opReturnPushes(output.outputScript);
         if (pushes === undefined) {
@@ -155,8 +186,15 @@ function firstStl1(tx: ChainTx): StallManifest | undefined {
             }
             found = decoded;
         } catch {
+            // Only ours counts. A stall memo is not a broken manifest.
+            if (isStl1(pushes)) {
+                sawBroken = true;
+            }
             continue;
         }
+    }
+    if (found === undefined && sawBroken) {
+        throw new Stl1Unreadable();
     }
     return found;
 }
