@@ -64,6 +64,9 @@ export function boot(
             onOpenStall: (raw) => {
                 onOpenStall(raw);
             },
+            onGoHome: () => {
+                onGoHome();
+            },
         });
     };
 
@@ -78,6 +81,11 @@ export function boot(
             return;
         }
         history.pushState(null, '', stallPath(raw));
+        void refresh();
+    };
+
+    const onGoHome = (): void => {
+        history.pushState(null, '', '/');
         void refresh();
     };
 
@@ -325,6 +333,7 @@ function openingFromLocation(): AppState {
     }
     if (parsed.kind === 'pubkey') {
         const address = p2pkhAddress(parsed.pubkeyHex);
+        const cachedName = sessionNames.get(parsed.pubkeyHex);
         return {
             view: {
                 route: {
@@ -334,6 +343,7 @@ function openingFromLocation(): AppState {
                 },
                 fetch: { kind: 'opening' },
                 overlay: idle,
+                stallName: cachedName,
                 address,
                 tokens: emptyTokens,
             },

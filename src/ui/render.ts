@@ -25,6 +25,8 @@ export type StallHandlers = {
     onCloseSheet: () => void;
     /** Apex paste. Optional so a render-only test need not invent navigation. */
     onOpenStall?: (raw: string) => void;
+    /** Stall → apex. Optional so a render-only test need not invent navigation. */
+    onGoHome?: () => void;
 };
 
 export function renderStall(
@@ -43,10 +45,10 @@ export function renderStall(
             paintHome(stall, handlers);
             break;
         case 'invalid':
-            paintInvalid(stall, view.route.raw);
+            paintInvalid(stall, view.route.raw, handlers);
             break;
         case 'unresolvable':
-            paintUnresolvable(stall, view);
+            paintUnresolvable(stall, view, handlers);
             break;
         case 'unresolved':
             paintUnresolved(stall, view, handlers);
@@ -80,14 +82,19 @@ function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
     stall.append(body);
 }
 
-function paintInvalid(stall: HTMLElement, raw: string): void {
+function paintInvalid(stall: HTMLElement, raw: string, handlers: StallHandlers): void {
     stall.append(header(copy.LINK_UNREADABLE_TITLE));
     const body = el('div', 'stall-body');
     body.append(el('p', 'mid-p', raw));
     stall.append(body);
+    stall.append(footer(undefined, { goHome: handlers.onGoHome }));
 }
 
-function paintUnresolvable(stall: HTMLElement, view: StallView): void {
+function paintUnresolvable(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
     stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB));
     const body = el('div', 'stall-body');
@@ -99,7 +106,7 @@ function paintUnresolvable(stall: HTMLElement, view: StallView): void {
         ]),
     );
     stall.append(body);
-    stall.append(footer(address, { share: true }));
+    stall.append(footer(address, { share: true, goHome: handlers.onGoHome }));
 }
 
 function paintUnresolved(
@@ -109,7 +116,7 @@ function paintUnresolved(
 ): void {
     const fetch = view.fetch;
     if (fetch?.kind === 'opening') {
-        paintOpening(stall, view);
+        paintOpening(stall, view, handlers);
         return;
     }
     if (fetch && (fetch.kind === 'unreachable' || fetch.kind === 'plugin-missing')) {
@@ -130,12 +137,12 @@ function paintPubkey(
 ): void {
     const fetch = view.fetch;
     if (!fetch || fetch.kind === 'opening') {
-        paintOpening(stall, view);
+        paintOpening(stall, view, handlers);
         return;
     }
     switch (fetch.kind) {
         case 'empty':
-            paintEmpty(stall, view);
+            paintEmpty(stall, view, handlers);
             break;
         case 'unreachable':
         case 'plugin-missing':
@@ -150,20 +157,28 @@ function paintPubkey(
     }
 }
 
-function paintOpening(stall: HTMLElement, view: StallView): void {
-    stall.append(header(view.stallName ?? identityOf(view), copy.OPENING_SUB));
+function paintOpening(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    stall.append(header(displayName(view), copy.OPENING_SUB));
     const body = el('div', 'stall-body');
     body.append(mid('', [copy.OPENING_BODY]));
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true }));
+    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
 }
 
-function paintEmpty(stall: HTMLElement, view: StallView): void {
-    stall.append(header(view.stallName, copy.EMPTY_SUB));
+function paintEmpty(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    stall.append(header(displayName(view), copy.EMPTY_SUB));
     const body = el('div', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true }));
+    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
 }
 
 /**
@@ -176,7 +191,7 @@ function paintUnreadable(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(view.stallName ?? identityOf(view), copy.UNREADABLE_SUB));
+    stall.append(header(displayName(view), copy.UNREADABLE_SUB));
     const body = el('div', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
     const retry = el('button', 'mini', copy.TRY_AGAIN);
@@ -186,7 +201,7 @@ function paintUnreadable(
     });
     body.append(retry);
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true }));
+    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
 }
 
 function paintUnreachable(
@@ -198,7 +213,7 @@ function paintUnreachable(
     const identity = identityOf(view);
     const cached = hasCachedShop(view);
     if (cached) {
-        stall.append(header(view.stallName, copy.UNREACHABLE_SUB));
+        stall.append(header(displayName(view), copy.UNREACHABLE_SUB));
     } else {
         stall.append(header(identity));
     }
@@ -224,10 +239,8 @@ function paintUnreachable(
     body.append(retry);
     stall.append(body);
 
-    if (cached) {
-        stall.append(footer(identity, { enabled: false, share: true }));
-    } else if (identity !== undefined) {
-        stall.append(footer(identity, { share: true }));
+    if (cached || identity !== undefined) {
+        stall.append(footer(identity, { share: true, goHome: handlers.onGoHome }));
     }
 }
 
@@ -237,7 +250,7 @@ function paintOffers(
     offers: StallOffer[],
     handlers: StallHandlers,
 ): void {
-    stall.append(header(view.stallName ?? identityOf(view), copy.itemsForSale(offers.length)));
+    stall.append(header(displayName(view), copy.itemsForSale(offers.length)));
     const body = el('div', 'stall-body');
     const items = el('div', 'items');
     for (const offer of offers) {
@@ -254,7 +267,7 @@ function paintOffers(
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
-    stall.append(footer(identityOf(view), { share: true }));
+    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
 
     if (view.overlay.kind === 'buy') {
         const selected = findOffer(offers, view.overlay.outpoint);
@@ -272,11 +285,15 @@ function offerRow(
     const row = el('button', 'item');
     row.type = 'button';
     const name = tokenName(view.tokens, offer.tokenId);
+    const ticker = tokenTicker(view.tokens, offer.tokenId);
     const d = decimalsOf(view.tokens, offer.tokenId);
     row.append(el('div', 'item-ic', initials(name)));
     const info = el('div', 'item-b');
     info.append(el('div', 'item-n', name));
-    info.append(el('div', 'item-q', copy.remainingAtoms(formatAtoms(offer.atoms, d))));
+    const left = copy.remainingAtoms(formatAtoms(offer.atoms, d));
+    info.append(
+        el('div', 'item-q', ticker !== undefined ? `${ticker} · ${left}` : left),
+    );
     row.append(info);
     const price = el('div', 'item-p');
     if (isUnbuyable(offer)) {
@@ -317,7 +334,12 @@ function buySheet(
     });
 
     const d = decimalsOf(view.tokens, offer.tokenId);
-    card.append(el('div', 'sheet-t', tokenName(view.tokens, offer.tokenId)));
+    const name = tokenName(view.tokens, offer.tokenId);
+    const ticker = tokenTicker(view.tokens, offer.tokenId);
+    card.append(el('div', 'sheet-t', name));
+    if (ticker !== undefined) {
+        card.append(el('div', 'sheet-tick', ticker));
+    }
 
     if (isUnbuyable(offer)) {
         card.append(
@@ -351,10 +373,11 @@ function buySheet(
     // No network fee row: this origin builds nothing, so it has no fee to
     // quote. Cashtab shows its own before it signs.
 
-    // The sheet used to precede a signature here. It now precedes a market,
-    // so the thing worth saying is which offer that market will preselect.
+    // The sheet used to precede a signature here. It now precedes a market.
+    // Cashtab's depth bars are a per-token spot (sometimes fiat), not the
+    // covenant minimum on this card — so there is no hunt figure to print.
     card.append(el('div', 'ctx', copy.HANDOFF_MAY_PRESELECT));
-    card.append(el('div', 'ctx', copy.lookForPriceLine(asked)));
+    card.append(el('div', 'ctx', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
 
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
@@ -391,24 +414,21 @@ function header(name?: string, sub?: string): HTMLElement {
 
 function footer(
     address: string | undefined,
-    extra?: { enabled?: boolean; onClick?: () => void; share?: boolean },
+    extra?: { share?: boolean; goHome?: () => void },
 ): HTMLElement {
     const ft = el('footer', 'stall-foot');
     if (address !== undefined && address !== '') {
         ft.append(el('div', 'addr', address));
     }
+    if (extra?.goHome !== undefined) {
+        const back = el('button', 'mini another', copy.OPEN_ANOTHER_STALL);
+        back.type = 'button';
+        back.setAttribute('data-role', 'open-another');
+        back.addEventListener('click', extra.goHome);
+        ft.append(back);
+    }
     if (extra?.share === true) {
         ft.append(shareControl());
-    }
-    if (extra && extra.enabled !== undefined) {
-        const btn = el('button', 'buy', copy.OPEN_IN_CASHTAB);
-        btn.type = 'button';
-        if (!extra.enabled) {
-            btn.disabled = true;
-        } else if (extra.onClick) {
-            btn.addEventListener('click', extra.onClick);
-        }
-        ft.append(btn);
     }
     return ft;
 }
@@ -447,6 +467,14 @@ function hostsBox(triedAtMs: number, hosts: HostAttempt[]): HTMLElement {
         box.append(el('div', undefined, `${host.host} · ${host.result}`));
     }
     return box;
+}
+
+/** Manifest name when present; otherwise the stall's own address or pubkey. */
+function displayName(view: StallView): string | undefined {
+    if (view.stallName !== undefined && view.stallName !== '') {
+        return view.stallName;
+    }
+    return identityOf(view);
 }
 
 function identityOf(view: StallView): string | undefined {
@@ -490,6 +518,18 @@ function tokenName(tokens: StallView['tokens'], tokenId: string): string {
     return tokenId;
 }
 
+/** Genesis ticker, omitted when missing or when it would duplicate the name. */
+function tokenTicker(tokens: StallView['tokens'], tokenId: string): string | undefined {
+    const ticker = tokenMeta(tokens, tokenId)?.ticker;
+    if (ticker === undefined || ticker === '') {
+        return undefined;
+    }
+    if (ticker === tokenName(tokens, tokenId)) {
+        return undefined;
+    }
+    return ticker;
+}
+
 function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {
     return tokenMeta(tokens, tokenId)?.decimals ?? 0;
 }
@@ -517,10 +557,6 @@ function formatTriedAt(ms: number): string {
 }
 
 function applyTitle(view: StallView): void {
-    if (view.stallName !== undefined && view.stallName !== '') {
-        document.title = view.stallName;
-        return;
-    }
     switch (view.route.kind) {
         case 'home':
             document.title = copy.HOME_TITLE;
@@ -536,11 +572,9 @@ function applyTitle(view: StallView): void {
             // once a manifest has been published, and nothing can publish one
             // yet — so without this every real stall shares the apex's title,
             // which is exactly what an unfurled link shows.
-            const identity = identityOf(view);
+            const name = displayName(view);
             document.title =
-                identity === undefined || identity === ''
-                    ? copy.HOME_TITLE
-                    : identity;
+                name === undefined || name === '' ? copy.HOME_TITLE : name;
         }
     }
 }
