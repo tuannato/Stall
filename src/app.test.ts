@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { boot, type AppState } from './app';
+import { sellerFromPath, stallPath } from './domain/route';
+import { HOME_LEDE, OPENING_BODY } from './ui/copy';
 
 const PK = '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
@@ -20,10 +22,21 @@ function stallNamed(name: string): AppState {
     };
 }
 
+function homeState(): AppState {
+    return {
+        view: { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
+        offers: [],
+    };
+}
+
 /** Let queued promise callbacks run. */
 async function flush(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+});
 
 describe('stale-refresh-does-not-paint', () => {
     it('drops a load that resolves after a newer navigation started', async () => {
@@ -50,5 +63,100 @@ describe('stale-refresh-does-not-paint', () => {
         await flush();
         expect(root.textContent).toContain('Second Stall');
         expect(root.textContent).not.toContain('First Stall');
+    });
+
+    it('a late home load cannot paint over a stall opened from the apex', async () => {
+        const root = document.createElement('div');
+        const pending: Array<(state: AppState) => void> = [];
+        boot(
+            root,
+            () =>
+                new Promise<AppState>((resolve) => {
+                    pending.push(resolve);
+                }),
+        );
+        expect(pending).toHaveLength(1);
+
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = ADDR;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        expect(pending).toHaveLength(2);
+
+        pending[1]!(stallNamed('Opened Stall'));
+        await flush();
+        expect(root.textContent).toContain('Opened Stall');
+
+        pending[0]!(homeState());
+        await flush();
+        expect(root.textContent).toContain('Opened Stall');
+        expect(root.textContent).not.toContain(HOME_LEDE);
+    });
+});
+
+describe('open-stall-from-apex', () => {
+    it('pushState then load sees /s/… and paints opening immediately', async () => {
+        const root = document.createElement('div');
+        const pending: Array<(state: AppState) => void> = [];
+        boot(
+            root,
+            () =>
+                new Promise<AppState>((resolve) => {
+                    pending.push(resolve);
+                }),
+        );
+        expect(root.textContent).toContain(HOME_LEDE);
+
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = ADDR;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+        expect(sellerFromPath(location.pathname)).toBe(ADDR);
+        expect(location.pathname).toBe(stallPath(ADDR));
+        expect(pending).toHaveLength(2);
+        expect(root.textContent).toContain(OPENING_BODY);
+        expect(root.textContent).not.toContain(HOME_LEDE);
+
+        pending[1]!(stallNamed('Opened Stall'));
+        await flush();
+        expect(root.textContent).toContain('Opened Stall');
+        expect(root.textContent).not.toContain(OPENING_BODY);
+    });
+
+    it('invalid open does not push and does not load', () => {
+        const root = document.createElement('div');
+        const pending: Array<(state: AppState) => void> = [];
+        boot(
+            root,
+            () =>
+                new Promise<AppState>((resolve) => {
+                    pending.push(resolve);
+                }),
+        );
+        expect(pending).toHaveLength(1);
+
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = 'not-a-seller';
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+        expect(pending).toHaveLength(1);
+        expect(location.pathname).toBe('/');
+        expect(sellerFromPath(location.pathname)).toBeUndefined();
+    });
+
+    it('a cold /s/<seller> paints opening before the load resolves', () => {
+        window.history.replaceState(null, '', stallPath(PK));
+        const root = document.createElement('div');
+        boot(
+            root,
+            () =>
+                new Promise<AppState>(() => {
+                    /* never resolves */
+                }),
+        );
+        expect(root.textContent).toContain(OPENING_BODY);
+        expect(root.textContent).not.toContain(HOME_LEDE);
     });
 });

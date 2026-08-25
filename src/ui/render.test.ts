@@ -3,13 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { BANNED_THEME_PROPS } from '../domain/theme';
 import type { Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
 import {
+    COPY_LINK,
+    COPY_LINK_FALLBACK,
     DASHED_PRICE,
     EMPTY_TITLE,
     HANDOFF_FINE_PRINT,
     HANDOFF_MAY_PRESELECT,
     HOME_LEDE,
+    HOME_NO_ACCOUNT,
+    HOME_PASTE_INVALID,
+    HOME_PASTE_SUBMIT,
+    HOME_TITLE,
+    LINK_COPIED,
     LINK_UNREADABLE_TITLE,
+    LIST_IN_CASHTAB,
     OPEN_IN_CASHTAB,
+    OPENING_BODY,
     PRICE_FROM,
     UNBUYABLE_BADGE,
     TRY_AGAIN,
@@ -47,6 +56,7 @@ function handlers() {
         onBuy: vi.fn(),
         onRetry: vi.fn(),
         onCloseSheet: vi.fn(),
+        onOpenStall: vi.fn(),
     };
 }
 
@@ -77,6 +87,7 @@ describe('empty vs unreachable', () => {
         );
         const text = root.textContent ?? '';
         expect(text).toContain(EMPTY_TITLE);
+        expect(text).toContain(LIST_IN_CASHTAB);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(text).not.toContain(TRY_AGAIN);
         expect(root.querySelector('button.buy')).toBeNull();
@@ -181,6 +192,7 @@ describe('unresolvable', () => {
         const text = root.textContent ?? '';
         expect(text).toContain(UNRESOLVABLE_TITLE);
         expect(text).toContain(ADDR);
+        expect(text).toContain(LIST_IN_CASHTAB);
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(root.querySelector('button.buy')).toBeNull();
@@ -270,6 +282,7 @@ describe('handoff-does-not-claim-this-maker-is-selected', () => {
         // No action=BUY: that deep link picks a maker for the buyer.
         expect(cta.href).toBe(`https://cashtab.com/#/token/${TOKEN_ID}`);
         expect(cta.href).not.toContain('action=');
+        expect(cta.href).not.toContain('quantity=');
         expect(cta.rel).toContain('noopener');
 
         const backdrop = root.querySelector('.sheet') as HTMLElement;
@@ -287,7 +300,155 @@ describe('home is not an unreadable link', () => {
         });
         const text = root.textContent ?? '';
         expect(text).toContain(HOME_LEDE);
+        expect(text).toContain(HOME_NO_ACCOUNT);
+        expect(text).toContain(HOME_PASTE_SUBMIT);
         expect(text).not.toContain(LINK_UNREADABLE_TITLE);
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        expect(document.title).toBe(HOME_TITLE);
+    });
+
+    it('invalid paste does not call onOpenStall', () => {
+        const { root, h } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = 'not-a-seller';
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        expect(h.onOpenStall).not.toHaveBeenCalled();
+        expect(root.textContent).toContain(HOME_PASTE_INVALID);
+    });
+
+    it('valid paste calls onOpenStall with the trimmed address', () => {
+        const { root, h } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = `  ${ADDR}  `;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        expect(h.onOpenStall).toHaveBeenCalledTimes(1);
+        expect(h.onOpenStall).toHaveBeenCalledWith(ADDR);
+        expect(root.textContent).not.toContain(HOME_PASTE_INVALID);
+    });
+});
+
+describe('opening-is-not-empty-or-unreachable', () => {
+    it('says the stall is being opened, not empty and not down', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'opening' },
+                stallName: "Nato's Corner",
+            }),
+        );
+        const text = root.textContent ?? '';
+        expect(text).toContain(OPENING_BODY);
+        expect(text).toContain("Nato's Corner");
+        expect(text).not.toContain(EMPTY_TITLE);
+        expect(text).not.toContain(UNREACHABLE_BODY);
+        expect(text).not.toContain(TRY_AGAIN);
+        expect(root.querySelector('button.buy')).toBeNull();
+    });
+
+    it('unresolved opening is not never-spent and not unreachable', () => {
+        const { root } = paint({
+            route: { kind: 'unresolved', address: ADDR },
+            fetch: { kind: 'opening' },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        });
+        const text = root.textContent ?? '';
+        expect(text).toContain(OPENING_BODY);
+        expect(text).toContain(ADDR);
+        expect(text).not.toContain(UNRESOLVABLE_TITLE);
+        expect(text).not.toContain(UNREACHABLE_BODY);
+        expect(text).not.toContain(EMPTY_TITLE);
+    });
+});
+
+describe('document-title-follows-identity', () => {
+    it('uses the stall name when it has one, and a kind title otherwise', () => {
+        paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                stallName: "Nato's Corner",
+            }),
+        );
+        expect(document.title).toBe("Nato's Corner");
+
+        paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        expect(document.title).toBe(HOME_TITLE);
+
+        paint({
+            route: { kind: 'invalid', raw: 'nope' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        expect(document.title).toBe(LINK_UNREADABLE_TITLE);
+    });
+
+    /**
+     * The case every stall on chain is in today: a name comes from a manifest,
+     * and nothing can publish one yet. Falling back to the site name here gives
+     * every seller the apex's title, which is what an unfurled link shows.
+     */
+    it('names the stall by its address when no manifest has named it', () => {
+        paint(idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] } }));
+        expect(document.title).toBe(ADDR);
+        expect(document.title).not.toBe(HOME_TITLE);
+    });
+});
+
+describe('copy-link', () => {
+    it('is on a pubkey stall and not on the apex', () => {
+        const home = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        }).root;
+        expect(home.querySelector('[data-role="copy-link"]')).toBeNull();
+
+        const stall = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                stallName: "Nato's Corner",
+            }),
+        ).root;
+        expect(stall.querySelector('[data-role="copy-link"]')).not.toBeNull();
+        expect(stall.textContent).toContain(COPY_LINK);
+    });
+
+    it('falls back to a selectable field when clipboard is missing', () => {
+        const original = navigator.clipboard;
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: undefined,
+        });
+        try {
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'empty' },
+                }),
+            );
+            const btn = root.querySelector('.share button.mini') as HTMLButtonElement;
+            btn.click();
+            expect(root.textContent).toContain(COPY_LINK_FALLBACK);
+            expect(root.textContent).not.toContain(LINK_COPIED);
+        } finally {
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: original,
+            });
+        }
     });
 });
 

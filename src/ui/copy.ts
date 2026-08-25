@@ -92,3 +92,22 @@ export const HOME_HOW =
     'Every stall lives at /s/ followed by the seller\u2019s eCash address. Open that link and you see what they have listed right now, priced as the contract on chain encodes it.';
 export const HOME_NO_ACCOUNT =
     'There is nothing to sign up for and nothing to install. Stall reads the chain and holds no keys.';
+
+export const OPENING_SUB = 'Opening this stall';
+export const OPENING_BODY = 'Reading the chain for this seller.';
+
+export const HOME_PASTE_LABEL = 'Open a stall';
+export const HOME_PASTE_HINT =
+    'Paste the seller’s eCash address, or their compressed public key.';
+export const HOME_PASTE_SUBMIT = 'Open stall';
+export const HOME_PASTE_INVALID =
+    'That is not an eCash address or a compressed public key.';
+export const HOME_SELLER =
+    'If this is your stall, list the token in Cashtab, then paste the address you sell from.';
+
+export const LIST_IN_CASHTAB =
+    'List the token in Cashtab. Once it is on Agora it will show up here on its own.';
+
+export const COPY_LINK = 'Copy link';
+export const LINK_COPIED = 'Link copied';
+export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';
