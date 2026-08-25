@@ -37,6 +37,7 @@ SESSION-*.md
 AUDIT-*.md
 TRANSCRIPT-*.md
 scratch/
+.grok-task/
 
 # Agent tool state. Shared config under .claude/ is tracked on purpose;
 # per-machine and credential-bearing files are not.
