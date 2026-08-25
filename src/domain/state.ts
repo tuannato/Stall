@@ -55,6 +55,11 @@ export type TokenMeta = {
 };
 
 export type FetchStatus =
+    /**
+     * First paint: identity is known or parsed, the index has not been asked
+     * yet. Not empty, not unreachable, not unreadable.
+     */
+    | { kind: 'opening' }
     | { kind: 'offers'; offers: StallOffer[] }
     | { kind: 'empty' }
     /**

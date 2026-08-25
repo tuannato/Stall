@@ -48,3 +48,14 @@ export function sellerFromPath(pathname: string): string | undefined {
         return undefined;
     }
 }
+
+export function stallPath(raw: string): string {
+    const parsed = parseSellerParam(raw);
+    const token =
+        parsed.kind === 'pubkey'
+            ? parsed.pubkeyHex
+            : parsed.kind === 'address'
+              ? parsed.address
+              : raw.trim();
+    return `/s/${encodeURIComponent(token)}`;
+}

@@ -352,3 +352,42 @@
     line-height: 1.5;
     margin: 0;
 }
+
+.paste {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.paste-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 620;
+}
+
+.paste-in,
+.share-url {
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 13px;
+    padding: 10px;
+    border: 1px solid var(--s-muted);
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+    color: var(--s-text);
+    width: 100%;
+}
+
+.share-url {
+    font-size: 11px;
+    word-break: break-all;
+}
+
+.share {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}

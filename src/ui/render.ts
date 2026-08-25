@@ -1,5 +1,6 @@
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { formatAtoms, formatXec, isUnbuyable } from '../domain/money';
+import { parseSellerParam } from '../domain/route';
 import type {
     FetchStatus,
     HostAttempt,
@@ -22,6 +23,8 @@ export type StallHandlers = {
     onBuy: (outpoint: Outpoint) => void;
     onRetry: () => void;
     onCloseSheet: () => void;
+    /** Apex paste. Optional so a render-only test need not invent navigation. */
+    onOpenStall?: (raw: string) => void;
 };
 
 export function renderStall(
@@ -30,19 +33,20 @@ export function renderStall(
     handlers: StallHandlers,
 ): void {
     root.replaceChildren();
+    applyTitle(view);
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
     applyTheme(stall, view.theme ?? DEFAULT_THEME);
 
     switch (view.route.kind) {
         case 'home':
-            paintHome(stall);
+            paintHome(stall, handlers);
             break;
         case 'invalid':
             paintInvalid(stall, view.route.raw);
             break;
         case 'unresolvable':
-            paintUnresolvable(stall, view.route.address);
+            paintUnresolvable(stall, view);
             break;
         case 'unresolved':
             paintUnresolved(stall, view, handlers);
@@ -67,10 +71,12 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
     stall.classList.add(layout!);
 }
 
-function paintHome(stall: HTMLElement): void {
+function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
     stall.append(header(copy.HOME_TITLE, copy.HOME_LEDE));
     const body = el('div', 'stall-body');
     body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
+    body.append(pasteForm(handlers));
+    body.append(el('p', 'fine', copy.HOME_SELLER));
     stall.append(body);
 }
 
@@ -81,14 +87,19 @@ function paintInvalid(stall: HTMLElement, raw: string): void {
     stall.append(body);
 }
 
-function paintUnresolvable(stall: HTMLElement, address: string): void {
+function paintUnresolvable(stall: HTMLElement, view: StallView): void {
+    const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
     stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB));
     const body = el('div', 'stall-body');
     body.append(
-        mid(copy.UNRESOLVABLE_TITLE, [copy.UNRESOLVABLE_BODY, copy.UNRESOLVABLE_HINT]),
+        mid(copy.UNRESOLVABLE_TITLE, [
+            copy.UNRESOLVABLE_BODY,
+            copy.UNRESOLVABLE_HINT,
+            copy.LIST_IN_CASHTAB,
+        ]),
     );
     stall.append(body);
-    stall.append(footer(address));
+    stall.append(footer(address, { share: true }));
 }
 
 function paintUnresolved(
@@ -97,6 +108,10 @@ function paintUnresolved(
     handlers: StallHandlers,
 ): void {
     const fetch = view.fetch;
+    if (fetch?.kind === 'opening') {
+        paintOpening(stall, view);
+        return;
+    }
     if (fetch && (fetch.kind === 'unreachable' || fetch.kind === 'plugin-missing')) {
         paintUnreachable(stall, view, fetch, handlers);
         return;
@@ -114,9 +129,8 @@ function paintPubkey(
     handlers: StallHandlers,
 ): void {
     const fetch = view.fetch;
-    if (!fetch) {
-        stall.append(header(view.stallName, undefined));
-        stall.append(footer(identityOf(view)));
+    if (!fetch || fetch.kind === 'opening') {
+        paintOpening(stall, view);
         return;
     }
     switch (fetch.kind) {
@@ -136,12 +150,20 @@ function paintPubkey(
     }
 }
 
+function paintOpening(stall: HTMLElement, view: StallView): void {
+    stall.append(header(view.stallName ?? identityOf(view), copy.OPENING_SUB));
+    const body = el('div', 'stall-body');
+    body.append(mid('', [copy.OPENING_BODY]));
+    stall.append(body);
+    stall.append(footer(identityOf(view), { share: true }));
+}
+
 function paintEmpty(stall: HTMLElement, view: StallView): void {
     stall.append(header(view.stallName, copy.EMPTY_SUB));
     const body = el('div', 'stall-body');
-    body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY]));
+    body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     stall.append(body);
-    stall.append(footer(identityOf(view)));
+    stall.append(footer(identityOf(view), { share: true }));
 }
 
 /**
@@ -164,7 +186,7 @@ function paintUnreadable(
     });
     body.append(retry);
     stall.append(body);
-    stall.append(footer(identityOf(view)));
+    stall.append(footer(identityOf(view), { share: true }));
 }
 
 function paintUnreachable(
@@ -203,9 +225,9 @@ function paintUnreachable(
     stall.append(body);
 
     if (cached) {
-        stall.append(footer(identity, { enabled: false }));
+        stall.append(footer(identity, { enabled: false, share: true }));
     } else if (identity !== undefined) {
-        stall.append(footer(identity));
+        stall.append(footer(identity, { share: true }));
     }
 }
 
@@ -228,7 +250,7 @@ function paintOffers(
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
-    stall.append(footer(identityOf(view)));
+    stall.append(footer(identityOf(view), { share: true }));
 
     if (view.overlay.kind === 'buy') {
         const selected = findOffer(offers, view.overlay.outpoint);
@@ -365,19 +387,22 @@ function header(name?: string, sub?: string): HTMLElement {
 
 function footer(
     address: string | undefined,
-    buy?: { enabled: boolean; onClick?: () => void },
+    extra?: { enabled?: boolean; onClick?: () => void; share?: boolean },
 ): HTMLElement {
     const ft = el('footer', 'stall-foot');
     if (address !== undefined && address !== '') {
         ft.append(el('div', 'addr', address));
     }
-    if (buy) {
+    if (extra?.share === true) {
+        ft.append(shareControl());
+    }
+    if (extra && extra.enabled !== undefined) {
         const btn = el('button', 'buy', copy.OPEN_IN_CASHTAB);
         btn.type = 'button';
-        if (!buy.enabled) {
+        if (!extra.enabled) {
             btn.disabled = true;
-        } else if (buy.onClick) {
-            btn.addEventListener('click', buy.onClick);
+        } else if (extra.onClick) {
+            btn.addEventListener('click', extra.onClick);
         }
         ft.append(btn);
     }
@@ -485,6 +510,96 @@ function formatTriedAt(ms: number): string {
     const mm = String(d.getMinutes()).padStart(2, '0');
     const ss = String(d.getSeconds()).padStart(2, '0');
     return `${hh}:${mm}:${ss}`;
+}
+
+function applyTitle(view: StallView): void {
+    if (view.stallName !== undefined && view.stallName !== '') {
+        document.title = view.stallName;
+        return;
+    }
+    switch (view.route.kind) {
+        case 'home':
+            document.title = copy.HOME_TITLE;
+            return;
+        case 'invalid':
+            document.title = copy.LINK_UNREADABLE_TITLE;
+            return;
+        case 'unresolvable':
+            document.title = copy.UNRESOLVABLE_HEADER;
+            return;
+        default:
+            document.title = copy.HOME_TITLE;
+    }
+}
+
+function pasteForm(handlers: StallHandlers): HTMLFormElement {
+    const form = el('form', 'paste');
+    const label = el('label', 'paste-label', copy.HOME_PASTE_LABEL);
+    const input = el('input', 'paste-in');
+    input.type = 'text';
+    input.name = 'seller';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('aria-label', copy.HOME_PASTE_LABEL);
+    const hint = el('p', 'fine', copy.HOME_PASTE_HINT);
+    const err = el('p', 'ctx', '');
+    err.hidden = true;
+    err.setAttribute('data-role', 'paste-invalid');
+    const submit = el('button', 'buy', copy.HOME_PASTE_SUBMIT);
+    submit.type = 'submit';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const raw = input.value.trim();
+        if (parseSellerParam(raw).kind === 'invalid') {
+            err.textContent = copy.HOME_PASTE_INVALID;
+            err.hidden = false;
+            return;
+        }
+        err.hidden = true;
+        handlers.onOpenStall?.(raw);
+    });
+    label.append(input);
+    form.append(label, hint, err, submit);
+    return form;
+}
+
+function shareUrl(): string {
+    return `${location.origin}${location.pathname}${location.search}`;
+}
+
+function shareControl(): HTMLElement {
+    const wrap = el('div', 'share');
+    wrap.setAttribute('data-role', 'copy-link');
+    const url = shareUrl();
+    const field = el('input', 'share-url');
+    field.type = 'text';
+    field.readOnly = true;
+    field.value = url;
+    field.setAttribute('aria-label', copy.COPY_LINK);
+    const btn = el('button', 'mini', copy.COPY_LINK);
+    btn.type = 'button';
+    const fallback = (): void => {
+        field.focus();
+        field.select();
+        btn.textContent = copy.COPY_LINK_FALLBACK;
+    };
+    btn.addEventListener('click', () => {
+        const clipboard = navigator.clipboard;
+        if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
+            void clipboard.writeText(url).then(
+                () => {
+                    btn.textContent = copy.LINK_COPIED;
+                },
+                () => {
+                    fallback();
+                },
+            );
+            return;
+        }
+        fallback();
+    });
+    wrap.append(field, btn);
+    return wrap;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(

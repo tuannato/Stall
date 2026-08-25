@@ -1,7 +1,7 @@
 import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
-import { isHomePath, parseSellerParam, sellerFromPath } from './domain/route';
+import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
 import type {
     FetchStatus,
     Overlay,
@@ -61,6 +61,9 @@ export function boot(
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
+            onOpenStall: (raw) => {
+                onOpenStall(raw);
+            },
         });
     };
 
@@ -70,10 +73,22 @@ export function boot(
         paint();
     };
 
+    const onOpenStall = (raw: string): void => {
+        if (parseSellerParam(raw).kind === 'invalid') {
+            return;
+        }
+        history.pushState(null, '', stallPath(raw));
+        void refresh();
+    };
+
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
         live?.close();
         live = undefined;
+        // Paint the parsed route before the index is asked, so a paste is not
+        // a no-op while Chronik is in flight. Home is local; still cheap.
+        state = openingFromLocation();
+        paint();
         const next = await load();
         if (claimed !== generation) {
             return;
@@ -271,6 +286,67 @@ async function loadCurrent(): Promise<AppState> {
         },
         offers,
         pubkeyHex: route.pubkeyHex,
+    };
+}
+
+function openingFromLocation(): AppState {
+    const idle = { kind: 'idle' as const };
+    const emptyTokens = new Map();
+    if (isHomePath(location.pathname)) {
+        return {
+            view: { route: { kind: 'home' }, overlay: idle, tokens: emptyTokens },
+            offers: [],
+        };
+    }
+    const raw = sellerFromPath(location.pathname);
+    if (raw === undefined) {
+        return {
+            view: {
+                route: { kind: 'invalid', raw: location.pathname },
+                overlay: idle,
+                tokens: emptyTokens,
+            },
+            offers: [],
+        };
+    }
+    const parsed = parseSellerParam(raw);
+    if (parsed.kind === 'invalid') {
+        return {
+            view: {
+                route: { kind: 'invalid', raw: parsed.raw },
+                overlay: idle,
+                tokens: emptyTokens,
+            },
+            offers: [],
+        };
+    }
+    if (parsed.kind === 'pubkey') {
+        const address = p2pkhAddress(parsed.pubkeyHex);
+        return {
+            view: {
+                route: {
+                    kind: 'pubkey',
+                    pubkeyHex: parsed.pubkeyHex,
+                    address,
+                },
+                fetch: { kind: 'opening' },
+                overlay: idle,
+                address,
+                tokens: emptyTokens,
+            },
+            offers: [],
+            pubkeyHex: parsed.pubkeyHex,
+        };
+    }
+    return {
+        view: {
+            route: { kind: 'unresolved', address: parsed.address },
+            fetch: { kind: 'opening' },
+            overlay: idle,
+            address: parsed.address,
+            tokens: emptyTokens,
+        },
+        offers: [],
     };
 }
 
