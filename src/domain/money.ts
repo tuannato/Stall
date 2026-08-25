@@ -4,6 +4,11 @@ const SATS_PER_XEC = 100n;
 /** 1 sat = 1e9 nanosats. AgoraPartial.priceNanoSatsPerAtom uses this scale. */
 export const NANOSATS_PER_SAT = 1_000_000_000n;
 const NANOSATS_PER_XEC = SATS_PER_XEC * NANOSATS_PER_SAT;
+/**
+ * 4 XEC decimal places — the < 10 XEC rate band, and the "not free" floor.
+ * Exported so the row can label a bound without wrapping it in `≈`.
+ */
+export const RATE_TOO_SMALL = '< 0.0001';
 /** SLP/ALP genesis decimals sit in 0–9; 18 is a hard ceiling, not a guess. */
 const MAX_DECIMALS = 18;
 
@@ -13,8 +18,8 @@ export function formatXec(sats: bigint): string {
 
 /**
  * Format nanosats as XEC. 1 XEC = 1e11 nanosats, so the fraction can run to
- * 11 digits. Trailing zeros are dropped. This is a rate, not a covenant
- * amount: floor-dividing sats into nanosats-per-atom does not invert.
+ * 11 digits. Trailing zeros are dropped. Not a covenant amount — this
+ * helper does not round; `formatTokenRate` does.
  */
 export function formatXecFromNanoSats(nanoSats: bigint): string {
     return formatScaled(nanoSats, NANOSATS_PER_XEC, 11);
@@ -60,15 +65,47 @@ export function nanoSatsPerToken(
     return priceNanoSatsPerAtom * 10n ** BigInt(decimals);
 }
 
+/**
+ * Glance rate, not a covenant amount. One fraction width is a wall of
+ * nanosats at 190.0000976562 and a lie at 0.0009. Magnitude picks a
+ * rounding unit in nanosats (never Number() on the amount): 2 XEC
+ * decimals at ≥ 10, 4 below. Half-up — paid figures in this module
+ * floor; this one is not. A positive rate that still rounds to 0
+ * prints `< 0.0001`, not `0`, which would read as free. A per-atom
+ * 0 is omitted (the floor-div already threw it away), not dressed
+ * as a bound. Trailing zeros are stripped, so 190.00 becomes `190`;
+ * the `≈` on the row is what marks it inexact.
+ */
 export function formatTokenRate(
     priceNanoSatsPerAtom: bigint,
     decimals: number,
 ): string | undefined {
     const perToken = nanoSatsPerToken(priceNanoSatsPerAtom, decimals);
-    if (perToken === undefined) {
+    if (perToken === undefined || perToken === 0n) {
         return undefined;
     }
-    return formatXecFromNanoSats(perToken);
+    const rounded = roundHalfUp(perToken, rateRoundingUnit(perToken));
+    if (rounded === 0n) {
+        return RATE_TOO_SMALL;
+    }
+    return formatXecFromNanoSats(rounded);
+}
+
+function rateRoundingUnit(nanoSatsPerToken: bigint): bigint {
+    const n = nanoSatsPerToken < 0n ? -nanoSatsPerToken : nanoSatsPerToken;
+    if (n >= 10n * NANOSATS_PER_XEC) {
+        return NANOSATS_PER_XEC / 100n;
+    }
+    return NANOSATS_PER_XEC / 10_000n;
+}
+
+function roundHalfUp(amount: bigint, unit: bigint): bigint {
+    if (unit <= 1n) {
+        return amount;
+    }
+    const abs = amount < 0n ? -amount : amount;
+    const rounded = ((abs + unit / 2n) / unit) * unit;
+    return amount < 0n ? -rounded : rounded;
 }
 
 export function formatAtoms(atoms: bigint, decimals: number): string {

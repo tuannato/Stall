@@ -1,5 +1,11 @@
 import { cashtabTokenUrl } from '../domain/cashtab';
-import { formatAtoms, formatTokenRate, formatXec, isUnbuyable } from '../domain/money';
+import {
+    formatAtoms,
+    formatTokenRate,
+    formatXec,
+    isUnbuyable,
+    RATE_TOO_SMALL,
+} from '../domain/money';
 import { parseSellerParam } from '../domain/route';
 import type {
     FetchStatus,
@@ -345,8 +351,13 @@ function rateLine(offer: StallOffer, view: StallView): HTMLElement {
         decimals !== undefined && offer.priceNanoSatsPerAtom !== undefined
             ? formatTokenRate(offer.priceNanoSatsPerAtom, decimals)
             : undefined;
-    line.textContent =
-        formatted === undefined ? copy.DASHED_PRICE : copy.tokenRate(formatted);
+    if (formatted === undefined) {
+        line.textContent = copy.DASHED_PRICE;
+    } else if (formatted === RATE_TOO_SMALL) {
+        line.textContent = copy.tokenRateBound(formatted);
+    } else {
+        line.textContent = copy.tokenRate(formatted);
+    }
     return line;
 }
 

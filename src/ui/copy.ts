@@ -97,6 +97,13 @@ export function tokenRate(formattedXec: string): string {
 }
 
 /**
+ * A positive rate that rounded to 0. A bound, not a figure, so no `≈`.
+ */
+export function tokenRateBound(formattedXec: string): string {
+    return `${formattedXec} ${XEC}/token`;
+}
+
+/**
  * Chronik's tokenType.type, mapped to the short labels a reader already
  * sees on explorer.e.cash / eCash-Live. Unknown strings pass through rather
  * than being invented; empty input is omitted by the caller.

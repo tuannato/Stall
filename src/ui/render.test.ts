@@ -34,6 +34,7 @@ import {
     UNREADABLE_BODY,
     UNRESOLVABLE_TITLE,
     tokenRate,
+    tokenRateBound,
 } from './copy';
 import { renderStall } from './render';
 
@@ -759,7 +760,7 @@ describe('rate-is-not-the-asked-price', () => {
         );
         const rate = root.querySelector('[data-role="rate"]') as HTMLElement;
         expect(rate).not.toBeNull();
-        expect(rate.textContent).toBe(tokenRate('190.0000976562'));
+        expect(rate.textContent).toBe(tokenRate('190'));
         expect(rate.textContent).toContain('XEC/token');
         expect(rate.textContent).toContain('≈');
         expect(rate.textContent).not.toBe(tokenRate('1,045.01'));
@@ -786,7 +787,7 @@ describe('unknown-decimals-is-not-a-rate', () => {
         expect(rate.textContent).not.toContain('XEC/token');
         expect(rate.textContent).not.toContain('0.019');
         expect(rate.textContent).not.toContain('190.0000976562');
-        expect(rate.textContent).not.toContain(tokenRate('19.00000976562'));
+        expect(rate.textContent).not.toContain(tokenRate('19'));
         // The asked price does not depend on decimals and still prints.
         expect(
             (root.querySelector('[data-role="price"]') as HTMLElement).textContent,
@@ -806,9 +807,37 @@ describe('unknown-decimals-is-not-a-rate', () => {
             }),
         );
         const rate = root.querySelector('[data-role="rate"]')?.textContent;
-        expect(rate).toBe(tokenRate('19.00000976562'));
+        expect(rate).toBe(tokenRate('19'));
         expect(rate).not.toBe(tokenRate('1,045.01'));
         expect(rate).not.toBe(DASHED_PRICE);
+    });
+});
+
+describe('tiny-rate-is-not-free', () => {
+    /**
+     * A positive rate under the 4-decimal quantum is a bound, not a
+     * figure. Wrapping it in `≈` would claim a rounded value we do not
+     * have; printing `0` would read as free.
+     */
+    it('paints a bound without ≈ and does not touch the asked price', () => {
+        const tiny: StallOffer = {
+            ...OFFER,
+            priceNanoSatsPerAtom: 1_000_000n,
+        };
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [tiny] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        const rate = root.querySelector('[data-role="rate"]') as HTMLElement;
+        expect(rate.textContent).toBe(tokenRateBound('< 0.0001'));
+        expect(rate.textContent).not.toContain('≈');
+        expect(rate.textContent).not.toBe('0');
+        expect(rate.textContent).not.toBe(tokenRate('0'));
+        expect(
+            (root.querySelector('[data-role="price"]') as HTMLElement).textContent,
+        ).toBe('1,200');
     });
 });
 
