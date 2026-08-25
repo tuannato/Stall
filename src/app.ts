@@ -110,7 +110,7 @@ export function boot(
      * Keep the painted book current. Only a fact about the seller is applied:
      * a refetch that fails leaves the last good list on screen rather than
      * turning a working stall into an error, and the offers are replaced
-     * without disturbing an open sheet.
+     * without disturbing an open expander.
      */
     const watch = (claimed: number): void => {
         const pubkeyHex = state.pubkeyHex;

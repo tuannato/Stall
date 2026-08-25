@@ -18,12 +18,24 @@ export async function loadTokenMeta(
     const settled = await Promise.allSettled(
         unique.map(async (tokenId): Promise<TokenMeta> => {
             const info = await chronik.token(tokenId);
-            return {
+            const meta: TokenMeta = {
                 tokenId,
                 name: info.genesisInfo.tokenName,
                 ticker: info.genesisInfo.tokenTicker,
                 decimals: info.genesisInfo.decimals,
             };
+            const tokenType = info.tokenType;
+            if (
+                tokenType !== undefined &&
+                tokenType.protocol !== '' &&
+                tokenType.type !== ''
+            ) {
+                meta.tokenType = {
+                    protocol: tokenType.protocol,
+                    type: tokenType.type,
+                };
+            }
+            return meta;
         }),
     );
 

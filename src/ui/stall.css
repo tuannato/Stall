@@ -1,5 +1,4 @@
 /* One stall DOM. Theme colours and font arrive as --s-* on .stall only. */
-/* Sheet positioning is app chrome on .sheet, never a theme property on .stall. */
 
 .frame {
     position: relative;
@@ -66,11 +65,25 @@
     gap: 10px;
 }
 
+.layout-shelf .item.open {
+    grid-column: 1 / -1;
+}
+
 .layout-vending .items {
     gap: 7px;
 }
 
 .item {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin: 0;
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+    color: inherit;
+}
+
+.item-head {
     display: grid;
     grid-template-columns: 38px 1fr auto;
     gap: 11px;
@@ -80,14 +93,18 @@
     padding: 14px;
     border: 0;
     border-radius: var(--s-radius);
-    background: var(--s-surface);
+    background: transparent;
     color: inherit;
     font: inherit;
     text-align: left;
     cursor: pointer;
 }
 
-.layout-vending .item {
+.item.open .item-head {
+    border-radius: var(--s-radius) var(--s-radius) 0 0;
+}
+
+.layout-vending .item-head {
     padding: 12px;
 }
 
@@ -151,6 +168,35 @@
     color: var(--s-muted);
     letter-spacing: 0.05em;
     text-transform: uppercase;
+}
+
+.item-rate {
+    margin-top: 3px;
+    font-size: 10.5px;
+    color: var(--s-muted);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--s-font);
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 400;
+}
+
+.item-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: 0 14px 14px;
+    border-top: 1px solid var(--s-muted);
+}
+
+.token-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.token-facts .row dd {
+    word-break: break-all;
 }
 
 .stall-foot {
@@ -278,44 +324,6 @@
     font-size: 15px;
     color: var(--s-muted);
     letter-spacing: 0.06em;
-}
-
-.sheet {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: rgba(12, 16, 20, 0.42);
-    display: flex;
-    align-items: flex-end;
-}
-
-.sheet-c {
-    /* Measured at exactly the backdrop height with the handoff rows in place.
-       One more row would push the asked amount off the top, which is the thing
-       theme-cannot-hide-the-asked-amount exists to prevent — by a different
-       route. Scroll the card instead of clipping it. */
-    max-height: 100%;
-    overflow-y: auto;
-    background: var(--s-bg);
-    color: var(--s-text);
-    font-family: var(--s-font);
-    width: 100%;
-    border-radius: 16px 16px 0 0;
-    padding: 16px 14px 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-}
-
-.sheet-t {
-    font-size: 15.5px;
-    font-weight: 640;
-}
-
-.sheet-tick {
-    font-size: 12px;
-    color: var(--s-muted);
-    margin-top: -4px;
 }
 
 .row {
