@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { ICON_HOST } from './src/domain/icons';
 import { CHRONIK_HOSTS } from './src/net/hosts';
 
 /**
@@ -9,6 +10,9 @@ import { CHRONIK_HOSTS } from './src/net/hosts';
  * unreachable host and moves on, so the drift would cost a node without ever
  * failing loudly.
  *
+ * img-src is derived from ICON_HOST the same way. The page never fetches that
+ * origin — only an <img> loads it — so the host does not belong on connect-src.
+ *
  * object-src, frame-src and worker-src are stated rather than left to
  * default-src: worker-src does not fall back to default-src at all (it falls
  * back through child-src to script-src, which carries 'wasm-unsafe-eval').
@@ -17,7 +21,7 @@ export const CSP = [
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self'",
-    "img-src 'self'",
+    `img-src 'self' ${ICON_HOST}`,
     "font-src 'self'",
     "object-src 'none'",
     "frame-src 'none'",
@@ -43,6 +47,10 @@ export const CSP = [
 const DEV_CSP = CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
     .replace("worker-src 'none'", "worker-src 'self' blob:");
 
+// Deployed copies already send no-referrer: a stall path is the seller's
+// key or address. Preview is the production rehearsal and must match.
+const REFERRER_POLICY = 'no-referrer';
+
 export default defineConfig({
     appType: 'spa',
     build: {
@@ -52,10 +60,16 @@ export default defineConfig({
         modulePreload: { polyfill: false },
     },
     server: {
-        headers: { 'Content-Security-Policy': DEV_CSP },
+        headers: {
+            'Content-Security-Policy': DEV_CSP,
+            'Referrer-Policy': REFERRER_POLICY,
+        },
     },
     preview: {
-        headers: { 'Content-Security-Policy': CSP },
+        headers: {
+            'Content-Security-Policy': CSP,
+            'Referrer-Policy': REFERRER_POLICY,
+        },
     },
     test: {
         include: ['src/**/*.test.ts'],

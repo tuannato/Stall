@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CSP } from '../vite.config';
+import appConfig, { CSP } from '../vite.config';
+import { ICON_HOST } from './domain/icons';
 import { CHRONIK_HOSTS } from './net/hosts';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -34,6 +35,52 @@ function policyIn(file: string): string {
     const pages = file.match(/^\s*Content-Security-Policy:\s*(.+)$/m);
     expect(pages, 'no Content-Security-Policy found').not.toBeNull();
     return pages![1]!.trim();
+}
+
+/** The three policy copies, compared by directive in deploy-spec-matches-the-app. */
+function policyCopies(): Array<[string, string]> {
+    return [
+        ['vite', CSP],
+        ['cloudflare pages', policyIn(read('public/_headers'))],
+        ['nginx', policyIn(read('deploy/stall-headers.conf'))],
+    ];
+}
+
+function referrerPolicyIn(file: string): string {
+    const nginx = file.match(/add_header Referrer-Policy "([^"]*)"/);
+    if (nginx) {
+        return nginx[1]!;
+    }
+    const pages = file.match(/^\s*Referrer-Policy:\s*(.+)$/m);
+    expect(pages, 'no Referrer-Policy found').not.toBeNull();
+    return pages![1]!.trim();
+}
+
+function viteHeader(block: 'server' | 'preview', name: string): string {
+    const headers = appConfig[block]?.headers;
+    expect(headers, `${block} headers`).toBeTypeOf('object');
+    const value = (headers as Record<string, unknown>)[name];
+    expect(value, `${block} ${name}`).toBeTypeOf('string');
+    return value as string;
+}
+
+/** Hostnames of URL sources. `'self'` and tokens are skipped. */
+function sourceHostnames(sources: string): Set<string> {
+    const out = new Set<string>();
+    for (const src of sources.split(/\s+/)) {
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(src)) {
+            continue;
+        }
+        try {
+            const host = new URL(src).hostname;
+            if (host !== '') {
+                out.add(host);
+            }
+        } catch {
+            // scheme with no host, e.g. data:
+        }
+    }
+    return out;
 }
 
 describe('csp-is-header-not-meta', () => {
@@ -115,6 +162,57 @@ describe('deploy-spec-matches-the-app', () => {
         expect(nginx).not.toContain('error_page 404');
         expect(nginx).toContain('try_files $uri =404');
         expect(nginx).toContain('Cache-Control "no-store"');
+    });
+});
+
+describe('img-src-is-self-and-the-icon-host', () => {
+    /**
+     * Agreement across copies does not pin img-src: widening every copy
+     * together stays green. ICON_HOST is the one extra image origin; the
+     * page never fetches it. The host is pinned as a literal so a lockstep
+     * change of the constant and every copy cannot stay green.
+     */
+    it('pins img-src to self plus ICON_HOST on every copy', () => {
+        expect(ICON_HOST).toBe('https://icons.stall.cash');
+        const expected = `'self' https://icons.stall.cash`;
+        for (const [name, policy] of policyCopies()) {
+            expect(directives(policy).get('img-src'), name).toBe(expected);
+        }
+    });
+
+    it('refuses the upstream CDN and a data scheme', () => {
+        expect(ICON_HOST).not.toMatch(/icons\.etokens\.cash/i);
+        expect(ICON_HOST).not.toMatch(/^data:/i);
+        for (const [name, policy] of policyCopies()) {
+            expect(policy, name).not.toMatch(/icons\.etokens\.cash/i);
+            expect(directives(policy).get('img-src'), name).not.toMatch(/data:/i);
+        }
+    });
+
+    it('keeps ICON_HOST out of connect-src', () => {
+        const iconHost = new URL(ICON_HOST).hostname;
+        for (const [name, policy] of policyCopies()) {
+            const connect = directives(policy).get('connect-src') ?? '';
+            expect(sourceHostnames(connect).has(iconHost), name).toBe(false);
+        }
+    });
+});
+
+describe('referrer-policy-agrees', () => {
+    /**
+     * public/_headers and deploy/stall-headers.conf already sent no-referrer.
+     * vite server and preview did not. The value is pinned so lockstep drift
+     * to origin cannot stay green.
+     */
+    it('sends no-referrer from preview, pages, and nginx', () => {
+        const server = viteHeader('server', 'Referrer-Policy');
+        const preview = viteHeader('preview', 'Referrer-Policy');
+        const pages = referrerPolicyIn(read('public/_headers'));
+        const nginx = referrerPolicyIn(read('deploy/stall-headers.conf'));
+        expect(server).toBe('no-referrer');
+        expect(preview).toBe(server);
+        expect(pages).toBe(server);
+        expect(nginx).toBe(server);
     });
 });
 

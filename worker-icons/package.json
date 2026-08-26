@@ -1,0 +1,11 @@
+{
+  "name": "stall-icons",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.22.0"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/index.test.ts"
+  }
+}

@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ICON_HOST, iconUrl } from '../domain/icons';
 import {
     BANNED_THEME_PROPS,
     DEFAULT_THEME,
@@ -46,7 +50,7 @@ import {
     tokenRate,
     tokenRateBound,
 } from './copy';
-import { renderStall } from './render';
+import { renderStall, resetIconsForTests } from './render';
 
 const PK =
     '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -1126,5 +1130,265 @@ describe('default-stall-control-says-which-way-it-goes', () => {
         });
         expect(root.querySelector('.stall-foot')).not.toBeNull();
         expect(control(root)).toBeNull();
+    });
+});
+
+const UI_DIR = dirname(fileURLToPath(import.meta.url));
+const OTHER_TOKEN = '11'.repeat(32);
+const TEA: TokenMeta = {
+    tokenId: OTHER_TOKEN,
+    name: 'Green Tea',
+    ticker: 'TEA',
+    decimals: 0,
+};
+
+function offersView(
+    offers: StallOffer[] = [OFFER],
+    tokens: Map<string, TokenMeta> = new Map([[TOKEN_ID, BEANS]]),
+): StallView {
+    return idlePubkey({
+        fetch: { kind: 'offers', offers },
+        tokens,
+    });
+}
+
+function probeImages(): { images: HTMLImageElement[]; restore: () => void } {
+    const images: HTMLImageElement[] = [];
+    const Original = window.Image;
+    function ProbedImage(width?: number, height?: number): HTMLImageElement {
+        const img = new Original(width, height);
+        images.push(img);
+        return img;
+    }
+    vi.stubGlobal('Image', ProbedImage);
+    return {
+        images,
+        restore: () => {
+            vi.unstubAllGlobals();
+        },
+    };
+}
+
+describe('token icon', () => {
+    beforeEach(() => {
+        resetIconsForTests();
+    });
+
+    it('pending-icon-keeps-the-letters', () => {
+        const { root } = paint(offersView());
+        const cell = root.querySelector('.item-ic') as HTMLElement;
+        expect(cell).not.toBeNull();
+        expect(cell.querySelector('img')).toBeNull();
+        expect(cell.textContent).toBe('RB');
+        expect(cell.childNodes).toHaveLength(1);
+    });
+
+    it('failed-icon-keeps-the-letters', () => {
+        const { images, restore } = probeImages();
+        try {
+            const view = offersView();
+            paint(view);
+            expect(images).toHaveLength(1);
+            images[0]!.dispatchEvent(new Event('error'));
+            images[0]!.dispatchEvent(new Event('load'));
+            const { root } = paint(view);
+            const cell = root.querySelector('.item-ic') as HTMLElement;
+            expect(cell.querySelector('img')).toBeNull();
+            expect(cell.textContent).toBe('RB');
+            paint(view);
+            expect(images).toHaveLength(1);
+        } finally {
+            restore();
+        }
+    });
+
+    it('loaded-icon-replaces-letters-not-covers-them', () => {
+        const { images, restore } = probeImages();
+        try {
+            const view = offersView();
+            const pending = paint(view);
+            expect(pending.root.querySelector('.item-ic')?.textContent).toBe('RB');
+            expect(pending.root.querySelector('.item-ic img')).toBeNull();
+            images[0]!.dispatchEvent(new Event('load'));
+            const { root } = paint(view);
+            const cell = root.querySelector('.item-ic') as HTMLElement;
+            const img = cell.querySelector('img');
+            expect(img).not.toBeNull();
+            expect(img!.parentElement).toBe(cell);
+            expect(cell.textContent).toBe('');
+            expect(cell.childNodes).toHaveLength(1);
+            expect(cell.childNodes[0]).toBe(img);
+        } finally {
+            restore();
+        }
+    });
+
+    it('icon-src-is-set-once-per-token', () => {
+        const { images, restore } = probeImages();
+        try {
+            const two: StallOffer[] = [
+                OFFER,
+                { ...OFFER, outpoint: { txid: OUTPOINT.txid, outIdx: 1 } },
+            ];
+            const view = offersView(two);
+            paint(view);
+            expect(images).toHaveLength(1);
+            expect(images[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(images[0]!.referrerPolicy).toBe('no-referrer');
+            images[0]!.dispatchEvent(new Event('load'));
+            const again = paint(view);
+            paint(view);
+            expect(images).toHaveLength(1);
+            const painted = again.root.querySelectorAll('.item-ic img');
+            expect(painted).toHaveLength(2);
+            expect(painted[0]).not.toBe(images[0]);
+            expect(painted[1]).not.toBe(images[0]);
+            expect(painted[0]).not.toBe(painted[1]);
+            expect(painted[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(painted[1]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(painted[0]!.getAttribute('data-token-id')).toBe(TOKEN_ID);
+            expect(painted[1]!.getAttribute('data-token-id')).toBe(TOKEN_ID);
+        } finally {
+            restore();
+        }
+    });
+
+    it('loaded-image-belongs-to-one-token', () => {
+        const { images, restore } = probeImages();
+        try {
+            const other: StallOffer = {
+                ...OFFER,
+                tokenId: OTHER_TOKEN,
+                outpoint: { ...OUTPOINT, outIdx: 1 },
+            };
+            const view = offersView([OFFER, other], new Map([
+                [TOKEN_ID, BEANS],
+                [OTHER_TOKEN, TEA],
+            ]));
+            paint(view);
+            expect(images).toHaveLength(2);
+            const beans = images.find(
+                (img) => img.getAttribute('src') === iconUrl(TOKEN_ID),
+            );
+            expect(beans).toBeDefined();
+            beans!.dispatchEvent(new Event('load'));
+            const { root } = paint(view);
+            const cells = [...root.querySelectorAll('.item-ic')];
+            expect(cells).toHaveLength(2);
+            expect(cells[0]!.querySelector('img')?.getAttribute('data-token-id')).toBe(
+                TOKEN_ID,
+            );
+            expect(cells[0]!.querySelector('img')?.getAttribute('src')).toBe(
+                iconUrl(TOKEN_ID),
+            );
+            expect(cells[0]!.textContent).toBe('');
+            expect(cells[1]!.querySelector('img')).toBeNull();
+            expect(cells[1]!.textContent).toBe('GT');
+        } finally {
+            restore();
+        }
+    });
+
+    it('icon-is-child-of-the-clipping-cell', () => {
+        const { images, restore } = probeImages();
+        try {
+            const view = offersView();
+            paint(view);
+            images[0]!.dispatchEvent(new Event('load'));
+            const { root } = paint(view);
+            const cell = root.querySelector('.item-ic') as HTMLElement;
+            const img = cell.querySelector('img') as HTMLImageElement | null;
+            expect(cell.classList.contains('item-ic')).toBe(true);
+            expect(img).not.toBeNull();
+            expect(img!.parentElement).toBe(cell);
+            expect(cell.contains(img!)).toBe(true);
+            expect(img!.closest('.item-ic')).toBe(cell);
+            const src = readFileSync(join(UI_DIR, 'render.ts'), 'utf8');
+            expect(src).not.toMatch(/\binnerHTML\b/);
+            expect(src).not.toMatch(/\binsertAdjacentHTML\b/);
+        } finally {
+            restore();
+        }
+    });
+
+    it('item-ic-clips-its-image', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const cell = css.match(/\.item-ic\s*\{([^}]+)\}/);
+        expect(cell).not.toBeNull();
+        expect(cell![1]).toMatch(/overflow:\s*hidden\s*;/);
+        const img = css.match(/\.item-ic\s+img\s*\{([^}]+)\}/);
+        expect(img).not.toBeNull();
+        expect(img![1]).toMatch(/width:\s*100%/);
+        expect(img![1]).toMatch(/height:\s*100%/);
+        expect(img![1]).toMatch(/object-fit:\s*cover/);
+        for (const banned of BANNED_THEME_PROPS) {
+            expect(img![1].toLowerCase()).not.toContain(banned);
+        }
+        // happy-dom does not lay out. Whether a 64px bitmap actually stays
+        // inside the 38px cell is a browser fact this runner cannot see.
+    });
+
+    it('genesis-url-is-not-an-image-source', () => {
+        const trap: TokenMeta = {
+            ...BEANS,
+            name: 'https://evil.example/icon.png',
+            ticker: 'https://minter.example/a.png',
+        };
+        const { images, restore } = probeImages();
+        try {
+            paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, trap]]),
+                }),
+            );
+            expect(images).toHaveLength(1);
+            expect(images[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(images[0]!.getAttribute('src')).toContain(ICON_HOST);
+            expect(images[0]!.getAttribute('src')).not.toContain('evil.example');
+            expect(images[0]!.getAttribute('src')).not.toContain('minter.example');
+
+            const junk: StallOffer = { ...OFFER, tokenId: 'not-a-token' };
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [junk] },
+                    tokens: new Map([['not-a-token', trap]]),
+                }),
+            );
+            expect(images).toHaveLength(1);
+            expect(root.querySelector('.item-ic img')).toBeNull();
+            for (const img of root.querySelectorAll('img')) {
+                expect(img.getAttribute('src')).not.toContain('evil.example');
+                expect(img.getAttribute('src')).toContain(ICON_HOST);
+            }
+
+            const src = readFileSync(join(UI_DIR, 'render.ts'), 'utf8');
+            expect(src).toMatch(/from ['"]\.\.\/domain\/icons['"]/);
+            expect(src).toMatch(/\biconUrl\s*\(/);
+            expect(src).not.toMatch(/\/icon\//);
+        } finally {
+            restore();
+        }
+    });
+
+    it('load-replaces-letters-on-the-painted-cell', () => {
+        const { images, restore } = probeImages();
+        try {
+            const { root } = paint(offersView());
+            const cell = root.querySelector('.item-ic') as HTMLElement;
+            expect(cell.textContent).toBe('RB');
+            expect(root.isConnected).toBe(false);
+            images[0]!.dispatchEvent(new Event('load'));
+            const img = cell.querySelector('img');
+            expect(img).not.toBeNull();
+            expect(img!.parentElement).toBe(cell);
+            expect(cell.textContent).toBe('');
+            expect(cell.childNodes).toHaveLength(1);
+        } finally {
+            restore();
+        }
     });
 });

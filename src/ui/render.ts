@@ -1,4 +1,5 @@
 import { cashtabTokenUrl } from '../domain/cashtab';
+import { iconUrl } from '../domain/icons';
 import {
     formatAtoms,
     formatTokenRate,
@@ -37,11 +38,32 @@ export type StallHandlers = {
     onToggleDefault?: (raw: string) => void;
 };
 
+/**
+ * One detached image per token for the session. `renderStall` throws the tree
+ * away on every paint; a fresh `<img src>` each time is a request burst.
+ * Initials stay until this image has loaded. A failed load keeps them.
+ */
+type IconEntry =
+    | { state: 'pending'; img: HTMLImageElement }
+    | { state: 'loaded'; img: HTMLImageElement }
+    | { state: 'error' };
+
+const iconCache = new Map<string, IconEntry>();
+
+/** Cells from the current paint, so a load reveals without walking `document`. */
+const paintedIconCells = new Map<string, HTMLElement[]>();
+
+export function resetIconsForTests(): void {
+    iconCache.clear();
+    paintedIconCells.clear();
+}
+
 export function renderStall(
     root: HTMLElement,
     view: StallView,
     handlers: StallHandlers,
 ): void {
+    paintedIconCells.clear();
     root.replaceChildren();
     applyTitle(view);
     const frame = el('div', 'frame');
@@ -302,6 +324,117 @@ function isExpanded(view: StallView, offer: StallOffer): boolean {
     );
 }
 
+function iconKey(tokenId: string): string | undefined {
+    if (iconUrl(tokenId) === undefined) {
+        return undefined;
+    }
+    return tokenId.toLowerCase();
+}
+
+function iconMatchesToken(img: HTMLImageElement, key: string): boolean {
+    const url = iconUrl(key);
+    if (url === undefined) {
+        return false;
+    }
+    return img.getAttribute('data-token-id') === key && img.getAttribute('src') === url;
+}
+
+function ensureIcon(tokenId: string): void {
+    const key = iconKey(tokenId);
+    if (key === undefined || iconCache.has(key)) {
+        return;
+    }
+    const url = iconUrl(tokenId);
+    if (url === undefined) {
+        return;
+    }
+    const img = new Image();
+    img.referrerPolicy = 'no-referrer';
+    img.alt = '';
+    img.setAttribute('data-token-id', key);
+    iconCache.set(key, { state: 'pending', img });
+    img.addEventListener('load', () => {
+        const current = iconCache.get(key);
+        if (current === undefined || current.state === 'error' || current.img !== img) {
+            return;
+        }
+        if (!iconMatchesToken(img, key)) {
+            return;
+        }
+        iconCache.set(key, { state: 'loaded', img });
+        revealLoadedIcon(key, img);
+    });
+    img.addEventListener('error', () => {
+        const current = iconCache.get(key);
+        if (current === undefined || current.state === 'error' || current.img !== img) {
+            return;
+        }
+        iconCache.set(key, { state: 'error' });
+    });
+    img.src = url;
+}
+
+function cloneLoadedIcon(tokenId: string): HTMLImageElement | undefined {
+    const key = iconKey(tokenId);
+    if (key === undefined) {
+        return undefined;
+    }
+    const entry = iconCache.get(key);
+    if (entry === undefined || entry.state !== 'loaded') {
+        return undefined;
+    }
+    if (!iconMatchesToken(entry.img, key)) {
+        return undefined;
+    }
+    const clone = entry.img.cloneNode(true) as HTMLImageElement;
+    if (!iconMatchesToken(clone, key)) {
+        return undefined;
+    }
+    return clone;
+}
+
+function revealLoadedIcon(key: string, source: HTMLImageElement): void {
+    if (!iconMatchesToken(source, key)) {
+        return;
+    }
+    const cells = paintedIconCells.get(key);
+    if (cells === undefined) {
+        return;
+    }
+    for (const cell of cells) {
+        if (cell.getAttribute('data-token-id') !== key) {
+            continue;
+        }
+        const clone = source.cloneNode(true) as HTMLImageElement;
+        if (!iconMatchesToken(clone, key)) {
+            continue;
+        }
+        cell.replaceChildren(clone);
+    }
+}
+
+function itemIcon(tokenId: string, name: string): HTMLElement {
+    const cell = el('div', 'item-ic');
+    const key = iconKey(tokenId);
+    if (key !== undefined) {
+        cell.setAttribute('data-token-id', key);
+        let cells = paintedIconCells.get(key);
+        if (cells === undefined) {
+            cells = [];
+            paintedIconCells.set(key, cells);
+        }
+        cells.push(cell);
+        ensureIcon(tokenId);
+        const clone = cloneLoadedIcon(tokenId);
+        if (clone !== undefined) {
+            cell.append(clone);
+            return cell;
+        }
+    }
+    cell.textContent = initials(name);
+    return cell;
+}
+
 function offerRow(
     offer: StallOffer,
     view: StallView,
@@ -316,7 +449,7 @@ function offerRow(
     const head = el('button', 'item-head');
     head.type = 'button';
     head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    head.append(el('div', 'item-ic', initials(name)));
+    head.append(itemIcon(offer.tokenId, name));
     const info = el('div', 'item-b');
     info.append(el('div', 'item-n', name));
     const left = copy.remainingAtoms(formatAtoms(offer.atoms, d));

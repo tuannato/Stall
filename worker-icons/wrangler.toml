@@ -1,0 +1,18 @@
+# icons.stall.cash — token-icon proxy.
+#
+# Sibling of stall.cash, not a dependency. If this Worker disappears the shop
+# still paints: every row falls back to initials. Do not put this hostname on
+# a path that bricks the stall, and do not add it to a CSP until that fallback
+# is in place.
+#
+# Deploy: cd worker-icons && npx wrangler deploy
+# DNS: the custom-domain route below creates `icons`. The stall.cash apex stays
+# on Pages.
+
+name = "stall-icons"
+main = "src/index.ts"
+compatibility_date = "2026-08-26"
+
+[[routes]]
+pattern = "icons.stall.cash"
+custom_domain = true

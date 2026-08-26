@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run && node --experimental-strip-types --test worker-icons/src/index.test.ts"
   },
   "dependencies": {
     "chronik-client": "file:vendor/chronik-client-4.3.0.tgz",
