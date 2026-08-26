@@ -131,6 +131,7 @@ function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
     return {
         ...decoded,
         height: tx.block?.height,
+        isFinal: tx.isFinal === true,
         txid: tx.txid,
     };
 }
@@ -171,30 +172,34 @@ export class Stl1Unreadable extends Error {
     }
 }
 
+/**
+ * The one `STL1` record this transaction carries, or nothing if it carries none.
+ *
+ * **More than one is unreadable, decodable or not.** The seller signed every
+ * output, so nothing in the transaction says which one is the stall, and
+ * picking by output order would make the answer depend on where a wallet
+ * happened to put it. Returning `undefined` instead would be worse than
+ * arbitrary: it reads as "this seller never published", which is our ambiguity
+ * stated as a fact about them.
+ */
 function firstStl1(tx: ChainTx): StallManifest | undefined {
-    let found: StallManifest | undefined;
-    let sawBroken = false;
+    const ours: Uint8Array[][] = [];
     for (const output of tx.outputs) {
         const pushes = opReturnPushes(output.outputScript);
-        if (pushes === undefined) {
-            continue;
-        }
-        try {
-            const decoded = decodeManifestPushes(pushes);
-            if (found !== undefined) {
-                return undefined;
-            }
-            found = decoded;
-        } catch {
-            // Only ours counts. A stall memo is not a broken manifest.
-            if (isStl1(pushes)) {
-                sawBroken = true;
-            }
-            continue;
+        // A stall memo is not a broken manifest, so only our LOKAD counts.
+        if (pushes !== undefined && isStl1(pushes)) {
+            ours.push(pushes);
         }
     }
-    if (found === undefined && sawBroken) {
+    if (ours.length === 0) {
+        return undefined;
+    }
+    if (ours.length > 1) {
         throw new Stl1Unreadable();
     }
-    return found;
+    try {
+        return decodeManifestPushes(ours[0]!);
+    } catch {
+        throw new Stl1Unreadable();
+    }
 }
