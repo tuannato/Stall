@@ -1,3 +1,4 @@
+import { toHex } from 'ecash-lib';
 import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
 
 export const STL1_ASCII = 'STL1';
@@ -103,6 +104,59 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
         theme: decodeTheme(themeBytes[0]!),
         extras: decodeExtras(pushes),
     };
+}
+
+/**
+ * Direct push: opcode = length, then the bytes. Not `pushBytesOp` — a
+ * one-byte value 1–16 becomes OP_1…OP_16, which Stall's OP_RETURN reader
+ * drops, so a published Modern record would read as unpublished. Empty is
+ * never passed here; opcode 0 is a one-byte stack add, not an empty push.
+ * Tests: `shipped-theme-id-is-a-one-byte-push`, `theme-zero-is-a-one-byte-push`.
+ */
+function scriptPush(data: Uint8Array): Uint8Array {
+    const out = new Uint8Array(1 + data.length);
+    out[0] = data.length;
+    out.set(data, 1);
+    return out;
+}
+
+function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
+    let n = 0;
+    for (const part of parts) {
+        n += part.length;
+    }
+    const out = new Uint8Array(n);
+    let i = 0;
+    for (const part of parts) {
+        out.set(part, i);
+        i += part.length;
+    }
+    return out;
+}
+
+/**
+ * Cashtab `op_return_raw` payload: the three pushes `decodeManifestPushes`
+ * reads, as lowercase hex, without a leading `6a`. Cashtab prepends
+ * OP_RETURN and rejects a payload that starts with it. Undefined when the
+ * input cannot make a valid record.
+ */
+export function encodeManifestHex(name: string, themeId: number): string | undefined {
+    if (typeof name !== 'string') {
+        return undefined;
+    }
+    if (!Number.isInteger(themeId) || themeId < 0 || themeId > 255) {
+        return undefined;
+    }
+    const nameBytes = new TextEncoder().encode(name);
+    if (nameBytes.length < 1 || nameBytes.length > MAX_STALL_NAME) {
+        return undefined;
+    }
+    const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
+    const themeBytes = new Uint8Array(THEME_ID_BYTES);
+    themeBytes[0] = themeId;
+    return toHex(
+        concatBytes([scriptPush(lokad), scriptPush(nameBytes), scriptPush(themeBytes)]),
+    );
 }
 
 export type ManifestRank = {

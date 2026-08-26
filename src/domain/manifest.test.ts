@@ -1,5 +1,11 @@
+import { fromHex, getStackArray } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
-import { decodeManifestPushes, pickManifestWinner, STL1_ASCII } from './manifest';
+import {
+    decodeManifestPushes,
+    encodeManifestHex,
+    pickManifestWinner,
+    STL1_ASCII,
+} from './manifest';
 import { DEFAULT_THEME_ID } from './theme';
 
 function lokad(): Uint8Array {
@@ -168,5 +174,110 @@ describe('unconfirmed-manifest-is-not-a-winner', () => {
             { height: undefined, isFinal: false, txid: 'zz' },
         ]);
         expect(winner?.txid).toBe('aa');
+    });
+});
+
+/**
+ * Domain tests do not import `opReturnPushes` from `src/net/` — that is a
+ * different wall. Cashtab survival is `getStackArray` (what
+ * `nodeWillAcceptOpReturnRaw` calls). Stall survival of OP_0 / OP_n is the
+ * hand-written hex below; `getStackArray` treats opcode 0 as a one-byte
+ * push of `00`, so a theme-0 round-trip through it would stay green.
+ */
+function decodeEncoded(hex: string) {
+    const stack = getStackArray(`6a${hex}`);
+    return decodeManifestPushes(stack.map((h) => fromHex(h)));
+}
+
+describe('encodeManifestHex', () => {
+    it('round-trips name and theme id through getStackArray', () => {
+        const cases: [string, number][] = [
+            ['Nato', 0xfe],
+            ["Nato's Corner", 0x01],
+            ['a'.repeat(32), 255],
+            ['\u00e9'.repeat(16), 0],
+        ];
+        for (const [name, themeId] of cases) {
+            const hex = encodeManifestHex(name, themeId);
+            expect(hex, name).toBeDefined();
+            const m = decodeEncoded(hex!);
+            expect(m.name).toBe(name);
+            expect(m.theme.id).toBe(themeId);
+        }
+    });
+});
+
+describe('encoded-hex-is-not-the-builder', () => {
+    /**
+     * Same literal as `hex-vector-is-not-the-builder`, without the leading
+     * `6a` Cashtab prepends. 0xfe is not the shipped default: an encoder
+     * that always writes 0x01 would still pass a 0x01 vector.
+     */
+    it('emits a hand-written payload for Nato and theme 0xfe', () => {
+        // 04 STL1 / 04 "Nato" / 01 0xfe
+        expect(encodeManifestHex('Nato', 0xfe)).toBe('0453544c31044e61746f01fe');
+    });
+});
+
+describe('shipped-theme-id-is-a-one-byte-push', () => {
+    /**
+     * 0x01 is Modern. `pushBytesOp` would emit OP_1 (`51`) instead of
+     * `0101`, and Stall would drop the output as an unknown opcode.
+     */
+    it('pushes the shipped default as one data byte, not OP_1', () => {
+        expect(encodeManifestHex('Nato', 0x01)).toBe('0453544c31044e61746f0101');
+    });
+});
+
+describe('theme-zero-is-a-one-byte-push', () => {
+    /**
+     * `pushNumberOp(0)` is OP_0. Cashtab's `getStackArray` would still
+     * report theme id 0; Stall's reader would void the whole output.
+     */
+    it('pushes theme 0 as one data byte, not OP_0', () => {
+        expect(encodeManifestHex('Nato', 0)).toBe('0453544c31044e61746f0100');
+    });
+});
+
+describe('utf8-byte-length-is-not-js-length', () => {
+    it('rejects a name whose utf-8 length exceeds 32 while JS length does not', () => {
+        const long = '\u00e9'.repeat(32);
+        expect(long.length).toBe(32);
+        expect(new TextEncoder().encode(long).length).toBeGreaterThan(32);
+        expect(encodeManifestHex(long, 0x01)).toBeUndefined();
+    });
+});
+
+describe('empty-name-is-not-a-record', () => {
+    it('rejects an empty name and a non-string name', () => {
+        expect(encodeManifestHex('', 0x01)).toBeUndefined();
+        expect(encodeManifestHex(null as unknown as string, 0x01)).toBeUndefined();
+    });
+});
+
+describe('theme-id-is-a-byte', () => {
+    it('rejects a theme id that is not an integer 0-255', () => {
+        expect(encodeManifestHex('Nato', 256)).toBeUndefined();
+        expect(encodeManifestHex('Nato', -1)).toBeUndefined();
+        expect(encodeManifestHex('Nato', 1.5)).toBeUndefined();
+        expect(encodeManifestHex('Nato', NaN)).toBeUndefined();
+        expect(encodeManifestHex('Nato', Infinity)).toBeUndefined();
+    });
+});
+
+describe('op-return-raw-does-not-start-with-6a', () => {
+    it('emits lowercase even-length hex that never starts with 6a', () => {
+        const hexes = [
+            encodeManifestHex('Nato', 0xfe),
+            encodeManifestHex('Nato', 0x01),
+            encodeManifestHex('Nato', 0),
+            encodeManifestHex('a'.repeat(32), 255),
+        ];
+        for (const hex of hexes) {
+            expect(hex).toBeDefined();
+            expect(hex!.startsWith('6a')).toBe(false);
+            expect(hex!.length % 2).toBe(0);
+            expect(hex).toMatch(/^[a-f0-9]+$/);
+        }
     });
 });
