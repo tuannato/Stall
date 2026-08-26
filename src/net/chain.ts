@@ -24,6 +24,8 @@ export type ChainTxOutput = {
 export type ChainTx = {
     txid: string;
     block?: { height: number };
+    /** Avalanche pre-consensus finality. Absent from a fixture reads as false. */
+    isFinal?: boolean;
     inputs: readonly ChainTxInput[];
     outputs: readonly ChainTxOutput[];
 };
