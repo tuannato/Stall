@@ -16,6 +16,14 @@ export const SETTINGS_TRUNCATED =
 export const SETTINGS_UNREADABLE =
     'This seller published stall settings that this page could not read, so it is showing the default look.';
 
+/**
+ * Distinct from SETTINGS_UNREADABLE on purpose. The record read perfectly; we
+ * simply ship no look under that id. Saying "could not read" here would blame
+ * the seller for a row we have not written yet.
+ */
+export const THEME_UNKNOWN =
+    'This seller chose a look this page does not ship, so it is showing the default one.';
+
 export const EMPTY_SUB = 'Nothing for sale right now';
 export const EMPTY_TITLE = 'This stall is empty';
 export const EMPTY_BODY =
@@ -78,6 +86,14 @@ export const XEC = 'XEC';
 export const TRIED = 'tried';
 
 export const OPEN_ANOTHER_STALL = 'Open another stall';
+
+/**
+ * Says what the control does, not what it feels like. "Save" would suggest the
+ * stall is kept here; nothing is. What is kept is which stall this browser
+ * opens when someone types the bare domain.
+ */
+export const OPEN_BY_DEFAULT = 'Open this stall by default';
+export const OPENING_BY_DEFAULT = 'Opens by default — stop';
 
 export function itemsForSale(n: number): string {
     return n === 1 ? '1 item for sale' : `${n} items for sale`;

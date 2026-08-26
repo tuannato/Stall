@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
-import { BANNED_THEME_PROPS, DEFAULT_THEME } from '../domain/theme';
+import {
+    BANNED_THEME_PROPS,
+    DEFAULT_THEME,
+    DEFAULT_THEME_ID,
+    decodeTheme,
+    themeVars,
+} from '../domain/theme';
 import type { Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
 import {
     COPY_LINK,
@@ -20,9 +26,13 @@ import {
     LIST_IN_CASHTAB,
     MIN_PURCHASE,
     OPEN_ANOTHER_STALL,
+    OPEN_BY_DEFAULT,
     OPEN_IN_CASHTAB,
+    OPENING_BY_DEFAULT,
     OPENING_BODY,
     PRICE_FROM,
+    SETTINGS_UNREADABLE,
+    THEME_UNKNOWN,
     THIS_STALLS_STOCK,
     TOKEN_DECIMALS,
     TOKEN_ID as TOKEN_ID_LABEL,
@@ -69,6 +79,7 @@ function handlers() {
         onCloseSheet: vi.fn(),
         onOpenStall: vi.fn(),
         onGoHome: vi.fn(),
+        onToggleDefault: vi.fn(),
     };
 }
 
@@ -87,6 +98,13 @@ function idlePubkey(over: Partial<StallView> = {}): StallView {
         address: ADDR,
         ...over,
     };
+}
+
+/** Direct-child notes from `settingsNotes`. Handoff fine print sits inside a row. */
+function settingsFineCopy(root: HTMLElement): string[] {
+    return [...root.querySelectorAll('.stall-body > p.fine')].map(
+        (node) => node.textContent ?? '',
+    );
 }
 
 describe('empty vs unreachable', () => {
@@ -955,5 +973,158 @@ describe('open-another-stall', () => {
         expect(back.textContent).toBe(OPEN_ANOTHER_STALL);
         back.click();
         expect(h.onGoHome).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('unknown-theme-id-is-not-silent-default', () => {
+    /**
+     * The record named an id we do not ship. The look is the shipped
+     * default; saying nothing would read as a look the seller chose.
+     * Empty is a separate call site — an offers-only check would miss it.
+     */
+    it('paints the default look and says so on the offers screen', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(0xfe),
+            }),
+        );
+        const stall = root.querySelector('.stall') as HTMLElement;
+        expect(stall).not.toBeNull();
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(
+            themeVars(DEFAULT_THEME)['--s-bg'],
+        );
+        expect(THEME_UNKNOWN.length).toBeGreaterThan(0);
+        expect(settingsFineCopy(root)).toEqual([THEME_UNKNOWN]);
+        expect(root.textContent).toContain('Roasted Beans');
+        expect(root.textContent).not.toContain(EMPTY_TITLE);
+    });
+
+    it('paints the default look and says so on the empty screen', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                stallName: "Nato's Corner",
+                theme: decodeTheme(0xfe),
+            }),
+        );
+        const stall = root.querySelector('.stall') as HTMLElement;
+        expect(stall).not.toBeNull();
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(
+            themeVars(DEFAULT_THEME)['--s-bg'],
+        );
+        expect(settingsFineCopy(root)).toEqual([THEME_UNKNOWN]);
+        expect(root.textContent).toContain(EMPTY_TITLE);
+    });
+});
+
+describe('theme-unknown-is-not-settings-unreadable', () => {
+    /**
+     * A well-formed record naming an unshipped id is not a record we
+     * could not read. The missing row is ours.
+     */
+    it('does not claim an unshipped id could not be read', () => {
+        expect(THEME_UNKNOWN).not.toBe(SETTINGS_UNREADABLE);
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                theme: decodeTheme(0xfe),
+            }),
+        );
+        const text = root.textContent ?? '';
+        expect(text).toContain(THEME_UNKNOWN);
+        expect(text).not.toContain(SETTINGS_UNREADABLE);
+        expect(settingsFineCopy(root)).not.toContain(SETTINGS_UNREADABLE);
+    });
+});
+
+describe('shipped-theme-id-says-nothing', () => {
+    it('does not announce the default look when the id is one we ship', () => {
+        const offers = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(DEFAULT_THEME_ID),
+            }),
+        ).root;
+        expect(settingsFineCopy(offers)).toEqual([]);
+        expect(offers.textContent).not.toContain(THEME_UNKNOWN);
+
+        const empty = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                theme: decodeTheme(DEFAULT_THEME_ID),
+            }),
+        ).root;
+        expect(settingsFineCopy(empty)).toEqual([]);
+        expect(empty.textContent).not.toContain(THEME_UNKNOWN);
+    });
+
+    /**
+     * The other half of the guard: no manifest is not an unknown id.
+     * `!view.theme?.known` would print THEME_UNKNOWN on every stall
+     * that never published, and a shipped-id fixture would stay green.
+     */
+    it('does not announce a look the seller never named', () => {
+        const { root } = paint(idlePubkey({ fetch: { kind: 'empty' } }));
+        expect(settingsFineCopy(root)).toEqual([]);
+        expect(root.textContent).not.toContain(THEME_UNKNOWN);
+        expect(root.textContent).toContain(EMPTY_TITLE);
+    });
+});
+
+describe('default-stall-control-says-which-way-it-goes', () => {
+    /**
+     * The control is the only way back to the door once the bare domain opens a
+     * stall. A label that reads the same in both states would leave a visitor
+     * who wants stall.cash with no way to ask for it.
+     */
+    function control(root: HTMLElement): HTMLButtonElement | null {
+        return root.querySelector('[data-role="default-stall"]');
+    }
+
+    it('offers to make this the default, and says so once it is', () => {
+        const off = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
+        expect(control(off)?.textContent).toBe(OPEN_BY_DEFAULT);
+        expect(control(off)?.getAttribute('aria-pressed')).toBe('false');
+
+        const on = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, isDefaultStall: true }),
+        ).root;
+        expect(control(on)?.textContent).toBe(OPENING_BY_DEFAULT);
+        expect(control(on)?.getAttribute('aria-pressed')).toBe('true');
+        expect(OPEN_BY_DEFAULT).not.toBe(OPENING_BY_DEFAULT);
+    });
+
+    it('hands back the route token this stall answers to', () => {
+        const { root, h } = paint(idlePubkey({ fetch: { kind: 'empty' } }));
+        control(root)?.click();
+        expect(h.onToggleDefault).toHaveBeenCalledWith(ADDR);
+    });
+
+    it('is offered on an unreachable stall too', () => {
+        // Wanting this stall back tomorrow does not depend on an index
+        // answering today.
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] },
+            }),
+        );
+        expect(control(root)).not.toBeNull();
+    });
+
+    it('is not offered for a link that is not a stall', () => {
+        // An unreadable link has a footer, so this can regress: routing that
+        // screen through the stall footer would offer to make an unparseable
+        // string the default. The apex is not the case to assert — it paints no
+        // footer at all, so an assertion there could never fail.
+        const { root } = paint({
+            route: { kind: 'invalid', raw: 'not-an-address' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        expect(root.querySelector('.stall-foot')).not.toBeNull();
+        expect(control(root)).toBeNull();
     });
 });

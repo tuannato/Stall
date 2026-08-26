@@ -33,6 +33,8 @@ export type StallHandlers = {
     onOpenStall?: (raw: string) => void;
     /** Stall → apex. Optional so a render-only test need not invent navigation. */
     onGoHome?: () => void;
+    /** Toggle whether the bare domain opens this stall. */
+    onToggleDefault?: (raw: string) => void;
 };
 
 export function renderStall(
@@ -112,7 +114,7 @@ function paintUnresolvable(
         ]),
     );
     stall.append(body);
-    stall.append(footer(address, { share: true, goHome: handlers.onGoHome }));
+    stall.append(stallFooter(address, view, handlers));
 }
 
 function paintUnresolved(
@@ -172,7 +174,7 @@ function paintOpening(
     const body = el('div', 'stall-body');
     body.append(mid('', [copy.OPENING_BODY]));
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
+    stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
 function paintEmpty(
@@ -183,8 +185,9 @@ function paintEmpty(
     stall.append(header(displayName(view), copy.EMPTY_SUB));
     const body = el('div', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
+    settingsNotes(body, view);
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
+    stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
 /**
@@ -207,7 +210,7 @@ function paintUnreadable(
     });
     body.append(retry);
     stall.append(body);
-    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
+    stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
 function paintUnreachable(
@@ -246,7 +249,7 @@ function paintUnreachable(
     stall.append(body);
 
     if (cached || identity !== undefined) {
-        stall.append(footer(identity, { share: true, goHome: handlers.onGoHome }));
+        stall.append(stallFooter(identity, view, handlers));
     }
 }
 
@@ -265,6 +268,17 @@ function paintOffers(
     body.append(items);
     stall.append(body);
 
+    settingsNotes(body, view);
+    stall.append(stallFooter(identityOf(view), view, handlers));
+}
+
+/**
+ * Why the stall does not look the way its seller asked. Painted on every screen
+ * that has a stall behind it, not only on the one with offers: a seller whose
+ * settings we could not read has the same right to know it when their shop is
+ * empty, and silence there would read as a look they chose.
+ */
+function settingsNotes(body: HTMLElement, view: StallView): void {
     if (view.settingsUnreadable === true) {
         // They did publish. Silence here would say they never did.
         body.append(el('p', 'fine', copy.SETTINGS_UNREADABLE));
@@ -273,7 +287,11 @@ function paintOffers(
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
-    stall.append(footer(identityOf(view), { share: true, goHome: handlers.onGoHome }));
+    if (view.theme !== undefined && !view.theme.known) {
+        // The record was fine. The missing row is ours, and saying so keeps
+        // this apart from a record we could not read.
+        body.append(el('p', 'fine', copy.THEME_UNKNOWN));
+    }
 }
 
 function isExpanded(view: StallView, offer: StallOffer): boolean {
@@ -471,13 +489,50 @@ function header(name?: string, sub?: string): HTMLElement {
     return hd;
 }
 
+/**
+ * The footer every screen with a stall behind it shares. The default-stall
+ * control is offered wherever an identity exists — including an unreachable
+ * one, because wanting this stall back tomorrow does not depend on today's
+ * index answering.
+ */
+function stallFooter(
+    identity: string | undefined,
+    view: StallView,
+    handlers: StallHandlers,
+): HTMLElement {
+    const raw = identityOf(view);
+    const onToggle = handlers.onToggleDefault;
+    return footer(identity, {
+        share: true,
+        goHome: handlers.onGoHome,
+        defaultStall:
+            raw !== undefined && onToggle !== undefined
+                ? { raw, isDefault: view.isDefaultStall === true, onToggle }
+                : undefined,
+    });
+}
+
 function footer(
     address: string | undefined,
-    extra?: { share?: boolean; goHome?: () => void },
+    extra?: {
+        share?: boolean;
+        goHome?: () => void;
+        defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
+    },
 ): HTMLElement {
     const ft = el('footer', 'stall-foot');
     if (address !== undefined && address !== '') {
         ft.append(el('div', 'addr', address));
+    }
+    const pin = extra?.defaultStall;
+    if (pin !== undefined) {
+        const label = pin.isDefault ? copy.OPENING_BY_DEFAULT : copy.OPEN_BY_DEFAULT;
+        const btn = el('button', 'mini another', label);
+        btn.type = 'button';
+        btn.setAttribute('data-role', 'default-stall');
+        btn.setAttribute('aria-pressed', pin.isDefault ? 'true' : 'false');
+        btn.addEventListener('click', () => pin.onToggle(pin.raw));
+        ft.append(btn);
     }
     if (extra?.goHome !== undefined) {
         const back = el('button', 'mini another', copy.OPEN_ANOTHER_STALL);
@@ -536,7 +591,13 @@ function displayName(view: StallView): string | undefined {
     return identityOf(view);
 }
 
-function identityOf(view: StallView): string | undefined {
+/**
+ * The route token this stall answers to — an address when one is known, else
+ * whatever the route carried. Exported because `app.ts` needs the same answer
+ * to decide whether this is the browser's default stall, and two copies of the
+ * rule would drift.
+ */
+export function identityOf(view: StallView): string | undefined {
     if (view.address !== undefined && view.address !== '') {
         return view.address;
     }

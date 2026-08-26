@@ -3,10 +3,13 @@ import {
     BANNED_THEME_PROPS,
     DEFAULT_THEME,
     FONT_STACKS,
+    DEFAULT_THEME_ID,
     MIN_CONTRAST,
-    THEME_BYTES,
+    NEO_CITY_THEME_ID,
+    RURAL_THEME_ID,
     contrastRatio,
     decodeTheme,
+    isShippedThemeId,
     themeVars,
     type DecodedTheme,
     type Rgb,
@@ -21,27 +24,71 @@ function rgbOf(cssValue: string): Rgb {
 }
 
 describe('decodeTheme', () => {
-    it('reads 28 bytes and falls back unknown font/layout indices', () => {
-        const bytes = new Uint8Array(THEME_BYTES);
-        bytes.set([255, 255, 255], 0);
-        bytes.set([244, 246, 248], 3);
-        bytes.set([20, 23, 26], 6);
-        bytes.set([107, 117, 128], 9);
-        bytes.set([44, 107, 228], 12);
-        bytes.set([178, 58, 46], 15);
-        bytes.set([44, 107, 228], 18);
-        bytes[21] = 99;
-        bytes[22] = 12;
-        bytes[23] = 99;
-        const t = decodeTheme(bytes);
-        expect(t.fontIndex).toBe(0);
-        expect(t.layoutIndex).toBe(0);
+    it('returns the shipped row for an id we ship', () => {
+        const t = decodeTheme(DEFAULT_THEME_ID);
+        expect(t.id).toBe(DEFAULT_THEME_ID);
+        expect(t.known).toBe(true);
+        expect(t.bg).toEqual(DEFAULT_THEME.bg);
+    });
+});
+
+describe('theme-table-ids-are-pinned', () => {
+    /**
+     * A published record names a number, and that number is permanent. Assert
+     * the numbers and the colours, not the names: renaming a look is free,
+     * re-pointing an id silently changes what somebody already signed.
+     */
+    it('pins 0x01 Modern, the look painted with no manifest at all', () => {
+        expect(DEFAULT_THEME_ID).toBe(0x01);
+        const t = decodeTheme(0x01);
         expect(t.bg).toEqual({ r: 255, g: 255, b: 255 });
+        expect(t.surface).toEqual({ r: 244, g: 246, b: 248 });
+        expect(t.text).toEqual({ r: 20, g: 23, b: 26 });
+        expect(t.accent).toEqual({ r: 44, g: 107, b: 228 });
+        expect(t.fontIndex).toBe(0);
+        expect(t.softness).toBe(12);
+        expect(t.layoutIndex).toBe(0);
     });
 
-    it('rejects the wrong length rather than ignoring trailing bytes', () => {
-        expect(() => decodeTheme(new Uint8Array(24))).toThrow(/28 bytes/);
-        expect(() => decodeTheme(new Uint8Array(29))).toThrow(/28 bytes/);
+    it('pins 0x02 Neo city and 0x03 Rural', () => {
+        expect(NEO_CITY_THEME_ID).toBe(0x02);
+        expect(RURAL_THEME_ID).toBe(0x03);
+        const neo = decodeTheme(0x02);
+        expect(neo.bg).toEqual({ r: 8, g: 10, b: 18 });
+        expect(neo.accent).toEqual({ r: 24, g: 224, b: 216 });
+        expect(neo.fontIndex).toBe(1);
+        expect(neo.layoutIndex).toBe(2);
+        const rural = decodeTheme(0x03);
+        expect(rural.bg).toEqual({ r: 251, g: 244, b: 230 });
+        expect(rural.accent).toEqual({ r: 180, g: 85, b: 44 });
+        expect(rural.fontIndex).toBe(2);
+        expect(rural.layoutIndex).toBe(1);
+    });
+
+    it('ships no id whose own palette hides the asked amount', () => {
+        // The synthetic case below proves the correction works. This proves we
+        // never needed it: a shipped look that had to be lifted would be a look
+        // nobody reviewed, painted on somebody's shop.
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const theme = decodeTheme(id);
+            expect(isShippedThemeId(id)).toBe(true);
+            const vars = themeVars(theme);
+            expect(rgbOf(vars['--s-text']!)).toEqual(theme.text);
+            expect(rgbOf(vars['--s-accent']!)).toEqual(theme.accent);
+            expect(rgbOf(vars['--s-muted']!)).toEqual(theme.muted);
+        }
+    });
+});
+
+describe('unknown-theme-id-is-not-silent-default', () => {
+    it('falls back without throwing and keeps the id it was asked for', () => {
+        const t = decodeTheme(0xfe);
+        expect(isShippedThemeId(0xfe)).toBe(false);
+        // A bad byte must not brick a stall, so the look is the default one.
+        expect(t.bg).toEqual(DEFAULT_THEME.bg);
+        // But the screen has to be able to say the look is ours, not theirs.
+        expect(t.known).toBe(false);
+        expect(t.id).toBe(0xfe);
     });
 });
 

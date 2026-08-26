@@ -102,4 +102,6 @@ export type StallView = {
     settingsTruncated?: boolean;
     /** The seller published settings this page could not read. */
     settingsUnreadable?: boolean;
+    /** True when the bare domain opens this stall for this browser. */
+    isDefaultStall?: boolean;
 };

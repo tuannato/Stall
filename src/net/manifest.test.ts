@@ -1,10 +1,10 @@
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
-import { STL1_ASCII, STL1_HEX } from '../domain/manifest';
-import { THEME_BYTES } from '../domain/theme';
+import { decodeManifestPushes, STL1_ASCII, STL1_HEX } from '../domain/manifest';
 import type { ChainTx, HistoryPage, ManifestChronik } from './chain';
 import { loadManifest } from './manifest';
 import { MAX_HISTORY_PAGES } from './chain';
+import { opReturnPushes } from './script';
 
 function compressedPk(fill: number): Uint8Array {
     const pk = new Uint8Array(33);
@@ -35,10 +35,40 @@ function pushHex(data: Uint8Array): string {
     return toHex(new Uint8Array([data.length, ...data]));
 }
 
-function stl1OutputScript(name: string, theme = new Uint8Array(THEME_BYTES)): string {
+function stl1OutputScript(name: string, theme = new Uint8Array([0x01])): string {
     const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
     const nameBytes = new TextEncoder().encode(name);
     return `6a${pushHex(lokad)}${pushHex(nameBytes)}${pushHex(theme)}`;
+}
+
+/**
+ * A record of ours that the decoder cannot read — the superseded 28-byte
+ * theme push. Still `isStl1`: LOKAD matches, decode fails.
+ */
+function brokenStl1(): string {
+    const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
+    const name = new TextEncoder().encode('Nato');
+    const theme = new Uint8Array(28);
+    return `6a${pushHex(lokad)}${pushHex(name)}${pushHex(theme)}`;
+}
+
+/** An OP_RETURN that was never addressed to us: a plain stall memo. */
+function memo(): string {
+    return `6a${pushHex(new TextEncoder().encode('hello there'))}`;
+}
+
+function txWith(outputScripts: readonly string[], pk: Uint8Array, hash: string): ChainTx {
+    return {
+        txid: 'cd'.repeat(32),
+        block: { height: 100 },
+        inputs: [
+            {
+                inputScript: p2pkhScriptSig(pk),
+                outputScript: p2pkhOutputScript(hash),
+            },
+        ],
+        outputs: outputScripts.map((outputScript) => ({ outputScript })),
+    };
 }
 
 function stallTx(opts: {
@@ -218,41 +248,14 @@ describe('truncated-manifest-is-not-silent-default', () => {
 describe('unparseable-manifest-is-not-silent-default', () => {
     /**
      * A record this stall signed, carrying our LOKAD, that the decoder cannot
-     * read — here a fourth push. The seller published settings. Painting the
-     * shipped default without a word says they never did, which is the same
-     * claim `truncated` exists to refuse.
+     * read — here a 28-byte theme push (the superseded format). The seller
+     * published settings. Painting the shipped default without a word says
+     * they never did, which is the same claim `truncated` exists to refuse.
      */
-    function brokenStl1(): string {
-        const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
-        const name = new TextEncoder().encode('Nato');
-        const theme = new Uint8Array(THEME_BYTES);
-        const extra = new Uint8Array([1, 2, 3]);
-        return `6a${pushHex(lokad)}${pushHex(name)}${pushHex(theme)}${pushHex(extra)}`;
-    }
-
-    /** An OP_RETURN that was never addressed to us: a plain stall memo. */
-    function memo(): string {
-        return `6a${pushHex(new TextEncoder().encode('hello there'))}`;
-    }
-
-    function txWith(outputScript: string, pk: Uint8Array, hash: string): ChainTx {
-        return {
-            txid: 'cd'.repeat(32),
-            block: { height: 100 },
-            inputs: [
-                {
-                    inputScript: p2pkhScriptSig(pk),
-                    outputScript: p2pkhOutputScript(hash),
-                },
-            ],
-            outputs: [{ outputScript }],
-        };
-    }
-
     it('says so when a record of ours cannot be decoded', async () => {
         const pk = compressedPk(0xaa);
         const hash = toHex(shaRmd160(pk));
-        const tx = txWith(brokenStl1(), pk, hash);
+        const tx = txWith([brokenStl1()], pk, hash);
         const lookup = await loadManifest(
             // walkShorter reads whichever index is shorter; give it both.
             fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
@@ -265,7 +268,7 @@ describe('unparseable-manifest-is-not-silent-default', () => {
     it('stays silent for an OP_RETURN that was never addressed to us', async () => {
         const pk = compressedPk(0xbb);
         const hash = toHex(shaRmd160(pk));
-        const tx = txWith(memo(), pk, hash);
+        const tx = txWith([memo()], pk, hash);
         const lookup = await loadManifest(
             fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
             { address: 'ecash:stall', hash },
@@ -273,5 +276,123 @@ describe('unparseable-manifest-is-not-silent-default', () => {
         expect(lookup.manifest).toBeUndefined();
         // A stall memo is not a broken manifest.
         expect(lookup.unreadable).toBe(false);
+    });
+});
+
+describe('extra-pushes-are-ignored', () => {
+    /**
+     * The domain decoder is tested on its own, but tolerance only pays off if a
+     * record carrying a field this reader has never heard of still arrives as
+     * that seller's settings. This is the end-to-end half: a stall published
+     * with a future field must not read as a stall that published nothing.
+     */
+    it('loads a record carrying a field this reader does not know', async () => {
+        const pk = compressedPk(0xa1);
+        const hash = toHex(shaRmd160(pk));
+        const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
+        const name = new TextEncoder().encode('Future');
+        const future = new Uint8Array([0x7f, 0xde, 0xad]);
+        const script =
+            `6a${pushHex(lokad)}${pushHex(name)}` +
+            `${pushHex(new Uint8Array([0x01]))}${pushHex(future)}`;
+        const tx: ChainTx = {
+            txid: 'ab'.repeat(32),
+            block: { height: 800000 },
+            inputs: [{ inputScript: p2pkhScriptSig(pk), outputScript: p2pkhOutputScript(hash) }],
+            outputs: [{ outputScript: script }],
+        };
+        const lookup = await loadManifest(
+            fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+            { address: 'ecash:stall', hash },
+        );
+        expect(lookup.manifest?.name).toBe('Future');
+        expect(lookup.unreadable).toBe(false);
+        expect(lookup.manifest?.theme.known).toBe(true);
+    });
+});
+
+describe('two-stl1-outputs-are-unreadable', () => {
+    /**
+     * The seller signed every output, so nothing in the transaction says which
+     * STL1 is the stall. Picking by output order would make the answer depend
+     * on where a wallet put it. Returning `undefined` without `unreadable`
+     * would be worse: it reads as "this seller never published".
+     */
+    it('does not pick among two well-formed records', async () => {
+        const pk = compressedPk(0xc1);
+        const hash = toHex(shaRmd160(pk));
+        const tx = txWith([stl1OutputScript('Alpha'), stl1OutputScript('Beta')], pk, hash);
+        const lookup = await loadManifest(
+            fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+            { address: 'ecash:stall', hash },
+        );
+        expect(lookup.manifest).toBeUndefined();
+        expect(lookup.unreadable).toBe(true);
+    });
+
+    it('does not pick the well-formed output when the other is broken, in either order', async () => {
+        const pk = compressedPk(0xc2);
+        const hash = toHex(shaRmd160(pk));
+        const well = stl1OutputScript('Nato');
+        const broken = brokenStl1();
+        for (const outputs of [
+            [well, broken],
+            [broken, well],
+        ] as const) {
+            const tx = txWith(outputs, pk, hash);
+            const lookup = await loadManifest(
+                fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+                { address: 'ecash:stall', hash },
+            );
+            expect(lookup.manifest).toBeUndefined();
+            expect(lookup.unreadable).toBe(true);
+        }
+    });
+});
+
+describe('stl1-beside-a-memo-is-not-unreadable', () => {
+    /**
+     * `isStl1` is what separates a record from a stall memo. Counting every
+     * OP_RETURN — or every output — as a manifest would paint a working stall
+     * as unreadable. Both orders: a first-wins reader of OP_RETURN would pass
+     * one and hide the other.
+     */
+    it('still loads a single STL1 sitting next to a plain OP_RETURN, in either order', async () => {
+        const pk = compressedPk(0xc3);
+        const hash = toHex(shaRmd160(pk));
+        const record = stl1OutputScript('Nato');
+        const note = memo();
+        for (const outputs of [
+            [record, note],
+            [note, record],
+        ] as const) {
+            const tx = txWith(outputs, pk, hash);
+            const lookup = await loadManifest(
+                fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
+                { address: 'ecash:stall', hash },
+            );
+            expect(lookup.manifest?.name).toBe('Nato');
+            expect(lookup.unreadable).toBe(false);
+        }
+    });
+});
+
+describe('hex-vector-is-not-the-builder', () => {
+    /**
+     * Every other fixture in this file is built by helpers that follow the
+     * decoder. A literal script is the only way to notice the two drifting.
+     */
+    it('decodes a literal OP_RETURN through opReturnPushes', () => {
+        // 6a OP_RETURN / 04 STL1 / 04 "Nato" / 01 0xfe
+        // 0xfe is not the shipped default: a decoder that ignores the theme
+        // push and always returns 0x01 would still pass a 0x01 vector.
+        const script = '6a0453544c31044e61746f01fe';
+        const pushes = opReturnPushes(script);
+        if (pushes === undefined) {
+            throw new Error('literal script did not parse');
+        }
+        const manifest = decodeManifestPushes(pushes);
+        expect(manifest.name).toBe('Nato');
+        expect(manifest.theme.id).toBe(0xfe);
     });
 });
