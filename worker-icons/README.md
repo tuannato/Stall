@@ -91,8 +91,10 @@ half-configured hostname.
 ### 3. Ship it
 
 ```
-cd worker-icons && npx wrangler deploy
+npx wrangler deploy
 ```
+
+You are already inside `worker-icons/` from the previous step.
 
 The `[[routes]]` entry is a **bare hostname with `custom_domain = true`**, so
 wrangler creates the DNS record itself — there is no separate DNS step. It also
@@ -114,8 +116,12 @@ Each of these is a rule the Worker's own tests already pin. Running them against
 the deployed edge is the part no test in this repo can do.
 
 ```
-curl -sI https://icons.stall.cash/icon/64/0000000000000000000000000000000000000000000000000000000000000000.png | head -1
+curl -s -o /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/64/0000000000000000000000000000000000000000000000000000000000000000.png
 ```
+
+**Never `curl -I` against this Worker.** That sends `HEAD`, which the contract
+refuses with 405, so every header check would report a routing failure that is
+not there. Use `-D-` when you need the headers.
 
 ```
 curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/512/0000000000000000000000000000000000000000000000000000000000000000.png
@@ -137,13 +143,23 @@ built. The fourth must be **405**.
 ### 6. Confirm the response is cacheable but not immutable
 
 ```
-curl -sI https://icons.stall.cash/icon/64/<a real token id>.png | grep -i '^cache-control'
+curl -s -D- -o /dev/null https://icons.stall.cash/icon/64/<a real token id>.png | grep -i '^HTTP\|^cache-control\|^x-icon-reason'
 ```
 
 Must read `public, max-age=3600, s-maxage=604800` and must **not** contain
 `immutable`. This URL carries no content hash, so an immutable answer would
 strand a bad icon in every visitor's browser — the same mistake
 `unhashed-path-is-not-cacheable` exists for on the app.
+
+### 6b. If it answers 502, read the reason
+
+`x-icon-reason` names the failure: `threw:<name>:<detail>` when the subrequest
+could not be made, `upstream-redirect-<status>` when the upstream tried to send
+us elsewhere, `upstream-<status>` for any other answer, `not-png` when a 200
+carried something else, `too-big-or-truncated` past the byte cap.
+
+`npx wrangler tail` will **not** show these. It reports a handled failure as
+`Ok`, because the Worker catches and answers rather than crashing.
 
 ### 7. Confirm the shop actually uses it
 

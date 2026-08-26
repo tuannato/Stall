@@ -305,7 +305,17 @@ describe('handleRequest upstream', () => {
             assert.equal(res.status, 502, String(status));
             assert.equal(res.headers.get('cache-control'), NO_STORE);
             assert.equal(cache.keys().length, 0);
-            assert.equal(calls[0]?.init?.redirect, 'error');
+            // The redirect is refused, not followed - and the reason says which
+            // kind of refusal it was, because a bare 502 could not be acted on.
+            assert.equal(calls[0]?.init?.redirect, 'manual');
+            const reason = res.headers.get('x-icon-reason');
+            assert.equal(
+                reason,
+                status >= 300 && status < 400
+                    ? `upstream-redirect-${status}`
+                    : `upstream-${status}`,
+                String(status),
+            );
         }
     });
 
@@ -425,13 +435,16 @@ describe('headers', () => {
         assert.equal(headers.get('authorization'), null);
         const init = calls[0]?.init ?? {};
         assert.equal(Object.hasOwn(init, 'cf'), false);
-        assert.equal(init.redirect, 'error');
+        assert.equal(init.redirect, 'manual');
         assert.equal(init.method, 'GET');
     });
 
-    it('subrequest-redirect-is-error', () => {
+    it('subrequest-does-not-follow-a-redirect', () => {
+        // `manual` rather than `error`: both refuse to follow, but `error`
+        // throws a bare TypeError that cannot be told apart from the connection
+        // never being made. The refusal is asserted by behaviour above.
         const init = upstreamRequestInit();
-        assert.equal(init.redirect, 'error');
+        assert.equal(init.redirect, 'manual');
         assert.equal(UPSTREAM_TIMEOUT_MS, 4000);
         assert.ok(init.signal instanceof AbortSignal);
     });
