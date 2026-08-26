@@ -2,6 +2,7 @@ import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
+import { clearSavedStall, isSavedStall, readSavedStall, saveStall } from './saved';
 import type {
     FetchStatus,
     Overlay,
@@ -15,7 +16,7 @@ import type { DecodedTheme } from './domain/theme';
 import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller } from './net';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
-import { renderStall } from './ui';
+import { identityOf, renderStall } from './ui';
 
 const sessionTokens = new Map<string, TokenMeta>();
 const sessionNames = new Map<string, string>();
@@ -50,7 +51,13 @@ export function boot(
     };
 
     const paint = (): void => {
-        renderStall(root, state.view, {
+        // Read at paint time, not at load: the toggle changes it without a
+        // refetch, and a stale flag would leave the control lying about itself.
+        const view: StallView = {
+            ...state.view,
+            isDefaultStall: isSavedStall(identityOf(state.view)),
+        };
+        renderStall(root, view, {
             onBuy: (outpoint) => {
                 void onBuy(outpoint);
             },
@@ -66,6 +73,14 @@ export function boot(
             },
             onGoHome: () => {
                 onGoHome();
+            },
+            onToggleDefault: (raw) => {
+                if (isSavedStall(raw)) {
+                    clearSavedStall();
+                } else {
+                    saveStall(raw);
+                }
+                paint();
             },
         });
     };
@@ -136,6 +151,15 @@ export function boot(
     window.addEventListener('popstate', () => {
         void refresh();
     });
+    // Cold start only. Someone who typed the bare domain gets the stall they
+    // chose; `replaceState` rather than `pushState` so Back leaves the site
+    // instead of bouncing between the door and the stall. In-app navigation to
+    // `/` still paints the door, which is what the Open-another-stall control
+    // is for.
+    const saved = readSavedStall();
+    if (saved !== undefined && isHomePath(location.pathname)) {
+        history.replaceState(null, '', stallPath(saved));
+    }
     void refresh();
 }
 

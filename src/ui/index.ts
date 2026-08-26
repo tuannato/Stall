@@ -1,1 +1,1 @@
-export { renderStall } from './render';
+export { identityOf, renderStall } from './render';
