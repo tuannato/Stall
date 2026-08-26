@@ -4,8 +4,11 @@ A sibling of stall.cash, not a dependency. It proxies token icons from
 `https://icons.etokens.cash` so the shop page never talks to that host. If this
 Worker is unreachable the shop still paints: every row falls back to initials.
 
-The stall app does not load a single icon from here yet. Its CSP `img-src` is
-`'self'`. Naming this host there is a shop change, not this one.
+The shop already points here: `img-src` names this host in all three policy
+copies and `iconUrl` builds this route. **The Worker itself has not been
+deployed**, so the hostname does not resolve and every row is initials — the
+designed fallback, not a fault. `cd worker-icons && npx wrangler deploy` is what
+closes that gap; the `custom_domain` route below creates the DNS record.
 
 ## Route
 

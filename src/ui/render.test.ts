@@ -1392,3 +1392,57 @@ describe('token icon', () => {
         }
     });
 });
+
+describe('initials-are-the-whole-fallback', () => {
+    // The icon cache is module state: without this, a token another test
+    // already loaded paints an image here and the assertion reads ''.
+    beforeEach(() => {
+        resetIconsForTests();
+    });
+
+    /**
+     * Every row is letters until an icon loads, and letters for good if the
+     * icon service is unreachable, so what `initials()` produces from a token
+     * with no name is the shop's real floor - not a detail.
+     *
+     * `tokenName` falls back name, then ticker, then the token id, so an
+     * unnamed token shows two hex characters. That is recorded here rather
+     * than hidden: it is the weakest point of the two-stage design.
+     */
+    function cellText(view: StallView): string {
+        const { root } = paint(view);
+        return root.querySelector('.item-ic')?.textContent ?? '';
+    }
+
+    it('uses two words when the genesis name has them', () => {
+        expect(
+            cellText(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                }),
+            ),
+        ).toBe('RB');
+    });
+
+    it('falls to the ticker when the name is empty', () => {
+        expect(
+            cellText(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, { ...BEANS, name: '' }]]),
+                }),
+            ),
+        ).toBe(BEANS.ticker.slice(0, 2).toUpperCase());
+    });
+
+    it('shows two characters of the token id when genesis is unknown', () => {
+        // Not a good glyph. Pinned so that improving it is a deliberate change
+        // and not a surprise, and so the cost of the icon fallback is visible.
+        expect(
+            cellText(
+                idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map() }),
+            ),
+        ).toBe(TOKEN_ID.slice(0, 2).toUpperCase());
+    });
+});
