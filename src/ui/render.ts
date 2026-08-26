@@ -1,5 +1,7 @@
-import { cashtabTokenUrl } from '../domain/cashtab';
+
+import { cashtabPublishUrl, cashtabTokenUrl, payECashPublishUrl } from '../domain/cashtab';
 import { iconUrl } from '../domain/icons';
+import { encodeManifestHex } from '../domain/manifest';
 import {
     formatAtoms,
     formatTokenRate,
@@ -19,6 +21,7 @@ import type {
 import {
     DEFAULT_THEME,
     LAYOUT_CLASSES,
+    SHIPPED_THEMES,
     clampIndex,
     themeVars,
     type DecodedTheme,
@@ -36,6 +39,8 @@ export type StallHandlers = {
     onGoHome?: () => void;
     /** Toggle whether the bare domain opens this stall. */
     onToggleDefault?: (raw: string) => void;
+    onOpenPublish?: () => void;
+    onClosePublish?: () => void;
 };
 
 /**
@@ -207,6 +212,9 @@ function paintEmpty(
     stall.append(header(displayName(view), copy.EMPTY_SUB));
     const body = el('div', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
+    if (view.overlay.kind === 'publish') {
+        body.append(publishSheet(view, handlers));
+    }
     settingsNotes(body, view);
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -290,6 +298,9 @@ function paintOffers(
     body.append(items);
     stall.append(body);
 
+    if (view.overlay.kind === 'publish') {
+        body.append(publishSheet(view, handlers));
+    }
     settingsNotes(body, view);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -433,6 +444,115 @@ function itemIcon(tokenId: string, name: string): HTMLElement {
     }
     cell.textContent = initials(name);
     return cell;
+}
+
+
+/**
+ * Composing the settings transaction. This origin holds no key: it builds a
+ * BIP21 string and the seller's own wallet signs it, the same handoff the buy
+ * control uses.
+ *
+ * The record is shown in words here because the wallet cannot show it — Cashtab
+ * previews an unrecognised LOKAD as raw hex — so this is the only screen where
+ * a seller reads what they are about to sign.
+ *
+ * Nothing is composed unless the stall resolved to an address. A route that is
+ * a bare pubkey still resolves to one; an unresolved or p2sh route does not,
+ * and then the screen says so rather than offering a link that cannot work.
+ */
+function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const wrap = el('div', 'item-detail');
+    wrap.setAttribute('data-role', 'publish');
+    wrap.append(el('div', 'item-n', copy.PUBLISH_TITLE));
+    wrap.append(el('p', 'fine', copy.PUBLISH_LEDE));
+
+    const address = view.address;
+    if (address === undefined || address === '') {
+        wrap.append(el('p', 'ctx', copy.PUBLISH_UNAVAILABLE));
+        return wrap;
+    }
+
+    const form = el('form', 'paste');
+    const label = el('label', 'paste-label', copy.PUBLISH_NAME_LABEL);
+    const input = el('input', 'paste-in');
+    input.type = 'text';
+    input.name = 'stall-name';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.value = view.stallName ?? '';
+    input.setAttribute('aria-label', copy.PUBLISH_NAME_LABEL);
+    label.append(input);
+
+    const themeLabel = el('label', 'paste-label', copy.PUBLISH_THEME_LABEL);
+    const select = el('select', 'paste-in');
+    select.name = 'theme';
+    select.setAttribute('aria-label', copy.PUBLISH_THEME_LABEL);
+    for (const row of SHIPPED_THEMES) {
+        const option = el('option', '', row.label);
+        option.value = String(row.id);
+        if (view.theme?.id === row.id) {
+            option.selected = true;
+        }
+        select.append(option);
+    }
+    themeLabel.append(select);
+
+    const err = el('p', 'ctx', '');
+    err.hidden = true;
+    err.setAttribute('data-role', 'publish-invalid');
+    const bytes = el('p', 'fine', '');
+    bytes.setAttribute('data-role', 'publish-hex');
+    const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
+    web.setAttribute('data-role', 'publish-cashtab');
+    const app = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
+    app.setAttribute('data-role', 'publish-pay');
+    for (const link of [web, app]) {
+        link.rel = 'noopener noreferrer';
+        link.target = '_blank';
+    }
+
+    // Rebuilt in place rather than by repainting: a repaint would take the
+    // focus out of the field on every keystroke.
+    const refresh = (): void => {
+        const hex = encodeManifestHex(input.value, Number(select.value));
+        const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
+        const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
+        const ready = cashtab !== undefined && pay !== undefined;
+        err.hidden = ready || input.value === '';
+        err.textContent = ready ? '' : copy.PUBLISH_NAME_TOO_LONG;
+        bytes.textContent = ready ? hex! : '';
+        bytes.hidden = !ready;
+        for (const [link, href] of [
+            [web, cashtab],
+            [app, pay],
+        ] as const) {
+            if (href === undefined) {
+                link.removeAttribute('href');
+                link.setAttribute('aria-disabled', 'true');
+            } else {
+                link.href = href;
+                link.removeAttribute('aria-disabled');
+            }
+        }
+    };
+    input.addEventListener('input', refresh);
+    select.addEventListener('change', refresh);
+    form.addEventListener('submit', (event) => event.preventDefault());
+    form.append(label, themeLabel, err);
+    wrap.append(form);
+    wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
+    wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
+    wrap.append(bytes);
+    wrap.append(web, app);
+    const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'publish-close');
+    if (handlers.onClosePublish !== undefined) {
+        close.addEventListener('click', handlers.onClosePublish);
+    }
+    wrap.append(close);
+    refresh();
+    return wrap;
 }
 
 function offerRow(
@@ -638,6 +758,10 @@ function stallFooter(
     return footer(identity, {
         share: true,
         goHome: handlers.onGoHome,
+        // Offered on any stall that resolved to an address. Stall cannot know
+        // who is looking; the copy says only this stall's wallet can sign.
+        onPublish:
+            view.address !== undefined && view.address !== '' ? handlers.onOpenPublish : undefined,
         defaultStall:
             raw !== undefined && onToggle !== undefined
                 ? { raw, isDefault: view.isDefaultStall === true, onToggle }
@@ -650,12 +774,21 @@ function footer(
     extra?: {
         share?: boolean;
         goHome?: () => void;
+        onPublish?: () => void;
         defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
     },
 ): HTMLElement {
     const ft = el('footer', 'stall-foot');
     if (address !== undefined && address !== '') {
         ft.append(el('div', 'addr', address));
+    }
+    const publish = extra?.onPublish;
+    if (publish !== undefined) {
+        const btn = el('button', 'mini another', copy.SET_UP_THIS_STALL);
+        btn.type = 'button';
+        btn.setAttribute('data-role', 'open-publish');
+        btn.addEventListener('click', publish);
+        ft.append(btn);
     }
     const pin = extra?.defaultStall;
     if (pin !== undefined) {

@@ -24,6 +24,35 @@ export const SETTINGS_UNREADABLE =
 export const THEME_UNKNOWN =
     'This seller chose a look this page does not ship, so it is showing the default one.';
 
+export const SET_UP_THIS_STALL = 'Name this stall';
+export const PUBLISH_TITLE = 'Name this stall';
+export const PUBLISH_NAME_LABEL = 'Stall name';
+export const PUBLISH_THEME_LABEL = 'Look';
+export const PUBLISH_OPEN_CASHTAB = 'Open in Cashtab';
+export const PUBLISH_OPEN_PAY = 'Open my wallet app';
+export const PUBLISH_CLOSE = 'Close';
+
+/**
+ * The signer is the whole security story here, and Cashtab cannot tell them:
+ * it previews an unrecognised LOKAD as "Unknown Protocol" with the raw bytes,
+ * so this screen is the only place the record is legible before it is signed.
+ */
+export const PUBLISH_LEDE =
+    'This builds one small transaction that publishes your stall name and look. Stall never holds your key — your wallet signs it.';
+
+/** Paying the right address is not enough: the record counts by who signed. */
+export const PUBLISH_MUST_SIGN =
+    'Sign it with this stall\u2019s own wallet. Paying from another wallet buys a record that will never be this stall\u2019s.';
+
+export const PUBLISH_WALLET_SHOWS_HEX =
+    'Your wallet will show these bytes rather than the words above. That is the same record, written the way the chain stores it.';
+
+export const PUBLISH_NAME_TOO_LONG =
+    'Names are up to 32 bytes. Accents and emoji cost more than one byte each.';
+
+export const PUBLISH_UNAVAILABLE =
+    'This stall has no address yet, so there is nothing to publish from.';
+
 export const EMPTY_SUB = 'Nothing for sale right now';
 export const EMPTY_TITLE = 'This stall is empty';
 export const EMPTY_BODY =

@@ -74,6 +74,14 @@ export function boot(
             onGoHome: () => {
                 onGoHome();
             },
+            onOpenPublish: () => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'publish' } } };
+                paint();
+            },
+            onClosePublish: () => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
+                paint();
+            },
             onToggleDefault: (raw) => {
                 if (isSavedStall(raw)) {
                     clearSavedStall();

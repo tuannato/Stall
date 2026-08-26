@@ -113,6 +113,18 @@ function look(theme: DecodedTheme): Omit<DecodedTheme, 'id' | 'known'> {
     return rest;
 }
 
+/**
+ * The looks a seller can choose, in the order they are offered. Labels are ours
+ * and renaming one is free; the **id** is what a published record carries, so
+ * `theme-table-ids-are-pinned` asserts the numbers and this list must agree
+ * with `SHIPPED_LOOKS` rather than drift beside it.
+ */
+export const SHIPPED_THEMES: readonly { readonly id: number; readonly label: string }[] = [
+    { id: DEFAULT_THEME_ID, label: 'Modern' },
+    { id: NEO_CITY_THEME_ID, label: 'Neo city' },
+    { id: RURAL_THEME_ID, label: 'Rural' },
+];
+
 export function isShippedThemeId(id: number): boolean {
     return SHIPPED_LOOKS.has(id);
 }

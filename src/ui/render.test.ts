@@ -31,6 +31,10 @@ import {
     MIN_PURCHASE,
     OPEN_ANOTHER_STALL,
     OPEN_BY_DEFAULT,
+    PUBLISH_MUST_SIGN,
+    PUBLISH_NAME_TOO_LONG,
+    PUBLISH_UNAVAILABLE,
+    SET_UP_THIS_STALL,
     OPEN_IN_CASHTAB,
     OPENING_BY_DEFAULT,
     OPENING_BODY,
@@ -84,6 +88,8 @@ function handlers() {
         onOpenStall: vi.fn(),
         onGoHome: vi.fn(),
         onToggleDefault: vi.fn(),
+        onOpenPublish: vi.fn(),
+        onClosePublish: vi.fn(),
     };
 }
 
@@ -1444,5 +1450,91 @@ describe('initials-are-the-whole-fallback', () => {
                 idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map() }),
             ),
         ).toBe(TOKEN_ID.slice(0, 2).toUpperCase());
+    });
+});
+
+describe('publish-sheet', () => {
+    function open(over: Partial<StallView> = {}) {
+        return paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                overlay: { kind: 'publish' },
+                ...over,
+            }),
+        );
+    }
+    const links = (root: HTMLElement) => ({
+        web: root.querySelector('[data-role="publish-cashtab"]') as HTMLAnchorElement | null,
+        pay: root.querySelector('[data-role="publish-pay"]') as HTMLAnchorElement | null,
+        hex: root.querySelector('[data-role="publish-hex"]'),
+        err: root.querySelector('[data-role="publish-invalid"]') as HTMLElement | null,
+    });
+
+    it('offers the control on a stall that resolved to an address', () => {
+        const { root } = paint(idlePubkey({ fetch: { kind: 'empty' } }));
+        const btn = root.querySelector('[data-role="open-publish"]');
+        expect(btn?.textContent).toBe(SET_UP_THIS_STALL);
+    });
+
+    it('does not offer it when there is no address to publish from', () => {
+        // A route that never resolved has nothing to sign with, so a link here
+        // would be one that cannot work.
+        const { root } = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        expect(root.querySelector('[data-role="open-publish"]')).toBeNull();
+    });
+
+    it('paints no sheet on a route that never resolved', () => {
+        // The guard inside the sheet is defence, not a screen: a route with no
+        // address is painted by paintUnresolvable, which offers no control and
+        // no sheet. Asserting the guard's copy here would test a state the app
+        // cannot reach.
+        const { root } = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'publish' },
+            tokens: new Map(),
+        });
+        expect(root.querySelector('[data-role="publish"]')).toBeNull();
+        expect(root.textContent).not.toContain(PUBLISH_UNAVAILABLE);
+    });
+
+    it('builds both bridges under their opposite encoding rules', () => {
+        const { root } = open();
+        const nameInput = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+        nameInput.value = 'Nato';
+        nameInput.dispatchEvent(new Event('input'));
+        const { web, pay } = links(root);
+        // Cashtab web takes the BIP21 raw in the fragment; pay.e.cash encodes it.
+        expect(web?.href).toContain(`#/send?bip21=${ADDR}?amount=5.46&op_return_raw=`);
+        expect(pay?.href).toContain('pay.e.cash/?bip21=');
+        expect(pay?.href).toContain(encodeURIComponent(`${ADDR}?amount=5.46`));
+        expect(web?.href).not.toContain('%3A');
+    });
+
+    it('shows the bytes, because the wallet shows nothing else', () => {
+        const { root } = open();
+        const nameInput = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+        nameInput.value = 'Nato';
+        nameInput.dispatchEvent(new Event('input'));
+        const { hex } = links(root);
+        // 04 STL1, 04 "Nato", 01 <id>
+        expect(hex?.textContent).toBe('0453544c31044e61746f0101');
+        expect(root.textContent).toContain(PUBLISH_MUST_SIGN);
+    });
+
+    it('refuses a name that is too many bytes, and offers no link', () => {
+        const { root } = open();
+        const nameInput = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+        // 17 three-byte characters is 51 bytes, while its JS length is 17.
+        nameInput.value = 'ế'.repeat(17);
+        nameInput.dispatchEvent(new Event('input'));
+        const { web, pay, err } = links(root);
+        expect(err?.hidden).toBe(false);
+        expect(err?.textContent).toBe(PUBLISH_NAME_TOO_LONG);
+        expect(web?.hasAttribute('href')).toBe(false);
+        expect(pay?.getAttribute('aria-disabled')).toBe('true');
     });
 });

@@ -85,7 +85,9 @@ export type FetchStatus =
 
 export type Overlay =
     | { kind: 'idle' }
-    | { kind: 'buy'; outpoint: Outpoint };
+    | { kind: 'buy'; outpoint: Outpoint }
+    /** Composing the settings transaction. Disclosure, not a wallet. */
+    | { kind: 'publish' };
 
 export type SessionTokenCache = Map<string, TokenMeta>;
 
