@@ -146,10 +146,26 @@ built. The fourth must be **405**.
 curl -s -D- -o /dev/null https://icons.stall.cash/icon/64/<a real token id>.png | grep -i '^HTTP\|^cache-control\|^x-icon-reason'
 ```
 
-Must read `public, max-age=3600, s-maxage=604800` and must **not** contain
-`immutable`. This URL carries no content hash, so an immutable answer would
+Must **not** contain `immutable`, and `s-maxage` must read `604800`.
+
+**`max-age` will not match the source.** The Worker sends `3600`; the edge
+answered `14400`, because the zone's Browser Cache TTL rewrites it. Measured on
+the first live request, not documented anywhere. The Worker's own tests assert
+the constant it sends, which is the thing this repo controls; what a browser is
+told is a zone setting. Check the shape and the absence of `immutable`, not the
+number. This URL carries no content hash, so an immutable answer would
 strand a bad icon in every visitor's browser — the same mistake
 `unhashed-path-is-not-cacheable` exists for on the app.
+
+### 6a. What the first live deploy actually did
+
+`redirect: 'error'` on the subrequest made every real request answer 502 with
+`threw:TypeError`, while the same URL answered 200 from a laptop. The suspicion
+was that Cloudflare egress could not reach the upstream — the failure that keeps
+a rate proxy from working next door. **That was wrong.** Switching to
+`redirect: 'manual'`, which refuses a redirect just as firmly but hands back a
+status instead of throwing, made it answer 200 immediately. The upstream is
+reachable from the edge; the request configuration was not.
 
 ### 6b. If it answers 502, read the reason
 
