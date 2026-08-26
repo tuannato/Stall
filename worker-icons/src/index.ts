@@ -185,8 +185,22 @@ function tokenMiss(): Response {
     return empty(404, MISS_CACHE_CONTROL);
 }
 
-function badGateway(): Response {
-    return empty(502, NO_STORE);
+/**
+ * Our failure, with the reason attached.
+ *
+ * A bare 502 told us nothing the first time this Worker met a real upstream:
+ * the answer was identical whether the fetch threw, the status was unexpected,
+ * or the bytes were not a PNG, and `wrangler tail` reports a handled failure as
+ * "Ok". A sibling proxy against the same chain hit this before us and recorded
+ * the same conclusion — an error that explains itself is worth far more than
+ * one that does not. The reason rides in a header, so the body stays empty and
+ * the contract is unchanged, and it is a short fixed token rather than an
+ * upstream string echoed back.
+ */
+function badGateway(reason: string): Response {
+    const res = empty(502, NO_STORE);
+    res.headers.set('x-icon-reason', reason.slice(0, 48));
+    return res;
 }
 
 function pngHit(bytes: Uint8Array): Response {
@@ -204,15 +218,16 @@ async function fetchIcon(id: string, fetchFn: typeof fetch): Promise<Response> {
     let upstream: Response;
     try {
         upstream = await fetchFn(upstreamUrl(id), upstreamRequestInit());
-    } catch {
-        return badGateway();
+    } catch (err) {
+        const name = (err as { name?: string } | null)?.name ?? 'unknown';
+        return badGateway(`threw:${name}`);
     }
 
     if (upstream.status === 404 || upstream.status === 410) {
         return tokenMiss();
     }
     if (upstream.status !== 200) {
-        return badGateway();
+        return badGateway(`upstream-${upstream.status}`);
     }
 
     const bytes = await readLimited(upstream, MAX_ICON_BYTES);
@@ -220,7 +235,7 @@ async function fetchIcon(id: string, fetchFn: typeof fetch): Promise<Response> {
         // Upstream answered, but not with a PNG we can vouch for. That is our
         // failure, not "this token has no icon" — a 200 HTML challenge page
         // must not be remembered as a miss.
-        return badGateway();
+        return badGateway(bytes === null ? 'too-big-or-truncated' : 'not-png');
     }
     return pngHit(bytes);
 }
