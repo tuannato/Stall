@@ -56,3 +56,98 @@ Needs `icons.stall.cash` on the same Cloudflare account as stall.cash.
   `no-store` 404).
 - Byte sizes of real `/64/` icons. `MAX_ICON_BYTES` is 64 KiB by construction
   (4× a 64×64 RGBA bitmap), not by measuring etokens.
+
+## Deploy, step by step
+
+The zone is already on Cloudflare — `stall.cash` answers from
+`ray.ns.cloudflare.com` — which is what `custom_domain = true` needs. Nothing
+below touches the apex: Pages keeps serving `stall.cash`, and this adds one
+proxied hostname beside it.
+
+**Rolling back needs no code change.** The app treats a missing icon as
+initials, so deleting this Worker returns the shop to letters. Do not remove the
+host from `img-src` to roll back — that only breaks the policy tests.
+
+### 1. Sign in
+
+```
+npx wrangler login
+```
+
+Opens a browser. Pick the account that holds the `stall.cash` zone; picking
+another one is how the custom domain fails at step 3 with a zone error rather
+than a login error.
+
+### 2. Build it without shipping it
+
+```
+cd worker-icons && npx wrangler deploy --dry-run
+```
+
+This bundles and typechecks without publishing. Read the reported size. A
+failure here is a code problem and costs nothing; a failure at step 3 is a
+half-configured hostname.
+
+### 3. Ship it
+
+```
+cd worker-icons && npx wrangler deploy
+```
+
+The `[[routes]]` entry is a **bare hostname with `custom_domain = true`**, so
+wrangler creates the DNS record itself — there is no separate DNS step. It also
+rejects a wildcard or a path in that pattern, which is why the route is
+`icons.stall.cash` and the path lives in the code.
+
+### 4. Confirm the hostname exists
+
+```
+dig +short icons.stall.cash
+```
+
+Empty means the route did not take. Certificates are issued automatically and
+can take a few minutes; until then expect TLS errors rather than 404s.
+
+### 5. Confirm it answers only what it should
+
+Each of these is a rule the Worker's own tests already pin. Running them against
+the deployed edge is the part no test in this repo can do.
+
+```
+curl -sI https://icons.stall.cash/icon/64/0000000000000000000000000000000000000000000000000000000000000000.png | head -1
+```
+
+```
+curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/512/0000000000000000000000000000000000000000000000000000000000000000.png
+```
+
+```
+curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/64/not-hex.png
+```
+
+```
+curl -sX POST -o /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/64/0000000000000000000000000000000000000000000000000000000000000000.png
+```
+
+The first is a real id and answers 200 or 404 depending on whether the upstream
+has that icon. The second and third must be **404** — a size that is not 64 and
+an id that is not 64 hex characters are refused before an upstream request is
+built. The fourth must be **405**.
+
+### 6. Confirm the response is cacheable but not immutable
+
+```
+curl -sI https://icons.stall.cash/icon/64/<a real token id>.png | grep -i '^cache-control'
+```
+
+Must read `public, max-age=3600, s-maxage=604800` and must **not** contain
+`immutable`. This URL carries no content hash, so an immutable answer would
+strand a bad icon in every visitor's browser — the same mistake
+`unhashed-path-is-not-cacheable` exists for on the app.
+
+### 7. Confirm the shop actually uses it
+
+Open a stall with a token whose icon the upstream carries. The row should paint
+letters and then swap to the image. If it stays on letters, look at the browser
+console for a CSP violation naming `img-src` before suspecting the Worker: the
+policy allows exactly this host and nothing else.
