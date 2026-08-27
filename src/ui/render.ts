@@ -121,7 +121,21 @@ function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
     body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
     body.append(pasteForm(handlers));
     body.append(el('p', 'fine', copy.HOME_SELLER));
+    body.append(demoSoon());
     stall.append(body);
+}
+
+/**
+ * A signpost for the live demo stall, not the stall itself: the apex never
+ * fetches. It waits on the owner listing from a real maker; until then this is
+ * copy, never an empty shop dressed as a demo.
+ */
+function demoSoon(): HTMLElement {
+    const wrap = el('div', 'demo-soon');
+    wrap.setAttribute('data-role', 'demo-soon');
+    wrap.append(el('div', 'mid-t', copy.HOME_DEMO_TITLE));
+    wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
+    return wrap;
 }
 
 function paintInvalid(stall: HTMLElement, raw: string, handlers: StallHandlers): void {
@@ -145,7 +159,13 @@ function paintUnresolvable(
     // screen a new seller sees — not a rare case. Give them the way forward: a
     // link to list, and a retry, because a listing is a new spend on page 0 and
     // resolves this address the next time it is read.
-    body.append(mid(copy.UNRESOLVABLE_TITLE, [copy.UNRESOLVABLE_BODY, copy.UNRESOLVABLE_HINT]));
+    body.append(
+        mid(copy.UNRESOLVABLE_TITLE, [
+            copy.UNRESOLVABLE_NEXT,
+            copy.UNRESOLVABLE_BODY,
+            copy.UNRESOLVABLE_HINT,
+        ]),
+    );
     body.append(listInCashtab());
     body.append(retryControl(handlers));
     stall.append(body);

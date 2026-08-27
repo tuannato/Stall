@@ -7,6 +7,14 @@ export const UNRESOLVABLE_SUB = 'This address has never sent';
 export const UNRESOLVABLE_TITLE = 'Nothing to read from this address';
 export const UNRESOLVABLE_BODY =
     'Offers are indexed by public key, and an address only reveals its key once it has sent a transaction. This one never has.';
+/**
+ * The forward half of the seller journey. A new seller who pastes before
+ * listing lands here and can read "never sent" as broken; this says it is the
+ * expected first step and what the address becomes once they list.
+ */
+export const UNRESOLVABLE_NEXT =
+    'This is the first step, not a dead end. Once you list, come back and this page is your shop — with a link to share and a name you can set.';
+
 export const UNRESOLVABLE_HINT =
     'Listing anything on Agora is a send, so a stall becomes readable the moment its first offer goes up.';
 
@@ -235,6 +243,13 @@ export const HOME_PASTE_INVALID =
     'That is not an eCash address or a compressed public key.';
 export const HOME_SELLER =
     'If this is your stall: list your token in Cashtab, then paste your own eCash address here — the one Cashtab shows on its Receive screen. Your shop opens at a link that is yours to share.';
+
+/**
+ * A placeholder for the live demo stall, which needs the owner to list from a
+ * real maker first. Copy only — no fetch, no fake shop. The apex stays a door.
+ */
+export const HOME_DEMO_TITLE = 'See one in action';
+export const HOME_DEMO_SOON = 'A live demo stall is coming soon.';
 
 export const LIST_IN_CASHTAB =
     'List the token in Cashtab. Once it is on Agora it will show up here on its own.';

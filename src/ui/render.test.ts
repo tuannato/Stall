@@ -24,6 +24,8 @@ import {
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     HOME_LEDE,
     HOME_SELLER,
+    HOME_DEMO_SOON,
+    UNRESOLVABLE_NEXT,
     SHARE_LEDE,
     HOME_NO_ACCOUNT,
     HOME_PASTE_INVALID,
@@ -1782,5 +1784,32 @@ describe('expanded-card-shows-a-large-token-image', () => {
         expect(detail.firstElementChild).toBe(big);
         // No icon has loaded, so it holds the initials, never an empty square.
         expect(big.textContent?.length ?? 0).toBeGreaterThan(0);
+    });
+});
+
+describe('apex signposts a demo without becoming a shop', () => {
+    it('shows a coming-soon placeholder, not a fetched stall', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
+        const demo = root.querySelector('[data-role="demo-soon"]');
+        expect(demo).not.toBeNull();
+        expect(demo!.textContent).toContain(HOME_DEMO_SOON);
+        // The door never paints a shop: no offer rows, no copy-link, no price.
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        expect(root.querySelector('.item')).toBeNull();
+    });
+});
+
+describe('unresolvable narrates the journey forward', () => {
+    it('tells a new seller this is the first step, not a dead end', () => {
+        const { root } = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        });
+        expect(root.textContent).toContain(UNRESOLVABLE_NEXT);
     });
 });

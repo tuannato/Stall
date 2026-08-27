@@ -502,3 +502,21 @@ body {
     margin-bottom: 6px;
     font-size: 32px;
 }
+
+/*
+ * The demo signpost on the door. A muted placeholder, deliberately quiet: it
+ * announces a future stall, it is not one. No image, no offer row, no fetch.
+ */
+.demo-soon {
+    margin-top: 4px;
+    padding: 12px 14px;
+    border: 1px dashed var(--s-muted);
+    border-radius: var(--s-radius);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.demo-soon .fine {
+    color: var(--s-muted);
+}
