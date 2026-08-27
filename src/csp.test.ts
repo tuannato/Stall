@@ -64,6 +64,50 @@ function viteHeader(block: 'server' | 'preview', name: string): string {
     return value as string;
 }
 
+/**
+ * A directive's sources as tokens.
+ *
+ * Substring checks cannot police this list: `not.toContain('unsafe-eval')`
+ * also matches the harmless `'wasm-unsafe-eval'`, so the one keyword that turns
+ * an XSS into arbitrary code could be added and read as already banned. Split
+ * first, then compare whole tokens.
+ */
+function sources(policy: string, name: string): string[] {
+    return (directives(policy).get(name) ?? '').split(/\s+/).filter((s) => s !== '');
+}
+
+describe('script-src-and-connect-src-are-pinned', () => {
+    /**
+     * `deploy-spec-matches-the-app` only proves the three copies agree, and
+     * `csp-is-header-not-meta` only asks whether a few strings are present. Both
+     * stay green if every copy is loosened together — which is exactly how a
+     * policy gets loosened. `img-src-is-self-and-the-icon-host` is the pattern
+     * that was not repeated for the two directives that matter most.
+     */
+    it('allows nothing in script-src but self', () => {
+        for (const [label, policy] of policyCopies()) {
+            // No wasm is bundled, so 'wasm-unsafe-eval' is gone too: the loosest
+            // allowance the origin ever needed. `'self'` and nothing else.
+            expect(sources(policy, 'script-src'), label).toEqual(["'self'"]);
+            expect(sources(policy, 'script-src'), label).not.toContain("'unsafe-eval'");
+            expect(sources(policy, 'script-src'), label).not.toContain(
+                "'wasm-unsafe-eval'",
+            );
+        }
+    });
+
+    it('allows nothing in connect-src but self and the chronik hosts', () => {
+        const expected = [
+            "'self'",
+            ...CHRONIK_HOSTS,
+            ...CHRONIK_HOSTS.map((host) => host.replace('https://', 'wss://')),
+        ].sort();
+        for (const [label, policy] of policyCopies()) {
+            expect([...sources(policy, 'connect-src')].sort(), label).toEqual(expected);
+        }
+    });
+});
+
 /** Hostnames of URL sources. `'self'` and tokens are skipped. */
 function sourceHostnames(sources: string): Set<string> {
     const out = new Set<string>();
@@ -90,11 +134,11 @@ describe('csp-is-header-not-meta', () => {
         );
         const d = directives(CSP);
         expect(d.get('frame-ancestors')).toBe("'none'");
-        expect(d.get('script-src')).toContain('wasm-unsafe-eval');
+        expect(d.get('script-src')).toBe("'self'");
         expect(d.get('script-src')).not.toContain('sha256-');
         expect(d.get('script-src')).not.toContain("'unsafe-inline'");
         // worker-src falls back through child-src to script-src, never to
-        // default-src, so script-src's 'wasm-unsafe-eval' would carry into it.
+        // default-src, so it is stated rather than left to inherit script-src.
         expect(d.get('worker-src')).toBe("'none'");
         expect(d.get('object-src')).toBe("'none'");
         expect(d.get('frame-src')).toBe("'none'");

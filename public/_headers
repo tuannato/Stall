@@ -13,7 +13,7 @@
 # Rules match the REQUEST path, so /s/* still matches after the rewrite.
 
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' https://icons.stall.cash; font-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; connect-src 'self' https://chronik-native1.fabien.cash https://chronik-native2.fabien.cash https://chronik-native3.fabien.cash wss://chronik-native1.fabien.cash wss://chronik-native2.fabien.cash wss://chronik-native3.fabien.cash; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://icons.stall.cash; font-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; connect-src 'self' https://chronik-native1.fabien.cash https://chronik-native2.fabien.cash https://chronik-native3.fabien.cash wss://chronik-native1.fabien.cash wss://chronik-native2.fabien.cash wss://chronik-native3.fabien.cash; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
