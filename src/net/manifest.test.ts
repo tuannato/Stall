@@ -182,6 +182,123 @@ describe('loadManifest', () => {
     });
 });
 
+describe('hint-must-look-like-a-txid', () => {
+    /**
+     * `chronik.tx()` concatenates its argument into a request path and never
+     * checks it — `verifyTxid` is in that package and `tx()` does not call it.
+     * The value comes from `?m=` in the address bar. Not an open redirect, since
+     * the host is fixed, but every other id this app handles is gated on shape
+     * and this one was not.
+     */
+    for (const bad of [
+        '../blockchain-info',
+        'not-a-txid',
+        'zz'.repeat(32),
+        'aa'.repeat(31),
+        '',
+    ]) {
+        it(`never asks the index for ${JSON.stringify(bad)}`, async () => {
+            const pk = compressedPk(0x77);
+            const hash = toHex(shaRmd160(pk));
+            const asked: string[] = [];
+            const chronik = fakeChronik({ addressTxs: [], lokadTxs: [] });
+            const watched: ManifestChronik = {
+                ...chronik,
+                async tx(txid: string) {
+                    asked.push(txid);
+                    return chronik.tx(txid);
+                },
+            };
+            await loadManifest(watched, { address: 'ecash:qtest', hash }, bad);
+            expect(asked).toEqual([]);
+        });
+    }
+
+    it('still accepts a real txid, in either case', async () => {
+        const pk = compressedPk(0x78);
+        const hash = toHex(shaRmd160(pk));
+        const hinted = stallTx({ txid: '5a'.repeat(32), pk, hash, name: 'Hint', height: 4 });
+        const got = (await loadManifest(
+            fakeChronik({ addressTxs: [], lokadTxs: [], byTxid: { [hinted.txid]: hinted } }),
+            { address: 'ecash:qtest', hash },
+            hinted.txid.toUpperCase(),
+        )).manifest;
+        expect(got?.name).toBe('Hint');
+    });
+});
+
+describe('hinted-unreadable-is-not-silent-default', () => {
+    /**
+     * A printed link carrying `?m=` that points at this seller's own broken
+     * record. The walk may not reach it — that is the whole reason the hint
+     * exists — and swallowing the decode failure painted the shipped default in
+     * silence, which reads as a seller who never published.
+     */
+    it('says the record could not be read, rather than nothing', async () => {
+        const pk = compressedPk(0x79);
+        const hash = toHex(shaRmd160(pk));
+        const bad = txWith([brokenStl1()], pk, hash);
+        const lookup = await loadManifest(
+            fakeChronik({ addressTxs: [], lokadTxs: [], byTxid: { [bad.txid]: bad } }),
+            { address: 'ecash:qtest', hash },
+            bad.txid,
+        );
+        expect(lookup.manifest).toBeUndefined();
+        expect(lookup.unreadable).toBe(true);
+    });
+
+    it('stays quiet when the hint is simply not this seller’s', async () => {
+        const pk = compressedPk(0x7a);
+        const hash = toHex(shaRmd160(pk));
+        const lookup = await loadManifest(
+            fakeChronik({ addressTxs: [], lokadTxs: [] }),
+            { address: 'ecash:qtest', hash },
+            'ab'.repeat(32),
+        );
+        expect(lookup.unreadable, 'a missing tx is our failure, not theirs').toBe(false);
+    });
+});
+
+describe('validated-hint-survives-a-walk-throw', () => {
+    /**
+     * The walk asks both indexes at once, so either one rejecting used to
+     * reject the whole lookup and take an already-authored hint down with it —
+     * the cheap path dying because the expensive one did. A walk that threw did
+     * not finish, which is exactly what `truncated` already says.
+     */
+    it('keeps the hinted record and says the walk did not finish', async () => {
+        const pk = compressedPk(0x7b);
+        const hash = toHex(shaRmd160(pk));
+        const hinted = stallTx({ txid: '6c'.repeat(32), pk, hash, name: 'Hint', height: 7 });
+        const chronik: ManifestChronik = {
+            address() {
+                return {
+                    async history(): Promise<HistoryPage> {
+                        throw new Error('error connecting to known chronik instances');
+                    },
+                };
+            },
+            lokadId() {
+                return {
+                    async history(): Promise<HistoryPage> {
+                        throw new Error('error connecting to known chronik instances');
+                    },
+                };
+            },
+            async tx() {
+                return hinted;
+            },
+        };
+        const lookup = await loadManifest(
+            chronik,
+            { address: 'ecash:qtest', hash },
+            hinted.txid,
+        );
+        expect(lookup.manifest?.name).toBe('Hint');
+        expect(lookup.truncated, 'we did not finish looking').toBe(true);
+    });
+});
+
 describe('truncated-manifest-is-not-silent-default', () => {
     /**
      * The walk is capped, so a stall's settings can sit beyond the last page.

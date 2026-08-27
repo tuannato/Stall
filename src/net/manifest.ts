@@ -35,30 +35,67 @@ export type ManifestLookup = {
     unreadable: boolean;
 };
 
+/**
+ * `chronik.tx()` concatenates whatever it is given into a request path and
+ * never checks it — `verifyTxid` exists in that package and `tx()` does not
+ * call it. The value comes from `?m=` in the address bar, and every other id
+ * this app hands out is gated on its own shape (`cashtabTokenUrl`, `iconUrl`).
+ * This one was not.
+ */
+const TXID = /^[0-9a-f]{64}$/;
+
+function txidOrNothing(value: string | undefined): string | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    const lower = value.trim().toLowerCase();
+    return TXID.test(lower) ? lower : undefined;
+}
+
 export async function loadManifest(
     chronik: ManifestChronik,
     stall: { address: string; hash: string },
     hintTxid?: string,
 ): Promise<ManifestLookup> {
     const hash = stall.hash.toLowerCase();
+    const broken = { seen: false };
     let best: LoadedManifest | undefined;
 
-    if (hintTxid !== undefined && hintTxid.length > 0) {
+    const hint = txidOrNothing(hintTxid);
+    if (hint !== undefined) {
         try {
-            best = better(best, recordFromTx(await chronik.tx(hintTxid), hash));
-        } catch {
-            // Hint is a candidate, never an authority.
+            best = better(best, recordFromTx(await chronik.tx(hint), hash));
+        } catch (err) {
+            // Hint is a candidate, never an authority — but a record of this
+            // seller's that will not decode is a fact about them either way,
+            // and swallowing it here let a printed `?m=` pointing at their own
+            // broken record paint the shipped default in silence. Anything
+            // else (a node that did not answer, a txid that is not theirs) is
+            // ours and stays quiet.
+            if (err instanceof Stl1Unreadable) {
+                broken.seen = true;
+            }
         }
     }
 
-    const walked = await walkShorter(chronik, stall.address, hash);
+    // A walk that throws is a walk that did not finish, which is what
+    // `truncated` already means. Rejecting instead threw away a hint that had
+    // already proved its authorship: the cheap path died because the expensive
+    // one did.
+    let walked: { best?: LoadedManifest; truncated: boolean };
+    try {
+        walked = await walkShorter(chronik, stall.address, hash, broken);
+    } catch {
+        walked = { truncated: true };
+    }
+
     const manifest = better(best, walked.best);
     return {
         manifest,
         truncated: walked.truncated,
         // Only worth saying when there is nothing to show instead. A readable
         // record wins on its own terms and the broken one is simply older.
-        unreadable: manifest === undefined && walked.unreadable,
+        unreadable: manifest === undefined && broken.seen,
     };
 }
 
@@ -80,7 +117,8 @@ async function walkShorter(
     chronik: ManifestChronik,
     address: string,
     hash: string,
-): Promise<{ best?: LoadedManifest; truncated: boolean; unreadable: boolean }> {
+    broken: { seen: boolean },
+): Promise<{ best?: LoadedManifest; truncated: boolean }> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STL1_HEX);
     const [addrPage, lokadPage] = await Promise.all([
@@ -94,12 +132,11 @@ async function walkShorter(
 
     const total = Math.max(first.numPages, 1);
     const pages = Math.min(total, MAX_HISTORY_PAGES);
-    const broken = { seen: false };
     let best = bestInPage(first, hash, undefined, broken);
     for (let page = 1; page < pages; page++) {
         best = bestInPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, best, broken);
     }
-    return { best, truncated: total > pages, unreadable: broken.seen };
+    return { best, truncated: total > pages };
 }
 
 function bestInPage(
