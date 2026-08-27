@@ -12,6 +12,7 @@ overrides:
   ecash-wallet: file:vendor/ecash-wallet-6.1.0.tgz
   ecashaddrjs: file:vendor/ecashaddrjs-2.0.0.tgz
   '@noble/hashes': file:vendor/noble-hashes-2.3.0.tgz
+  qrcode-generator: file:vendor/qrcode-generator-1.4.4.tgz
 
 importers:
 
@@ -32,6 +33,9 @@ importers:
       ecashaddrjs:
         specifier: file:vendor/ecashaddrjs-2.0.0.tgz
         version: file:vendor/ecashaddrjs-2.0.0.tgz
+      qrcode-generator:
+        specifier: file:vendor/qrcode-generator-1.4.4.tgz
+        version: file:vendor/qrcode-generator-1.4.4.tgz
     devDependencies:
       happy-dom:
         specifier: 18.0.1
@@ -660,6 +664,10 @@ packages:
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
     engines: {node: '>=10'}
+
+  qrcode-generator@file:vendor/qrcode-generator-1.4.4.tgz:
+    resolution: {integrity: sha512-HM7yY8O2ilqhmULxGMpcHSF1EhJJ9yBj8gvDEuZ6M+KGJ0YY2hKpnXvRD+hZPLrDVck3ExIGhmPtSdcjC+guuw==, tarball: file:vendor/qrcode-generator-1.4.4.tgz}
+    version: 1.4.4
 
   rollup@4.62.5:
     resolution: {integrity: sha512-/tqMfgP7GPA3PHhCmuiS4vIjrSVhHLgY++i+dhbG462euyAj7FpM4D9uq1X3BgjlqRdpcOrYhcQtfiQLNc8tqw==}
@@ -1331,6 +1339,8 @@ snapshots:
       long: 5.3.2
 
   proxy-from-env@2.1.0: {}
+
+  qrcode-generator@file:vendor/qrcode-generator-1.4.4.tgz: {}
 
   rollup@4.62.5:
     dependencies:

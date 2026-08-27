@@ -19,6 +19,13 @@ import { decodeCashAddress, encodeCashAddress } from 'ecashaddrjs';
 
 const CASHTAB_ORIGIN = 'https://cashtab.com';
 const PAY_E_CASH_ORIGIN = 'https://pay.e.cash';
+
+/**
+ * Cashtab's token list, where a seller holding a token lists it on Agora. Not a
+ * token page: the stall has not resolved, so there is no token id to aim at.
+ * `#/etokens` renders Cashtab's Etokens screen.
+ */
+export const CASHTAB_LIST_URL = `${CASHTAB_ORIGIN}/#/etokens`;
 const TOKEN_ID_RE = /^[0-9a-f]{64}$/;
 /**
  * Dust in XEC. 546 sats is 5.46 XEC; BIP21 `amount` is XEC, so writing
@@ -65,7 +72,12 @@ function isEncoderOpReturnRaw(hex: string): boolean {
     return hex.length / 2 <= OP_RETURN_RAW_MAX_BYTES;
 }
 
-function publishBip21(
+/**
+ * The bare BIP21 the seller's wallet signs: `ecash:<addr>?amount=…&op_return_raw=…`.
+ * This is what a phone wallet scans from a QR — no `cashtab.com` wrapper, no
+ * `pay.e.cash` bridge, just the payment URI a wallet understands directly.
+ */
+export function publishBip21(
     address: string,
     opReturnRawHex: string,
 ): string | undefined {

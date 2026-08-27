@@ -18,7 +18,8 @@
     "ecash-agora": "file:vendor/ecash-agora-4.2.5.tgz",
     "ecash-lib": "file:vendor/ecash-lib-4.13.0.tgz",
     "ecashaddrjs": "file:vendor/ecashaddrjs-2.0.0.tgz",
-    "@noble/hashes": "file:vendor/noble-hashes-2.3.0.tgz"
+    "@noble/hashes": "file:vendor/noble-hashes-2.3.0.tgz",
+    "qrcode-generator": "file:vendor/qrcode-generator-1.4.4.tgz"
   },
   "devDependencies": {
     "happy-dom": "18.0.1",
@@ -34,7 +35,8 @@
       "ecash-lib": "file:vendor/ecash-lib-4.13.0.tgz",
       "ecash-wallet": "file:vendor/ecash-wallet-6.1.0.tgz",
       "ecashaddrjs": "file:vendor/ecashaddrjs-2.0.0.tgz",
-      "@noble/hashes": "file:vendor/noble-hashes-2.3.0.tgz"
+      "@noble/hashes": "file:vendor/noble-hashes-2.3.0.tgz",
+      "qrcode-generator": "file:vendor/qrcode-generator-1.4.4.tgz"
     },
     "onlyBuiltDependencies": [
       "esbuild",
