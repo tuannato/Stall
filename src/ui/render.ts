@@ -158,11 +158,32 @@ function paintUnresolved(
         paintUnreachable(stall, view, fetch, handlers);
         return;
     }
-    paintUnreachable(stall, view, unreachableFallback(), handlers);
+    // No fetch at all means `resolveSeller` returned rather than threw: it
+    // walked, hit `MAX_HISTORY_PAGES`, and stopped. The index answered every
+    // page. Painting the unreachable screen here told the visitor "no index
+    // answered", which is our own limit reported as the network's failure —
+    // the one collapse this project promised not to make.
+    paintStoppedLooking(stall, view, handlers);
 }
 
-function unreachableFallback(): Extract<FetchStatus, { kind: 'unreachable' }> {
-    return { kind: 'unreachable', triedAtMs: Date.now(), hosts: [] };
+/**
+ * We ran out of pages, not out of network. No hosts box, because nothing failed
+ * to answer; a retry still helps, because any new spend from that address lands
+ * on page 0 and resolves it.
+ */
+function paintStoppedLooking(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    stall.append(header(identityOf(view), copy.UNRESOLVED_SUB));
+    const body = el('div', 'stall-body');
+    body.append(
+        mid(copy.UNRESOLVED_TITLE, [copy.UNRESOLVED_BODY, copy.UNRESOLVED_HINT]),
+    );
+    body.append(retryControl(handlers));
+    stall.append(body);
+    stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
 function paintPubkey(
@@ -204,6 +225,21 @@ function paintOpening(
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
+/**
+ * Ask the chain again. On the failure screens this is the only way forward; on
+ * the empty one it is what makes a genuine sell-out clear, now that a live
+ * empty answer is no longer applied over a painted book.
+ */
+function retryControl(handlers: StallHandlers): HTMLElement {
+    const retry = el('button', 'mini', copy.TRY_AGAIN);
+    retry.type = 'button';
+    retry.setAttribute('data-role', 'retry');
+    retry.addEventListener('click', () => {
+        handlers.onRetry();
+    });
+    return retry;
+}
+
 function paintEmpty(
     stall: HTMLElement,
     view: StallView,
@@ -216,6 +252,10 @@ function paintEmpty(
         body.append(publishSheet(view, handlers));
     }
     settingsNotes(body, view);
+    // The live path no longer applies an empty answer, so a stall whose last
+    // offer genuinely sold keeps that row until someone asks again. This is
+    // where they ask.
+    body.append(retryControl(handlers));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -233,12 +273,7 @@ function paintUnreadable(
     stall.append(header(displayName(view), copy.UNREADABLE_SUB));
     const body = el('div', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
-    const retry = el('button', 'mini', copy.TRY_AGAIN);
-    retry.type = 'button';
-    retry.addEventListener('click', () => {
-        handlers.onRetry();
-    });
-    body.append(retry);
+    body.append(retryControl(handlers));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -270,12 +305,7 @@ function paintUnreachable(
     }
     body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
     body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
-    const retry = el('button', 'mini', copy.TRY_AGAIN);
-    retry.type = 'button';
-    retry.addEventListener('click', () => {
-        handlers.onRetry();
-    });
-    body.append(retry);
+    body.append(retryControl(handlers));
     stall.append(body);
 
     if (cached || identity !== undefined) {
@@ -487,12 +517,16 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const select = el('select', 'paste-in');
     select.name = 'theme';
     select.setAttribute('aria-label', copy.PUBLISH_THEME_LABEL);
+    // The look on screen, selected explicitly. A stall with no manifest is
+    // painted with the shipped default, so leaving this to the browser's
+    // first-option rule happened to be right and read as nothing being chosen:
+    // a seller who never touched the picker published the look they already had
+    // and saw no change. `painted` is what the note below compares against.
+    const painted = view.theme?.id ?? DEFAULT_THEME.id;
     for (const row of SHIPPED_THEMES) {
         const option = el('option', '', row.label);
         option.value = String(row.id);
-        if (view.theme?.id === row.id) {
-            option.selected = true;
-        }
+        option.selected = row.id === painted;
         select.append(option);
     }
     themeLabel.append(select);
@@ -500,6 +534,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const err = el('p', 'ctx', '');
     err.hidden = true;
     err.setAttribute('data-role', 'publish-invalid');
+    const sameLook = el('p', 'fine', copy.PUBLISH_SAME_LOOK);
+    sameLook.hidden = true;
+    sameLook.setAttribute('data-role', 'publish-same-look');
     const bytes = el('p', 'fine', '');
     bytes.setAttribute('data-role', 'publish-hex');
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
@@ -520,6 +557,11 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const ready = cashtab !== undefined && pay !== undefined;
         err.hidden = ready || input.value === '';
         err.textContent = ready ? '' : copy.PUBLISH_NAME_TOO_LONG;
+        // Say when the record will not change the look. Publishing the look
+        // already on screen is a legitimate thing to do — it is how a name gets
+        // set — but a seller who does it unaware reads the unchanged stall as
+        // the publish having failed.
+        sameLook.hidden = Number(select.value) !== painted;
         bytes.textContent = ready ? hex! : '';
         bytes.hidden = !ready;
         for (const [link, href] of [
@@ -538,12 +580,27 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     input.addEventListener('input', refresh);
     select.addEventListener('change', refresh);
     form.addEventListener('submit', (event) => event.preventDefault());
-    form.append(label, themeLabel, err);
+    form.append(label, themeLabel, err, sameLook);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
     wrap.append(bytes);
     wrap.append(web, app);
+
+    // Signing happens in another app, and the live socket only listens to the
+    // agora group — a settings transaction does not move the book, so no
+    // message ever arrives and nothing re-reads the manifest. Without this
+    // control the seller signs, comes back, and watches an unchanged stall.
+    // It runs a full refresh, so the sheet closes and the answer is the stall.
+    wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
+    const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
+    check.type = 'button';
+    check.setAttribute('data-role', 'publish-check');
+    check.addEventListener('click', () => {
+        handlers.onRetry();
+    });
+    wrap.append(check);
+
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
     close.type = 'button';
     close.setAttribute('data-role', 'publish-close');
@@ -758,10 +815,19 @@ function stallFooter(
     return footer(identity, {
         share: true,
         goHome: handlers.onGoHome,
-        // Offered on any stall that resolved to an address. Stall cannot know
-        // who is looking; the copy says only this stall's wallet can sign.
+        // Only where the sheet can actually open. `publishSheet` is mounted by
+        // `paintOffers` and `paintEmpty`, both under `paintPubkey`; on any
+        // other screen this was a button that flipped the overlay and repainted
+        // the same page — no sheet, no error, no feedback. An address route
+        // that never resolved still carries `view.address`, so the address
+        // alone was never the right condition. Stall cannot know who is
+        // looking; the copy says only this stall's wallet can sign.
         onPublish:
-            view.address !== undefined && view.address !== '' ? handlers.onOpenPublish : undefined,
+            view.route.kind === 'pubkey' &&
+            view.address !== undefined &&
+            view.address !== ''
+                ? handlers.onOpenPublish
+                : undefined,
         defaultStall:
             raw !== undefined && onToggle !== undefined
                 ? { raw, isDefault: view.isDefaultStall === true, onToggle }

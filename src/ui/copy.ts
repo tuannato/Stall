@@ -50,6 +50,26 @@ export const PUBLISH_WALLET_SHOWS_HEX =
 export const PUBLISH_NAME_TOO_LONG =
     'Names are up to 32 bytes. Accents and emoji cost more than one byte each.';
 
+/**
+ * A stall with no settings is painted in the shipped default, so the first look
+ * in the picker is the look already on screen. Publishing it is a real thing to
+ * want — it is how the name gets set — but a seller who does it without knowing
+ * reads the unchanged stall as a failed publish.
+ */
+export const PUBLISH_SAME_LOOK =
+    'That is the look this stall already shows. Publishing it sets the name and leaves the rest as it is.';
+
+/**
+ * Stall cannot tell that a record was signed, for the same reason it cannot
+ * tell that a purchase happened: it holds no key and watches no wallet. The
+ * live socket listens to the agora group, and a settings transaction does not
+ * move the offer book, so nothing arrives to prompt a re-read.
+ */
+export const PUBLISH_AFTER_SIGNING =
+    'Nothing here watches your wallet. After you sign, the network has to agree the record exists before this page will read it — usually a few seconds.';
+
+export const PUBLISH_CHECK_NOW = 'Check for it now';
+
 export const PUBLISH_UNAVAILABLE =
     'This stall has no address yet, so there is nothing to publish from.';
 
@@ -64,6 +84,22 @@ export const UNREADABLE_BODY =
 
 export const UNREACHABLE_SUB = 'Prices unavailable';
 export const UNREACHABLE_BODY = "We can't read prices right now. No index answered.";
+
+/**
+ * We stopped reading, and the index did not fail.
+ *
+ * This screen used to be `UNREACHABLE_BODY` — "No index answered" — which is a
+ * statement about the network, made when the network answered every page we
+ * asked for. A busy stall reaches it: takes pay the maker as ordinary outputs,
+ * not as spends, so the one transaction that reveals the seller's key sinks
+ * below `MAX_HISTORY_PAGES` while the shop is doing well.
+ */
+export const UNRESOLVED_SUB = 'Stopped reading';
+export const UNRESOLVED_TITLE = 'We did not finish reading this address';
+export const UNRESOLVED_BODY =
+    'This address has a long history, and we stopped before finding the key that identifies the stall. Every page we asked for came back — we did not ask for enough.';
+export const UNRESOLVED_HINT =
+    'A link that carries the seller’s key instead of their address skips this entirely.';
 
 /**
  * The label is what the control actually does. Cashtab's token page cannot be

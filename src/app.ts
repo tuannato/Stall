@@ -137,7 +137,12 @@ export function boot(
      */
     const watch = (claimed: number): void => {
         const pubkeyHex = state.pubkeyHex;
-        if (pubkeyHex === undefined || state.view.fetch?.kind !== 'offers') {
+        // An empty stall is watched too. It is the one screen that promises
+        // "anything they list will appear here on its own", and it was the one
+        // screen with nothing listening: a seller's first offer never arrived
+        // until the visitor reloaded.
+        const kind = state.view.fetch?.kind;
+        if (pubkeyHex === undefined || (kind !== 'offers' && kind !== 'empty')) {
             return;
         }
         live = watchStall(createChronik() as never, pubkeyHex, () => {

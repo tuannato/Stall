@@ -1,5 +1,28 @@
 /* One stall DOM. Theme colours and font arrive as --s-* on .stall only. */
 
+/*
+ * The stall must reach the edges, or the theme is a card on somebody else's
+ * page. `--s-bg` is set on `.stall`, so everything outside it is painted by the
+ * browser, not by the seller: with no reset, `body` keeps its default 8px
+ * margin, and `min-height: 100%` on `.frame` and `.stall` resolves to nothing
+ * because no ancestor has a definite height. Measured in a real browser at
+ * 375x812 with a dark theme: an 8px border and 338px — 42% of the screen —
+ * left unthemed below the stall.
+ *
+ * Invisible until it mattered. The shipped default is white on a white canvas,
+ * so this only appears the first time a seller publishes a dark look. happy-dom
+ * does not lay out, so no test in this runner can see it either.
+ */
+html,
+body,
+#app {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+}
+
 .frame {
     position: relative;
     display: flex;
@@ -108,11 +131,21 @@
     padding: 12px;
 }
 
+/*
+ * The tile takes the second accent, not the first. `themeVars` has always
+ * emitted `--s-accent-2` and no rule consumed it, so `accentTwo` in the shipped
+ * table did nothing: half of what a seller published never reached the screen.
+ * Modern sets both to the same colour, so the default look is unchanged.
+ *
+ * `legibleOn(accentTwo, bg)` already governs this exact pairing — the tile
+ * paints `--s-bg` on top of it, the same direction the buy control uses for
+ * `--s-accent`.
+ */
 .item-ic {
     width: 38px;
     height: 38px;
     border-radius: calc(var(--s-radius) * 0.7);
-    background: var(--s-accent);
+    background: var(--s-accent-2);
     color: var(--s-bg);
     display: grid;
     place-items: center;

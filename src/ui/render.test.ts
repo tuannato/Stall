@@ -8,6 +8,8 @@ import {
     BANNED_THEME_PROPS,
     DEFAULT_THEME,
     DEFAULT_THEME_ID,
+    NEO_CITY_THEME_ID,
+    RURAL_THEME_ID,
     decodeTheme,
     themeVars,
 } from '../domain/theme';
@@ -35,6 +37,11 @@ import {
     PUBLISH_NAME_TOO_LONG,
     PUBLISH_UNAVAILABLE,
     SET_UP_THIS_STALL,
+    PUBLISH_SAME_LOOK,
+    PUBLISH_AFTER_SIGNING,
+    PUBLISH_CHECK_NOW,
+    UNRESOLVED_TITLE,
+    UNRESOLVED_BODY,
     OPEN_IN_CASHTAB,
     OPENING_BY_DEFAULT,
     OPENING_BODY,
@@ -129,9 +136,15 @@ describe('empty vs unreachable', () => {
         expect(text).toContain(EMPTY_TITLE);
         expect(text).toContain(LIST_IN_CASHTAB);
         expect(text).not.toContain(UNREACHABLE_BODY);
-        expect(text).not.toContain(TRY_AGAIN);
         expect(root.querySelector('button.buy')).toBeNull();
         expect(h.onRetry).not.toHaveBeenCalled();
+        // The retry control is shared with the failure screens and is not what
+        // separates them: an empty stall carries it so a genuine sell-out can
+        // clear, now that a live empty answer is no longer applied. What must
+        // never appear here is the claim that no index answered, and the box
+        // naming the hosts we failed to reach.
+        expect(root.querySelector('[data-role="retry"]')).not.toBeNull();
+        expect(root.querySelector('.hosts')).toBeNull();
     });
 
     it('unreachable has "We can\'t read prices" and must not contain "This stall is empty"', () => {
@@ -236,6 +249,44 @@ describe('unresolvable', () => {
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(root.querySelector('button.buy')).toBeNull();
+    });
+});
+
+describe('unresolved-without-fetch-is-not-no-index-answered', () => {
+    /**
+     * `resolveSeller` returns `unresolved` when the address walk hits
+     * `MAX_HISTORY_PAGES`, and `loadCurrent` then paints that route with **no
+     * fetch** — it never asked agora anything. The index answered every page we
+     * requested; we stopped requesting. Sending that to the unreachable screen
+     * printed "No index answered", which is our own cap reported as the
+     * network's failure.
+     *
+     * Reachable exactly when a stall is doing well: takes pay the maker as
+     * ordinary outputs, not as spends, so the one transaction that reveals the
+     * key sinks below the cap while the shop fills with sales.
+     */
+    it('says we stopped reading, and blames no host for it', () => {
+        const { root } = paint({
+            route: { kind: 'unresolved', address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        });
+        const text = root.textContent ?? '';
+        expect(text).toContain(UNRESOLVED_TITLE);
+        expect(text).toContain(UNRESOLVED_BODY);
+        expect(text, 'the index answered').not.toContain(UNREACHABLE_BODY);
+        expect(text, 'this is not a seller who never spent').not.toContain(
+            UNRESOLVABLE_TITLE,
+        );
+        expect(text, 'and not a seller with nothing for sale').not.toContain(
+            EMPTY_TITLE,
+        );
+        // Nothing failed to answer, so there is no host to list.
+        expect(root.querySelector('.hosts')).toBeNull();
+        // A new spend from this address lands on page 0, so asking again works.
+        expect(root.querySelector('[data-role="retry"]')).not.toBeNull();
+        expect(text).toContain(ADDR);
     });
 });
 
@@ -1140,6 +1191,30 @@ describe('default-stall-control-says-which-way-it-goes', () => {
 });
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
+
+describe('every-theme-var-reaches-the-stylesheet', () => {
+    /**
+     * `--s-accent-2` was emitted on every paint and read by no rule, so
+     * `accentTwo` in the shipped table painted nothing: a seller publishing a
+     * two-colour look got one colour and no way to tell why. A variable nobody
+     * consumes is a value the chain carried for nothing, and neither the theme
+     * table nor `asked-amount-not-covered` can see it — one asserts what
+     * `themeVars` returns, the other never opens a stylesheet.
+     */
+    it('consumes every --s-* that themeVars emits', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const emitted = Object.keys(themeVars(DEFAULT_THEME));
+        expect(emitted.length).toBeGreaterThan(0);
+        for (const name of emitted) {
+            expect(css, `${name} is emitted on every paint and read by no rule`).toContain(
+                `var(${name})`,
+            );
+        }
+    });
+});
 const OTHER_TOKEN = '11'.repeat(32);
 const TEA: TokenMeta = {
     tokenId: OTHER_TOKEN,
@@ -1476,6 +1551,52 @@ describe('publish-sheet', () => {
         expect(btn?.textContent).toBe(SET_UP_THIS_STALL);
     });
 
+    /**
+     * A stall with no settings is painted in the shipped default, which is also
+     * the first row of the picker. Leaving the selection to the browser was
+     * right by accident and read as nothing being chosen, so a seller published
+     * the look they already had and saw an unchanged stall — the single most
+     * likely reading of "I published and the theme did not render".
+     */
+    it('picker-shows-the-look-already-on-screen', () => {
+        const { root } = open();
+        const select = root.querySelector('select[name="theme"]') as HTMLSelectElement;
+        expect(select.value).toBe(String(DEFAULT_THEME_ID));
+        const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
+        expect(note.hidden, 'default look is the painted one, so say so').toBe(false);
+        expect(note.textContent).toBe(PUBLISH_SAME_LOOK);
+    });
+
+    it('picker-follows-a-published-theme-and-drops-the-note-on-a-change', () => {
+        const { root } = open({ theme: decodeTheme(NEO_CITY_THEME_ID) });
+        const select = root.querySelector('select[name="theme"]') as HTMLSelectElement;
+        expect(select.value).toBe(String(NEO_CITY_THEME_ID));
+        const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
+        expect(note.hidden).toBe(false);
+
+        select.value = String(RURAL_THEME_ID);
+        select.dispatchEvent(new Event('change'));
+        expect(note.hidden, 'a different look is a real change').toBe(true);
+    });
+
+    /**
+     * The live socket listens to the agora group, and a settings transaction
+     * does not move the offer book. So no message arrives, nothing re-reads the
+     * manifest, and without this the seller signs in another app and comes back
+     * to a stall that never changes.
+     */
+    it('publish-says-nothing-watches-the-wallet', () => {
+        const { root, h } = open();
+        const text = root.textContent ?? '';
+        expect(text).toContain(PUBLISH_AFTER_SIGNING);
+
+        const check = root.querySelector('[data-role="publish-check"]') as HTMLElement;
+        expect(check.textContent).toBe(PUBLISH_CHECK_NOW);
+        expect(h.onRetry).not.toHaveBeenCalled();
+        check.dispatchEvent(new Event('click'));
+        expect(h.onRetry).toHaveBeenCalledTimes(1);
+    });
+
     it('does not offer it when there is no address to publish from', () => {
         // A route that never resolved has nothing to sign with, so a link here
         // would be one that cannot work.
@@ -1485,6 +1606,31 @@ describe('publish-sheet', () => {
             tokens: new Map(),
         });
         expect(root.querySelector('[data-role="open-publish"]')).toBeNull();
+    });
+
+    /**
+     * The fixture above is a state `loadCurrent` never builds: `addressOf` sets
+     * `view.address` for `unresolvable` and `unresolved` alike, so the app
+     * always had one here. Keying the control off the address therefore offered
+     * it on a screen that mounts no sheet — a button that did nothing at all.
+     * This is the shape the app actually produces.
+     */
+    it('does-not-offer-a-button-that-opens-nothing', () => {
+        for (const route of [
+            { kind: 'unresolvable', address: ADDR },
+            { kind: 'unresolved', address: ADDR },
+        ] as const) {
+            const { root } = paint({
+                route,
+                overlay: { kind: 'idle' },
+                address: ADDR,
+                tokens: new Map(),
+            });
+            expect(
+                root.querySelector('[data-role="open-publish"]'),
+                `${route.kind} mounts no publish sheet, so it must offer no control`,
+            ).toBeNull();
+        }
     });
 
     it('paints no sheet on a route that never resolved', () => {
