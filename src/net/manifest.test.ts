@@ -131,6 +131,97 @@ function fakeChronik(opts: {
     };
 }
 
+/**
+ * Two indexes whose `numTxs` diverge, so a test can tell which one `walkShorter`
+ * chose. `pages()` ties them; this does not.
+ */
+function twoIndexChronik(opts: {
+    addrTxs: ChainTx[];
+    addrNumTxs: number;
+    lokadTxs: ChainTx[];
+    lokadNumTxs: number;
+}): ManifestChronik {
+    return {
+        address() {
+            return {
+                async history(): Promise<HistoryPage> {
+                    return { txs: opts.addrTxs, numTxs: opts.addrNumTxs, numPages: 1 };
+                },
+            };
+        },
+        lokadId(id: string) {
+            expect(id).toBe(STL1_HEX);
+            return {
+                async history(): Promise<HistoryPage> {
+                    return { txs: opts.lokadTxs, numTxs: opts.lokadNumTxs, numPages: 1 };
+                },
+            };
+        },
+        async tx(txid: string): Promise<ChainTx> {
+            throw new Error(`no hint tx ${txid}`);
+        },
+    };
+}
+
+describe('manifest-walks-the-shorter-index', () => {
+    /**
+     * `walkShorter` asks both indexes for `numTxs` and walks only the smaller.
+     * Reversing the `<=` walked the larger, which no other test would catch: a
+     * real record lives in both indexes, so a mis-walk still finds it. Here the
+     * two indexes carry different records, so the winner names the one walked.
+     */
+    it('reads the record in the shorter index, not the higher-block one in the larger', async () => {
+        const pk = compressedPk(0x81);
+        const hash = toHex(shaRmd160(pk));
+        const fromAddr = stallTx({ txid: 'a1'.repeat(32), pk, hash, name: 'FromAddr', height: 10 });
+        const fromLokad = stallTx({ txid: 'b2'.repeat(32), pk, hash, name: 'FromLokad', height: 20 });
+        const got = (
+            await loadManifest(
+                twoIndexChronik({
+                    addrTxs: [fromAddr],
+                    addrNumTxs: 2,
+                    lokadTxs: [fromLokad],
+                    lokadNumTxs: 90,
+                }),
+                { address: 'ecash:qtest', hash },
+            )
+        ).manifest;
+        // Address is shorter (2 <= 90) so it is walked; the lokad record has the
+        // higher block but is never read. A reversed comparison would surface
+        // 'FromLokad'.
+        expect(got?.name).toBe('FromAddr');
+    });
+});
+
+describe('manifest-reader-is-not-output-zero-only', () => {
+    /**
+     * chronik indexes a LOKAD from the first output only, but `firstStl1` reads
+     * every output. Cashtab puts the record at output 0; another wallet need
+     * not, and such a record is found by the address walk. This pins that the
+     * reader is not narrowed to output 0.
+     *
+     * The residual gap, stated not fixed: when the lokad index is the shorter
+     * one, `walkShorter` walks it and never sees an output-1 record. Today every
+     * published record is Cashtab's at output 0, so the gap is latent.
+     */
+    it('reads an STL1 that sits at output 1, via the address walk', async () => {
+        const pk = compressedPk(0x82);
+        const hash = toHex(shaRmd160(pk));
+        const tx = txWith(
+            [p2pkhOutputScript(hash), stl1OutputScript('Second')],
+            pk,
+            hash,
+        );
+        const got = (
+            await loadManifest(
+                twoIndexChronik({ addrTxs: [tx], addrNumTxs: 1, lokadTxs: [], lokadNumTxs: 5 }),
+                { address: 'ecash:qtest', hash },
+            )
+        ).manifest;
+        expect(got?.name).toBe('Second');
+    });
+});
+
 describe('loadManifest', () => {
     it('returns the authored STL1 and skips a record signed by someone else', async () => {
         const pk = compressedPk(0x44);
