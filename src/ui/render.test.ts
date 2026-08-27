@@ -23,6 +23,8 @@ import {
     HANDOFF_MAY_PRESELECT,
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     HOME_LEDE,
+    HOME_SELLER,
+    SHARE_LEDE,
     HOME_NO_ACCOUNT,
     HOME_PASTE_INVALID,
     HOME_PASTE_SUBMIT,
@@ -245,7 +247,8 @@ describe('unresolvable', () => {
         const text = root.textContent ?? '';
         expect(text).toContain(UNRESOLVABLE_TITLE);
         expect(text).toContain(ADDR);
-        expect(text).toContain(LIST_IN_CASHTAB);
+        // Listing is now a link, not a sentence to read and act on separately.
+        expect(root.querySelector('[data-role="list-in-cashtab"]')).not.toBeNull();
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(root.querySelector('button.buy')).toBeNull();
@@ -1682,5 +1685,102 @@ describe('publish-sheet', () => {
         expect(err?.textContent).toBe(PUBLISH_NAME_TOO_LONG);
         expect(web?.hasAttribute('href')).toBe(false);
         expect(pay?.getAttribute('aria-disabled')).toBe('true');
+    });
+});
+
+describe('apex directs the seller to their own address', () => {
+    it('names the receive address, not a public key they cannot see', () => {
+        const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        expect(root.textContent).toContain(HOME_SELLER);
+        // A seller can copy their address out of Cashtab; the pubkey is shown
+        // nowhere, so the seller line must not send them looking for one.
+        expect(HOME_SELLER.toLowerCase()).toContain('address');
+        expect(HOME_SELLER.toLowerCase()).not.toContain('public key');
+    });
+});
+
+describe('unresolvable-is-not-a-shareable-shop', () => {
+    it('drops copy-link, offers a retry and a real link to list', () => {
+        const { root, h } = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        });
+        // A never-spent address is not a shop, so its link is not offered.
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        // But a listing is a new spend that resolves it, so retry is the way on.
+        expect(root.querySelector('[data-role="retry"]')).not.toBeNull();
+        // And listing is a link, not a sentence.
+        const link = root.querySelector('[data-role="list-in-cashtab"]') as HTMLAnchorElement;
+        expect(link).not.toBeNull();
+        expect(link.getAttribute('href')).toContain('cashtab.com');
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+        // Retry re-reads the address.
+        expect(h.onRetry).not.toHaveBeenCalled();
+        (root.querySelector('[data-role="retry"]') as HTMLElement).click();
+        expect(h.onRetry).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('resolved-stall-shows-the-share-link-as-the-prize', () => {
+    const cases: Array<[string, StallView['fetch']]> = [
+        ['offers', { kind: 'offers', offers: [OFFER] }],
+        ['empty', { kind: 'empty' }],
+    ];
+    for (const [label, fetch] of cases) {
+        it(`says what the link is for and draws its QR (${label})`, () => {
+            const { root } = paint(
+                idlePubkey({ fetch, tokens: new Map([[TOKEN_ID, BEANS]]) }),
+            );
+            const share = root.querySelector('[data-role="copy-link"]') as HTMLElement;
+            expect(share).not.toBeNull();
+            expect(share.textContent).toContain(SHARE_LEDE);
+            const qr = share.querySelector('svg.qr.share-qr');
+            expect(qr).not.toBeNull();
+            // A real QR is one path of modules, not an empty box.
+            expect((qr!.querySelector('path')?.getAttribute('d')?.length ?? 0)).toBeGreaterThan(100);
+        });
+    }
+});
+
+describe('publish-sheet-carries-a-scannable-bip21', () => {
+    it('draws the QR for a valid record and hides it for an invalid name', () => {
+        const view = idlePubkey({
+            fetch: { kind: 'empty' },
+            overlay: { kind: 'publish' },
+            stallName: 'Shop',
+        });
+        const { root } = paint(view);
+        const qrBox = root.querySelector('[data-role="publish-qr"]') as HTMLElement;
+        expect(qrBox).not.toBeNull();
+        expect(qrBox.hidden).toBe(false);
+        expect(qrBox.querySelector('svg.qr')).not.toBeNull();
+
+        const input = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+        expect(qrBox.hidden).toBe(true);
+    });
+});
+
+describe('expanded-card-shows-a-large-token-image', () => {
+    it('puts a large icon cell at the top of the opened detail', () => {
+        resetIconsForTests();
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+            }),
+        );
+        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
+        expect(detail).not.toBeNull();
+        const big = detail.querySelector('.item-ic.item-ic-lg') as HTMLElement;
+        expect(big).not.toBeNull();
+        // It is the first thing in the panel.
+        expect(detail.firstElementChild).toBe(big);
+        // No icon has loaded, so it holds the initials, never an empty square.
+        expect(big.textContent?.length ?? 0).toBeGreaterThan(0);
     });
 });

@@ -234,10 +234,24 @@ export const HOME_PASTE_SUBMIT = 'Open stall';
 export const HOME_PASTE_INVALID =
     'That is not an eCash address or a compressed public key.';
 export const HOME_SELLER =
-    'If this is your stall, list the token in Cashtab, then paste the address you sell from.';
+    'If this is your stall: list your token in Cashtab, then paste your own eCash address here — the one Cashtab shows on its Receive screen. Your shop opens at a link that is yours to share.';
 
 export const LIST_IN_CASHTAB =
     'List the token in Cashtab. Once it is on Agora it will show up here on its own.';
+
+/** The clickable form, for a screen where the seller has not listed yet. */
+export const LIST_IN_CASHTAB_LINK = 'List a token in Cashtab';
+
+/** Says what the link is for, so a resolved stall reads as the thing to send. */
+export const SHARE_LEDE =
+    'This link is your shop. Send it to anyone — they open it in a browser, and buying happens in their own Cashtab.';
+
+export const SHARE_QR_ALT = 'QR code for this stall’s link';
+
+/** The settings BIP21 as a QR, for signing from a phone wallet. */
+export const PUBLISH_QR_ALT = 'QR code for the settings transaction';
+export const PUBLISH_QR_LEDE =
+    'On a phone, scan this with the wallet that holds this stall to sign the same transaction.';
 
 export const COPY_LINK = 'Copy link';
 export const LINK_COPIED = 'Link copied';

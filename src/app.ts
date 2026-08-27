@@ -108,7 +108,12 @@ export function boot(
     };
 
     const onGoHome = (): void => {
-        history.pushState(null, '', '/');
+        // Mark this door as chosen. `history.state` survives a reload of the
+        // same entry, so a visitor who clicked "open another stall" and then
+        // reloaded stays on the door instead of being snapped back to their
+        // default stall. A freshly typed bare domain has null state and still
+        // opens the default. See the cold-start block below.
+        history.pushState({ door: true }, '', '/');
         void refresh();
     };
 
@@ -170,7 +175,8 @@ export function boot(
     // `/` still paints the door, which is what the Open-another-stall control
     // is for.
     const saved = readSavedStall();
-    if (saved !== undefined && isHomePath(location.pathname)) {
+    const choseTheDoor = (history.state as { door?: boolean } | null)?.door === true;
+    if (saved !== undefined && isHomePath(location.pathname) && !choseTheDoor) {
         history.replaceState(null, '', stallPath(saved));
     }
     void refresh();

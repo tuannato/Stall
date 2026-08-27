@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { boot, type AppState } from './app';
 import { sellerFromPath, stallPath } from './domain/route';
 import { EMPTY_TITLE, HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
@@ -232,5 +232,28 @@ describe('open-another-stall', () => {
         expect(root.textContent).toContain(HOME_LEDE);
         expect(root.querySelector('.paste-in')).not.toBeNull();
         expect(document.title).toBe(HOME_TITLE);
+    });
+});
+
+describe('default-stall-does-not-trap-the-door', () => {
+    afterEach(() => {
+        localStorage.clear();
+    });
+
+    it('a freshly typed bare domain opens the saved stall', () => {
+        localStorage.setItem('stall.default', ADDR);
+        // A fresh navigation has null history state.
+        window.history.replaceState(null, '', '/');
+        boot(document.createElement('div'), async () => homeState());
+        expect(location.pathname).toContain('/s/');
+    });
+
+    it('reloading a door reached via open-another stays on the door', () => {
+        localStorage.setItem('stall.default', ADDR);
+        // onGoHome stamps the entry; the stamp survives a reload of it, which a
+        // fresh type does not carry.
+        window.history.replaceState({ door: true }, '', '/');
+        boot(document.createElement('div'), async () => homeState());
+        expect(location.pathname).toBe('/');
     });
 });

@@ -457,3 +457,48 @@ body {
     font-weight: 620;
     text-align: left;
 }
+
+/*
+ * QR codes. Always black on white with a quiet zone — a themed or margin-less
+ * QR does not scan — so the SVG carries its own colours and only its box is
+ * themed. `image-rendering: pixelated` keeps the modules crisp when scaled.
+ */
+.qr {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #ffffff;
+    image-rendering: pixelated;
+    border-radius: 4px;
+}
+
+.share-qr {
+    max-width: 168px;
+    align-self: flex-start;
+    padding: 6px;
+}
+
+.publish-qr {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.publish-qr .qr {
+    max-width: 208px;
+    padding: 8px;
+}
+
+/*
+ * The token's own image, large, at the top of an opened card. Reuses the icon
+ * cache and clipping of `.item-ic`; only the size and placement differ.
+ */
+.item-ic-lg {
+    width: 96px;
+    height: 96px;
+    border-radius: var(--s-radius);
+    align-self: center;
+    margin-bottom: 6px;
+    font-size: 32px;
+}

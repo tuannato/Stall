@@ -1,6 +1,13 @@
 
-import { cashtabPublishUrl, cashtabTokenUrl, payECashPublishUrl } from '../domain/cashtab';
+import {
+    CASHTAB_LIST_URL,
+    cashtabPublishUrl,
+    cashtabTokenUrl,
+    payECashPublishUrl,
+    publishBip21,
+} from '../domain/cashtab';
 import { iconUrl } from '../domain/icons';
+import { qrMatrix } from '../domain/qr';
 import { encodeManifestHex } from '../domain/manifest';
 import {
     formatAtoms,
@@ -133,15 +140,67 @@ function paintUnresolvable(
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
     stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB));
     const body = el('div', 'stall-body');
-    body.append(
-        mid(copy.UNRESOLVABLE_TITLE, [
-            copy.UNRESOLVABLE_BODY,
-            copy.UNRESOLVABLE_HINT,
-            copy.LIST_IN_CASHTAB,
-        ]),
-    );
+    // A waiting state, not a shop. The seller pasted the address they sell from
+    // before listing, which is the order the apex invites, so this is the first
+    // screen a new seller sees — not a rare case. Give them the way forward: a
+    // link to list, and a retry, because a listing is a new spend on page 0 and
+    // resolves this address the next time it is read.
+    body.append(mid(copy.UNRESOLVABLE_TITLE, [copy.UNRESOLVABLE_BODY, copy.UNRESOLVABLE_HINT]));
+    body.append(listInCashtab());
+    body.append(retryControl(handlers));
     stall.append(body);
-    stall.append(stallFooter(address, view, handlers));
+    // No share: the link here opens "this address has never sent."
+    stall.append(stallFooter(address, view, handlers, { share: false }));
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built
+ * through the DOM, not a markup string, and no external image. Always black on
+ * white with a quiet zone: a QR that inherits a theme colour or loses its margin
+ * does not scan. `title` is what a screen reader announces.
+ */
+function qrSvg(text: string, title: string): SVGSVGElement {
+    const matrix = qrMatrix(text);
+    const n = matrix.length;
+    const quiet = 4;
+    const size = n + quiet * 2;
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', title);
+    svg.classList.add('qr');
+    const bg = document.createElementNS(SVG_NS, 'rect');
+    bg.setAttribute('width', String(size));
+    bg.setAttribute('height', String(size));
+    bg.setAttribute('fill', '#ffffff');
+    svg.append(bg);
+    let d = '';
+    for (let r = 0; r < n; r += 1) {
+        for (let c = 0; c < n; c += 1) {
+            if (matrix[r]![c]) {
+                d += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+            }
+        }
+    }
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', '#000000');
+    svg.append(path);
+    return svg;
+}
+
+/** A real link to list, for a seller who has not listed yet. */
+function listInCashtab(): HTMLElement {
+    const wrap = el('p', 'mid-p');
+    const link = el('a', 'buy', copy.LIST_IN_CASHTAB_LINK);
+    link.href = CASHTAB_LIST_URL;
+    link.rel = 'noopener noreferrer';
+    link.target = '_blank';
+    link.setAttribute('data-role', 'list-in-cashtab');
+    wrap.append(link);
+    return wrap;
 }
 
 function paintUnresolved(
@@ -454,8 +513,11 @@ function revealLoadedIcon(key: string, source: HTMLImageElement): void {
     }
 }
 
-function itemIcon(tokenId: string, name: string): HTMLElement {
+function itemIcon(tokenId: string, name: string, extraClass?: string): HTMLElement {
     const cell = el('div', 'item-ic');
+    if (extraClass !== undefined) {
+        cell.classList.add(extraClass);
+    }
     const key = iconKey(tokenId);
     if (key !== undefined) {
         cell.setAttribute('data-token-id', key);
@@ -539,6 +601,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     sameLook.setAttribute('data-role', 'publish-same-look');
     const bytes = el('p', 'fine', '');
     bytes.setAttribute('data-role', 'publish-hex');
+    const qrBox = el('div', 'publish-qr');
+    qrBox.setAttribute('data-role', 'publish-qr');
+    qrBox.hidden = true;
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'publish-cashtab');
     const app = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
@@ -564,6 +629,20 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         sameLook.hidden = Number(select.value) !== painted;
         bytes.textContent = ready ? hex! : '';
         bytes.hidden = !ready;
+        // The bare BIP21 as a QR: the same record, for a phone wallet to scan
+        // rather than a desktop link to follow. Rebuilt because its content is
+        // the record, which changes with the name and the look.
+        const bip21 = hex === undefined ? undefined : publishBip21(address, hex);
+        if (ready && bip21 !== undefined) {
+            qrBox.replaceChildren(
+                qrSvg(bip21, copy.PUBLISH_QR_ALT),
+                el('p', 'fine', copy.PUBLISH_QR_LEDE),
+            );
+            qrBox.hidden = false;
+        } else {
+            qrBox.replaceChildren();
+            qrBox.hidden = true;
+        }
         for (const [link, href] of [
             [web, cashtab],
             [app, pay],
@@ -585,6 +664,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
     wrap.append(bytes);
+    wrap.append(qrBox);
     wrap.append(web, app);
 
     // Signing happens in another app, and the live socket only listens to the
@@ -701,6 +781,12 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     const ticker = tokenTicker(view.tokens, offer.tokenId);
     const meta = tokenMeta(view.tokens, offer.tokenId);
 
+    // The token's own image, large, at the top of the opened card. Same source
+    // and cache as the row icon (our Worker); initials stay until it loads and
+    // a failed load keeps them, exactly as the small one does.
+    const name = meta?.name ?? meta?.ticker ?? offer.tokenId;
+    panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg'));
+
     if (isUnbuyable(offer)) {
         panel.append(
             el(
@@ -809,11 +895,15 @@ function stallFooter(
     identity: string | undefined,
     view: StallView,
     handlers: StallHandlers,
+    opts: { share?: boolean } = {},
 ): HTMLElement {
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
     return footer(identity, {
-        share: true,
+        // A stall that never resolved is not a shareable shop: its link opens a
+        // page that says the address has never sent. The caller drops share
+        // there. Everywhere else the link is the point.
+        share: opts.share ?? true,
         goHome: handlers.onGoHome,
         // Only where the sheet can actually open. `publishSheet` is mounted by
         // `paintOffers` and `paintEmpty`, both under `paintPubkey`; on any
@@ -1075,7 +1165,13 @@ function shareUrl(): string {
 function shareControl(): HTMLElement {
     const wrap = el('div', 'share');
     wrap.setAttribute('data-role', 'copy-link');
+    // The link is what this page exists to produce, so it says what it is for
+    // rather than sitting unlabelled at the foot.
+    wrap.append(el('p', 'fine', copy.SHARE_LEDE));
     const url = shareUrl();
+    const qr = qrSvg(url, copy.SHARE_QR_ALT);
+    qr.classList.add('share-qr');
+    wrap.append(qr);
     const field = el('input', 'share-url');
     field.type = 'text';
     field.readOnly = true;
