@@ -1,0 +1,248 @@
+/**
+ * The rendered-output guard `CLAUDE.md` §6 has been asking for.
+ *
+ * `asked-amount-not-covered` inspects what `themeVars()` returns and never
+ * opens a stylesheet, and happy-dom does not lay out — so the rule that nothing
+ * we ship may cover the asked amount has been enforced by reading the diff.
+ * Three defects got through in one session because of it: a grid row stretched
+ * to an image's height and opened a 130px hole, `hidden` lost to a class that
+ * set `display`, and a hex string ran off the side of the sheet.
+ *
+ * This page paints every shipped look across every screen, measures the result
+ * in a real browser, and writes a verdict into the DOM for the runner to read.
+ * It asserts what only a browser can see.
+ */
+import { renderStall } from '../src/ui/render';
+import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
+import { scaleRate } from '../src/domain/fiat';
+import type { Outpoint, StallOffer, StallView, TokenMeta } from '../src/domain/state';
+
+const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
+const PK = `03${'aa'.repeat(32)}`;
+const T1 = 'cd'.repeat(32);
+const T2 = '11'.repeat(32);
+const NFT = 'ee'.repeat(32);
+const GROUP = 'aa'.repeat(32);
+const OUT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
+
+const offer = (tokenId: string, outIdx: number, sats: bigint): StallOffer => ({
+    outpoint: { txid: OUT.txid, outIdx },
+    tokenId,
+    atoms: 12n,
+    variant: 'PARTIAL',
+    askedSats: sats,
+    askedAtoms: 1n,
+    priceNanoSatsPerAtom: sats * 1_000_000_000n,
+});
+
+const meta = (tokenId: string, name: string, type?: string): TokenMeta => ({
+    tokenId,
+    name,
+    ticker: name.slice(0, 4).toUpperCase(),
+    decimals: 0,
+    ...(type === undefined ? {} : { tokenType: { protocol: 'SLP', type } }),
+});
+
+const tokens = new Map<string, TokenMeta>([
+    [T1, meta(T1, 'Roasted Beans', 'SLP_TOKEN_TYPE_FUNGIBLE')],
+    [T2, meta(T2, 'Green Tea', 'SLP_TOKEN_TYPE_FUNGIBLE')],
+    [NFT, meta(NFT, 'Pixel #1', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
+    [GROUP, meta(GROUP, 'Pixel Set')],
+]);
+
+/** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
+const UNBROKEN = 'A'.repeat(178);
+
+const handlers = {
+    onBuy: () => {},
+    onRetry: () => {},
+    onCloseSheet: () => {},
+    onOpenStall: () => {},
+    onGoHome: () => {},
+    onToggleDefault: () => {},
+    onOpenPublish: () => {},
+    onClosePublish: () => {},
+    onChangeFiat: () => {},
+};
+
+const base = (over: Partial<StallView>): StallView => ({
+    route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+    overlay: { kind: 'idle' },
+    tokens,
+    address: ADDR,
+    stallName: 'Riverside Goods',
+    fiatCode: 'usd',
+    fiatRate: scaleRate(7.02e-6),
+    nftGroups: new Map([[NFT, GROUP]]),
+    ...over,
+});
+
+const SCREENS: Record<string, StallView> = {
+    offers: base({
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n), offer(NFT, 2, 50_000n)],
+        },
+    }),
+    expanded: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'buy', outpoint: OUT },
+        // The longest thing a seller can publish, with no spaces to break on.
+        descriptions: new Map([[T1, UNBROKEN]]),
+    }),
+    publish: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        overlay: { kind: 'publish' },
+        descriptions: new Map([[T1, 'Existing words']]),
+    }),
+    empty: base({ fetch: { kind: 'empty' } }),
+    door: {
+        route: { kind: 'home' },
+        overlay: { kind: 'idle' },
+        tokens: new Map(),
+    },
+};
+
+type Failure = { screen: string; theme: string; check: string; detail: string };
+
+/**
+ * Is any part of this node covered by something that is not itself?
+ *
+ * Sampled at five points rather than one: a decoration that covers half a
+ * number still hides the number, and a single centre probe misses it.
+ */
+function coveredBy(node: Element): string | undefined {
+    const box = node.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) {
+        return 'has no box at all';
+    }
+    const points: [number, number][] = [
+        [box.left + box.width / 2, box.top + box.height / 2],
+        [box.left + 2, box.top + 2],
+        [box.right - 2, box.top + 2],
+        [box.left + 2, box.bottom - 2],
+        [box.right - 2, box.bottom - 2],
+    ];
+    for (const [x, y] of points) {
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+            // Off screen is its own failure, reported by the viewport check.
+            continue;
+        }
+        const hit = document.elementFromPoint(x, y);
+        if (hit === null) {
+            continue;
+        }
+        // The node itself, or something inside it. An **ancestor** is not
+        // allowed: `elementFromPoint` attributes a pseudo-element's paint to
+        // the element that owns it, so `.item-head::after { position: absolute
+        // }` laid over the price reports as `.item-head` — and treating an
+        // ancestor as innocent made the first version of this guard blind to
+        // exactly the defect §6 names, a shipped decoration over the amount.
+        if (hit !== node && !node.contains(hit)) {
+            return `covered at ${Math.round(x)},${Math.round(y)} by ${describe(hit)}`;
+        }
+    }
+    return undefined;
+}
+
+function describe(node: Element): string {
+    const cls = typeof node.className === 'string' ? node.className : '';
+    return `${node.tagName.toLowerCase()}${cls === '' ? '' : `.${cls.split(/\s+/).join('.')}`}`;
+}
+
+function check(screen: string, themeId: number, themeLabel: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId) };
+    renderStall(root, view, handlers);
+
+    const out: Failure[] = [];
+    const fail = (c: string, detail: string): void => {
+        out.push({ screen, theme: themeLabel, check: c, detail });
+    };
+
+    /**
+     * A modal the seller opened is the surface being read, and covering the
+     * stall behind it is what a modal is for — the sheet says so in its own
+     * comment. So the rule is scoped rather than waived: while a sheet is open
+     * the figures **inside it** must be uncovered, and the sheet must be
+     * bounded and scrollable so closing it brings the stall back. The first run
+     * of this guard reported the scrim covering the price behind it, which is
+     * exactly the boundary that had never been written down.
+     */
+    const scrim = root.querySelector('[data-role="sheet-scrim"]');
+    const surface: ParentNode = scrim ?? root;
+
+    // §6's rule, at last enforced against what was actually drawn.
+    for (const price of surface.querySelectorAll('[data-role="price"]')) {
+        const why = coveredBy(price);
+        if (why !== undefined) {
+            fail('asked amount is covered', why);
+        }
+    }
+    // The figure the buyer pays in the disclosure is the same promise.
+    for (const paid of surface.querySelectorAll('.row.big dd')) {
+        const why = coveredBy(paid);
+        if (why !== undefined) {
+            fail('you-pay figure is covered', why);
+        }
+    }
+    if (scrim !== null) {
+        // A sheet taller than the screen with nothing to scroll would strand
+        // whatever is below it — including a figure a seller is about to sign.
+        const sheet = scrim.querySelector('.sheet');
+        if (sheet === null) {
+            fail('a scrim with no sheet', 'nothing to read inside the overlay');
+        } else {
+            const box = sheet.getBoundingClientRect();
+            const scrollable = sheet.scrollHeight <= sheet.clientHeight + 1;
+            if (box.height > window.innerHeight + 1) {
+                fail('sheet is taller than the screen', `height ${Math.round(box.height)}`);
+            }
+            if (!scrollable && getComputedStyle(sheet).overflowY !== 'auto') {
+                fail('sheet overflows with no way to scroll', 'content is out of reach');
+            }
+        }
+    }
+
+    // Nothing may push the page sideways. This is the class of bug that a
+    // 178-character description, a long token id and a raw hex record all
+    // belong to, and none of them is visible to a runner that cannot lay out.
+    const doc = document.documentElement;
+    if (doc.scrollWidth > window.innerWidth + 1) {
+        fail(
+            'page scrolls sideways',
+            `scrollWidth ${doc.scrollWidth} > viewport ${window.innerWidth}`,
+        );
+    }
+
+    // The theme must reach the edges. Measured once at 375x812 as an 8px border
+    // and 42% of the screen left unthemed, and invisible for two months because
+    // the shipped default is white on a white canvas.
+    const stall = root.querySelector('.stall');
+    if (stall !== null && screen !== 'door') {
+        const box = stall.getBoundingClientRect();
+        if (box.top > 1 || box.left > 1 || box.right < window.innerWidth - 1) {
+            fail('theme does not reach the edges', `stall box ${JSON.stringify(box.toJSON())}`);
+        }
+        if (box.height < window.innerHeight - 1) {
+            fail('theme does not reach the bottom', `height ${box.height} < ${window.innerHeight}`);
+        }
+    }
+    return out;
+}
+
+const failures: Failure[] = [];
+for (const screen of Object.keys(SCREENS)) {
+    for (const theme of SHIPPED_THEMES) {
+        failures.push(...check(screen, theme.id, theme.label));
+    }
+}
+
+const result = document.createElement('pre');
+result.id = 'layout-result';
+result.textContent = JSON.stringify(
+    { viewport: window.innerWidth, failures },
+    null,
+    1,
+);
+document.body.append(result);

@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
+    "test:layout": "node scripts/layout-check.mjs",
     "test": "vitest run && node --experimental-strip-types --test worker-icons/src/index.test.ts"
   },
   "dependencies": {
