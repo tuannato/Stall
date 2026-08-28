@@ -1,4 +1,19 @@
+import { attachmentByTokenId } from './attachments';
+import { SHIPPED_THEMES } from './theme';
 import type { StallOffer, TokenMeta } from './state';
+
+/**
+ * The shipped catalogue's answer, which is the one production uses. Injectable
+ * so a test can describe a shop without minting a token — the same seam
+ * `groupOf` already is.
+ */
+function defaultLookOf(tokenId: string): string | undefined {
+    const row = attachmentByTokenId(tokenId);
+    if (row === undefined) {
+        return undefined;
+    }
+    return SHIPPED_THEMES.find((t) => t.id === row.themeId)?.label;
+}
 
 /**
  * Which section of the stall a row belongs in.
@@ -16,7 +31,7 @@ import type { StallOffer, TokenMeta } from './state';
  * support. `tokenTypeLabel` already passes unknown strings through rather than
  * renaming them, and this follows that.
  */
-export type Category = 'etoken' | 'nft' | 'unsorted';
+export type Category = 'etoken' | 'nft' | 'decor' | 'unsorted';
 
 /**
  * NFT1 group is filed with the NFTs, not with the fungibles. A group token is
@@ -57,8 +72,18 @@ export function isNftChild(meta: TokenMeta | undefined): boolean {
  * The order sections are printed in. Unsorted is last: it is the smallest and
  * the least interesting, and putting our own failure above a seller's stock
  * would be a strange way to run their shop.
+ *
+ * **Decorations sit below a seller's own stock, not above it.** On the shop
+ * that sells them the order does not show at all — one section prints no
+ * heading — so the only place this order is visible is somebody else's stall
+ * reselling one, and there their own goods lead.
  */
-export const CATEGORY_ORDER: readonly Category[] = ['etoken', 'nft', 'unsorted'] as const;
+export const CATEGORY_ORDER: readonly Category[] = [
+    'etoken',
+    'nft',
+    'decor',
+    'unsorted',
+] as const;
 
 export type OfferGroup = {
     /**
@@ -67,6 +92,12 @@ export type OfferGroup = {
      * unsorted section.
      */
     readonly groupTokenId?: string;
+    /**
+     * A run's heading when it is not an NFT collection — today, the look a
+     * decoration is for. Text this app ships, never chain-supplied: a heading
+     * built from a seller's own string is a heading anyone can write.
+     */
+    readonly groupLabel?: string;
     readonly offers: readonly StallOffer[];
 };
 
@@ -76,8 +107,9 @@ export type CategorySection = {
 };
 
 /**
- * Split already-ordered offers into sections, and inside the NFT section into
- * runs that share a parent.
+ * Split already-ordered offers into sections, and inside two of them into runs:
+ * NFTs by the collection they were minted from, decorations by the look they
+ * fit.
  *
  * Ordering is the caller's job (`compareOffers`) and is preserved exactly: this
  * only decides where the dividers go. Nothing is priced, counted into a
@@ -89,10 +121,17 @@ export function sectionsOf(
     offers: readonly StallOffer[],
     tokens: ReadonlyMap<string, TokenMeta>,
     groupOf: (tokenId: string) => string | undefined = () => undefined,
+    lookOf: (tokenId: string) => string | undefined = defaultLookOf,
 ): CategorySection[] {
     const buckets = new Map<Category, StallOffer[]>();
     for (const offer of offers) {
-        const category = categoryOf(tokens.get(offer.tokenId));
+        // The catalogue is asked first, and it is asked by token id. A row in
+        // it is a decoration whatever its genesis says it is called — and a
+        // token that merely shares a ticker with one is not.
+        const category =
+            lookOf(offer.tokenId) === undefined
+                ? categoryOf(tokens.get(offer.tokenId))
+                : 'decor';
         const list = buckets.get(category);
         if (list === undefined) {
             buckets.set(category, [offer]);
@@ -107,12 +146,54 @@ export function sectionsOf(
         if (rows === undefined || rows.length === 0) {
             continue;
         }
-        out.push({
-            category,
-            groups: category === 'nft' ? runsByGroup(rows, tokens, groupOf) : [{ offers: rows }],
-        });
+        let groups: OfferGroup[];
+        if (category === 'nft') {
+            groups = runsByGroup(rows, tokens, groupOf);
+        } else if (category === 'decor') {
+            groups = runsByLook(rows, lookOf);
+        } else {
+            groups = [{ offers: rows }];
+        }
+        out.push({ category, groups });
     }
     return out;
+}
+
+/**
+ * Consecutive decoration rows for one look become one run, the same way an NFT
+ * collection does — consecutive rather than gathered, because the incoming
+ * order is the caller's and re-sorting here would silently override it.
+ *
+ * This is what gives the shop that sells decorations its structure: it sells
+ * nothing else, so it has one section and prints no section heading, and these
+ * run headings are the only dividers on the page.
+ */
+function runsByLook(
+    rows: readonly StallOffer[],
+    lookOf: (tokenId: string) => string | undefined,
+): OfferGroup[] {
+    const runs: OfferGroup[] = [];
+    let current: StallOffer[] = [];
+    let currentLook: string | undefined;
+    let started = false;
+
+    for (const offer of rows) {
+        const look = lookOf(offer.tokenId);
+        if (started && look === currentLook) {
+            current.push(offer);
+            continue;
+        }
+        if (started) {
+            runs.push({ groupLabel: currentLook, offers: current });
+        }
+        current = [offer];
+        currentLook = look;
+        started = true;
+    }
+    if (started) {
+        runs.push({ groupLabel: currentLook, offers: current });
+    }
+    return runs;
 }
 
 /**

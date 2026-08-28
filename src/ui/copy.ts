@@ -399,11 +399,17 @@ export const tokenLinkHost = (host: string): string => `You will be taken to ${h
  */
 export const SECTION_ETOKEN = 'Tokens';
 export const SECTION_NFT = 'NFTs';
+export const SECTION_DECOR = 'Decorations';
 export const SECTION_UNSORTED = 'Type not read';
 export const SECTION_UNSORTED_WHY =
     'These are listed, and this page could not read what kind of token they are. That is our failure, not a claim about them.';
 /** A collection heading carries a name and a count, and never a price. */
 export const collectionOf = (name: string): string => `Collection · ${name}`;
+/**
+ * A decoration run's heading: which look these fit. The look name is ours, from
+ * the shipped table — never a string read off a token, which anyone can write.
+ */
+export const decorFor = (look: string): string => `For ${look}`;
 export const NFT_GROUPS_TRUNCATED =
     'Some NFTs are shown without their collection: this page stopped looking after the first few.';
 

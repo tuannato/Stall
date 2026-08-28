@@ -250,3 +250,14 @@ export function attachmentNodesWanted(
 ): readonly ShippedAttachment[] {
     return worn.filter((a) => a.paint === 'node' && a.cls !== undefined);
 }
+
+/**
+ * The look a decoration is for, by the only identifier that cannot be written
+ * by somebody else: the genesis txid. A ticker is seller-supplied text, it is
+ * not unique on either protocol, and a rule keyed on one would file an
+ * unrelated token with a colliding ticker under this shop's catalogue — on
+ * *their* stall, about *their* stock.
+ */
+export function attachmentByTokenId(tokenId: string): ShippedAttachment | undefined {
+    return SHIPPED_ATTACHMENTS.find((a) => a.tokenId === tokenId);
+}

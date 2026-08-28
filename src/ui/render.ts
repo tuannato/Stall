@@ -525,6 +525,8 @@ function paintOffers(
         for (const group of section.groups) {
             if (group.groupTokenId !== undefined) {
                 body.append(collectionHead(group.groupTokenId, group.offers.length, view));
+            } else if (group.groupLabel !== undefined) {
+                body.append(lookHead(group.groupLabel, group.offers.length));
             }
             const items = el('div', 'items');
             for (const offer of group.offers) {
@@ -566,7 +568,9 @@ function sectionHead(category: Category, view: StallView): HTMLElement {
             ? copy.SECTION_ETOKEN
             : category === 'nft'
               ? copy.SECTION_NFT
-              : copy.SECTION_UNSORTED;
+              : category === 'decor'
+                ? copy.SECTION_DECOR
+                : copy.SECTION_UNSORTED;
     wrap.append(el('h2', 'section-title', label));
     if (category === 'unsorted') {
         wrap.append(el('p', 'fine', copy.SECTION_UNSORTED_WHY));
@@ -582,6 +586,19 @@ function sectionHead(category: Category, view: StallView): HTMLElement {
  * collection's name and how many rows follow, and **no price**: a heading
  * priced at its cheapest member would name a number no covenant encodes.
  */
+/**
+ * A run of decorations for one look. Printed whether or not the page has more
+ * than one section, because on the shop that sells them there is only one — so
+ * these are the only dividers it has.
+ */
+function lookHead(look: string, count: number): HTMLElement {
+    const wrap = el('div', 'collection-head');
+    wrap.setAttribute('data-role', 'decor-run');
+    wrap.append(el('div', 'collection-name', copy.decorFor(look)));
+    wrap.append(el('div', 'collection-count', copy.itemsForSale(count)));
+    return wrap;
+}
+
 function collectionHead(groupTokenId: string, count: number, view: StallView): HTMLElement {
     const wrap = el('div', 'collection-head');
     wrap.setAttribute('data-role', 'collection');
