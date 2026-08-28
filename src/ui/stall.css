@@ -1,17 +1,19 @@
-/* One stall DOM. Theme colours and font arrive as --s-* on .stall only. */
+/*
+ * One stall DOM, three shops. Theme colours, font and shape arrive as --s-* on
+ * .stall only; every value is one this repo ships, indexed by a one-byte id.
+ *
+ * Mobile is the base; the single `min-width: 680px` block below swaps the `-d`
+ * half of each pair. The specimen switched these in JS on resize — this origin
+ * repaints only when the offer book moves, so the choice has to be CSS's.
+ */
 
 /*
  * The stall must reach the edges, or the theme is a card on somebody else's
  * page. `--s-bg` is set on `.stall`, so everything outside it is painted by the
  * browser, not by the seller: with no reset, `body` keeps its default 8px
- * margin, and `min-height: 100%` on `.frame` and `.stall` resolves to nothing
- * because no ancestor has a definite height. Measured in a real browser at
- * 375x812 with a dark theme: an 8px border and 338px — 42% of the screen —
- * left unthemed below the stall.
- *
- * Invisible until it mattered. The shipped default is white on a white canvas,
- * so this only appears the first time a seller publishes a dark look. happy-dom
- * does not lay out, so no test in this runner can see it either.
+ * margin, and `min-height: 100%` resolves to nothing because no ancestor has a
+ * definite height. Measured in a real browser at 375x812 with a dark theme: an
+ * 8px border and 42% of the screen left unthemed below the stall.
  */
 html,
 body,
@@ -48,39 +50,10 @@ body {
     box-sizing: border-box;
 }
 
-.stall-head {
-    padding: 16px 14px 12px;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 11px;
-    border-bottom: 1px solid var(--s-muted);
-}
-
 /*
- * The brand mark. It carries its own hexagon and inks, so it is not themed —
- * only sized here. `width: auto` holds the logo's aspect ratio; `flex: none`
- * keeps it from shrinking when a long stall name pushes the row.
- */
-.stall-mark {
-    height: 34px;
-    width: auto;
-    flex: none;
-    display: block;
-}
-
-.stall-headings {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-}
-
-/*
- * A per-theme header strip. Its label and kind are theme data
- * (`domain/theme.ts`); a new theme reusing a kind costs nothing here, and only
- * a brand new kind adds a rule. It sits above the sign and far from the price —
- * it decorates the top edge, it never covers what a buyer must read.
+ * A per-theme header strip. Label and kind are theme data, so a new theme
+ * reusing a kind costs nothing here. It decorates the top edge and is nowhere
+ * near the price.
  */
 .orn {
     display: grid;
@@ -129,10 +102,49 @@ body {
     }
 }
 
+/* The shop's sign: the mark, the name, and the address it is reachable at. */
+.stall-head {
+    padding: var(--s-sign-pad-m);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: var(--s-sign-rule);
+}
+
+/*
+ * The brand mark carries its own hexagon and inks, so it is not themed — only
+ * sized. `width: auto` holds the logo's aspect ratio; `flex: none` keeps it
+ * from shrinking when a long stall name pushes the row.
+ */
+.stall-mark {
+    height: 34px;
+    width: auto;
+    flex: none;
+    display: block;
+}
+
+.stall-sign {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.stall-headings {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
 .stall-name {
-    font-size: 19px;
-    font-weight: 600;
-    line-height: 1.2;
+    font-size: var(--s-sign-size);
+    font-weight: var(--s-name-weight);
+    letter-spacing: var(--s-track);
+    text-transform: var(--s-sign-case);
+    line-height: 1.15;
 }
 
 .stall-sub {
@@ -144,29 +156,24 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 13px 14px;
-    gap: 11px;
+    padding: var(--s-pad-m);
+    gap: var(--s-gap);
     min-height: 0;
 }
 
 .items {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.layout-shelf .items {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: var(--s-gap);
 }
 
-.layout-shelf .item.open {
+/*
+ * An expanded row spans the whole grid, so a neighbour's price is never pushed
+ * off screen by the disclosure. Universal now: it used to hang off
+ * `.layout-shelf` alone, and the guarantee is not one look's privilege.
+ */
+.items .item.open {
     grid-column: 1 / -1;
-}
-
-.layout-vending .items {
-    gap: 7px;
 }
 
 .item {
@@ -174,21 +181,29 @@ body {
     flex-direction: column;
     width: 100%;
     margin: 0;
+    border: var(--s-card-border);
+    box-shadow: var(--s-card-shadow);
     border-radius: var(--s-radius);
     background: var(--s-surface);
     color: inherit;
+    overflow: hidden;
 }
 
+/*
+ * The offer card's own grid. `ic / name / price` are named areas, so the asked
+ * amount owns a cell of its own and nothing shares it. The area strings are
+ * ours, from the shipped table — the chain names a row, never a layout.
+ */
 .item-head {
     display: grid;
-    grid-template-columns: 38px 1fr auto;
-    gap: 11px;
+    grid-template-areas: var(--s-areas-m);
+    grid-template-columns: var(--s-cols-m);
+    gap: var(--s-card-gap);
     align-items: center;
     width: 100%;
     margin: 0;
-    padding: 14px;
+    padding: var(--s-card-pad);
     border: 0;
-    border-radius: var(--s-radius);
     background: transparent;
     color: inherit;
     font: inherit;
@@ -196,28 +211,17 @@ body {
     cursor: pointer;
 }
 
-.item.open .item-head {
-    border-radius: var(--s-radius) var(--s-radius) 0 0;
-}
-
-.layout-vending .item-head {
-    padding: 12px;
-}
-
 /*
- * The tile takes the second accent, not the first. `themeVars` has always
- * emitted `--s-accent-2` and no rule consumed it, so `accentTwo` in the shipped
- * table did nothing: half of what a seller published never reached the screen.
- * Modern sets both to the same colour, so the default look is unchanged.
- *
- * `legibleOn(accentTwo, bg)` already governs this exact pairing — the tile
- * paints `--s-bg` on top of it, the same direction the buy control uses for
- * `--s-accent`.
+ * The tile takes the second accent, not the first: `--s-accent-2` was emitted
+ * and read by nothing, so half of what a seller published never reached the
+ * screen. Modern sets both to one colour, so the default look is unchanged.
  */
 .item-ic {
-    width: 38px;
-    height: 38px;
-    border-radius: calc(var(--s-radius) * 0.7);
+    grid-area: ic;
+    width: var(--s-icon);
+    height: var(--s-icon);
+    border-radius: var(--s-icon-radius);
+    clip-path: var(--s-icon-clip);
     background: var(--s-accent-2);
     color: var(--s-bg);
     display: grid;
@@ -235,12 +239,14 @@ body {
 }
 
 .item-b {
+    grid-area: name;
     min-width: 0;
 }
 
 .item-n {
     font-size: 14.5px;
-    font-weight: 600;
+    font-weight: var(--s-name-weight);
+    letter-spacing: var(--s-track);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -252,15 +258,28 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The price cell. It is the grid area; the asked number inside it is the node
+ * tagged `data-role="price"`, and the rate is a sibling, never a child of it —
+ * `askedSats` is what the covenant takes and the rate is not it.
+ */
 .item-p {
-    text-align: right;
+    grid-area: price;
+    text-align: var(--s-price-align-m);
+    border-top: var(--s-price-rule-m);
+    margin-top: var(--s-price-gap-m);
+    padding: var(--s-price-pad-m);
+    border-left: var(--s-price-edge-m);
+    padding-left: var(--s-price-edge-pad-m);
 }
 
 .item-a {
     display: flex;
-    align-items: baseline;
-    justify-content: flex-end;
-    gap: 4px;
+    flex-direction: var(--s-price-dir);
+    align-items: var(--s-price-cross-m);
+    justify-content: var(--s-price-just-m);
+    gap: var(--s-price-inner-gap);
+    flex-wrap: wrap;
 }
 
 .item-from {
@@ -270,22 +289,25 @@ body {
 }
 
 .item-x {
-    font-size: 14px;
-    font-weight: 660;
+    font-size: var(--s-price-size);
+    font-weight: var(--s-price-weight);
+    letter-spacing: var(--s-price-track);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     font-family: var(--s-font);
+    line-height: 1.05;
 }
 
 .item-u {
-    font-size: 10.5px;
+    font-size: var(--s-unit-size);
     color: var(--s-muted);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    font-weight: 600;
 }
 
 .item-rate {
-    margin-top: 3px;
+    margin-top: 4px;
     font-size: 10.5px;
     color: var(--s-muted);
     font-variant-numeric: tabular-nums;
@@ -299,8 +321,21 @@ body {
     display: flex;
     flex-direction: column;
     gap: 11px;
-    padding: 0 14px 14px;
-    border-top: 1px solid var(--s-muted);
+    padding: 0 var(--s-detail-x) var(--s-detail-x);
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
+}
+
+/*
+ * The token's own image, large, at the top of an opened card. Reuses the icon
+ * cache and clipping of `.item-ic`; only size and placement differ.
+ */
+.item-ic-lg {
+    width: var(--s-hero);
+    height: var(--s-hero);
+    border-radius: var(--s-hero-radius);
+    align-self: center;
+    margin-bottom: 6px;
+    font-size: 32px;
 }
 
 .token-facts {
@@ -314,8 +349,8 @@ body {
 }
 
 .stall-foot {
-    padding: 12px 14px 16px;
-    border-top: 1px solid var(--s-muted);
+    padding: 12px var(--s-pad-x-m) 16px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
     display: flex;
     flex-direction: column;
     gap: 9px;
@@ -338,8 +373,8 @@ body {
     cursor: pointer;
     background: var(--s-accent);
     color: var(--s-bg);
-    border-radius: calc(var(--s-radius) * 0.75);
-    padding: 12px;
+    border-radius: var(--s-btn-radius);
+    padding: 13px;
     width: 100%;
 }
 
@@ -395,7 +430,7 @@ body {
     border: 1px solid var(--s-accent);
     color: var(--s-accent);
     background: var(--s-bg);
-    border-radius: 8px;
+    border-radius: var(--s-btn-radius);
     padding: 8px 14px;
     cursor: pointer;
     align-self: center;
@@ -403,7 +438,7 @@ body {
 
 .sk {
     background: var(--s-surface);
-    border-radius: 10px;
+    border-radius: var(--s-radius);
     padding: 12px;
     display: grid;
     grid-template-columns: 32px 1fr auto;
@@ -435,9 +470,10 @@ body {
 
 .dash {
     font-family: var(--s-font);
-    font-size: 15px;
+    font-size: var(--s-price-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
+    line-height: 1.05;
 }
 
 .row {
@@ -460,8 +496,9 @@ body {
     font-family: var(--s-font);
 }
 
+/* What the buyer pays: the one figure in the disclosure sized like a price. */
 .row.big dd {
-    font-size: 16px;
+    font-size: var(--s-paid-size);
     font-weight: 660;
 }
 
@@ -542,7 +579,7 @@ body {
     height: auto;
     background: #ffffff;
     image-rendering: pixelated;
-    border-radius: 4px;
+    border-radius: var(--s-qr-radius);
 }
 
 .share-qr {
@@ -564,22 +601,37 @@ body {
 }
 
 /*
- * The token's own image, large, at the top of an opened card. Reuses the icon
- * cache and clipping of `.item-ic`; only the size and placement differ.
+ * The publish sheet. A bottom sheet on a phone, a dialog on a desktop. It is a
+ * disclosure the seller opened, so it may cover the shop behind it — but it is
+ * scrollable and never taller than the screen, so it cannot strand an asked
+ * amount underneath with no way back.
  */
-.item-ic-lg {
-    width: 96px;
-    height: 96px;
-    border-radius: var(--s-radius);
-    align-self: center;
-    margin-bottom: 6px;
-    font-size: 32px;
+.sheet-scrim {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background: color-mix(in srgb, #000 55%, transparent);
+    padding: 0;
+    z-index: 20;
 }
 
-/*
- * The demo signpost on the door. A muted placeholder, deliberately quiet: it
- * announces a future stall, it is not one. No image, no offer row, no fetch.
- */
+.sheet {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    background: var(--s-bg);
+    color: var(--s-text);
+    border: var(--s-sheet-border);
+    border-radius: var(--s-sheet-radius-m);
+    padding: var(--s-card-pad);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+}
+
 .demo-soon {
     margin-top: 4px;
     padding: 12px 14px;
@@ -592,4 +644,67 @@ body {
 
 .demo-soon .fine {
     color: var(--s-muted);
+}
+
+/*
+ * Desktop. The one breakpoint: every `-d` half of a pair is swapped here, and
+ * nothing else changes. Values that differ only by viewport and are identical
+ * across all three looks are written here directly — a variable that always
+ * holds the same value is a value the stylesheet already knows.
+ */
+@media (min-width: 680px) {
+    .stall-head {
+        flex-direction: row;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+        padding: var(--s-sign-pad-d);
+    }
+
+    .stall-body {
+        padding: var(--s-pad-d);
+    }
+
+    .stall-foot {
+        padding-left: var(--s-pad-x-d);
+        padding-right: var(--s-pad-x-d);
+    }
+
+    .items {
+        grid-template-columns: var(--s-items-d);
+        align-items: start;
+    }
+
+    .item-head {
+        grid-template-areas: var(--s-areas-d);
+        grid-template-columns: var(--s-cols-d);
+        text-align: var(--s-card-text-d);
+        justify-items: var(--s-card-items-d);
+    }
+
+    .item-p {
+        text-align: var(--s-price-align-d);
+        border-top: var(--s-price-rule-d);
+        margin-top: var(--s-price-gap-d);
+        padding: var(--s-price-pad-d);
+        border-left: 0;
+        padding-left: 0;
+    }
+
+    .item-a {
+        align-items: var(--s-price-cross-d);
+        justify-content: var(--s-price-just-d);
+    }
+
+    .sheet-scrim {
+        justify-content: center;
+        align-items: center;
+        padding: 40px 20px;
+    }
+
+    .sheet {
+        max-width: var(--s-sheet-max-d);
+        border-radius: var(--s-sheet-radius-d);
+        max-height: 86vh;
+    }
 }

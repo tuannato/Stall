@@ -1836,12 +1836,15 @@ describe('brand mark leads the header', () => {
             const { root } = paint(view);
             const head = root.querySelector('.stall-head') as HTMLElement | null;
             expect(head, 'every header exists').not.toBeNull();
-            const mark = head!.querySelector('img.stall-mark') as HTMLImageElement | null;
-            expect(mark, 'the mark leads the header').not.toBeNull();
+            const sign = head!.querySelector('.stall-sign') as HTMLElement | null;
+            expect(sign, 'the sign carries the mark and the headings').not.toBeNull();
+            const mark = sign!.querySelector('img.stall-mark') as HTMLImageElement | null;
+            expect(mark, 'the mark leads the sign').not.toBeNull();
             expect(mark!.tagName).toBe('IMG');
             expect(mark!.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
             expect(mark!.alt, 'decorative: the name beside it announces identity').toBe('');
-            expect(head!.firstElementChild, 'mark precedes the headings').toBe(mark);
+            expect(sign!.firstElementChild, 'mark precedes the headings').toBe(mark);
+            expect(head!.firstElementChild, 'the sign leads the header').toBe(sign);
         }
     });
 });
@@ -1885,5 +1888,38 @@ describe('theme ornament is data, not per-theme code', () => {
         );
         const stall = root.querySelector('.stall') as HTMLElement;
         expect(stall.firstElementChild?.classList.contains('orn')).toBe(true);
+    });
+});
+
+describe('publish sheet is a sheet, not a row in the shop', () => {
+    /**
+     * The seller opened this deliberately, so it sits over the stall rather
+     * than pushing the offers down. It carries the dialog roles a screen reader
+     * needs, and the scrim closes it — a modal with only one way out is a trap
+     * on a phone. A click inside the sheet must not close it.
+     */
+    it('mounts a scrim over the stall and closes only on the scrim', () => {
+        const { root, h } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+            }),
+        );
+        const scrim = root.querySelector('[data-role="sheet-scrim"]') as HTMLElement | null;
+        expect(scrim, 'the sheet is carried by a scrim').not.toBeNull();
+        const sheet = scrim!.querySelector('[data-role="publish"]') as HTMLElement | null;
+        expect(sheet, 'the sheet sits inside the scrim').not.toBeNull();
+        expect(sheet!.classList.contains('sheet')).toBe(true);
+        expect(sheet!.getAttribute('role')).toBe('dialog');
+        expect(sheet!.getAttribute('aria-modal')).toBe('true');
+        // Over the stall, not inside the body flow that holds the offer rows.
+        expect(scrim!.parentElement?.classList.contains('stall')).toBe(true);
+        expect(root.querySelector('.stall-body')?.contains(scrim!)).toBe(false);
+
+        sheet!.dispatchEvent(new Event('click', { bubbles: true }));
+        expect(h.onClosePublish, 'a click inside the sheet keeps it open').not.toHaveBeenCalled();
+        scrim!.dispatchEvent(new Event('click', { bubbles: true }));
+        expect(h.onClosePublish).toHaveBeenCalledTimes(1);
     });
 });

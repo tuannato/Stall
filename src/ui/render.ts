@@ -162,7 +162,7 @@ function paintUnresolvable(
     handlers: StallHandlers,
 ): void {
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
-    stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB));
+    stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB, address));
     const body = el('div', 'stall-body');
     // A waiting state, not a shop. The seller pasted the address they sell from
     // before listing, which is the order the apex invites, so this is the first
@@ -265,7 +265,7 @@ function paintStoppedLooking(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(identityOf(view), copy.UNRESOLVED_SUB));
+    stall.append(header(identityOf(view), copy.UNRESOLVED_SUB, view.address));
     const body = el('div', 'stall-body');
     body.append(
         mid(copy.UNRESOLVED_TITLE, [copy.UNRESOLVED_BODY, copy.UNRESOLVED_HINT]),
@@ -307,7 +307,7 @@ function paintOpening(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.OPENING_SUB));
+    stall.append(header(displayName(view), copy.OPENING_SUB, view.address));
     const body = el('div', 'stall-body');
     body.append(mid('', [copy.OPENING_BODY]));
     stall.append(body);
@@ -334,11 +334,11 @@ function paintEmpty(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.EMPTY_SUB));
+    stall.append(header(displayName(view), copy.EMPTY_SUB, view.address));
     const body = el('div', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     if (view.overlay.kind === 'publish') {
-        body.append(publishSheet(view, handlers));
+        stall.append(publishOverlay(view, handlers));
     }
     settingsNotes(body, view);
     // The live path no longer applies an empty answer, so a stall whose last
@@ -359,7 +359,7 @@ function paintUnreadable(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.UNREADABLE_SUB));
+    stall.append(header(displayName(view), copy.UNREADABLE_SUB, view.address));
     const body = el('div', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
     body.append(retryControl(handlers));
@@ -376,7 +376,7 @@ function paintUnreachable(
     const identity = identityOf(view);
     const cached = hasCachedShop(view);
     if (cached) {
-        stall.append(header(displayName(view), copy.UNREACHABLE_SUB));
+        stall.append(header(displayName(view), copy.UNREACHABLE_SUB, view.address));
     } else {
         stall.append(header(identity));
     }
@@ -408,7 +408,7 @@ function paintOffers(
     offers: StallOffer[],
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.itemsForSale(offers.length)));
+    stall.append(header(displayName(view), copy.itemsForSale(offers.length), view.address));
     const body = el('div', 'stall-body');
     const items = el('div', 'items');
     for (const offer of offers) {
@@ -418,7 +418,7 @@ function paintOffers(
     stall.append(body);
 
     if (view.overlay.kind === 'publish') {
-        body.append(publishSheet(view, handlers));
+        stall.append(publishOverlay(view, handlers));
     }
     settingsNotes(body, view);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -582,9 +582,35 @@ function itemIcon(tokenId: string, name: string, extraClass?: string): HTMLEleme
  * a bare pubkey still resolves to one; an unresolved or p2sh route does not,
  * and then the screen says so rather than offering a link that cannot work.
  */
+/**
+ * The sheet sits over the shop, docked to the bottom edge on a phone and
+ * centred on a desktop. It is a disclosure the seller opened deliberately, so
+ * covering the stall behind it is the point — but it scrolls and is never
+ * taller than the screen, so it cannot strand an asked amount out of reach.
+ * A click on the scrim closes it; a click inside it does not.
+ */
+function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
+    const scrim = el('div', 'sheet-scrim');
+    scrim.setAttribute('data-role', 'sheet-scrim');
+    const sheet = publishSheet(view, handlers);
+    scrim.append(sheet);
+    const close = handlers.onClosePublish;
+    if (close !== undefined) {
+        scrim.addEventListener('click', (ev) => {
+            if (ev.target === scrim) {
+                close();
+            }
+        });
+    }
+    return scrim;
+}
+
 function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
-    const wrap = el('div', 'item-detail');
+    const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'publish');
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', copy.PUBLISH_TITLE);
     wrap.append(el('div', 'item-n', copy.PUBLISH_TITLE));
     wrap.append(el('p', 'fine', copy.PUBLISH_LEDE));
 
@@ -904,12 +930,13 @@ function sheetRow(label: string, value: string, big = false): HTMLElement {
     return row;
 }
 
-function header(name?: string, sub?: string): HTMLElement {
+function header(name?: string, sub?: string, address?: string): HTMLElement {
     const hd = el('header', 'stall-head');
     // The brand mark leads every screen — the app's identity, sitting beside
     // the seller's stall name, never replacing it. It carries its own colours
     // (§brand), so it reads on any theme this header is painted in.
-    hd.append(stallMark());
+    const sign = el('div', 'stall-sign');
+    sign.append(stallMark());
     const headings = el('div', 'stall-headings');
     if (name !== undefined && name !== '') {
         headings.append(el('div', 'stall-name', name));
@@ -917,7 +944,14 @@ function header(name?: string, sub?: string): HTMLElement {
     if (sub !== undefined && sub !== '') {
         headings.append(el('div', 'stall-sub', sub));
     }
-    hd.append(headings);
+    sign.append(headings);
+    hd.append(sign);
+    // The address belongs to the sign: it is what the shop is reachable at.
+    // Never when it is already the name — an unnamed stall is titled by its own
+    // route, and printing that twice says nothing the first line did not.
+    if (address !== undefined && address !== '' && address !== name) {
+        hd.append(el('div', 'addr', address));
+    }
     return hd;
 }
 
@@ -988,10 +1022,11 @@ function footer(
         defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
     },
 ): HTMLElement {
+    // The address is the sign's now, not the footer's: it names the shop, so it
+    // belongs beside the name rather than under the controls. The parameter
+    // stays because every caller still identifies the stall it is footing.
+    void address;
     const ft = el('footer', 'stall-foot');
-    if (address !== undefined && address !== '') {
-        ft.append(el('div', 'addr', address));
-    }
     const publish = extra?.onPublish;
     if (publish !== undefined) {
         const btn = el('button', 'mini another', copy.SET_UP_THIS_STALL);
