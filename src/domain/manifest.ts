@@ -113,10 +113,43 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
  * never passed here; opcode 0 is a one-byte stack add, not an empty push.
  * Tests: `shipped-theme-id-is-a-one-byte-push`, `theme-zero-is-a-one-byte-push`.
  */
+/**
+ * The largest payload a direct push can carry. Above it the length no longer
+ * fits in the opcode byte and `OP_PUSHDATA1` must carry it separately.
+ */
+const MAX_DIRECT_PUSH = 75;
+const OP_PUSHDATA1 = 0x4c;
+/** `OP_PUSHDATA1` carries one length byte, so this is its ceiling. */
+export const MAX_PUSH_BYTES = 255;
+
+/**
+ * One data push.
+ *
+ * Writing the length into the opcode byte is only valid up to 75. At 76 that
+ * byte *is* `OP_PUSHDATA1` — with no length after it, so the reader takes the
+ * first byte of the payload as the length and the whole output decodes as
+ * something else. §5 names that failure exactly: the record reads as never
+ * published rather than as unreadable, which is the worse of the two.
+ *
+ * Unreachable while the only payloads were a 4-byte lokad, a 32-byte name and
+ * a one-byte theme id. A description is not one of those.
+ */
+/** One data push, shared with the other record types this app writes. */
+export function encodePush(data: Uint8Array): Uint8Array {
+    return scriptPush(data);
+}
+
 function scriptPush(data: Uint8Array): Uint8Array {
-    const out = new Uint8Array(1 + data.length);
-    out[0] = data.length;
-    out.set(data, 1);
+    if (data.length <= MAX_DIRECT_PUSH) {
+        const out = new Uint8Array(1 + data.length);
+        out[0] = data.length;
+        out.set(data, 1);
+        return out;
+    }
+    const out = new Uint8Array(2 + data.length);
+    out[0] = OP_PUSHDATA1;
+    out[1] = data.length;
+    out.set(data, 2);
     return out;
 }
 

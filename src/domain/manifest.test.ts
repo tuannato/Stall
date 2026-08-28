@@ -1,10 +1,11 @@
-import { fromHex, getStackArray } from 'ecash-lib';
+import { fromHex, getStackArray, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import {
     decodeManifestPushes,
     encodeManifestHex,
     pickManifestWinner,
     STL1_ASCII,
+    encodePush,
 } from './manifest';
 import { DEFAULT_THEME_ID } from './theme';
 
@@ -279,5 +280,38 @@ describe('op-return-raw-does-not-start-with-6a', () => {
             expect(hex!.length % 2).toBe(0);
             expect(hex).toMatch(/^[a-f0-9]+$/);
         }
+    });
+});
+
+describe('push-longer-than-75-bytes-uses-pushdata1', () => {
+    /**
+     * Writing the length into the opcode byte is valid only to 75. At 76 that
+     * byte *is* `OP_PUSHDATA1`, with no length after it — so the reader takes
+     * the first payload byte as the length and the output decodes as something
+     * else entirely. §5 names that as the worse failure: the record reads as
+     * never published, not as unreadable.
+     *
+     * The name is capped at 32, so nothing shipped could reach this. A
+     * description can.
+     */
+    it('round-trips a payload on both sides of the boundary', () => {
+        // `OP_PUSHDATA1` could carry 255, but the OP_RETURN relay limit (223)
+        // binds first and ecash-lib enforces it — so the ceiling that matters
+        // here is the output's, not the opcode's.
+        for (const len of [1, 74, 75, 76, 77, 200, 210]) {
+            const payload = new Uint8Array(len).fill(0x41);
+            const hex = toHex(encodePush(payload));
+            const pushes = getStackArray(`6a${hex}`);
+            expect(pushes, `${len} bytes did not decode as one push`).toHaveLength(1);
+            // The stack comes back as hex strings, two characters per byte.
+            expect(fromHex(pushes[0]!).length, `${len} bytes came back wrong`).toBe(len);
+        }
+    });
+
+    it('emits OP_PUSHDATA1 only where it is needed', () => {
+        expect(encodePush(new Uint8Array(75))[0]).toBe(75);
+        // 0x4c is OP_PUSHDATA1, and the length follows it rather than being it.
+        expect(encodePush(new Uint8Array(76))[0]).toBe(0x4c);
+        expect(encodePush(new Uint8Array(76))[1]).toBe(76);
     });
 });
