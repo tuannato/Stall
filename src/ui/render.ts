@@ -7,6 +7,7 @@ import {
     publishBip21,
 } from '../domain/cashtab';
 import { FIAT_CURRENCIES, formatFiat } from '../domain/fiat';
+import { sectionsOf, type Category } from '../domain/category';
 import { iconUrl } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
@@ -465,14 +466,30 @@ function paintOffers(
 ): void {
     stall.append(header(displayName(view), copy.itemsForSale(offers.length), view.address));
     const body = el('main', 'stall-body');
-    const items = el('div', 'items');
-    // Ordered, not grouped. Nothing sorted before this, so two offers of the
-    // same token could sit either side of a third token's row — the shop read
-    // as noise. Copied first: the array belongs to the caller's view.
-    for (const offer of [...offers].sort(compareOffers)) {
-        items.append(offerRow(offer, view, handlers));
+    // Ordered first, then divided. Nothing sorted before this, so two offers of
+    // one token could sit either side of a third token's row. Copied: the array
+    // belongs to the caller's view.
+    const ordered = [...offers].sort(compareOffers);
+    const sections = sectionsOf(ordered, view.tokens, (id) => view.nftGroups?.get(id));
+    // One section is not a division, it is a heading over the whole shop. A
+    // stall that sells only tokens should look like a stall, not a filing
+    // cabinet with one drawer.
+    const divided = sections.length > 1;
+    for (const section of sections) {
+        if (divided) {
+            body.append(sectionHead(section.category, view));
+        }
+        for (const group of section.groups) {
+            if (group.groupTokenId !== undefined) {
+                body.append(collectionHead(group.groupTokenId, group.offers.length, view));
+            }
+            const items = el('div', 'items');
+            for (const offer of group.offers) {
+                items.append(offerRow(offer, view, handlers));
+            }
+            body.append(items);
+        }
     }
-    body.append(items);
     stall.append(body);
 
     if (view.overlay.kind === 'publish') {
@@ -488,6 +505,45 @@ function paintOffers(
  * settings we could not read has the same right to know it when their shop is
  * empty, and silence there would read as a look they chose.
  */
+/**
+ * A section heading. The unsorted one explains itself: a row lands there
+ * because *we* could not read its type, and a reader owed that distinction is
+ * the same reader §4 protects from "empty" standing in for "unreachable".
+ */
+function sectionHead(category: Category, view: StallView): HTMLElement {
+    const wrap = el('div', 'section-head');
+    wrap.setAttribute('data-role', `section-${category}`);
+    const label =
+        category === 'etoken'
+            ? copy.SECTION_ETOKEN
+            : category === 'nft'
+              ? copy.SECTION_NFT
+              : copy.SECTION_UNSORTED;
+    wrap.append(el('h2', 'section-title', label));
+    if (category === 'unsorted') {
+        wrap.append(el('p', 'fine', copy.SECTION_UNSORTED_WHY));
+    }
+    if (category === 'nft' && view.nftGroupsTruncated === true) {
+        wrap.append(el('p', 'fine', copy.NFT_GROUPS_TRUNCATED));
+    }
+    return wrap;
+}
+
+/**
+ * A collection heading over a run of NFTs minted from one group. It carries the
+ * collection's name and how many rows follow, and **no price**: a heading
+ * priced at its cheapest member would name a number no covenant encodes.
+ */
+function collectionHead(groupTokenId: string, count: number, view: StallView): HTMLElement {
+    const wrap = el('div', 'collection-head');
+    wrap.setAttribute('data-role', 'collection');
+    const meta = view.tokens.get(groupTokenId);
+    const name = meta?.name ?? meta?.ticker ?? groupTokenId;
+    wrap.append(el('div', 'collection-name', copy.collectionOf(name)));
+    wrap.append(el('div', 'collection-count', copy.itemsForSale(count)));
+    return wrap;
+}
+
 function settingsNotes(body: HTMLElement, view: StallView): void {
     if (view.settingsUnreadable === true) {
         // They did publish. Silence here would say they never did.

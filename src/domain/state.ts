@@ -119,4 +119,8 @@ export type StallView = {
      */
     fiatCode?: string;
     fiatRate?: bigint;
+    /** tokenId -> the NFT collection it was minted from, where we could read it. */
+    nftGroups?: ReadonlyMap<string, string>;
+    /** The group lookup hit its cap, so some NFTs are shown without a collection. */
+    nftGroupsTruncated?: boolean;
 };

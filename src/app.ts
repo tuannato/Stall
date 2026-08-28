@@ -15,6 +15,8 @@ import type {
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
 import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller } from './net';
+import { isNftChild } from './domain/category';
+import { groupIdsToName, loadNftGroups } from './net/groups';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { identityOf, renderStall } from './ui';
@@ -342,6 +344,26 @@ async function loadCurrent(): Promise<AppState> {
         sessionTokens.set(cacheKey(route.pubkeyHex, meta.tokenId), meta);
     }
 
+    /**
+     * Which collection each NFT was minted from. A request per NFT — the parent
+     * id is not on `chronik.token()`, it is on the genesis transaction — so it
+     * is capped, and a stall past the cap shows its NFTs ungrouped rather than
+     * grouped from half the answer. Never throws: an ungrouped NFT is a much
+     * smaller loss than a stall that fails to paint.
+     */
+    const byId = new Map(metas.map((m) => [m.tokenId, m]));
+    const nftLookup = await loadNftGroups(
+        chronik,
+        offers.map((o) => o.tokenId),
+        (id) => isNftChild(byId.get(id)),
+    );
+    // The collection's own name is another read, and one per collection rather
+    // than one per NFT. A heading falls back to the group id without it.
+    const groupMetas = await loadTokenMeta(chronik, groupIdsToName(nftLookup, byId));
+    for (const meta of groupMetas) {
+        sessionTokens.set(cacheKey(route.pubkeyHex, meta.tokenId), meta);
+    }
+
     let stallName = cachedName;
     let theme = cachedTheme;
     let settingsTruncated = false;
@@ -368,6 +390,13 @@ async function loadCurrent(): Promise<AppState> {
             tokens.set(offer.tokenId, meta);
         }
     }
+    // The collections themselves, so a heading can print a name.
+    for (const groupId of nftLookup.groups.values()) {
+        const meta = sessionTokens.get(cacheKey(route.pubkeyHex, groupId));
+        if (meta) {
+            tokens.set(groupId, meta);
+        }
+    }
 
     return {
         view: {
@@ -377,6 +406,8 @@ async function loadCurrent(): Promise<AppState> {
             stallName,
             address,
             tokens,
+            nftGroups: nftLookup.groups,
+            nftGroupsTruncated: nftLookup.truncated,
             theme,
             settingsTruncated,
             settingsUnreadable,

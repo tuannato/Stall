@@ -320,3 +320,18 @@ export const TOKEN_LINK_CONFIRM_TITLE = 'Leave Stall?';
 export const TOKEN_LINK_CONFIRM = 'Visit this link';
 export const TOKEN_LINK_CANCEL = 'Stay here';
 export const tokenLinkHost = (host: string): string => `You will be taken to ${host}`;
+
+/**
+ * Section headings. The third is named for what it is: a row lands there when
+ * *we* could not read its type, so it must not be dressed as a kind of token
+ * the seller chose to list.
+ */
+export const SECTION_ETOKEN = 'Tokens';
+export const SECTION_NFT = 'NFTs';
+export const SECTION_UNSORTED = 'Type not read';
+export const SECTION_UNSORTED_WHY =
+    'These are listed, and this page could not read what kind of token they are. That is our failure, not a claim about them.';
+/** A collection heading carries a name and a count, and never a price. */
+export const collectionOf = (name: string): string => `Collection · ${name}`;
+export const NFT_GROUPS_TRUNCATED =
+    'Some NFTs are shown without their collection: this page stopped looking after the first few.';

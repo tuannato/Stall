@@ -67,6 +67,7 @@ import {
     tokenRateBound,
 } from './copy';
 import { scaleRate } from '../domain/fiat';
+import { NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
@@ -1238,10 +1239,12 @@ const TEA: TokenMeta = {
 function offersView(
     offers: StallOffer[] = [OFFER],
     tokens: Map<string, TokenMeta> = new Map([[TOKEN_ID, BEANS]]),
+    over: Partial<StallView> = {},
 ): StallView {
     return idlePubkey({
         fetch: { kind: 'offers', offers },
         tokens,
+        ...over,
     });
 }
 
@@ -2106,12 +2109,14 @@ describe('same-token-rows-are-adjacent-on-screen', () => {
             outpoint: { ...OUTPOINT, outIdx: 5 },
         };
         // Interleaved on the way in, exactly as an unsorted index answers.
+        // Both fungible on purpose: this is a test about ordering, and two
+        // different categories would divide them into sections instead.
         const { root } = paint(
             offersView(
                 [dear, other, cheap],
                 new Map([
                     [TOKEN_ID, BEANS],
-                    [OTHER_TOKEN, TEA],
+                    [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
                 ]),
             ),
         );
@@ -2555,5 +2560,84 @@ describe('hidden-beats-a-class-that-sets-display', () => {
                 `.${cls} sets display, so it depends on the [hidden] rule above`,
             ).toBe(true);
         }
+    });
+});
+
+describe('sections-name-our-failure-instead-of-hiding-it', () => {
+    const fungible = { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' };
+    const nftChild = { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' };
+    const NFT_ID = 'ee'.repeat(32);
+    const GROUP_ID = 'aa'.repeat(32);
+
+    const nftOffer = { ...OFFER, tokenId: NFT_ID, outpoint: { ...OUTPOINT, outIdx: 7 } };
+
+    it('divides tokens, NFTs and the ones we could not read', () => {
+        const { root } = paint(
+            offersView(
+                [OFFER, nftOffer, { ...OFFER, tokenId: OTHER_TOKEN, outpoint: { ...OUTPOINT, outIdx: 8 } }],
+                new Map([
+                    [TOKEN_ID, { ...BEANS, tokenType: fungible }],
+                    [NFT_ID, { ...BEANS, tokenId: NFT_ID, name: 'Pixel #1', tokenType: nftChild }],
+                    // No tokenType: the read failed, which is ours.
+                    [OTHER_TOKEN, { ...TEA, tokenType: undefined }],
+                ]),
+            ),
+        );
+        expect(root.querySelector('[data-role="section-etoken"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="section-nft"]')).not.toBeNull();
+        const unsorted = root.querySelector('[data-role="section-unsorted"]') as HTMLElement;
+        expect(unsorted, 'a bucket for what we could not read').not.toBeNull();
+        // It must say the failure is ours, not describe the seller's stock.
+        expect(unsorted.textContent).toContain(SECTION_UNSORTED_WHY);
+        // Every row is still painted exactly once.
+        expect(root.querySelectorAll('.item')).toHaveLength(3);
+    });
+
+    it('draws no heading at all when there is only one section', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, { ...BEANS, tokenType: fungible }]])),
+        );
+        expect(root.querySelector('.section-head'), 'one kind is not a division').toBeNull();
+        expect(root.querySelectorAll('.item')).toHaveLength(1);
+    });
+
+    it('heads a collection with a name and a count, and never a price', () => {
+        const { root } = paint(
+            offersView(
+                [nftOffer],
+                new Map([
+                    [NFT_ID, { ...BEANS, tokenId: NFT_ID, name: 'Pixel #1', tokenType: nftChild }],
+                    [GROUP_ID, { ...BEANS, tokenId: GROUP_ID, name: 'Pixel Set' }],
+                ]),
+                { nftGroups: new Map([[NFT_ID, GROUP_ID]]) },
+            ),
+        );
+        const head = root.querySelector('[data-role="collection"]') as HTMLElement;
+        expect(head).not.toBeNull();
+        expect(head.textContent).toContain('Pixel Set');
+        // The count is the other half of what a heading may say: how many rows
+        // follow. Without it a collection is a label with no information.
+        expect(head.querySelector('.collection-count')?.textContent).toBe(
+            itemsForSale(1),
+        );
+        // A heading priced at its cheapest member would name a number no
+        // covenant encodes, so it carries none.
+        expect(head.querySelector('[data-role="price"]')).toBeNull();
+        expect(head.textContent).not.toMatch(/\d+,?\d*\s*(XEC|\$)/);
+    });
+
+    it('says so when the group lookup stopped short', () => {
+        const { root } = paint(
+            offersView(
+                [nftOffer, OFFER],
+                new Map([
+                    [NFT_ID, { ...BEANS, tokenId: NFT_ID, tokenType: nftChild }],
+                    [TOKEN_ID, { ...BEANS, tokenType: fungible }],
+                ]),
+                { nftGroupsTruncated: true },
+            ),
+        );
+        const nft = root.querySelector('[data-role="section-nft"]') as HTMLElement;
+        expect(nft.textContent).toContain(NFT_GROUPS_TRUNCATED);
     });
 });
