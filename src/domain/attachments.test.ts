@@ -87,13 +87,27 @@ describe('attachment-table-ids-are-pinned', () => {
         }
     });
 
-    it('has no token minted yet, so nothing can be worn against a holdings read', () => {
-        // The row is written before the token exists on purpose: everything
-        // except the entitlement can be built and tested first. When a token is
-        // minted its genesis txid goes here and nothing else changes.
+    it('carries a token id that is a genesis txid, or none at all', () => {
+        // A row is written before its token exists on purpose: everything
+        // except the entitlement is built and tested first, and minting only
+        // fills this one field. What must never happen is a *malformed* id —
+        // `attachmentByTokenId` compares strings, so a stray space or an
+        // uppercase digit is a row nobody can ever wear, silently.
         for (const a of SHIPPED_ATTACHMENTS) {
-            expect(a.tokenId).toBeUndefined();
+            if (a.tokenId === undefined) {
+                continue;
+            }
+            expect(a.tokenId, `${a.label} is not a genesis txid`).toMatch(/^[0-9a-f]{64}$/);
         }
+    });
+
+    it('never points two rows at one token', () => {
+        // Two rows sharing a token would let one purchase wear two slots, and
+        // `attachmentByTokenId` would answer with whichever came first.
+        const ids = SHIPPED_ATTACHMENTS.map((a) => a.tokenId).filter(
+            (id): id is string => id !== undefined,
+        );
+        expect(new Set(ids).size).toBe(ids.length);
     });
 });
 
