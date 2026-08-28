@@ -344,3 +344,27 @@ export const NFT_GROUPS_TRUNCATED =
  * and it says whose claim it is.
  */
 export const TOKEN_DESCRIPTION_LABEL = 'From the seller';
+
+/**
+ * Describing a token. Its own record and its own transaction — one per token,
+ * so a seller must know before they sign that changing three descriptions costs
+ * three fees. Nothing here watches their wallet, for the same reason the
+ * settings sheet does not: the live socket listens to the offer book, and a
+ * description transaction does not move it.
+ */
+export const DESC_TITLE = 'Describe a token';
+export const DESC_LEDE =
+    'Your own words about one token you list. This builds a second small transaction — one for each token you describe, and one more each time you change one.';
+export const DESC_TOKEN_LABEL = 'Which token';
+export const DESC_TEXT_LABEL = 'What buyers should know';
+export const DESC_TOO_LONG =
+    'That is longer than one record holds. Shorten it until the counter is not over.';
+export const DESC_REFUSED =
+    'That cannot be written to a record — it holds no readable text, or contains characters that could hide part of a sentence.';
+export const DESC_REMOVE = 'Remove this description';
+export const DESC_REMOVE_LEDE =
+    'This publishes a record that erases what you wrote. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
+export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
+/** Bytes, never characters: an accented character costs two or three. */
+export const descBytesLeft = (used: number, max: number): string =>
+    `${used} of ${max} bytes`;

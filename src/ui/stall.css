@@ -431,6 +431,25 @@ body {
 }
 
 /*
+ * The description editor, inside the settings sheet. A separate record and a
+ * separate transaction from the stall's settings, so it is separated on screen
+ * too — a seller must not read one publish control as covering both.
+ */
+.desc-section {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding-top: 11px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
+}
+
+textarea.paste-in {
+    resize: vertical;
+    min-height: 68px;
+    line-height: 1.5;
+}
+
+/*
  * The seller's own words. Labelled as theirs, because a signature proves who
  * wrote a sentence and not that it is true — a description can claim a price
  * the covenant does not ask. So it never borrows the price cell's typography,
@@ -765,6 +784,16 @@ body {
     border-radius: 7px;
     padding: 8px 10px;
     line-height: 1.45;
+}
+
+/*
+ * The record as the wallet will show it. Hex has no spaces, so without this it
+ * runs off the side of the sheet — and this is the one screen where a seller
+ * reads what they are about to sign.
+ */
+.publish-hex {
+    font-family: var(--s-font);
+    overflow-wrap: anywhere;
 }
 
 .fine {

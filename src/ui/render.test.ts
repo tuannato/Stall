@@ -66,8 +66,9 @@ import {
     tokenRate,
     tokenRateBound,
 } from './copy';
+import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
 import { scaleRate } from '../domain/fiat';
-import { TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
+import { DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
@@ -2692,5 +2693,119 @@ describe('a-token-with-no-description-shows-no-empty-slot', () => {
         const block = root.querySelector('[data-role="token-description"]') as HTMLElement;
         expect(block.textContent).toContain('https://example.com');
         expect(block.querySelector('a'), 'text, never a link').toBeNull();
+    });
+});
+
+describe('describing-a-token-is-its-own-transaction', () => {
+    /**
+     * A description is a separate record from the stall's settings, so
+     * publishing one does not publish the other and describing three tokens
+     * costs three fees. A seller who learns that after signing learns it the
+     * expensive way, so the sheet says it before they do.
+     *
+     * It lives in the settings sheet rather than on every card: a control per
+     * offer row would put a second publish button beside every buy control, for
+     * every visitor, on a page that cannot know which of them is the seller.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('says the cost before anything is signed, and offers no card control', () => {
+        const { root } = sheet();
+        const block = root.querySelector('[data-role="describe"]') as HTMLElement;
+        expect(block).not.toBeNull();
+        expect(block.textContent).toContain(DESC_LEDE);
+        // One entry point: nothing was added to the offer rows.
+        expect(root.querySelector('.item [data-role="describe"]')).toBeNull();
+    });
+
+    it('builds a record from the token and the words, and counts bytes', () => {
+        const { root } = sheet();
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        expect(picker.value).toBe(TOKEN_ID);
+
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.hidden).toBe(false);
+        expect(hex.textContent).toBe(encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.'));
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement;
+        expect(link.hidden).toBe(false);
+        expect(link.getAttribute('href')).toContain('op_return_raw');
+
+        // Bytes, not characters: an accented character costs more than one.
+        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        field.value = 'Cà phê';
+        field.dispatchEvent(new Event('input'));
+        expect(counter.textContent).toBe(descBytesLeft(8, MAX_DESCRIPTION_BYTES));
+    });
+
+    it('refuses what the record cannot hold, and hands over nothing', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement;
+
+        field.value = 'A'.repeat(MAX_DESCRIPTION_BYTES + 1);
+        field.dispatchEvent(new Event('input'));
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(DESC_TOO_LONG);
+        expect(link.hidden, 'nothing to sign while it cannot be written').toBe(true);
+    });
+
+    it('offers removal only where there is something to remove', () => {
+        const none = sheet();
+        expect(
+            (none.root.querySelector('[data-role="describe-remove"]') as HTMLElement).hidden,
+            'a removal over nothing costs a fee and changes nothing',
+        ).toBe(true);
+
+        const some = sheet({ descriptions: new Map([[TOKEN_ID, 'Existing words']]) });
+        const remove = some.root.querySelector('[data-role="describe-remove"]') as HTMLAnchorElement;
+        expect(remove.hidden).toBe(false);
+        expect(remove.getAttribute('href')).toContain('op_return_raw');
+        // The existing words are loaded for editing rather than starting blank.
+        const field = some.root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        expect(field.value).toBe('Existing words');
+    });
+});
+
+describe('the-record-a-seller-signs-stays-on-screen', () => {
+    /**
+     * Hex has no spaces, so it runs off the side of the sheet without an
+     * explicit rule — on the one screen where a seller reads what they are
+     * about to sign, because Cashtab shows an unknown LOKAD as raw hex.
+     */
+    it('wraps both records rather than letting them overflow', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rule = css.match(/\.publish-hex\s*\{([^}]+)\}/);
+        expect(rule, 'no wrap rule for the signed record').not.toBeNull();
+        expect(rule![1]).toMatch(/overflow-wrap:\s*anywhere/);
+
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+            }),
+        );
+        for (const role of ['publish-hex', 'describe-hex']) {
+            const node = root.querySelector(`[data-role="${role}"]`) as HTMLElement;
+            expect(node, role).not.toBeNull();
+            expect(node.classList.contains('publish-hex'), `${role} wears the rule`).toBe(true);
+        }
     });
 });

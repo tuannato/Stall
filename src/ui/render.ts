@@ -13,6 +13,12 @@ import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { encodeManifestHex } from '../domain/manifest';
 import {
+    MAX_DESCRIPTION_BYTES,
+    descriptionBytes,
+    encodeDescriptionHex,
+    encodeRemovalHex,
+} from '../domain/description';
+import {
     compareOffers,
     formatAtoms,
     formatTokenRate,
@@ -696,6 +702,169 @@ function itemIcon(tokenId: string, name: string, extraClass?: string): HTMLEleme
  * a bare pubkey still resolves to one; an unresolved or p2sh route does not,
  * and then the screen says so rather than offering a link that cannot work.
  */
+/** The offers behind the current screen, or none when it is not a shop. */
+function offersOf(view: StallView): readonly StallOffer[] {
+    return view.fetch?.kind === 'offers' ? view.fetch.offers : [];
+}
+
+/**
+ * The description editor, inside the settings sheet rather than on every card.
+ *
+ * One entry point: a control per offer row would put a second "publish" button
+ * beside every buy control, for every visitor, on a page that cannot know which
+ * of them is the seller.
+ *
+ * **Its own transaction, and the sheet says so.** A description is a separate
+ * record from the stall's settings, so publishing one does not publish the
+ * other, and describing three tokens costs three fees. A seller who learns that
+ * after signing learns it the expensive way.
+ */
+function describeSection(
+    view: StallView,
+    address: string,
+    offers: readonly StallOffer[],
+): HTMLElement {
+    const wrap = el('div', 'desc-section');
+    wrap.setAttribute('data-role', 'describe');
+    wrap.append(el('div', 'item-n', copy.DESC_TITLE));
+    wrap.append(el('p', 'fine', copy.DESC_LEDE));
+
+    const tokenIds = [...new Set(offers.map((o) => o.tokenId))];
+    if (tokenIds.length === 0) {
+        wrap.append(el('p', 'fine', copy.DESC_NO_TOKENS));
+        return wrap;
+    }
+
+    const tokenLabel = el('label', 'paste-label', copy.DESC_TOKEN_LABEL);
+    const picker = el('select', 'paste-in');
+    picker.name = 'describe-token';
+    picker.setAttribute('data-role', 'describe-token');
+    picker.setAttribute('data-focus-key', 'describe-token');
+    for (const id of tokenIds) {
+        const meta = view.tokens.get(id);
+        const option = el('option', '', meta?.name ?? meta?.ticker ?? id);
+        option.value = id;
+        picker.append(option);
+    }
+    tokenLabel.append(picker);
+    wrap.append(tokenLabel);
+
+    const textLabel = el('label', 'paste-label', copy.DESC_TEXT_LABEL);
+    const field = el('textarea', 'paste-in');
+    field.name = 'describe-text';
+    field.rows = 3;
+    field.setAttribute('data-role', 'describe-text');
+    field.setAttribute('data-focus-key', 'describe-text');
+    field.setAttribute('autocapitalize', 'sentences');
+    textLabel.append(field);
+    wrap.append(textLabel);
+
+    const counter = el('p', 'fine', '');
+    counter.setAttribute('data-role', 'describe-bytes');
+    wrap.append(counter);
+
+    const err = el('p', 'ctx', '');
+    err.hidden = true;
+    err.setAttribute('data-role', 'describe-invalid');
+    wrap.append(err);
+
+    const bytes = el('p', 'fine publish-hex', '');
+    bytes.setAttribute('data-role', 'describe-hex');
+    bytes.hidden = true;
+    wrap.append(bytes);
+
+    const qrBox = el('div', 'publish-qr');
+    qrBox.setAttribute('data-role', 'describe-qr');
+    qrBox.hidden = true;
+    wrap.append(qrBox);
+
+    const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
+    web.setAttribute('data-role', 'describe-cashtab');
+    web.setAttribute('data-focus-key', 'describe-cashtab');
+    const app = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
+    app.setAttribute('data-role', 'describe-pay');
+    app.setAttribute('data-focus-key', 'describe-pay');
+    for (const link of [web, app]) {
+        link.rel = 'noopener noreferrer';
+        link.target = '_blank';
+    }
+    wrap.append(web);
+    wrap.append(app);
+
+    // Removal is its own record and its own transaction, offered only where
+    // there is something to remove. It erases the words from this page; the
+    // chain keeps every record ever published, and the copy says so.
+    const remove = el('a', 'mini another', copy.DESC_REMOVE);
+    remove.setAttribute('data-role', 'describe-remove');
+    remove.rel = 'noopener noreferrer';
+    remove.target = '_blank';
+    const removeLede = el('p', 'fine', copy.DESC_REMOVE_LEDE);
+    wrap.append(removeLede);
+    wrap.append(remove);
+
+    const refresh = (): void => {
+        const tokenId = picker.value;
+        const text = field.value;
+        const used = descriptionBytes(text);
+        counter.textContent = copy.descBytesLeft(used, MAX_DESCRIPTION_BYTES);
+
+        const hex = text === '' ? undefined : encodeDescriptionHex(tokenId, text);
+        const ready = hex !== undefined;
+        err.hidden = ready || text === '';
+        err.textContent = used > MAX_DESCRIPTION_BYTES ? copy.DESC_TOO_LONG : copy.DESC_REFUSED;
+
+        bytes.hidden = !ready;
+        bytes.textContent = ready ? hex : '';
+        const cashtab = ready ? cashtabPublishUrl(address, hex) : undefined;
+        const pay = ready ? payECashPublishUrl(address, hex) : undefined;
+        const linked = cashtab !== undefined && pay !== undefined;
+        web.hidden = !linked;
+        app.hidden = !linked;
+        if (linked) {
+            web.href = cashtab;
+            app.href = pay;
+        }
+
+        const bip21 = ready ? publishBip21(address, hex) : undefined;
+        if (bip21 !== undefined && fitsQr(bip21)) {
+            qrBox.replaceChildren(
+                qrSvg(bip21, copy.PUBLISH_QR_ALT),
+                el('p', 'fine', copy.PUBLISH_QR_LEDE),
+            );
+            qrBox.hidden = false;
+        } else {
+            qrBox.replaceChildren();
+            qrBox.hidden = true;
+        }
+
+        // Only offered when this page found words to remove. Publishing a
+        // removal over nothing costs a fee and changes nothing.
+        const existing = view.descriptions?.get(tokenId);
+        const removalHex = existing === undefined ? undefined : encodeRemovalHex(tokenId);
+        const canRemove = removalHex !== undefined;
+        remove.hidden = !canRemove;
+        removeLede.hidden = !canRemove;
+        const removeUrl = canRemove ? cashtabPublishUrl(address, removalHex) : undefined;
+        remove.hidden = removeUrl === undefined;
+        removeLede.hidden = removeUrl === undefined;
+        if (removeUrl !== undefined) {
+            remove.href = removeUrl;
+        }
+    };
+
+    // Rebuilt in place, never by repainting: a repaint would take the focus out
+    // of the field on every keystroke.
+    field.addEventListener('input', refresh);
+    picker.addEventListener('change', () => {
+        // The words belong to the token, so switching tokens loads theirs.
+        field.value = view.descriptions?.get(picker.value) ?? '';
+        refresh();
+    });
+    field.value = view.descriptions?.get(picker.value) ?? '';
+    refresh();
+    return wrap;
+}
+
 /**
  * The sheet sits over the shop, docked to the bottom edge on a phone and
  * centred on a desktop. It is a disclosure the seller opened deliberately, so
@@ -795,7 +964,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const sameLook = el('p', 'fine', copy.PUBLISH_SAME_LOOK);
     sameLook.hidden = true;
     sameLook.setAttribute('data-role', 'publish-same-look');
-    const bytes = el('p', 'fine', '');
+    const bytes = el('p', 'fine publish-hex', '');
     bytes.setAttribute('data-role', 'publish-hex');
     const qrBox = el('div', 'publish-qr');
     qrBox.setAttribute('data-role', 'publish-qr');
@@ -896,6 +1065,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         handlers.onRetry();
     });
     wrap.append(check);
+
+    // A second record, in the same place a seller already came to publish one.
+    wrap.append(describeSection(view, address, offersOf(view)));
 
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
     close.type = 'button';
