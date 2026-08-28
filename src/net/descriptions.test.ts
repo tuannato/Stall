@@ -345,3 +345,38 @@ describe('a-failed-description-read-never-takes-the-shop-down', () => {
         });
     });
 });
+
+describe('description-does-not-cross-stalls', () => {
+    /**
+     * Two sellers can each list the same token and each describe it. The words
+     * belong to the stall that signed them, so a lookup is scoped by the
+     * seller's hash — and there is no module-level cache here on purpose: one
+     * keyed by tokenId alone would put seller A's words on seller B's shop, and
+     * one keyed by both would still hold a description after it was replaced.
+     */
+    it('answers with the words the asked-for seller signed, and no others', () => {
+        const otherPk = compressedPk(0x22);
+        const otherHash = toHex(shaRmd160(otherPk));
+        const otherSig = p2pkhScriptSig(otherPk);
+        // One index carrying both sellers' records for the same token.
+        const shared: ChainTx[] = [
+            tx({ txid: '20'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'mine')] }),
+            {
+                txid: '21'.repeat(32),
+                block: { height: 6 },
+                inputs: [{ inputScript: otherSig, outputScript: p2pkhOutputScript(otherHash) }],
+                outputs: [{ outputScript: stld(TOKEN_A, 'theirs') }],
+            },
+        ];
+        const chronik = chronikWith({ lokadTxs: shared });
+        return loadDescriptions(chronik, { address: 'ecash:qq', hash: HASH })
+            .then((mine) => {
+                // Theirs is higher-ranked, and must still not win here.
+                expect(mine.descriptions.get(TOKEN_A)).toBe('mine');
+                return loadDescriptions(chronik, { address: 'ecash:qr', hash: otherHash });
+            })
+            .then((theirs) => {
+                expect(theirs.descriptions.get(TOKEN_A)).toBe('theirs');
+            });
+    });
+});

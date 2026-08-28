@@ -431,6 +431,34 @@ body {
 }
 
 /*
+ * The seller's own words. Labelled as theirs, because a signature proves who
+ * wrote a sentence and not that it is true — a description can claim a price
+ * the covenant does not ask. So it never borrows the price cell's typography,
+ * and it wraps: a 180-byte run with no spaces would otherwise push the card
+ * wider than the screen.
+ */
+.token-desc {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.token-desc-label {
+    font-size: 11.5px;
+    font-weight: 620;
+    color: var(--s-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.token-desc-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+/*
  * A link nobody verified. It is laid out to be read before it is followed: the
  * label, then the destination in full, then the warning, and only then a
  * control — and that control reveals a second one. Never a bare anchor in the

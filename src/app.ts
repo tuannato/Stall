@@ -17,6 +17,7 @@ import type { DecodedTheme } from './domain/theme';
 import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller } from './net';
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
+import { loadDescriptions } from './net/descriptions';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { identityOf, renderStall } from './ui';
@@ -364,6 +365,14 @@ async function loadCurrent(): Promise<AppState> {
         sessionTokens.set(cacheKey(route.pubkeyHex, meta.tokenId), meta);
     }
 
+    /**
+     * The seller's words about their tokens. Its own walk, so a chronik that
+     * answers the offers but not this leaves a shop with no descriptions rather
+     * than no shop. Never cached across loads: unlike a name or a ticker, a
+     * description is republishable, so a remembered one can be wrong.
+     */
+    const descriptionLookup = await loadDescriptions(chronik, { address, hash });
+
     let stallName = cachedName;
     let theme = cachedTheme;
     let settingsTruncated = false;
@@ -406,6 +415,7 @@ async function loadCurrent(): Promise<AppState> {
             stallName,
             address,
             tokens,
+            descriptions: descriptionLookup.descriptions,
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,

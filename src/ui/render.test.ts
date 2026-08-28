@@ -67,7 +67,7 @@ import {
     tokenRateBound,
 } from './copy';
 import { scaleRate } from '../domain/fiat';
-import { NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
+import { TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
@@ -2639,5 +2639,58 @@ describe('sections-name-our-failure-instead-of-hiding-it', () => {
         );
         const nft = root.querySelector('[data-role="section-nft"]') as HTMLElement;
         expect(nft.textContent).toContain(NFT_GROUPS_TRUNCATED);
+    });
+});
+
+describe('a-token-with-no-description-shows-no-empty-slot', () => {
+    /**
+     * Absent means the seller wrote none **or** our walk did not reach it, and
+     * only one of those is a fact about them. The card prints a description
+     * when there is one and says nothing at all when there is not — printing
+     * "none" while holding "we did not look" is §4's collapse.
+     */
+    const opened = (descriptions?: ReadonlyMap<string, string>) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                ...(descriptions === undefined ? {} : { descriptions }),
+            }),
+        );
+
+    it('paints the seller’s words, labelled as theirs', () => {
+        const { root } = opened(new Map([[TOKEN_ID, 'Roasted the morning it ships.']]));
+        const block = root.querySelector('[data-role="token-description"]') as HTMLElement;
+        expect(block).not.toBeNull();
+        expect(block.textContent).toContain('Roasted the morning it ships.');
+        // Labelled, because a signature proves who wrote a sentence, not that
+        // it is true — a description can name a price the covenant never asks.
+        expect(block.textContent).toContain(TOKEN_DESCRIPTION_LABEL);
+        // And it is not the price node, nor inside it.
+        const price = root.querySelector('[data-role="price"]') as HTMLElement;
+        expect(price.contains(block)).toBe(false);
+        expect(price.textContent).toBe('1,200');
+    });
+
+    it('paints nothing when there is none, and nothing when we never looked', () => {
+        for (const descriptions of [undefined, new Map<string, string>(), new Map([['other', 'x']])]) {
+            const { root } = opened(descriptions);
+            expect(
+                root.querySelector('[data-role="token-description"]'),
+                String(descriptions),
+            ).toBeNull();
+            // The card is otherwise intact.
+            expect(root.querySelector('[data-role="detail"]')).not.toBeNull();
+        }
+    });
+
+    it('never turns the seller’s words into a link', () => {
+        // Stall's product is a handoff to Cashtab; a seller-supplied clickable
+        // URL beside it would be the best phish this origin could ship.
+        const { root } = opened(new Map([[TOKEN_ID, 'See https://example.com for more']]));
+        const block = root.querySelector('[data-role="token-description"]') as HTMLElement;
+        expect(block.textContent).toContain('https://example.com');
+        expect(block.querySelector('a'), 'text, never a link').toBeNull();
     });
 });

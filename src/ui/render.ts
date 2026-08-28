@@ -1045,6 +1045,10 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
             ),
         );
         panel.append(tokenFacts(offer, meta, ticker));
+    const described = tokenDescription(view, offer.tokenId);
+    if (described !== undefined) {
+        panel.append(described);
+    }
     const link = tokenLink(meta);
     if (link !== undefined) {
         panel.append(link);
@@ -1067,6 +1071,10 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     panel.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
 
     panel.append(tokenFacts(offer, meta, ticker));
+    const described = tokenDescription(view, offer.tokenId);
+    if (described !== undefined) {
+        panel.append(described);
+    }
     const link = tokenLink(meta);
     if (link !== undefined) {
         panel.append(link);
@@ -1113,6 +1121,32 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
  * `noopener noreferrer` because the opened page must not reach back into this
  * one and must not learn which stall sent it.
  */
+/**
+ * The seller's own words about this token, when they published any.
+ *
+ * **Nothing at all when there are none.** A card must never carry an empty
+ * description slot: absent here means "the seller wrote none" *or* "our walk
+ * did not reach it", and only one of those is a fact about them. Printing the
+ * first while holding the second is the collapse §4 exists to prevent.
+ *
+ * Rendered as text through `textContent`, like everything else here, and
+ * deliberately not linkified. Stall's whole product is a handoff to Cashtab; a
+ * seller-supplied clickable URL sitting beside that handoff would be the best
+ * phishing surface this origin could ship. The genesis link already has its
+ * own armed, confirmed control — this is not that.
+ */
+function tokenDescription(view: StallView, tokenId: string): HTMLElement | undefined {
+    const text = view.descriptions?.get(tokenId);
+    if (text === undefined || text === '') {
+        return undefined;
+    }
+    const wrap = el('div', 'token-desc');
+    wrap.setAttribute('data-role', 'token-description');
+    wrap.append(el('div', 'token-desc-label', copy.TOKEN_DESCRIPTION_LABEL));
+    wrap.append(el('p', 'token-desc-text', text));
+    return wrap;
+}
+
 /**
  * The homepage from the token's genesis, in two deliberate steps.
  *

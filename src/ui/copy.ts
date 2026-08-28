@@ -335,3 +335,12 @@ export const SECTION_UNSORTED_WHY =
 export const collectionOf = (name: string): string => `Collection · ${name}`;
 export const NFT_GROUPS_TRUNCATED =
     'Some NFTs are shown without their collection: this page stopped looking after the first few.';
+
+/**
+ * The seller's own words about a token. Labelled as theirs, because this page
+ * verifies a signature and nothing else: it proves who wrote the sentence, not
+ * that the sentence is true. A description can say "only 100 XEC" while the
+ * covenant asks a million — so it never sits in the price cell's typography,
+ * and it says whose claim it is.
+ */
+export const TOKEN_DESCRIPTION_LABEL = 'From the seller';

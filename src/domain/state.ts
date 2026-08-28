@@ -119,6 +119,20 @@ export type StallView = {
      */
     fiatCode?: string;
     fiatRate?: bigint;
+    /**
+     * tokenId → the seller's own words about that token.
+     *
+     * Deliberately **not** on `TokenMeta`. §4 allows session memory of a name
+     * and a ticker because those come from genesis and cannot go stale; a
+     * description is republishable, so a remembered one can be wrong, and
+     * `TokenMeta` is reused on the unreachable path where it would survive as
+     * if it were genesis truth.
+     *
+     * A token that is absent here has no description **or** we did not find
+     * one. Nothing may print the first meaning: the card renders a description
+     * when there is one and says nothing at all when there is not.
+     */
+    descriptions?: ReadonlyMap<string, string>;
     /** tokenId -> the NFT collection it was minted from, where we could read it. */
     nftGroups?: ReadonlyMap<string, string>;
     /** The group lookup hit its cap, so some NFTs are shown without a collection. */
