@@ -2384,12 +2384,13 @@ describe('fiat-is-beside-the-price-never-inside-it', () => {
     });
 });
 
-describe('genesis-link-needs-two-clicks-and-never-runs-script', () => {
+describe('genesis-link-arms-before-it-leaves', () => {
     /**
      * The minter wrote this field, it is permanent on chain, and nobody checked
-     * it — least of all this page, which reads the chain and verifies no claim
-     * in it. So the destination is shown in full with a warning, and nothing is
-     * a link until the reader asks for one.
+     * it. So it does not arrive as a link: it arrives as inert text, touching
+     * it says who wrote it and turns it live, and following it asks once more
+     * and names the host. Two deliberate acts, and no second "Open…" button on
+     * a card that already has one.
      */
     const withUrl = (url: string | undefined) =>
         idlePubkey({
@@ -2398,31 +2399,54 @@ describe('genesis-link-needs-two-clicks-and-never-runs-script', () => {
             tokens: new Map([[TOKEN_ID, { ...BEANS, url }]]),
         });
 
-    it('shows the destination and warns before anything opens', () => {
+    it('starts inert, arms on touch, and confirms before leaving', () => {
         const { root } = paint(withUrl('https://example.com/beans'));
         const block = root.querySelector('[data-role="token-link"]') as HTMLElement;
         expect(block).not.toBeNull();
+
+        const link = block.querySelector('[data-role="token-link-url"]') as HTMLAnchorElement;
+        // The real destination from the start, so what is read is what is
+        // followed — the raw genesis string is never displayed.
+        expect(link.textContent).toBe('https://example.com/beans');
+        expect(link.getAttribute('href')).toBe('https://example.com/beans');
+        expect(link.target, 'a stranger’s page never replaces the stall').toBe('_blank');
+        expect(link.rel).toContain('noopener');
+        expect(link.rel).toContain('noreferrer');
+
+        const warning = block.querySelector('[data-role="token-link-warning"]') as HTMLElement;
+        expect(warning.hidden, 'nothing is said until it is touched').toBe(true);
+        expect(link.classList.contains('token-link-live'), 'inert first').toBe(false);
+        // No button anywhere in the block: the link is the control.
+        expect(block.querySelector('button')).toBeNull();
+
+        link.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+        expect(warning.hidden, 'the first touch explains').toBe(false);
+        expect(warning.textContent).toBe(TOKEN_LINK_WARNING);
+        expect(link.classList.contains('token-link-live'), 'and arms it').toBe(true);
         expect(
-            block.querySelector('[data-role="token-link-url"]')?.textContent,
-            'the full destination is printed',
-        ).toBe('https://example.com/beans');
-        expect(block.textContent).toContain(TOKEN_LINK_WARNING);
+            root.querySelector('[data-role="leave-confirm"]'),
+            'arming is not leaving',
+        ).toBeNull();
 
-        const confirm = block.querySelector('[data-role="token-link-confirm"]') as HTMLElement;
-        expect(confirm.hidden, 'no link until asked').toBe(true);
-        (block.querySelector('[data-role="token-link-reveal"]') as HTMLButtonElement).click();
-        expect(confirm.hidden).toBe(false);
+        link.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+        const confirm = root.querySelector('[data-role="leave-confirm"]') as HTMLElement;
+        expect(confirm, 'the second touch asks').not.toBeNull();
+        const go = confirm.querySelector('[data-role="leave-confirm-go"]') as HTMLAnchorElement;
+        expect(go.getAttribute('href')).toBe('https://example.com/beans');
+        expect(go.rel).toContain('noopener');
 
-        const open = block.querySelector('[data-role="token-link-open"]') as HTMLAnchorElement;
-        expect(open.getAttribute('href')).toBe('https://example.com/beans');
-        expect(open.target, 'a stranger’s page does not replace the stall').toBe('_blank');
-        // The opened page must not reach back into this one, nor learn which
-        // stall sent it.
-        expect(open.rel).toContain('noopener');
-        expect(open.rel).toContain('noreferrer');
+        (confirm.querySelector('[data-role="leave-confirm-cancel"]') as HTMLButtonElement).click();
+        expect(
+            root.querySelector('[data-role="leave-confirm"]'),
+            'the reader can stay',
+        ).toBeNull();
+    });
 
-        (block.querySelector('[data-role="token-link-cancel"]') as HTMLButtonElement).click();
-        expect(confirm.hidden, 'the reader can back out').toBe(true);
+    it('calls it a link, never an address', () => {
+        // Every other address on this page is an eCash address; calling this one
+        // an address invites a reader to take it for the seller's wallet.
+        expect(TOKEN_LINK_WARNING).toContain('This link was written');
+        expect(TOKEN_LINK_WARNING).not.toContain('address');
     });
 
     it('paints no link at all for a scheme that would run code', () => {
@@ -2436,7 +2460,6 @@ describe('genesis-link-needs-two-clicks-and-never-runs-script', () => {
         ]) {
             const { root } = paint(withUrl(raw));
             expect(root.querySelector('[data-role="token-link"]'), String(raw)).toBeNull();
-            // And no anchor anywhere in the panel carries it.
             for (const a of root.querySelectorAll('a')) {
                 expect(a.getAttribute('href') ?? '').not.toContain('javascript:');
             }
@@ -2524,7 +2547,7 @@ describe('hidden-beats-a-class-that-sets-display', () => {
         // The classes the code actually toggles. If one of these stops setting
         // `display` the rule is merely redundant; if a new one appears, it is
         // already covered — this asserts the pairing is understood, not lucky.
-        for (const cls of ['mini', 'publish-qr', 'token-link-confirm']) {
+        for (const cls of ['mini', 'publish-qr']) {
             const block = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]+)\\}`));
             expect(block, `.${cls} missing`).not.toBeNull();
             expect(

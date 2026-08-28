@@ -389,6 +389,11 @@ body {
  * control — and that control reveals a second one. Never a bare anchor in the
  * middle of the facts, where it would read as something this page vouches for.
  */
+/*
+ * A link nobody verified. It is laid out to be read before it is followed, and
+ * it does not compete with the buy control: no button, no second "Open…" on a
+ * card that already has one.
+ */
 .token-link {
     display: flex;
     flex-direction: column;
@@ -407,19 +412,49 @@ body {
     letter-spacing: 0.06em;
 }
 
+/*
+ * Shortened and inert until it is armed: one line, muted, no underline — text
+ * that happens to be a destination, not an invitation. `direction: rtl` on an
+ * ellipsis would flip the host to the wrong end, so it truncates on the right
+ * and the host is named in full at the confirmation.
+ */
 .token-link-url {
+    display: block;
+    max-width: 100%;
     font-family: var(--s-font);
     font-size: 12px;
-    word-break: break-all;
     line-height: 1.45;
+    color: var(--s-muted);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.token-link-confirm {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 7px;
-    width: 100%;
+/*
+ * Armed. The colour is the whole signal that this is now a link, so it is the
+ * accent and it is underlined — the two things every reader already knows.
+ */
+.token-link-url.token-link-live {
+    color: var(--s-accent);
+    text-decoration: underline;
+    white-space: normal;
+    word-break: break-all;
+}
+
+/* In the confirmation the destination is never shortened. */
+.sheet .token-link-url {
+    color: var(--s-text);
+    white-space: normal;
+    word-break: break-all;
+    cursor: auto;
+}
+
+.token-link-host {
+    font-size: 13px;
+    font-weight: 660;
+    word-break: break-all;
 }
 
 .item-detail {

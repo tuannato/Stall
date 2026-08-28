@@ -309,9 +309,14 @@ export const FIAT_LABEL = 'Show prices in';
  * reader is told who wrote it, and nothing opens without a second click.
  */
 export const TOKEN_LINK_LABEL = 'Link from the token’s creator';
+/**
+ * "Link", never "address". Every other address on this page is an eCash
+ * address, so calling this one an address invites a reader to read it as the
+ * seller's wallet — which is the one thing it is certainly not.
+ */
 export const TOKEN_LINK_WARNING =
-    'This address was written into the token by whoever minted it. Stall does not check it and cannot vouch for it — it is not verified, and it may not belong to this seller.';
-export const TOKEN_LINK_REVEAL = 'Open this link…';
-export const TOKEN_LINK_CONFIRM = 'Open in a new tab';
-export const TOKEN_LINK_CANCEL = 'Cancel';
+    'This link was written into the token by whoever minted it. Stall does not check it and cannot vouch for it — it is not verified, and it may not belong to this seller.';
+export const TOKEN_LINK_CONFIRM_TITLE = 'Leave Stall?';
+export const TOKEN_LINK_CONFIRM = 'Visit this link';
+export const TOKEN_LINK_CANCEL = 'Stay here';
 export const tokenLinkHost = (host: string): string => `You will be taken to ${host}`;

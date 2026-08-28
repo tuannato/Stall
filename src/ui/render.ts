@@ -1057,6 +1057,22 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
  * `noopener noreferrer` because the opened page must not reach back into this
  * one and must not learn which stall sent it.
  */
+/**
+ * The homepage from the token's genesis, in two deliberate steps.
+ *
+ * The string was written by whoever minted the token, it is permanent on chain,
+ * and nobody checked it — least of all this page, which reads the chain and
+ * verifies no claim in it. So it does not arrive as a link. It arrives as text:
+ * shortened, in the muted role, plainly inert. Touching it reveals who wrote it
+ * and what that is worth, and only then does the same text become a link and
+ * take the accent colour — the colour change *is* the signal that it is now
+ * live, which is why the arming step does not also move it.
+ *
+ * Following it then asks once more, naming the host, because a link a reader
+ * did not choose to follow, from a source nobody verified, on a page about
+ * money, is a phishing surface. The confirm is an anchor, not `window.open`:
+ * the navigation stays a user gesture, so no popup blocker eats it.
+ */
 function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
     const href = tokenUrl(meta?.url);
     if (href === undefined) {
@@ -1065,49 +1081,97 @@ function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
     const wrap = el('div', 'token-link');
     wrap.setAttribute('data-role', 'token-link');
     wrap.append(el('div', 'token-link-label', copy.TOKEN_LINK_LABEL));
-    // The destination in full, always visible, never truncated into a lie.
-    const shown = el('div', 'token-link-url', href);
-    shown.setAttribute('data-role', 'token-link-url');
-    wrap.append(shown);
-    wrap.append(el('p', 'note', copy.TOKEN_LINK_WARNING));
 
-    const reveal = el('button', 'mini', copy.TOKEN_LINK_REVEAL);
-    reveal.type = 'button';
-    reveal.setAttribute('data-role', 'token-link-reveal');
+    // One node throughout: an anchor carrying the real destination from the
+    // start, so what is read is what is followed. Before it is armed it is
+    // styled inert and its click arms instead of navigating.
+    const link = el('a', 'token-link-url');
+    link.textContent = href;
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('data-role', 'token-link-url');
+    link.setAttribute('data-focus-key', `token-link:${meta?.tokenId ?? 'unknown'}`);
+    link.setAttribute('aria-describedby', 'token-link-warning');
 
-    const confirm = el('div', 'token-link-confirm');
-    confirm.setAttribute('data-role', 'token-link-confirm');
-    confirm.hidden = true;
+    const warning = el('p', 'note', copy.TOKEN_LINK_WARNING);
+    warning.id = 'token-link-warning';
+    warning.setAttribute('data-role', 'token-link-warning');
+    warning.hidden = true;
+
+    let armed = false;
+    link.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        if (!armed) {
+            // First touch: say who wrote it, and let the colour say it is live.
+            armed = true;
+            warning.hidden = false;
+            link.classList.add('token-link-live');
+            return;
+        }
+        wrap.append(confirmLeaving(href));
+    });
+
+    wrap.append(link);
+    wrap.append(warning);
+    return wrap;
+}
+
+/**
+ * The last step before leaving. Names the host on its own line: a lookalike
+ * domain is caught there and nowhere else in a long href.
+ */
+function confirmLeaving(href: string): HTMLElement {
+    const scrim = el('div', 'sheet-scrim');
+    scrim.setAttribute('data-role', 'leave-confirm');
+    const box = el('div', 'sheet');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-label', copy.TOKEN_LINK_CONFIRM_TITLE);
+    box.tabIndex = -1;
+    box.append(el('div', 'mid-t', copy.TOKEN_LINK_CONFIRM_TITLE));
     const host = tokenUrlHost(href);
     if (host !== undefined) {
-        confirm.append(el('div', 'fine', copy.tokenLinkHost(host)));
+        box.append(el('div', 'token-link-host', copy.tokenLinkHost(host)));
     }
-    const go = el('a', 'mini');
+    box.append(el('div', 'token-link-url', href));
+    box.append(el('p', 'note', copy.TOKEN_LINK_WARNING));
+
+    const go = el('a', 'buy');
     go.textContent = copy.TOKEN_LINK_CONFIRM;
     go.href = href;
     go.target = '_blank';
     go.rel = 'noopener noreferrer';
-    go.setAttribute('data-role', 'token-link-open');
-    const cancel = el('button', 'another', copy.TOKEN_LINK_CANCEL);
-    cancel.type = 'button';
-    cancel.setAttribute('data-role', 'token-link-cancel');
-    confirm.append(go);
-    confirm.append(cancel);
+    go.setAttribute('data-role', 'leave-confirm-go');
+    const stay = el('button', 'mini', copy.TOKEN_LINK_CANCEL);
+    stay.type = 'button';
+    stay.setAttribute('data-role', 'leave-confirm-cancel');
 
-    reveal.addEventListener('click', () => {
-        confirm.hidden = false;
-        reveal.hidden = true;
-        go.focus();
+    const close = (): void => scrim.remove();
+    stay.addEventListener('click', close);
+    go.addEventListener('click', close);
+    scrim.addEventListener('click', (ev) => {
+        if (ev.target === scrim) {
+            close();
+        }
     });
-    cancel.addEventListener('click', () => {
-        confirm.hidden = true;
-        reveal.hidden = false;
-        reveal.focus();
+    scrim.addEventListener('keydown', (ev) => {
+        if ((ev as KeyboardEvent).key === 'Escape') {
+            ev.preventDefault();
+            close();
+        }
     });
-    wrap.append(reveal);
-    wrap.append(confirm);
-    return wrap;
+    box.append(go);
+    box.append(stay);
+    scrim.append(box);
+    queueMicrotask(() => {
+        if (box.isConnected) {
+            box.focus();
+        }
+    });
+    return scrim;
 }
+
 
 function tokenFacts(
     offer: StallOffer,
