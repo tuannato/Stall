@@ -173,7 +173,12 @@ function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
     };
 }
 
-function txSignedByStall(tx: ChainTx, hash: string): boolean {
+/**
+ * Did the stall's own key sign this transaction? Shared with every other record
+ * type this stall authors — a record nobody proved the seller signed is a
+ * record anyone can publish *for* them.
+ */
+export function txSignedByStall(tx: ChainTx, hash: string): boolean {
     for (const input of tx.inputs) {
         if (input.outputScript === undefined) {
             continue;
