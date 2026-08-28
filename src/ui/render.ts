@@ -27,9 +27,7 @@ import type {
 } from '../domain/state';
 import {
     DEFAULT_THEME,
-    LAYOUT_CLASSES,
     SHIPPED_THEMES,
-    clampIndex,
     themeVars,
     type DecodedTheme,
 } from '../domain/theme';
@@ -119,10 +117,6 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
     for (const [name, value] of Object.entries(vars)) {
         stall.style.setProperty(name, value);
     }
-    const layout =
-        LAYOUT_CLASSES[clampIndex(theme.layoutIndex, LAYOUT_CLASSES.length)] ??
-        LAYOUT_CLASSES[0];
-    stall.classList.add(layout!);
 }
 
 function paintHome(stall: HTMLElement, handlers: StallHandlers): void {

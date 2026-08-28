@@ -120,7 +120,6 @@ export type DecodedTheme = {
     accentTwo: Rgb;
     fontIndex: number;
     softness: number;
-    layoutIndex: number;
     /** A shipped header strip, or absent — Modern ships none. */
     ornament?: Ornament;
     /** The shape half of the look. Ours, never the chain's. */
@@ -133,16 +132,6 @@ export const FONT_STACKS = [
     '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
 ] as const;
 
-export const LAYOUT_CLASSES = [
-    'layout-stack',
-    'layout-shelf',
-    'layout-vending',
-    'layout-stack',
-    'layout-stack',
-    'layout-stack',
-    'layout-stack',
-    'layout-stack',
-] as const;
 
 /**
  * Ids are permanent. `0x01` is Modern, the look Stall paints with no manifest at
@@ -164,7 +153,6 @@ export const DEFAULT_THEME: DecodedTheme = {
     accentTwo: { r: 44, g: 107, b: 228 },
     fontIndex: 0,
     softness: 12,
-    layoutIndex: 0,
     shape: {
         padM: '20px 18px',
         padD: '30px 34px',
@@ -235,7 +223,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             accentTwo: { r: 255, g: 77, b: 122 },
             fontIndex: 1,
             softness: 0,
-            layoutIndex: 2,
             ornament: { label: '// stall.cash', kind: 'ticker' },
             shape: {
                 padM: '12px',
@@ -303,7 +290,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             accentTwo: { r: 138, g: 116, b: 88 },
             fontIndex: 2,
             softness: 8,
-            layoutIndex: 1,
             ornament: { label: 'Market stall', kind: 'plate' },
             shape: {
                 padM: '20px 18px',

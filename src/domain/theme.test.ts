@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
     BANNED_THEME_PROPS,
@@ -47,7 +50,7 @@ describe('theme-table-ids-are-pinned', () => {
         expect(t.accent).toEqual({ r: 44, g: 107, b: 228 });
         expect(t.fontIndex).toBe(0);
         expect(t.softness).toBe(12);
-        expect(t.layoutIndex).toBe(0);
+        expect(t.shape.itemsD).toBe('repeat(2, minmax(0, 1fr))');
     });
 
     it('pins 0x02 Neo city and 0x03 Rural', () => {
@@ -57,12 +60,13 @@ describe('theme-table-ids-are-pinned', () => {
         expect(neo.bg).toEqual({ r: 8, g: 10, b: 18 });
         expect(neo.accent).toEqual({ r: 24, g: 224, b: 216 });
         expect(neo.fontIndex).toBe(1);
-        expect(neo.layoutIndex).toBe(2);
+        expect(neo.shape.itemsD).toBe('repeat(3, minmax(0, 1fr))');
         const rural = decodeTheme(0x03);
         expect(rural.bg).toEqual({ r: 251, g: 244, b: 230 });
         expect(rural.accent).toEqual({ r: 180, g: 85, b: 44 });
         expect(rural.fontIndex).toBe(2);
-        expect(rural.layoutIndex).toBe(1);
+        expect(rural.shape.itemsD).toBe('repeat(2, minmax(0, 1fr))');
+        expect(rural.shape.areasM).toBe('"ic name" "price price"');
     });
 
     it('ships no id whose own palette hides the asked amount', () => {
@@ -180,5 +184,33 @@ describe('theme-ornaments-are-pinned-per-id', () => {
 
     it('an unknown id falls back to the default look and ships no ornament', () => {
         expect(decodeTheme(0xfe).ornament).toBeUndefined();
+    });
+});
+
+describe('theme-module-ships-no-markup-or-fetchable-string', () => {
+    /**
+     * CLAUDE.md §6 freezes this while there are no keys: the theme module is a
+     * table of values, not a place that builds markup or names a remote thing.
+     * `directory-walls` cannot see it — that scan looks for DOM access, network
+     * calls and chronik/agora imports, none of which this file would ever have.
+     * (It is a text scan over this directory, so naming those tokens here in
+     * prose would trip it: the wall cannot tell a comment from code.)
+     *
+     * It matters more now than when the rule was written. The shape half added
+     * ~40 string fields to the shipped table, and a string is where "just add a
+     * banner image" arrives: `url(` reaches the network from a stylesheet,
+     * `cssText` and the innerHTML family reach the parser. The table may hold a
+     * colour, a length, a grid, a font stack — never markup, never a host.
+     */
+    it('contains no innerHTML, cssText or url(', () => {
+        const here = dirname(fileURLToPath(import.meta.url));
+        const src = readFileSync(join(here, 'theme.ts'), 'utf8');
+        expect(src).not.toMatch(/\binnerHTML\b/);
+        expect(src).not.toMatch(/\binsertAdjacentHTML\b/);
+        expect(src).not.toMatch(/\bouterHTML\b/);
+        expect(src).not.toMatch(/\bcssText\b/);
+        // `url(` is the one that leaves the origin. Written without the paren
+        // it is prose; with it, it is a request.
+        expect(src).not.toMatch(/url\s*\(/);
     });
 });

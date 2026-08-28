@@ -345,7 +345,7 @@ describe('asked-amount-not-covered', () => {
         expect(h.onBuy).toHaveBeenCalledWith(OUTPOINT);
     });
 
-    it('lets an expanded shelf row span the grid so the neighbour keeps its price', () => {
+    it('lets an expanded row span the grid so the neighbour keeps its price', () => {
         const neighbour: StallOffer = {
             ...OFFER,
             outpoint: { txid: OUTPOINT.txid, outIdx: 1 },
@@ -355,11 +355,12 @@ describe('asked-amount-not-covered', () => {
                 fetch: { kind: 'offers', offers: [OFFER, neighbour] },
                 overlay: { kind: 'buy', outpoint: OUTPOINT },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: { ...DEFAULT_THEME, layoutIndex: 1 },
+                // Any look: the span is no longer one layout's privilege, so
+                // the guarantee is asserted on the default one.
+                theme: decodeTheme(RURAL_THEME_ID),
             }),
         );
         const stall = root.querySelector('.stall') as HTMLElement;
-        expect(stall.classList.contains('layout-shelf')).toBe(true);
         const cards = [...stall.querySelectorAll('.item')];
         expect(cards).toHaveLength(2);
         expect(cards[0]?.classList.contains('open')).toBe(true);
@@ -369,6 +370,9 @@ describe('asked-amount-not-covered', () => {
         expect(prices[0]?.textContent).toBe('1,200');
         expect(prices[1]?.textContent).toBe('1,200');
         expect(stall.contains(prices[1]!)).toBe(true);
+        // Whether the span actually keeps it on screen is a browser fact this
+        // runner cannot see: happy-dom does not lay out. What is asserted here
+        // is that the neighbour and its price are still rendered at all.
     });
 });
 
