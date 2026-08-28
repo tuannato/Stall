@@ -140,6 +140,14 @@ export function encodePush(data: Uint8Array): Uint8Array {
 }
 
 function scriptPush(data: Uint8Array): Uint8Array {
+    if (data.length === 0) {
+        // A zero-length payload has to be `OP_PUSHDATA1 0x00`. The direct form
+        // would be opcode `0x00`, which `opReturnPushes` refuses outright — so
+        // the whole output becomes unreadable and the record reads as never
+        // published, §5's worse failure. Verified: `6a00` decodes to nothing,
+        // `6a4c00` decodes to one empty push.
+        return Uint8Array.from([OP_PUSHDATA1, 0]);
+    }
     if (data.length <= MAX_DIRECT_PUSH) {
         const out = new Uint8Array(1 + data.length);
         out[0] = data.length;
