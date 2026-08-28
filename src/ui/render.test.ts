@@ -3083,3 +3083,67 @@ describe('unknown-decimals-is-not-a-stock-count', () => {
     });
 });
 
+describe('choosing-a-look-shows-the-look', () => {
+    function openSheet() {
+        const { root, h } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        const scrim = root.querySelector<HTMLElement>('[data-role="sheet-scrim"]')!;
+        const select = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
+        return { root, h, scrim, select };
+    }
+
+    it('lowers the panel when the look changes', () => {
+        const { scrim, select } = openSheet();
+        expect(scrim.classList.contains('peek')).toBe(false);
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(scrim.classList.contains('peek')).toBe(true);
+    });
+
+    it('raises it again when anything else in the panel is touched', () => {
+        const { root, scrim, select } = openSheet();
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        const name = root.querySelector<HTMLInputElement>('input[name="stall-name"]')!;
+        name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        expect(scrim.classList.contains('peek')).toBe(false);
+    });
+
+    it('stays lowered while the picker itself is used', () => {
+        const { scrim, select } = openSheet();
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        // A keyboard seller changes the look with the arrow keys, which keeps
+        // the focus on the picker. Raising here would make it unusable.
+        select.dispatchEvent(new Event('focusin', { bubbles: true }));
+        expect(scrim.classList.contains('peek')).toBe(true);
+    });
+
+    it('a click on the bare stall comes back rather than throwing the name away', () => {
+        const { h, scrim, select } = openSheet();
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(scrim.classList.contains('peek')).toBe(false);
+        expect(h.onClosePublish).not.toHaveBeenCalled();
+
+        // With the panel up, the same click closes as it always did.
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onClosePublish).toHaveBeenCalled();
+    });
+
+    it('still applies the chosen look to the stall behind', () => {
+        const { root, select } = openSheet();
+        const stall = root.querySelector<HTMLElement>('.stall')!;
+        const before = stall.style.getPropertyValue('--s-bg');
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(stall.style.getPropertyValue('--s-bg')).not.toBe(before);
+    });
+});
+

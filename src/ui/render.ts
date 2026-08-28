@@ -945,9 +945,17 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     const close = handlers.onClosePublish;
     if (close !== undefined) {
         scrim.addEventListener('click', (ev) => {
-            if (ev.target === scrim) {
-                close();
+            if (ev.target !== scrim) {
+                return;
             }
+            // While the panel is lowered the scrim is transparent and the stall
+            // is what the seller is looking at, so a click on it means "come
+            // back", not "throw away the name I typed". Escape still closes.
+            if (scrim.classList.contains('peek')) {
+                scrim.classList.remove('peek');
+                return;
+            }
+            close();
         });
         // Escape is the other way out. Without it `aria-modal` was a claim the
         // markup did not honour — a dialog a keyboard user could not dismiss.
@@ -966,6 +974,18 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     sheet.tabIndex = -1;
     sheet.setAttribute('data-focus-key', 'publish-sheet');
     trapTab(sheet);
+    // Not `keydown`: a keyboard seller changes the look with the arrow keys,
+    // and raising the panel on the key that just lowered it would make the
+    // control unusable without a mouse.
+    for (const kind of ['pointerdown', 'focusin'] as const) {
+        sheet.addEventListener(kind, (ev) => {
+            const target = ev.target instanceof Element ? ev.target : null;
+            if (target !== null && target.closest('[data-role="theme-picker"]') !== null) {
+                return;
+            }
+            scrim.classList.remove('peek');
+        });
+    }
     queueMicrotask(() => {
         if (sheet.isConnected) {
             sheet.focus();
@@ -1007,8 +1027,10 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     label.append(input);
 
     const themeLabel = el('label', 'paste-label', copy.PUBLISH_THEME_LABEL);
+    themeLabel.setAttribute('data-role', 'theme-picker');
     const select = el('select', 'paste-in');
     select.name = 'theme';
+    select.setAttribute('data-focus-key', 'theme-picker');
     select.setAttribute('aria-label', copy.PUBLISH_THEME_LABEL);
     // The look on screen, selected explicitly. A stall with no manifest is
     // painted with the shipped default, so leaving this to the browser's
@@ -1107,6 +1129,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (stall !== null && stall !== undefined && Number.isInteger(chosen)) {
             applyTheme(stall as HTMLElement, decodeTheme(chosen));
         }
+        // And get out of the way, so the look being chosen is the thing on
+        // screen rather than a strip of it around a panel.
+        select.closest('[data-role="sheet-scrim"]')?.classList.add('peek');
     });
     form.addEventListener('submit', (event) => event.preventDefault());
     form.append(label, themeLabel, err, sameLook);
