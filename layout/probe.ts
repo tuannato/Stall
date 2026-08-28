@@ -14,6 +14,11 @@
  */
 import { renderStall } from '../src/ui/render';
 import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
+import {
+    attachmentsForTheme,
+    wornAttachments,
+    type ShippedAttachment,
+} from '../src/domain/attachments';
 import { scaleRate } from '../src/domain/fiat';
 import type { Outpoint, StallOffer, StallView, TokenMeta } from '../src/domain/state';
 
@@ -233,10 +238,25 @@ function describe(node: Element): string {
     return `${node.tagName.toLowerCase()}${cls === '' ? '' : `.${cls.split(/\s+/).join('.')}`}`;
 }
 
-function paint(screen: string, themeId: number): void {
+function paint(screen: string, themeId: number, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
-    const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId) };
+    const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId), worn };
     renderStall(root, view, handlers);
+}
+
+/**
+ * Every decorated stall a shipped look can produce, and no more than that.
+ *
+ * One occupant per slot is what keeps this linear: the alternative is 2^16
+ * combinations per theme, which is a guard nobody would ever run. So each row
+ * is measured alone, and then the all-worn case is measured once — the only
+ * combination a picker can actually produce.
+ */
+function wornVariants(themeId: number): readonly (readonly ShippedAttachment[])[] {
+    const rows = attachmentsForTheme(themeId);
+    const all = wornAttachments(themeId, 0xffff);
+    const singles = rows.map((row) => [row]);
+    return [[], ...singles, ...(all.length > 1 ? [all] : [])];
 }
 
 /**
@@ -378,8 +398,13 @@ function measure(screen: string, themeLabel: string): Failure[] {
  */
 const STEPS = 6;
 
-function checkOverTime(screen: string, themeId: number, themeLabel: string): Failure[] {
-    paint(screen, themeId);
+function checkOverTime(
+    screen: string,
+    themeId: number,
+    themeLabel: string,
+    worn: readonly ShippedAttachment[],
+): Failure[] {
+    paint(screen, themeId, worn);
     const out = measure(screen, themeLabel);
     // Queried after the paint, so these are the animations on the tree that is
     // about to be measured — and it must stay that way. Repainting between the
@@ -419,7 +444,13 @@ function checkOverTime(screen: string, themeId: number, themeLabel: string): Fai
 const failures: Failure[] = [];
 for (const screen of Object.keys(SCREENS)) {
     for (const theme of SHIPPED_THEMES) {
-        failures.push(...checkOverTime(screen, theme.id, theme.label));
+        for (const worn of wornVariants(theme.id)) {
+            const label =
+                worn.length === 0
+                    ? theme.label
+                    : `${theme.label} + ${worn.map((a) => a.label).join(' + ')}`;
+            failures.push(...checkOverTime(screen, theme.id, label, worn));
+        }
     }
 }
 

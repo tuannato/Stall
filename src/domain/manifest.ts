@@ -1,4 +1,5 @@
 import { toHex } from 'ecash-lib';
+import { encodeAttachmentFlags } from './attachments';
 import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
 
 export const STL1_ASCII = 'STL1';
@@ -181,7 +182,11 @@ function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
  * OP_RETURN and rejects a payload that starts with it. Undefined when the
  * input cannot make a valid record.
  */
-export function encodeManifestHex(name: string, themeId: number): string | undefined {
+export function encodeManifestHex(
+    name: string,
+    themeId: number,
+    attachmentFlags = 0,
+): string | undefined {
     if (typeof name !== 'string') {
         return undefined;
     }
@@ -195,9 +200,15 @@ export function encodeManifestHex(name: string, themeId: number): string | undef
     const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));
     const themeBytes = new Uint8Array(THEME_ID_BYTES);
     themeBytes[0] = themeId;
-    return toHex(
-        concatBytes([scriptPush(lokad), scriptPush(nameBytes), scriptPush(themeBytes)]),
-    );
+    const pushes = [scriptPush(lokad), scriptPush(nameBytes), scriptPush(themeBytes)];
+    // A fourth push, and only when there is something to say. The three above
+    // are positional and required; everything after them is one tagged field,
+    // first byte the tag — so a reader that knows nothing about decorations
+    // skips this and still reads the name and the look.
+    if (Number.isInteger(attachmentFlags) && (attachmentFlags & 0xffff) !== 0) {
+        pushes.push(scriptPush(encodeAttachmentFlags(attachmentFlags)));
+    }
+    return toHex(concatBytes(pushes));
 }
 
 export type ManifestRank = {

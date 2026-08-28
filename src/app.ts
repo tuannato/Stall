@@ -2,6 +2,13 @@ import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
+import {
+    ATTACHMENT_FLAGS_TAG,
+    decodeAttachmentFlags,
+    wornAttachments,
+} from './domain/attachments';
+import { DEFAULT_THEME_ID } from './domain/theme';
+import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
 import { clearSavedStall, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
 import type {
@@ -481,6 +488,7 @@ async function loadCurrent(): Promise<AppState> {
     let theme = cachedTheme;
     let settingsTruncated = false;
     let settingsUnreadable = false;
+    let attachmentFlags = 0;
     {
         const lookup = await manifestSoon;
         if (lookup !== undefined) {
@@ -490,12 +498,42 @@ async function loadCurrent(): Promise<AppState> {
             if (manifest) {
                 stallName = manifest.name;
                 theme = manifest.theme;
+                // One tagged field, read by its tag rather than its position.
+                // A payload that is not two bytes, or a bit with no row in this
+                // theme's table, is nothing at all — never a reason to refuse
+                // the record and never a note to a visitor, because a missing
+                // decoration is not a lie about money.
+                attachmentFlags = decodeAttachmentFlags(
+                    manifest.extras.get(ATTACHMENT_FLAGS_TAG),
+                );
                 sessionNames.set(route.pubkeyHex, manifest.name);
                 sessionThemes.set(route.pubkeyHex, manifest.theme);
             }
         }
         // A walk that failed leaves the session name and theme standing, which
         // is what the guard on `manifestSoon` above turns a rejection into.
+    }
+
+    /*
+     * The entitlement, asked only when there is something to entitle. A stall
+     * wearing nothing never makes this request, which is the majority of them;
+     * one that does pays a single round after the manifest. It fails closed and
+     * silently for a visitor — a missing beetle is not a lie about money — and
+     * the picker is where a seller is told, because that is where we know a
+     * seller is looking.
+     */
+    let heldTokens: ReadonlySet<string> | undefined;
+    {
+        const wanted = new Set(
+            wornAttachments(theme?.id ?? DEFAULT_THEME_ID, attachmentFlags)
+                .map((row) => row.tokenId)
+                .filter((id): id is string => id !== undefined),
+        );
+        if (wanted.size > 0) {
+            // The derived p2pkh when the route was a bare key: §3 says the stall
+            // address is that, and it is the address a decoration is held at.
+            heldTokens = await loadHeldTokens(createChronik() as never, address, wanted);
+        }
     }
 
     const tokens: SessionTokenCache = new Map();
@@ -525,6 +563,12 @@ async function loadCurrent(): Promise<AppState> {
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,
+            attachmentFlags,
+            heldTokens,
+            // Fails closed: with no holdings answer, nothing is worn. A stall
+            // that paints a decoration it cannot prove is holding is exactly
+            // the consent rule broken from the inside.
+            worn: wornAttachments(theme?.id ?? DEFAULT_THEME_ID, attachmentFlags, heldTokens),
             settingsTruncated,
             settingsUnreadable,
         },

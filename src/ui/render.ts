@@ -26,7 +26,15 @@ import {
     isUnbuyable,
     RATE_TOO_SMALL,
 } from '../domain/money';
-import { parseSellerParam } from '../domain/route';
+import { parseSellerParam, stallPath } from '../domain/route';
+import {
+    attachmentClasses,
+    attachmentNodesWanted,
+    attachmentsForTheme,
+    withMood,
+    wornAttachments,
+    type ShippedAttachment,
+} from '../domain/attachments';
 import type {
     FetchStatus,
     HostAttempt,
@@ -129,7 +137,7 @@ export function renderStall(
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
     const theme = view.theme ?? DEFAULT_THEME;
-    applyTheme(stall, theme);
+    applyTheme(stall, theme, view.worn ?? []);
 
     switch (view.route.kind) {
         case 'home':
@@ -149,13 +157,26 @@ export function renderStall(
             break;
     }
 
+    // After the screen, because a `yard` needs the footer to sit above and a
+    // `fringe` needs the strip to sit inside. `applyTheme` has already put the
+    // root classes on, which is everything a `root` row needs.
+    placeAttachmentNodes(stall, view.worn ?? []);
+
     frame.append(stall);
     root.append(frame);
     restoreFocus(root, keptFocus);
 }
 
-function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
-    const vars = themeVars(theme);
+function applyTheme(
+    stall: HTMLElement,
+    theme: DecodedTheme,
+    worn: readonly ShippedAttachment[] = [],
+): void {
+    // A mood is merged before `themeVars`, never as a stylesheet block: every
+    // `--s-*` is written inline on this element, and an inline custom property
+    // beats any rule. Merging here also keeps `legibleOn` in the path, so a
+    // palette a seller bought still cannot hide the asked amount.
+    const vars = themeVars(withMood(theme, worn));
     for (const [name, value] of Object.entries(vars)) {
         stall.style.setProperty(name, value);
     }
@@ -168,6 +189,12 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
             child.remove();
         }
     }
+    for (const cls of [...stall.classList]) {
+        if (cls.startsWith('att-')) {
+            stall.classList.remove(cls);
+        }
+    }
+    stall.classList.add(...attachmentClasses(worn));
     const next = ornamentStrip(theme);
     if (next !== null) {
         stall.prepend(next);
@@ -1041,9 +1068,14 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     for (const row of SHIPPED_THEMES) {
         const option = el('option', '', row.label);
         option.value = String(row.id);
-        option.selected = row.id === painted;
         select.append(option);
     }
+    // Set on the select after the options exist, not as `option.selected`
+    // before each is appended. The old shape depended on when the flag was
+    // assigned relative to the append, and `picker-shows-the-look-already-on-
+    // screen` was passing on a coincidence: the runner landed on the second
+    // option whatever the painted look, which happens to be Neo city.
+    select.value = String(painted);
     themeLabel.append(select);
 
     const err = el('p', 'ctx', '');
@@ -1071,7 +1103,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // Rebuilt in place rather than by repainting: a repaint would take the
     // focus out of the field on every keystroke.
     const refresh = (): void => {
-        const hex = encodeManifestHex(input.value, Number(select.value));
+        const hex = encodeManifestHex(input.value, Number(select.value), flags);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
@@ -1125,16 +1157,104 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // rather than through a repaint, because a repaint would rebuild this
         // sheet and take the focus out of the picker.
         const chosen = Number(select.value);
-        const stall = select.closest('.frame')?.querySelector('.stall');
-        if (stall !== null && stall !== undefined && Number.isInteger(chosen)) {
-            applyTheme(stall as HTMLElement, decodeTheme(chosen));
-        }
-        // And get out of the way, so the look being chosen is the thing on
-        // screen rather than a strip of it around a panel.
-        select.closest('[data-role="sheet-scrim"]')?.classList.add('peek');
+        // Flags do not travel across a look. Bit N means row N of *this*
+        // theme's table, so carrying them over would hand the seller a
+        // decoration they never chose — which is the thing "holding is not
+        // consent" exists to prevent, arriving through the front door.
+        flags = 0;
+        renderDecor(chosen);
+        previewLook(select, chosen, flags);
+        refresh();
     });
     form.addEventListener('submit', (event) => event.preventDefault());
-    form.append(label, themeLabel, err, sameLook);
+    /*
+     * Decoration, one control per slot rather than one per row. Two selects at
+     * most on any shipped look, which is why this is a picker and not six
+     * toggles: a slot that holds one thing is a choice, and a choice is a list.
+     * It also makes two bits in one slot unrepresentable, which is a better
+     * answer than resolving them quietly after the record is signed.
+     */
+    let flags = view.attachmentFlags ?? 0;
+    const decorWrap = el('div', 'decor');
+    decorWrap.setAttribute('data-role', 'decor');
+    const decorNote = el('p', 'fine', '');
+    decorNote.setAttribute('data-role', 'decor-note');
+
+    const describeChoice = (themeId: number): string => {
+        const chosen = wornAttachments(themeId, flags);
+        if (chosen.length === 0) {
+            return '';
+        }
+        // The first thing that is not simply true of everything chosen: a row
+        // nobody can hold yet outranks one this stall merely does not hold.
+        if (chosen.some((r) => r.tokenId === undefined)) {
+            return copy.DECOR_NOT_MINTED;
+        }
+        const held = view.heldTokens;
+        if (held !== undefined && chosen.every((r) => held.has(r.tokenId!))) {
+            return copy.DECOR_HELD;
+        }
+        return copy.DECOR_PREVIEW_ONLY;
+    };
+
+    const renderDecor = (themeId: number): void => {
+        decorWrap.replaceChildren();
+        const rows = attachmentsForTheme(themeId);
+        if (rows.length === 0) {
+            return;
+        }
+        decorWrap.append(el('p', 'fine', copy.DECOR_LEDE));
+        for (const slot of [...new Set(rows.map((r) => r.slot))]) {
+            const slotLabel = el('label', 'paste-label', `${copy.DECOR_LABEL} · ${slot}`);
+            // Marked as a picker so choosing here keeps the panel lowered, the
+            // same way choosing a look does — this is the other control whose
+            // whole subject is the stall behind the sheet.
+            slotLabel.setAttribute('data-role', 'theme-picker');
+            const slotSelect = el('select', 'paste-in');
+            slotSelect.name = `att-${slot}`;
+            slotSelect.setAttribute('data-role', `decor-${slot}`);
+            slotSelect.setAttribute('data-focus-key', `decor-${slot}`);
+            slotSelect.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
+            const none = el('option', undefined, copy.DECOR_NONE);
+            none.value = '';
+            slotSelect.append(none);
+            for (const row of rows.filter((r) => r.slot === slot)) {
+                const opt = el('option', undefined, row.label);
+                opt.value = String(row.bit);
+                slotSelect.append(opt);
+            }
+            const on = rows.find((r) => r.slot === slot && (flags & (1 << r.bit)) !== 0);
+            slotSelect.value = on === undefined ? '' : String(on.bit);
+            slotSelect.addEventListener('change', () => {
+                // One occupant per slot, enforced where the choice is made: every
+                // other bit in this slot goes off before the chosen one goes on.
+                for (const r of rows.filter((x) => x.slot === slot)) {
+                    flags &= ~(1 << r.bit);
+                }
+                if (slotSelect.value !== '') {
+                    flags |= 1 << Number(slotSelect.value);
+                }
+                previewLook(select, Number(select.value), flags);
+                decorNote.textContent = describeChoice(Number(select.value));
+                decorNote.hidden = decorNote.textContent === '';
+                refresh();
+            });
+            slotLabel.append(slotSelect);
+            decorWrap.append(slotLabel);
+        }
+        decorNote.textContent = describeChoice(themeId);
+        decorNote.hidden = decorNote.textContent === '';
+        decorWrap.append(decorNote);
+        if (copy.FITTINGS_STALL !== undefined) {
+            const shop = el('a', 'mini another', copy.DECOR_SHOP);
+            shop.setAttribute('data-role', 'decor-shop');
+            shop.href = stallPath(copy.FITTINGS_STALL);
+            decorWrap.append(shop);
+        }
+    };
+
+    renderDecor(painted);
+    form.append(label, themeLabel, err, sameLook, decorWrap);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
@@ -1642,6 +1762,66 @@ function trapTab(panel: HTMLElement): void {
 
 const FOCUSABLE =
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The elements a worn set needs, placed by slot rather than by row — so adding
+ * a row to the catalogue is a table edit and never a change here.
+ *
+ * A `fringe` lives inside the ornament strip, which clips it, and is simply not
+ * painted on a look that ships no strip: a decoration with nowhere to be is not
+ * a decoration that goes somewhere else. A `yard` gets a reserved strip of its
+ * own above the footer, so the sprite has a place that is not on top of
+ * anything — the specimen's fixed offset from the bottom lands on whatever
+ * happens to sit there, which in production is the share code.
+ */
+/**
+ * Paint a look on the stall behind the sheet, decorations included.
+ *
+ * Applied to the live `.stall` rather than through a repaint, because a repaint
+ * rebuilds the sheet and takes the focus out of the control being used. That is
+ * the same reason the theme picker has always worked this way; decorations join
+ * it because they are the other half of the same question.
+ */
+function previewLook(anchor: Element, themeId: number, flags: number): void {
+    const stall = anchor.closest('.frame')?.querySelector('.stall');
+    if (stall === null || stall === undefined || !Number.isInteger(themeId)) {
+        return;
+    }
+    const worn = wornAttachments(themeId, flags);
+    applyTheme(stall as HTMLElement, decodeTheme(themeId), worn);
+    placeAttachmentNodes(stall as HTMLElement, worn);
+    anchor.closest('[data-role="sheet-scrim"]')?.classList.add('peek');
+}
+
+function placeAttachmentNodes(
+    stall: HTMLElement,
+    worn: readonly ShippedAttachment[],
+): void {
+    for (const node of [...stall.querySelectorAll('[class^="att-"], [class*=" att-"]')]) {
+        if (node.parentElement !== null && !node.classList.contains('orn')) {
+            node.remove();
+        }
+    }
+    for (const row of attachmentNodesWanted(worn)) {
+        const node = el('div', row.cls!);
+        if (row.slot === 'fringe') {
+            stall.querySelector('.orn')?.append(node);
+            continue;
+        }
+        if (row.slot === 'yard') {
+            // The sprite is a second real node rather than a pseudo-element:
+            // `::before` has no box, so the guard cannot measure it, and it is
+            // refused outright for exactly that reason.
+            node.append(el('div', `${row.cls!}-bug`));
+            const foot = stall.querySelector('.stall-foot');
+            if (foot !== null) {
+                stall.insertBefore(node, foot);
+            } else {
+                stall.append(node);
+            }
+        }
+    }
+}
 
 function ornamentStrip(theme: DecodedTheme): HTMLElement | null {
     const orn = theme.ornament;

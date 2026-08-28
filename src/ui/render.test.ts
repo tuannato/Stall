@@ -70,6 +70,7 @@ import {
 import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
+import { wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
@@ -3148,6 +3149,132 @@ describe('choosing-a-look-shows-the-look', () => {
         select.value = String(NEO_CITY_THEME_ID);
         select.dispatchEvent(new Event('change', { bubbles: true }));
         expect(stall.style.getPropertyValue('--s-bg')).not.toBe(before);
+    });
+});
+
+describe('a-decoration-is-chosen-where-the-look-is', () => {
+    function sheet(over = {}) {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(RURAL_THEME_ID),
+                ...over,
+            }),
+        );
+        return root;
+    }
+
+    it('offers one control per slot, not one per row', () => {
+        const root = sheet();
+        // Rural has a yard and a mood, so two selects and no more.
+        expect(root.querySelector('[data-role="decor-yard"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="decor-mood"]')).not.toBeNull();
+        expect(root.querySelectorAll('.decor select').length).toBe(2);
+    });
+
+    it('opens the look picker on every look, not just the second one', () => {
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const root = sheet({ theme: decodeTheme(id) });
+            const themeSelect = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
+            expect(themeSelect.value, `painted ${id}`).toBe(String(id));
+        }
+    });
+
+    it('opens on what the record already set', () => {
+        const root = sheet({ attachmentFlags: 1 });
+        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
+        expect(yard.value).toBe('0');
+    });
+
+    it('says a row nobody can hold yet is not worn, however it is set', () => {
+        const root = sheet({ attachmentFlags: 1 });
+        const note = root.querySelector('[data-role="decor-note"]')!;
+        expect(note.textContent).toBe(copy.DECOR_NOT_MINTED);
+        expect((note as HTMLElement).hidden).toBe(false);
+    });
+
+    it('says nothing at all when nothing is chosen', () => {
+        const note = sheet().querySelector<HTMLElement>('[data-role="decor-note"]')!;
+        expect(note.hidden).toBe(true);
+    });
+
+    it('previews the choice on the stall behind, and lowers the panel', () => {
+        const root = sheet({ stallName: 'Riverside' });
+        document.body.append(root);
+        const scrim = root.querySelector<HTMLElement>('[data-role="sheet-scrim"]')!;
+        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
+        yard.value = '0';
+        yard.dispatchEvent(new Event('change', { bubbles: true }));
+        // eslint-disable-next-line no-console
+        expect(root.querySelector('.att-beetle')).not.toBeNull();
+        expect(scrim.classList.contains('peek')).toBe(true);
+        root.remove();
+    });
+
+    it('puts the choice in the record the seller signs', () => {
+        // A record needs a name: `encodeManifestHex` refuses an empty one.
+        const root = sheet({ stallName: 'Riverside' });
+        const hexBefore = root.querySelector('[data-role="publish-hex"]')!.textContent ?? '';
+        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
+        yard.value = '0';
+        yard.dispatchEvent(new Event('change', { bubbles: true }));
+        const hexAfter = root.querySelector('[data-role="publish-hex"]')!.textContent ?? '';
+        expect(hexAfter).not.toBe(hexBefore);
+        // Tag byte then two payload bytes, appended after the three required
+        // pushes: `03 01 01 00`.
+        expect(hexAfter.endsWith('03010100')).toBe(true);
+    });
+
+    it('drops the flags when the look changes, rather than re-aiming them', () => {
+        const root = sheet({ attachmentFlags: 1 });
+        document.body.append(root);
+        const theme = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
+        theme.value = String(NEO_CITY_THEME_ID);
+        theme.dispatchEvent(new Event('change', { bubbles: true }));
+        // Neo's slots are crest and fringe; bit 0 there is a different row, so
+        // carrying the flag over would wear something never chosen.
+        expect(root.querySelector('[data-role="decor-yard"]')).toBeNull();
+        const crest = root.querySelector<HTMLSelectElement>('[data-role="decor-crest"]')!;
+        expect(crest.value).toBe('');
+        root.remove();
+    });
+
+    it('paints no link to a shop that does not exist yet', () => {
+        expect(sheet().querySelector('[data-role="decor-shop"]')).toBeNull();
+    });
+});
+
+describe('a-worn-decoration-reaches-the-stall', () => {
+    it('puts a root row on the stall and builds a node row above the footer', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(RURAL_THEME_ID),
+                worn: wornAttachments(RURAL_THEME_ID, 1),
+            }),
+        );
+        const strip = root.querySelector('.att-beetle')!;
+        expect(strip).not.toBeNull();
+        expect(strip.querySelector('.att-beetle-bug')).not.toBeNull();
+        expect(strip.nextElementSibling?.classList.contains('stall-foot')).toBe(true);
+    });
+
+    it('moves the palette for a mood, through the contrast floor', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(DEFAULT_THEME_ID),
+                worn: wornAttachments(DEFAULT_THEME_ID, 1),
+            }),
+        );
+        const stall = root.querySelector<HTMLElement>('.stall')!;
+        expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(18, 21, 26)');
+        // A mood paints no node and carries no class.
+        expect(stall.className).toBe('stall');
     });
 });
 

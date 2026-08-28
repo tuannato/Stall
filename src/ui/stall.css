@@ -68,6 +68,14 @@ body {
  * near the price.
  */
 .orn {
+    /*
+     * Containment, made real rather than assumed: the `fringe` slot puts a
+     * decoration inside this strip, and a sprite inside a box with no
+     * `overflow` escapes to `.frame` — the only positioned ancestor in this
+     * sheet — where it can land anywhere on the page.
+     */
+    position: relative;
+    overflow: hidden;
     display: grid;
     place-items: center;
     min-height: 28px;
@@ -112,6 +120,142 @@ body {
     .orn-ticker {
         animation: none;
     }
+}
+
+/*
+ * Attachments. A seller wears these by holding the token and saying so in their
+ * own settings record; the chain names a row and never a colour, a font or a
+ * template, so nothing here is ever chain-supplied.
+ *
+ * Two shapes only, and the table says which each row is. A `root` row is a
+ * class on `.stall` whose paint cannot leave the element it sits on — a rule,
+ * a glow on the sign's own text. A `node` row is an element the layout guard
+ * can measure, which is what anything that moves has to be. Every one of them
+ * is `pointer-events: none`: a decoration that answers a tap is a control, and
+ * controls here are named for what they do.
+ */
+
+/* Modern · fringe · Pinstripe. In flow at the top edge; in-flow cannot cover. */
+.stall.att-pinstripe {
+    border-top: 3px solid var(--s-accent);
+}
+
+/*
+ * Neo city · crest · The sign hums. Paint on the seller's own name and nothing
+ * else. A shadow has no box and no hit region, so the guard cannot see it —
+ * which is exactly why it is confined to text on one element and given a blur
+ * small enough that it cannot reach the address below it.
+ */
+.stall.att-hum .stall-name {
+    color: var(--s-accent);
+    text-shadow:
+        0 0 6px color-mix(in srgb, var(--s-accent) 70%, transparent),
+        0 0 14px color-mix(in srgb, var(--s-accent) 35%, transparent);
+}
+
+/*
+ * Neo city · fringe · Neon rain. Its box is the ticker strip's box exactly, so
+ * it can only ever overlap what the strip already overlaps — nothing. The
+ * streaks are a moving background inside that box, not elements that travel.
+ */
+.att-rain {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        108deg,
+        color-mix(in srgb, var(--s-accent) 55%, transparent) 0 1px,
+        transparent 1px 9px
+    );
+    background-size: 100% 22px;
+    opacity: 0.55;
+    animation: att-rain-fall 900ms linear infinite;
+}
+
+@keyframes att-rain-fall {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 0 22px;
+    }
+}
+
+/*
+ * Rural · yard · Yard beetle. The strip is a reserved in-flow row of its own,
+ * so the sprite has somewhere to be that is not on top of anything: the
+ * specimen pinned it 96px off the bottom, which in production is wherever the
+ * share code happens to sit. The bug travels by `left` within this box rather
+ * than by a percentage transform, so its own box can never leave the strip.
+ */
+.att-beetle {
+    position: relative;
+    overflow: hidden;
+    height: 22px;
+    flex: none;
+    pointer-events: none;
+}
+
+.att-beetle-bug {
+    position: absolute;
+    bottom: 5px;
+    left: 0;
+    width: 13px;
+    height: 9px;
+    pointer-events: none;
+    border-radius: 46% 46% 42% 42%;
+    background: var(--s-muted);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-bg) 45%, transparent);
+    animation: att-beetle-crawl 15s linear infinite;
+}
+
+@keyframes att-beetle-crawl {
+    0% {
+        left: 0;
+        transform: scaleX(1);
+    }
+    46% {
+        left: calc(100% - 13px);
+        transform: scaleX(1);
+    }
+    /* The turn is a mirror, never a rotation: the specimen's `rotate(180deg)`
+       walks it home belly-up. */
+    50% {
+        left: calc(100% - 13px);
+        transform: scaleX(-1);
+    }
+    96% {
+        left: 0;
+        transform: scaleX(-1);
+    }
+    100% {
+        left: 0;
+        transform: scaleX(1);
+    }
+}
+
+/*
+ * Reduced motion: things stand still and events disappear. A beetle that has
+ * stopped is a beetle; rain that has stopped is a smear of lines nobody asked
+ * for, so it goes.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .att-beetle-bug {
+        animation: none;
+    }
+
+    .att-rain {
+        display: none;
+    }
+}
+
+/* The decoration block in the settings sheet: a picker, a note, a way out. */
+.decor {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 25%, transparent);
 }
 
 /* The shop's sign: the mark, the name, and the address it is reachable at. */

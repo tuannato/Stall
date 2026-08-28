@@ -1,3 +1,4 @@
+import type { ShippedAttachment } from './attachments';
 import type { DecodedTheme } from './theme';
 
 /** Three-layer stall state. Mixing layers is how empty and unreachable collapse. */
@@ -121,6 +122,20 @@ export type StallView = {
     address?: string;
     tokens: SessionTokenCache;
     theme?: DecodedTheme;
+    /**
+     * The decorations this stall is actually wearing: resolved from the
+     * manifest's flags against what the address holds, so the view never has to
+     * re-derive an entitlement. Empty is the ordinary case.
+     */
+    worn?: readonly ShippedAttachment[];
+    /** The flags this stall's own record set, so the picker opens on them. */
+    attachmentFlags?: number;
+    /**
+     * Token ids the stall address holds, when a holdings read answered. Absent
+     * means "not read", which is not the same as "holds nothing" — the picker
+     * says the weaker thing rather than telling a seller they own nothing.
+     */
+    heldTokens?: ReadonlySet<string>;
     /** The settings walk hit its cap, so this look may not be the current one. */
     settingsTruncated?: boolean;
     /** The seller published settings this page could not read. */

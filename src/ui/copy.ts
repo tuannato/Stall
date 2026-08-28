@@ -57,6 +57,30 @@ export const PUBLISH_THEME_LABEL = 'Look';
  */
 export const PUBLISH_OPEN_CASHTAB = 'Sign with Cashtab';
 export const PUBLISH_OPEN_PAY = 'Sign with another wallet';
+/**
+ * Decoration, in the sheet the seller already publishes from. The copy has to
+ * carry three states without four controls: a row nobody can buy yet, a row on
+ * sale that this stall does not hold, and a row it does. Silence about the
+ * middle one is how a seller sets a flag, sees nothing, and is told nothing.
+ */
+export const DECOR_LABEL = 'Decoration';
+export const DECOR_NONE = 'None';
+export const DECOR_LEDE =
+    'Decorations are tokens. Your stall wears one when it holds the token and your settings say so — so this is two things, and both are yours.';
+export const DECOR_PREVIEW_ONLY =
+    'You are looking at it, not wearing it. Publishing this changes nothing until the stall holds the token.';
+export const DECOR_NOT_MINTED =
+    'This one is not on sale yet. You can look at it; nothing can hold it until it exists.';
+export const DECOR_HELD = 'This stall holds the token, so publishing will paint it.';
+export const DECOR_SHOP = 'See the decorations';
+/**
+ * Where that link goes. **Undefined until the shop exists**: a control that
+ * cannot be aimed is not painted, for the same reason the buy link is never
+ * `action=BUY` — a button that does not do what it says is worse than no
+ * button. Set this to the fittings stall's address and the link appears.
+ */
+export const FITTINGS_STALL: string | undefined = undefined;
+
 export const PUBLISH_CLOSE = 'Close';
 
 /**
