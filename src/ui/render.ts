@@ -7,9 +7,10 @@ import {
     publishBip21,
 } from '../domain/cashtab';
 import { iconUrl } from '../domain/icons';
-import { qrMatrix } from '../domain/qr';
+import { fitsQr, qrMatrix } from '../domain/qr';
 import { encodeManifestHex } from '../domain/manifest';
 import {
+    compareOffers,
     formatAtoms,
     formatTokenRate,
     formatXec,
@@ -121,7 +122,7 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
 
 function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
     stall.append(header(copy.HOME_TITLE, copy.HOME_LEDE));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
     body.append(pasteForm(handlers));
     body.append(el('p', 'fine', copy.HOME_SELLER));
@@ -144,7 +145,7 @@ function demoSoon(): HTMLElement {
 
 function paintInvalid(stall: HTMLElement, raw: string, handlers: StallHandlers): void {
     stall.append(header(copy.LINK_UNREADABLE_TITLE));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(el('p', 'mid-p', raw));
     stall.append(body);
     stall.append(footer(undefined, { goHome: handlers.onGoHome }));
@@ -157,7 +158,7 @@ function paintUnresolvable(
 ): void {
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
     stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB, address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     // A waiting state, not a shop. The seller pasted the address they sell from
     // before listing, which is the order the apex invites, so this is the first
     // screen a new seller sees — not a rare case. Give them the way forward: a
@@ -260,7 +261,7 @@ function paintStoppedLooking(
     handlers: StallHandlers,
 ): void {
     stall.append(header(identityOf(view), copy.UNRESOLVED_SUB, view.address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(
         mid(copy.UNRESOLVED_TITLE, [copy.UNRESOLVED_BODY, copy.UNRESOLVED_HINT]),
     );
@@ -302,7 +303,7 @@ function paintOpening(
     handlers: StallHandlers,
 ): void {
     stall.append(header(displayName(view), copy.OPENING_SUB, view.address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(mid('', [copy.OPENING_BODY]));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -329,7 +330,7 @@ function paintEmpty(
     handlers: StallHandlers,
 ): void {
     stall.append(header(displayName(view), copy.EMPTY_SUB, view.address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     if (view.overlay.kind === 'publish') {
         stall.append(publishOverlay(view, handlers));
@@ -354,7 +355,7 @@ function paintUnreadable(
     handlers: StallHandlers,
 ): void {
     stall.append(header(displayName(view), copy.UNREADABLE_SUB, view.address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
     body.append(retryControl(handlers));
     stall.append(body);
@@ -375,7 +376,7 @@ function paintUnreachable(
         stall.append(header(identity));
     }
 
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     if (cached) {
         if (view.tokens.size > 0) {
             for (const meta of view.tokens.values()) {
@@ -403,9 +404,12 @@ function paintOffers(
     handlers: StallHandlers,
 ): void {
     stall.append(header(displayName(view), copy.itemsForSale(offers.length), view.address));
-    const body = el('div', 'stall-body');
+    const body = el('main', 'stall-body');
     const items = el('div', 'items');
-    for (const offer of offers) {
+    // Ordered, not grouped. Nothing sorted before this, so two offers of the
+    // same token could sit either side of a third token's row — the shop read
+    // as noise. Copied first: the array belongs to the caller's view.
+    for (const offer of [...offers].sort(compareOffers)) {
         items.append(offerRow(offer, view, handlers));
     }
     body.append(items);
@@ -621,6 +625,12 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     input.name = 'stall-name';
     input.autocomplete = 'off';
     input.spellcheck = false;
+    // A phone keyboard capitalises the first character, and cashaddr is
+    // case-strict: `Ecash:qq…` fails validation for an address that is correct.
+    // Not fixed by lowercasing in the parser — mixed case is a real cashaddr
+    // signal, and swallowing it is the leniency AGENTS.md §5 warns about.
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('autocorrect', 'off');
     input.value = view.stallName ?? '';
     input.setAttribute('aria-label', copy.PUBLISH_NAME_LABEL);
     label.append(input);
@@ -683,7 +693,11 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // rather than a desktop link to follow. Rebuilt because its content is
         // the record, which changes with the name and the look.
         const bip21 = hex === undefined ? undefined : publishBip21(address, hex);
-        if (ready && bip21 !== undefined) {
+        // Bounded by the manifest grammar — a 32-byte name and a one-byte id —
+        // so this never reaches the cap today. Asked anyway: the share QR was
+        // also "obviously short enough" until a forwarded query string proved
+        // otherwise, and a throw here lands inside a live rebuild.
+        if (ready && bip21 !== undefined && fitsQr(bip21)) {
             qrBox.replaceChildren(
                 qrSvg(bip21, copy.PUBLISH_QR_ALT),
                 el('p', 'fine', copy.PUBLISH_QR_LEDE),
@@ -933,7 +947,10 @@ function header(name?: string, sub?: string, address?: string): HTMLElement {
     sign.append(stallMark());
     const headings = el('div', 'stall-headings');
     if (name !== undefined && name !== '') {
-        headings.append(el('div', 'stall-name', name));
+        // The one <h1> on every screen. A screen reader needs an outline to
+        // navigate by; the whole site was <div>s. `stall.css` selects on class,
+        // so nothing restyles.
+        headings.append(el('h1', 'stall-name', name));
     }
     if (sub !== undefined && sub !== '') {
         headings.append(el('div', 'stall-sub', sub));
@@ -1054,7 +1071,11 @@ function footer(
 
 function mid(title: string, paragraphs: string[]): HTMLElement {
     const wrap = el('div', 'mid');
-    wrap.append(el('div', 'mid-t', title));
+    // An empty heading is worse than none: it lands in the outline carrying no
+    // text. The apex calls this with no title on purpose.
+    if (title !== '') {
+        wrap.append(el('h2', 'mid-t', title));
+    }
     for (const p of paragraphs) {
         wrap.append(el('p', 'mid-p', p));
     }
@@ -1176,7 +1197,9 @@ function initials(name: string): string {
     if (parts.length >= 2) {
         return (parts[0]!.slice(0, 1) + parts[1]!.slice(0, 1)).toUpperCase();
     }
-    return name.slice(0, 2).toUpperCase();
+    // Code points, not UTF-16 units: `slice` splits a surrogate pair, so an
+    // emoji or astral-plane token name put a lone surrogate in the tile.
+    return [...name].slice(0, 2).join('').toUpperCase();
 }
 
 function formatTriedAt(ms: number): string {
@@ -1218,6 +1241,12 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     input.name = 'seller';
     input.autocomplete = 'off';
     input.spellcheck = false;
+    // A phone keyboard capitalises the first character, and cashaddr is
+    // case-strict: `Ecash:qq…` fails validation for an address that is correct.
+    // Not fixed by lowercasing in the parser — mixed case is a real cashaddr
+    // signal, and swallowing it is the leniency AGENTS.md §5 warns about.
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('autocorrect', 'off');
     input.setAttribute('aria-label', copy.HOME_PASTE_LABEL);
     const hint = el('p', 'fine', copy.HOME_PASTE_HINT);
     const err = el('p', 'ctx', '');
@@ -1252,9 +1281,19 @@ function shareControl(): HTMLElement {
     // rather than sitting unlabelled at the foot.
     wrap.append(el('p', 'fine', copy.SHARE_LEDE));
     const url = shareUrl();
-    const qr = qrSvg(url, copy.SHARE_QR_ALT);
-    qr.classList.add('share-qr');
-    wrap.append(qr);
+    // A link too long to scan gets the copy field and a line saying why. Never
+    // a code: past ~2,300 characters the library throws, and this runs inside
+    // the footer of a tree `renderStall` has already emptied — so the throw
+    // took the whole page down and every repaint took it down again.
+    if (fitsQr(url)) {
+        const qr = qrSvg(url, copy.SHARE_QR_ALT);
+        qr.classList.add('share-qr');
+        wrap.append(qr);
+    } else {
+        const note = el('p', 'fine', copy.SHARE_QR_TOO_LONG);
+        note.setAttribute('data-role', 'qr-too-long');
+        wrap.append(note);
+    }
     const field = el('input', 'share-url');
     field.type = 'text';
     field.readOnly = true;

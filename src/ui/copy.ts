@@ -258,10 +258,25 @@ export const LIST_IN_CASHTAB =
 export const LIST_IN_CASHTAB_LINK = 'List a token in Cashtab';
 
 /** Says what the link is for, so a resolved stall reads as the thing to send. */
+/**
+ * Said to whoever is looking, and Stall cannot know who that is: it holds no
+ * key. The old wording ("This link is your shop") told every visitor they owned
+ * the stall they had just been sent. This is true for the seller and the buyer
+ * both.
+ */
 export const SHARE_LEDE =
-    'This link is your shop. Send it to anyone — they open it in a browser, and buying happens in their own Cashtab.';
+    'This stall’s link. Send it to anyone — they open it in a browser, and buying happens in their own Cashtab.';
 
 export const SHARE_QR_ALT = 'QR code for this stall’s link';
+
+/**
+ * A link long enough to be unscannable is still a link: the copy field stays,
+ * and the code goes. Said out loud, because a QR that silently vanishes reads
+ * as a broken page — and the alternative shipped for a while was worse, a throw
+ * mid-paint that emptied the whole screen.
+ */
+export const SHARE_QR_TOO_LONG =
+    'This link is too long for a scannable code. Copy it instead.';
 
 /** The settings BIP21 as a QR, for signing from a phone wallet. */
 export const PUBLISH_QR_ALT = 'QR code for the settings transaction';

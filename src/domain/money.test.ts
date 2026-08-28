@@ -1,3 +1,4 @@
+import type { StallOffer } from './state';
 import { describe, expect, it } from 'vitest';
 import {
     cheaperOfferCount,
@@ -7,6 +8,7 @@ import {
     formatXecFromNanoSats,
     NANOSATS_PER_SAT,
     nanoSatsPerAtom,
+    compareOffers,
 } from './money';
 
 describe('formatXec', () => {
@@ -118,5 +120,49 @@ describe('tiny-rate-is-not-free', () => {
         expect(formatTokenRate(0n, 0)).toBeUndefined();
         expect(formatTokenRate(0n, 0)).not.toBe('0');
         expect(formatTokenRate(0n, 0)).not.toBe('< 0.0001');
+    });
+});
+
+describe('same-token-offers-are-adjacent', () => {
+    /**
+     * Nothing sorted before this: `loadOffers` returns the plugin's order and
+     * `paintOffers` printed it as-is, so two offers of one token could sit
+     * either side of a third token's row.
+     *
+     * Ordering, never grouping. Each row stays its own covenant with its own
+     * asked amount — a heading priced at the cheapest member would be a number
+     * no covenant encodes.
+     */
+    const at = (tokenId: string, rate: bigint | undefined): StallOffer =>
+        ({
+            outpoint: { txid: 'ab'.repeat(32), outIdx: 0 },
+            tokenId,
+            atoms: 10n,
+            variant: 'PARTIAL',
+            askedSats: 100n,
+            askedAtoms: 1n,
+            priceNanoSatsPerAtom: rate,
+        }) as StallOffer;
+
+    it('groups by token id and puts the cheaper rate first', () => {
+        const a1 = at('aa', 500n);
+        const b = at('bb', 1n);
+        const a2 = at('aa', 100n);
+        const order = [a1, b, a2].sort(compareOffers);
+        expect(order.map((o) => o.tokenId)).toEqual(['aa', 'aa', 'bb']);
+        expect(order[0]!.priceNanoSatsPerAtom).toBe(100n);
+        expect(order[1]!.priceNanoSatsPerAtom).toBe(500n);
+    });
+
+    it('keeps a rateless offer with its own token rather than dropping it', () => {
+        const known = at('aa', 100n);
+        const unknown = at('aa', undefined);
+        const other = at('bb', 1n);
+        const order = [unknown, other, known].sort(compareOffers);
+        expect(order).toHaveLength(3);
+        expect(order.map((o) => o.tokenId)).toEqual(['aa', 'aa', 'bb']);
+        // Priced first, unpriced last within the token, never floated to the top.
+        expect(order[0]!.priceNanoSatsPerAtom).toBe(100n);
+        expect(order[1]!.priceNanoSatsPerAtom).toBeUndefined();
     });
 });

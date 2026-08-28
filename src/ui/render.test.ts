@@ -65,6 +65,7 @@ import {
     tokenRate,
     tokenRateBound,
 } from './copy';
+import { SHARE_QR_TOO_LONG } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -1365,15 +1366,21 @@ describe('token icon', () => {
             const { root } = paint(view);
             const cells = [...root.querySelectorAll('.item-ic')];
             expect(cells).toHaveLength(2);
-            expect(cells[0]!.querySelector('img')?.getAttribute('data-token-id')).toBe(
+            // Found by token, not by position: rows are ordered by token id
+            // now, and this test is about which cell the image belongs to.
+            const withImg = cells.filter((c) => c.querySelector('img') !== null);
+            expect(withImg, 'exactly one token loaded').toHaveLength(1);
+            const loaded = withImg[0]!;
+            expect(loaded.querySelector('img')?.getAttribute('data-token-id')).toBe(
                 TOKEN_ID,
             );
-            expect(cells[0]!.querySelector('img')?.getAttribute('src')).toBe(
+            expect(loaded.querySelector('img')?.getAttribute('src')).toBe(
                 iconUrl(TOKEN_ID),
             );
-            expect(cells[0]!.textContent).toBe('');
-            expect(cells[1]!.querySelector('img')).toBeNull();
-            expect(cells[1]!.textContent).toBe('GT');
+            expect(loaded.textContent).toBe('');
+            const lettered = cells.find((c) => c !== loaded)!;
+            expect(lettered.querySelector('img')).toBeNull();
+            expect(lettered.textContent).toBe('GT');
         } finally {
             restore();
         }
@@ -1925,5 +1932,188 @@ describe('publish sheet is a sheet, not a row in the shop', () => {
         expect(h.onClosePublish, 'a click inside the sheet keeps it open').not.toHaveBeenCalled();
         scrim!.dispatchEvent(new Event('click', { bubbles: true }));
         expect(h.onClosePublish).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('unscannable-link-drops-the-qr-not-the-page', () => {
+    /**
+     * `qrMatrix` threw above ~2,300 characters, and `renderStall` empties the
+     * root before it paints — so a forwarded link with a long query string blew
+     * up mid-paint and left a permanently white page. Every repaint threw
+     * again, so the retry control could not rescue it. Reproduced: a 2,603
+     * character search string, `root.childElementCount === 0`.
+     *
+     * The cap is scannability, not the library's ceiling: at 2,272 characters
+     * the matrix is 177 modules inside a 168px box, unreadable long before it
+     * overflows. So the rule is that a link too long to scan keeps its copy
+     * field and loses its code, and says so.
+     */
+    const longSearch = `?m=${'a'.repeat(2600)}`;
+
+    function paintWithSearch(search: string) {
+        const before = window.location.href;
+        window.history.replaceState({}, '', `/s/x${search}`);
+        try {
+            return paint(idlePubkey({ fetch: { kind: 'empty' } }));
+        } finally {
+            window.history.replaceState({}, '', before);
+        }
+    }
+
+    it('still paints the stall, and swaps the code for a reason', () => {
+        const { root } = paintWithSearch(longSearch);
+        expect(root.childElementCount, 'the page is not blank').toBeGreaterThan(0);
+        expect(root.querySelector('.stall')).not.toBeNull();
+        const share = root.querySelector('[data-role="copy-link"]');
+        expect(share, 'the copy control survives').not.toBeNull();
+        expect(share!.querySelector('svg.qr'), 'no unscannable code').toBeNull();
+        const why = root.querySelector('[data-role="qr-too-long"]');
+        expect(why, 'the page says why').not.toBeNull();
+        expect(why!.textContent).toBe(SHARE_QR_TOO_LONG);
+    });
+
+    it('a normal link still gets its code', () => {
+        const { root } = paintWithSearch('');
+        const share = root.querySelector('[data-role="copy-link"]');
+        expect(share!.querySelector('svg.qr')).not.toBeNull();
+        expect(root.querySelector('[data-role="qr-too-long"]')).toBeNull();
+    });
+});
+
+describe('screens have an outline and a main landmark', () => {
+    /**
+     * The whole site was `div`s: no heading anywhere, so a screen-reader user
+     * had nothing to navigate by and the page had no outline. `stall.css`
+     * selects on class, so this is purely additive.
+     */
+    it('gives each screen one h1 and one main, and never an empty heading', () => {
+        for (const view of [
+            { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() } as StallView,
+            idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]) }),
+            idlePubkey({ fetch: { kind: 'empty' } }),
+        ]) {
+            const { root } = paint(view);
+            expect(root.querySelectorAll('h1')).toHaveLength(1);
+            expect(root.querySelectorAll('main')).toHaveLength(1);
+            for (const h of root.querySelectorAll('h1, h2')) {
+                expect(h.textContent, 'a heading with no text is worse than none').not.toBe('');
+            }
+        }
+    });
+});
+
+describe('phone-keyboard-cannot-invalidate-a-pasted-address', () => {
+    /**
+     * cashaddr is case-strict: `Ecash:qq…` fails validation for an address that
+     * is correct. A phone keyboard capitalises the first character, so without
+     * this a seller typing their own address is told it is not an eCash
+     * address. Not fixed by lowercasing in the parser — mixed case is a real
+     * cashaddr signal.
+     */
+    it('turns off autocapitalize and autocorrect on the paste field', () => {
+        const { root } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        expect(input.getAttribute('autocapitalize')).toBe('none');
+        expect(input.getAttribute('autocorrect')).toBe('off');
+    });
+});
+
+describe('controls that look like buttons are not underlined', () => {
+    /**
+     * `.buy` and `.mini` are worn by both `<button>` and `<a>`. An anchor is
+     * inline by default, so `width: 100%` was ignored and the padding overflowed
+     * the line box wherever the parent was not flex — which is `listInCashtab`,
+     * on the first screen a new seller sees.
+     */
+    it('gives .buy a block box and no underline', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const buy = css.match(/\.buy\s*\{([^}]+)\}/);
+        expect(buy).not.toBeNull();
+        expect(buy![1]).toMatch(/display:\s*block/);
+        expect(buy![1]).toMatch(/text-decoration:\s*none/);
+        const mini = css.match(/\.mini\s*\{([^}]+)\}/);
+        expect(mini![1]).toMatch(/text-decoration:\s*none/);
+    });
+});
+
+describe('initials-survive-an-astral-name', () => {
+    it('does not split a surrogate pair into a lone half', () => {
+        const { root, restore } = (() => {
+            const p = probeImages();
+            const painted = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, { ...BEANS, name: '𝒮𝒽𝑜𝓅' }]]),
+                }),
+            );
+            return { root: painted.root, restore: p.restore };
+        })();
+        try {
+            const cell = root.querySelector('.item-ic') as HTMLElement;
+            const text = cell.textContent ?? '';
+            for (const unit of text) {
+                const code = unit.charCodeAt(0);
+                expect(code >= 0xd800 && code <= 0xdfff && unit.length === 1).toBe(false);
+            }
+            expect([...text]).toHaveLength(2);
+        } finally {
+            restore();
+        }
+    });
+});
+
+describe('same-token-rows-are-adjacent-on-screen', () => {
+    /**
+     * `compareOffers` has its own test, but a correct comparator nobody calls
+     * paints nothing — the shape of the `--s-accent-2` bug. This asserts the
+     * painted order, so removing the sort from `paintOffers` turns it red.
+     */
+    it('prints both offers of a token together, cheaper first', () => {
+        const dear: StallOffer = {
+            ...OFFER,
+            outpoint: { ...OUTPOINT, outIdx: 3 },
+            askedSats: 900n * 100n,
+            priceNanoSatsPerAtom: 900n * 100n * 1_000_000_000n,
+        };
+        const cheap: StallOffer = {
+            ...OFFER,
+            outpoint: { ...OUTPOINT, outIdx: 4 },
+            askedSats: 300n * 100n,
+            priceNanoSatsPerAtom: 300n * 100n * 1_000_000_000n,
+        };
+        const other: StallOffer = {
+            ...OFFER,
+            tokenId: OTHER_TOKEN,
+            outpoint: { ...OUTPOINT, outIdx: 5 },
+        };
+        // Interleaved on the way in, exactly as an unsorted index answers.
+        const { root } = paint(
+            offersView(
+                [dear, other, cheap],
+                new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER_TOKEN, TEA],
+                ]),
+            ),
+        );
+        const names = [...root.querySelectorAll('.item-n')].map((n) => n.textContent);
+        expect(names, 'the two Beans rows are not split by Tea').toEqual([
+            'Green Tea',
+            'Roasted Beans',
+            'Roasted Beans',
+        ]);
+        const prices = [...root.querySelectorAll('[data-role="price"]')].map(
+            (p) => p.textContent,
+        );
+        // Within the token, the cheaper rate is printed first.
+        expect(prices[1]).toBe('300');
+        expect(prices[2]).toBe('900');
     });
 });

@@ -364,7 +364,19 @@ body {
     line-height: 1.45;
 }
 
+/*
+ * Both a <button> and an <a> wear this. An anchor is inline by default, so
+ * `width: 100%` was ignored and 13px of padding overflowed the line box
+ * wherever the parent was not a flex container — which is `listInCashtab`, on
+ * the first screen a new seller sees. `display: block` fixes it everywhere and
+ * changes nothing for the flex children. The underline goes for the same
+ * reason: these read as buttons, and the <button> siblings beside them are not
+ * underlined.
+ */
 .buy {
+    display: block;
+    text-align: center;
+    text-decoration: none;
     font: inherit;
     font-family: var(--s-font);
     font-size: 14.5px;
@@ -424,6 +436,9 @@ body {
 }
 
 .mini {
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
     font: inherit;
     font-size: 12.5px;
     font-weight: 620;

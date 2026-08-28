@@ -1,5 +1,7 @@
 /** Display maths. Never Number() on satoshis or atoms. */
 
+import type { StallOffer } from './state';
+
 const SATS_PER_XEC = 100n;
 /** 1 sat = 1e9 nanosats. AgoraPartial.priceNanoSatsPerAtom uses this scale. */
 export const NANOSATS_PER_SAT = 1_000_000_000n;
@@ -165,4 +167,37 @@ export function isUnbuyable(offer: {
     atoms: bigint;
 }): boolean {
     return offer.minAcceptedAtoms !== undefined && offer.minAcceptedAtoms > offer.atoms;
+}
+
+/**
+ * Reading order for a stall's rows. Offers of the same token sit together, and
+ * within a token the cheaper rate comes first.
+ *
+ * This is ordering, not grouping. Every row stays its own covenant with its own
+ * asked amount: a group header priced at its cheapest member would be a number
+ * no covenant encodes, which is exactly what §8 forbids. Nothing here computes
+ * a price — it only decides which row is printed next.
+ *
+ * Offers with no comparable rate keep their relative order at the end of their
+ * token's run rather than being dropped or floated to the top.
+ */
+export function compareOffers(a: StallOffer, b: StallOffer): number {
+    if (a.tokenId !== b.tokenId) {
+        return a.tokenId < b.tokenId ? -1 : 1;
+    }
+    const ra = a.priceNanoSatsPerAtom;
+    const rb = b.priceNanoSatsPerAtom;
+    if (ra === undefined && rb === undefined) {
+        return 0;
+    }
+    if (ra === undefined) {
+        return 1;
+    }
+    if (rb === undefined) {
+        return -1;
+    }
+    if (ra === rb) {
+        return 0;
+    }
+    return ra < rb ? -1 : 1;
 }
