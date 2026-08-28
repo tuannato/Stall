@@ -162,7 +162,7 @@ function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
     body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
     body.append(pasteForm(handlers));
     body.append(el('p', 'fine', copy.HOME_SELLER));
-    body.append(demoSoon());
+    body.append(demoSoon(handlers));
     stall.append(body);
 }
 
@@ -171,11 +171,23 @@ function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
  * fetches. It waits on the owner listing from a real maker; until then this is
  * copy, never an empty shop dressed as a demo.
  */
-function demoSoon(): HTMLElement {
+function demoSoon(handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'demo-soon');
     wrap.setAttribute('data-role', 'demo-soon');
     wrap.append(el('div', 'mid-t', copy.HOME_DEMO_TITLE));
     wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
+    // A real route into a real stall. Still no fetch here: the apex never reads
+    // the chain, so this is a link, not a preview — the door cannot promise
+    // what that shop has in it, only that it is one.
+    const open = el('button', 'mini', copy.HOME_DEMO_OPEN);
+    open.type = 'button';
+    open.setAttribute('data-role', 'open-demo');
+    open.setAttribute('data-focus-key', 'open-demo');
+    if (handlers.onOpenStall !== undefined) {
+        const go = handlers.onOpenStall;
+        open.addEventListener('click', () => go(copy.DEMO_STALL_ADDRESS));
+    }
+    wrap.append(open);
     return wrap;
 }
 

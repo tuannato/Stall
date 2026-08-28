@@ -321,7 +321,7 @@ body {
 }
 
 .item-from {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--s-muted);
     font-family: var(--s-font);
 }
@@ -348,7 +348,7 @@ body {
 .item-rate {
     display: block;
     margin-top: 4px;
-    font-size: 10.5px;
+    font-size: 11.5px;
     color: var(--s-muted);
     font-variant-numeric: tabular-nums;
     font-family: var(--s-font);
@@ -398,7 +398,7 @@ body {
 
 .addr {
     font-family: var(--s-font);
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--s-muted);
     word-break: break-all;
     line-height: 1.45;
@@ -459,9 +459,14 @@ body {
     margin: 0;
 }
 
+/*
+ * The box that names what we tried and why we failed. It was the smallest type
+ * on the site in the lowest-contrast role — a rule about being honest about our
+ * own failures, rendered as the least readable element we ship.
+ */
 .hosts {
     font-family: var(--s-font);
-    font-size: 9.5px;
+    font-size: 11px;
     color: var(--s-muted);
     line-height: 1.7;
     text-align: left;
@@ -588,7 +593,7 @@ body {
 }
 
 .fine {
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--s-muted);
     line-height: 1.5;
     margin: 0;
@@ -609,11 +614,18 @@ body {
     font-weight: 620;
 }
 
+/*
+ * 16px is a floor, not a taste. iOS Safari zooms the whole page when a field
+ * with type below 16px takes focus, and it does not zoom back out — a seller
+ * pasting an address ends up on a page they have to pinch their way out of, on
+ * the one screen the apex exists to serve. It applies to the theme `<select>`
+ * for the same reason.
+ */
 .paste-in,
 .share-url {
     font: inherit;
     font-family: var(--s-font);
-    font-size: 13px;
+    font-size: 16px;
     padding: 10px;
     border: 1px solid var(--s-muted);
     border-radius: var(--s-radius);
@@ -623,7 +635,7 @@ body {
 }
 
 .share-url {
-    font-size: 11px;
+    /* Also a field, so also 16px: it is focusable and iOS zooms on focus. */
     word-break: break-all;
 }
 

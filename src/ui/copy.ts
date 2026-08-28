@@ -248,8 +248,20 @@ export const HOME_SELLER =
  * A placeholder for the live demo stall, which needs the owner to list from a
  * real maker first. Copy only — no fetch, no fake shop. The apex stays a door.
  */
-export const HOME_DEMO_TITLE = 'See one in action';
-export const HOME_DEMO_SOON = 'A live demo stall is coming soon.';
+export const HOME_DEMO_TITLE = 'See a real stall';
+/**
+ * The promise is the page, not the inventory. Stall cannot watch this stall any
+ * more than it can watch a purchase (§2), so if its last offer sells the link
+ * opens an empty shop — and copy that promised "one in action" would have been
+ * lying by then, silently. "Not a demo" is the honest part: it is a real seller
+ * with real listings, and the buy control there hands to Cashtab like any other.
+ */
+export const HOME_DEMO_SOON =
+    'A real seller’s shop, listed on Agora — not a demo. Open it to see what a stall looks like.';
+
+/** Where "See a real stall" goes. The owner's own stall, decided by the owner. */
+export const DEMO_STALL_ADDRESS = 'ecash:qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r';
+export const HOME_DEMO_OPEN = 'Open this stall';
 
 export const LIST_IN_CASHTAB =
     'List the token in Cashtab. Once it is on Agora it will show up here on its own.';

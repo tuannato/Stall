@@ -24,6 +24,7 @@ import {
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     HOME_LEDE,
     HOME_SELLER,
+    DEMO_STALL_ADDRESS,
     HOME_DEMO_SOON,
     UNRESOLVABLE_NEXT,
     SHARE_LEDE,
@@ -1808,6 +1809,16 @@ describe('apex signposts a demo without becoming a shop', () => {
         const demo = root.querySelector('[data-role="demo-soon"]');
         expect(demo).not.toBeNull();
         expect(demo!.textContent).toContain(HOME_DEMO_SOON);
+        // A real route now, not a "coming soon". Still a link: the apex never
+        // fetches, so it cannot promise what that shop has in it.
+        const open = demo!.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
+        expect(open).not.toBeNull();
+        open.click();
+        expect(h.onOpenStall).toHaveBeenCalledWith(DEMO_STALL_ADDRESS);
+        // The copy promises the page, never the inventory: this stall's last
+        // offer can sell, and Stall cannot tell that it did.
+        expect(demo!.textContent).not.toMatch(/coming soon/i);
+        expect(demo!.textContent).not.toMatch(/\bdemo\b(?!\.)/i);
         // The door never paints a shop: no offer rows, no copy-link, no price.
         expect(root.querySelector('[data-role="price"]')).toBeNull();
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -2225,5 +2236,86 @@ describe('danger-is-reserved-for-what-is-wrong', () => {
         expect(notes).toContain(HANDOFF_PRICE_IS_NOT_THE_ROW);
         // The buyable card has nothing wrong with it, so nothing is red.
         expect(panel.querySelector('.ctx')).toBeNull();
+    });
+});
+
+describe('muted-text-is-not-microscopic', () => {
+    /**
+     * `--s-muted` carries real content, not decoration: the rate, the stock,
+     * the address, and the hosts box that says what we tried and why we failed.
+     * Its floor is `MIN_CONTRAST` (3), which is the WCAG threshold for
+     * interface components rather than for body text — correct for
+     * `--s-accent`, which is a button background, and thin for a sentence.
+     *
+     * This does not make the palette compliant; 4.5:1 is the AA floor for text
+     * at any size below 24px, and the shipped `muted` values sit at 4.33
+     * (Modern) and 3.63 (Rural). What it does is stop the weakest colour on the
+     * page from also being the smallest type. Raising the floor itself would
+     * replace two shipped palettes with ink — see `legibleOn`, which swaps
+     * rather than darkens — and that is a look change, not a fix.
+     */
+    it('sets no muted role below 11px', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const offenders: string[] = [];
+        for (const block of css.split('}')) {
+            if (!block.includes('color: var(--s-muted)')) {
+                continue;
+            }
+            const size = block.match(/font-size:\s*([\d.]+)px/);
+            if (size === null) {
+                continue;
+            }
+            const px = Number(size[1]);
+            if (px < 11) {
+                const selector = block.split('{')[0]!.trim().replace(/\s+/g, ' ');
+                offenders.push(`${selector} at ${px}px`);
+            }
+        }
+        expect(offenders, 'muted is the weakest colour; it may not also be the smallest type').toEqual([]);
+    });
+});
+
+describe('ios-does-not-zoom-a-focused-field', () => {
+    /**
+     * iOS Safari zooms the page when a field with type below 16px takes focus,
+     * and does not zoom back out. On the apex that lands a seller inside a
+     * pinched page on the one screen the door exists to serve. The `<select>`
+     * for the look counts: it wears `.paste-in` too.
+     */
+    it('gives every field at least 16px', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const { root } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const fields = [...root.querySelectorAll('input, select, textarea')];
+        expect(fields.length, 'the door has a field to check').toBeGreaterThan(0);
+
+        const tooSmall: string[] = [];
+        for (const block of css.split('}')) {
+            const selector = block.split('{')[0]!.trim().replace(/\s+/g, ' ');
+            if (!/\.paste-in|\.share-url/.test(selector)) {
+                continue;
+            }
+            const size = block.match(/font-size:\s*([\d.]+)px/);
+            if (size !== null && Number(size[1]) < 16) {
+                tooSmall.push(`${selector} at ${size[1]}px`);
+            }
+        }
+        expect(tooSmall, 'a field below 16px makes iOS zoom and stay zoomed').toEqual([]);
+        // The classes the rule is written against are the ones actually worn.
+        for (const f of fields) {
+            expect(
+                f.classList.contains('paste-in') || f.classList.contains('share-url'),
+                `${f.tagName} wears no sized field class`,
+            ).toBe(true);
+        }
     });
 });
