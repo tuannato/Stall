@@ -238,9 +238,47 @@ body {
     display: block;
 }
 
+/*
+ * The name column. Its children are spans (a `<button>` takes phrasing
+ * content), so each one is told to be a block: as `div`s they stacked for free.
+ */
 .item-b {
     grid-area: name;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.item-n,
+.item-q {
+    display: block;
+    max-width: 100%;
+}
+
+/*
+ * The only affordance a thumb gets. Rotates a quarter turn when the row is
+ * open, and holds still for a reader who asked for no motion.
+ */
+.item-caret {
+    display: block;
+    margin-top: 3px;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--s-muted);
+    border-bottom: 1.5px solid var(--s-muted);
+    rotate: 45deg;
+    transition: rotate 120ms ease;
+}
+
+.item.open .item-caret {
+    rotate: -135deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .item-caret {
+        transition: none;
+    }
 }
 
 .item-n {
@@ -299,6 +337,7 @@ body {
 }
 
 .item-u {
+    display: block;
     font-size: var(--s-unit-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
@@ -307,6 +346,7 @@ body {
 }
 
 .item-rate {
+    display: block;
     margin-top: 4px;
     font-size: 10.5px;
     color: var(--s-muted);
@@ -484,6 +524,7 @@ body {
 }
 
 .dash {
+    display: block;
     font-family: var(--s-font);
     font-size: var(--s-price-size);
     color: var(--s-muted);
@@ -517,10 +558,30 @@ body {
     font-weight: 660;
 }
 
+/*
+ * `.ctx` is danger and means something is wrong: a field that will not
+ * validate, a stall that cannot be published, an offer whose covenant would
+ * refuse the take. `.note` below is the other job it used to do.
+ */
 .ctx {
     font-size: 12px;
     color: var(--s-danger);
     background: var(--s-surface);
+    border-radius: 7px;
+    padding: 8px 10px;
+    line-height: 1.45;
+}
+
+/*
+ * An explanation the reader must not skip, which is not the same as an error.
+ * Muted on the surface with an accent edge, so it reads as "attention" without
+ * spending the danger colour on text that is merely important.
+ */
+.note {
+    font-size: 12px;
+    color: var(--s-muted);
+    background: var(--s-surface);
+    border-left: 2px solid var(--s-accent);
     border-radius: 7px;
     padding: 8px 10px;
     line-height: 1.45;
@@ -709,6 +770,50 @@ body {
     .item-a {
         align-items: var(--s-price-cross-d);
         justify-content: var(--s-price-just-d);
+    }
+
+    /*
+     * The expanded card, two columns. It spans the whole grid, so on a wide
+     * screen it was one stacked column with a centred hero and a great deal of
+     * nothing beside it.
+     *
+     * The image column is fixed at its own size and the text column is
+     * `minmax(0, 1fr)`. Never the other way round: `YOU_PAY` is the asked
+     * amount of the disclosure, and an image column that could grow would push
+     * it out of view — CLAUDE.md §6, nothing we ship may cover the price.
+     *
+     * No new --s-* var: all three looks want the same split, and a variable
+     * that always holds one value is a value the stylesheet already knows.
+     */
+    .item-detail {
+        display: grid;
+        grid-template-columns: var(--s-hero) minmax(0, 1fr);
+        column-gap: 20px;
+        row-gap: 11px;
+        align-items: start;
+    }
+
+    /*
+     * Column tracks and an explicit row span — never a shared area name. Two
+     * items given the same `grid-area` occupy the same cell and paint on top of
+     * one another, and one of the things stacked here is the figure the buyer
+     * pays. Placing by column lets the rest auto-flow down track 2 instead.
+     */
+    .item-detail > .item-ic-lg {
+        grid-column: 1;
+        /*
+         * `1 / -1` resolves against the *explicit* grid, which has one row —
+         * so the image sat in row 1 and stretched it to its own height,
+         * opening a 130px hole between the first two facts. The rows here are
+         * implicit, so the span has to be counted, not anchored to `-1`.
+         */
+        grid-row: 1 / span 99;
+        align-self: start;
+        margin-bottom: 0;
+    }
+
+    .item-detail > *:not(.item-ic-lg) {
+        grid-column: 2;
     }
 
     .sheet-scrim {

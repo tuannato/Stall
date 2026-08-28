@@ -2117,3 +2117,113 @@ describe('same-token-rows-are-adjacent-on-screen', () => {
         expect(prices[2]).toBe('900');
     });
 });
+
+describe('repaint-keeps-the-focused-control', () => {
+    /**
+     * Every handler in `app.ts` ends in a repaint and `renderStall` replaces the
+     * whole tree, so pressing Enter on an offer put focus back on `<body>`: a
+     * keyboard user had to tab from the top of the page to reach the disclosure
+     * they had just opened, and a live agora message did the same thing
+     * mid-interaction. Focus survives by a stable key per control.
+     */
+    it('returns focus to the same offer row across a repaint', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const view = offersView([OFFER]);
+            renderStall(root, view, handlers());
+            const row = root.querySelector('button.item-head') as HTMLButtonElement;
+            row.focus();
+            expect(document.activeElement).toBe(row);
+            const key = row.getAttribute('data-focus-key');
+            expect(key).toBe(`offer:${OUTPOINT.txid}:${OUTPOINT.outIdx}`);
+
+            renderStall(root, view, handlers());
+            const after = root.querySelector('button.item-head') as HTMLButtonElement;
+            expect(after, 'a fresh element, same identity').not.toBe(row);
+            expect(document.activeElement, 'focus followed the key').toBe(after);
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('drops focus when the control it was on is gone', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(root, offersView([OFFER]), handlers());
+            (root.querySelector('button.item-head') as HTMLButtonElement).focus();
+            // The offer sold: its outpoint is spent, so the row is not "the same
+            // row that moved" and must not hand focus to whatever replaced it.
+            renderStall(root, idlePubkey({ fetch: { kind: 'empty' } }), handlers());
+            expect(root.querySelector('button.item-head')).toBeNull();
+            expect(document.activeElement).not.toBe(null);
+            expect((document.activeElement as HTMLElement).closest('.item-head')).toBeNull();
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('sheet-closes-on-escape', () => {
+    /**
+     * `aria-modal="true"` was a claim the markup did not honour: there was no
+     * way out but the scrim and the close button, and focus never entered the
+     * sheet at all.
+     */
+    it('takes focus on open and closes on Escape', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const h = handlers();
+            renderStall(
+                root,
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    overlay: { kind: 'publish' },
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="publish"]') as HTMLElement;
+            expect(sheet.tabIndex, 'focusable without joining the tab order').toBe(-1);
+            sheet.focus();
+            expect(document.activeElement).toBe(sheet);
+
+            sheet.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'a', bubbles: true }),
+            );
+            expect(h.onClosePublish, 'only Escape closes it').not.toHaveBeenCalled();
+            sheet.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+            );
+            expect(h.onClosePublish).toHaveBeenCalledTimes(1);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('danger-is-reserved-for-what-is-wrong', () => {
+    /**
+     * The two handoff sentences are the most load-bearing text on the buyer's
+     * path, and they are an explanation. Painting them in the danger colour on
+     * every expanded card spent the one colour that should mean something has
+     * gone wrong. `.ctx` keeps the validation errors and the unbuyable line.
+     */
+    it('paints the handoff lines as notes, not errors', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        const panel = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const notes = [...panel.querySelectorAll('.note')].map((n) => n.textContent);
+        expect(notes).toContain(HANDOFF_MAY_PRESELECT);
+        expect(notes).toContain(HANDOFF_PRICE_IS_NOT_THE_ROW);
+        // The buyable card has nothing wrong with it, so nothing is red.
+        expect(panel.querySelector('.ctx')).toBeNull();
+    });
+});

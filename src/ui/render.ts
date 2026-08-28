@@ -70,12 +70,47 @@ export function resetIconsForTests(): void {
     paintedIconCells.clear();
 }
 
+/**
+ * Every handler in `app.ts` ends in a repaint, and a repaint replaces the whole
+ * tree — so pressing Enter on the fifth offer put focus back on `<body>`, and a
+ * keyboard user had to tab from the top of the page to read the disclosure they
+ * had just opened. A live agora message did the same thing mid-interaction.
+ *
+ * The fix is a stable name per control that survives the rebuild. `publishSheet`
+ * already knew this for one input — it rebuilds in place rather than repainting,
+ * "a repaint would take the focus out of the field on every keystroke" — and the
+ * lesson was never generalised.
+ */
+function focusKeyOf(node: Element | null): string | null {
+    if (node === null) {
+        return null;
+    }
+    return node.getAttribute('data-focus-key');
+}
+
+/**
+ * Compared by value, never interpolated into a selector: an offer's key carries
+ * a chain-derived txid, and `querySelector` would be parsing it.
+ */
+function restoreFocus(root: HTMLElement, key: string | null): void {
+    if (key === null) {
+        return;
+    }
+    for (const node of root.querySelectorAll('[data-focus-key]')) {
+        if (node.getAttribute('data-focus-key') === key) {
+            (node as HTMLElement).focus();
+            return;
+        }
+    }
+}
+
 export function renderStall(
     root: HTMLElement,
     view: StallView,
     handlers: StallHandlers,
 ): void {
     paintedIconCells.clear();
+    const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     root.replaceChildren();
     applyTitle(view);
     const frame = el('div', 'frame');
@@ -111,6 +146,7 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
+    restoreFocus(root, keptFocus);
 }
 
 function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
@@ -224,6 +260,7 @@ function listInCashtab(): HTMLElement {
     link.rel = 'noopener noreferrer';
     link.target = '_blank';
     link.setAttribute('data-role', 'list-in-cashtab');
+    link.setAttribute('data-focus-key', 'list-in-cashtab');
     wrap.append(link);
     return wrap;
 }
@@ -318,6 +355,7 @@ function retryControl(handlers: StallHandlers): HTMLElement {
     const retry = el('button', 'mini', copy.TRY_AGAIN);
     retry.type = 'button';
     retry.setAttribute('data-role', 'retry');
+    retry.setAttribute('data-focus-key', 'retry');
     retry.addEventListener('click', () => {
         handlers.onRetry();
     });
@@ -599,7 +637,27 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
                 close();
             }
         });
+        // Escape is the other way out. Without it `aria-modal` was a claim the
+        // markup did not honour — a dialog a keyboard user could not dismiss.
+        // Bound on the sheet, which takes focus when it opens, so it hears the
+        // key without the document growing a listener that outlives the paint.
+        scrim.addEventListener('keydown', (ev) => {
+            if ((ev as KeyboardEvent).key === 'Escape') {
+                ev.preventDefault();
+                close();
+            }
+        });
     }
+    // Focus enters the sheet on open, so the next Tab is inside it and Escape
+    // reaches the handler above. `tabindex="-1"` makes the panel itself a
+    // target without putting it in the tab order.
+    sheet.tabIndex = -1;
+    sheet.setAttribute('data-focus-key', 'publish-sheet');
+    queueMicrotask(() => {
+        if (sheet.isConnected) {
+            sheet.focus();
+        }
+    });
     return scrim;
 }
 
@@ -666,8 +724,10 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     qrBox.hidden = true;
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'publish-cashtab');
+    web.setAttribute('data-focus-key', 'publish-cashtab');
     const app = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
     app.setAttribute('data-role', 'publish-pay');
+    app.setAttribute('data-focus-key', 'publish-pay');
     for (const link of [web, app]) {
         link.rel = 'noopener noreferrer';
         link.target = '_blank';
@@ -740,6 +800,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
     check.type = 'button';
     check.setAttribute('data-role', 'publish-check');
+    check.setAttribute('data-focus-key', 'publish-check');
     check.addEventListener('click', () => {
         handlers.onRetry();
     });
@@ -748,6 +809,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
     close.type = 'button';
     close.setAttribute('data-role', 'publish-close');
+    close.setAttribute('data-focus-key', 'publish-close');
     if (handlers.onClosePublish !== undefined) {
         close.addEventListener('click', handlers.onClosePublish);
     }
@@ -770,30 +832,47 @@ function offerRow(
     const head = el('button', 'item-head');
     head.type = 'button';
     head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    // Keyed by the outpoint: a partial fill re-creates the remainder as a new
+    // UTXO, so a row that changed identity correctly loses focus rather than
+    // handing it to whatever took its place in the list.
+    head.setAttribute(
+        'data-focus-key',
+        `offer:${offer.outpoint.txid}:${offer.outpoint.outIdx}`,
+    );
     head.append(itemIcon(offer.tokenId, name));
-    const info = el('div', 'item-b');
-    info.append(el('div', 'item-n', name));
+    // Spans, not divs: `<button>` takes phrasing content, and these are grid
+    // items either way. The invalid markup also meant the button's accessible
+    // name was one unbroken run of name, ticker, stock, "from", figure and rate.
+    const info = el('span', 'item-b');
+    info.append(el('span', 'item-n', name));
     const left = copy.remainingAtoms(formatAtoms(offer.atoms, d));
     info.append(
-        el('div', 'item-q', ticker !== undefined ? `${ticker} · ${left}` : left),
+        el('span', 'item-q', ticker !== undefined ? `${ticker} · ${left}` : left),
     );
+    // A touch device gets no cursor and no hover, so nothing said these rows
+    // open. `aria-expanded` already told a screen reader; this tells a thumb.
+    // Inside the name column on purpose — a fourth grid child with no named
+    // area is auto-placed, and the implicit row it grows lands beside the price.
+    const caret = el('span', 'item-caret');
+    caret.setAttribute('aria-hidden', 'true');
+    info.append(caret);
     head.append(info);
-    const price = el('div', 'item-p');
+    const price = el('span', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
         // it would advertise a purchase that cannot happen.
-        price.append(el('div', 'dash', copy.DASHED_PRICE));
-        price.append(el('div', 'item-u', copy.UNBUYABLE_BADGE));
+        price.append(el('span', 'dash', copy.DASHED_PRICE));
+        price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
     } else {
-        const amount = el('div', 'item-a');
+        const amount = el('span', 'item-a');
         if (offer.askedAtoms < offer.atoms) {
             amount.append(el('span', 'item-from', copy.PRICE_FROM));
         }
-        const asked = el('div', 'item-x', formatXec(offer.askedSats));
+        const asked = el('span', 'item-x', formatXec(offer.askedSats));
         asked.setAttribute('data-role', 'price');
         amount.append(asked);
         price.append(amount);
-        price.append(el('div', 'item-u', copy.XEC));
+        price.append(el('span', 'item-u', copy.XEC));
         price.append(rateLine(offer, view));
     }
     head.append(price);
@@ -816,7 +895,7 @@ function offerRow(
  * price node: `askedSats` is what the covenant takes, and this is not it.
  */
 function rateLine(offer: StallOffer, view: StallView): HTMLElement {
-    const line = el('div', 'item-rate');
+    const line = el('span', 'item-rate');
     line.setAttribute('data-role', 'rate');
     const decimals = knownDecimals(view.tokens, offer.tokenId);
     const formatted =
@@ -888,8 +967,13 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     // The panel used to precede a signature here. It now precedes a market.
     // Cashtab's depth bars are a per-token spot (sometimes fiat), not the
     // covenant minimum on this card — so there is no hunt figure to print.
-    panel.append(el('div', 'ctx', copy.HANDOFF_MAY_PRESELECT));
-    panel.append(el('div', 'ctx', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
+    // `.note`, not `.ctx`. These are the two most load-bearing sentences on the
+    // buyer's path, and they are an explanation, not an error: painting them in
+    // the danger colour on every expanded card spent the one colour that should
+    // mean something has gone wrong. `.ctx` keeps the validation errors and the
+    // unbuyable line above, where red is the truth.
+    panel.append(el('div', 'note', copy.HANDOFF_MAY_PRESELECT));
+    panel.append(el('div', 'note', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
 
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
@@ -1043,6 +1127,7 @@ function footer(
         const btn = el('button', 'mini another', copy.SET_UP_THIS_STALL);
         btn.type = 'button';
         btn.setAttribute('data-role', 'open-publish');
+    btn.setAttribute('data-focus-key', 'open-publish');
         btn.addEventListener('click', publish);
         ft.append(btn);
     }
@@ -1052,6 +1137,7 @@ function footer(
         const btn = el('button', 'mini another', label);
         btn.type = 'button';
         btn.setAttribute('data-role', 'default-stall');
+    btn.setAttribute('data-focus-key', 'default-stall');
         btn.setAttribute('aria-pressed', pin.isDefault ? 'true' : 'false');
         btn.addEventListener('click', () => pin.onToggle(pin.raw));
         ft.append(btn);
@@ -1060,6 +1146,7 @@ function footer(
         const back = el('button', 'mini another', copy.OPEN_ANOTHER_STALL);
         back.type = 'button';
         back.setAttribute('data-role', 'open-another');
+    back.setAttribute('data-focus-key', 'open-another');
         back.addEventListener('click', extra.goHome);
         ft.append(back);
     }
