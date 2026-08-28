@@ -15,22 +15,41 @@ import {
  * what chronik reports through `onConnect` every time — including after a
  * reconnect, when it re-sends the subscriptions it remembers and plugin
  * subscriptions are not among them.
+ *
+ * **Nothing here connects itself**, because the library does not. `ws()`
+ * returns an endpoint that has dialled nothing; `waitForOpen` is what reaches
+ * `connectWs`, and only then does `onConnect` fire. A fake that opened on its
+ * own was the camouflage over a stall whose socket never connected on a fresh
+ * load — every test stayed green because each one called `openNow` by hand.
  */
 function fakeChronik() {
     const calls: Array<[string, string]> = [];
+    let waits = 0;
     let onMessage: ((m: { type: string }) => void) | undefined;
     let onConnect: (() => void) | undefined;
     let onReconnect: (() => void) | undefined;
+    const openNow = (): void => {
+        onConnect?.();
+    };
     return {
         calls,
+        /** How many times the watch asked the library to dial. */
+        waits: () => waits,
         fire: (type: string) => onMessage?.({ type }),
         /** A drop: chronik reports it, then opens a new socket. */
         reconnect: () => {
             onReconnect?.();
-            onConnect?.();
+            openNow();
         },
-        openNow: () => {
-            onConnect?.();
+        openNow,
+        /**
+         * Let a queued establish actually happen. `watchStall` starts the
+         * connection without awaiting it, so nothing has opened by the time it
+         * returns and a test that wants the subscribe has to yield first.
+         */
+        settle: async () => {
+            await Promise.resolve();
+            await Promise.resolve();
         },
         chronik: {
             ws(config: {
@@ -44,18 +63,52 @@ function fakeChronik() {
                 return {
                     subscribeToPlugin: (p: string, g: string) => calls.push([p, g]),
                     close: () => undefined,
+                    // The whole connection lives here, exactly as in the
+                    // library: `ws()` above only remembered the handlers.
+                    waitForOpen: () => {
+                        waits += 1;
+                        return Promise.resolve().then(openNow);
+                    },
                 };
             },
         },
     };
 }
 
-describe('live-group-is-the-maker-prefix', () => {
-    it('subscribes to the agora group the plugin actually indexes', () => {
+describe('a-fresh-stall-opens-its-socket-without-a-visibility-change', () => {
+    /**
+     * `chronik.ws()` constructs an endpoint and dials nothing — `connectWs`
+     * runs from `waitForOpen`, from `resume`, or from the auto-reconnect of an
+     * already-established socket. So a watch that only called `ws()` held a
+     * socket that never opened: no `onConnect`, no plugin subscription, no live
+     * message, on every first page load. The one path that worked was leaving
+     * the tab and coming back, which is what `resume` is for and is not
+     * something a visitor should have to do.
+     */
+    it('dials on its own, with no reconnect and no resume', async () => {
         const f = fakeChronik();
         const pk = '02'.repeat(33);
         watchStall(f.chronik as never, pk, () => undefined);
-        f.openNow();
+
+        // Asked synchronously, so this fails loudly rather than timing out if
+        // the call goes away again.
+        expect(f.waits(), 'the watch asks the library to connect').toBe(1);
+
+        // Nothing below simulates a drop or a return from the background: the
+        // only establish is the one the watch started itself.
+        await f.settle();
+        expect(f.calls, 'subscribed on that first establish').toEqual([
+            [AGORA_PLUGIN, `50${pk}`],
+        ]);
+    });
+});
+
+describe('live-group-is-the-maker-prefix', () => {
+    it('subscribes to the agora group the plugin actually indexes', async () => {
+        const f = fakeChronik();
+        const pk = '02'.repeat(33);
+        watchStall(f.chronik as never, pk, () => undefined);
+        await f.settle();
         // The plugin groups offers under b"P" + maker_pk; "50" is hex for "P".
         expect(stallGroup(pk)).toBe(`50${pk}`);
         expect(f.calls).toEqual([[AGORA_PLUGIN, `50${pk}`]]);
@@ -70,13 +123,13 @@ describe('plugin-sub-is-restored-on-reconnect', () => {
      * open therefore bought exactly one connection's worth of updates: after
      * a drop the socket reconnected, looked alive, and carried nothing.
      */
-    it('re-subscribes on every establish, and never twice for one', () => {
+    it('re-subscribes on every establish, and never twice for one', async () => {
         const f = fakeChronik();
         const pk = '03'.repeat(33);
         const group = `50${pk}`;
         watchStall(f.chronik as never, pk, () => undefined);
 
-        f.openNow();
+        await f.settle();
         expect(f.calls, 'first connect').toEqual([[AGORA_PLUGIN, group]]);
 
         // A phone changing network. The socket comes back; the subscription
@@ -94,10 +147,13 @@ describe('plugin-sub-is-restored-on-reconnect', () => {
         expect(f.calls, 'one send per establish').toHaveLength(3);
     });
 
-    it('says nothing once the visitor has left the stall', () => {
+    it('says nothing once the visitor has left the stall', async () => {
         const f = fakeChronik();
         const handle = watchStall(f.chronik as never, '02'.repeat(33), () => undefined);
         handle.close();
+        // The establish the watch started arrives after the visitor left, which
+        // is the ordinary case: it is queued before `close` and lands after.
+        await f.settle();
         f.openNow();
         f.reconnect();
         expect(f.calls).toEqual([]);
@@ -136,7 +192,7 @@ describe('failed-refetch-is-not-empty', () => {
         const f = fakeChronik();
         const changed = vi.fn();
         const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
-        await f.openNow();
+        await f.settle();
 
         f.fire('Tx');
         // One transaction arrives as several messages, so the read waits out
@@ -162,7 +218,7 @@ describe('failed-refetch-is-not-empty', () => {
         const f = fakeChronik();
         const changed = vi.fn();
         const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
-        await f.openNow();
+        await f.settle();
 
         // One sale, three messages: mempool, confirmed, and the same again
         // after a block is disconnected. Each used to be a full re-read behind
@@ -199,7 +255,7 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
             onReconnect?: () => void;
             onMessage: (m: { type: string }) => void;
         };
-        const calls = { subscribed: 0, paused: 0, resumed: 0 };
+        const calls = { subscribed: 0, paused: 0, resumed: 0, dialled: 0 };
         const chronik = {
             ws(config: never) {
                 handlers = config as never;
@@ -208,6 +264,14 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
                         calls.subscribed += 1;
                     },
                     close: () => {},
+                    // As in the library: `ws()` dialled nothing, and this is
+                    // the call that does. The spin below is driven by firing
+                    // `onReconnect` by hand, so the first establish only has to
+                    // be asked for, not awaited.
+                    waitForOpen: () => {
+                        calls.dialled += 1;
+                        return Promise.resolve().then(() => handlers.onConnect?.());
+                    },
                     pause: () => {
                         calls.paused += 1;
                     },

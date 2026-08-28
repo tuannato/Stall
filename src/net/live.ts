@@ -28,6 +28,12 @@ export type LiveChronik = {
 export type LiveSocket = {
     subscribeToPlugin(pluginName: string, group: string): void;
     close(): void;
+    /**
+     * Connect, and resolve once the socket is open. Required, not optional:
+     * `ws()` hands back an endpoint that has not dialled anything, so a socket
+     * without this is a socket that never opens. See `watchStall`.
+     */
+    waitForOpen(): Promise<void>;
     /** Stop reconnecting and drop the socket. The library's own idle mode. */
     pause?(): void;
     /** Reconnect and re-subscribe. Resolves once the socket is back. */
@@ -188,6 +194,26 @@ export function watchStall(
         // Re-read on reconnect, because anything missed while down is unknown —
         // but throttled, because the library reconnects without any backoff.
         onReconnect: rereadThrottled,
+    });
+
+    // `ws()` only constructs the endpoint; it dials nothing. chronik-client
+    // reaches `connectWs` from exactly three places — `waitForOpen`, `resume`,
+    // and the auto-reconnect of a socket that is already established — so
+    // without this call a freshly loaded stall holds a socket that never opens:
+    // `onConnect` never fires, the subscription above is never sent, and no
+    // message ever arrives. The one accidental way back was a visibility cycle,
+    // because `pause` no-ops on an undefined socket and `resume` connects when
+    // it finds none — live updates for a visitor who left the tab and came
+    // back, and for nobody else.
+    //
+    // Not awaited, because the stall is painted from the HTTP read and must not
+    // wait on a socket. Caught, because `connectWs` **throws** when no host
+    // answers, and that rejection is otherwise unhandled on a page that is
+    // otherwise fine. A socket that could not open on this first try stays
+    // quiet until `resume` or the retry control: nothing was established, so
+    // there is no reconnect loop to fall back into.
+    void socket.waitForOpen().catch(() => {
+        // Nothing to say here that the screen does not already say.
     });
 
     return {
