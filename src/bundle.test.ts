@@ -59,3 +59,50 @@ describe('built-bundle-has-no-key-derivation', () => {
         expect(code, 'wasm is being instantiated at runtime').not.toContain('initSync');
     }, 120_000);
 });
+
+/**
+ * A chronik request that never returns is how a stall hangs forever.
+ *
+ * `chronik-client` calls axios with no `timeout`, and axios defaults to `0` —
+ * wait indefinitely. Its own `_request` loop is written to fail over to the
+ * next host on an error carrying a `code`, but a half-open socket, which is
+ * what sleeping a laptop leaves behind, never returns *and never throws*: the
+ * loop never advances, the load never settles, and the page sits on `opening`
+ * with the browser's spinner running. `src/net/errors.ts` already sorts
+ * `ETIMEDOUT` and `ECONNABORTED` onto the unreachable screen — the machinery
+ * to report this existed and nothing ever started a clock.
+ *
+ * `chronikRequestTimeout` in `vite.config.ts` injects one at build time, the
+ * same way key derivation is stubbed out. A grep of `src/` cannot see that
+ * either, so this reads the bytes the origin actually serves.
+ */
+describe('built-bundle-times-out-a-chronik-request', () => {
+    it('gives both axios calls a timeout, beside the request they belong to', async () => {
+        const result = (await build({
+            logLevel: 'silent',
+            build: { write: false },
+        })) as unknown as BuiltOutput | readonly BuiltOutput[];
+        const outputs = Array.isArray(result) ? result : [result as BuiltOutput];
+        const code = outputs
+            .flatMap((o) => o.output)
+            .filter((part) => part.type === 'chunk')
+            .map((part) => part.code ?? '')
+            .join('\n');
+
+        expect(code.length, 'nothing was built').toBeGreaterThan(0);
+        // The proxy is in the bundle at all, so an absent match cannot read as
+        // a pass because chronik was tree-shaken away.
+        expect(code, 'the chronik request path is not in the bundle').toContain(
+            'arraybuffer',
+        );
+
+        // Minified: 5000 becomes 5e3. Both call sites — the GET the app uses
+        // and the POST beside it — must carry it, and it must sit in the same
+        // options object as the request, not merely somewhere in the bundle.
+        const paired = code.match(/timeout:\s*5e3\s*,\s*responseType:\s*["']arraybuffer["']/g);
+        expect(paired?.length, 'both chronik axios calls need the clock').toBe(2);
+
+        // And nothing in the chronik path is left waiting forever.
+        expect(code).not.toMatch(/timeout:\s*0\s*,\s*responseType:\s*["']arraybuffer["']/);
+    });
+});

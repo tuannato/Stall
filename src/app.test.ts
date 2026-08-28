@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { boot, type AppState } from './app';
@@ -255,5 +258,51 @@ describe('default-stall-does-not-trap-the-door', () => {
         window.history.replaceState({ door: true }, '', '/');
         boot(document.createElement('div'), async () => homeState());
         expect(location.pathname).toBe('/');
+    });
+});
+
+describe('decoration-does-not-queue-behind-the-price', () => {
+    /**
+     * `loadDescriptions` and `loadManifest` need only an address and a hash,
+     * both computed before the offers are asked for. They were sequential purely
+     * by the order they were written in, and it cost the visitor up to 34 round
+     * trips before a price could be painted — 22 of them decoration.
+     *
+     * This reads the source rather than timing anything, because a timing test
+     * on a stub proves whatever the stub was built to prove. What must stay
+     * true is structural: both are *started* before the offers await, and only
+     * awaited after.
+     */
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'app.ts'), 'utf8');
+    const body = (() => {
+        const from = source.indexOf('async function loadCurrent');
+        return source.slice(from, source.indexOf('\n}\n', from));
+    })();
+
+    it('starts both settings reads before it waits on the offers', () => {
+        const startDesc = body.indexOf('loadDescriptions(');
+        const startManifest = body.indexOf('loadManifest(');
+        const awaitOffers = body.indexOf('await loadOffers(');
+        expect(startDesc, 'descriptions are never read').toBeGreaterThan(-1);
+        expect(startManifest, 'settings are never read').toBeGreaterThan(-1);
+        expect(awaitOffers, 'offers are never read').toBeGreaterThan(-1);
+        expect(startDesc, 'descriptions queue behind the offers').toBeLessThan(awaitOffers);
+        expect(startManifest, 'settings queue behind the offers').toBeLessThan(awaitOffers);
+    });
+
+    it('still waits for both before returning, so nothing is dropped', () => {
+        // Reordering, not skipping: every field the view carried before is
+        // still filled from a read that was awaited.
+        expect(body).toMatch(/await descriptionsSoon/);
+        expect(body).toMatch(/await manifestSoon/);
+    });
+
+    it('cannot leave a rejection with nobody listening', () => {
+        // The offers branch can return before either is awaited, so the guard
+        // has to sit at creation rather than at use.
+        const desc = body.slice(body.indexOf('loadDescriptions('));
+        const manifest = body.slice(body.indexOf('loadManifest('));
+        expect(desc.slice(0, 200)).toMatch(/\.catch\(/);
+        expect(manifest.slice(0, 200)).toMatch(/\.catch\(/);
     });
 });

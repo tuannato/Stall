@@ -76,6 +76,74 @@ const WALLET_STUB = stubSource([
 ]);
 
 /**
+ * How long one chronik request may take before it is somebody else's turn.
+ *
+ * chronik-client calls `axios.get()` with no `timeout`, and axios defaults to
+ * `0` — wait forever. Its own `_request` loop is written to fail over: on an
+ * error carrying a `code` it moves to the next host. But a half-open socket,
+ * which is what sleeping a laptop leaves behind, never returns *and never
+ * throws*, so the loop never advances and the page sits on `opening` with the
+ * browser's spinner running. `src/net/errors.ts` already sorts `ETIMEDOUT` and
+ * `ECONNABORTED` into the unreachable screen; nothing ever started a clock.
+ *
+ * Five seconds per host, three hosts, so a genuinely slow network reaches
+ * `unreachable` after about fifteen. The hosts box names which host timed out,
+ * and the retry control is the way back.
+ */
+const CHRONIK_TIMEOUT_MS = 5000;
+
+/**
+ * The options object of chronik's two axios calls, found by the one thing in it
+ * that a bundler cannot rename: the string literal. Matching the call itself
+ * failed — Vite hands this hook the esbuild-converted module, where the axios
+ * import has a different local name than it has on disk.
+ */
+const AXIOS_OPTIONS = /(responseType:\s*['"]arraybuffer['"])/g;
+
+/**
+ * Give those calls a timeout at build time.
+ *
+ * The same shape as `noKeyDerivation`: this repo already rewrites a dependency
+ * on the way into the bundle rather than vendoring a fork, and proves the
+ * result by reading the built bytes. The alternatives were worse — a
+ * `Promise.race` at our own call sites would abort the whole walk on the first
+ * slow host and never try the second or third, and `axios.defaults` would make
+ * axios a direct dependency, which §9 governs and vendors as a pinned tarball.
+ */
+function chronikRequestTimeout(): Plugin {
+    return {
+        name: 'stall-chronik-timeout',
+        enforce: 'pre',
+        transform(code, id) {
+            if (!id.includes('chronik-client') || !id.includes('failoverProxy')) {
+                return null;
+            }
+            // Rollup's CommonJS interop hands this module through more than
+            // once: the real 14 kB body, and tiny `?commonjs-exports` facades
+            // that share the same path. Only the body carries the request, and
+            // throwing on a facade is a build that fails for the wrong reason.
+            if (!code.includes('arraybuffer')) {
+                return null;
+            }
+            AXIOS_OPTIONS.lastIndex = 0;
+            const out = code.replace(
+                AXIOS_OPTIONS,
+                `timeout: ${CHRONIK_TIMEOUT_MS}, $1`,
+            );
+            if (out === code) {
+                // The library moved. Failing the build is the point: a silent
+                // miss here is a stall that hangs forever again.
+                throw new Error(
+                    'stall-chronik-timeout: no axios options object matched in failoverProxy. ' +
+                        'chronik-client changed shape; update the pattern.',
+                );
+            }
+            return { code: out, map: null };
+        },
+    };
+}
+
+/**
  * `ecash-lib` embeds a 1.2 MB wasm as base64 and runs `initSync` at import to
  * back its hashers — 80% of the served script, for the one hash this app calls:
  * `shaRmd160` (pubkey to address). Replace `initWasm.js` so the hashes come from
@@ -189,7 +257,7 @@ const REFERRER_POLICY = 'no-referrer';
 
 export default defineConfig({
     appType: 'spa',
-    plugins: [noKeyDerivation()],
+    plugins: [noKeyDerivation(), chronikRequestTimeout()],
     build: {
         // The polyfill is emitted as an inline <script>, which this policy has
         // no 'unsafe-inline' and no hash for. Disabling it keeps the built

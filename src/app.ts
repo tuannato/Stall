@@ -326,6 +326,30 @@ async function loadCurrent(): Promise<AppState> {
     const cachedTheme = sessionThemes.get(route.pubkeyHex);
     const cachedTokens = tokensFor(route.pubkeyHex);
 
+    /**
+     * The two reads that need only an address and a hash, started here rather
+     * than after the offers.
+     *
+     * They were sequential purely by the order they were written in, and it
+     * cost the visitor dearly: measured from source, the seven awaits in this
+     * function are up to 34 round trips before a price can be painted, and 22
+     * of them belong to decoration. Neither of these depends on the offers, on
+     * token metadata, or on each other.
+     *
+     * Nothing is dropped by starting them early, and nothing is skipped — the
+     * same requests are made, in the same numbers. Only the waiting overlaps.
+     *
+     * The rejection is caught at the point of creation, not at the point of
+     * use: the offers branch below can return before either is awaited, and a
+     * promise that rejects with nobody listening is an unhandled rejection.
+     */
+    const descriptionsSoon = loadDescriptions(chronik, { address, hash }).catch(
+        () => undefined,
+    );
+    const manifestSoon = loadManifest(chronik, { address, hash }, hint).catch(
+        () => undefined,
+    );
+
     let fetch: FetchStatus;
     try {
         fetch = await loadOffers(agora, route.pubkeyHex);
@@ -338,6 +362,10 @@ async function loadCurrent(): Promise<AppState> {
         fetch.kind === 'plugin-missing' ||
         fetch.kind === 'unreadable'
     ) {
+        // The settings read is already in flight and may well answer. It is
+        // deliberately not used here: this screen shows what a previous good
+        // load left behind, and improving it is a separate change with its own
+        // reasoning, not a side effect of running two reads at once.
         const later = Boolean(cachedName) || cachedTokens.size > 0;
         return {
             view: {
@@ -384,30 +412,39 @@ async function loadCurrent(): Promise<AppState> {
     }
 
     /**
-     * The seller's words about their tokens. Its own walk, so a chronik that
-     * answers the offers but not this leaves a shop with no descriptions rather
-     * than no shop. Never cached across loads: unlike a name or a ticker, a
-     * description is republishable, so a remembered one can be wrong.
+     * The seller's words about their tokens, and the stall's own settings.
+     * Both were started before the offers and have been running since; by the
+     * time the token walk above is done they are usually already answered.
+     *
+     * `loadDescriptions` never throws by design — a shop with no descriptions
+     * beats no shop — so an `undefined` here is the rejection guard above
+     * firing, and reads the same as a walk that found nothing.
      */
-    const descriptionLookup = await loadDescriptions(chronik, { address, hash });
+    const descriptionLookup = (await descriptionsSoon) ?? {
+        descriptions: new Map<string, string>(),
+        unreadable: new Set<string>(),
+        truncated: false,
+    };
 
     let stallName = cachedName;
     let theme = cachedTheme;
     let settingsTruncated = false;
     let settingsUnreadable = false;
-    try {
-        const lookup = await loadManifest(chronik, { address, hash }, hint);
-        settingsTruncated = lookup.truncated;
-        settingsUnreadable = lookup.unreadable;
-        const manifest = lookup.manifest;
-        if (manifest) {
-            stallName = manifest.name;
-            theme = manifest.theme;
-            sessionNames.set(route.pubkeyHex, manifest.name);
-            sessionThemes.set(route.pubkeyHex, manifest.theme);
+    {
+        const lookup = await manifestSoon;
+        if (lookup !== undefined) {
+            settingsTruncated = lookup.truncated;
+            settingsUnreadable = lookup.unreadable;
+            const manifest = lookup.manifest;
+            if (manifest) {
+                stallName = manifest.name;
+                theme = manifest.theme;
+                sessionNames.set(route.pubkeyHex, manifest.name);
+                sessionThemes.set(route.pubkeyHex, manifest.theme);
+            }
         }
-    } catch {
-        // Keep session name if the manifest walk failed.
+        // A walk that failed leaves the session name and theme standing, which
+        // is what the guard on `manifestSoon` above turns a rejection into.
     }
 
     const tokens: SessionTokenCache = new Map();
