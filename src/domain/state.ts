@@ -15,20 +15,29 @@ export type HostAttempt = {
     detail?: string;
 };
 
+/**
+ * `why` distinguishes "these bytes are not an address" from "this is a real
+ * address that cannot host a stall". Both are unreadable routes — a stall is
+ * indexed by a public key — but telling a seller their valid address is not an
+ * address is a lie, and telling them to list and come back is a loop that never
+ * ends. A script address never reveals a pubkey to recover.
+ */
+export type RouteWhy = 'script-address';
+
 export type RouteParse =
-    | { kind: 'invalid'; raw: string }
+    | { kind: 'invalid'; raw: string; why?: RouteWhy }
     | { kind: 'pubkey'; pubkeyHex: PubKeyHex }
     | {
           kind: 'address';
           address: string;
-          type: 'p2pkh' | 'p2sh';
+          type: 'p2pkh';
           hash: string;
       };
 
 export type RouteResolution =
     /** The apex. No seller was asked for, so nothing failed. */
     | { kind: 'home' }
-    | { kind: 'invalid'; raw: string }
+    | { kind: 'invalid'; raw: string; why?: RouteWhy }
     | { kind: 'unresolvable'; address: string }
     /** Address parsed; history was not read (index down). Not unresolvable. */
     | { kind: 'unresolved'; address: string }
@@ -77,7 +86,14 @@ export type FetchStatus =
      * yet. Not empty, not unreachable, not unreadable.
      */
     | { kind: 'opening' }
-    | { kind: 'offers'; offers: StallOffer[] }
+    /**
+     * `dropped` counts listings the index returned that this app refused to
+     * map. Optional, and painted only when it is above zero: seven of ten shown
+     * reads as seven listed, which is our failure printed as a fact about
+     * somebody's inventory. It cannot see an offer the agora library dropped
+     * before we ever saw it — that one is still open, and §10 says so.
+     */
+    | { kind: 'offers'; offers: StallOffer[]; dropped?: number }
     | { kind: 'empty' }
     /**
      * The index returned listings and none of them could be read. Our failure,

@@ -14,7 +14,17 @@ export function parseSellerParam(raw: string): RouteParse {
     }
     try {
         const decoded = decodeCashAddress(withPrefix);
-        if (decoded.type !== 'p2pkh' && decoded.type !== 'p2sh') {
+        // A script address is refused here rather than walked. Offers are
+        // grouped by public key, and the only way to recover one is a p2pkh
+        // spend revealing it in an input script — a p2sh input never does, and
+        // `pubkeyFromSpends` skips those inputs outright. So a p2sh route could
+        // only ever spend ten pages of history to arrive at "this address has
+        // never sent", which is false about an address that has sent thousands
+        // of times. It carries `why` so the screen can say the true thing.
+        if (decoded.type === 'p2sh') {
+            return { kind: 'invalid', raw, why: 'script-address' };
+        }
+        if (decoded.type !== 'p2pkh') {
             return { kind: 'invalid', raw };
         }
         return {

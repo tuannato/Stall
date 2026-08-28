@@ -39,6 +39,14 @@ export type FiatCurrency = {
     readonly code: string;
     readonly name: string;
     readonly symbol: string;
+    /**
+     * Present when the symbol is written **after** the number, and the value is
+     * what sits between them: `''` for a sign that hugs the digits (`9đ`), `' '`
+     * for a symbol that is a word (`9 kr`). A prefix is the default because most
+     * of this table takes one, not because it is neutral — `đ9` is not how the
+     * amount is written anywhere it is spent.
+     */
+    readonly symbolAfter?: string;
 };
 
 /**
@@ -66,7 +74,7 @@ export const FIAT_CURRENCIES: readonly FiatCurrency[] = [
     { code: 'myr', name: 'Malaysian Ringgit', symbol: 'RM' },
     { code: 'ngn', name: 'Nigerian Naira', symbol: '₦' },
     { code: 'nzd', name: 'New Zealand Dollar', symbol: '$' },
-    { code: 'nok', name: 'Norwegian Krone', symbol: 'kr' },
+    { code: 'nok', name: 'Norwegian Krone', symbol: 'kr', symbolAfter: ' ' },
     { code: 'php', name: 'Philippine Peso', symbol: '₱' },
     { code: 'rub', name: 'Russian Ruble', symbol: 'р.' },
     { code: 'twd', name: 'New Taiwan Dollar', symbol: 'NT$' },
@@ -74,7 +82,7 @@ export const FIAT_CURRENCIES: readonly FiatCurrency[] = [
     { code: 'zar', name: 'South African Rand', symbol: 'R' },
     { code: 'chf', name: 'Swiss Franc', symbol: 'Fr.' },
     { code: 'try', name: 'Turkish Lira', symbol: '₺' },
-    { code: 'vnd', name: 'Vietnamese đồng', symbol: 'đ' },
+    { code: 'vnd', name: 'Vietnamese đồng', symbol: 'đ', symbolAfter: '' },
 ] as const;
 
 export const DEFAULT_FIAT_CODE = 'usd';
@@ -143,9 +151,16 @@ export function formatFiat(
         // Rounds to nothing at this currency's precision. Saying `0` would read
         // as free, and the measured median purchase is near $0.006.
         const smallest = digits === 0 ? '1' : `0.${'0'.repeat(digits - 1)}1`;
-        return `< ${currency.symbol}${smallest}`;
+        return `< ${withSymbol(currency, smallest)}`;
     }
-    return `${currency.symbol}${groupSubUnits(subUnits, digits)}`;
+    return withSymbol(currency, groupSubUnits(subUnits, digits));
+}
+
+/** The `< ` marker stays at the front either way: it qualifies the figure. */
+function withSymbol(currency: FiatCurrency, figure: string): string {
+    return currency.symbolAfter === undefined
+        ? `${currency.symbol}${figure}`
+        : `${figure}${currency.symbolAfter}${currency.symbol}`;
 }
 
 function groupSubUnits(subUnits: bigint, digits: number): string {

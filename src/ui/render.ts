@@ -31,6 +31,7 @@ import type {
     FetchStatus,
     HostAttempt,
     Outpoint,
+    RouteWhy,
     StallOffer,
     StallView,
     TokenMeta,
@@ -135,7 +136,7 @@ export function renderStall(
             paintHome(stall, handlers);
             break;
         case 'invalid':
-            paintInvalid(stall, view.route.raw, handlers);
+            paintInvalid(stall, view.route.raw, handlers, view.route.why);
             break;
         case 'unresolvable':
             paintUnresolvable(stall, view, handlers);
@@ -208,10 +209,19 @@ function demoSoon(handlers: StallHandlers): HTMLElement {
     return wrap;
 }
 
-function paintInvalid(stall: HTMLElement, raw: string, handlers: StallHandlers): void {
-    stall.append(header(copy.LINK_UNREADABLE_TITLE));
+function paintInvalid(
+    stall: HTMLElement,
+    raw: string,
+    handlers: StallHandlers,
+    why?: RouteWhy,
+): void {
+    const script = why === 'script-address';
+    stall.append(header(script ? copy.SCRIPT_ADDRESS_TITLE : copy.LINK_UNREADABLE_TITLE));
     const body = el('main', 'stall-body');
     body.append(el('p', 'mid-p', raw));
+    if (script) {
+        body.append(el('p', 'note', copy.SCRIPT_ADDRESS_BODY));
+    }
     stall.append(body);
     stall.append(footer(undefined, { goHome: handlers.onGoHome }));
 }
@@ -495,6 +505,11 @@ function paintOffers(
             }
             body.append(items);
         }
+    }
+    // Said on the shop that works, because that is where it is invisible.
+    const dropped = view.fetch?.kind === 'offers' ? (view.fetch.dropped ?? 0) : 0;
+    if (dropped > 0) {
+        body.append(el('p', 'fine', copy.droppedOffers(dropped)));
     }
     stall.append(body);
 
@@ -796,11 +811,24 @@ function describeSection(
     // chain keeps every record ever published, and the copy says so.
     const remove = el('a', 'mini another', copy.DESC_REMOVE);
     remove.setAttribute('data-role', 'describe-remove');
-    remove.rel = 'noopener noreferrer';
-    remove.target = '_blank';
+    const removePay = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
+    removePay.setAttribute('data-role', 'describe-remove-pay');
+    for (const link of [remove, removePay]) {
+        link.rel = 'noopener noreferrer';
+        link.target = '_blank';
+    }
+    // A removal is a transaction like any other, so it gets the same three ways
+    // to reach a wallet as publishing does. It had only the Cashtab web link,
+    // which strands a seller who publishes from a phone: they could add words
+    // and never take them back.
+    const removeQr = el('div', 'publish-qr');
+    removeQr.setAttribute('data-role', 'describe-remove-qr');
+    removeQr.hidden = true;
     const removeLede = el('p', 'fine', copy.DESC_REMOVE_LEDE);
     wrap.append(removeLede);
     wrap.append(remove);
+    wrap.append(removePay);
+    wrap.append(removeQr);
 
     const refresh = (): void => {
         const tokenId = picker.value;
@@ -811,7 +839,12 @@ function describeSection(
         const hex = text === '' ? undefined : encodeDescriptionHex(tokenId, text);
         const ready = hex !== undefined;
         err.hidden = ready || text === '';
-        err.textContent = used > MAX_DESCRIPTION_BYTES ? copy.DESC_TOO_LONG : copy.DESC_REFUSED;
+        err.textContent =
+            used > MAX_DESCRIPTION_BYTES
+                ? copy.DESC_TOO_LONG
+                : /[\r\n]/.test(text)
+                  ? copy.DESC_ONE_LINE
+                  : copy.DESC_REFUSED;
 
         bytes.hidden = !ready;
         bytes.textContent = ready ? hex : '';
@@ -845,15 +878,47 @@ function describeSection(
         remove.hidden = !canRemove;
         removeLede.hidden = !canRemove;
         const removeUrl = canRemove ? cashtabPublishUrl(address, removalHex) : undefined;
+        const removePayUrl =
+            canRemove && removalHex !== undefined
+                ? payECashPublishUrl(address, removalHex)
+                : undefined;
         remove.hidden = removeUrl === undefined;
         removeLede.hidden = removeUrl === undefined;
+        removePay.hidden = removePayUrl === undefined;
         if (removeUrl !== undefined) {
             remove.href = removeUrl;
+        }
+        if (removePayUrl !== undefined) {
+            removePay.href = removePayUrl;
+        }
+        const removeBip21 =
+            canRemove && removalHex !== undefined
+                ? publishBip21(address, removalHex)
+                : undefined;
+        if (removeBip21 !== undefined && fitsQr(removeBip21)) {
+            removeQr.replaceChildren(
+                qrSvg(removeBip21, copy.PUBLISH_QR_ALT),
+                el('p', 'fine', copy.PUBLISH_QR_LEDE),
+            );
+            removeQr.hidden = false;
+        } else {
+            removeQr.replaceChildren();
+            removeQr.hidden = true;
         }
     };
 
     // Rebuilt in place, never by repainting: a repaint would take the focus out
     // of the field on every keystroke.
+    // The one-line rule is the wire's, and it is right: a control character is
+    // how one line is made to look like several. But the field offered three
+    // rows and took the key, then refused the record with copy about hiding
+    // text. Refusing the keystroke says the same thing at the moment it is
+    // made. A pasted newline still reaches `refresh`, which now names it.
+    field.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
     field.addEventListener('input', refresh);
     picker.addEventListener('change', () => {
         // The words belong to the token, so switching tokens loads theirs.
@@ -900,6 +965,7 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     // target without putting it in the tab order.
     sheet.tabIndex = -1;
     sheet.setAttribute('data-focus-key', 'publish-sheet');
+    trapTab(sheet);
     queueMicrotask(() => {
         if (sheet.isConnected) {
             sheet.focus();
@@ -1090,7 +1156,6 @@ function offerRow(
     const card = el('div', expanded ? 'item open' : 'item');
     const name = tokenName(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
-    const d = decimalsOf(view.tokens, offer.tokenId);
 
     const head = el('button', 'item-head');
     head.type = 'button';
@@ -1108,10 +1173,22 @@ function offerRow(
     // name was one unbroken run of name, ticker, stock, "from", figure and rate.
     const info = el('span', 'item-b');
     info.append(el('span', 'item-n', name));
-    const left = copy.remainingAtoms(formatAtoms(offer.atoms, d));
-    info.append(
-        el('span', 'item-q', ticker !== undefined ? `${ticker} · ${left}` : left),
-    );
+    /*
+     * The stock line is omitted when genesis decimals did not load, for the
+     * same reason `rateLine` omits the rate: `decimalsOf` defaults to 0, and
+     * `formatAtoms` at 0 prints the atoms verbatim — so a nine-decimal token
+     * with one token left read as "1000000000 left". That is not a missing
+     * number, it is a wrong one, printed as confidently as a right one. A
+     * ticker with no count still says which token it is.
+     */
+    const known = knownDecimals(view.tokens, offer.tokenId);
+    const left =
+        known === undefined ? undefined : copy.remainingAtoms(formatAtoms(offer.atoms, known));
+    const stock =
+        left === undefined ? ticker : ticker !== undefined ? `${ticker} · ${left}` : left;
+    if (stock !== undefined) {
+        info.append(el('span', 'item-q', stock));
+    }
     // A touch device gets no cursor and no hover, so nothing said these rows
     // open. `aria-expanded` already told a screen reader; this tells a thumb.
     // Inside the name column on purpose — a fourth grid child with no named
@@ -1426,6 +1503,7 @@ function confirmLeaving(href: string): HTMLElement {
     box.append(go);
     box.append(stay);
     scrim.append(box);
+    trapTab(box);
     queueMicrotask(() => {
         if (box.isConnected) {
             box.focus();
@@ -1433,7 +1511,6 @@ function confirmLeaving(href: string): HTMLElement {
     });
     return scrim;
 }
-
 
 function tokenFacts(
     offer: StallOffer,
@@ -1501,6 +1578,46 @@ function header(name?: string, sub?: string, address?: string): HTMLElement {
  * simply does not appear. It decorates the top of the stall and is nowhere near
  * the price, which it must never cover.
  */
+/**
+ * `aria-modal="true"` is a promise that the rest of the page is not reachable,
+ * and Escape plus initial focus is only half of keeping it. Without a Tab cycle
+ * the third Tab is on the stall behind the scrim — a screen reader is told the
+ * background is inert while the keyboard walks straight into it.
+ *
+ * Focus is cycled rather than the background made `inert`: the sheet is rebuilt
+ * on every paint, and an `inert` attribute left on a stall that outlives its
+ * overlay is a shop nobody can click.
+ */
+function trapTab(panel: HTMLElement): void {
+    panel.addEventListener('keydown', (ev) => {
+        const event = ev as KeyboardEvent;
+        if (event.key !== 'Tab') {
+            return;
+        }
+        const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+            (node) => !node.hidden && node.getAttribute('aria-hidden') !== 'true',
+        );
+        if (focusable.length === 0) {
+            // Nothing to move to, so the only honest answer is to stay put.
+            event.preventDefault();
+            return;
+        }
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || active === panel)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+}
+
+const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function ornamentStrip(theme: DecodedTheme): HTMLElement | null {
     const orn = theme.ornament;
     if (orn === undefined) {
@@ -1795,8 +1912,12 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         const raw = input.value.trim();
-        if (parseSellerParam(raw).kind === 'invalid') {
-            err.textContent = copy.HOME_PASTE_INVALID;
+        const parsed = parseSellerParam(raw);
+        if (parsed.kind === 'invalid') {
+            err.textContent =
+                parsed.why === 'script-address'
+                    ? copy.HOME_PASTE_SCRIPT_ADDRESS
+                    : copy.HOME_PASTE_INVALID;
             err.hidden = false;
             return;
         }

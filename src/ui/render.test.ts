@@ -68,6 +68,7 @@ import {
 } from './copy';
 import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
 import { scaleRate } from '../domain/fiat';
+import * as copy from './copy';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
@@ -2869,3 +2870,211 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
         expect(new Set(labels).size).toBe(labels.length);
     });
 });
+
+describe('a script address is told the true thing', () => {
+    it('does not borrow the unreadable-link copy', () => {
+        const address = 'ecash:prfhcnyqnrd7pcgt3lg9c5yrsnfjnpr5qsysdz7lgg';
+        const { root } = paint({
+            route: { kind: 'invalid', raw: address, why: 'script-address' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const text = root.textContent ?? '';
+        expect(text).toContain(copy.SCRIPT_ADDRESS_TITLE);
+        expect(text).toContain(copy.SCRIPT_ADDRESS_BODY);
+        expect(text).not.toContain(copy.LINK_UNREADABLE_TITLE);
+        // The never-sent screen's promise is a loop for an address like this.
+        expect(text).not.toContain(copy.UNRESOLVABLE_SUB);
+    });
+
+    it('leaves an ordinary unreadable link exactly as it was', () => {
+        const { root } = paint({
+            route: { kind: 'invalid', raw: 'nope' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        const text = root.textContent ?? '';
+        expect(text).toContain(copy.LINK_UNREADABLE_TITLE);
+        expect(text).not.toContain(copy.SCRIPT_ADDRESS_TITLE);
+    });
+});
+
+describe('a-description-field-refuses-the-key-not-the-record', () => {
+    function describeSheet() {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+            }),
+        );
+        return root;
+    }
+
+    it('does not let Enter put a line break in the field', () => {
+        const root = describeSheet();
+        const field = root.querySelector<HTMLTextAreaElement>('[data-role="describe-text"]')!;
+        const event = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        });
+        field.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('names the line break when one arrives by paste', () => {
+        const root = describeSheet();
+        const field = root.querySelector<HTMLTextAreaElement>('[data-role="describe-text"]')!;
+        field.value = 'one\ntwo';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        const err = root.querySelector('[data-role="describe-invalid"]')!;
+        expect(err.textContent).toBe(copy.DESC_ONE_LINE);
+        // Not the copy about hiding a sentence: pressing Enter is not that.
+        expect(err.textContent).not.toBe(copy.DESC_REFUSED);
+    });
+});
+
+describe('removal-is-signable-from-a-phone', () => {
+    it('offers the same three ways to a wallet as publishing does', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+            }),
+        );
+        const remove = root.querySelector<HTMLAnchorElement>('[data-role="describe-remove"]')!;
+        const pay = root.querySelector<HTMLAnchorElement>('[data-role="describe-remove-pay"]')!;
+        const qr = root.querySelector<HTMLElement>('[data-role="describe-remove-qr"]')!;
+        expect(remove.hidden).toBe(false);
+        expect(pay.hidden).toBe(false);
+        expect(pay.href).toContain('op_return_raw');
+        expect(qr.hidden).toBe(false);
+        expect(qr.querySelector('svg')).not.toBeNull();
+    });
+
+    it('offers none of them when there is nothing to remove', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(
+            root.querySelector<HTMLElement>('[data-role="describe-remove"]')!.hidden,
+        ).toBe(true);
+        expect(
+            root.querySelector<HTMLElement>('[data-role="describe-remove-pay"]')!.hidden,
+        ).toBe(true);
+        expect(
+            root.querySelector<HTMLElement>('[data-role="describe-remove-qr"]')!.hidden,
+        ).toBe(true);
+    });
+});
+
+describe('aria-modal-is-a-promise-about-the-keyboard', () => {
+    it('sends Tab from the last control back to the first', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        document.body.append(root);
+        const sheet = root.querySelector<HTMLElement>('[data-role="publish"]')!;
+        const focusable = [
+            ...sheet.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+        ].filter((n) => !n.hidden);
+        expect(focusable.length).toBeGreaterThan(1);
+        const last = focusable[focusable.length - 1]!;
+        last.focus();
+        const forward = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        last.dispatchEvent(forward);
+        expect(forward.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(focusable[0]);
+        root.remove();
+    });
+
+    it('sends Shift+Tab from the panel itself to the last control', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        document.body.append(root);
+        const sheet = root.querySelector<HTMLElement>('[data-role="publish"]')!;
+        sheet.focus();
+        const back = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+        });
+        sheet.dispatchEvent(back);
+        expect(back.defaultPrevented).toBe(true);
+        expect(sheet.contains(document.activeElement)).toBe(true);
+        root.remove();
+    });
+});
+
+describe('seven-of-ten-shown-is-not-seven-listed', () => {
+    it('says how many listings this page refused', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER], dropped: 3 },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(root.textContent).toContain(copy.droppedOffers(3));
+    });
+
+    it('says nothing when every listing was read', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(root.textContent).not.toContain('could not be read here');
+    });
+});
+
+describe('unknown-decimals-is-not-a-stock-count', () => {
+    it('omits the count rather than printing atoms as whole tokens', () => {
+        const { root } = paint(
+            idlePubkey({
+                // Metadata absent: exactly what a live-arrived listing looks
+                // like before its genesis read lands.
+                fetch: { kind: 'offers', offers: [{ ...OFFER, atoms: 1_000_000_000n }] },
+                tokens: new Map(),
+            }),
+        );
+        const text = root.textContent ?? '';
+        expect(text).not.toContain('1000000000');
+        expect(text).not.toContain('1,000,000,000');
+    });
+
+    it('still counts stock when genesis decimals are known', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(root.querySelector('.item-q')).not.toBeNull();
+    });
+});
+

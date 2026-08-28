@@ -849,12 +849,22 @@ textarea.paste-in {
     gap: 6px;
 }
 
+/*
+ * The quiet second choice beside a bordered control — and every use of it in
+ * this tree is `mini another`, so this is what the padding above resolves to
+ * on all of them. It once set `padding: 0`, which with 12px text and the
+ * inherited line height made a 17px tap target: measured on a phone at
+ * 375x812, the three footer buttons came out 108x17, 188x17 and 130x17. Those
+ * three are the only door into the whole seller side, and 17px is half of what
+ * a finger can reliably hit. Quiet is a colour and a border, never a height.
+ */
 .another {
     align-self: flex-start;
     border: 0;
     background: transparent;
     color: var(--s-muted);
-    padding: 0;
+    padding: 13px 0;
+    min-height: 44px;
     font-size: 12px;
     font-weight: 620;
     text-align: left;
@@ -1003,7 +1013,16 @@ textarea.paste-in {
      */
     .item-detail {
         display: grid;
-        grid-template-columns: var(--s-hero) minmax(0, 1fr);
+        /*
+         * The content column is capped, not free. An open card spans every
+         * column by design, and an uncapped second column let `.row`'s
+         * `space-between` throw the label and its figure to opposite ends of
+         * the card: measured at 1280px, the label sat at x=203 and its number
+         * at x=1185, and at 1600px they were 1,180px apart. A pair nobody can
+         * read as a pair is worse than empty card beside it, and the buy
+         * control was a 1,346px slab for the same reason.
+         */
+        grid-template-columns: var(--s-hero) minmax(0, 540px);
         column-gap: 20px;
         row-gap: 11px;
         align-items: start;

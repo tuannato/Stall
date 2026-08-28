@@ -48,6 +48,37 @@ function historyChronik(txs: readonly ChainTx[], numTxs = txs.length, numPages =
     };
 }
 
+describe('p2sh-route-does-not-claim-a-history', () => {
+    /**
+     * The cost this closes is not only the false sentence at the end: a script
+     * address used to buy up to `MAX_HISTORY_PAGES` round trips that could not
+     * possibly find a key, because every p2sh input is skipped before a pubkey
+     * is even extracted. Nothing is asked of the network now.
+     */
+    it('asks the index for nothing at all', async () => {
+        const address = encodeCashAddress('ecash', 'p2sh', '11'.repeat(20));
+        const parsed = parseSellerParam(address);
+        let calls = 0;
+        const counting = {
+            address() {
+                calls += 1;
+                return {
+                    async history() {
+                        return { txs: [], numTxs: 0, numPages: 0 };
+                    },
+                };
+            },
+        };
+        const resolved = await resolveSeller(parsed, counting as never);
+        expect(calls).toBe(0);
+        expect(resolved).toEqual({
+            kind: 'invalid',
+            raw: address,
+            why: 'script-address',
+        });
+    });
+});
+
 describe('resolveSeller', () => {
     it('never-spent history (empty txs) is unresolvable', async () => {
         const pk = compressedPk(0xaa);

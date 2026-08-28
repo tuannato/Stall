@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FetchStatus } from '../domain/state';
 import {
+    BURST_MS,
     AGORA_PLUGIN,
     MIN_REREAD_MS,
     isDefiniteResult,
@@ -131,12 +132,17 @@ describe('failed-refetch-is-not-empty', () => {
     });
 
     it('re-reads on reconnect, because what was missed while down is unknown', async () => {
+        vi.useFakeTimers();
         const f = fakeChronik();
         const changed = vi.fn();
         const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
         await f.openNow();
 
         f.fire('Tx');
+        // One transaction arrives as several messages, so the read waits out
+        // the burst — see `rereadCoalesced`. The reconnect below is not
+        // deferred and is not floored by it.
+        await vi.advanceTimersByTimeAsync(BURST_MS);
         expect(changed).toHaveBeenCalledTimes(1);
         f.reconnect();
         expect(changed).toHaveBeenCalledTimes(2);
@@ -145,8 +151,36 @@ describe('failed-refetch-is-not-empty', () => {
         // stall the visitor has already left.
         handle.close();
         f.fire('Tx');
+        await vi.advanceTimersByTimeAsync(BURST_MS);
         f.reconnect();
         expect(changed).toHaveBeenCalledTimes(2);
+        vi.useRealTimers();
+    });
+
+    it('reads once per burst, not once per message', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const changed = vi.fn();
+        const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
+        await f.openNow();
+
+        // One sale, three messages: mempool, confirmed, and the same again
+        // after a block is disconnected. Each used to be a full re-read behind
+        // a fresh failover client.
+        f.fire('Tx');
+        f.fire('Tx');
+        f.fire('Tx');
+        expect(changed).toHaveBeenCalledTimes(0);
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(changed).toHaveBeenCalledTimes(1);
+
+        // A later sale is its own burst, not swallowed by the first.
+        f.fire('Tx');
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(changed).toHaveBeenCalledTimes(2);
+
+        handle.close();
+        vi.useRealTimers();
     });
 });
 

@@ -55,7 +55,8 @@ export async function loadOffers(agora: AgoraReader, pubkeyHex: string): Promise
         // that empty would blame the seller for our failure.
         return { kind: 'unreadable', triedAtMs: Date.now(), returned: raw.length };
     }
-    return { kind: 'offers', offers };
+    const dropped = raw.length - offers.length;
+    return dropped > 0 ? { kind: 'offers', offers, dropped } : { kind: 'offers', offers };
 }
 
 function hostAttempts(err: unknown): HostAttempt[] {

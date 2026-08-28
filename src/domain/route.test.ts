@@ -7,6 +7,8 @@ const SAMPLE_P2PKH = encodeCashAddress(
     'p2pkh',
     '00'.repeat(20),
 );
+/** hash160 of nothing anyone holds — never a real shop's script. */
+const SAMPLE_P2SH = encodeCashAddress('ecash', 'p2sh', '11'.repeat(20));
 
 describe('parseSellerParam', () => {
     it('accepts compressed pubkey hex', () => {
@@ -71,5 +73,35 @@ describe('stallPath', () => {
         expect(parseSellerParam(sellerFromPath(stallPath(invalid))!).kind).toBe(
             'invalid',
         );
+    });
+});
+
+describe('p2sh-is-not-a-stall-address', () => {
+    /**
+     * Offers are grouped by public key, and the only thing that reveals one is
+     * a p2pkh spend putting it in an input script. A p2sh input never does, and
+     * `pubkeyFromSpends` skips those inputs outright — so admitting a script
+     * address bought ten pages of history and then said "this address has never
+     * sent" about an address that may have sent thousands of times.
+     */
+    it('is refused at the parse, with its own reason', () => {
+        const parsed = parseSellerParam(SAMPLE_P2SH);
+        expect(parsed.kind).toBe('invalid');
+        if (parsed.kind === 'invalid') {
+            expect(parsed.why).toBe('script-address');
+        }
+    });
+
+    it('does not read as an ordinary unreadable string', () => {
+        const notAnAddress = parseSellerParam('hello');
+        expect(notAnAddress.kind).toBe('invalid');
+        if (notAnAddress.kind === 'invalid') {
+            expect(notAnAddress.why).toBeUndefined();
+        }
+    });
+
+    it('leaves a p2pkh address alone', () => {
+        const parsed = parseSellerParam(SAMPLE_P2PKH);
+        expect(parsed.kind).toBe('address');
     });
 });

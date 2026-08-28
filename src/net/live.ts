@@ -58,6 +58,13 @@ export type LiveHandle = {
  */
 export const MIN_REREAD_MS = 5_000;
 
+/**
+ * How long one transaction's messages are allowed to keep arriving before the
+ * book is read. Short enough that a sale shows up as fast as it did; long
+ * enough that mempool and confirmed for the same txid become one read.
+ */
+export const BURST_MS = 700;
+
 export function stallGroup(pubkeyHex: string): string {
     return PUBKEY_GROUP_PREFIX + pubkeyHex;
 }
@@ -111,6 +118,7 @@ export function watchStall(
     let closed = false;
     let socket: LiveSocket | undefined;
     let lastReread = 0;
+    let burst: ReturnType<typeof setTimeout> | undefined;
     const group = stallGroup(pubkeyHex);
 
     /** A re-read caused by the socket, floored so a reconnect spin cannot flood. */
@@ -126,6 +134,40 @@ export function watchStall(
         onChanged();
     };
 
+    /**
+     * One re-read per burst, not one per message.
+     *
+     * chronik types every transaction event as `Tx`, and one transaction on this
+     * group arrives more than once — added to the mempool, then confirmed, and
+     * the same again after a block is invalidated. Each of those was a full
+     * `loadOffers` behind a fresh failover client that starts again at the first
+     * host, so a single sale cost the index two or three identical reads per
+     * open tab.
+     *
+     * A trailing timer rather than the floor above: the floor **drops**, and the
+     * last message of a burst is the one carrying the settled book, so dropping
+     * it leaves a sold row on screen until something unrelated happens. This
+     * waits out the burst and then reads once. The floor stays where it is,
+     * guarding the reconnect spin, which is a different failure — there the
+     * later attempts carry no new information at all.
+     */
+    const rereadCoalesced = (): void => {
+        if (closed || burst !== undefined) {
+            return;
+        }
+        burst = setTimeout(() => {
+            burst = undefined;
+            if (!closed) {
+                // Deliberately does not stamp `lastReread`: the floor guards a
+                // reconnect spin, and a read caused by a message must not
+                // suppress the one caused by a drop. What was missed while the
+                // socket was down is still unknown, however recently the book
+                // was read.
+                onChanged();
+            }
+        }, BURST_MS);
+    };
+
     const subscribe = (): void => {
         if (closed || socket === undefined) {
             return;
@@ -138,7 +180,7 @@ export function watchStall(
         onMessage: (msg) => {
             // Every plugin message for this group is a change to this book.
             if (!closed && msg.type === 'Tx') {
-                onChanged();
+                rereadCoalesced();
             }
         },
         onConnect: subscribe,
@@ -151,6 +193,10 @@ export function watchStall(
     return {
         close() {
             closed = true;
+            if (burst !== undefined) {
+                clearTimeout(burst);
+                burst = undefined;
+            }
             try {
                 socket?.close();
             } catch {

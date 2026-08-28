@@ -178,6 +178,56 @@ export function boot(
     };
 
     /**
+     * Genesis facts for a token this page has never seen.
+     *
+     * A listing that arrives over the socket used to paint with no metadata at
+     * all: the card showed the 64-character token id where the name goes, and
+     * nothing corrected it until the visitor reloaded. Names and tickers come
+     * from genesis and cannot go stale, so reading them once is honest.
+     *
+     * After the paint, never before it: the price moving is the thing the
+     * socket woke us for, and it must not queue behind a token read — the same
+     * ordering `loadCurrent` already keeps. The generation is re-checked after
+     * the await, or a late read paints onto a stall the visitor has left.
+     */
+    const fillNewTokens = async (
+        claimed: number,
+        pubkeyHex: string,
+        status: FetchStatus,
+    ): Promise<void> => {
+        if (status.kind !== 'offers') {
+            return;
+        }
+        const missing = [
+            ...new Set(
+                status.offers
+                    .map((o) => o.tokenId)
+                    .filter((id) => !state.view.tokens.has(id)),
+            ),
+        ];
+        if (missing.length === 0) {
+            return;
+        }
+        let metas: TokenMeta[];
+        try {
+            metas = await loadTokenMeta(createChronik(), missing);
+        } catch {
+            // A name we could not read is not a reason to disturb the book.
+            return;
+        }
+        if (claimed !== generation || metas.length === 0) {
+            return;
+        }
+        const tokens: SessionTokenCache = new Map(state.view.tokens);
+        for (const meta of metas) {
+            sessionTokens.set(cacheKey(pubkeyHex, meta.tokenId), meta);
+            tokens.set(meta.tokenId, meta);
+        }
+        state = { ...state, view: { ...state.view, tokens } };
+        paint();
+    };
+
+    /**
      * Keep the painted book current. Only a fact about the seller is applied:
      * a refetch that fails leaves the last good list on screen rather than
      * turning a working stall into an error, and the offers are replaced
@@ -205,6 +255,7 @@ export function boot(
                     view: { ...state.view, fetch: status },
                 };
                 paint();
+                await fillNewTokens(claimed, pubkeyHex, status);
             })();
         });
     };
@@ -277,7 +328,7 @@ async function loadCurrent(): Promise<AppState> {
         if (parsed.kind === 'invalid') {
             return {
                 view: {
-                    route: { kind: 'invalid', raw: parsed.raw },
+                    route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                     overlay: { kind: 'idle' },
                     tokens: new Map(),
                 },
@@ -506,7 +557,7 @@ function openingFromLocation(): AppState {
     if (parsed.kind === 'invalid') {
         return {
             view: {
-                route: { kind: 'invalid', raw: parsed.raw },
+                route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                 overlay: idle,
                 tokens: emptyTokens,
             },

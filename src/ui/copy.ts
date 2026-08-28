@@ -2,6 +2,17 @@
 
 export const LINK_UNREADABLE_TITLE = 'This link is unreadable';
 
+/**
+ * A valid address that cannot host a stall. It must not borrow the unreadable
+ * copy above ("this is not an address" is false about it) nor the never-sent
+ * copy below ("list, then come back" is a loop it can never leave).
+ */
+export const SCRIPT_ADDRESS_TITLE = 'A script address cannot be a stall';
+export const SCRIPT_ADDRESS_BODY =
+    'This is a real eCash address, but it is a script address. Offers are indexed by a public key, and a script address never reveals one — so there is no shop to open here, however many times it has sent. A stall opens from an address that starts with q, the one Cashtab shows on its Receive screen.';
+export const HOME_PASTE_SCRIPT_ADDRESS =
+    'That is a script address. A stall needs the address Cashtab shows on its Receive screen.';
+
 export const UNRESOLVABLE_HEADER = 'Stall not readable yet';
 export const UNRESOLVABLE_SUB = 'This address has never sent';
 export const UNRESOLVABLE_TITLE = 'Nothing to read from this address';
@@ -93,6 +104,18 @@ export const EMPTY_SUB = 'Nothing for sale right now';
 export const EMPTY_TITLE = 'This stall is empty';
 export const EMPTY_BODY =
     'The seller has no live offers. Anything they list will appear here on its own.';
+
+/**
+ * Our failure, said out loud on a working shop. `unreadable` covers the case
+ * where every listing failed; this is the far commoner one where some did, and
+ * it used to be silent — seven of ten shown reads as seven listed, which is a
+ * claim about the seller's inventory made out of our own gap.
+ */
+export function droppedOffers(count: number): string {
+    return count === 1
+        ? 'One more listing is on the chain and could not be read here, so it is not shown.'
+        : `${count} more listings are on the chain and could not be read here, so they are not shown.`;
+}
 
 export const UNREADABLE_SUB = 'Prices unavailable';
 export const UNREADABLE_BODY =
@@ -280,8 +303,15 @@ export const HOME_DEMO_SOON =
 export const DEMO_STALL_ADDRESS = 'ecash:qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r';
 export const HOME_DEMO_OPEN = 'Open this stall';
 
+/**
+ * Conditional, because an empty stall is a link anyone can hold — a buyer who
+ * bookmarked a shop that has since sold out reads an unconditional "list the
+ * token in Cashtab" as an instruction meant for them. The never-spent screen
+ * can address the seller directly (nobody else can be looking at an address
+ * that has never sent); a resolved, empty one cannot.
+ */
 export const LIST_IN_CASHTAB =
-    'List the token in Cashtab. Once it is on Agora it will show up here on its own.';
+    'If this is your stall: list the token in Cashtab, and it will appear here on its own.';
 
 /** The clickable form, for a screen where the seller has not listed yet. */
 export const LIST_IN_CASHTAB_LINK = 'List a token in Cashtab';
@@ -378,6 +408,15 @@ export const DESC_TOO_LONG =
     'That is longer than one record holds. Shorten it until the counter is not over.';
 export const DESC_REFUSED =
     'That cannot be written to a record — it holds no readable text, or contains characters that could hide part of a sentence.';
+/**
+ * A newline is refused by the same rule that refuses a bidi override, and for
+ * the same reason — but a seller who pressed Enter has done nothing suspicious
+ * and deserves to be told which key it was. The generic refusal names hiding
+ * text, which reads as an accusation for a line break.
+ */
+export const DESC_ONE_LINE =
+    'A description is one line. Remove the line break, and the rest is fine.';
+
 export const DESC_REMOVE = 'Remove this description';
 export const DESC_REMOVE_LEDE =
     'This publishes a record that erases what you wrote. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';

@@ -15,7 +15,9 @@ export async function resolveSeller(
     chronik: AddressChronik,
 ): Promise<RouteResolution> {
     if (parse.kind === 'invalid') {
-        return { kind: 'invalid', raw: parse.raw };
+        // The reason travels with it: a script address is refused without a
+        // single request, and the screen must not read it as unreadable bytes.
+        return { kind: 'invalid', raw: parse.raw, why: parse.why };
     }
     if (parse.kind === 'pubkey') {
         return {

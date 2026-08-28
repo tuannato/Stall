@@ -11,6 +11,38 @@ import {
 /** A plausible XEC price: 1 XEC ≈ $0.00003. */
 const USD_RATE = scaleRate(0.00003);
 
+describe('symbol-sits-where-the-language-puts-it', () => {
+    /**
+     * A prefix is this table's default because most of it takes one, not
+     * because it is neutral. "đ9" is not how the amount is written anywhere it
+     * is spent, and a figure a seller cannot read at a glance is the same class
+     * of defect as one rounded to `$0.00`.
+     */
+    it('writes the dong after the number, with nothing between', () => {
+        const rate = scaleRate(0.0003);
+        const out = formatFiat(1_000_000n, rate, 'vnd')!;
+        expect(out.endsWith('đ')).toBe(true);
+        expect(out.startsWith('đ')).toBe(false);
+    });
+
+    it('writes a symbol that is a word after the number, with a space', () => {
+        const out = formatFiat(1_000_000n, scaleRate(0.0003), 'nok')!;
+        expect(out.endsWith(' kr')).toBe(true);
+        expect(out.startsWith('kr')).toBe(false);
+    });
+
+    it('leaves every prefix currency exactly where it was', () => {
+        // 1,200 XEC = 120,000 sats. At $0.00003/XEC that is $0.036 -> $0.04.
+        expect(formatFiat(120_000n, USD_RATE, 'usd')).toBe('$0.04');
+        expect(formatFiat(1n, USD_RATE, 'usd')).toBe('< $0.01');
+    });
+
+    it('keeps the less-than marker in front of the whole figure', () => {
+        // Never "đ< 1": the marker qualifies the amount, not the symbol.
+        expect(formatFiat(1n, scaleRate(0.0000001), 'vnd')).toBe('< 1đ');
+    });
+});
+
 describe('fiat-is-absent-not-stale', () => {
     /**
      * §8's other half: a lying indexer can show a dead offer, and a price feed

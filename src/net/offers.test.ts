@@ -65,6 +65,18 @@ describe('loadOffers', () => {
             expect(status.offers[0]?.askedAtoms).toBe(1n);
             expect(status.offers[0]?.variant).toBe('ONESHOT');
             expect(status.offers[0]?.priceNanoSatsPerAtom).toBe(80_000n * 1_000_000_000n);
+            // The one we refused is counted, not swallowed.
+            expect(status.dropped).toBe(1);
+        }
+    });
+
+    it('a-refused-offer-is-counted-not-swallowed', async () => {
+        const status = await loadOffers(agoraWith([oneshot(80000n, 1n)]), PK);
+        expect(status.kind).toBe('offers');
+        if (status.kind === 'offers') {
+            // Nothing refused: the field is absent rather than a zero, so a
+            // screen cannot print "0 more listings".
+            expect(status.dropped).toBeUndefined();
         }
     });
 
