@@ -301,3 +301,17 @@ export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';
 
 /** The currency the supplementary fiat figure is read in. */
 export const FIAT_LABEL = 'Show prices in';
+
+/**
+ * The homepage a token's minter wrote into genesis. Permanent on chain, and
+ * checked by nobody — least of all by this page, which reads the chain and
+ * verifies no claim made in it. So the destination is printed in full, the
+ * reader is told who wrote it, and nothing opens without a second click.
+ */
+export const TOKEN_LINK_LABEL = 'Link from the token’s creator';
+export const TOKEN_LINK_WARNING =
+    'This address was written into the token by whoever minted it. Stall does not check it and cannot vouch for it — it is not verified, and it may not belong to this seller.';
+export const TOKEN_LINK_REVEAL = 'Open this link…';
+export const TOKEN_LINK_CONFIRM = 'Open in a new tab';
+export const TOKEN_LINK_CANCEL = 'Cancel';
+export const tokenLinkHost = (host: string): string => `You will be taken to ${host}`;

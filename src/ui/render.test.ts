@@ -67,7 +67,7 @@ import {
     tokenRateBound,
 } from './copy';
 import { scaleRate } from '../domain/fiat';
-import { SHARE_QR_TOO_LONG } from './copy';
+import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -2381,5 +2381,156 @@ describe('fiat-is-beside-the-price-never-inside-it', () => {
         // No asked price is shown for an unbuyable remainder, so there is no
         // figure for a fiat line to be a conversion of.
         expect(root.querySelector('[data-role="fiat"]')).toBeNull();
+    });
+});
+
+describe('genesis-link-needs-two-clicks-and-never-runs-script', () => {
+    /**
+     * The minter wrote this field, it is permanent on chain, and nobody checked
+     * it — least of all this page, which reads the chain and verifies no claim
+     * in it. So the destination is shown in full with a warning, and nothing is
+     * a link until the reader asks for one.
+     */
+    const withUrl = (url: string | undefined) =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            overlay: { kind: 'buy', outpoint: OUTPOINT },
+            tokens: new Map([[TOKEN_ID, { ...BEANS, url }]]),
+        });
+
+    it('shows the destination and warns before anything opens', () => {
+        const { root } = paint(withUrl('https://example.com/beans'));
+        const block = root.querySelector('[data-role="token-link"]') as HTMLElement;
+        expect(block).not.toBeNull();
+        expect(
+            block.querySelector('[data-role="token-link-url"]')?.textContent,
+            'the full destination is printed',
+        ).toBe('https://example.com/beans');
+        expect(block.textContent).toContain(TOKEN_LINK_WARNING);
+
+        const confirm = block.querySelector('[data-role="token-link-confirm"]') as HTMLElement;
+        expect(confirm.hidden, 'no link until asked').toBe(true);
+        (block.querySelector('[data-role="token-link-reveal"]') as HTMLButtonElement).click();
+        expect(confirm.hidden).toBe(false);
+
+        const open = block.querySelector('[data-role="token-link-open"]') as HTMLAnchorElement;
+        expect(open.getAttribute('href')).toBe('https://example.com/beans');
+        expect(open.target, 'a stranger’s page does not replace the stall').toBe('_blank');
+        // The opened page must not reach back into this one, nor learn which
+        // stall sent it.
+        expect(open.rel).toContain('noopener');
+        expect(open.rel).toContain('noreferrer');
+
+        (block.querySelector('[data-role="token-link-cancel"]') as HTMLButtonElement).click();
+        expect(confirm.hidden, 'the reader can back out').toBe(true);
+    });
+
+    it('paints no link at all for a scheme that would run code', () => {
+        for (const raw of [
+            'javascript:alert(1)',
+            '  JaVaScRiPt:alert(1)',
+            'data:text/html,<script>alert(1)</script>',
+            '/relative',
+            'not a url',
+            undefined,
+        ]) {
+            const { root } = paint(withUrl(raw));
+            expect(root.querySelector('[data-role="token-link"]'), String(raw)).toBeNull();
+            // And no anchor anywhere in the panel carries it.
+            for (const a of root.querySelectorAll('a')) {
+                expect(a.getAttribute('href') ?? '').not.toContain('javascript:');
+            }
+        }
+    });
+});
+
+describe('picker-previews-the-look-without-publishing-it', () => {
+    /**
+     * Choosing a look repaints the seller's own stall in it immediately. It is
+     * a preview and nothing else: no record is signed here, so a reload brings
+     * back whatever the chain says. The note beside the control has always been
+     * about exactly that gap, and it still flips when the choice differs from
+     * what was published.
+     */
+    function openSheet(theme = decodeTheme(DEFAULT_THEME_ID)) {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                theme,
+            }),
+        );
+        return {
+            root,
+            stall: root.querySelector('.stall') as HTMLElement,
+            select: root.querySelector('select[name="theme"]') as HTMLSelectElement,
+        };
+    }
+
+    it('repaints the live stall in the chosen look, strip and all', () => {
+        const { stall, select } = openSheet();
+        expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(255, 255, 255)');
+        expect(stall.querySelector('.orn'), 'Modern ships no strip').toBeNull();
+
+        select.value = String(NEO_CITY_THEME_ID);
+        select.dispatchEvent(new Event('change'));
+
+        const neo = decodeTheme(NEO_CITY_THEME_ID);
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(
+            `rgb(${neo.bg.r}, ${neo.bg.g}, ${neo.bg.b})`,
+        );
+        // The strip is part of the look: without this, choosing Neo left a
+        // white shop and choosing Modern left Neo's ticker running above one.
+        const strip = stall.querySelector('.orn') as HTMLElement;
+        expect(strip).not.toBeNull();
+        expect(strip.classList.contains('orn-ticker')).toBe(true);
+
+        select.value = String(DEFAULT_THEME_ID);
+        select.dispatchEvent(new Event('change'));
+        expect(stall.querySelectorAll('.orn'), 'never two strips').toHaveLength(0);
+        expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(255, 255, 255)');
+    });
+
+    it('still says when publishing would not change anything', () => {
+        const { root, select } = openSheet();
+        const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
+        expect(note.hidden, 'the painted look is the selected one').toBe(false);
+        select.value = String(RURAL_THEME_ID);
+        select.dispatchEvent(new Event('change'));
+        expect(note.hidden, 'a previewed look is a real change to publish').toBe(true);
+    });
+});
+
+describe('hidden-beats-a-class-that-sets-display', () => {
+    /**
+     * The UA rule is `[hidden] { display: none }`, which any author rule
+     * outranks. Three classes here set `display` and are toggled with
+     * `.hidden`, so without an explicit rule the settings QR stayed on screen
+     * for a record that was not ready to sign, and the reveal button sat beside
+     * the confirmation it had just opened. happy-dom does not cascade, so this
+     * reads the stylesheet.
+     */
+    it('declares the override, and every display-setting class needs it', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rule = css.match(/\[hidden\]\s*\{([^}]+)\}/);
+        expect(rule, 'no [hidden] rule at all').not.toBeNull();
+        expect(rule![1]).toMatch(/display:\s*none\s*!important/);
+
+        // The classes the code actually toggles. If one of these stops setting
+        // `display` the rule is merely redundant; if a new one appears, it is
+        // already covered — this asserts the pairing is understood, not lucky.
+        for (const cls of ['mini', 'publish-qr', 'token-link-confirm']) {
+            const block = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]+)\\}`));
+            expect(block, `.${cls} missing`).not.toBeNull();
+            expect(
+                /display:/.test(block![1]),
+                `.${cls} sets display, so it depends on the [hidden] rule above`,
+            ).toBe(true);
+        }
     });
 });

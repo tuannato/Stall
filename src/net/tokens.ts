@@ -23,6 +23,10 @@ export async function loadTokenMeta(
                 name: info.genesisInfo.tokenName,
                 ticker: info.genesisInfo.tokenTicker,
                 decimals: info.genesisInfo.decimals,
+                // A homepage the minter wrote, kept as the raw string: what it
+                // is allowed to become is `domain/tokenlink.ts`'s decision, and
+                // it is never an image source (`genesis-url-is-not-an-image-source`).
+                url: info.genesisInfo.url,
             };
             const tokenType = info.tokenType;
             if (

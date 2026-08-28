@@ -64,6 +64,11 @@ export type TokenMeta = {
     ticker: string;
     decimals: number;
     tokenType?: TokenTypeMeta;
+    /**
+     * The homepage the minter wrote into genesis. Permanent, and checked by
+     * nobody — see `domain/tokenlink.ts` before it reaches an href.
+     */
+    url?: string;
 };
 
 export type FetchStatus =

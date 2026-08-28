@@ -50,6 +50,8 @@ export type TokenChronik = {
             tokenName: string;
             tokenTicker: string;
             decimals: number;
+            /** A homepage the minter wrote. Optional: plenty of tokens set none. */
+            url?: string;
         };
         tokenType?: {
             protocol: string;

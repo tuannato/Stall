@@ -8,6 +8,7 @@ import {
 } from '../domain/cashtab';
 import { FIAT_CURRENCIES, formatFiat } from '../domain/fiat';
 import { iconUrl } from '../domain/icons';
+import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { encodeManifestHex } from '../domain/manifest';
 import {
@@ -30,6 +31,7 @@ import type {
 import {
     DEFAULT_THEME,
     SHIPPED_THEMES,
+    decodeTheme,
     themeVars,
     type DecodedTheme,
 } from '../domain/theme';
@@ -121,14 +123,6 @@ export function renderStall(
     const theme = view.theme ?? DEFAULT_THEME;
     applyTheme(stall, theme);
 
-    // The ornament is the top edge of the stall, so it precedes every screen's
-    // header. Only a theme that ships one paints anything; the apex and every
-    // error screen fall to the default look, which ships none.
-    const orn = ornamentStrip(theme);
-    if (orn !== null) {
-        stall.append(orn);
-    }
-
     switch (view.route.kind) {
         case 'home':
             paintHome(stall, handlers);
@@ -156,6 +150,19 @@ function applyTheme(stall: HTMLElement, theme: DecodedTheme): void {
     const vars = themeVars(theme);
     for (const [name, value] of Object.entries(vars)) {
         stall.style.setProperty(name, value);
+    }
+    // The strip is part of the look, so a live preview has to swap it too —
+    // otherwise choosing Modern leaves Neo's ticker running above a white shop.
+    // Direct children only, and walked rather than selected: `:scope >` is not
+    // universally supported, and a miss here leaves two strips stacked.
+    for (const child of [...stall.children]) {
+        if (child.classList.contains('orn')) {
+            child.remove();
+        }
+    }
+    const next = ornamentStrip(theme);
+    if (next !== null) {
+        stall.prepend(next);
     }
 }
 
@@ -796,7 +803,20 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
     };
     input.addEventListener('input', refresh);
-    select.addEventListener('change', refresh);
+    select.addEventListener('change', () => {
+        refresh();
+        // Paint the chosen look on the seller's own stall straight away. It is
+        // a preview and nothing more: no record is signed here, so a reload
+        // brings back whatever the chain says — which is what the note beside
+        // this control has always been about. Applied to the live `.stall`
+        // rather than through a repaint, because a repaint would rebuild this
+        // sheet and take the focus out of the picker.
+        const chosen = Number(select.value);
+        const stall = select.closest('.frame')?.querySelector('.stall');
+        if (stall !== null && stall !== undefined && Number.isInteger(chosen)) {
+            applyTheme(stall as HTMLElement, decodeTheme(chosen));
+        }
+    });
     form.addEventListener('submit', (event) => event.preventDefault());
     form.append(label, themeLabel, err, sameLook);
     wrap.append(form);
@@ -969,6 +989,10 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
             ),
         );
         panel.append(tokenFacts(offer, meta, ticker));
+    const link = tokenLink(meta);
+    if (link !== undefined) {
+        panel.append(link);
+    }
         // No link out: Cashtab will not show this row either.
         panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
         return panel;
@@ -987,6 +1011,10 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     panel.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
 
     panel.append(tokenFacts(offer, meta, ticker));
+    const link = tokenLink(meta);
+    if (link !== undefined) {
+        panel.append(link);
+    }
 
     // No network fee row: this origin builds nothing, so it has no fee to
     // quote. Cashtab shows its own before it signs.
@@ -1017,6 +1045,68 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     }
     panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
     return panel;
+}
+
+/**
+ * The homepage from the token's genesis, if it is one this app will offer to
+ * open. Two clicks, never one: the string was written by whoever minted the
+ * token, it is permanent, and nobody checked it. So the reader sees the label,
+ * the warning and the full destination before anything is a link at all —
+ * and what opens is the parsed URL that was displayed, not the raw field.
+ *
+ * `noopener noreferrer` because the opened page must not reach back into this
+ * one and must not learn which stall sent it.
+ */
+function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
+    const href = tokenUrl(meta?.url);
+    if (href === undefined) {
+        return undefined;
+    }
+    const wrap = el('div', 'token-link');
+    wrap.setAttribute('data-role', 'token-link');
+    wrap.append(el('div', 'token-link-label', copy.TOKEN_LINK_LABEL));
+    // The destination in full, always visible, never truncated into a lie.
+    const shown = el('div', 'token-link-url', href);
+    shown.setAttribute('data-role', 'token-link-url');
+    wrap.append(shown);
+    wrap.append(el('p', 'note', copy.TOKEN_LINK_WARNING));
+
+    const reveal = el('button', 'mini', copy.TOKEN_LINK_REVEAL);
+    reveal.type = 'button';
+    reveal.setAttribute('data-role', 'token-link-reveal');
+
+    const confirm = el('div', 'token-link-confirm');
+    confirm.setAttribute('data-role', 'token-link-confirm');
+    confirm.hidden = true;
+    const host = tokenUrlHost(href);
+    if (host !== undefined) {
+        confirm.append(el('div', 'fine', copy.tokenLinkHost(host)));
+    }
+    const go = el('a', 'mini');
+    go.textContent = copy.TOKEN_LINK_CONFIRM;
+    go.href = href;
+    go.target = '_blank';
+    go.rel = 'noopener noreferrer';
+    go.setAttribute('data-role', 'token-link-open');
+    const cancel = el('button', 'another', copy.TOKEN_LINK_CANCEL);
+    cancel.type = 'button';
+    cancel.setAttribute('data-role', 'token-link-cancel');
+    confirm.append(go);
+    confirm.append(cancel);
+
+    reveal.addEventListener('click', () => {
+        confirm.hidden = false;
+        reveal.hidden = true;
+        go.focus();
+    });
+    cancel.addEventListener('click', () => {
+        confirm.hidden = true;
+        reveal.hidden = false;
+        reveal.focus();
+    });
+    wrap.append(reveal);
+    wrap.append(confirm);
+    return wrap;
 }
 
 function tokenFacts(
