@@ -1871,7 +1871,13 @@ function applyTitle(view: StallView): void {
             document.title = copy.HOME_TITLE;
             return;
         case 'invalid':
-            document.title = copy.LINK_UNREADABLE_TITLE;
+            // The title is what an unfurled link and a tab strip show, so it
+            // carries the same distinction the screen does: "unreadable" about
+            // a valid address is a false claim wherever it is printed.
+            document.title =
+                view.route.why === 'script-address'
+                    ? copy.SCRIPT_ADDRESS_TITLE
+                    : copy.LINK_UNREADABLE_TITLE;
             return;
         case 'unresolvable':
             document.title = copy.UNRESOLVABLE_HEADER;

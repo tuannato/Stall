@@ -2883,6 +2883,10 @@ describe('a script address is told the true thing', () => {
         expect(text).toContain(copy.SCRIPT_ADDRESS_TITLE);
         expect(text).toContain(copy.SCRIPT_ADDRESS_BODY);
         expect(text).not.toContain(copy.LINK_UNREADABLE_TITLE);
+        // The tab strip and an unfurled link show this, and it said the wrong
+        // thing while the screen said the right one — found in a browser, not
+        // by this suite, which was reading `root.textContent` alone.
+        expect(document.title).toBe(copy.SCRIPT_ADDRESS_TITLE);
         // The never-sent screen's promise is a loop for an address like this.
         expect(text).not.toContain(copy.UNRESOLVABLE_SUB);
     });
@@ -2896,6 +2900,7 @@ describe('a script address is told the true thing', () => {
         const text = root.textContent ?? '';
         expect(text).toContain(copy.LINK_UNREADABLE_TITLE);
         expect(text).not.toContain(copy.SCRIPT_ADDRESS_TITLE);
+        expect(document.title).toBe(copy.LINK_UNREADABLE_TITLE);
     });
 });
 
