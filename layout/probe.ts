@@ -108,8 +108,24 @@ const SCREENS: Record<string, StallView> = {
  * partly covered does not scan, an address that is partly covered cannot be
  * checked against a wallet, and a buy control under a sprite is a control the
  * visitor cannot press.
+ *
+ * The hex of a record is here for a stronger reason than the price: §5 says
+ * Cashtab previews an unknown LOKAD as raw hex, so the publish screen is the
+ * **only** place a seller can read the bytes before signing them. Covering
+ * those is worse than covering a number they can check on the next screen.
+ * `fiat` and `rate` are money figures too, and a covered one reads as nothing.
  */
-const PROTECTED = '[data-role="price"], .row.big dd, .qr, .buy, .addr';
+const PROTECTED = [
+    '[data-role="price"]',
+    '.row.big dd',
+    '.qr',
+    '.buy',
+    '.addr',
+    '[data-role="publish-hex"]',
+    '[data-role="describe-hex"]',
+    '[data-role="fiat"]',
+    '[data-role="rate"]',
+].join(', ');
 
 /**
  * Anything painted over the stall rather than in it. Absolutely positioned or
@@ -217,10 +233,19 @@ function describe(node: Element): string {
     return `${node.tagName.toLowerCase()}${cls === '' ? '' : `.${cls.split(/\s+/).join('.')}`}`;
 }
 
-function check(screen: string, themeId: number, themeLabel: string): Failure[] {
+function paint(screen: string, themeId: number): void {
     const root = document.getElementById('app')!;
     const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId) };
     renderStall(root, view, handlers);
+}
+
+/**
+ * Measure what is on screen. **Separate from painting on purpose**: seeking an
+ * animation and then repainting seeks a tree that is thrown away, and that is
+ * exactly what the first version did — see `checkOverTime`.
+ */
+function measure(screen: string, themeLabel: string): Failure[] {
+    const root = document.getElementById('app')!;
 
     const out: Failure[] = [];
     const fail = (c: string, detail: string): void => {
@@ -354,7 +379,15 @@ function check(screen: string, themeId: number, themeLabel: string): Failure[] {
 const STEPS = 6;
 
 function checkOverTime(screen: string, themeId: number, themeLabel: string): Failure[] {
-    const out = check(screen, themeId, themeLabel);
+    paint(screen, themeId);
+    const out = measure(screen, themeLabel);
+    // Queried after the paint, so these are the animations on the tree that is
+    // about to be measured — and it must stay that way. Repainting between the
+    // seek and the measurement is what made the first version of this loop a
+    // no-op: `renderStall` throws the tree away on every paint, so every
+    // measurement landed on fresh nodes at t=0. Proved by planting a sprite
+    // that is empty at t=0 and covers the screen mid-cycle: nothing was
+    // reported until the seek and the measurement shared one tree.
     const running = document.getAnimations();
     if (running.length === 0) {
         return out;
@@ -376,7 +409,7 @@ function checkOverTime(screen: string, themeId: number, themeLabel: string): Fai
                 // A finished or unseekable animation is not a moving thing.
             }
         }
-        for (const f of check(screen, themeId, themeLabel)) {
+        for (const f of measure(screen, themeLabel)) {
             out.push({ ...f, check: `${f.check} (at ${Math.round(at)}ms)` });
         }
     }
