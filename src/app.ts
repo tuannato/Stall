@@ -2,7 +2,8 @@ import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
-import { clearSavedStall, isSavedStall, readSavedStall, saveStall } from './saved';
+import { fetchXecPrice } from './net/price';
+import { clearSavedStall, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
 import type {
     FetchStatus,
     Overlay,
@@ -41,6 +42,16 @@ export function boot(
     let generation = 0;
     /** One socket per painted stall. Closed before the next one opens. */
     let live: LiveHandle | undefined;
+    /**
+     * The fiat rate for this page load. Absent until the feed answers, and
+     * absent again the moment it fails — never a last-known value, because a
+     * stale rate renders a two-dollar item at two cents and nobody would find
+     * out. Deliberately not refreshed on a timer: the offers are what this page
+     * watches, and a fiat figure that quietly rewrites itself is worse than one
+     * that is honestly a few minutes old at a glance.
+     */
+    let fiatCode = readSavedFiat();
+    let fiatRate: bigint | undefined;
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -50,14 +61,43 @@ export function boot(
         offers: [],
     };
 
+    /**
+     * Ask the feed once, and paint whatever came back — including nothing. This
+     * never rejects and never throws: the asked amount is on chain and does not
+     * need a price feed to be right, so a feed that is down or rate-limited
+     * costs the fiat line and nothing else.
+     */
+    const refreshFiat = async (): Promise<void> => {
+        const asked = fiatCode;
+        const rate = await fetchXecPrice(asked);
+        // The visitor may have changed currency while this was in flight.
+        if (asked !== fiatCode) {
+            return;
+        }
+        fiatRate = rate;
+        paint();
+    };
+
     const paint = (): void => {
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
             ...state.view,
             isDefaultStall: isSavedStall(identityOf(state.view)),
+            fiatCode,
+            fiatRate,
         };
         renderStall(root, view, {
+            onChangeFiat: (code: string): void => {
+                fiatCode = code;
+                saveFiat(code);
+                // The old currency's rate is not this currency's rate, so it
+                // goes immediately: a figure in the wrong currency is a worse
+                // lie than no figure at all.
+                fiatRate = undefined;
+                paint();
+                void refreshFiat();
+            },
             onBuy: (outpoint) => {
                 void onBuy(outpoint);
             },
@@ -180,6 +220,9 @@ export function boot(
         history.replaceState(null, '', stallPath(saved));
     }
     void refresh();
+    // Independent of the offer read: a feed that is slow or down must not hold
+    // up the shop, and a shop that fails to load still has no use for a rate.
+    void refreshFiat();
 }
 
 async function loadCurrent(): Promise<AppState> {

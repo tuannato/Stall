@@ -357,6 +357,20 @@ body {
     font-weight: 400;
 }
 
+/*
+ * The fiat figure. Rate size and the muted role on purpose: it is
+ * supplementary, and type large enough to be comfortable would make it a second
+ * price beside the one the covenant encodes.
+ */
+.item-fiat {
+    display: block;
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--s-muted);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--s-font);
+}
+
 .item-detail {
     display: flex;
     flex-direction: column;

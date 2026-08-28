@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import { ICON_HOST } from './src/domain/icons';
-import { CHRONIK_HOSTS } from './src/net/hosts';
+import { CHRONIK_HOSTS, PRICE_HOST } from './src/net/hosts';
 
 /**
  * Key derivation must not reach the bundle.
@@ -165,7 +165,7 @@ export const CSP = [
     // Both schemes, from the one constant. chronik-client turns each https
     // host into wss://<host>/ws for its subscription socket, and CSP does not
     // infer one from the other — a missing wss:// is a silent dead socket.
-    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')} ${CHRONIK_HOSTS.map((h) => h.replace('https://', 'wss://')).join(' ')}`,
+    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')} ${CHRONIK_HOSTS.map((h) => h.replace('https://', 'wss://')).join(' ')} ${PRICE_HOST}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import appConfig, { CSP } from '../vite.config';
 import { ICON_HOST } from './domain/icons';
-import { CHRONIK_HOSTS } from './net/hosts';
+import { CHRONIK_HOSTS, PRICE_HOST } from './net/hosts';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -101,6 +101,9 @@ describe('script-src-and-connect-src-are-pinned', () => {
             "'self'",
             ...CHRONIK_HOSTS,
             ...CHRONIK_HOSTS.map((host) => host.replace('https://', 'wss://')),
+            // The price feed. One origin, and the only non-chronik host here:
+            // the fiat line is supplementary, and this is what it costs.
+            PRICE_HOST,
         ].sort();
         for (const [label, policy] of policyCopies()) {
             expect([...sources(policy, 'connect-src')].sort(), label).toEqual(expected);

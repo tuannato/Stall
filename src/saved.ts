@@ -11,6 +11,7 @@
  * stall not to paint. Every call here swallows that and behaves as if nothing
  * was ever saved.
  */
+import { DEFAULT_FIAT_CODE, isSupportedFiat } from './domain/fiat';
 import { parseSellerParam } from './domain/route';
 
 const KEY = 'stall.default';
@@ -62,4 +63,41 @@ export function isSavedStall(raw: string | undefined): boolean {
     }
     const saved = readSavedStall();
     return saved !== undefined && saved === raw;
+}
+
+/**
+ * The fiat currency this browser reads prices in. A display preference and
+ * nothing else — §2 allows storage to hold exactly that.
+ *
+ * Re-validated on every read against the shipped table, because the value is
+ * user-writable and it is concatenated into a request path. A stored code we no
+ * longer ship reads as the default, never as a URL fragment.
+ */
+const FIAT_KEY = 'stall.fiat';
+
+/** No shipped code is longer than this; anything longer was not written here. */
+const MAX_FIAT_CODE = 8;
+
+export function readSavedFiat(): string {
+    let raw: string | null;
+    try {
+        raw = localStorage.getItem(FIAT_KEY);
+    } catch {
+        return DEFAULT_FIAT_CODE;
+    }
+    if (raw === null || raw.length > MAX_FIAT_CODE || !isSupportedFiat(raw)) {
+        return DEFAULT_FIAT_CODE;
+    }
+    return raw;
+}
+
+export function saveFiat(code: string): void {
+    if (code.length > MAX_FIAT_CODE || !isSupportedFiat(code)) {
+        return;
+    }
+    try {
+        localStorage.setItem(FIAT_KEY, code);
+    } catch {
+        // Nothing to do: the choice simply is not remembered.
+    }
 }

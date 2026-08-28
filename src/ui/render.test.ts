@@ -66,6 +66,7 @@ import {
     tokenRate,
     tokenRateBound,
 } from './copy';
+import { scaleRate } from '../domain/fiat';
 import { SHARE_QR_TOO_LONG } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
@@ -2317,5 +2318,68 @@ describe('ios-does-not-zoom-a-focused-field', () => {
                 `${f.tagName} wears no sized field class`,
             ).toBe(true);
         }
+    });
+});
+
+describe('fiat-is-beside-the-price-never-inside-it', () => {
+    /**
+     * §8: the price node holds the number the covenant encodes. The fiat figure
+     * is the same shape as the labelled rate that already sits beside it — a
+     * rounded figure for a glance, in its own node — and it is absent whenever
+     * the feed did not answer, because a stale rate renders a two-dollar item
+     * at two cents and nobody would find out.
+     */
+    const withRate = (over = {}) =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            tokens: new Map([[TOKEN_ID, BEANS]]),
+            fiatCode: 'usd',
+            fiatRate: scaleRate(0.00003),
+            ...over,
+        });
+
+    it('paints a fiat line that is not the price node', () => {
+        const { root } = paint(withRate());
+        const fiat = root.querySelector('[data-role="fiat"]') as HTMLElement;
+        expect(fiat).not.toBeNull();
+        expect(fiat.textContent).toBe('$0.04');
+
+        const price = root.querySelector('[data-role="price"]') as HTMLElement;
+        // The asked amount is untouched, and does not contain the fiat figure.
+        expect(price.textContent).toBe('1,200');
+        expect(price.contains(fiat)).toBe(false);
+        expect(price).not.toBe(fiat);
+        const rate = root.querySelector('[data-role="rate"]') as HTMLElement;
+        expect(rate.contains(fiat)).toBe(false);
+    });
+
+    it('paints nothing at all when the rate did not load', () => {
+        for (const over of [
+            { fiatRate: undefined },
+            { fiatCode: undefined },
+            { fiatCode: 'xyz' },
+        ]) {
+            const { root } = paint(withRate(over));
+            expect(
+                root.querySelector('[data-role="fiat"]'),
+                JSON.stringify(over),
+            ).toBeNull();
+            // The stall still paints, and the asked amount is still there.
+            expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+        }
+    });
+
+    it('says nothing on an offer no covenant will sell', () => {
+        const { root } = paint(
+            withRate({
+                fetch: {
+                    kind: 'offers',
+                    offers: [{ ...OFFER, askedAtoms: 999n, minAcceptedAtoms: 999n }],
+                },
+            }),
+        );
+        // No asked price is shown for an unbuyable remainder, so there is no
+        // figure for a fiat line to be a conversion of.
+        expect(root.querySelector('[data-role="fiat"]')).toBeNull();
     });
 });

@@ -6,6 +6,7 @@ import {
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
+import { FIAT_CURRENCIES, formatFiat } from '../domain/fiat';
 import { iconUrl } from '../domain/icons';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { encodeManifestHex } from '../domain/manifest';
@@ -47,6 +48,8 @@ export type StallHandlers = {
     /** Toggle whether the bare domain opens this stall. */
     onToggleDefault?: (raw: string) => void;
     onOpenPublish?: () => void;
+    /** Change the currency the fiat line is read in. */
+    onChangeFiat?: (code: string) => void;
     onClosePublish?: () => void;
 };
 
@@ -887,6 +890,18 @@ function offerRow(
         price.append(el('span', 'item-u', copy.XEC));
         price.append(rateLine(offer, view));
     }
+    // Fiat sits beside the rate, at rate size, in its own node — never inside
+    // `[data-role="price"]`. It is supplementary: the covenant encodes
+    // `askedSats`, and a figure large enough to be comfortable is a second
+    // price. Absent whenever the feed did not answer.
+    if (!isUnbuyable(offer)) {
+        const fiat = formatFiat(offer.askedSats, view.fiatRate, view.fiatCode ?? '');
+        if (fiat !== undefined) {
+            const fiatLine = el('span', 'item-fiat', fiat);
+            fiatLine.setAttribute('data-role', 'fiat');
+            price.append(fiatLine);
+        }
+    }
     head.append(price);
     head.addEventListener('click', () => {
         if (expanded) {
@@ -1100,6 +1115,8 @@ function stallFooter(
         // there. Everywhere else the link is the point.
         share: opts.share ?? true,
         goHome: handlers.onGoHome,
+        fiatCode: view.fiatCode,
+        onChangeFiat: handlers.onChangeFiat,
         // Only where the sheet can actually open. `publishSheet` is mounted by
         // `paintOffers` and `paintEmpty`, both under `paintPubkey`; on any
         // other screen this was a button that flipped the overlay and repainted
@@ -1127,6 +1144,8 @@ function footer(
         goHome?: () => void;
         onPublish?: () => void;
         defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
+        fiatCode?: string;
+        onChangeFiat?: (code: string) => void;
     },
 ): HTMLElement {
     // The address is the sign's now, not the footer's: it names the shop, so it
@@ -1164,6 +1183,10 @@ function footer(
     }
     if (extra?.share === true) {
         ft.append(shareControl());
+    }
+    const onFiat = extra?.onChangeFiat;
+    if (onFiat !== undefined) {
+        ft.append(fiatPicker(extra?.fiatCode ?? '', onFiat));
     }
     return ft;
 }
@@ -1371,6 +1394,31 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
 
 function shareUrl(): string {
     return `${location.origin}${location.pathname}${location.search}`;
+}
+
+/**
+ * Which currency the fiat line is read in. A display preference, kept in
+ * `localStorage` like the default stall — never anything that grows, never a
+ * key. The list is the one the feed answers for, so a choice here cannot ask
+ * for a code that silently returns nothing.
+ */
+function fiatPicker(code: string, onChange: (code: string) => void): HTMLElement {
+    const label = el('label', 'paste-label', copy.FIAT_LABEL);
+    const select = el('select', 'paste-in');
+    select.name = 'fiat';
+    select.setAttribute('data-role', 'fiat-picker');
+    select.setAttribute('data-focus-key', 'fiat-picker');
+    for (const c of FIAT_CURRENCIES) {
+        const opt = el('option', undefined, `${c.name} (${c.symbol})`);
+        opt.value = c.code;
+        if (c.code === code) {
+            opt.selected = true;
+        }
+        select.append(opt);
+    }
+    select.addEventListener('change', () => onChange(select.value));
+    label.append(select);
+    return label;
 }
 
 function shareControl(): HTMLElement {

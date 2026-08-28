@@ -298,3 +298,6 @@ export const PUBLISH_QR_LEDE =
 export const COPY_LINK = 'Copy link';
 export const LINK_COPIED = 'Link copied';
 export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';
+
+/** The currency the supplementary fiat figure is read in. */
+export const FIAT_LABEL = 'Show prices in';

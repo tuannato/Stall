@@ -106,4 +106,12 @@ export type StallView = {
     settingsUnreadable?: boolean;
     /** True when the bare domain opens this stall for this browser. */
     isDefaultStall?: boolean;
+    /**
+     * The fiat currency this browser chose, and one XEC in it as an integer
+     * (see `domain/fiat.ts`). The rate is **absent** whenever the feed did not
+     * answer — never a last-known value — so a missing rate paints no fiat line
+     * rather than an old one.
+     */
+    fiatCode?: string;
+    fiatRate?: bigint;
 };
