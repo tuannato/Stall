@@ -103,6 +103,73 @@ const SCREENS: Record<string, StallView> = {
     },
 };
 
+/**
+ * What a decoration may never touch. Wider than the price, because a QR that is
+ * partly covered does not scan, an address that is partly covered cannot be
+ * checked against a wallet, and a buy control under a sprite is a control the
+ * visitor cannot press.
+ */
+const PROTECTED = '[data-role="price"], .row.big dd, .qr, .buy, .addr';
+
+/**
+ * Anything painted over the stall rather than in it. Absolutely positioned or
+ * fixed nodes, and any element carrying an attachment class — the catalogue
+ * that does not exist yet is the reason this check does, so it is written to
+ * find those the moment they arrive.
+ */
+function decorations(root: ParentNode): Element[] {
+    const out: Element[] = [];
+    for (const node of root.querySelectorAll('*')) {
+        if (node.className !== undefined && /\batt-/.test(String(node.className))) {
+            out.push(node);
+            continue;
+        }
+        const pos = getComputedStyle(node).position;
+        if (pos === 'absolute' || pos === 'fixed') {
+            out.push(node);
+        }
+    }
+    return out;
+}
+
+/**
+ * A pseudo-element falls through both other checks, so it is banned outright.
+ *
+ * `::before` and `::after` are not in the DOM: `querySelectorAll` cannot return
+ * them and they have no `getBoundingClientRect`, so the geometric check is
+ * blind. And with `pointer-events: none` the hit test is blind too — measured:
+ * an `::after` with `inset: 0` and `pointer-events: none` over the price passed
+ * both. Nothing in the shipped stylesheet needs a positioned pseudo-element, so
+ * the honest rule is that a decoration must be a **real node the guard can
+ * measure**. This finds the ones that are not.
+ */
+function positionedPseudos(root: ParentNode): string[] {
+    const out: string[] = [];
+    for (const node of root.querySelectorAll('*')) {
+        for (const which of ['::before', '::after'] as const) {
+            const style = getComputedStyle(node, which);
+            if (style.content === 'none' || style.content === '') {
+                continue;
+            }
+            const pos = style.position;
+            if (pos === 'absolute' || pos === 'fixed') {
+                out.push(`${describe(node)}${which}`);
+            }
+        }
+    }
+    return out;
+}
+
+/** Do two boxes share any area at all? */
+function overlaps(a: DOMRect, b: DOMRect): boolean {
+    return !(
+        a.right <= b.left ||
+        b.right <= a.left ||
+        a.bottom <= b.top ||
+        b.bottom <= a.top
+    );
+}
+
 type Failure = { screen: string; theme: string; check: string; detail: string };
 
 /**
@@ -186,6 +253,48 @@ function check(screen: string, themeId: number, themeLabel: string): Failure[] {
             fail('you-pay figure is covered', why);
         }
     }
+    /**
+     * Boxes, not hit testing — and this is the check that matters most.
+     *
+     * `elementFromPoint` skips anything with `pointer-events: none`, and every
+     * attachment in the shipped catalogue will carry exactly that, because a
+     * decoration that answers a tap is a control. Measured in a browser: a red
+     * box with `pointer-events: none` laid over a price returned **the price**
+     * as the hit, so the five-point probe called it uncovered while it was
+     * completely hidden. Geometry does not care about hit testing.
+     */
+    const guarded = [...surface.querySelectorAll(PROTECTED)].map((n) => ({
+        node: n,
+        box: n.getBoundingClientRect(),
+    }));
+    for (const deco of decorations(surface)) {
+        // A decoration that contains the thing, or sits inside it, is layout,
+        // not cover: `.item` clips its own children, and the scrim *is* the
+        // sheet's own frame.
+        const box = deco.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) {
+            continue;
+        }
+        for (const g of guarded) {
+            if (deco.contains(g.node) || g.node.contains(deco)) {
+                continue;
+            }
+            if (overlaps(box, g.box)) {
+                fail(
+                    'a decoration overlaps something it must not',
+                    `${describe(deco)} over ${describe(g.node)}`,
+                );
+            }
+        }
+    }
+
+    for (const pseudo of positionedPseudos(surface)) {
+        fail(
+            'a positioned pseudo-element cannot be measured',
+            `${pseudo} — a decoration must be a real node`,
+        );
+    }
+
     if (scrim !== null) {
         // A sheet taller than the screen with nothing to scroll would strand
         // whatever is below it — including a figure a seller is about to sign.
@@ -231,10 +340,53 @@ function check(screen: string, themeId: number, themeLabel: string): Failure[] {
     return out;
 }
 
+/**
+ * One instant is not a measurement of a moving thing.
+ *
+ * A sprite whose keyframes carry it across the price is uncovered at t=0 and
+ * over the number at t=7s, and a probe that samples once passes it. So each
+ * screen is measured at several points through the longest animation on it.
+ *
+ * `getAnimations` is queried after the paint, so it sees whatever the shipped
+ * looks actually start — today that is the Neo ticker's flicker and the card
+ * caret's transition, and tomorrow whatever an attachment brings.
+ */
+const STEPS = 6;
+
+function checkOverTime(screen: string, themeId: number, themeLabel: string): Failure[] {
+    const out = check(screen, themeId, themeLabel);
+    const running = document.getAnimations();
+    if (running.length === 0) {
+        return out;
+    }
+    const longest = running.reduce((ms, a) => {
+        const timing = a.effect?.getComputedTiming();
+        const d = typeof timing?.duration === 'number' ? timing.duration : 0;
+        return Math.max(ms, d);
+    }, 0);
+    if (longest <= 0) {
+        return out;
+    }
+    for (let step = 1; step <= STEPS; step += 1) {
+        const at = (longest * step) / (STEPS + 1);
+        for (const a of running) {
+            try {
+                a.currentTime = at;
+            } catch {
+                // A finished or unseekable animation is not a moving thing.
+            }
+        }
+        for (const f of check(screen, themeId, themeLabel)) {
+            out.push({ ...f, check: `${f.check} (at ${Math.round(at)}ms)` });
+        }
+    }
+    return out;
+}
+
 const failures: Failure[] = [];
 for (const screen of Object.keys(SCREENS)) {
     for (const theme of SHIPPED_THEMES) {
-        failures.push(...check(screen, theme.id, theme.label));
+        failures.push(...checkOverTime(screen, theme.id, theme.label));
     }
 }
 
