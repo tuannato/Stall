@@ -355,6 +355,35 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
     }
 
+    /*
+     * A label never wraps.
+     *
+     * These are our own words and all of them are short, so a two-line label is
+     * always a column too narrow rather than a label too long. It shipped:
+     * capping the detail's content column at 540px left exactly enough room for
+     * a 64-character token id and nothing else, so "Token ID" broke across two
+     * lines beside a value that had also broken — a row that reads as damage
+     * rather than as a fact. Nothing else in this guard can see it: the row is
+     * covered by nothing, scrolls nowhere, and stays inside the page.
+     */
+    for (const dt of surface.querySelectorAll('.row dt')) {
+        // The **text**, not the box. `.row` is a flex row, so a label's box
+        // stretches to whatever the value beside it needs — a wrapped token id
+        // at 390px, or the larger type on the you-pay figure — and measuring
+        // the box called all of those wrapped labels when the words sat on one
+        // line. A range over the contents reports one rect per line of text.
+        const range = document.createRange();
+        range.selectNodeContents(dt);
+        const lines = range.getClientRects().length;
+        range.detach?.();
+        if (lines > 1) {
+            fail(
+                'a label wrapped onto a second line',
+                `${describe(dt)} "${(dt.textContent ?? '').slice(0, 24)}" runs to ${lines} lines`,
+            );
+        }
+    }
+
     for (const pseudo of positionedPseudos(surface)) {
         fail(
             'a positioned pseudo-element cannot be measured',

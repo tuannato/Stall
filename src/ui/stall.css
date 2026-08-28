@@ -374,9 +374,19 @@ body {
  * An expanded row spans the whole grid, so a neighbour's price is never pushed
  * off screen by the disclosure. Universal now: it used to hang off
  * `.layout-shelf` alone, and the guarantee is not one look's privilege.
+ *
+ * Spans the grid but does not *fill* it. Capping the card is not the same as
+ * capping its contents, and the difference is what the first attempt got
+ * wrong: with the card left full width and the content column held to 540px,
+ * a 1,893px screen showed 1,137px of empty **card**, and the one row with a
+ * long value — the token id — had 540px for a label, a gap and a 64-character
+ * hex that needs 540px exactly, so both the label and the id wrapped. Capping
+ * the card puts the leftover space outside it, where it reads as page rather
+ * than as a hole in a card, and gives the content room to stay on one line.
  */
 .items .item.open {
     grid-column: 1 / -1;
+    max-width: 800px;
 }
 
 .item {
@@ -879,6 +889,15 @@ textarea.paste-in {
     line-height: 1.05;
 }
 
+/*
+ * A label never wraps. These are our own words, all of them short, and a
+ * two-line "Token ID" beside a two-line value reads as a broken row rather
+ * than as a fact.
+ */
+.row dt {
+    white-space: nowrap;
+}
+
 .row {
     display: flex;
     justify-content: space-between;
@@ -1181,15 +1200,13 @@ textarea.paste-in {
     .item-detail {
         display: grid;
         /*
-         * The content column is capped, not free. An open card spans every
-         * column by design, and an uncapped second column let `.row`'s
-         * `space-between` throw the label and its figure to opposite ends of
-         * the card: measured at 1280px, the label sat at x=203 and its number
-         * at x=1185, and at 1600px they were 1,180px apart. A pair nobody can
-         * read as a pair is worse than empty card beside it, and the buy
-         * control was a 1,346px slab for the same reason.
+         * Free again, because the card above it is what is capped now. An
+         * uncapped card with an uncapped column threw the label and its figure
+         * to opposite ends — measured at 1280px, a label at x=203 and its
+         * number at x=1185 — and that is what the cap on the card fixes,
+         * without also squeezing the token id onto two lines.
          */
-        grid-template-columns: var(--s-hero) minmax(0, 540px);
+        grid-template-columns: var(--s-hero) minmax(0, 1fr);
         column-gap: 20px;
         row-gap: 11px;
         align-items: start;
