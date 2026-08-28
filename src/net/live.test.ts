@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FetchStatus } from '../domain/state';
-import { isDefiniteResult, stallGroup, watchStall, AGORA_PLUGIN } from './live';
+import {
+    AGORA_PLUGIN,
+    MIN_REREAD_MS,
+    isDefiniteResult,
+    stallGroup,
+    watchStall,
+} from './live';
 
 /**
  * Models the one chronik behaviour this module exists to survive: a socket
@@ -141,5 +147,101 @@ describe('failed-refetch-is-not-empty', () => {
         f.fire('Tx');
         f.reconnect();
         expect(changed).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
+    /**
+     * Reproduced from a tab reopened after sleep: a loading indicator that never
+     * settled and a warm machine. chronik-client reconnects with **no backoff**
+     * — its `ws.onclose` calls `onReconnect` and then `connectWs` immediately —
+     * so a network that refuses connections spins as fast as it can refuse them.
+     * Asking for the offers on reconnect is right, because anything missed while
+     * down is unknown; asking once per spin is the storm.
+     */
+    function socketDouble() {
+        let handlers: {
+            onConnect?: () => void;
+            onReconnect?: () => void;
+            onMessage: (m: { type: string }) => void;
+        };
+        const calls = { subscribed: 0, paused: 0, resumed: 0 };
+        const chronik = {
+            ws(config: never) {
+                handlers = config as never;
+                return {
+                    subscribeToPlugin: () => {
+                        calls.subscribed += 1;
+                    },
+                    close: () => {},
+                    pause: () => {
+                        calls.paused += 1;
+                    },
+                    resume: () => {
+                        calls.resumed += 1;
+                        return Promise.resolve();
+                    },
+                };
+            },
+        };
+        return { chronik, calls, fire: () => handlers };
+    }
+
+    it('re-reads once for a burst of reconnects, then again after the floor', () => {
+        const { chronik, fire } = socketDouble();
+        let changed = 0;
+        let clock = 1_000_000;
+        watchStall(chronik as never, 'ab'.repeat(33), () => {
+            changed += 1;
+        }, () => clock);
+
+        for (let i = 0; i < 50; i += 1) {
+            fire().onReconnect?.();
+        }
+        expect(changed, 'fifty failed reconnects are not fifty reads').toBe(1);
+
+        clock += MIN_REREAD_MS - 1;
+        fire().onReconnect?.();
+        expect(changed, 'still inside the floor').toBe(1);
+
+        clock += 2;
+        fire().onReconnect?.();
+        expect(changed, 'a real gap asks again').toBe(2);
+    });
+
+    it('pauses instead of closing, so the socket can come back', () => {
+        const { chronik, calls } = socketDouble();
+        let changed = 0;
+        let clock = 2_000_000;
+        const handle = watchStall(chronik as never, 'ab'.repeat(33), () => {
+            changed += 1;
+        }, () => clock);
+
+        handle.pause();
+        expect(calls.paused).toBe(1);
+        // `close()` marks the socket manually closed and it never returns;
+        // `pause` is the library's own idle mode.
+        clock += MIN_REREAD_MS;
+        handle.resume();
+        expect(calls.resumed).toBe(1);
+        expect(changed, 'catch up once on return').toBe(1);
+
+        // Flapping in and out of the background is not a request per flap.
+        handle.pause();
+        handle.resume();
+        expect(changed).toBe(1);
+    });
+
+    it('does nothing on a handle that was closed for good', () => {
+        const { chronik, calls, fire } = socketDouble();
+        let changed = 0;
+        const handle = watchStall(chronik as never, 'ab'.repeat(33), () => {
+            changed += 1;
+        });
+        handle.close();
+        handle.resume();
+        fire().onReconnect?.();
+        expect(changed).toBe(0);
+        expect(calls.resumed).toBe(0);
     });
 });

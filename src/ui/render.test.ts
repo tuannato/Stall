@@ -68,7 +68,7 @@ import {
 } from './copy';
 import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
 import { scaleRate } from '../domain/fiat';
-import { DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
+import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
@@ -2807,5 +2807,65 @@ describe('the-record-a-seller-signs-stays-on-screen', () => {
             expect(node, role).not.toBeNull();
             expect(node.classList.contains('publish-hex'), `${role} wears the rule`).toBe(true);
         }
+    });
+});
+
+describe('cashtab-handoffs-say-which-act-they-are', () => {
+    /**
+     * Four controls hand off to Cashtab and they do four different things: a
+     * buyer going to look at a market, a seller signing settings, a seller
+     * signing a description, a seller listing for the first time. Labelled the
+     * same they read as one control, and a reader stops reading them.
+     *
+     * The wording avoids two English fixed phrases on purpose. "Check in" is
+     * registering an arrival, and "sign in" is logging in — on a product whose
+     * own promise is that there is nothing to sign up for.
+     */
+    it('names the buyer’s handoff for looking, never for buying', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        const cta = root.querySelector('a.buy[href*="cashtab.com"]') as HTMLAnchorElement;
+        expect(cta.textContent).toBe(OPEN_IN_CASHTAB);
+        // Cashtab's token page cannot be pointed at one maker, so the label
+        // must not promise a purchase from this seller.
+        expect(cta.textContent).not.toMatch(/\bbuy\b/i);
+        expect(cta.textContent).not.toMatch(/check in/i);
+    });
+
+    it('names the seller’s handoffs for signing, and not for logging in', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+            }),
+        );
+        for (const role of ['publish-cashtab', 'describe-cashtab']) {
+            const node = root.querySelector(`[data-role="${role}"]`) as HTMLElement;
+            expect(node, role).not.toBeNull();
+            expect(node.textContent, role).toBe(PUBLISH_OPEN_CASHTAB);
+            expect(node.textContent, `${role} must not read as log in`).not.toMatch(
+                /sign in\b/i,
+            );
+        }
+        const other = root.querySelector('[data-role="publish-pay"]') as HTMLElement;
+        expect(other.textContent).toBe(PUBLISH_OPEN_PAY);
+    });
+
+    it('gives each act its own words', () => {
+        // The four labels are distinct, so no two controls read as the same one.
+        const labels = [
+            OPEN_IN_CASHTAB,
+            PUBLISH_OPEN_CASHTAB,
+            PUBLISH_OPEN_PAY,
+            LIST_IN_CASHTAB_LINK,
+        ];
+        expect(new Set(labels).size).toBe(labels.length);
     });
 });

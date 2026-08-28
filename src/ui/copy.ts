@@ -36,8 +36,16 @@ export const SET_UP_THIS_STALL = 'Name this stall';
 export const PUBLISH_TITLE = 'Name this stall';
 export const PUBLISH_NAME_LABEL = 'Stall name';
 export const PUBLISH_THEME_LABEL = 'Look';
-export const PUBLISH_OPEN_CASHTAB = 'Open in Cashtab';
-export const PUBLISH_OPEN_PAY = 'Open my wallet app';
+/**
+ * A seller going to sign a record, which is a different act from a buyer going
+ * to look at a market — so it is a different label.
+ *
+ * Not "Sign in Cashtab": "sign in" is the fixed phrase for logging in, and this
+ * product's own promise is that there is nothing to sign up for. "Sign with"
+ * says who does the signing, which is the whole point of the handoff.
+ */
+export const PUBLISH_OPEN_CASHTAB = 'Sign with Cashtab';
+export const PUBLISH_OPEN_PAY = 'Sign with another wallet';
 export const PUBLISH_CLOSE = 'Close';
 
 /**
@@ -110,11 +118,20 @@ export const UNRESOLVED_HINT =
     'A link that carries the seller’s key instead of their address skips this entirely.';
 
 /**
- * The label is what the control actually does. Cashtab's token page cannot be
- * pointed at one maker, so this opens a market — it does not buy, and it must
- * not be named for an outcome Stall cannot deliver.
+ * The label is what the control actually does, and every one of these says a
+ * different thing — a buyer going to look at a market, a seller going to sign a
+ * record, a seller going to list for the first time. They read as one control
+ * when they all say "Open in Cashtab".
+ *
+ * Cashtab's token page cannot be pointed at one maker, so this opens a market:
+ * it does not buy, and it must not be named for an outcome Stall cannot
+ * deliver. "See offers" is also what the two handoff notes beside it explain —
+ * that the page lists every maker's offers, not this seller's.
+ *
+ * Not "Check in Cashtab": in English "check in" is a fixed phrase for
+ * registering an arrival, and the button would read as check-in.
  */
-export const OPEN_IN_CASHTAB = 'Open in Cashtab';
+export const OPEN_IN_CASHTAB = 'See offers in Cashtab';
 export const TRY_AGAIN = 'Try again';
 export const YOU_PAY = 'You pay';
 export const MIN_PURCHASE = 'Minimum purchase';

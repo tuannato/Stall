@@ -28,9 +28,35 @@ export type LiveChronik = {
 export type LiveSocket = {
     subscribeToPlugin(pluginName: string, group: string): void;
     close(): void;
+    /** Stop reconnecting and drop the socket. The library's own idle mode. */
+    pause?(): void;
+    /** Reconnect and re-subscribe. Resolves once the socket is back. */
+    resume?(): Promise<void>;
 };
 
-export type LiveHandle = { close(): void };
+export type LiveHandle = {
+    close(): void;
+    /** Called when the tab goes away: stop holding a socket open. */
+    pause(): void;
+    /** Called when the tab comes back: reconnect and catch up once. */
+    resume(): void;
+};
+
+/**
+ * The least time between two re-reads caused by the socket dropping.
+ *
+ * chronik-client reconnects with **no backoff at all**: its `ws.onclose` calls
+ * `onReconnect` and then `connectWs` immediately, so a network that refuses
+ * connections spins as fast as it can refuse them. Our reconnect handler asks
+ * for the offers again, which is right — anything missed while down is unknown
+ * — but without a floor it turns that spin into an HTTP request storm. Measured
+ * as a tab reopened after sleep: a loading indicator that never settles and a
+ * warm machine.
+ *
+ * A re-read that is skipped is not lost: the next message on the group, the
+ * next resume, or the retry control all ask again.
+ */
+export const MIN_REREAD_MS = 5_000;
 
 export function stallGroup(pubkeyHex: string): string {
     return PUBKEY_GROUP_PREFIX + pubkeyHex;
@@ -80,10 +106,25 @@ export function watchStall(
     chronik: LiveChronik,
     pubkeyHex: string,
     onChanged: () => void,
+    now: () => number = () => Date.now(),
 ): LiveHandle {
     let closed = false;
     let socket: LiveSocket | undefined;
+    let lastReread = 0;
     const group = stallGroup(pubkeyHex);
+
+    /** A re-read caused by the socket, floored so a reconnect spin cannot flood. */
+    const rereadThrottled = (): void => {
+        if (closed) {
+            return;
+        }
+        const at = now();
+        if (at - lastReread < MIN_REREAD_MS) {
+            return;
+        }
+        lastReread = at;
+        onChanged();
+    };
 
     const subscribe = (): void => {
         if (closed || socket === undefined) {
@@ -102,12 +143,9 @@ export function watchStall(
         },
         onConnect: subscribe,
         // A dropped socket only stops updates; it never means the shop emptied.
-        // Re-read on reconnect, because anything missed while down is unknown.
-        onReconnect: () => {
-            if (!closed) {
-                onChanged();
-            }
-        },
+        // Re-read on reconnect, because anything missed while down is unknown —
+        // but throttled, because the library reconnects without any backoff.
+        onReconnect: rereadThrottled,
     });
 
     return {
@@ -118,6 +156,29 @@ export function watchStall(
             } catch {
                 // Already gone.
             }
+        },
+        pause() {
+            // Not `close()`: that marks the socket manually closed and it will
+            // never come back. `pause` is the library's own idle mode.
+            try {
+                socket?.pause?.();
+            } catch {
+                // Already gone.
+            }
+        },
+        resume() {
+            if (closed) {
+                return;
+            }
+            try {
+                void socket?.resume?.();
+            } catch {
+                // A socket that will not resume is one the next refresh rebuilds.
+            }
+            // Whatever happened while the tab was away is unknown, so ask once —
+            // still floored, so flapping in and out of the background cannot
+            // turn into a request per flap.
+            rereadThrottled();
         },
     };
 }

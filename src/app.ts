@@ -212,6 +212,24 @@ export function boot(
     window.addEventListener('popstate', () => {
         void refresh();
     });
+
+    /**
+     * A backgrounded tab does not need a socket, and holding one is how a
+     * sleeping laptop wakes into a reconnect spin: chronik-client retries with
+     * no backoff, and each retry asked this page for the offers again. The
+     * library provides `pause`/`resume` for exactly this and says the app must
+     * drive them, because it cannot predict what an OS does to a socket.
+     *
+     * Lives here rather than in `net/`, where `directory-walls` forbids
+     * `document` — and this is the app's lifecycle to own anyway.
+     */
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            live?.pause();
+        } else {
+            live?.resume();
+        }
+    });
     // Cold start only. Someone who typed the bare domain gets the stall they
     // chose; `replaceState` rather than `pushState` so Back leaves the site
     // instead of bouncing between the door and the stall. In-app navigation to
