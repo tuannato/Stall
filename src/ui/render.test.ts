@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { encodeCashAddress } from 'ecashaddrjs';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -2873,7 +2874,10 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
 
 describe('a script address is told the true thing', () => {
     it('does not borrow the unreadable-link copy', () => {
-        const address = 'ecash:prfhcnyqnrd7pcgt3lg9c5yrsnfjnpr5qsysdz7lgg';
+        // Derived, not typed: an address written by hand had a bad checksum and
+        // was not a script address at all, in a test named for one. hash160 of
+        // a repeating byte is obviously nobody's script.
+        const address = encodeCashAddress('ecash', 'p2sh', '11'.repeat(20));
         const { root } = paint({
             route: { kind: 'invalid', raw: address, why: 'script-address' },
             overlay: { kind: 'idle' },
