@@ -158,3 +158,27 @@ describe('theme-cannot-hide-the-asked-amount', () => {
         expect(rgbOf(vars['--s-danger']!)).toEqual(dark.danger);
     });
 });
+
+describe('theme-ornaments-are-pinned-per-id', () => {
+    /**
+     * An ornament is theme data, like the palette: the label and kind travel in
+     * the row, so adding a theme is adding a row and the renderer never grows.
+     * Pin what each shipped id carries so a later edit cannot quietly restyle a
+     * stall a seller already published.
+     */
+    it('Modern ships none, Neo a ticker, Rural a plate', () => {
+        expect(decodeTheme(DEFAULT_THEME_ID).ornament).toBeUndefined();
+        expect(decodeTheme(NEO_CITY_THEME_ID).ornament).toEqual({
+            label: '// stall.cash',
+            kind: 'ticker',
+        });
+        expect(decodeTheme(RURAL_THEME_ID).ornament).toEqual({
+            label: 'Market stall',
+            kind: 'plate',
+        });
+    });
+
+    it('an unknown id falls back to the default look and ships no ornament', () => {
+        expect(decodeTheme(0xfe).ornament).toBeUndefined();
+    });
+});

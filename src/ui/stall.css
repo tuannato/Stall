@@ -51,9 +51,82 @@ body {
 .stall-head {
     padding: 16px 14px 12px;
     display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 11px;
+    border-bottom: 1px solid var(--s-muted);
+}
+
+/*
+ * The brand mark. It carries its own hexagon and inks, so it is not themed —
+ * only sized here. `width: auto` holds the logo's aspect ratio; `flex: none`
+ * keeps it from shrinking when a long stall name pushes the row.
+ */
+.stall-mark {
+    height: 34px;
+    width: auto;
+    flex: none;
+    display: block;
+}
+
+.stall-headings {
+    display: flex;
     flex-direction: column;
     gap: 3px;
-    border-bottom: 1px solid var(--s-muted);
+    min-width: 0;
+}
+
+/*
+ * A per-theme header strip. Its label and kind are theme data
+ * (`domain/theme.ts`); a new theme reusing a kind costs nothing here, and only
+ * a brand new kind adds a rule. It sits above the sign and far from the price —
+ * it decorates the top edge, it never covers what a buyer must read.
+ */
+.orn {
+    display: grid;
+    place-items: center;
+    min-height: 28px;
+    padding: 4px 12px;
+    font-family: var(--s-font);
+    font-size: 10px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.orn-ticker {
+    color: var(--s-accent);
+    letter-spacing: 0.34em;
+    border-bottom: 1px solid color-mix(in srgb, var(--s-accent) 24%, transparent);
+    animation: om-flick 3.4s steps(1) infinite;
+}
+
+.orn-plate {
+    color: var(--s-muted);
+    letter-spacing: 0.22em;
+    border-bottom: 1px dashed color-mix(in srgb, var(--s-muted) 55%, transparent);
+}
+
+@keyframes om-flick {
+    0%,
+    42%,
+    46%,
+    58%,
+    100% {
+        opacity: 1;
+    }
+    44%,
+    56% {
+        opacity: 0.4;
+    }
+}
+
+/* Motion is decoration; a reader who asked for none keeps the strip, still. */
+@media (prefers-reduced-motion: reduce) {
+    .orn-ticker {
+        animation: none;
+    }
 }
 
 .stall-name {

@@ -10,6 +10,17 @@ export const THEME_ID_BYTES = 1;
 
 export type Rgb = { r: number; g: number; b: number };
 
+/**
+ * A theme may ship a decorative header strip. The **kind** selects a shipped
+ * style (a stylesheet rule in `stall.css`); the **label** is the text it shows.
+ * Both are data that travels in the theme row, so adding a theme is adding one
+ * row here — the renderer and the stylesheet only change when a genuinely new
+ * *kind* is introduced, never per theme. It is never chain-supplied: like the
+ * palette, the chain names an id and Stall ships what it looks like.
+ */
+export type OrnamentKind = 'ticker' | 'plate';
+export type Ornament = { label: string; kind: OrnamentKind };
+
 export type DecodedTheme = {
     /** The id the record asked for, kept even when we ship no row for it. */
     id: number;
@@ -25,6 +36,8 @@ export type DecodedTheme = {
     fontIndex: number;
     softness: number;
     layoutIndex: number;
+    /** A shipped header strip, or absent — Modern ships none. */
+    ornament?: Ornament;
 };
 
 export const FONT_STACKS = [
@@ -89,6 +102,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             fontIndex: 1,
             softness: 0,
             layoutIndex: 2,
+            ornament: { label: '// stall.cash', kind: 'ticker' },
         },
     ],
     [
@@ -104,6 +118,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             fontIndex: 2,
             softness: 8,
             layoutIndex: 1,
+            ornament: { label: 'Market stall', kind: 'plate' },
         },
     ],
 ]);

@@ -33,6 +33,7 @@ import {
     themeVars,
     type DecodedTheme,
 } from '../domain/theme';
+import { stallMark } from './brand';
 import * as copy from './copy';
 import './stall.css';
 
@@ -80,7 +81,16 @@ export function renderStall(
     applyTitle(view);
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
-    applyTheme(stall, view.theme ?? DEFAULT_THEME);
+    const theme = view.theme ?? DEFAULT_THEME;
+    applyTheme(stall, theme);
+
+    // The ornament is the top edge of the stall, so it precedes every screen's
+    // header. Only a theme that ships one paints anything; the apex and every
+    // error screen fall to the default look, which ships none.
+    const orn = ornamentStrip(theme);
+    if (orn !== null) {
+        stall.append(orn);
+    }
 
     switch (view.route.kind) {
         case 'home':
@@ -896,13 +906,37 @@ function sheetRow(label: string, value: string, big = false): HTMLElement {
 
 function header(name?: string, sub?: string): HTMLElement {
     const hd = el('header', 'stall-head');
+    // The brand mark leads every screen — the app's identity, sitting beside
+    // the seller's stall name, never replacing it. It carries its own colours
+    // (§brand), so it reads on any theme this header is painted in.
+    hd.append(stallMark());
+    const headings = el('div', 'stall-headings');
     if (name !== undefined && name !== '') {
-        hd.append(el('div', 'stall-name', name));
+        headings.append(el('div', 'stall-name', name));
     }
     if (sub !== undefined && sub !== '') {
-        hd.append(el('div', 'stall-sub', sub));
+        headings.append(el('div', 'stall-sub', sub));
     }
+    hd.append(headings);
     return hd;
+}
+
+/**
+ * A per-theme header strip, above the sign. Its label and kind are theme data
+ * (`domain/theme.ts`), so a theme carries its own ornament in its own row: this
+ * function is written once and never grows when a theme is added — only a brand
+ * new *kind* touches this file or the stylesheet. Modern ships none; the strip
+ * simply does not appear. It decorates the top of the stall and is nowhere near
+ * the price, which it must never cover.
+ */
+function ornamentStrip(theme: DecodedTheme): HTMLElement | null {
+    const orn = theme.ornament;
+    if (orn === undefined) {
+        return null;
+    }
+    // `kind` is a shipped enum, not chain bytes, so it is safe in a class name;
+    // the label is set as text, never markup.
+    return el('div', `orn orn-${orn.kind}`, orn.label);
 }
 
 /**

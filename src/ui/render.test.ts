@@ -1446,7 +1446,9 @@ describe('token icon', () => {
             );
             expect(images).toHaveLength(1);
             expect(root.querySelector('.item-ic img')).toBeNull();
-            for (const img of root.querySelectorAll('img')) {
+            // Scoped to token-icon cells: the only other <img> is the brand
+            // mark, a same-origin fingerprinted asset, never a genesis url.
+            for (const img of root.querySelectorAll('.item-ic img')) {
                 expect(img.getAttribute('src')).not.toContain('evil.example');
                 expect(img.getAttribute('src')).toContain(ICON_HOST);
             }
@@ -1811,5 +1813,77 @@ describe('unresolvable narrates the journey forward', () => {
             tokens: new Map(),
         });
         expect(root.textContent).toContain(UNRESOLVABLE_NEXT);
+    });
+});
+
+describe('brand mark leads the header', () => {
+    /**
+     * The mark is the app's identity, so it precedes every screen's headings —
+     * the apex and a resolved stall alike. It is the shipped logo image on a
+     * same-origin, fingerprinted asset (no external host, `img-src 'self'`),
+     * and it is decorative: the name beside it carries identity to a reader.
+     */
+    it('is the logo image, first in the header, on apex and stall', () => {
+        const views: StallView[] = [
+            { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(NEO_CITY_THEME_ID),
+            }),
+        ];
+        for (const view of views) {
+            const { root } = paint(view);
+            const head = root.querySelector('.stall-head') as HTMLElement | null;
+            expect(head, 'every header exists').not.toBeNull();
+            const mark = head!.querySelector('img.stall-mark') as HTMLImageElement | null;
+            expect(mark, 'the mark leads the header').not.toBeNull();
+            expect(mark!.tagName).toBe('IMG');
+            expect(mark!.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
+            expect(mark!.alt, 'decorative: the name beside it announces identity').toBe('');
+            expect(head!.firstElementChild, 'mark precedes the headings').toBe(mark);
+        }
+    });
+});
+
+describe('theme ornament is data, not per-theme code', () => {
+    function ornOf(theme: ReturnType<typeof decodeTheme>): HTMLElement | null {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme,
+            }),
+        );
+        return root.querySelector('.stall .orn') as HTMLElement | null;
+    }
+
+    it('Neo city ships a ticker strip and Rural a plate, above the sign', () => {
+        const neo = ornOf(decodeTheme(NEO_CITY_THEME_ID));
+        expect(neo, 'Neo city ships an ornament').not.toBeNull();
+        expect(neo!.classList.contains('orn-ticker')).toBe(true);
+        expect(neo!.textContent).toBe('// stall.cash');
+
+        const rural = ornOf(decodeTheme(RURAL_THEME_ID));
+        expect(rural, 'Rural ships an ornament').not.toBeNull();
+        expect(rural!.classList.contains('orn-plate')).toBe(true);
+        expect(rural!.textContent).toBe('Market stall');
+    });
+
+    it('Modern and an unknown id ship none — the strip simply does not appear', () => {
+        expect(ornOf(decodeTheme(DEFAULT_THEME_ID))).toBeNull();
+        expect(ornOf(decodeTheme(0xfe))).toBeNull();
+    });
+
+    it('sits at the very top of the stall, before the header', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(NEO_CITY_THEME_ID),
+            }),
+        );
+        const stall = root.querySelector('.stall') as HTMLElement;
+        expect(stall.firstElementChild?.classList.contains('orn')).toBe(true);
     });
 });
