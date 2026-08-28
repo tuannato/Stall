@@ -1,4 +1,4 @@
-import { attachmentByTokenId } from './attachments';
+import { SHIPPED_ATTACHMENTS, attachmentByTokenId } from './attachments';
 import { SHIPPED_THEMES } from './theme';
 import type { StallOffer, TokenMeta } from './state';
 
@@ -7,12 +7,23 @@ import type { StallOffer, TokenMeta } from './state';
  * so a test can describe a shop without minting a token — the same seam
  * `groupOf` already is.
  */
-function defaultLookOf(tokenId: string): string | undefined {
+export type DecorPlace = {
+    /** The look this decoration fits, named by the shipped table. */
+    readonly label: string;
+    /** Its position in the catalogue, which is the order the runs print in. */
+    readonly order: number;
+};
+
+function defaultLookOf(tokenId: string): DecorPlace | undefined {
     const row = attachmentByTokenId(tokenId);
     if (row === undefined) {
         return undefined;
     }
-    return SHIPPED_THEMES.find((t) => t.id === row.themeId)?.label;
+    const label = SHIPPED_THEMES.find((t) => t.id === row.themeId)?.label;
+    if (label === undefined) {
+        return undefined;
+    }
+    return { label, order: SHIPPED_ATTACHMENTS.indexOf(row) };
 }
 
 /**
@@ -121,7 +132,7 @@ export function sectionsOf(
     offers: readonly StallOffer[],
     tokens: ReadonlyMap<string, TokenMeta>,
     groupOf: (tokenId: string) => string | undefined = () => undefined,
-    lookOf: (tokenId: string) => string | undefined = defaultLookOf,
+    lookOf: (tokenId: string) => DecorPlace | undefined = defaultLookOf,
 ): CategorySection[] {
     const buckets = new Map<Category, StallOffer[]>();
     for (const offer of offers) {
@@ -150,7 +161,23 @@ export function sectionsOf(
         if (category === 'nft') {
             groups = runsByGroup(rows, tokens, groupOf);
         } else if (category === 'decor') {
-            groups = runsByLook(rows, lookOf);
+            /*
+             * The one place this module orders anything, and it is deliberate.
+             * Everywhere else the caller's order is preserved exactly. But
+             * `compareOffers` sorts by token id, and a genesis txid is random
+             * with respect to which look a decoration fits — so the shipped
+             * catalogue arrived interleaved and every run was one row long,
+             * which is worse than no runs at all. These rows are ours and the
+             * catalogue is their order. Stable, so two offers of one token keep
+             * the price order `compareOffers` gave them.
+             */
+            groups = runsByLook(
+                [...rows].sort(
+                    (a, b) =>
+                        (lookOf(a.tokenId)?.order ?? 0) - (lookOf(b.tokenId)?.order ?? 0),
+                ),
+                lookOf,
+            );
         } else {
             groups = [{ offers: rows }];
         }
@@ -170,7 +197,7 @@ export function sectionsOf(
  */
 function runsByLook(
     rows: readonly StallOffer[],
-    lookOf: (tokenId: string) => string | undefined,
+    lookOf: (tokenId: string) => DecorPlace | undefined,
 ): OfferGroup[] {
     const runs: OfferGroup[] = [];
     let current: StallOffer[] = [];
@@ -178,7 +205,7 @@ function runsByLook(
     let started = false;
 
     for (const offer of rows) {
-        const look = lookOf(offer.tokenId);
+        const look = lookOf(offer.tokenId)?.label;
         if (started && look === currentLook) {
             current.push(offer);
             continue;

@@ -76,7 +76,8 @@ const rgb = (r: number, g: number, b: number): Rgb => ({ r, g, b });
  * and a stall that holds neither wears neither.
  */
 export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
-    {
+    {   
+        tokenId: '14e1f68b541840cd443a40029b9aef28b4fee9db6066d18607812b856169e9c4',
         themeId: DEFAULT_THEME_ID,
         bit: 0,
         slot: 'mood',
@@ -96,7 +97,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
             accentTwo: rgb(91, 147, 255),
         },
     },
-    {
+    {   
+        tokenId: '9a0d0745a9ca0e82eea47f2690d2611ca791635f3eba26af6a9bf49dfd528e59',
         themeId: DEFAULT_THEME_ID,
         bit: 1,
         slot: 'fringe',
@@ -105,7 +107,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-pinstripe',
         motion: false,
     },
-    {
+    {   
+        tokenId: 'c136cdac5c17def45a7cf1f308fc14f21a54b21ce2b4a70ee513d6b9a8055876',
         themeId: NEO_CITY_THEME_ID,
         bit: 0,
         slot: 'crest',
@@ -114,7 +117,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-hum',
         motion: false,
     },
-    {
+    {   
+        tokenId: '15e67ab0299782529a5971eaf5920a559d1be920ffe596dfcacb16eabda3ebd7',
         themeId: NEO_CITY_THEME_ID,
         bit: 1,
         slot: 'fringe',
@@ -123,7 +127,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-rain',
         motion: true,
     },
-    {
+    {   
+        tokenId: '314c3acedc40ffd92cf6ee50e5cbac9e5504b83b7c6a956a4039f6291a46c6e6',
         themeId: RURAL_THEME_ID,
         bit: 0,
         slot: 'yard',
@@ -132,7 +137,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-beetle',
         motion: true,
     },
-    {
+    {   
+        tokenId: 'aecd2dbc2cef26aaf46ef94ceab289fc0deec2c57d6ff0d2a7ec20c3f4460fb6',
         themeId: RURAL_THEME_ID,
         bit: 1,
         slot: 'mood',

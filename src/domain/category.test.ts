@@ -115,8 +115,14 @@ describe('a-decoration-is-known-by-its-token-id-not-its-ticker', () => {
     const PLAIN = '44'.repeat(32);
 
     /** The shipped catalogue's answer, described rather than minted. */
-    const lookOf = (id: string): string | undefined =>
-        id === MOD_A || id === MOD_B ? 'Modern' : id === NEO_A ? 'Neo city' : undefined;
+    const lookOf = (id: string) =>
+        id === MOD_A
+            ? { label: 'Modern', order: 0 }
+            : id === MOD_B
+              ? { label: 'Modern', order: 1 }
+              : id === NEO_A
+                ? { label: 'Neo city', order: 2 }
+                : undefined;
 
     const offerOf = (tokenId: string): StallOffer => ({
         outpoint: { txid: tokenId, outIdx: 0 },
@@ -165,6 +171,23 @@ describe('a-decoration-is-known-by-its-token-id-not-its-ticker', () => {
             lookOf,
         );
         expect(sections).toHaveLength(1);
+        expect(sections[0]!.groups.map((g) => [g.groupLabel, g.offers.length])).toEqual([
+            ['Modern', 2],
+            ['Neo city', 1],
+        ]);
+    });
+
+    it('gathers a look into one run even when the ids interleave', () => {
+        // `compareOffers` sorts by token id, and a genesis txid says nothing
+        // about which look a decoration fits — so the shipped catalogue arrives
+        // interleaved and every run would be one row long, which is worse than
+        // no runs at all. Measured on the real six: six headings, not three.
+        const sections = sectionsOf(
+            [offerOf(MOD_A), offerOf(NEO_A), offerOf(MOD_B)],
+            new Map(),
+            () => undefined,
+            lookOf,
+        );
         expect(sections[0]!.groups.map((g) => [g.groupLabel, g.offers.length])).toEqual([
             ['Modern', 2],
             ['Neo city', 1],

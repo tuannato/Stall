@@ -70,7 +70,7 @@ import {
 import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
-import { wornAttachments } from '../domain/attachments';
+import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
 import { renderStall, resetIconsForTests } from './render';
@@ -3188,11 +3188,22 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         expect(yard.value).toBe('0');
     });
 
-    it('says a row nobody can hold yet is not worn, however it is set', () => {
+    it('says a chosen row is only being looked at until the stall holds it', () => {
+        // The tokens exist now, so the honest note is no longer "not on sale
+        // yet" — it is that a flag without the token paints nothing.
         const root = sheet({ attachmentFlags: 1 });
         const note = root.querySelector('[data-role="decor-note"]')!;
-        expect(note.textContent).toBe(copy.DECOR_NOT_MINTED);
+        expect(note.textContent).toBe(copy.DECOR_PREVIEW_ONLY);
         expect((note as HTMLElement).hidden).toBe(false);
+    });
+
+    it('says it will paint once the stall is known to hold the token', () => {
+        const held = SHIPPED_ATTACHMENTS.find((r) => r.themeId === RURAL_THEME_ID && r.bit === 0);
+        const root = sheet({
+            attachmentFlags: 1,
+            heldTokens: new Set([held!.tokenId!]),
+        });
+        expect(root.querySelector('[data-role="decor-note"]')!.textContent).toBe(copy.DECOR_HELD);
     });
 
     it('says nothing at all when nothing is chosen', () => {
@@ -3275,6 +3286,67 @@ describe('a-worn-decoration-reaches-the-stall', () => {
         expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(18, 21, 26)');
         // A mood paints no node and carries no class.
         expect(stall.className).toBe('stall');
+    });
+});
+
+describe('the-fittings-shop-reads-as-three-runs', () => {
+    /**
+     * The whole path, through the shipped catalogue rather than an injected
+     * one: six real token ids, filed by id into the Decorations section, and
+     * grouped by the look each fits. This is the one page where those run
+     * headings are the only dividers — a single section prints no section
+     * heading — so if they are missing the shop is six rows in txid order.
+     */
+    const rows = SHIPPED_ATTACHMENTS.filter((r) => r.tokenId !== undefined);
+
+    it('files every catalogue token under Decorations, by id', () => {
+        expect(rows.length, 'no token is minted yet').toBeGreaterThan(0);
+        const { root } = paint(
+            idlePubkey({
+                fetch: {
+                    kind: 'offers',
+                    offers: rows.map((r, i) => ({ ...OFFER, tokenId: r.tokenId!, outpoint: { txid: OUTPOINT.txid, outIdx: i } })),
+                },
+                tokens: new Map(
+                    rows.map((r) => [
+                        r.tokenId!,
+                        { ...BEANS, tokenId: r.tokenId!, name: r.label },
+                    ]),
+                ),
+            }),
+        );
+        // One section, so no section heading — the runs carry the page.
+        expect(root.querySelector('[data-role="section-decor"]')).toBeNull();
+        const runs = [...root.querySelectorAll('[data-role="decor-run"] .collection-name')].map(
+            (n) => n.textContent,
+        );
+        expect(runs).toEqual([
+            copy.decorFor('Modern'),
+            copy.decorFor('Neo city'),
+            copy.decorFor('Rural'),
+        ]);
+    });
+
+    it('keeps a seller’s own stock above a decoration they resell', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: {
+                    kind: 'offers',
+                    offers: [
+                        { ...OFFER, tokenId: rows[0]!.tokenId!, outpoint: { txid: OUTPOINT.txid, outIdx: 1 } },
+                        OFFER,
+                    ],
+                },
+                tokens: new Map<string, TokenMeta>([
+                    [TOKEN_ID, BEANS],
+                    [rows[0]!.tokenId!, { ...BEANS, tokenId: rows[0]!.tokenId!, name: rows[0]!.label }],
+                ]),
+            }),
+        );
+        const heads = [...root.querySelectorAll('.section-head')].map((n) =>
+            n.getAttribute('data-role'),
+        );
+        expect(heads).toEqual(['section-etoken', 'section-decor']);
     });
 });
 

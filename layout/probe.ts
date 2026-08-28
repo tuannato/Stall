@@ -15,6 +15,7 @@
 import { renderStall } from '../src/ui/render';
 import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
 import {
+    SHIPPED_ATTACHMENTS,
     attachmentsForTheme,
     wornAttachments,
     type ShippedAttachment,
@@ -82,6 +83,9 @@ const base = (over: Partial<StallView>): StallView => ({
     ...over,
 });
 
+/** Every catalogue row that has a token, which is what the fittings shop lists. */
+const DECOR_ROWS = SHIPPED_ATTACHMENTS.filter((row) => row.tokenId !== undefined);
+
 const SCREENS: Record<string, StallView> = {
     offers: base({
         fetch: {
@@ -99,6 +103,24 @@ const SCREENS: Record<string, StallView> = {
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         overlay: { kind: 'publish' },
         descriptions: new Map([[T1, 'Existing words']]),
+    }),
+    /*
+     * The shop that sells decorations, which is the one page where the
+     * Decorations section and its per-look runs are the only dividers there
+     * are — a single section prints no section heading, so nothing else on
+     * this page tells a buyer what fits what.
+     *
+     * Built from the shipped catalogue rather than from pasted ids, so it
+     * follows the table instead of drifting from it.
+     */
+    decor: base({
+        fetch: {
+            kind: 'offers',
+            offers: DECOR_ROWS.map((row, i) => offer(row.tokenId!, i, 5_000n * BigInt(i + 1))),
+        },
+        tokens: new Map(
+            DECOR_ROWS.map((row) => [row.tokenId!, meta(row.tokenId!, row.label, 'ALP_TOKEN_TYPE_STANDARD')]),
+        ),
     }),
     empty: base({ fetch: { kind: 'empty' } }),
     door: {
