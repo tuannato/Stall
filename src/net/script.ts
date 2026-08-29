@@ -17,6 +17,18 @@ export function p2pkhHashFromOutputScript(outputScriptHex: string): string | und
 }
 
 /**
+ * The inverse: the output script a p2pkh hash is paid at.
+ *
+ * Built here rather than at the caller so the two directions cannot drift, and
+ * lowercased for the same reason `p2pkhHashFromOutputScript` lowercases —
+ * chronik answers in lowercase and a comparison against a hash typed anywhere
+ * else must not depend on that.
+ */
+export function p2pkhOutputScript(hash: string): string {
+    return `76a914${hash.toLowerCase()}88ac`;
+}
+
+/**
  * Pushes after OP_RETURN. Same opcode subset as extractP2pkhPubKey
  * (direct push 1–75 and OP_PUSHDATA1). Anything else rejects the output.
  */

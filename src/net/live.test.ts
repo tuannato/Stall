@@ -1,43 +1,109 @@
+import { ChronikClient } from 'chronik-client';
 import { describe, expect, it, vi } from 'vitest';
 import type { FetchStatus } from '../domain/state';
+import { CHRONIK_HOSTS } from './hosts';
 import {
     BURST_MS,
     AGORA_PLUGIN,
     MIN_REREAD_MS,
+    UNKNOWN_TXID,
     isDefiniteResult,
     stallGroup,
     watchStall,
 } from './live';
 
+/** 20 bytes of lowercase hex, which is all `subscribeToScript` accepts. */
+const HASH = 'ab'.repeat(20);
+const TXID_A = 'a1'.repeat(32);
+const TXID_B = 'b2'.repeat(32);
+
 /**
- * Models the one chronik behaviour this module exists to survive: a socket
- * that opens, drops, and opens again. `openNow` is a fresh establish, which is
- * what chronik reports through `onConnect` every time — including after a
- * reconnect, when it re-sends the subscriptions it remembers and plugin
- * subscriptions are not among them.
+ * Models the two chronik behaviours this module exists to survive.
+ *
+ * **A socket that opens, drops, and opens again.** `openNow` is a fresh
+ * establish, which is what chronik reports through `onConnect` every time —
+ * including after a reconnect, when it re-sends the subscriptions it remembers
+ * and plugin subscriptions are not among them.
  *
  * **Nothing here connects itself**, because the library does not. `ws()`
  * returns an endpoint that has dialled nothing; `waitForOpen` is what reaches
  * `connectWs`, and only then does `onConnect` fire. A fake that opened on its
  * own was the camouflage over a stall whose socket never connected on a fresh
  * load — every test stayed green because each one called `openNow` by hand.
+ *
+ * **And a replay that pushes back into the list it replayed from.** Script
+ * subscriptions *are* re-sent on every open, by calling the endpoint's own
+ * public `subscribeToScript` — which appends. So the remembered list doubles
+ * per open unless something trims it. `subs` here is the same object the guard
+ * reaches into, and `scriptFrames` is what the wire would have carried.
  */
 function fakeChronik() {
+    /**
+     * Plugin subscribes, in order. Kept apart from the script ones so the
+     * exact-equality assertions in `plugin-sub-is-restored-on-reconnect` keep
+     * pinning exactly what they pinned.
+     */
     const calls: Array<[string, string]> = [];
+    /** Script subscribe frames that would have gone out on an open socket. */
+    const scriptFrames: Array<[string, string]> = [];
+    /** The library's own memory of what to replay. */
+    const subs = { scripts: [] as Array<{ scriptType: string; payload: string }> };
+    let opened = false;
     let waits = 0;
-    let onMessage: ((m: { type: string }) => void) | undefined;
+    let onMessage: ((m: { type: string; txid?: string }) => void) | undefined;
     let onConnect: (() => void) | undefined;
     let onReconnect: (() => void) | undefined;
+
+    const socket = {
+        subs,
+        subscribeToPlugin: (p: string, g: string) => calls.push([p, g]),
+        subscribeToScript: (scriptType: string, payload: string) => {
+            // As `isValidWsSubscription` does: the library throws rather than
+            // remembering a subscription it cannot send.
+            if (scriptType === 'p2pkh' && !/^[0-9a-f]{40}$/.test(payload)) {
+                throw new Error('Invalid length');
+            }
+            subs.scripts.push({ scriptType, payload });
+            if (opened) {
+                scriptFrames.push([scriptType, payload]);
+            }
+        },
+        close: () => undefined,
+        // The whole connection lives here, exactly as in the library: `ws()`
+        // below only remembered the handlers.
+        waitForOpen: () => {
+            waits += 1;
+            return Promise.resolve().then(openNow);
+        },
+    };
+
     const openNow = (): void => {
+        opened = true;
+        // `ws.onopen` replays the remembered scripts through the public method,
+        // which pushes each one back onto the list being read. Copied first,
+        // because `forEach` visits the length the array had when it started.
+        for (const sub of [...subs.scripts]) {
+            socket.subscribeToScript(sub.scriptType, sub.payload);
+        }
+        // After the replay, which is where the guard has to sit.
         onConnect?.();
     };
+
     return {
         calls,
+        scriptFrames,
+        subs,
         /** How many times the watch asked the library to dial. */
         waits: () => waits,
-        fire: (type: string) => onMessage?.({ type }),
+        fire: (type: string, txid?: string) => onMessage?.({ type, txid }),
+        /** The socket went away. chronik reports this at the drop, not at the return. */
+        drop: () => {
+            opened = false;
+            onReconnect?.();
+        },
         /** A drop: chronik reports it, then opens a new socket. */
         reconnect: () => {
+            opened = false;
             onReconnect?.();
             openNow();
         },
@@ -53,23 +119,14 @@ function fakeChronik() {
         },
         chronik: {
             ws(config: {
-                onMessage: (m: { type: string }) => void;
+                onMessage: (m: { type: string; txid?: string }) => void;
                 onConnect?: () => void;
                 onReconnect?: () => void;
             }) {
                 onMessage = config.onMessage;
                 onConnect = config.onConnect;
                 onReconnect = config.onReconnect;
-                return {
-                    subscribeToPlugin: (p: string, g: string) => calls.push([p, g]),
-                    close: () => undefined,
-                    // The whole connection lives here, exactly as in the
-                    // library: `ws()` above only remembered the handlers.
-                    waitForOpen: () => {
-                        waits += 1;
-                        return Promise.resolve().then(openNow);
-                    },
-                };
+                return socket;
             },
         },
     };
@@ -88,7 +145,7 @@ describe('a-fresh-stall-opens-its-socket-without-a-visibility-change', () => {
     it('dials on its own, with no reconnect and no resume', async () => {
         const f = fakeChronik();
         const pk = '02'.repeat(33);
-        watchStall(f.chronik as never, pk, () => undefined);
+        watchStall(f.chronik as never, { pubkeyHex: pk });
 
         // Asked synchronously, so this fails loudly rather than timing out if
         // the call goes away again.
@@ -107,7 +164,7 @@ describe('live-group-is-the-maker-prefix', () => {
     it('subscribes to the agora group the plugin actually indexes', async () => {
         const f = fakeChronik();
         const pk = '02'.repeat(33);
-        watchStall(f.chronik as never, pk, () => undefined);
+        watchStall(f.chronik as never, { pubkeyHex: pk });
         await f.settle();
         // The plugin groups offers under b"P" + maker_pk; "50" is hex for "P".
         expect(stallGroup(pk)).toBe(`50${pk}`);
@@ -127,7 +184,7 @@ describe('plugin-sub-is-restored-on-reconnect', () => {
         const f = fakeChronik();
         const pk = '03'.repeat(33);
         const group = `50${pk}`;
-        watchStall(f.chronik as never, pk, () => undefined);
+        watchStall(f.chronik as never, { pubkeyHex: pk });
 
         await f.settle();
         expect(f.calls, 'first connect').toEqual([[AGORA_PLUGIN, group]]);
@@ -149,7 +206,7 @@ describe('plugin-sub-is-restored-on-reconnect', () => {
 
     it('says nothing once the visitor has left the stall', async () => {
         const f = fakeChronik();
-        const handle = watchStall(f.chronik as never, '02'.repeat(33), () => undefined);
+        const handle = watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33) });
         handle.close();
         // The establish the watch started arrives after the visitor left, which
         // is the ordinary case: it is queued before `close` and lands after.
@@ -157,6 +214,94 @@ describe('plugin-sub-is-restored-on-reconnect', () => {
         f.openNow();
         f.reconnect();
         expect(f.calls).toEqual([]);
+    });
+});
+
+describe('script-sub-does-not-double-on-reconnect', () => {
+    /**
+     * The library replays script subscriptions on every open by calling its own
+     * **public** `subscribeToScript`, which pushes the subscription back onto
+     * the list it was just read from. One entry becomes two, two become four,
+     * and by open N the wire carries 2^(N-1) copies of one subscribe frame. The
+     * trigger is not only a network drop: `pause()` closes the socket and
+     * `resume()` opens it, so every visibility change doubles it again.
+     *
+     * Idempotent at the far end — chronik removes before it inserts — so what
+     * this costs is wire bytes and client memory. That is why the guard trims
+     * the list rather than the vendored tarball being patched.
+     */
+    it('sends one frame per establish, and the remembered list stays at one', async () => {
+        const f = fakeChronik();
+        watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33), hash: HASH });
+        await f.settle();
+        expect(f.scriptFrames, 'sent once the socket was open').toEqual([['p2pkh', HASH]]);
+        expect(f.subs.scripts, 'trimmed back after the replay').toHaveLength(1);
+
+        f.reconnect();
+        f.reconnect();
+        f.reconnect();
+        expect(f.scriptFrames, 'one per open, never 1 + 2 + 4').toHaveLength(4);
+        expect(f.subs.scripts, "the library's own list does not grow").toHaveLength(1);
+        expect(f.subs.scripts[0]).toEqual({ scriptType: 'p2pkh', payload: HASH });
+    });
+
+    it('subscribes to no script when there is no address to watch', async () => {
+        // The waiting screens are the other way round — a hash and no pubkey.
+        const f = fakeChronik();
+        watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33) });
+        await f.settle();
+        expect(f.scriptFrames).toEqual([]);
+        expect(f.subs.scripts).toEqual([]);
+    });
+
+    it('subscribes to no plugin when there is no maker key yet', async () => {
+        const f = fakeChronik();
+        watchStall(f.chronik as never, { hash: HASH });
+        await f.settle();
+        expect(f.calls, 'no pubkey means no agora group to ask for').toEqual([]);
+        expect(f.scriptFrames).toEqual([['p2pkh', HASH]]);
+    });
+
+    it('does not take the book down when the hash cannot be subscribed to', async () => {
+        // `subscribeToScript` throws on a payload that is not 20 bytes of
+        // lowercase hex. A stall we cannot watch the address of still has a
+        // book worth watching.
+        const f = fakeChronik();
+        const pk = '02'.repeat(33);
+        watchStall(f.chronik as never, { pubkeyHex: pk, hash: 'NOT-A-HASH' });
+        await f.settle();
+        expect(f.calls).toEqual([[AGORA_PLUGIN, `50${pk}`]]);
+        expect(f.scriptFrames).toEqual([]);
+    });
+});
+
+describe('script-sub-dedupe-notices-when-the-library-changes-shape', () => {
+    /**
+     * The guard reaches into a library internal, and it fails **open**: a shape
+     * it does not recognise is left alone, because trimming a list this module
+     * does not understand would be worse than the duplicates. That safety is
+     * also how a vendored upgrade could turn the guard into a silent no-op, so
+     * the shape itself is asserted here against a real endpoint rather than
+     * against the fake above.
+     *
+     * No connection is made: `new ChronikClient(...)` is documented as creating
+     * an object and nothing else, and `ws()` returns an endpoint that has
+     * dialled nothing.
+     */
+    it('finds subs.scripts on a real endpoint, with the two fields the guard keys on', () => {
+        const endpoint = new ChronikClient([...CHRONIK_HOSTS]).ws({
+            onMessage: () => undefined,
+        });
+        const subs = (endpoint as unknown as { subs?: { scripts?: unknown } }).subs;
+        expect(subs, 'WsEndpoint no longer exposes `subs`').toBeDefined();
+        expect(Array.isArray(subs?.scripts), '`subs.scripts` is no longer an array').toBe(
+            true,
+        );
+
+        endpoint.subscribeToScript('p2pkh', HASH);
+        expect(subs?.scripts, 'a remembered subscription changed shape').toEqual([
+            { scriptType: 'p2pkh', payload: HASH },
+        ]);
     });
 });
 
@@ -191,10 +336,14 @@ describe('failed-refetch-is-not-empty', () => {
         vi.useFakeTimers();
         const f = fakeChronik();
         const changed = vi.fn();
-        const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33) },
+            { onChanged: changed },
+        );
         await f.settle();
 
-        f.fire('Tx');
+        f.fire('Tx', TXID_A);
         // One transaction arrives as several messages, so the read waits out
         // the burst — see `rereadCoalesced`. The reconnect below is not
         // deferred and is not floored by it.
@@ -206,7 +355,7 @@ describe('failed-refetch-is-not-empty', () => {
         // A closed watch is silent, so a stale socket cannot paint over a
         // stall the visitor has already left.
         handle.close();
-        f.fire('Tx');
+        f.fire('Tx', TXID_A);
         await vi.advanceTimersByTimeAsync(BURST_MS);
         f.reconnect();
         expect(changed).toHaveBeenCalledTimes(2);
@@ -217,25 +366,168 @@ describe('failed-refetch-is-not-empty', () => {
         vi.useFakeTimers();
         const f = fakeChronik();
         const changed = vi.fn();
-        const handle = watchStall(f.chronik as never, '03'.repeat(33), changed);
+        const bursts: string[][] = [];
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onChanged: changed, onBurst: (ids) => bursts.push([...ids]) },
+        );
         await f.settle();
 
         // One sale, three messages: mempool, confirmed, and the same again
         // after a block is disconnected. Each used to be a full re-read behind
         // a fresh failover client.
-        f.fire('Tx');
-        f.fire('Tx');
-        f.fire('Tx');
+        f.fire('Tx', TXID_A);
+        f.fire('Tx', TXID_A);
+        f.fire('Tx', TXID_A);
         expect(changed).toHaveBeenCalledTimes(0);
         await vi.advanceTimersByTimeAsync(BURST_MS);
         expect(changed).toHaveBeenCalledTimes(1);
+        expect(bursts, 'one transaction, named once').toEqual([[TXID_A]]);
 
         // A later sale is its own burst, not swallowed by the first.
-        f.fire('Tx');
+        f.fire('Tx', TXID_B);
         await vi.advanceTimersByTimeAsync(BURST_MS);
         expect(changed).toHaveBeenCalledTimes(2);
+        expect(bursts[1]).toEqual([TXID_B]);
 
         handle.close();
+        vi.useRealTimers();
+    });
+
+    it('names a message that carried no txid rather than dropping it', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const bursts: string[][] = [];
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onChanged: () => undefined, onBurst: (ids) => bursts.push([...ids]) },
+        );
+        await f.settle();
+
+        f.fire('Tx');
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        // Not a txid on purpose: the caller's 64-hex gate refuses it and asks
+        // every reader, which is what a message we could not read is owed.
+        expect(bursts).toEqual([[UNKNOWN_TXID]]);
+        expect(UNKNOWN_TXID).not.toMatch(/^[0-9a-f]{64}$/);
+
+        handle.close();
+        vi.useRealTimers();
+    });
+});
+
+describe('a-txid-arriving-mid-read-starts-the-next-burst-not-this-one', () => {
+    /**
+     * The set is drained synchronously, before either callback can await
+     * anything. A drain that happened after the book read would put a
+     * transaction that arrived *during* that read into the burst that had
+     * already been reported — classified, acted on, and then cleared with the
+     * rest, so the settings publish that landed half a second after a sale
+     * would never be looked at.
+     */
+    it('reports the burst that fired, and carries the newcomer into the next', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const bursts: string[][] = [];
+        let reads = 0;
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            {
+                onChanged: () => {
+                    reads += 1;
+                    if (reads === 1) {
+                        // A second transaction lands while the first read is in
+                        // flight. Fired from inside the read for exactly that.
+                        f.fire('Tx', TXID_B);
+                    }
+                },
+                onBurst: (ids) => bursts.push([...ids]),
+            },
+        );
+        await f.settle();
+
+        f.fire('Tx', TXID_A);
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(bursts, 'the burst that fired names only what it collected').toEqual([
+            [TXID_A],
+        ]);
+
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(bursts[1], 'and the newcomer is not lost').toEqual([TXID_B]);
+        expect(reads, 'two bursts, two reads').toBe(2);
+
+        handle.close();
+        vi.useRealTimers();
+    });
+});
+
+describe('a-reconnect-spin-still-re-reads-the-facts-once-it-is-back', () => {
+    /**
+     * `MIN_REREAD_MS` **drops**, which is right for the book — the next message
+     * on the group corrects it — and wrong for the facts, because a settings
+     * publish is one transaction and nothing announces it twice. And
+     * `onReconnect` fires at the moment of the *drop*, before the network is
+     * back, so a catch-up hung on it would ask an index that is not there.
+     *
+     * The catch-up therefore rides the establish, on a trailing timer of its
+     * own, and the clock never moves in this test: everything below happens
+     * inside the floor that the book read is subject to.
+     */
+    it('asks once per establish while the floored book read is dropped', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const changed = vi.fn();
+        const facts = vi.fn();
+        const clock = 1_000_000;
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onChanged: changed, onReestablished: facts, now: () => clock },
+        );
+        await f.settle();
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(facts, 'the first establish is the page load, which read them').not
+            .toHaveBeenCalled();
+
+        // Fifty refused connections. chronik reconnects with no backoff at all.
+        for (let i = 0; i < 50; i += 1) {
+            f.drop();
+        }
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(facts, 'a drop is not an establish').not.toHaveBeenCalled();
+
+        f.reconnect();
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(facts, 'back, so ask').toHaveBeenCalledTimes(1);
+
+        f.reconnect();
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(facts, 'and the floor does not drop the second one').toHaveBeenCalledTimes(2);
+        expect(changed, 'while the book read is floored, on a frozen clock').toHaveBeenCalledTimes(
+            1,
+        );
+
+        handle.close();
+        vi.useRealTimers();
+    });
+
+    it('says nothing after the visitor has left', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const facts = vi.fn();
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onReestablished: facts },
+        );
+        await f.settle();
+        f.reconnect();
+        handle.close();
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(facts).not.toHaveBeenCalled();
         vi.useRealTimers();
     });
 });
@@ -253,15 +545,18 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
         let handlers: {
             onConnect?: () => void;
             onReconnect?: () => void;
-            onMessage: (m: { type: string }) => void;
+            onMessage: (m: { type: string; txid?: string }) => void;
         };
-        const calls = { subscribed: 0, paused: 0, resumed: 0, dialled: 0 };
+        const calls = { subscribed: 0, scripts: 0, paused: 0, resumed: 0, dialled: 0 };
         const chronik = {
             ws(config: never) {
                 handlers = config as never;
                 return {
                     subscribeToPlugin: () => {
                         calls.subscribed += 1;
+                    },
+                    subscribeToScript: () => {
+                        calls.scripts += 1;
                     },
                     close: () => {},
                     // As in the library: `ws()` dialled nothing, and this is
@@ -289,9 +584,16 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
         const { chronik, fire } = socketDouble();
         let changed = 0;
         let clock = 1_000_000;
-        watchStall(chronik as never, 'ab'.repeat(33), () => {
-            changed += 1;
-        }, () => clock);
+        watchStall(
+            chronik as never,
+            { pubkeyHex: 'ab'.repeat(33) },
+            {
+                onChanged: () => {
+                    changed += 1;
+                },
+                now: () => clock,
+            },
+        );
 
         for (let i = 0; i < 50; i += 1) {
             fire().onReconnect?.();
@@ -311,9 +613,16 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
         const { chronik, calls } = socketDouble();
         let changed = 0;
         let clock = 2_000_000;
-        const handle = watchStall(chronik as never, 'ab'.repeat(33), () => {
-            changed += 1;
-        }, () => clock);
+        const handle = watchStall(
+            chronik as never,
+            { pubkeyHex: 'ab'.repeat(33) },
+            {
+                onChanged: () => {
+                    changed += 1;
+                },
+                now: () => clock,
+            },
+        );
 
         handle.pause();
         expect(calls.paused).toBe(1);
@@ -333,9 +642,15 @@ describe('a-reconnect-spin-does-not-become-a-request-storm', () => {
     it('does nothing on a handle that was closed for good', () => {
         const { chronik, calls, fire } = socketDouble();
         let changed = 0;
-        const handle = watchStall(chronik as never, 'ab'.repeat(33), () => {
-            changed += 1;
-        });
+        const handle = watchStall(
+            chronik as never,
+            { pubkeyHex: 'ab'.repeat(33) },
+            {
+                onChanged: () => {
+                    changed += 1;
+                },
+            },
+        );
         handle.close();
         handle.resume();
         fire().onReconnect?.();

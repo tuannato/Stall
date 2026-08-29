@@ -1607,15 +1607,35 @@ describe('publish-sheet', () => {
     });
 
     /**
-     * The live socket listens to the agora group, and a settings transaction
-     * does not move the offer book. So no message arrives, nothing re-reads the
-     * manifest, and without this the seller signs in another app and comes back
-     * to a stall that never changes.
+     * The socket watches the stall address now, so a record published from that
+     * wallet does re-read on its own. Three things can each stop it, none of
+     * them visible from here: the wrong wallet signs a record that will never be
+     * this stall's, a host without avalanche pre-consensus turns seconds into
+     * next block, and a socket that is down delivers nothing.
+     *
+     * So the pin is the **negative** — no unconditional arrival, no timing — plus
+     * the control that asks outright. Pinning the sentence instead would make
+     * this test approve whatever copy happened to be written.
      */
-    it('publish-says-nothing-watches-the-wallet', () => {
+    it('publish-does-not-promise-a-record-will-arrive', () => {
         const { root, h } = open();
         const text = root.textContent ?? '';
         expect(text).toContain(PUBLISH_AFTER_SIGNING);
+
+        const said = PUBLISH_AFTER_SIGNING.toLowerCase();
+        for (const promise of [
+            'will appear',
+            'will show',
+            'lands automatically',
+            'automatically',
+            'a few seconds',
+            'within seconds',
+        ]) {
+            expect(said, `promises arrival: "${promise}"`).not.toContain(promise);
+        }
+        // And it does name the condition, so the absence above is a rewrite
+        // rather than a deletion.
+        expect(said, 'says nothing about what has to hold').toContain('connection');
 
         const check = root.querySelector('[data-role="publish-check"]') as HTMLElement;
         expect(check.textContent).toBe(PUBLISH_CHECK_NOW);

@@ -15,6 +15,7 @@ import type {
     FetchStatus,
     Overlay,
     Outpoint,
+    RouteParse,
     SessionTokenCache,
     StallOffer,
     StallView,
@@ -25,6 +26,8 @@ import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller }
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions } from './net/descriptions';
+import { ALL_FACTS, NO_FACTS, anyFact, classifyTx, unionFacts } from './net/classify';
+import { p2pkhOutputScript } from './net/script';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { identityOf, renderStall } from './ui';
@@ -32,6 +35,24 @@ import { identityOf, renderStall } from './ui';
 const sessionTokens = new Map<string, TokenMeta>();
 const sessionNames = new Map<string, string>();
 const sessionThemes = new Map<string, DecodedTheme>();
+
+/**
+ * `chronik.tx()` concatenates whatever it is handed into a request path and
+ * never checks it, and a txid off the socket is no more trusted than the one
+ * `loadManifest` takes from the address bar. Same gate, same reason.
+ */
+const TXID = /^[0-9a-f]{64}$/;
+
+/**
+ * The entitlement, absent.
+ *
+ * `wornAttachments` skips the holdings check when it is handed `undefined` —
+ * that affordance is for the picker's preview, where a seller looking at a
+ * decoration has not claimed to own it. On a visitor's screen it must fail
+ * closed: §7 says a flag set over a token the address does not hold paints
+ * nothing, so until a holdings read has answered, nothing is worn.
+ */
+const NOTHING_HELD: ReadonlySet<string> = new Set();
 
 export type AppState = {
     view: StallView;
@@ -143,6 +164,30 @@ export function boot(
         });
     };
 
+    /**
+     * A paint the visitor did not ask for.
+     *
+     * `renderStall` begins with `replaceChildren()`, and the publish sheet keeps
+     * the seller's typed name, their picked look and their chosen decorations in
+     * the DOM and nowhere else. So a paint while that sheet is open throws away
+     * a record they are half way through composing — and with a script
+     * subscription watching the stall address, a stranger can now cause that
+     * from outside for the price of dust.
+     *
+     * The state is updated either way; only the paint waits. Every path that
+     * closes the sheet ends in a paint of its own, which is the flush: there is
+     * no way out of the overlay that does not repaint.
+     *
+     * A paint a person asked for is untouched — including `PUBLISH_CHECK_NOW`,
+     * whose whole answer is the sheet closing onto a re-read stall.
+     */
+    const livePaint = (): void => {
+        if (state.view.overlay.kind === 'publish') {
+            return;
+        }
+        paint();
+    };
+
     const onBuy = async (outpoint: Outpoint): Promise<void> => {
         const overlay: Overlay = { kind: 'buy', outpoint };
         state = { ...state, view: { ...state.view, overlay } };
@@ -231,7 +276,221 @@ export function boot(
             tokens.set(meta.tokenId, meta);
         }
         state = { ...state, view: { ...state.view, tokens } };
-        paint();
+        livePaint();
+    };
+
+    /** The attachment tokens the settings currently on screen depend on. */
+    const wantedAttachmentTokens = (): Set<string> =>
+        new Set(
+            wornAttachments(
+                state.view.theme?.id ?? DEFAULT_THEME_ID,
+                state.view.attachmentFlags ?? 0,
+            )
+                .map((row) => row.tokenId)
+                .filter((id): id is string => id !== undefined),
+        );
+
+    /**
+     * The stall's own settings, re-read because something at its address looked
+     * like a record.
+     *
+     * **Only a definite answer is applied.** A walk that threw leaves the
+     * painted name, look and flags exactly where they were — the facts mirror
+     * of `failed-refetch-is-not-empty`, and for the same reason: our failure
+     * must never be painted as a statement about the seller. A walk that
+     * finished and found nothing also leaves them standing, because a record on
+     * chain cannot disappear; an absent one means we did not reach it.
+     *
+     * A record that is not yet finalised and not yet mined changes nothing
+     * either, and nothing here has to know that: `pickManifestWinner` refuses
+     * it, so the walk simply answers with the older winner. The `TX_FINALIZED`
+     * message seconds later is another message, and it re-reads.
+     */
+    const refreshSettings = async (
+        claimed: number,
+        stall: { address: string; hash: string },
+    ): Promise<void> => {
+        let lookup;
+        try {
+            lookup = await loadManifest(createChronik(), stall);
+        } catch {
+            return;
+        }
+        if (claimed !== generation) {
+            return;
+        }
+        const view: StallView = {
+            ...state.view,
+            // As the walk reports them: a capped walk and an undecodable record
+            // are both things the seller has a right to be told, and both are
+            // just as true now as they are on a full load.
+            settingsTruncated: lookup.truncated,
+            settingsUnreadable: lookup.unreadable,
+        };
+        const manifest = lookup.manifest;
+        if (manifest !== undefined) {
+            const flags = decodeAttachmentFlags(manifest.extras.get(ATTACHMENT_FLAGS_TAG));
+            view.stallName = manifest.name;
+            view.theme = manifest.theme;
+            view.attachmentFlags = flags;
+            // Recomputed here and not left to the holdings read below, because a
+            // bit means a different row under a different theme: carrying the
+            // old `worn` across a theme change would paint one look's decoration
+            // on another's stall for as long as the entitlement read takes.
+            view.worn = wornAttachments(manifest.theme.id, flags, view.heldTokens ?? NOTHING_HELD);
+            const pubkeyHex = state.pubkeyHex;
+            if (pubkeyHex !== undefined) {
+                sessionNames.set(pubkeyHex, manifest.name);
+                sessionThemes.set(pubkeyHex, manifest.theme);
+            }
+        }
+        state = { ...state, view };
+        livePaint();
+        // Always, even when no token moved in this burst: a flag switched on is
+        // a decoration that needs an entitlement nothing else asked for.
+        await refreshHoldings(claimed, stall.address);
+    };
+
+    /**
+     * Which of the wanted decoration tokens the stall address actually holds.
+     *
+     * No finality rule here, unlike the settings, and the asymmetry is stated
+     * rather than discovered: a holding is read at mempool strength while a
+     * record has to win `pickManifestWinner`. What bounds it is consent — only a
+     * decoration the seller opted into in their own record can appear at all.
+     */
+    const refreshHoldings = async (claimed: number, address: string): Promise<void> => {
+        const themeId = state.view.theme?.id ?? DEFAULT_THEME_ID;
+        const flags = state.view.attachmentFlags ?? 0;
+        let held: ReadonlySet<string> | undefined;
+        try {
+            held = await loadHeldTokens(
+                createChronik() as never,
+                address,
+                wantedAttachmentTokens(),
+            );
+        } catch {
+            return;
+        }
+        // `undefined` is a read that did not answer, never "holds none of them".
+        // Applying it would take a decoration off because a node blinked.
+        if (claimed !== generation || held === undefined) {
+            return;
+        }
+        // The settings moved while this was in flight, so this answer is about a
+        // question nobody is asking any more. Whoever changed them is reading
+        // the holdings again.
+        if (
+            (state.view.theme?.id ?? DEFAULT_THEME_ID) !== themeId ||
+            (state.view.attachmentFlags ?? 0) !== flags
+        ) {
+            return;
+        }
+        state = {
+            ...state,
+            view: {
+                ...state.view,
+                heldTokens: held,
+                worn: wornAttachments(themeId, flags, held),
+            },
+        };
+        livePaint();
+    };
+
+    /**
+     * The seller's words about their tokens.
+     *
+     * `loadDescriptions` never throws — a shop with no descriptions beats no
+     * shop — so it answers an empty lookup both when the seller wrote nothing
+     * and when its own walk failed. On this path those cannot be told apart, so
+     * an empty answer never replaces words already on screen: the same rule
+     * `isDefiniteResult` applies to an empty book, for the same reason. The cost
+     * is chosen and small — a description a seller removes stays until the next
+     * full load, which the retry control and any reload both are.
+     */
+    const refreshDescriptions = async (
+        claimed: number,
+        stall: { address: string; hash: string },
+    ): Promise<void> => {
+        const lookup = await loadDescriptions(createChronik(), stall);
+        if (claimed !== generation) {
+            return;
+        }
+        if (lookup.descriptions.size === 0 && (state.view.descriptions?.size ?? 0) > 0) {
+            return;
+        }
+        state = { ...state, view: { ...state.view, descriptions: lookup.descriptions } };
+        livePaint();
+    };
+
+    /**
+     * Everything, once. What a re-establish is owed: the socket was down for an
+     * unknown length of time, and a settings record that arrived while it was
+     * down is not going to be announced again.
+     */
+    const refreshAllFacts = async (
+        claimed: number,
+        stall: { address: string; hash: string },
+    ): Promise<void> => {
+        // Reads the holdings itself, so there is no third call here.
+        await refreshSettings(claimed, stall);
+        await refreshDescriptions(claimed, stall);
+    };
+
+    /**
+     * What one burst of transactions could have changed.
+     *
+     * The script subscription carries everything the stall address touches, and
+     * most of that is ordinary money. Walking the settings and description
+     * indexes for each of those would turn a refund into two capped walks in
+     * every open tab, so each transaction is fetched once and read with the same
+     * predicates the readers use.
+     *
+     * **What cannot be classified asks everything.** A txid we could not fetch,
+     * or a message that carried none, is a transaction we cannot rule out —
+     * asking costs two capped walks, and guessing "nothing" costs the seller a
+     * settings publish that never lands.
+     */
+    const readFacts = async (
+        claimed: number,
+        stall: { address: string; hash: string },
+        txids: readonly string[],
+    ): Promise<void> => {
+        const wanted = wantedAttachmentTokens();
+        const script = p2pkhOutputScript(stall.hash);
+        const chronik = createChronik();
+        let facts = NO_FACTS;
+        for (const txid of txids) {
+            if (!TXID.test(txid)) {
+                facts = ALL_FACTS;
+                break;
+            }
+            let tx;
+            try {
+                tx = await chronik.tx(txid);
+            } catch {
+                facts = ALL_FACTS;
+                break;
+            }
+            if (claimed !== generation) {
+                return;
+            }
+            facts = unionFacts(facts, classifyTx(tx, script, wanted));
+        }
+        if (claimed !== generation || !anyFact(facts)) {
+            return;
+        }
+        // Each reader runs at most once for a burst, however many transactions
+        // named it. `refreshSettings` ends by reading the holdings, so asking
+        // for both is one call, not two.
+        if (facts.settings) {
+            await refreshSettings(claimed, stall);
+        } else if (facts.holdings) {
+            await refreshHoldings(claimed, stall.address);
+        }
+        if (facts.descriptions) {
+            await refreshDescriptions(claimed, stall);
+        }
     };
 
     /**
@@ -242,29 +501,112 @@ export function boot(
      */
     const watch = (claimed: number): void => {
         const pubkeyHex = state.pubkeyHex;
+        if (pubkeyHex === undefined) {
+            watchWaiting(claimed);
+            return;
+        }
         // An empty stall is watched too. It is the one screen that promises
         // "anything they list will appear here on its own", and it was the one
         // screen with nothing listening: a seller's first offer never arrived
         // until the visitor reloaded.
         const kind = state.view.fetch?.kind;
-        if (pubkeyHex === undefined || (kind !== 'offers' && kind !== 'empty')) {
+        if (kind !== 'offers' && kind !== 'empty') {
             return;
         }
-        live = watchStall(createChronik() as never, pubkeyHex, () => {
-            void (async () => {
-                const status = await loadOffers(new Agora(createChronik()), pubkeyHex);
-                if (claimed !== generation || !isDefiniteResult(status)) {
-                    return;
-                }
-                state = {
-                    ...state,
-                    offers: status.kind === 'offers' ? status.offers : [],
-                    view: { ...state.view, fetch: status },
-                };
-                paint();
-                await fillNewTokens(claimed, pubkeyHex, status);
-            })();
-        });
+        const hash = toHex(shaRmd160(fromHex(pubkeyHex)));
+        const stall = { address: state.view.address ?? p2pkhAddress(pubkeyHex), hash };
+        live = watchStall(
+            createChronik() as never,
+            { pubkeyHex, hash },
+            {
+                onChanged: () => {
+                    void (async () => {
+                        const status = await loadOffers(new Agora(createChronik()), pubkeyHex);
+                        if (claimed !== generation || !isDefiniteResult(status)) {
+                            return;
+                        }
+                        state = {
+                            ...state,
+                            offers: status.kind === 'offers' ? status.offers : [],
+                            view: { ...state.view, fetch: status },
+                        };
+                        livePaint();
+                        await fillNewTokens(claimed, pubkeyHex, status);
+                    })();
+                },
+                onBurst: (txids) => {
+                    void readFacts(claimed, stall, txids);
+                },
+                onReestablished: () => {
+                    void refreshAllFacts(claimed, stall);
+                },
+            },
+        );
+    };
+
+    /**
+     * The two screens that are waiting rather than shopping.
+     *
+     * An address that has never spent is the first screen many sellers see —
+     * they paste the address they sell from before they have listed anything,
+     * which is the order the apex invites. A listing is a spend, and a spend is
+     * what reveals the key, so the answer arrives on its own if anything is
+     * watching. Nothing was.
+     *
+     * The socket lives in the same `live` variable as a resolved stall's, so
+     * `refresh()` closes it and the visibility handler pauses it — one
+     * lifecycle, not two. There is no pubkey here, so no agora group and no
+     * plugin subscription: the script subscription is the whole watch.
+     */
+    const watchWaiting = (claimed: number): void => {
+        const route = state.view.route;
+        if (route.kind !== 'unresolvable' && route.kind !== 'unresolved') {
+            return;
+        }
+        const parsed = parseSellerParam(route.address);
+        if (parsed.kind !== 'address') {
+            return;
+        }
+        live = watchStall(
+            createChronik() as never,
+            { hash: parsed.hash.toLowerCase() },
+            {
+                // No `onChanged` on purpose. That hook also rides
+                // `MIN_REREAD_MS` on a reconnect, and the floor **drops** — safe
+                // for a book, whose next message corrects it, and wrong for a
+                // resolve, which nothing announces twice.
+                onBurst: () => {
+                    void tryResolve(claimed, parsed);
+                },
+                onReestablished: () => {
+                    void tryResolve(claimed, parsed);
+                },
+            },
+        );
+    };
+
+    /**
+     * Ask again whether this address has revealed a public key.
+     *
+     * **Only a success changes anything on screen.** A walk that found nothing,
+     * and a walk that threw, both leave the waiting screen exactly as it is: no
+     * `opening` flash, and never an `unreachable` painted over a true
+     * `unresolvable`, which would be the empty-versus-unreachable collapse
+     * arriving by a new road. A receive fires a message and reveals no key —
+     * `pubkeyFromSpends` reads inputs — so finding nothing is the ordinary case
+     * here, and the screen only ever promised what a spend does.
+     */
+    const tryResolve = async (claimed: number, parsed: RouteParse): Promise<void> => {
+        let route;
+        try {
+            route = await resolveSeller(parsed, createChronik());
+        } catch {
+            return;
+        }
+        if (claimed !== generation || route.kind !== 'pubkey') {
+            return;
+        }
+        void refresh();
     };
 
     window.addEventListener('popstate', () => {

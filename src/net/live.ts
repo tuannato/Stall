@@ -1,13 +1,25 @@
 import type { FetchStatus } from '../domain/state';
 
 /**
- * Live offer updates over the chronik WebSocket.
+ * Live updates over the chronik WebSocket. One socket, two subscriptions.
  *
  * The agora plugin groups offers under `P` + the maker's pubkey, so one
- * subscription covers a whole stall. Any message on that group means this
- * seller's book moved — a take, a cancel, a new listing — and the honest
- * response is to re-read it rather than to guess what changed from the
- * message.
+ * subscription covers a whole stall's book. Any message on that group means the
+ * book moved — a take, a cancel, a new listing — and the honest response is to
+ * re-read it rather than to guess what changed from the message.
+ *
+ * The book is not the whole stall. A settings record, a description and a
+ * decoration's token are all transactions at the stall *address*, and none of
+ * them is in the agora group, so none of them ever woke this page: a seller
+ * published a look and watched an unchanged shop. The second subscription is a
+ * script subscription on the stall's hash, and it carries every one of those —
+ * along with every ordinary payment, which is why what arrives is classified
+ * rather than acted on wholesale.
+ *
+ * One socket rather than two: a second endpoint would buy attribution (this
+ * message came from the group, that one from the script) at the price of a
+ * second TCP and TLS connection per tab, a second reconnect machine, and the
+ * duplicate-subscription guard below on both of them anyway.
  */
 
 /** `toHex(strToBytes('P'))`, the prefix the agora plugin groups under. */
@@ -17,7 +29,7 @@ export const AGORA_PLUGIN = 'agora';
 
 export type LiveChronik = {
     ws(config: {
-        onMessage: (msg: { type: string }) => void;
+        onMessage: (msg: { type: string; txid?: string }) => void;
         /** Fired on every establish, including each reconnect. See `watchStall`. */
         onConnect?: () => void;
         onReconnect?: () => void;
@@ -27,6 +39,13 @@ export type LiveChronik = {
 
 export type LiveSocket = {
     subscribeToPlugin(pluginName: string, group: string): void;
+    /**
+     * Subscribe to a script. `payload` for `'p2pkh'` is the 20-byte hash as
+     * lowercase hex, and the library **throws** on anything else, so the call
+     * site guards it. Unlike a plugin subscription this one is replayed by the
+     * library on every open — see `dedupeScriptSubs`.
+     */
+    subscribeToScript(scriptType: string, payload: string): void;
     close(): void;
     /**
      * Connect, and resolve once the socket is open. Required, not optional:
@@ -71,9 +90,66 @@ export const MIN_REREAD_MS = 5_000;
  */
 export const BURST_MS = 700;
 
+/**
+ * Stands in for a `Tx` message that carried no txid.
+ *
+ * chronik always sends one, so this is a message we could not read rather than
+ * an event we can name — and a burst holding it has to wake every fact reader,
+ * exactly as a transaction we failed to fetch does. Deliberately **not** shaped
+ * like a txid: the caller gates on 64 lowercase hex before it asks chronik for
+ * anything, so this takes the ask-everything branch without a second rule.
+ */
+export const UNKNOWN_TXID = 'unknown';
+
 export function stallGroup(pubkeyHex: string): string {
     return PUBKEY_GROUP_PREFIX + pubkeyHex;
 }
+
+/**
+ * What is being watched. Both fields are optional and they are not the same
+ * question: `pubkeyHex` is the agora group, which exists only once a route has
+ * resolved to a maker; `hash` is the stall address, which exists on a waiting
+ * screen that has no pubkey at all. A watch with neither subscribes to nothing
+ * and is harmless.
+ */
+export type WatchedStall = {
+    /** The maker key the agora plugin indexes offers under. */
+    pubkeyHex?: string;
+    /** The stall's hash160, lowercase hex. */
+    hash?: string;
+};
+
+export type WatchHooks = {
+    /**
+     * The thing being watched moved: re-read it.
+     *
+     * For a resolved stall that is the offer book. It fires on the trailing
+     * burst timer, and on a reconnect through `MIN_REREAD_MS` — the floor
+     * **drops**, which is right for a book because the next message corrects
+     * it.
+     */
+    onChanged?: () => void;
+    /**
+     * The txids of one burst, drained before the read above was started.
+     *
+     * Handed over so the caller can ask what each one was and wake only the
+     * readers that could be affected. `UNKNOWN_TXID` appears for a message that
+     * carried no txid.
+     */
+    onBurst?: (txids: readonly string[]) => void;
+    /**
+     * The socket was established again after having been established before.
+     *
+     * Facts are never dropped by the floor. `MIN_REREAD_MS` is safe for the
+     * book and wrong here: a settings publish is one transaction, and a read
+     * that the floor drops stays stale until the visitor reloads. This rides a
+     * trailing timer instead, and it rides the **establish** rather than
+     * `onReconnect`, which chronik fires at the moment of the drop — before the
+     * network is back.
+     */
+    onReestablished?: () => void;
+    now?: () => number;
+};
 
 /**
  * A live refetch is applied only when it paints a book: offers, and nothing
@@ -117,15 +193,20 @@ export function isDefiniteResult(status: FetchStatus): boolean {
  */
 export function watchStall(
     chronik: LiveChronik,
-    pubkeyHex: string,
-    onChanged: () => void,
-    now: () => number = () => Date.now(),
+    stall: WatchedStall,
+    hooks: WatchHooks = {},
 ): LiveHandle {
+    const now = hooks.now ?? (() => Date.now());
     let closed = false;
     let socket: LiveSocket | undefined;
     let lastReread = 0;
     let burst: ReturnType<typeof setTimeout> | undefined;
-    const group = stallGroup(pubkeyHex);
+    let facts: ReturnType<typeof setTimeout> | undefined;
+    let establishes = 0;
+    /** Collected between bursts, drained at the fire. */
+    const seen = new Set<string>();
+    const { pubkeyHex, hash } = stall;
+    const group = pubkeyHex === undefined ? undefined : stallGroup(pubkeyHex);
 
     /** A re-read caused by the socket, floored so a reconnect spin cannot flood. */
     const rereadThrottled = (): void => {
@@ -137,7 +218,7 @@ export function watchStall(
             return;
         }
         lastReread = at;
-        onChanged();
+        hooks.onChanged?.();
     };
 
     /**
@@ -156,6 +237,12 @@ export function watchStall(
      * waits out the burst and then reads once. The floor stays where it is,
      * guarding the reconnect spin, which is a different failure — there the
      * later attempts carry no new information at all.
+     *
+     * **The txids are collected in `onMessage`, not here.** This guard exists
+     * to keep one timer running, and a message that arrives while it is running
+     * still names a transaction the caller has to classify — dropping it behind
+     * the early return would lose exactly the settings publish that arrived
+     * half a second after a sale.
      */
     const rereadCoalesced = (): void => {
         if (closed || burst !== undefined) {
@@ -163,13 +250,36 @@ export function watchStall(
         }
         burst = setTimeout(() => {
             burst = undefined;
+            if (closed) {
+                return;
+            }
+            // Drained synchronously, before either callback can await
+            // anything: a txid that arrives while the reads below are in
+            // flight belongs to the next burst, not to this one, and a set
+            // emptied after the first await would swallow it.
+            const txids = [...seen];
+            seen.clear();
+            // Deliberately does not stamp `lastReread`: the floor guards a
+            // reconnect spin, and a read caused by a message must not
+            // suppress the one caused by a drop. What was missed while the
+            // socket was down is still unknown, however recently the book
+            // was read.
+            hooks.onChanged?.();
+            if (txids.length > 0) {
+                hooks.onBurst?.(txids);
+            }
+        }, BURST_MS);
+    };
+
+    /** The facts catch-up after a re-establish. Trailing, never floored. */
+    const factsCoalesced = (): void => {
+        if (closed || facts !== undefined) {
+            return;
+        }
+        facts = setTimeout(() => {
+            facts = undefined;
             if (!closed) {
-                // Deliberately does not stamp `lastReread`: the floor guards a
-                // reconnect spin, and a read caused by a message must not
-                // suppress the one caused by a drop. What was missed while the
-                // socket was down is still unknown, however recently the book
-                // was read.
-                onChanged();
+                hooks.onReestablished?.();
             }
         }, BURST_MS);
     };
@@ -178,16 +288,28 @@ export function watchStall(
         if (closed || socket === undefined) {
             return;
         }
-        socket.subscribeToPlugin(AGORA_PLUGIN, group);
+        if (group !== undefined) {
+            socket.subscribeToPlugin(AGORA_PLUGIN, group);
+        }
+        // After the library's own replay, which has already run by the time
+        // `onConnect` fires. See `dedupeScriptSubs`.
+        dedupeScriptSubs(socket);
+        establishes += 1;
+        // Not the first: that one is the page load, and the facts were read by
+        // the load itself. Every establish after it is a gap of unknown length.
+        if (establishes > 1) {
+            factsCoalesced();
+        }
     };
 
     socket = chronik.ws({
         autoReconnect: true,
         onMessage: (msg) => {
-            // Every plugin message for this group is a change to this book.
-            if (!closed && msg.type === 'Tx') {
-                rereadCoalesced();
+            if (closed || msg.type !== 'Tx') {
+                return;
             }
+            seen.add(typeof msg.txid === 'string' ? msg.txid : UNKNOWN_TXID);
+            rereadCoalesced();
         },
         onConnect: subscribe,
         // A dropped socket only stops updates; it never means the shop emptied.
@@ -196,11 +318,27 @@ export function watchStall(
         onReconnect: rereadThrottled,
     });
 
+    // Sent once, and only from here. Unlike a plugin subscription the library
+    // remembers this one and re-sends it on every open, so subscribing from
+    // `onConnect` as well would be one more copy per establish on top of the
+    // copies it makes on its own.
+    //
+    // Guarded because `subscribeToScript` **throws** on a payload that is not
+    // 20 bytes of lowercase hex, and a stall whose hash we cannot subscribe to
+    // still has a book worth watching.
+    if (hash !== undefined) {
+        try {
+            socket.subscribeToScript('p2pkh', hash);
+        } catch {
+            // Nothing to say: the book subscription above is unaffected.
+        }
+    }
+
     // `ws()` only constructs the endpoint; it dials nothing. chronik-client
     // reaches `connectWs` from exactly three places — `waitForOpen`, `resume`,
     // and the auto-reconnect of a socket that is already established — so
     // without this call a freshly loaded stall holds a socket that never opens:
-    // `onConnect` never fires, the subscription above is never sent, and no
+    // `onConnect` never fires, neither subscription is ever sent, and no
     // message ever arrives. The one accidental way back was a visibility cycle,
     // because `pause` no-ops on an undefined socket and `resume` connects when
     // it finds none — live updates for a visitor who left the tab and came
@@ -223,6 +361,11 @@ export function watchStall(
                 clearTimeout(burst);
                 burst = undefined;
             }
+            if (facts !== undefined) {
+                clearTimeout(facts);
+                facts = undefined;
+            }
+            seen.clear();
             try {
                 socket?.close();
             } catch {
@@ -253,4 +396,55 @@ export function watchStall(
             rereadThrottled();
         },
     };
+}
+
+/** The one shape this module reads out of the library, named so the cast is small. */
+type ScriptSub = { scriptType?: unknown; payload?: unknown };
+
+/**
+ * Undo the duplicate the library makes of our script subscription.
+ *
+ * chronik-client replays remembered subscriptions when a socket opens, and for
+ * scripts it does so by calling its own **public** `subscribeToScript` — which
+ * pushes the subscription back onto `subs.scripts`. So the list doubles on
+ * every open: one entry becomes two, two become four, and by open N the wire
+ * carries 2^(N-1) copies of one subscribe frame. The trigger is not only a
+ * network drop. `pause()` closes the socket and `resume()` opens it, so every
+ * visibility change a visitor makes is another doubling.
+ *
+ * **What it costs is bytes and memory, not correctness.** chronik's own
+ * subscribe handler removes before it inserts, so a duplicate is idempotent at
+ * the far end. That is why a guard here is enough and the pinned vendored
+ * tarball is not patched.
+ *
+ * This reaches into a library internal, so it checks the shape before touching
+ * anything and does nothing at all if the shape is not what it expects — and
+ * `script-sub-dedupe-notices-when-the-library-changes-shape` asserts the
+ * property exists on a real endpoint, so a tarball that renames it fails the
+ * suite instead of quietly turning this into a no-op.
+ *
+ * The array is emptied and refilled rather than replaced: `subs` is built once
+ * in the constructor and the library holds the same reference for the life of
+ * the endpoint.
+ */
+function dedupeScriptSubs(socket: LiveSocket): void {
+    const scripts = (socket as unknown as { subs?: { scripts?: unknown } }).subs?.scripts;
+    if (!Array.isArray(scripts)) {
+        return;
+    }
+    const seen = new Set<string>();
+    const unique: ScriptSub[] = [];
+    for (const sub of scripts as ScriptSub[]) {
+        const key = `${String(sub?.scriptType)}:${String(sub?.payload)}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        unique.push(sub);
+    }
+    if (unique.length === scripts.length) {
+        return;
+    }
+    scripts.length = 0;
+    scripts.push(...unique);
 }

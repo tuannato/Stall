@@ -1279,11 +1279,13 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.append(qrBox);
     wrap.append(web, app);
 
-    // Signing happens in another app, and the live socket only listens to the
-    // agora group — a settings transaction does not move the book, so no
-    // message ever arrives and nothing re-reads the manifest. Without this
-    // control the seller signs, comes back, and watches an unchanged stall.
-    // It runs a full refresh, so the sheet closes and the answer is the stall.
+    // Signing happens in another app. The socket now watches the stall address
+    // as well as the agora group, so a record published from that wallet does
+    // re-read on its own — but only while this page still has a connection, and
+    // only if the wallet that signed it is this stall's. Neither is ours to
+    // promise, which is why the copy above states them as conditions and this
+    // control exists to ask outright. It runs a full refresh, so the sheet
+    // closes and the answer is the stall itself.
     wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
     const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
     check.type = 'button';

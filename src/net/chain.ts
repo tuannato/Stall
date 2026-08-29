@@ -28,6 +28,14 @@ export type ChainTx = {
     isFinal?: boolean;
     inputs: readonly ChainTxInput[];
     outputs: readonly ChainTxOutput[];
+    /**
+     * The tokens a transaction moved, as chronik reports them. Optional here and
+     * not on the walks: only `classifyTx` reads it, and a fixture written for a
+     * manifest walk has no business inventing one. `tokenId` is optional in turn
+     * because this type is structural — nothing in this app may assume chronik
+     * filled a field it did not promise.
+     */
+    tokenEntries?: readonly { tokenId?: string }[];
 };
 
 export type HistoryPage = {

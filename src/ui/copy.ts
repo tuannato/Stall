@@ -112,12 +112,23 @@ export const PUBLISH_SAME_LOOK =
 
 /**
  * Stall cannot tell that a record was signed, for the same reason it cannot
- * tell that a purchase happened: it holds no key and watches no wallet. The
- * live socket listens to the agora group, and a settings transaction does not
- * move the offer book, so nothing arrives to prompt a re-read.
+ * tell that a purchase happened: it holds no key and watches no wallet. What it
+ * now watches is the stall *address*, so a record published from that wallet
+ * does arrive on its own — and every word here is about the conditions on that,
+ * because **none of them is ours to promise.**
+ *
+ * The wrong wallet signs a record that will never belong to this stall. A host
+ * without avalanche pre-consensus turns "seconds" into "next block", and which
+ * of them is running it is not observable from here — so no timing is claimed.
+ * A socket that is down delivers nothing and says nothing about being down.
+ *
+ * Hence the shape: what has to be true, said as a condition, and a control that
+ * asks outright. `publish-does-not-promise-a-record-will-arrive` pins the
+ * absence rather than the sentence, so it cannot rot into approving whatever
+ * copy happens to be here.
  */
 export const PUBLISH_AFTER_SIGNING =
-    'Nothing here watches your wallet. After you sign, the network has to agree the record exists before this page will read it — usually a few seconds.';
+    'This page cannot see your wallet. After you sign, the network has to agree the record exists — and while this page still has a connection, it re-reads on its own once that happens. If your stall still looks the same, ask for it here.';
 
 export const PUBLISH_CHECK_NOW = 'Check for it now';
 

@@ -1,0 +1,759 @@
+// @vitest-environment happy-dom
+import { encodeCashAddress } from 'ecashaddrjs';
+import { shaRmd160, toHex } from 'ecash-lib';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { STL1_HEX, encodeManifestHex } from './domain/manifest';
+import { STLD_HEX, encodeDescriptionHex } from './domain/description';
+import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
+import type { ChainTx, HistoryPage } from './net/chain';
+import { UNKNOWN_TXID } from './net/live';
+import { p2pkhOutputScript } from './net/script';
+import { stallPath } from './domain/route';
+import {
+    OPENING_BODY,
+    UNREACHABLE_BODY,
+    UNRESOLVABLE_TITLE,
+} from './ui/copy';
+
+/**
+ * The live half of `app.ts`, against real readers and a fake chain.
+ *
+ * Its own file rather than more of `app.test.ts` because module mocking is
+ * hoisted per file, and that file deliberately has none: it drives `boot`
+ * through its injected loader and nothing else.
+ *
+ * **What is faked here is chronik, not the readers.** `loadManifest`,
+ * `loadDescriptions`, `loadHeldTokens` and `resolveSeller` all run for real
+ * against the pages below, so `unfinalized-settings-do-not-flip-the-look-live`
+ * exercises `pickManifestWinner` itself rather than a stub that was written to
+ * agree with it. Only the socket (`watchStall`), the offer read (which needs a
+ * real `Agora`) and the price feed are replaced.
+ */
+
+const PK_BYTES = (() => {
+    const pk = new Uint8Array(33);
+    pk[0] = 0x02;
+    pk.fill(0x11, 1);
+    return pk;
+})();
+/** Nobody holds this key: it is a byte pattern, not a wallet. */
+const PK = toHex(PK_BYTES);
+const HASH = toHex(shaRmd160(PK_BYTES));
+const ADDR = encodeCashAddress('ecash', 'p2pkh', HASH);
+const STALL_SCRIPT = p2pkhOutputScript(HASH);
+const STRANGER_SCRIPT = p2pkhOutputScript('ff'.repeat(20));
+const TOKEN = 'aa'.repeat(32);
+
+/** One row, so a description has somewhere to be painted. */
+const OFFER = {
+    outpoint: { txid: 'de'.repeat(32), outIdx: 1 },
+    tokenId: TOKEN,
+    atoms: 12n,
+    variant: 'PARTIAL' as const,
+    askedSats: 120_000n,
+    askedAtoms: 1n,
+};
+const TOKEN_META = {
+    tokenId: TOKEN,
+    name: 'Ripe Beans',
+    ticker: 'RB',
+    decimals: 0,
+};
+
+function p2pkhScriptSig(pk: Uint8Array): string {
+    const sig = new Uint8Array(71).fill(0x30);
+    const script = new Uint8Array(1 + sig.length + 1 + pk.length);
+    script[0] = sig.length;
+    script.set(sig, 1);
+    script[1 + sig.length] = pk.length;
+    script.set(pk, 2 + sig.length);
+    return toHex(script);
+}
+
+/** The chain this test controls, shared by every reader through `createChronik`. */
+const chain = {
+    /** Newest first, as chronik answers. */
+    addressTxs: [] as ChainTx[],
+    txs: new Map<string, ChainTx>(),
+    utxos: [] as { token?: { tokenId?: string } }[],
+    historyThrows: false,
+    txThrows: false,
+    utxosThrow: false,
+    calls: { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 },
+};
+
+function resetChain(): void {
+    chain.addressTxs = [];
+    chain.txs = new Map();
+    chain.utxos = [];
+    chain.historyThrows = false;
+    chain.txThrows = false;
+    chain.utxosThrow = false;
+    chain.calls = { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 };
+}
+
+const addressPage = (): HistoryPage => ({
+    txs: chain.addressTxs,
+    numPages: 1,
+    numTxs: chain.addressTxs.length,
+});
+
+/**
+ * The lokad indexes are reported as enormous so `walkShorter` always takes the
+ * address branch. One index to fill, and the branch a real busy stall takes.
+ */
+const lokadPage = (): HistoryPage => ({ txs: [], numPages: 1, numTxs: 1_000_000 });
+
+const fakeChronik = {
+    address(_address: string) {
+        return {
+            history: async (): Promise<HistoryPage> => {
+                chain.calls.addressHistory += 1;
+                if (chain.historyThrows) {
+                    throw new Error('no index answered');
+                }
+                return addressPage();
+            },
+            utxos: async () => {
+                chain.calls.utxos += 1;
+                if (chain.utxosThrow) {
+                    throw new Error('no index answered');
+                }
+                return { utxos: chain.utxos };
+            },
+        };
+    },
+    lokadId(id: string) {
+        return {
+            history: async (): Promise<HistoryPage> => {
+                if (id === STL1_HEX) {
+                    chain.calls.stl1 += 1;
+                } else if (id === STLD_HEX) {
+                    chain.calls.stld += 1;
+                }
+                return lokadPage();
+            },
+        };
+    },
+    async tx(txid: string): Promise<ChainTx> {
+        chain.calls.tx += 1;
+        if (chain.txThrows) {
+            throw new Error('not found');
+        }
+        const found = chain.txs.get(txid);
+        if (found === undefined) {
+            throw new Error('not found');
+        }
+        return found;
+    },
+    async token(): Promise<never> {
+        throw new Error('no genesis here');
+    },
+};
+
+/** Every watch opened this session, so a close can be seen from outside. */
+type OpenedWatch = {
+    stall: { pubkeyHex?: string; hash?: string };
+    hooks: {
+        onChanged?: () => void;
+        onBurst?: (txids: readonly string[]) => void;
+        onReestablished?: () => void;
+    };
+    closed: boolean;
+};
+const watches: OpenedWatch[] = [];
+
+vi.mock('./net', async (importOriginal) => {
+    const real = await importOriginal<typeof import('./net')>();
+    return {
+        ...real,
+        createChronik: () => fakeChronik,
+        // Needs a real `Agora`, which needs a real client. The book is not what
+        // this file is about; `live.test.ts` and `offers.test.ts` cover it.
+        loadOffers: async () => ({ kind: 'empty' as const }),
+    };
+});
+
+vi.mock('./net/live', async (importOriginal) => {
+    const real = await importOriginal<typeof import('./net/live')>();
+    return {
+        ...real,
+        watchStall: (
+            _chronik: unknown,
+            stall: OpenedWatch['stall'],
+            hooks: OpenedWatch['hooks'] = {},
+        ) => {
+            const entry: OpenedWatch = { stall, hooks, closed: false };
+            watches.push(entry);
+            return {
+                close: () => {
+                    entry.closed = true;
+                },
+                pause: () => undefined,
+                resume: () => undefined,
+            };
+        },
+    };
+});
+
+vi.mock('./net/price', () => ({
+    fetchXecPrice: async () => undefined,
+}));
+
+const { boot } = await import('./app');
+type State = import('./app').AppState;
+
+/** Let the queued promise chains run. Several helpers await in sequence. */
+async function flush(times = 8): Promise<void> {
+    for (let i = 0; i < times; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+function stallEmpty(over: Partial<State['view']> = {}): State {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'empty' },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+            ...over,
+        },
+        offers: [],
+        pubkeyHex: PK,
+    };
+}
+
+function waitingState(kind: 'unresolvable' | 'unresolved'): State {
+    return {
+        view: {
+            route: { kind, address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        },
+        offers: [],
+    };
+}
+
+/** A transaction the stall's own key signed, which is what authorship means. */
+function signedTx(opts: {
+    txid: string;
+    outputs: readonly string[];
+    height?: number;
+    isFinal?: boolean;
+    tokens?: readonly string[];
+}): ChainTx {
+    return {
+        txid: opts.txid,
+        block: opts.height === undefined ? undefined : { height: opts.height },
+        isFinal: opts.isFinal,
+        inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
+        outputs: opts.outputs.map((outputScript) => ({ outputScript })),
+        tokenEntries: opts.tokens?.map((tokenId) => ({ tokenId })),
+    };
+}
+
+function stl1Output(name: string, themeId = DEFAULT_THEME_ID, flags = 0): string {
+    const hex = encodeManifestHex(name, themeId, flags);
+    if (hex === undefined) {
+        throw new Error('fixture is not encodable');
+    }
+    return `6a${hex}`;
+}
+
+function stldOutput(tokenId: string, text: string): string {
+    const hex = encodeDescriptionHex(tokenId, text);
+    if (hex === undefined) {
+        throw new Error('fixture is not encodable');
+    }
+    return `6a${hex}`;
+}
+
+/** Put a transaction both in the address history and behind `chronik.tx`. */
+function publish(tx: ChainTx): string {
+    chain.addressTxs = [tx, ...chain.addressTxs];
+    chain.txs.set(tx.txid, tx);
+    return tx.txid;
+}
+
+function bootStall(state: State): { root: HTMLElement; loads: number } {
+    const root = document.createElement('div');
+    const counter = { root, loads: 0 };
+    boot(root, async () => {
+        counter.loads += 1;
+        return state;
+    });
+    return counter;
+}
+
+beforeEach(() => {
+    window.history.replaceState(null, '', stallPath(PK));
+    resetChain();
+    watches.length = 0;
+    localStorage.clear();
+});
+
+describe('a-settings-publish-lands-without-a-reload', () => {
+    /**
+     * A settings transaction is not in the agora group, so the offer-book
+     * subscription never carried one: a seller signed a name and a look in
+     * another app, came back, and watched an unchanged stall until they
+     * reloaded. The script subscription carries it, the classifier names it,
+     * and the manifest walk applies it.
+     */
+    it('paints the name and the look the seller just signed', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        expect(root.textContent, 'no name until one is published').not.toContain(
+            'Ripe Beans',
+        );
+        const watch = watches[0]!;
+        expect(watch.stall.hash, 'the address is watched, not only the book').toBe(HASH);
+        expect(watch.stall.pubkeyHex).toBe(PK);
+
+        const txid = publish(
+            signedTx({
+                txid: '01'.repeat(32),
+                outputs: [STALL_SCRIPT, stl1Output('Ripe Beans', NEO_CITY_THEME_ID)],
+                height: 800_000,
+            }),
+        );
+        watch.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(root.textContent, 'the published name is on screen').toContain('Ripe Beans');
+        expect(chain.calls.stl1, 'the settings index was consulted once').toBe(1);
+        expect(chain.calls.stld, 'and the descriptions were not').toBe(0);
+    });
+
+    it('reads the words a seller published about a token', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const txid = publish(
+            signedTx({
+                txid: '02'.repeat(32),
+                outputs: [STALL_SCRIPT, stldOutput(TOKEN, 'Grown on the hill')],
+                height: 800_000,
+            }),
+        );
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(chain.calls.stld, 'the description index was consulted').toBe(1);
+        expect(chain.calls.stl1, 'and the settings were left alone').toBe(0);
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+    });
+});
+
+describe('a-sale-does-not-walk-the-settings', () => {
+    /**
+     * The script subscription carries every transaction the stall address
+     * touches, and most of it is ordinary money. The book has its own answer —
+     * any message re-reads it — so a take must not also buy two capped history
+     * walks in every open tab.
+     */
+    it('classifies a take as ordinary traffic and reads no index', async () => {
+        bootStall(stallEmpty());
+        await flush();
+
+        const covenant = `a914${'cd'.repeat(20)}87`;
+        const txid = '03'.repeat(32);
+        chain.txs.set(txid, {
+            txid,
+            inputs: [{ inputScript: '00', outputScript: covenant }],
+            outputs: [{ outputScript: STALL_SCRIPT }, { outputScript: covenant }],
+            tokenEntries: [{ tokenId: 'bb'.repeat(32) }],
+        });
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(chain.calls.tx, 'the transaction is read once, and only once').toBe(1);
+        expect(chain.calls.stl1, 'no settings walk').toBe(0);
+        expect(chain.calls.stld, 'no description walk').toBe(0);
+        expect(chain.calls.utxos, 'no holdings read').toBe(0);
+    });
+
+    it('reads each reader at most once however many transactions name it', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        const first = publish(
+            signedTx({
+                txid: '04'.repeat(32),
+                outputs: [stl1Output('One')],
+                height: 800_001,
+            }),
+        );
+        const second = publish(
+            signedTx({
+                txid: '05'.repeat(32),
+                outputs: [stl1Output('Two')],
+                height: 800_002,
+            }),
+        );
+        watches[0]!.hooks.onBurst?.([first, second]);
+        await flush();
+
+        expect(chain.calls.tx, 'both transactions were read').toBe(2);
+        expect(chain.calls.stl1, 'one walk for the burst, not one per record').toBe(1);
+    });
+});
+
+describe('an-unclassifiable-event-asks-everything', () => {
+    /**
+     * A transaction we could not fetch is one we cannot rule out. Asking costs
+     * two capped walks; guessing "nothing" costs the seller a settings publish
+     * that never lands, and they have no way to find out.
+     */
+    it('runs every fact reader once when the transaction cannot be read', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['06'.repeat(32), '07'.repeat(32)]);
+        await flush();
+
+        expect(chain.calls.tx, 'stops asking once it has to ask everything').toBe(1);
+        expect(chain.calls.stl1).toBe(1);
+        expect(chain.calls.stld).toBe(1);
+    });
+
+    it('never hands a txid it could not gate to chronik', async () => {
+        // `chronik.tx()` concatenates its argument into a request path and
+        // never checks it — the same gate the manifest hint gets, for the same
+        // reason. A message that carried no txid arrives as exactly this.
+        bootStall(stallEmpty());
+        await flush();
+        watches[0]!.hooks.onBurst?.([UNKNOWN_TXID]);
+        await flush();
+
+        expect(chain.calls.tx, 'not fetched at all').toBe(0);
+        expect(chain.calls.stl1, 'and still asked everything').toBe(1);
+        expect(chain.calls.stld).toBe(1);
+    });
+});
+
+describe('failed-facts-refetch-keeps-the-painted-facts', () => {
+    /**
+     * The facts mirror of `failed-refetch-is-not-empty`. A walk that did not
+     * finish knows less than the screen already does, and painting from it
+     * would turn our own failure into a statement about the seller — here, that
+     * they never named their stall.
+     */
+    it('leaves the painted name standing when the walk cannot finish', async () => {
+        const { root } = bootStall(
+            stallEmpty({ stallName: 'Ripe Beans', descriptions: new Map([[TOKEN, 'Sun dried']]) }),
+        );
+        await flush();
+        expect(root.textContent).toContain('Ripe Beans');
+
+        chain.historyThrows = true;
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['08'.repeat(32)]);
+        await flush();
+
+        expect(root.textContent, 'a failed walk is not a seller with no name').toContain(
+            'Ripe Beans',
+        );
+        expect(chain.calls.stl1, 'it did try').toBe(1);
+        expect(chain.calls.stld).toBe(1);
+    });
+
+    it('keeps a description when the walk answers empty because it failed', async () => {
+        // `loadDescriptions` swallows its own failure by design and answers an
+        // empty lookup, which on this path cannot be told from a seller who
+        // wrote nothing. So an empty answer never replaces words on screen —
+        // the same rule `isDefiniteResult` applies to an empty book.
+        const { root } = bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                // The words live in the disclosure panel, so it has to be open
+                // for them to be on screen at all.
+                overlay: { kind: 'buy', outpoint: OFFER.outpoint },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                descriptions: new Map([[TOKEN, 'Grown on the hill']]),
+            }),
+        );
+        await flush();
+        const painted = (): string =>
+            root.querySelector('[data-role="token-description"]')?.textContent ?? '';
+        expect(painted()).toContain('Grown on the hill');
+
+        chain.historyThrows = true;
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['09'.repeat(32)]);
+        await flush();
+
+        expect(chain.calls.stld, 'it did try').toBe(1);
+        expect(painted(), 'an empty answer is not a seller who wrote nothing').toContain(
+            'Grown on the hill',
+        );
+        expect(root.textContent).not.toContain(OPENING_BODY);
+    });
+});
+
+describe('unfinalized-settings-do-not-flip-the-look-live', () => {
+    /**
+     * Two nodes hold two mempools, which is how one link renders two stalls. §5
+     * settles it: unfinalized **and** unmined never wins. The live path must
+     * not be a way around that rule, and it is not — it goes through the same
+     * `loadManifest`, so `pickManifestWinner` refuses the record and the walk
+     * simply answers with the older winner.
+     */
+    it('waits for the chain to agree, then lands when it does', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+
+        const tx = signedTx({
+            txid: '0a'.repeat(32),
+            outputs: [stl1Output('Neon Stall', NEO_CITY_THEME_ID)],
+            isFinal: false,
+        });
+        const txid = publish(tx);
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+        expect(
+            root.textContent,
+            'one node saying so is not the chain agreeing',
+        ).not.toContain('Neon Stall');
+
+        // Avalanche finalises it. That is another message on the same socket.
+        chain.txs.set(txid, { ...tx, isFinal: true });
+        chain.addressTxs = [{ ...tx, isFinal: true }];
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+        expect(root.textContent, 'and now it is the seller’s look').toContain(
+            'Neon Stall',
+        );
+    });
+});
+
+describe('a-live-update-does-not-clear-a-half-written-record', () => {
+    /**
+     * `renderStall` begins with `replaceChildren()`, and the publish sheet keeps
+     * the typed name in the DOM and nowhere else. A live paint while it is open
+     * therefore wipes a record the seller is composing — and with a script
+     * subscription, a stranger can force that from outside for the price of
+     * dust.
+     */
+    it('defers the paint while the sheet is open, and flushes it on close', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+
+        (root.querySelector('[data-role="open-publish"]') as HTMLButtonElement).click();
+        const input = root.querySelector(
+            'input[name="stall-name"]',
+        ) as HTMLInputElement;
+        input.value = 'Half Written';
+
+        const txid = publish(
+            signedTx({
+                txid: '0b'.repeat(32),
+                outputs: [stl1Output('Ripe Beans')],
+                height: 800_000,
+            }),
+        );
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        const still = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+        expect(still, 'the sheet is still mounted').not.toBeNull();
+        expect(still.value, 'and what the seller typed is still in it').toBe('Half Written');
+        expect(chain.calls.stl1, 'the state was read all the same').toBe(1);
+
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('input[name="stall-name"]')).toBeNull();
+        expect(root.textContent, 'the deferred paint arrives with the close').toContain(
+            'Ripe Beans',
+        );
+    });
+
+    it('a paint the seller asked for is untouched', async () => {
+        // Opening and closing the sheet still repaint immediately: only the
+        // paints nobody asked for wait.
+        const { root } = bootStall(stallEmpty({ stallName: 'Ripe Beans' }));
+        await flush();
+        (root.querySelector('[data-role="open-publish"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="publish"]')).not.toBeNull();
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="publish"]')).toBeNull();
+    });
+});
+
+describe('waiting-address-resolves-on-its-own', () => {
+    /**
+     * An address that has never spent is the first screen many sellers see:
+     * they paste the address they sell from before listing anything, which is
+     * the order the apex invites. A listing is a spend, and a spend reveals the
+     * key — so the answer arrives on its own, if anything is watching. Nothing
+     * was.
+     */
+    it('watches the address with no plugin subscription, and refreshes on a spend', async () => {
+        const root = document.createElement('div');
+        const states: State[] = [waitingState('unresolvable'), stallEmpty()];
+        let loads = 0;
+        boot(root, async () => states[Math.min(loads++, states.length - 1)]!);
+        await flush();
+        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+
+        const watch = watches[0]!;
+        expect(watch.stall.hash, 'the address is what there is to watch').toBe(HASH);
+        expect(
+            watch.stall.pubkeyHex,
+            'there is no maker key yet, so no agora group',
+        ).toBeUndefined();
+
+        // The seller lists. A listing is an ordinary p2pkh spend, and the input
+        // script is where the key finally shows.
+        chain.addressTxs = [
+            signedTx({ txid: '0c'.repeat(32), outputs: [STRANGER_SCRIPT], height: 800_000 }),
+        ];
+        watch.hooks.onBurst?.(['0c'.repeat(32)]);
+        await flush();
+
+        expect(loads, 'the resolve was worth a reload of the page state').toBe(2);
+        expect(root.textContent).not.toContain(UNRESOLVABLE_TITLE);
+    });
+
+    it('a re-establish asks again, because nothing announces a spend twice', async () => {
+        const root = document.createElement('div');
+        const states: State[] = [waitingState('unresolved'), stallEmpty()];
+        let loads = 0;
+        boot(root, async () => states[Math.min(loads++, states.length - 1)]!);
+        await flush();
+
+        chain.addressTxs = [
+            signedTx({ txid: '0d'.repeat(32), outputs: [STRANGER_SCRIPT], height: 800_000 }),
+        ];
+        watches[0]!.hooks.onReestablished?.();
+        await flush();
+        expect(loads).toBe(2);
+    });
+});
+
+describe('a-failed-live-resolve-does-not-repaint-the-waiting-screen', () => {
+    /**
+     * A receive fires a message and reveals no key — `pubkeyFromSpends` reads
+     * inputs — so finding nothing is the ordinary case here. Painting
+     * `unreachable` over a true `unresolvable` would be the empty-versus-
+     * unreachable collapse arriving by a new road, and an `opening` flash under
+     * every stranger's dust would be a stall that flickers for no reason.
+     */
+    it('holds the screen when the walk finds no key', async () => {
+        const root = document.createElement('div');
+        let loads = 0;
+        boot(root, async () => {
+            loads += 1;
+            return waitingState('unresolvable');
+        });
+        await flush();
+
+        // Somebody funded the address. A receive is not a spend.
+        chain.addressTxs = [
+            {
+                txid: '0e'.repeat(32),
+                inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+                outputs: [{ outputScript: STALL_SCRIPT }],
+            },
+        ];
+        watches[0]!.hooks.onBurst?.(['0e'.repeat(32)]);
+        await flush();
+
+        expect(loads, 'nothing was reloaded').toBe(1);
+        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).not.toContain(OPENING_BODY);
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+    });
+
+    it('holds the screen when the walk throws', async () => {
+        const root = document.createElement('div');
+        let loads = 0;
+        boot(root, async () => {
+            loads += 1;
+            return waitingState('unresolvable');
+        });
+        await flush();
+
+        chain.historyThrows = true;
+        watches[0]!.hooks.onBurst?.(['0f'.repeat(32)]);
+        await flush();
+
+        expect(loads).toBe(1);
+        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+    });
+});
+
+describe('a-waiting-watch-is-closed-when-the-route-resolves', () => {
+    /**
+     * The waiting socket lives in the same `live` variable as a resolved
+     * stall's, so `refresh()` closes it before it opens the next one. Two
+     * lifecycles would mean a stall holding two sockets, one of them watching a
+     * screen nobody is on.
+     */
+    it('closes the address watch and opens the book watch in its place', async () => {
+        const root = document.createElement('div');
+        const states: State[] = [waitingState('unresolvable'), stallEmpty()];
+        let loads = 0;
+        boot(root, async () => states[Math.min(loads++, states.length - 1)]!);
+        await flush();
+        expect(watches).toHaveLength(1);
+        expect(watches[0]!.closed).toBe(false);
+
+        chain.addressTxs = [
+            signedTx({ txid: '10'.repeat(32), outputs: [STRANGER_SCRIPT], height: 800_000 }),
+        ];
+        watches[0]!.hooks.onBurst?.(['10'.repeat(32)]);
+        await flush();
+
+        expect(watches[0]!.closed, 'the waiting watch is closed, not left open').toBe(true);
+        expect(watches).toHaveLength(2);
+        expect(watches[1]!.stall.pubkeyHex, 'and the book is watched now').toBe(PK);
+        expect(watches[1]!.stall.hash).toBe(HASH);
+    });
+});
+
+describe('a-live-holdings-change-takes-a-decoration-off', () => {
+    /**
+     * §7: moving the token takes the decoration off, which is what selling a
+     * decoration should do. And a read that did not answer is not a stall that
+     * holds nothing — applying that would strip a decoration because a node
+     * blinked.
+     */
+    it('applies a definite holdings answer and ignores a failed one', async () => {
+        const worn = (root: HTMLElement): boolean =>
+            root.querySelector('.stall')?.classList.contains('att-pinstripe') === true;
+
+        // Bit 1 of the shipped default is `att-pinstripe`, a `root` row.
+        const flagged = publish(
+            signedTx({
+                txid: '11'.repeat(32),
+                outputs: [stl1Output('Ripe Beans', DEFAULT_THEME_ID, 0b10)],
+                height: 800_000,
+            }),
+        );
+        const { root } = bootStall(stallEmpty());
+        await flush();
+
+        chain.utxos = [
+            { token: { tokenId: '9a0d0745a9ca0e82eea47f2690d2611ca791635f3eba26af6a9bf49dfd528e59' } },
+        ];
+        watches[0]!.hooks.onBurst?.([flagged]);
+        await flush();
+        expect(chain.calls.utxos, 'a flag is worth an entitlement read').toBe(1);
+        expect(worn(root), 'held, opted into, so worn').toBe(true);
+
+        // The holdings read fails. Nothing changes.
+        chain.utxosThrow = true;
+        watches[0]!.hooks.onReestablished?.();
+        await flush();
+        expect(worn(root), 'a failed read does not undress a stall').toBe(true);
+
+        // The seller sells the decoration. That is a definite answer.
+        chain.utxosThrow = false;
+        chain.utxos = [];
+        watches[0]!.hooks.onReestablished?.();
+        await flush();
+        expect(worn(root), 'gone with the token').toBe(false);
+    });
+});
