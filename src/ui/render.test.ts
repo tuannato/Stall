@@ -2575,7 +2575,12 @@ describe('picker-previews-the-look-without-publishing-it', () => {
 
     it('repaints the live stall in the chosen look, strip and all', () => {
         const { stall, select } = openSheet();
-        expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(255, 255, 255)');
+        // Against the table, not a literal: D1 froze the mapping, not the
+        // pixels, so this test asserts "painted in Modern", whatever Modern is.
+        const modern = DEFAULT_THEME.bg;
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(
+            `rgb(${modern.r}, ${modern.g}, ${modern.b})`,
+        );
         expect(stall.querySelector('.orn'), 'Modern ships no strip').toBeNull();
 
         select.value = String(NEO_CITY_THEME_ID);
@@ -2594,7 +2599,9 @@ describe('picker-previews-the-look-without-publishing-it', () => {
         select.value = String(DEFAULT_THEME_ID);
         select.dispatchEvent(new Event('change'));
         expect(stall.querySelectorAll('.orn'), 'never two strips').toHaveLength(0);
-        expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(255, 255, 255)');
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(
+            `rgb(${modern.r}, ${modern.g}, ${modern.b})`,
+        );
     });
 
     it('still says when publishing would not change anything', () => {

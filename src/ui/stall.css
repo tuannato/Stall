@@ -41,8 +41,18 @@ body {
     background: var(--s-bg);
     color: var(--s-text);
     font-family: var(--s-font);
-    font-size: 14px;
-    line-height: 1.45;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+/*
+ * One focus language for the whole shop. `:focus-visible`, not `:focus`, so a
+ * tap does not leave a ring behind; the accent is the theme's own, so the ring
+ * belongs to the look it is drawn in.
+ */
+.stall :focus-visible {
+    outline: 2px solid var(--s-accent);
+    outline-offset: 2px;
 }
 
 .stall,
@@ -312,7 +322,7 @@ body {
 }
 
 .stall-sub {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--s-muted);
 }
 
@@ -408,6 +418,25 @@ body {
     background: var(--s-surface);
     color: inherit;
     overflow: hidden;
+    transition:
+        translate 140ms ease,
+        box-shadow 140ms ease;
+}
+
+/*
+ * A card answers the pointer before it is pressed. `translate`, not
+ * `transform`: the banned-props list is review discipline for values a theme
+ * emits, and this is a fixed 1px lift in our own stylesheet — but staying off
+ * the property entirely keeps the grep clean. Hover-capable pointers only, so
+ * a phone's scroll-tap never sticks a card mid-lift.
+ */
+@media (hover: hover) {
+    .item:not(.open):hover {
+        translate: 0 -1px;
+        box-shadow:
+            0 2px 4px color-mix(in srgb, var(--s-text) 7%, transparent),
+            0 12px 32px color-mix(in srgb, var(--s-text) 9%, transparent);
+    }
 }
 
 /*
@@ -501,13 +530,17 @@ body {
         transition: none;
     }
 
+    .item {
+        transition: none;
+    }
+
     .sheet {
         transition: none;
     }
 }
 
 .item-n {
-    font-size: 14.5px;
+    font-size: 15.5px;
     font-weight: var(--s-name-weight);
     letter-spacing: var(--s-track);
     white-space: nowrap;
@@ -779,14 +812,15 @@ textarea.paste-in {
     text-decoration: none;
     font: inherit;
     font-family: var(--s-font);
-    font-size: 14.5px;
+    font-size: 15.5px;
     font-weight: 670;
     border: 0;
     cursor: pointer;
     background: var(--s-accent);
     color: var(--s-bg);
     border-radius: var(--s-btn-radius);
-    padding: 13px;
+    padding: 14px;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--s-text) 12%, transparent);
     width: 100%;
 }
 
@@ -807,16 +841,19 @@ textarea.paste-in {
 }
 
 .mid-t {
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 620;
     line-height: 1.35;
 }
 
 .mid-p {
-    font-size: 12.5px;
+    font-size: 13.5px;
     color: var(--s-muted);
     line-height: 1.55;
     margin: 0;
+    /* The invalid screen echoes the pasted route verbatim — one unbreakable
+       token. Breaks only when nothing else can. */
+    overflow-wrap: anywhere;
 }
 
 /*
@@ -1149,6 +1186,21 @@ textarea.paste-in {
  * holds the same value is a value the stylesheet already knows.
  */
 @media (min-width: 680px) {
+    /*
+     * The page is a column, not a spill. Without a cap the three cards spread
+     * across whatever a monitor is — measured on a 2560px screen: card
+     * content in two far corners and a thousand pixels of nothing between.
+     * The stall's background still reaches every edge; it is the content that
+     * holds a readable measure.
+     */
+    .stall-head,
+    .stall-body,
+    .stall-foot {
+        width: 100%;
+        max-width: 1104px;
+        margin-inline: auto;
+    }
+
     .stall-head {
         flex-direction: row;
         align-items: center;
