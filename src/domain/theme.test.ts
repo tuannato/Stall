@@ -26,6 +26,15 @@ function rgbOf(cssValue: string): Rgb {
     return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
 }
 
+/** WCAG relative luminance, for identity assertions: dark stays dark. */
+function relativeLuminanceOf(c: Rgb): number {
+    const f = (v: number): number => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+
 describe('decodeTheme', () => {
     it('returns the shipped row for an id we ship', () => {
         const t = decodeTheme(DEFAULT_THEME_ID);
@@ -37,36 +46,40 @@ describe('decodeTheme', () => {
 
 describe('theme-table-ids-are-pinned', () => {
     /**
-     * A published record names a number, and that number is permanent. Assert
-     * the numbers and the colours, not the names: renaming a look is free,
-     * re-pointing an id silently changes what somebody already signed.
+     * A published record names a number, and that number is permanent. What
+     * the number means is a look's **identity**, not its pixels: the owner
+     * decided (2026-08-29, PLAN-REDESIGN D1, while the only signed records on
+     * chain were his own) that an id's mapping is frozen and its rendering may
+     * be refined — a shop repainted is the same shop. A **replacement** look
+     * is a new id, so what this asserts is what a replacement could not fake:
+     * the ids themselves, and each look's family. Re-pointing Rural's id at a
+     * dark cyber look goes red here; polishing Rural does not.
      */
-    it('pins 0x01 Modern, the look painted with no manifest at all', () => {
+    it('pins 0x01 as Modern, the look painted with no manifest at all', () => {
         expect(DEFAULT_THEME_ID).toBe(0x01);
         const t = decodeTheme(0x01);
-        expect(t.bg).toEqual({ r: 255, g: 255, b: 255 });
-        expect(t.surface).toEqual({ r: 244, g: 246, b: 248 });
-        expect(t.text).toEqual({ r: 20, g: 23, b: 26 });
-        expect(t.accent).toEqual({ r: 44, g: 107, b: 228 });
-        expect(t.fontIndex).toBe(0);
-        expect(t.softness).toBe(12);
-        expect(t.shape.itemsD).toBe('repeat(2, minmax(0, 1fr))');
+        expect(t.known).toBe(true);
+        // 0x01 IS the default look, whatever the default look currently is.
+        expect(t.bg).toEqual(DEFAULT_THEME.bg);
+        expect(relativeLuminanceOf(t.bg)).toBeGreaterThan(0.5);
     });
 
-    it('pins 0x02 Neo city and 0x03 Rural', () => {
+    it('pins 0x02 as the dark look and 0x03 as the warm light look', () => {
         expect(NEO_CITY_THEME_ID).toBe(0x02);
         expect(RURAL_THEME_ID).toBe(0x03);
         const neo = decodeTheme(0x02);
-        expect(neo.bg).toEqual({ r: 8, g: 10, b: 18 });
-        expect(neo.accent).toEqual({ r: 24, g: 224, b: 216 });
-        expect(neo.fontIndex).toBe(1);
-        expect(neo.shape.itemsD).toBe('repeat(3, minmax(0, 1fr))');
+        // Neo city's identity is night. A light 0x02 is a re-point, not a polish.
+        expect(relativeLuminanceOf(neo.bg)).toBeLessThan(0.1);
         const rural = decodeTheme(0x03);
-        expect(rural.bg).toEqual({ r: 251, g: 244, b: 230 });
-        expect(rural.accent).toEqual({ r: 180, g: 85, b: 44 });
-        expect(rural.fontIndex).toBe(2);
-        expect(rural.shape.itemsD).toBe('repeat(2, minmax(0, 1fr))');
-        expect(rural.shape.areasM).toBe('"ic name" "price price"');
+        // Rural's identity is warm daylight paper: light, and warm-ordered.
+        expect(relativeLuminanceOf(rural.bg)).toBeGreaterThan(0.5);
+        expect(rural.bg.r).toBeGreaterThanOrEqual(rural.bg.g);
+        expect(rural.bg.g).toBeGreaterThanOrEqual(rural.bg.b);
+        // Three ids, three different shops.
+        const modern = decodeTheme(0x01);
+        expect(neo.bg).not.toEqual(modern.bg);
+        expect(rural.bg).not.toEqual(modern.bg);
+        expect(rural.bg).not.toEqual(neo.bg);
     });
 
     it('ships no id whose own palette hides the asked amount', () => {
