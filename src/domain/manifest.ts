@@ -1,4 +1,4 @@
-import { toHex } from 'ecash-lib';
+import { fromHex, toHex } from 'ecash-lib';
 import { encodeAttachmentFlags } from './attachments';
 import { isLegibleText } from './text';
 import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
@@ -12,11 +12,38 @@ export type StallManifest = {
     theme: DecodedTheme;
     /**
      * Fields beyond the three required pushes, keyed by their own tag byte.
-     * Nothing reads this yet; it exists so the first field ever added is found
-     * by its tag rather than by sitting at push index 3.
+     * The known tags are decoded into the typed fields below; the map stays
+     * so a reader from the future finds what this one cannot name.
      */
     extras: ReadonlyMap<number, Uint8Array>;
+    /** Tag 0x02: the seller's line under their name. Screened like the name. */
+    tagline?: string;
+    /** Tag 0x03: the token whose card leads the shop. A genesis txid. */
+    featuredTokenId?: string;
+    /** Tag 0x04: a display-currency suggestion. The buyer's choice wins. */
+    fiatHint?: string;
 };
+
+/*
+ * The tag registry, allocated low-to-high the day each field's screen ships
+ * (PLAN-REDESIGN §2). A tag that has ever been written is permanent. A
+ * malformed payload under a known tag voids **that field alone**, never the
+ * record — the mirror of unknown tags being skipped.
+ */
+export const TAGLINE_TAG = 0x02;
+export const FEATURED_TAG = 0x03;
+export const FIAT_HINT_TAG = 0x04;
+
+export const MAX_TAGLINE_BYTES = 64;
+
+/**
+ * The whole `op_return_raw` payload ceiling, shared by every record this app
+ * writes: `OP_RETURN_MAX_BYTES` is the 223-byte script including the
+ * OP_RETURN byte Cashtab prepends. One helper, one number — `STLD` at a full
+ * description has three bytes of headroom, so a fixed per-field cap cannot
+ * express the budget (critic finding 5).
+ */
+export const OP_RETURN_BUDGET = 222;
 
 export class ManifestDecodeError extends Error {
     constructor(message: string) {
@@ -109,11 +136,60 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
     if (themeBytes.length !== THEME_ID_BYTES) {
         throw new ManifestDecodeError('theme id is not one byte');
     }
+    const extras = decodeExtras(pushes);
+    const tagline = readTagline(extras.get(TAGLINE_TAG));
+    const featuredTokenId = readTokenIdField(extras.get(FEATURED_TAG));
+    const fiatHint = readFiatHint(extras.get(FIAT_HINT_TAG));
     return {
         name,
         theme: decodeTheme(themeBytes[0]!),
-        extras: decodeExtras(pushes),
+        extras,
+        ...(tagline === undefined ? {} : { tagline }),
+        ...(featuredTokenId === undefined ? {} : { featuredTokenId }),
+        ...(fiatHint === undefined ? {} : { fiatHint }),
     };
+}
+
+/** 1–64 legible utf-8 bytes, or nothing — never a reason to void the record. */
+function readTagline(payload: Uint8Array | undefined): string | undefined {
+    if (payload === undefined || payload.length < 1 || payload.length > MAX_TAGLINE_BYTES) {
+        return undefined;
+    }
+    let text: string;
+    try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(payload);
+    } catch {
+        return undefined;
+    }
+    return isLegibleText(text) ? text : undefined;
+}
+
+/** Exactly a genesis txid's 32 bytes, or nothing. */
+function readTokenIdField(payload: Uint8Array | undefined): string | undefined {
+    if (payload === undefined || payload.length !== 32) {
+        return undefined;
+    }
+    return toHex(payload);
+}
+
+/**
+ * Three ASCII letters, lowercased — the shape of an ISO code. Whether the
+ * shipped table knows it is the reader's question at paint time, so a code
+ * from the future degrades to nothing rather than to an unreadable field.
+ */
+function readFiatHint(payload: Uint8Array | undefined): string | undefined {
+    if (payload === undefined || payload.length !== 3) {
+        return undefined;
+    }
+    let out = '';
+    for (const byte of payload) {
+        const lower = byte | 0x20;
+        if (lower < 0x61 || lower > 0x7a) {
+            return undefined;
+        }
+        out += String.fromCharCode(lower);
+    }
+    return out;
 }
 
 /**
@@ -191,10 +267,17 @@ function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
  * OP_RETURN and rejects a payload that starts with it. Undefined when the
  * input cannot make a valid record.
  */
+export type ManifestExtras = {
+    tagline?: string;
+    featuredTokenId?: string;
+    fiatHint?: string;
+};
+
 export function encodeManifestHex(
     name: string,
     themeId: number,
     attachmentFlags = 0,
+    extras: ManifestExtras = {},
 ): string | undefined {
     if (typeof name !== 'string') {
         return undefined;
@@ -215,14 +298,53 @@ export function encodeManifestHex(
     const themeBytes = new Uint8Array(THEME_ID_BYTES);
     themeBytes[0] = themeId;
     const pushes = [scriptPush(lokad), scriptPush(nameBytes), scriptPush(themeBytes)];
-    // A fourth push, and only when there is something to say. The three above
-    // are positional and required; everything after them is one tagged field,
-    // first byte the tag — so a reader that knows nothing about decorations
-    // skips this and still reads the name and the look.
+    // Tagged fields, ascending tags. The three pushes above are positional
+    // and required; each field below is one push whose first byte is its tag,
+    // so a reader that knows none of them still reads the name and the look.
     if (Number.isInteger(attachmentFlags) && (attachmentFlags & 0xffff) !== 0) {
         pushes.push(scriptPush(encodeAttachmentFlags(attachmentFlags)));
     }
-    return toHex(concatBytes(pushes));
+    if (extras.tagline !== undefined && extras.tagline !== '') {
+        const bytes = new TextEncoder().encode(extras.tagline);
+        if (
+            bytes.length < 1 ||
+            bytes.length > MAX_TAGLINE_BYTES ||
+            !isLegibleText(extras.tagline)
+        ) {
+            return undefined;
+        }
+        pushes.push(scriptPush(concatBytes([Uint8Array.of(TAGLINE_TAG), bytes])));
+    }
+    if (extras.featuredTokenId !== undefined && extras.featuredTokenId !== '') {
+        if (!/^[0-9a-f]{64}$/.test(extras.featuredTokenId)) {
+            return undefined;
+        }
+        pushes.push(
+            scriptPush(
+                concatBytes([Uint8Array.of(FEATURED_TAG), fromHex(extras.featuredTokenId)]),
+            ),
+        );
+    }
+    if (extras.fiatHint !== undefined && extras.fiatHint !== '') {
+        if (!/^[a-z]{3}$/.test(extras.fiatHint)) {
+            return undefined;
+        }
+        pushes.push(
+            scriptPush(
+                concatBytes([
+                    Uint8Array.of(FIAT_HINT_TAG),
+                    Uint8Array.from(extras.fiatHint, (c) => c.charCodeAt(0)),
+                ]),
+            ),
+        );
+    }
+    const record = concatBytes(pushes);
+    // The shared ceiling, enforced where the bytes are made: a record this
+    // app writes and the wallet refuses is the worst failure §5 names.
+    if (record.length > OP_RETURN_BUDGET) {
+        return undefined;
+    }
+    return toHex(record);
 }
 
 export type ManifestRank = {

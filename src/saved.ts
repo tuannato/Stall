@@ -78,6 +78,21 @@ const FIAT_KEY = 'stall.fiat';
 /** No shipped code is longer than this; anything longer was not written here. */
 const MAX_FIAT_CODE = 8;
 
+/**
+ * Whether the visitor ever chose a currency. `readSavedFiat` answers the
+ * default for "never chose", which is right for painting and wrong for the
+ * seller's fiat hint — a hint may fill silence and must never override a
+ * choice, so the two questions need two answers.
+ */
+export function hasSavedFiat(): boolean {
+    try {
+        const raw = localStorage.getItem(FIAT_KEY);
+        return raw !== null && raw.length <= MAX_FIAT_CODE && isSupportedFiat(raw);
+    } catch {
+        return false;
+    }
+}
+
 export function readSavedFiat(): string {
     let raw: string | null;
     try {

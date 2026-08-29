@@ -245,6 +245,12 @@ export type StallView = {
      * the ordinary case — it is not a claim that nothing happened.
      */
     events?: readonly StallEvent[];
+    /** The seller's line under their name — manifest tag 0x02, screened. */
+    tagline?: string;
+    /** The token whose card leads the shop — manifest tag 0x03. */
+    featuredTokenId?: string;
+    /** The seller's display-currency suggestion — manifest tag 0x04. */
+    fiatHint?: string;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

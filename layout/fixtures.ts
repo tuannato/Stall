@@ -73,6 +73,7 @@ export const base = (over: Partial<StallView>): StallView => ({
     tokens,
     address: ADDR,
     stallName: 'Riverside Goods',
+    tagline: 'Fresh from the riverside \u2014 roasted and packed weekly',
     fiatCode: 'usd',
     fiatRate: scaleRate(7.02e-6),
     nftGroups: new Map([[NFT, GROUP]]),
@@ -154,6 +155,14 @@ export const SCREENS: Record<string, StallView> = {
             { txid: 'cd'.repeat(32), kind: 'settings', seenAtMs: TRIED_AT_MS - 60_000 },
             { txid: 'ee'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 120_000 },
         ],
+    }),
+    /* The featured token leads the shop under our chip \u2014 tag 0x03. */
+    featured: base({
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n), offer(NFT, 2, 50_000n)],
+        },
+        featuredTokenId: T2,
     }),
     /*
      * A card mid-flourish: the one instant the pulse animation exists, so
@@ -248,4 +257,5 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'hostile-name',
     'emoji-name',
     'offers-changed',
+    'featured',
 ]);

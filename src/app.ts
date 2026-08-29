@@ -9,7 +9,7 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
-import { clearSavedStall, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
+import { clearSavedStall, hasSavedFiat, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
 import { MAX_STALL_EVENTS } from './domain/state';
 import type {
     BookShape,
@@ -34,6 +34,7 @@ import {
     resolveSeller,
 } from './net';
 import { isNftChild } from './domain/category';
+import { isSupportedFiat } from './domain/fiat';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions } from './net/descriptions';
 import {
@@ -131,6 +132,7 @@ export function boot(
      * watches, and a fiat figure that quietly rewrites itself is worse than one
      * that is honestly a few minutes old at a glance.
      */
+    const visitorChoseFiat = hasSavedFiat();
     let fiatCode = readSavedFiat();
     let fiatRate: bigint | undefined;
     /**
@@ -173,6 +175,24 @@ export function boot(
         }
         fiatRate = rate;
         paint();
+    };
+
+    /**
+     * The seller's currency suggestion fills silence and nothing else: a
+     * buyer who ever chose a currency keeps it forever, and an unsupported
+     * code is nothing rather than an error — it is a hint, not a setting.
+     */
+    const adoptFiatHint = (): void => {
+        if (visitorChoseFiat) {
+            return;
+        }
+        const hint = state.view.fiatHint;
+        if (hint === undefined || !isSupportedFiat(hint) || fiatCode === hint) {
+            return;
+        }
+        fiatCode = hint;
+        fiatRate = undefined;
+        void refreshFiat();
     };
 
     const paint = (): void => {
@@ -350,6 +370,7 @@ export function boot(
         // this function just emptied the ring; "since the page opened" would
         // claim coverage across a gap it cannot see.
         state = { ...next, view: { ...next.view, watchedSinceMs: Date.now() } };
+        adoptFiatHint();
         paint();
         watch(claimed);
     };
@@ -456,6 +477,9 @@ export function boot(
         if (manifest !== undefined) {
             const flags = decodeAttachmentFlags(manifest.extras.get(ATTACHMENT_FLAGS_TAG));
             view.stallName = manifest.name;
+            view.tagline = manifest.tagline;
+            view.featuredTokenId = manifest.featuredTokenId;
+            view.fiatHint = manifest.fiatHint;
             view.theme = manifest.theme;
             view.attachmentFlags = flags;
             // Recomputed here and not left to the holdings read below, because a
@@ -470,6 +494,7 @@ export function boot(
             }
         }
         state = { ...state, view };
+        adoptFiatHint();
         livePaint();
         // Always, even when no token moved in this burst: a flag switched on is
         // a decoration that needs an entitlement nothing else asked for.
@@ -1028,6 +1053,9 @@ async function loadCurrent(): Promise<AppState> {
 
     let stallName = cachedName;
     let theme = cachedTheme;
+    let tagline: string | undefined;
+    let featuredTokenId: string | undefined;
+    let fiatHint: string | undefined;
     let settingsTruncated = false;
     let settingsUnreadable = false;
     let attachmentFlags = 0;
@@ -1040,6 +1068,9 @@ async function loadCurrent(): Promise<AppState> {
             if (manifest) {
                 stallName = manifest.name;
                 theme = manifest.theme;
+                tagline = manifest.tagline;
+                featuredTokenId = manifest.featuredTokenId;
+                fiatHint = manifest.fiatHint;
                 // One tagged field, read by its tag rather than its position.
                 // A payload that is not two bytes, or a bit with no row in this
                 // theme's table, is nothing at all — never a reason to refuse
@@ -1099,6 +1130,9 @@ async function loadCurrent(): Promise<AppState> {
             fetch,
             overlay: { kind: 'idle' },
             stallName,
+            tagline,
+            featuredTokenId,
+            fiatHint,
             address,
             tokens,
             descriptions: descriptionLookup.descriptions,

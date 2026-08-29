@@ -1092,3 +1092,23 @@ describe('storefront-effects-are-gated-on-proof', () => {
         ).toBeUndefined();
     });
 });
+
+describe('fiat-hint-is-a-hint', () => {
+    /**
+     * The seller's suggestion (manifest tag 0x04) fills silence and nothing
+     * else: a visitor who ever chose a currency keeps it, and painting is
+     * always from the visitor's side of that line.
+     */
+    it('adopts the hint only when the visitor never chose', async () => {
+        bootStall(stallEmpty({ fiatHint: 'vnd' }));
+        await flush();
+        expect(painted.view?.fiatCode).toBe('vnd');
+    });
+
+    it('never overrides a saved choice', async () => {
+        localStorage.setItem('stall.fiat', 'eur');
+        bootStall(stallEmpty({ fiatHint: 'vnd' }));
+        await flush();
+        expect(painted.view?.fiatCode).toBe('eur');
+    });
+});

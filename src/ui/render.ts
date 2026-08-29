@@ -6,12 +6,12 @@ import {
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
-import { FIAT_CURRENCIES, formatFiat } from '../domain/fiat';
+import { FIAT_CURRENCIES, formatFiat, isSupportedFiat } from '../domain/fiat';
 import { sectionsOf, type Category } from '../domain/category';
 import { iconUrl } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
-import { encodeManifestHex } from '../domain/manifest';
+import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import {
     MAX_DESCRIPTION_BYTES,
     descriptionBytes,
@@ -480,7 +480,7 @@ function paintEmpty(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.EMPTY_SUB, view.address));
+    stall.append(header(displayName(view), copy.EMPTY_SUB, view.address, view.tagline));
     const body = el('main', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     settingsNotes(body, view);
@@ -554,12 +554,34 @@ function paintOffers(
     // The header counts what the shop displays: distinct tokens, one card
     // each. The per-token listing counts live on the cards and in the detail.
     const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
-    stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address));
+    stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address, view.tagline));
     const body = el('main', 'stall-body');
+    /*
+     * The featured token leads the shop (manifest tag 0x03): its card is
+     * pulled above the sections under our own "Featured" chip and excluded
+     * from them, so one listing is never two cards. Only when actually
+     * listed — a featured id with no live offer paints nothing at all.
+     */
+    const featuredId = view.featuredTokenId;
+    const featuredOffers =
+        featuredId === undefined ? [] : offers.filter((o) => o.tokenId === featuredId);
+    if (featuredOffers.length > 0) {
+        const wrap = el('section', 'featured-wrap');
+        wrap.setAttribute('data-role', 'featured');
+        wrap.append(el('span', 'featured-chip', copy.FEATURED));
+        wrap.append(
+            offerRow({ tokenId: featuredId!, offers: featuredOffers }, view, handlers),
+        );
+        body.append(wrap);
+    }
+    const shelfOffers =
+        featuredOffers.length > 0
+            ? offers.filter((o) => o.tokenId !== featuredId)
+            : offers;
     // Ordered first, then divided. Nothing sorted before this, so two offers of
     // one token could sit either side of a third token's row. Copied: the array
     // belongs to the caller's view.
-    const ordered = [...offers].sort(compareOffers);
+    const ordered = [...shelfOffers].sort(compareOffers);
     const sections = sectionsOf(ordered, view.tokens, (id) => view.nftGroups?.get(id));
     // One section is not a division, it is a heading over the whole shop. A
     // stall that sells only tokens should look like a stall, not a filing
@@ -1190,6 +1212,73 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     select.value = String(painted);
     themeLabel.append(select);
 
+    /*
+     * The three P5 fields, each a tagged push the reader already skips when
+     * absent. The budget meter below is the shared 222-byte ceiling made
+     * visible before anything is signed.
+     */
+    const taglineLabel = el('label', 'paste-label', copy.PUBLISH_TAGLINE_LABEL);
+    const taglineInput = el('input', 'paste-in');
+    taglineInput.type = 'text';
+    taglineInput.name = 'tagline';
+    taglineInput.autocomplete = 'off';
+    taglineInput.spellcheck = false;
+    taglineInput.setAttribute('data-role', 'publish-tagline');
+    taglineInput.setAttribute('data-focus-key', 'publish-tagline');
+    taglineInput.setAttribute('aria-label', copy.PUBLISH_TAGLINE_LABEL);
+    taglineInput.value = view.tagline ?? '';
+    taglineLabel.append(taglineInput);
+
+    const featuredLabel = el('label', 'paste-label', copy.PUBLISH_FEATURED_LABEL);
+    featuredLabel.setAttribute('data-role', 'theme-picker');
+    const featuredSelect = el('select', 'paste-in');
+    featuredSelect.name = 'featured';
+    featuredSelect.setAttribute('data-role', 'publish-featured');
+    featuredSelect.setAttribute('data-focus-key', 'publish-featured');
+    featuredSelect.setAttribute('aria-label', copy.PUBLISH_FEATURED_LABEL);
+    {
+        const none = el('option', undefined, copy.DECOR_NONE);
+        none.value = '';
+        featuredSelect.append(none);
+        for (const tokenId of [...new Set(offersOf(view).map((o) => o.tokenId))]) {
+            const opt = el('option', undefined, tokenName(view.tokens, tokenId));
+            opt.value = tokenId;
+            featuredSelect.append(opt);
+        }
+        featuredSelect.value =
+            view.featuredTokenId !== undefined &&
+            [...featuredSelect.options].some((o) => o.value === view.featuredTokenId)
+                ? view.featuredTokenId
+                : '';
+    }
+    featuredLabel.append(featuredSelect);
+
+    const fiatLabel = el('label', 'paste-label', copy.PUBLISH_FIAT_LABEL);
+    fiatLabel.setAttribute('data-role', 'theme-picker');
+    const fiatSelect = el('select', 'paste-in');
+    fiatSelect.name = 'fiat-hint';
+    fiatSelect.setAttribute('data-role', 'publish-fiat');
+    fiatSelect.setAttribute('data-focus-key', 'publish-fiat');
+    fiatSelect.setAttribute('aria-label', copy.PUBLISH_FIAT_LABEL);
+    {
+        const none = el('option', undefined, copy.DECOR_NONE);
+        none.value = '';
+        fiatSelect.append(none);
+        for (const currency of FIAT_CURRENCIES) {
+            const opt = el('option', undefined, currency.code.toUpperCase());
+            opt.value = currency.code;
+            fiatSelect.append(opt);
+        }
+        fiatSelect.value =
+            view.fiatHint !== undefined && isSupportedFiat(view.fiatHint)
+                ? view.fiatHint
+                : '';
+    }
+    fiatLabel.append(fiatSelect);
+
+    const budget = el('p', 'fine', '');
+    budget.setAttribute('data-role', 'publish-budget');
+
     const err = el('p', 'ctx', '');
     err.hidden = true;
     err.setAttribute('data-role', 'publish-invalid');
@@ -1215,12 +1304,27 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // Rebuilt in place rather than by repainting: a repaint would take the
     // focus out of the field on every keystroke.
     const refresh = (): void => {
-        const hex = encodeManifestHex(input.value, Number(select.value), flags);
+        const extras = {
+            tagline: taglineInput.value === '' ? undefined : taglineInput.value,
+            featuredTokenId: featuredSelect.value === '' ? undefined : featuredSelect.value,
+            fiatHint: fiatSelect.value === '' ? undefined : fiatSelect.value,
+        };
+        const hex = encodeManifestHex(input.value, Number(select.value), flags, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
+        // Which field refused: the name's own rules first, then the tagline's,
+        // then the shared ceiling — the seller is told the one that bit.
+        const nameAlone = encodeManifestHex(input.value, Number(select.value), flags);
         err.hidden = ready || input.value === '';
-        err.textContent = ready ? '' : copy.PUBLISH_NAME_TOO_LONG;
+        err.textContent = ready
+            ? ''
+            : nameAlone === undefined
+              ? copy.PUBLISH_NAME_TOO_LONG
+              : copy.PUBLISH_TAGLINE_INVALID;
+        budget.textContent =
+            hex === undefined ? '' : copy.publishBudget(hex.length / 2, OP_RETURN_BUDGET);
+        budget.hidden = hex === undefined;
         // Say when the record will not change the look. Publishing the look
         // already on screen is a legitimate thing to do — it is how a name gets
         // set — but a seller who does it unaware reads the unchanged stall as
@@ -1260,6 +1364,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
     };
     input.addEventListener('input', refresh);
+    taglineInput.addEventListener('input', refresh);
+    featuredSelect.addEventListener('change', refresh);
+    fiatSelect.addEventListener('change', refresh);
     select.addEventListener('change', () => {
         refresh();
         // Paint the chosen look on the seller's own stall straight away. It is
@@ -1366,7 +1473,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
 
     renderDecor(painted);
-    form.append(label, themeLabel, err, sameLook, decorWrap);
+    form.append(label, taglineLabel, themeLabel, featuredLabel, fiatLabel, budget, err, sameLook, decorWrap);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
@@ -1875,7 +1982,12 @@ function sheetRow(label: string, value: string, big = false): HTMLElement {
     return row;
 }
 
-function header(name?: string, sub?: string, address?: string): HTMLElement {
+function header(
+    name?: string,
+    sub?: string,
+    address?: string,
+    tagline?: string,
+): HTMLElement {
     const hd = el('header', 'stall-head');
     // The brand mark leads every screen — the app's identity, sitting beside
     // the seller's stall name, never replacing it. It carries its own colours
@@ -1888,6 +2000,12 @@ function header(name?: string, sub?: string, address?: string): HTMLElement {
         // navigate by; the whole site was <div>s. `stall.css` selects on class,
         // so nothing restyles.
         headings.append(el('h1', 'stall-name', name));
+    }
+    // The seller's own line, screened at decode like the name (tag 0x02) and
+    // rendered as text through `textContent` like everything else. It is
+    // their sign — the same surface class the name already is.
+    if (tagline !== undefined && tagline !== '') {
+        headings.append(el('div', 'stall-tagline', tagline));
     }
     if (sub !== undefined && sub !== '') {
         headings.append(el('div', 'stall-sub', sub));
@@ -2082,7 +2200,7 @@ function paintStudio(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.STUDIO_SUB, view.address));
+    stall.append(header(displayName(view), copy.STUDIO_SUB, view.address, view.tagline));
     const body = el('main', 'stall-body');
     body.append(el('p', 'fine', copy.STUDIO_LEDE));
     const canPublish =
@@ -2135,7 +2253,7 @@ function paintActivity(
     view: StallView,
     _handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.ACTIVITY_SUB, view.address));
+    stall.append(header(displayName(view), copy.ACTIVITY_SUB, view.address, view.tagline));
     const body = el('main', 'stall-body');
     const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
     if (!watching) {

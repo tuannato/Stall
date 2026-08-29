@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     decodeManifestPushes,
     encodeManifestHex,
+    OP_RETURN_BUDGET,
     pickManifestWinner,
     STL1_ASCII,
     encodePush,
@@ -353,5 +354,90 @@ describe('a-stall-name-cannot-hide-itself', () => {
     it('still reads an ordinary name, accents included', () => {
         const m = decodeManifestPushes(pushes('C\u00e0 ph\u00ea 1st'));
         expect(m.name).toBe('C\u00e0 ph\u00ea 1st');
+    });
+});
+
+describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
+    /**
+     * Every field at its simultaneous maximum, against the shared 222-byte
+     * ceiling — a per-field cap cannot express a shared budget. The exact sum
+     * is asserted so the headroom is a number, not a feeling.
+     */
+    it('encodes the full record, round-trips it, and states its size', () => {
+        const name = 'N'.repeat(32);
+        const tagline = 'T'.repeat(64);
+        const featuredTokenId = 'ab'.repeat(32);
+        const hex = encodeManifestHex(name, DEFAULT_THEME_ID, 0xffff, {
+            tagline,
+            featuredTokenId,
+            fiatHint: 'vnd',
+        });
+        expect(hex).toBeDefined();
+        // 5 lokad + 33 name + 2 theme + 4 flags + 66 tagline + 34 featured
+        // + 5 fiat = 149 of 222.
+        expect(hex!.length / 2).toBe(149);
+        expect(hex!.length / 2).toBeLessThanOrEqual(OP_RETURN_BUDGET);
+
+        const back = decodeEncoded(hex!);
+        expect(back.name).toBe(name);
+        expect(back.tagline).toBe(tagline);
+        expect(back.featuredTokenId).toBe(featuredTokenId);
+        expect(back.fiatHint).toBe('vnd');
+    });
+
+    it('refuses what decode would drop, so it never writes a dead field', () => {
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { tagline: 'x\u202ey' }),
+        ).toBeUndefined();
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { tagline: 'T'.repeat(65) }),
+        ).toBeUndefined();
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { featuredTokenId: 'ab' }),
+        ).toBeUndefined();
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { fiatHint: 'US1' }),
+        ).toBeUndefined();
+    });
+});
+
+describe('unknown-tag-payload-is-ignored-alone', () => {
+    /**
+     * A malformed payload under a known tag voids that field and nothing
+     * else — the mirror of unknown tags being skipped. Refusing the record
+     * would let one bad byte take a seller's name and look down with it.
+     */
+    it('drops a malformed featured id and keeps the tagline beside it', () => {
+        const lokadPush = lokad();
+        const name = new TextEncoder().encode('Shop');
+        const theme = new Uint8Array([DEFAULT_THEME_ID]);
+        const goodTagline = new Uint8Array([
+            0x02,
+            ...new TextEncoder().encode('Fresh weekly'),
+        ]);
+        const badFeatured = new Uint8Array([0x03, ...new Uint8Array(31).fill(0xab)]);
+        const badFiat = new Uint8Array([0x04, 0x55, 0x24, 0x31]);
+        const m = decodeManifestPushes([
+            lokadPush,
+            name,
+            theme,
+            goodTagline,
+            badFeatured,
+            badFiat,
+        ]);
+        expect(m.name).toBe('Shop');
+        expect(m.tagline).toBe('Fresh weekly');
+        expect(m.featuredTokenId).toBeUndefined();
+        expect(m.fiatHint).toBeUndefined();
+    });
+
+    it('reads an uppercase fiat hint as its lowercase code', () => {
+        const m = decodeManifestPushes([
+            lokad(),
+            new TextEncoder().encode('Shop'),
+            new Uint8Array([DEFAULT_THEME_ID]),
+            new Uint8Array([0x04, 0x56, 0x4e, 0x44]),
+        ]);
+        expect(m.fiatHint).toBe('vnd');
     });
 });
