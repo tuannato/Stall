@@ -12,6 +12,7 @@ import { fetchXecPrice } from './net/price';
 import { clearSavedStall, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
 import { MAX_STALL_EVENTS } from './domain/state';
 import type {
+    BookShape,
     FetchStatus,
     Overlay,
     Outpoint,
@@ -35,7 +36,47 @@ import {
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions } from './net/descriptions';
-import { ALL_FACTS, NO_FACTS, anyFact, classifyTx, eventKindOf, unionFacts } from './net/classify';
+import {
+    ALL_FACTS,
+    NO_FACTS,
+    anyFact,
+    bookShapeOf,
+    classifyTx,
+    eventKindOf,
+    unionFacts,
+} from './net/classify';
+
+/**
+ * Which tokens' cards a re-read actually moved: the offer **sets** differ, by
+ * outpoint. Pure set comparison — a partial fill re-creates the remainder as
+ * a new UTXO, so the outpoint is the honest identity of "this row changed".
+ */
+function changedTokens(
+    prev: readonly StallOffer[],
+    status: FetchStatus,
+): ReadonlySet<string> {
+    const next = status.kind === 'offers' ? status.offers : [];
+    const keysByToken = (offers: readonly StallOffer[]): Map<string, Set<string>> => {
+        const map = new Map<string, Set<string>>();
+        for (const offer of offers) {
+            const keys = map.get(offer.tokenId) ?? new Set();
+            keys.add(`${offer.outpoint.txid}:${offer.outpoint.outIdx}`);
+            map.set(offer.tokenId, keys);
+        }
+        return map;
+    };
+    const before = keysByToken(prev);
+    const after = keysByToken(next);
+    const out = new Set<string>();
+    for (const token of new Set([...before.keys(), ...after.keys()])) {
+        const a = before.get(token) ?? new Set();
+        const b = after.get(token) ?? new Set();
+        if (a.size !== b.size || [...a].some((key) => !b.has(key))) {
+            out.add(token);
+        }
+    }
+    return out;
+}
 import { p2pkhOutputScript } from './net/script';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
@@ -259,13 +300,25 @@ export function boot(
      * repaint the visitor did not ask for — and `renderStall` throws the tree
      * away, which is what `livePaint` exists to be careful about.
      */
-    const recordEvent = (txid: string, kind: StallEventKind): void => {
+    const recordEvent = (txid: string, kind: StallEventKind, book?: BookShape): void => {
         if (events.some((event) => event.txid === txid)) {
             return;
         }
-        events = [{ txid, kind, seenAtMs: Date.now() }, ...events].slice(0, MAX_STALL_EVENTS);
+        events = [
+            { txid, kind, seenAtMs: Date.now(), ...(book === undefined ? {} : { book }) },
+            ...events,
+        ].slice(0, MAX_STALL_EVENTS);
         state = { ...state, view: { ...state.view, events } };
     };
+
+    /**
+     * When a burst last **proved** the book moved — a plugin entry with
+     * groups, on an input or an output. The storefront effect is gated on
+     * this: a message-triggered re-read whose burst proved nothing gets no
+     * flourish, because its diff could as easily be a replica that lost a
+     * row as a sale.
+     */
+    let bookProofAtMs = 0;
 
     /**
      * A hole in the ring, counted rather than hidden: the panel would
@@ -556,10 +609,15 @@ export function boot(
                 return;
             }
             const classified = classifyTx(tx, script, wanted);
+            const kind = eventKindOf(tx, classified);
+            const book = kind === 'book' ? bookShapeOf(tx) : undefined;
+            if (book !== undefined) {
+                bookProofAtMs = Date.now();
+            }
             // One event per transaction that was actually read. A txid that was
             // never fetched has no kind to give it, and inventing `other` for
             // one would put a claim in the ring that nothing checked.
-            recordEvent(txid, eventKindOf(tx, classified));
+            recordEvent(txid, kind, book);
             ringMoved = true;
             facts = unionFacts(facts, classified);
         }
@@ -615,7 +673,7 @@ export function boot(
             createChronik() as never,
             { pubkeyHex, hash },
             {
-                onChanged: () => {
+                onChanged: (trigger) => {
                     void (async () => {
                         let status: FetchStatus;
                         try {
@@ -635,12 +693,39 @@ export function boot(
                         if (claimed !== generation || !isDefiniteResult(status)) {
                             return;
                         }
+                        // The flourish, strictly gated: a message-triggered
+                        // read, inside the window of a burst whose plugin
+                        // entries proved the book moved. A recheck's diff is
+                        // replica skew as often as news, and a proof-less
+                        // message diff could be a replica that lost a row —
+                        // neither may stage our failover as a sale.
+                        const proven =
+                            trigger === 'message' &&
+                            Date.now() - bookProofAtMs < 15_000;
+                        const changed = proven
+                            ? changedTokens(state.offers, status)
+                            : undefined;
                         state = {
                             ...state,
                             offers: status.kind === 'offers' ? status.offers : [],
-                            view: { ...state.view, fetch: status },
+                            view: {
+                                ...state.view,
+                                fetch: status,
+                                justChanged:
+                                    changed !== undefined && changed.size > 0
+                                        ? changed
+                                        : undefined,
+                            },
                         };
                         livePaint();
+                        // One shot: the paint above showed it; nothing may
+                        // replay it — not a fiat answer, not a holdings read.
+                        if (state.view.justChanged !== undefined) {
+                            state = {
+                                ...state,
+                                view: { ...state.view, justChanged: undefined },
+                            };
+                        }
                         await fillNewTokens(claimed, pubkeyHex, status);
                     })();
                 },

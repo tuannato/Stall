@@ -146,6 +146,16 @@ export type SessionTokenCache = Map<string, TokenMeta>;
 export type StallEventKind = 'book' | 'settings' | 'description' | 'token-move' | 'other';
 
 /**
+ * What a `book` transaction provably did, from the plugin's own group
+ * entries. **Never a sale, never a cancel**: on the wire a cancel and a
+ * fully-taken offer are the same shape — a grouped offer input spent, an
+ * ungrouped ERROR output — so `consumed` says exactly what is true of both.
+ * `appeared` is a grouped output: a live covenant entered the book.
+ * Absent means the shapes could not be read, which stays "the book moved".
+ */
+export type BookShape = 'consumed' | 'appeared' | 'both';
+
+/**
  * One transaction the live socket named, once it had been read.
  *
  * `seenAtMs` is when **this page** saw it, not when the chain did: a message
@@ -156,6 +166,8 @@ export type StallEvent = {
     txid: string;
     kind: StallEventKind;
     seenAtMs: number;
+    /** For a `book` event: what the plugin entries prove it did. */
+    book?: BookShape;
 };
 
 /**
@@ -235,6 +247,14 @@ export type StallView = {
     events?: readonly StallEvent[];
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
+    /**
+     * Tokens whose cards the next paint may pulse — **one-shot**: set only by
+     * a message-triggered re-read in the same window as a burst whose plugin
+     * entries proved the book moved (never by a reconnect or resume re-read,
+     * whose diff is replica skew as often as news), and cleared by the paint
+     * that shows it, so an unrelated repaint cannot replay the flourish.
+     */
+    justChanged?: ReadonlySet<string>;
     /**
      * When this page's watching began — the last **full load**, not the page
      * open: `refresh()` empties the ring, so a caption dated from the page

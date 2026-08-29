@@ -291,6 +291,14 @@ export const ACTIVITY_QUIET = 'Nothing has arrived yet. New activity appears her
  * this page cannot back (PLAN-REDESIGN P3.5).
  */
 export const EVENT_BOOK = 'The offer book moved';
+/**
+ * The two things the plugin entries can prove, in words that claim nothing
+ * more: `consumed` is true of a take and of a cancel alike — the wire cannot
+ * tell them apart, so neither may the copy.
+ */
+export const EVENT_BOOK_CONSUMED = 'An offer was consumed';
+export const EVENT_BOOK_APPEARED = 'An offer appeared';
+export const EVENT_BOOK_BOTH = 'An offer was consumed and another appeared';
 export const EVENT_SETTINGS = 'Stall settings published';
 export const EVENT_DESCRIPTION = 'A token description published';
 export const EVENT_TOKEN_MOVE = 'A decoration token moved';

@@ -989,6 +989,34 @@ textarea.paste-in {
     max-width: 34vw;
 }
 
+/*
+ * The flourish for a proven book move: an outline pulse that grows and fades
+ * once. An outline paints outside the box and covers nothing; the class is
+ * one-shot view state set only by a message-triggered re-read inside a
+ * proven-burst window, so a reconnect or an unrelated repaint cannot replay
+ * it. Themes own the colour through their accent.
+ */
+.item.just-changed {
+    animation: item-changed 900ms ease-out 1;
+}
+
+@keyframes item-changed {
+    0% {
+        outline: 2px solid var(--s-accent);
+        outline-offset: 2px;
+    }
+    100% {
+        outline: 2px solid transparent;
+        outline-offset: 12px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .item.just-changed {
+        animation: none;
+    }
+}
+
 /* The activity feed: watched transactions, newest first. */
 .events {
     display: flex;

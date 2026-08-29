@@ -1409,6 +1409,11 @@ function offerRow(
     const offer = cheapestOf(listing);
     const expanded = isExpanded(view, listing);
     const card = el('div', expanded ? 'item open' : 'item');
+    // One-shot: set only by a message-triggered re-read with proven book
+    // movement, and cleared by this very paint's caller — see StallView.
+    if (view.justChanged?.has(listing.tokenId) === true) {
+        card.classList.add('just-changed');
+    }
     const name = tokenName(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
 
@@ -2162,14 +2167,26 @@ function paintActivity(
 function eventRow(event: StallEvent): HTMLElement {
     const row = el('div', 'event');
     row.append(el('span', 'event-time', formatTriedAt(event.seenAtMs)));
-    row.append(el('span', 'event-kind', eventLabel(event.kind)));
+    row.append(el('span', 'event-kind', eventLabel(event.kind, event.book)));
     row.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
     return row;
 }
 
-function eventLabel(kind: StallEvent['kind']): string {
+function eventLabel(kind: StallEvent['kind'], book?: StallEvent['book']): string {
     switch (kind) {
         case 'book':
+            // Only what the plugin entries proved. `consumed` covers a take
+            // and a cancel alike — the wire cannot tell them apart, so the
+            // row never says "sold".
+            if (book === 'consumed') {
+                return copy.EVENT_BOOK_CONSUMED;
+            }
+            if (book === 'appeared') {
+                return copy.EVENT_BOOK_APPEARED;
+            }
+            if (book === 'both') {
+                return copy.EVENT_BOOK_BOTH;
+            }
             return copy.EVENT_BOOK;
         case 'settings':
             return copy.EVENT_SETTINGS;

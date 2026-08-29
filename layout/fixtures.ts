@@ -156,6 +156,18 @@ export const SCREENS: Record<string, StallView> = {
         ],
     }),
     /*
+     * A card mid-flourish: the one instant the pulse animation exists, so
+     * `checkOverTime` has something to seek — a runtime-only class would be
+     * an animation the probe never sees (critic finding 8).
+     */
+    'offers-changed': base({
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)],
+        },
+        justChanged: new Set([T1]),
+    }),
+    /*
      * Name-stress screens: the sign, the tab bar and the title all carry a
      * seller's name, and the shipped fixture name is friendly. These are not:
      * 32 bytes with no break opportunity, and an all-emoji name that spends
@@ -235,4 +247,5 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'activity',
     'hostile-name',
     'emoji-name',
+    'offers-changed',
 ]);

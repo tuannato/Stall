@@ -119,16 +119,24 @@ export type WatchedStall = {
     hash?: string;
 };
 
+/**
+ * Why a re-read is happening. `message` is news — the group announced a
+ * transaction. `recheck` is housekeeping — a reconnect or a resume, where the
+ * next read differs from the last as often by replica skew as by the world:
+ * an effect keyed on a recheck's diff stages our failover as a sale.
+ */
+export type LiveTrigger = 'message' | 'recheck';
+
 export type WatchHooks = {
     /**
      * The thing being watched moved: re-read it.
      *
      * For a resolved stall that is the offer book. It fires on the trailing
-     * burst timer, and on a reconnect through `MIN_REREAD_MS` — the floor
-     * **drops**, which is right for a book because the next message corrects
-     * it.
+     * burst timer (`message`), and on a reconnect through `MIN_REREAD_MS`
+     * (`recheck`) — the floor **drops**, which is right for a book because
+     * the next message corrects it.
      */
-    onChanged?: () => void;
+    onChanged?: (trigger: LiveTrigger) => void;
     /**
      * The txids of one burst, drained before the read above was started.
      *
@@ -218,7 +226,7 @@ export function watchStall(
             return;
         }
         lastReread = at;
-        hooks.onChanged?.();
+        hooks.onChanged?.('recheck');
     };
 
     /**
@@ -264,7 +272,7 @@ export function watchStall(
             // suppress the one caused by a drop. What was missed while the
             // socket was down is still unknown, however recently the book
             // was read.
-            hooks.onChanged?.();
+            hooks.onChanged?.('message');
             if (txids.length > 0) {
                 hooks.onBurst?.(txids);
             }

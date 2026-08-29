@@ -81,6 +81,8 @@ const chain = {
     txThrows: false,
     utxosThrow: false,
     calls: { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 },
+    /** What the next live offer re-read answers. Empty when unset. */
+    book: undefined as import('./domain/state').FetchStatus | undefined,
 };
 
 function resetChain(): void {
@@ -91,6 +93,7 @@ function resetChain(): void {
     chain.txThrows = false;
     chain.utxosThrow = false;
     chain.calls = { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 };
+    chain.book = undefined;
 }
 
 const addressPage = (): HistoryPage => ({
@@ -156,7 +159,7 @@ const fakeChronik = {
 type OpenedWatch = {
     stall: { pubkeyHex?: string; hash?: string };
     hooks: {
-        onChanged?: () => void;
+        onChanged?: (trigger: import('./net/live').LiveTrigger) => void;
         onBurst?: (txids: readonly string[]) => void;
         onReestablished?: () => void;
     };
@@ -169,9 +172,13 @@ vi.mock('./net', async (importOriginal) => {
     return {
         ...real,
         createChronik: () => fakeChronik,
-        // Needs a real `Agora`, which needs a real client. The book is not what
-        // this file is about; `live.test.ts` and `offers.test.ts` cover it.
-        loadOffers: async () => ({ kind: 'empty' as const }),
+        // Needs a real `Agora`, which needs a real client. The parse is not
+        // what this file is about; the *answer* is controllable so the effect
+        // gating can be driven: `chain.book` is what a live re-read returns.
+        // The reader is a stub for the same reason — constructing the real
+        // one against the fake chronik throws before loadOffers is reached.
+        agoraOfferReader: () => ({}) as never,
+        loadOffers: async () => chain.book ?? ({ kind: 'empty' as const }),
     };
 });
 
@@ -1010,5 +1017,78 @@ describe('a-reconnect-gap-is-said-not-hidden', () => {
         watches[0]!.hooks.onBurst?.(['0b'.repeat(32)]);
         await flush();
         expect(painted.view?.activityGaps).toBe(2);
+    });
+});
+
+describe('storefront-effects-are-gated-on-proof', () => {
+    /** A take-shaped transaction: a grouped agora entry on the spent input. */
+    function consumedTx(txid: string): ChainTx {
+        return {
+            txid,
+            inputs: [
+                {
+                    inputScript: p2pkhScriptSig(PK_BYTES),
+                    outputScript: STALL_SCRIPT,
+                    plugins: { agora: { groups: ['50aa'], data: [] } },
+                },
+            ],
+            outputs: [{ outputScript: STALL_SCRIPT }],
+        };
+    }
+
+    it('an-effect-is-consumed-by-the-paint-that-shows-it', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        const proof = publish(consumedTx('1a'.repeat(32)));
+        watches[0]!.hooks.onBurst?.([proof]);
+        await flush();
+        // The ring named it for what the entries prove — never a sale.
+        expect(painted.view?.events?.[0]?.book).toBe('consumed');
+
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+        expect(
+            painted.view?.justChanged?.has(TOKEN),
+            'a proven message re-read pulses the changed card',
+        ).toBe(true);
+
+        // Any later paint shows it consumed: the flourish never replays.
+        watches[0]!.hooks.onBurst?.([
+            publish(signedTx({ txid: '1b'.repeat(32), outputs: [STRANGER_SCRIPT] })),
+        ]);
+        await flush();
+        expect(painted.view?.justChanged).toBeUndefined();
+    });
+
+    it('a-reconnect-read-does-not-animate-a-sale', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        watches[0]!.hooks.onBurst?.([publish(consumedTx('2a'.repeat(32)))]);
+        await flush();
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        // The same proof stands — but this read is a recheck, whose diff is
+        // replica skew as often as news.
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(painted.view?.fetch?.kind, 'the book itself is applied').toBe('offers');
+        expect(painted.view?.justChanged).toBeUndefined();
+    });
+
+    it('a-partial-refetch-that-lost-one-row-does-not-animate-a-clear', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        // No proof anywhere: the burst carried ordinary money.
+        watches[0]!.hooks.onBurst?.([
+            publish(signedTx({ txid: '3a'.repeat(32), outputs: [STRANGER_SCRIPT] })),
+        ]);
+        await flush();
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+        expect(
+            painted.view?.justChanged,
+            'a diff without proof is a replica question, not a sale',
+        ).toBeUndefined();
     });
 });

@@ -13,6 +13,7 @@ import {
     eventKindOf,
     touchesAgora,
     unionFacts,
+    bookShapeOf,
 } from './classify';
 import { p2pkhOutputScript } from './script';
 
@@ -237,5 +238,76 @@ describe('one-transaction-gets-one-name', () => {
         expect(eventKindOf(words, classifyTx(words, STALL, WANTED))).toBe('description');
         const moved = tx({ outputs: [STALL], tokens: [TOKEN_WORN] });
         expect(eventKindOf(moved, classifyTx(moved, STALL, WANTED))).toBe('token-move');
+    });
+});
+
+describe('a-cancel-is-not-named-a-sale', () => {
+    /**
+     * On the wire a cancel and a fully-taken offer are one shape: a grouped
+     * offer input spent, an ungrouped ERROR-tagged output left behind. The
+     * shape reader must answer `consumed` for both — a word true of each —
+     * and must never read the ERROR leavings as an offer appearing.
+     */
+    const base = {
+        txid: 'ab'.repeat(32),
+        inputs: [] as ChainTx['inputs'],
+        outputs: [] as ChainTx['outputs'],
+    };
+
+    it('a spent grouped offer with ERROR leavings is consumed, nothing more', () => {
+        const cancelOrFullTake: ChainTx = {
+            ...base,
+            inputs: [
+                {
+                    inputScript: '00',
+                    plugins: { agora: { groups: ['50aa'], data: [] } },
+                },
+            ],
+            outputs: [
+                // The plugin's own bookkeeping: an entry with no groups.
+                { outputScript: '6a', plugins: { agora: { groups: [], data: ['4552524f52'] } } },
+            ],
+        };
+        expect(bookShapeOf(cancelOrFullTake)).toBe('consumed');
+    });
+
+    it('a partial take is both: one consumed, the remainder appeared', () => {
+        const partial: ChainTx = {
+            ...base,
+            inputs: [
+                { inputScript: '00', plugins: { agora: { groups: ['50aa'], data: [] } } },
+            ],
+            outputs: [
+                { outputScript: 'a9', plugins: { agora: { groups: ['50aa'], data: [] } } },
+            ],
+        };
+        expect(bookShapeOf(partial)).toBe('both');
+    });
+
+    it('a new listing is appeared; plain money is no shape at all', () => {
+        const listing: ChainTx = {
+            ...base,
+            outputs: [
+                { outputScript: 'a9', plugins: { agora: { groups: ['50aa'], data: [] } } },
+            ],
+        };
+        expect(bookShapeOf(listing)).toBe('appeared');
+        const money: ChainTx = { ...base, outputs: [{ outputScript: '76' }] };
+        expect(bookShapeOf(money)).toBeUndefined();
+    });
+
+    it('a-listing-that-arrives-as-two-transactions-is-not-two-events', () => {
+        // The SLP ad-setup half carries no agora entries; only the offer half
+        // appears. One act, one shaped event.
+        const adSetup: ChainTx = { ...base, outputs: [{ outputScript: 'a9' }] };
+        const offerHalf: ChainTx = {
+            ...base,
+            txid: 'cd'.repeat(32),
+            outputs: [
+                { outputScript: 'a9', plugins: { agora: { groups: ['50aa'], data: [] } } },
+            ],
+        };
+        const shapes = [adSetup, offerHalf].map(bookShapeOf);
+        expect(shapes.filter((s) => s !== undefined)).toEqual(['appeared']);
     });
 });

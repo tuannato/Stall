@@ -1,7 +1,7 @@
 import { STLD_HEX } from '../domain/description';
 import { isStl1 } from '../domain/manifest';
-import type { StallEventKind } from '../domain/state';
-import type { ChainTx } from './chain';
+import type { BookShape, StallEventKind } from '../domain/state';
+import type { ChainPluginEntries, ChainTx } from './chain';
 import { AGORA_PLUGIN } from './live';
 import { opReturnPushes } from './script';
 
@@ -123,6 +123,48 @@ export function touchesAgora(tx: ChainTx): boolean {
         }
     }
     return false;
+}
+
+/**
+ * Whether an agora entry carries **groups** — the difference between a live
+ * offer and the plugin's own bookkeeping. A cancel and a fully-taken offer
+ * both leave an output tagged with an ERROR entry and empty groups, so an
+ * entry's mere presence proves much less than a grouped one: reading presence
+ * as "an offer" would name a cancel's leavings a listing.
+ */
+function groupedAgoraEntry(entries: ChainPluginEntries | undefined): boolean {
+    const entry = entries?.[AGORA_PLUGIN];
+    if (entry === null || typeof entry !== 'object') {
+        return false;
+    }
+    const groups = (entry as { groups?: unknown }).groups;
+    return Array.isArray(groups) && groups.length > 0;
+}
+
+/**
+ * What a book transaction provably did — and nothing more.
+ *
+ * `consumed`: a grouped offer was spent. True of a take **and** of a cancel,
+ * which are the same shape on the wire, so no caller may print "sold" from
+ * it. `appeared`: a grouped output entered the book — a new listing, or a
+ * partial take's remainder. `both` is the ordinary partial take. `undefined`
+ * is a transaction whose entries prove neither, which stays "the book moved":
+ * a node without the plugin sends no entries at all, and `touchesAgora`'s own
+ * rule holds here — absence is never evidence of absence.
+ */
+export function bookShapeOf(tx: ChainTx): BookShape | undefined {
+    const consumed = tx.inputs.some((input) => groupedAgoraEntry(input.plugins));
+    const appeared = tx.outputs.some((output) => groupedAgoraEntry(output.plugins));
+    if (consumed && appeared) {
+        return 'both';
+    }
+    if (consumed) {
+        return 'consumed';
+    }
+    if (appeared) {
+        return 'appeared';
+    }
+    return undefined;
 }
 
 /**

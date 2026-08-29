@@ -73,7 +73,7 @@ import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
-import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER } from './copy';
+import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -3574,5 +3574,38 @@ describe('an-unwatched-stall-does-not-show-an-empty-feed', () => {
         const quiet = paint(offersView([OFFER], undefined, { panel: 'activity' }));
         expect(quiet.root.textContent).toContain(ACTIVITY_QUIET);
         expect(quiet.root.textContent).not.toContain(ACTIVITY_GAPS);
+    });
+});
+
+describe('a-book-row-says-consumed-or-appeared-never-sold', () => {
+    it('labels the shapes the entries proved, and stays generic without one', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [
+                    { txid: 'a1'.repeat(32), kind: 'book', seenAtMs: 1, book: 'consumed' },
+                    { txid: 'a2'.repeat(32), kind: 'book', seenAtMs: 2, book: 'appeared' },
+                    { txid: 'a3'.repeat(32), kind: 'book', seenAtMs: 3, book: 'both' },
+                    { txid: 'a4'.repeat(32), kind: 'book', seenAtMs: 4 },
+                ],
+            }),
+        );
+        const kinds = [...root.querySelectorAll('.event-kind')].map((n) => n.textContent);
+        expect(kinds).toEqual([
+            EVENT_BOOK_CONSUMED,
+            EVENT_BOOK_APPEARED,
+            EVENT_BOOK_BOTH,
+            EVENT_BOOK,
+        ]);
+        expect(root.textContent!.toLowerCase()).not.toContain('sold');
+    });
+
+    it('pulses exactly the cards the view names, one-shot state included', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { justChanged: new Set([TOKEN_ID]) }),
+        );
+        expect(root.querySelector('.item.just-changed')).not.toBeNull();
+        const without = paint(offersView([OFFER]));
+        expect(without.root.querySelector('.item.just-changed')).toBeNull();
     });
 });
