@@ -23,6 +23,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 
 const VIEWPORTS = [
     { name: 'mobile', width: 390, height: 844 },
@@ -117,6 +118,163 @@ async function readVerdict(cdp, sessionId, url) {
     throw new Error('the probe never reported. It threw, or never ran.');
 }
 
+/** Evaluate an expression in the page and parse its JSON result. */
+async function evalJson(cdp, sessionId, expression) {
+    const r = await cdp.send(
+        'Runtime.evaluate',
+        { expression: `JSON.stringify(${expression})`, returnByValue: true },
+        sessionId,
+    );
+    if (r.exceptionDetails) {
+        throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+    }
+    return JSON.parse(r.result.value);
+}
+
+async function waitForFlag(cdp, sessionId, flag) {
+    for (let i = 0; i < 150; i += 1) {
+        const r = await cdp.send(
+            'Runtime.evaluate',
+            { expression: `window.${flag} === true`, returnByValue: true },
+            sessionId,
+        );
+        if (r.result.value === true) return;
+        await sleep(100);
+    }
+    throw new Error(`${flag} never became true`);
+}
+
+/*
+ * A minimal PNG reader for Chrome screenshots: 8-bit, RGB or RGBA,
+ * non-interlaced — which is what `Page.captureScreenshot` emits. Node's zlib
+ * does the heavy half, so this stays dependency-free like the CDP client
+ * above. Anything outside that shape throws rather than guessing.
+ */
+function decodePng(buf) {
+    let pos = 8;
+    let width = 0;
+    let height = 0;
+    let bpp = 0;
+    const idat = [];
+    while (pos + 8 <= buf.length) {
+        const len = buf.readUInt32BE(pos);
+        const type = buf.toString('ascii', pos + 4, pos + 8);
+        const data = buf.subarray(pos + 8, pos + 8 + len);
+        if (type === 'IHDR') {
+            width = data.readUInt32BE(0);
+            height = data.readUInt32BE(4);
+            const bitDepth = data[8];
+            const colorType = data[9];
+            const interlace = data[12];
+            if (bitDepth !== 8 || interlace !== 0 || (colorType !== 6 && colorType !== 2)) {
+                throw new Error(
+                    `unexpected PNG shape: depth ${bitDepth}, colour ${colorType}, interlace ${interlace}`,
+                );
+            }
+            bpp = colorType === 6 ? 4 : 3;
+        } else if (type === 'IDAT') {
+            idat.push(data);
+        } else if (type === 'IEND') {
+            break;
+        }
+        pos += 12 + len;
+    }
+    if (width === 0 || bpp === 0) throw new Error('PNG carried no IHDR');
+    const raw = inflateSync(Buffer.concat(idat));
+    const stride = width * bpp;
+    const out = Buffer.alloc(height * stride);
+    for (let y = 0; y < height; y += 1) {
+        const filter = raw[y * (stride + 1)];
+        const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
+        const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : undefined;
+        const cur = out.subarray(y * stride, (y + 1) * stride);
+        for (let x = 0; x < stride; x += 1) {
+            const a = x >= bpp ? cur[x - bpp] : 0;
+            const b = prev !== undefined ? prev[x] : 0;
+            const c = x >= bpp && prev !== undefined ? prev[x - bpp] : 0;
+            let v = line[x];
+            switch (filter) {
+                case 0:
+                    break;
+                case 1:
+                    v = (v + a) & 0xff;
+                    break;
+                case 2:
+                    v = (v + b) & 0xff;
+                    break;
+                case 3:
+                    v = (v + ((a + b) >> 1)) & 0xff;
+                    break;
+                case 4: {
+                    const p = a + b - c;
+                    const pa = Math.abs(p - a);
+                    const pb = Math.abs(p - b);
+                    const pc = Math.abs(p - c);
+                    v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
+                    break;
+                }
+                default:
+                    throw new Error(`PNG filter ${filter}`);
+            }
+            cur[x] = v;
+        }
+    }
+    return { width, height, bpp, data: out };
+}
+
+/* The same WCAG arithmetic as `contrastRatio` in src/domain/theme.ts. */
+function channelLum(v) {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(r, g, b) {
+    return 0.2126 * channelLum(r) + 0.7152 * channelLum(g) + 0.0722 * channelLum(b);
+}
+
+function contrast(la, lb) {
+    const hi = Math.max(la, lb);
+    const lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+/** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
+const PIXEL_CONTRAST_FLOOR = 3;
+
+/**
+ * The worst contrast between a text colour and any sampled background pixel
+ * inside its box. The page turned the glyphs transparent before the shot, so
+ * every pixel in the box is background — gradients, scanlines and decorations
+ * included, which is the whole point: `legibleOn` proves the flat palette
+ * roles, and nothing else proves what is actually painted behind a figure.
+ */
+function worstContrastInBox(img, target, textColor) {
+    const m = textColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (m === null) {
+        throw new Error(`unreadable computed colour "${textColor}"`);
+    }
+    const textLum = luminance(Number(m[1]), Number(m[2]), Number(m[3]));
+    // Narrowed by the corner radius: outside it the pixels are the page
+    // behind the control, not the control. See ContrastTarget.r in the probe.
+    const r = target.r ?? 0;
+    const x0 = Math.max(0, Math.floor(target.x + r) + 1);
+    const y0 = Math.max(0, Math.floor(target.y) + 1);
+    const x1 = Math.min(img.width - 1, Math.ceil(target.x + target.w - r) - 1);
+    const y1 = Math.min(img.height - 1, Math.ceil(target.y + target.h) - 1);
+    if (x1 <= x0 || y1 <= y0) return undefined;
+    let worst = Infinity;
+    const stepX = Math.max(1, Math.floor((x1 - x0) / 12));
+    const stepY = Math.max(1, Math.floor((y1 - y0) / 8));
+    for (let y = y0; y <= y1; y += stepY) {
+        for (let x = x0; x <= x1; x += stepX) {
+            const i = (y * img.width + x) * img.bpp;
+            const lum = luminance(img.data[i], img.data[i + 1], img.data[i + 2]);
+            worst = Math.min(worst, contrast(textLum, lum));
+        }
+    }
+    return worst;
+}
+
 const chromeBin = findChrome();
 if (chromeBin === undefined) {
     console.error(
@@ -207,6 +365,156 @@ try {
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
         }
+    }
+
+    /*
+     * Pass 3: reduced motion. Three `prefers-reduced-motion` blocks ship in
+     * `stall.css` and no guard had ever run under them. Only the animating
+     * screens are re-measured — the media doubles a run, and a still page is
+     * the page already measured above.
+     */
+    const mobile = VIEWPORTS[0];
+    await cdp.send(
+        'Emulation.setDeviceMetricsOverride',
+        { width: mobile.width, height: mobile.height, deviceScaleFactor: 1, mobile: false },
+        sessionId,
+    );
+    await cdp.send(
+        'Emulation.setEmulatedMedia',
+        { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] },
+        sessionId,
+    );
+    try {
+        const rm = await readVerdict(
+            cdp,
+            sessionId,
+            `http://localhost:${PORT}/layout/probe.html?screens=offers,publish`,
+        );
+        // The page's own answer, not the request: emulation that silently did
+        // not apply is how 500px once passed as 390.
+        if (rm.reducedMotion !== true) {
+            failed = true;
+            console.error('✗ reduced-motion: the page never saw the media feature.');
+        } else if ((rm.screensMeasured ?? []).length !== 2) {
+            failed = true;
+            console.error('✗ reduced-motion: the pass measured nothing — vacuous green.');
+        } else if (rm.failures.length === 0) {
+            console.log('✓ reduced-motion (offers, publish): every look');
+        } else {
+            failed = true;
+            console.error(`✗ reduced-motion: ${rm.failures.length} failure(s)`);
+            for (const f of rm.failures) {
+                console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+            }
+        }
+    } catch (err) {
+        failed = true;
+        console.error(`✗ reduced-motion: ${err.message}`);
+    }
+    await cdp.send('Emulation.setEmulatedMedia', { features: [] }, sessionId);
+
+    /*
+     * Pass 4: rendered-pixel contrast. `legibleOn` proves text against the two
+     * flat palette roles; this proves it against what is actually painted
+     * behind every money figure — gradients, scanlines and worn decorations
+     * included. The page hides the glyphs, the shot samples the boxes.
+     */
+    try {
+        await cdp.send(
+            'Page.navigate',
+            { url: `http://localhost:${PORT}/layout/probe.html?screens=` },
+            sessionId,
+        );
+        await waitForFlag(cdp, sessionId, '__probeReady');
+        const screens = await evalJson(cdp, sessionId, 'window.__screens');
+        const themes = await evalJson(cdp, sessionId, 'window.__themes');
+        let boxes = 0;
+        const dim = [];
+        for (const screen of screens) {
+            for (const theme of themes) {
+                for (const wornAll of [false, true]) {
+                    // Two animation frames between hiding the glyphs and the
+                    // shot: the style change needs a composited frame, and a
+                    // screenshot taken before one still shows the text — which
+                    // read as 1.00:1 wherever a sample point landed on a glyph.
+                    const prepare = async () => {
+                        const r = await cdp.send(
+                            'Runtime.evaluate',
+                            {
+                                expression:
+                                    `new Promise((res) => { ` +
+                                    `const out = JSON.stringify(window.__contrastPrepare(` +
+                                    `${JSON.stringify(screen)}, ${theme}, ${wornAll})); ` +
+                                    `requestAnimationFrame(() => requestAnimationFrame(() => res(out))); })`,
+                                awaitPromise: true,
+                                returnByValue: true,
+                            },
+                            sessionId,
+                        );
+                        if (r.exceptionDetails) {
+                            throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        }
+                        return JSON.parse(r.result.value);
+                    };
+                    // First paint tells us how tall the page is; the viewport
+                    // grows to hold all of it and the paint is redone at that
+                    // size, because `captureBeyondViewport` does not reliably
+                    // paint backgrounds below the fold — a below-fold buy
+                    // control sampled as near-white.
+                    const first = await prepare();
+                    if (first.targets.length === 0) continue;
+                    const shotH = Math.max(mobile.height, first.pageH);
+                    await cdp.send(
+                        'Emulation.setDeviceMetricsOverride',
+                        { width: mobile.width, height: shotH, deviceScaleFactor: 1, mobile: false },
+                        sessionId,
+                    );
+                    const prep = await prepare();
+                    const shot = await cdp.send(
+                        'Page.captureScreenshot',
+                        { format: 'png', fromSurface: true },
+                        sessionId,
+                    );
+                    await cdp.send(
+                        'Emulation.setDeviceMetricsOverride',
+                        {
+                            width: mobile.width,
+                            height: mobile.height,
+                            deviceScaleFactor: 1,
+                            mobile: false,
+                        },
+                        sessionId,
+                    );
+                    const img = decodePng(Buffer.from(shot.data, 'base64'));
+                    for (const t of prep.targets) {
+                        const worst = worstContrastInBox(img, t, t.color);
+                        if (worst === undefined) continue;
+                        boxes += 1;
+                        if (worst < PIXEL_CONTRAST_FLOOR) {
+                            dim.push(
+                                `${screen} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if (boxes === 0) {
+            failed = true;
+            console.error('✗ contrast: no figure boxes were sampled — vacuous green.');
+        } else if (dim.length === 0) {
+            console.log(`✓ contrast: ${boxes} figure boxes sampled against rendered pixels`);
+        } else {
+            failed = true;
+            console.error(`✗ contrast: ${dim.length} figure(s) on paint below ${PIXEL_CONTRAST_FLOOR}:1`);
+            for (const line of dim) {
+                console.error(`    ${line}`);
+            }
+        }
+    } catch (err) {
+        failed = true;
+        console.error(`✗ contrast: ${err.message}`);
     }
     cdp.close();
 } catch (err) {

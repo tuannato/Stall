@@ -301,6 +301,14 @@ body {
     letter-spacing: var(--s-track);
     text-transform: var(--s-sign-case);
     line-height: 1.15;
+    /*
+     * An unnamed stall is titled by its own address — 44 characters with no
+     * break opportunity — and a manifest name can be one long word. Without
+     * this the sign stretched the page: measured at 390px, `opening` and
+     * `unresolved` scrolled sideways to 625–656px on every theme, found the
+     * day the probe first measured those screens.
+     */
+    overflow-wrap: anywhere;
 }
 
 .stall-sub {
@@ -1247,3 +1255,4 @@ textarea.paste-in {
         max-height: 86vh;
     }
 }
+

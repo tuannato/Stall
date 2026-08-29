@@ -15,120 +15,11 @@
 import { renderStall } from '../src/ui/render';
 import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
 import {
-    SHIPPED_ATTACHMENTS,
     attachmentsForTheme,
     wornAttachments,
     type ShippedAttachment,
 } from '../src/domain/attachments';
-import { scaleRate } from '../src/domain/fiat';
-import type { Outpoint, StallOffer, StallView, TokenMeta } from '../src/domain/state';
-
-const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
-const PK = `03${'aa'.repeat(32)}`;
-const T1 = 'cd'.repeat(32);
-const T2 = '11'.repeat(32);
-const NFT = 'ee'.repeat(32);
-const GROUP = 'aa'.repeat(32);
-const OUT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
-
-const offer = (tokenId: string, outIdx: number, sats: bigint): StallOffer => ({
-    outpoint: { txid: OUT.txid, outIdx },
-    tokenId,
-    atoms: 12n,
-    variant: 'PARTIAL',
-    askedSats: sats,
-    askedAtoms: 1n,
-    priceNanoSatsPerAtom: sats * 1_000_000_000n,
-});
-
-const meta = (tokenId: string, name: string, type?: string): TokenMeta => ({
-    tokenId,
-    name,
-    ticker: name.slice(0, 4).toUpperCase(),
-    decimals: 0,
-    ...(type === undefined ? {} : { tokenType: { protocol: 'SLP', type } }),
-});
-
-const tokens = new Map<string, TokenMeta>([
-    [T1, meta(T1, 'Roasted Beans', 'SLP_TOKEN_TYPE_FUNGIBLE')],
-    [T2, meta(T2, 'Green Tea', 'SLP_TOKEN_TYPE_FUNGIBLE')],
-    [NFT, meta(NFT, 'Pixel #1', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
-    [GROUP, meta(GROUP, 'Pixel Set')],
-]);
-
-/** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
-const UNBROKEN = 'A'.repeat(178);
-
-const handlers = {
-    onBuy: () => {},
-    onRetry: () => {},
-    onCloseSheet: () => {},
-    onOpenStall: () => {},
-    onGoHome: () => {},
-    onToggleDefault: () => {},
-    onOpenPublish: () => {},
-    onClosePublish: () => {},
-    onChangeFiat: () => {},
-};
-
-const base = (over: Partial<StallView>): StallView => ({
-    route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
-    overlay: { kind: 'idle' },
-    tokens,
-    address: ADDR,
-    stallName: 'Riverside Goods',
-    fiatCode: 'usd',
-    fiatRate: scaleRate(7.02e-6),
-    nftGroups: new Map([[NFT, GROUP]]),
-    ...over,
-});
-
-/** Every catalogue row that has a token, which is what the fittings shop lists. */
-const DECOR_ROWS = SHIPPED_ATTACHMENTS.filter((row) => row.tokenId !== undefined);
-
-const SCREENS: Record<string, StallView> = {
-    offers: base({
-        fetch: {
-            kind: 'offers',
-            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n), offer(NFT, 2, 50_000n)],
-        },
-    }),
-    expanded: base({
-        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)] },
-        overlay: { kind: 'buy', outpoint: OUT },
-        // The longest thing a seller can publish, with no spaces to break on.
-        descriptions: new Map([[T1, UNBROKEN]]),
-    }),
-    publish: base({
-        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
-        overlay: { kind: 'publish' },
-        descriptions: new Map([[T1, 'Existing words']]),
-    }),
-    /*
-     * The shop that sells decorations, which is the one page where the
-     * Decorations section and its per-look runs are the only dividers there
-     * are — a single section prints no section heading, so nothing else on
-     * this page tells a buyer what fits what.
-     *
-     * Built from the shipped catalogue rather than from pasted ids, so it
-     * follows the table instead of drifting from it.
-     */
-    decor: base({
-        fetch: {
-            kind: 'offers',
-            offers: DECOR_ROWS.map((row, i) => offer(row.tokenId!, i, 5_000n * BigInt(i + 1))),
-        },
-        tokens: new Map(
-            DECOR_ROWS.map((row) => [row.tokenId!, meta(row.tokenId!, row.label, 'ALP_TOKEN_TYPE_STANDARD')]),
-        ),
-    }),
-    empty: base({ fetch: { kind: 'empty' } }),
-    door: {
-        route: { kind: 'home' },
-        overlay: { kind: 'idle' },
-        tokens: new Map(),
-    },
-};
+import { SCREENS, STATE_SCREENS, handlers } from './fixtures';
 
 /**
  * What a decoration may never touch. Wider than the price, because a QR that is
@@ -163,7 +54,11 @@ const PROTECTED = [
 function decorations(root: ParentNode): Element[] {
     const out: Element[] = [];
     for (const node of root.querySelectorAll('*')) {
-        if (node.className !== undefined && /\batt-/.test(String(node.className))) {
+        // `getAttribute`, never `className`: on an SVG element `className` is
+        // an `SVGAnimatedString`, so `String(...)` is "[object ...]" and the
+        // prefix can never match — an SVG decoration would ship with no guard.
+        const cls = node.getAttribute('class') ?? '';
+        if (/\batt-/.test(cls)) {
             out.push(node);
             continue;
         }
@@ -305,6 +200,14 @@ function measure(screen: string, themeLabel: string): Failure[] {
      */
     const scrim = root.querySelector('[data-role="sheet-scrim"]');
     const surface: ParentNode = scrim ?? root;
+
+    // A closed <details> lays out nothing, so every check below it would pass
+    // vacuously on exactly the content it was written for — the wrapped
+    // "Token ID" label lives inside the fold P2 introduces. Open them all
+    // before anything is measured, protected boxes included.
+    for (const details of surface.querySelectorAll('details')) {
+        details.open = true;
+    }
 
     // §6's rule, at last enforced against what was actually drawn.
     for (const price of surface.querySelectorAll('[data-role="price"]')) {
@@ -492,10 +395,42 @@ function checkOverTime(
     return out;
 }
 
+/**
+ * Which decorated variants a screen buys. Card screens get the full set; the
+ * state screens (no cards, still decorated) get undecorated and fully-worn
+ * only — the probe's runtime is a budget, and the interaction a single row
+ * could break that the full set does not needs a card to stage it.
+ */
+function variantsFor(screen: string, themeId: number): readonly (readonly ShippedAttachment[])[] {
+    const all = wornVariants(themeId);
+    if (!STATE_SCREENS.has(screen) || all.length < 2) {
+        return all;
+    }
+    return [all[0]!, all[all.length - 1]!];
+}
+
+/**
+ * `?screens=a,b` limits a run to named screens. The reduced-motion pass uses
+ * it: emulated media doubles the run, so it re-measures only the screens that
+ * animate rather than paying for fourteen twice.
+ */
+function screensToRun(): string[] {
+    const asked = new URLSearchParams(location.search).get('screens');
+    if (asked === null) {
+        return Object.keys(SCREENS);
+    }
+    // The asked list verbatim, unknown names dropped — `?screens=` measures
+    // nothing on purpose (the contrast driver wants the hooks without paying
+    // for a full measurement run). The verdict names what actually ran, so a
+    // runner can refuse a vacuous green instead of trusting this filter.
+    return asked.split(',').filter((name) => name in SCREENS);
+}
+
 const failures: Failure[] = [];
-for (const screen of Object.keys(SCREENS)) {
+const measured = screensToRun();
+for (const screen of measured) {
     for (const theme of SHIPPED_THEMES) {
-        for (const worn of wornVariants(theme.id)) {
+        for (const worn of variantsFor(screen, theme.id)) {
             const label =
                 worn.length === 0
                     ? theme.label
@@ -505,11 +440,121 @@ for (const screen of Object.keys(SCREENS)) {
     }
 }
 
+/**
+ * The rendered-background contrast hook, driven by `layout-check.mjs`.
+ *
+ * `legibleOn` proves text against the two flat palette roles; nothing proves
+ * it against what is actually painted behind a figure once gradients, images
+ * or decorations exist. Only pixels can. This paints one combination, turns
+ * every protected figure's own glyphs transparent — the background under text
+ * cannot be sampled through the text — and reports each box with the colour
+ * its glyphs would have painted in. The runner screenshots the page and
+ * samples the boxes.
+ *
+ * The QR is excluded: it is not text over theme paint, it carries its own
+ * fixed black-on-white rule with its own test.
+ */
+type ContrastTarget = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    color: string;
+    /**
+     * The element's own corner radius, clamped to half its box. A rounded
+     * control's corner pixels are the page behind it, and on Modern that page
+     * is the same white as the control's label — sampled as 1.00:1. Inside a
+     * rounded rect, every x in [x+r, right−r] is box paint at any y, so the
+     * sampler narrows its horizontal range by exactly this.
+     */
+    r: number;
+    /** What was measured, for a failure a person can find. */
+    sel: string;
+};
+
+const CONTRAST_TEXT = [
+    '[data-role="price"]',
+    '.row.big dd',
+    '.buy',
+    '.addr',
+    '[data-role="publish-hex"]',
+    '[data-role="describe-hex"]',
+    '[data-role="fiat"]',
+    '[data-role="rate"]',
+].join(', ');
+
+declare global {
+    interface Window {
+        __contrastPrepare: (
+            screen: string,
+            themeId: number,
+            wornAll: boolean,
+        ) => { targets: ContrastTarget[] };
+        __screens: string[];
+        __themes: number[];
+        __probeReady: boolean;
+    }
+}
+
+window.__screens = Object.keys(SCREENS);
+window.__themes = SHIPPED_THEMES.map((t) => t.id);
+
+window.__contrastPrepare = (screen, themeId, wornAll) => {
+    const worn = wornAll ? wornAttachments(themeId, 0xffff) : [];
+    paint(screen, themeId, worn);
+    // Freeze motion at an arbitrary instant so a streak is on screen, not
+    // between frames.
+    for (const a of document.getAnimations()) {
+        a.pause();
+        try {
+            a.currentTime = 400;
+        } catch {
+            // A finished animation holds still on its own.
+        }
+    }
+    // The same scoping as `measure()`: an open sheet is the surface being
+    // read, and everything behind its scrim is deliberately dimmed — sampling
+    // there compares an undimmed text colour against scrimmed paint, which
+    // reported the address behind the publish sheet at 1.00:1.
+    const scrim = document.querySelector('[data-role="sheet-scrim"]');
+    const scope: ParentNode = scrim ?? document;
+    const targets: ContrastTarget[] = [];
+    for (const node of scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)) {
+        const box = node.getBoundingClientRect();
+        if (box.width < 2 || box.height < 2) {
+            continue;
+        }
+        const style = getComputedStyle(node);
+        const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+        targets.push({
+            x: box.x,
+            y: box.y,
+            w: box.width,
+            h: box.height,
+            color: style.color,
+            r: Math.min(radius, box.width / 2, box.height / 2),
+            sel: describe(node),
+        });
+        node.style.color = 'transparent';
+        node.style.textShadow = 'none';
+    }
+    // The runner grows the emulated viewport to this and repaints before the
+    // shot: `captureBeyondViewport` does not reliably paint backgrounds below
+    // the fold — a below-fold buy control sampled as near-white.
+    return { targets, pageH: document.documentElement.scrollHeight };
+};
+
 const result = document.createElement('pre');
 result.id = 'layout-result';
 result.textContent = JSON.stringify(
-    { viewport: window.innerWidth, failures },
+    {
+        viewport: window.innerWidth,
+        reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        screensMeasured: measured,
+        failures,
+    },
     null,
     1,
 );
 document.body.append(result);
+window.__probeReady = true;

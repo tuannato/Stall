@@ -18,5 +18,5 @@
       "ecash-wallet": ["./src/shims/ecash-wallet.d.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "layout"]
 }
