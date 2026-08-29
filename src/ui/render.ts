@@ -221,6 +221,12 @@ function applyTheme(
     for (const [name, value] of Object.entries(vars)) {
         stall.style.setProperty(name, value);
     }
+    // The browser chrome joins the look: the static #0a1b33 in index.html is
+    // the pre-paint colour, and a Rural stall framed by navy is somebody
+    // else's page. Mood included — it went through the same merge above.
+    document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', vars['--s-bg']!);
     // The strip is part of the look, so a live preview has to swap it too —
     // otherwise choosing Modern leaves Neo's ticker running above a white shop.
     // Direct children only, and walked rather than selected: `:scope >` is not

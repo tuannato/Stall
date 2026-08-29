@@ -70,7 +70,10 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100%;
-    background: var(--s-bg);
+    background-color: var(--s-bg);
+    /* The look's backdrop layers — ours from the theme table, behind every
+       surface, arbitrated by the rendered-pixel contrast pass. */
+    background-image: var(--s-backdrop);
     color: var(--s-text);
     font-family: var(--s-font);
     font-size: 15px;
@@ -343,6 +346,9 @@ body {
     letter-spacing: var(--s-track);
     text-transform: var(--s-sign-case);
     line-height: 1.15;
+    /* A look may light its own sign. Paint on the glyphs, nowhere else;
+       a worn crest (att-hum) replaces this with its stronger hum. */
+    text-shadow: var(--s-sign-glow);
     /*
      * An unnamed stall is titled by its own address — 44 characters with no
      * break opportunity — and a manifest name can be one long word. Without

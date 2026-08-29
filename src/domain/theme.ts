@@ -111,6 +111,16 @@ export type DecodedTheme = {
     id: number;
     /** False when the id has no shipped row, so the screen can say so. */
     known: boolean;
+    /**
+     * The page's backdrop layers — a CSS background-image value, ours from
+     * this table exactly like `cardBorder`'s color-mix strings, never a byte
+     * of it chain-supplied. It paints **behind** every surface; the pixel
+     * contrast pass samples what actually lands behind each money figure, so
+     * a wash or a scanline that dims one goes red in `pnpm test:layout`.
+     */
+    backdrop?: string;
+    /** A glow on the sign's own text. Paint that cannot leave its glyphs. */
+    signGlow?: string;
     bg: Rgb;
     surface: Rgb;
     text: Rgb;
@@ -161,6 +171,8 @@ export const DEFAULT_THEME: DecodedTheme = {
     accentTwo: { r: 37, g: 99, b: 235 },
     fontIndex: 0,
     softness: 14,
+    backdrop:
+        'radial-gradient(1100px 380px at 50% -120px, color-mix(in srgb, var(--s-accent) 6%, transparent), transparent 70%)',
     shape: {
         padM: '20px 18px',
         padD: '36px 34px',
@@ -232,6 +244,13 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             accentTwo: { r: 255, g: 77, b: 122 },
             fontIndex: 1,
             softness: 0,
+            // Night with its own light: a cyan wash falling from the strip,
+            // and a scanline at four percent — texture, never a veil. The
+            // rendered-pixel contrast pass arbitrates both.
+            backdrop:
+                'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-accent) 4%, transparent) 0 1px, transparent 1px 4px), linear-gradient(180deg, color-mix(in srgb, var(--s-accent) 9%, var(--s-bg)) 0%, var(--s-bg) 480px)',
+            signGlow:
+                '0 0 16px color-mix(in srgb, var(--s-accent) 35%, transparent)',
             ornament: { label: '// stall.cash', kind: 'ticker' },
             shape: {
                 padM: '12px',
@@ -299,6 +318,11 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             accentTwo: { r: 138, g: 116, b: 88 },
             fontIndex: 2,
             softness: 8,
+            // Paper, not pixels: two crossing weaves of the ink at three
+            // percent. Strong enough to read as grain up close, weak enough
+            // that the contrast pass cannot tell it from the sheet.
+            backdrop:
+                'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-muted) 3%, transparent) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--s-muted) 3%, transparent) 0 1px, transparent 1px 3px)',
             ornament: { label: 'Market stall', kind: 'plate' },
             shape: {
                 padM: '20px 18px',
@@ -348,7 +372,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 signPadD: '34px 40px 26px',
                 signSize: '27px',
                 signCase: 'none',
-                signRule: '1px dashed color-mix(in srgb, var(--s-muted) 55%, transparent)',
+                signRule: '4px double color-mix(in srgb, var(--s-muted) 50%, transparent)',
                 nameWeight: '600',
                 track: '0',
                 btnRadius: '999px',
@@ -478,6 +502,8 @@ export function themeVars(theme: DecodedTheme): Record<string, string> {
         '--s-accent': rgbCss(legibleOn(theme.accent, bg)),
         '--s-danger': rgbCss(legibleOn(theme.danger, surface)),
         '--s-accent-2': rgbCss(legibleOn(theme.accentTwo, bg)),
+        '--s-backdrop': theme.backdrop ?? 'none',
+        '--s-sign-glow': theme.signGlow ?? 'none',
         '--s-font': FONT_STACKS[clampIndex(theme.fontIndex, FONT_STACKS.length)]!,
         '--s-radius': `${theme.softness}px`,
         ...shapeVars(theme.shape ?? DEFAULT_THEME.shape),

@@ -3609,3 +3609,25 @@ describe('a-book-row-says-consumed-or-appeared-never-sold', () => {
         expect(without.root.querySelector('.item.just-changed')).toBeNull();
     });
 });
+
+describe('the-browser-chrome-joins-the-look', () => {
+    it('theme-color follows the painted background, mood included', () => {
+        const meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.append(meta);
+        try {
+            paint(offersView([OFFER], undefined, { theme: decodeTheme(NEO_CITY_THEME_ID) }));
+            const neo = decodeTheme(NEO_CITY_THEME_ID).bg;
+            expect(meta.getAttribute('content')).toBe(
+                `rgb(${neo.r}, ${neo.g}, ${neo.b})`,
+            );
+            paint(offersView([OFFER]));
+            const modern = DEFAULT_THEME.bg;
+            expect(meta.getAttribute('content')).toBe(
+                `rgb(${modern.r}, ${modern.g}, ${modern.b})`,
+            );
+        } finally {
+            meta.remove();
+        }
+    });
+});
