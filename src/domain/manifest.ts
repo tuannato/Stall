@@ -1,5 +1,6 @@
 import { toHex } from 'ecash-lib';
 import { encodeAttachmentFlags } from './attachments';
+import { isLegibleText } from './text';
 import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
 
 export const STL1_ASCII = 'STL1';
@@ -95,6 +96,14 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
         throw new ManifestDecodeError('stall name length');
     }
     const name = new TextDecoder('utf-8', { fatal: true }).decode(nameBytes);
+    // The name is chain-supplied free text painted as the sign's <h1>, and it
+    // went unscreened for as long as the description had a screen: a bidi
+    // override in it could reorder the header, an invisible character could
+    // pad it into a lookalike. Same set as the description, one module, so the
+    // two cannot drift. Unreadable, not sanitised — a record is what it is.
+    if (!isLegibleText(name)) {
+        throw new ManifestDecodeError('stall name is not legible text');
+    }
     // A 28-byte push is the old wire. Accepting it would read its first byte as
     // an id and silently drop the rest, which is a look nobody chose.
     if (themeBytes.length !== THEME_ID_BYTES) {
@@ -195,6 +204,11 @@ export function encodeManifestHex(
     }
     const nameBytes = new TextEncoder().encode(name);
     if (nameBytes.length < 1 || nameBytes.length > MAX_STALL_NAME) {
+        return undefined;
+    }
+    // Refuse here what decode refuses there, or this app writes a record it
+    // could not read back — a printed link to a silent shipped default.
+    if (!isLegibleText(name)) {
         return undefined;
     }
     const lokad = Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0));

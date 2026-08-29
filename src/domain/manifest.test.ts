@@ -315,3 +315,43 @@ describe('push-longer-than-75-bytes-uses-pushdata1', () => {
         expect(encodePush(new Uint8Array(76))[1]).toBe(76);
     });
 });
+
+/**
+ * The stall name is chain-supplied free text painted as the sign's <h1>, and
+ * it went unscreened for as long as the description had a screen. Same set,
+ * one module (`domain/text.ts`), enforced at decode and encode both — an
+ * illegible record is unreadable (which has honest copy), never sanitised.
+ */
+describe('a-stall-name-cannot-reorder-the-page', () => {
+    it('refuses a bidi override at decode', () => {
+        expect(() => decodeManifestPushes(pushes('100 XEC\u202e'))).toThrow(
+            /not legible/,
+        );
+    });
+
+    it('refuses the same name at encode, so this app never writes it', () => {
+        expect(encodeManifestHex('100 XEC\u202e', DEFAULT_THEME_ID)).toBeUndefined();
+    });
+});
+
+describe('a-stall-name-cannot-hide-itself', () => {
+    it('refuses zero-width padding at decode', () => {
+        expect(() => decodeManifestPushes(pushes('Sta\u200bll'))).toThrow(
+            /not legible/,
+        );
+    });
+
+    it('refuses a name that is only whitespace', () => {
+        expect(() => decodeManifestPushes(pushes('   '))).toThrow(/not legible/);
+    });
+
+    it('refuses both shapes at encode', () => {
+        expect(encodeManifestHex('Sta\u200bll', DEFAULT_THEME_ID)).toBeUndefined();
+        expect(encodeManifestHex('   ', DEFAULT_THEME_ID)).toBeUndefined();
+    });
+
+    it('still reads an ordinary name, accents included', () => {
+        const m = decodeManifestPushes(pushes('C\u00e0 ph\u00ea 1st'));
+        expect(m.name).toBe('C\u00e0 ph\u00ea 1st');
+    });
+});

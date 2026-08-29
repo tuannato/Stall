@@ -1,4 +1,5 @@
 import { encodePush } from './manifest';
+import { isLegibleText } from './text';
 import { toHex } from 'ecash-lib';
 
 /**
@@ -105,7 +106,7 @@ export function decodeDescriptionPushes(
     } catch {
         return undefined;
     }
-    if (!isLegibleDescription(text)) {
+    if (!isLegibleText(text)) {
         return undefined;
     }
     // Control characters are not description: they are a way to make one line
@@ -116,43 +117,10 @@ export function decodeDescriptionPushes(
     return { kind: 'text', tokenId: toHex(idBytes), text };
 }
 
-/**
- * What a description is allowed to be made of.
- *
- * This is the first attacker-chosen free text on the paint path since the stall
- * name, so §6's "the chain supplies a row, never bytes" stops covering it here
- * and the check has to be explicit. It lives in the decoder rather than in CSS
- * because this runner cannot lay anything out, so the decoder is the only place
- * an enforceable test can sit — and because tightening it after the first
- * record is on chain would make published records unreadable.
+/*
+ * The legibility screen lives in `./text` now — the stall name goes through
+ * the same set, and two copies of what "legible" means is how they drift.
  */
-function isLegibleDescription(text: string): boolean {
-    if (text.trim() === '') {
-        return false;
-    }
-    // C0/C1, DEL, and the two separators that end a line.
-    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(text)) {
-        return false;
-    }
-    // Bidi overrides, embeddings and isolates. An unterminated U+202E reorders
-    // the rest of its paragraph: a seller could write a price that reads
-    // backwards from the one they typed. A block boundary happens to contain it
-    // today, which is a CSS accident and not a boundary.
-    if (/[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/.test(text)) {
-        return false;
-    }
-    // Invisible characters. They pad a name into a lookalike, or hide a word.
-    if (/[\u00ad\u200b-\u200d\ufeff]/u.test(text)) {
-        return false;
-    }
-    // A long stack of combining marks grows out of its line box and can cover
-    // the row beside it — chain-supplied bytes over the asked amount, which is
-    // the one thing §6 says must never happen. Four is past any real language.
-    if (/\p{Mn}{5,}/u.test(text)) {
-        return false;
-    }
-    return true;
-}
 
 /**
  * The `op_return_raw` payload for a record — these pushes without the `6a`
