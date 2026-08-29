@@ -11,6 +11,7 @@ import {
     DEFAULT_THEME_ID,
     NEO_CITY_THEME_ID,
     RURAL_THEME_ID,
+    SHIPPED_THEMES,
     decodeTheme,
     themeVars,
 } from '../domain/theme';
@@ -2269,6 +2270,57 @@ describe('danger-is-reserved-for-what-is-wrong', () => {
     });
 });
 
+/**
+ * Resolve a `font-size` declaration to px, or **refuse the block loudly**.
+ *
+ * The first version matched `/([\d.]+)px/` and `continue`d when the regex
+ * found nothing — so converting the type scale to `rem` would have turned the
+ * two guards below into no-ops that stay green while guarding nothing. A
+ * guard that cannot read a value must fail the suite, never skip the block.
+ *
+ * `px` is exact. `rem` resolves against the browser default of 16, which is
+ * safe because the stylesheet never sets a font-size on `html` (asserted
+ * below). Anything else — `em`, `clamp()`, `var()` — depends on context this
+ * static scan does not have, so it is refused: use px or rem in blocks these
+ * guards read.
+ */
+function fontSizePx(block: string): number | undefined {
+    const decl = block.match(/font-size:\s*([^;}]+)/);
+    if (decl === null) {
+        return undefined;
+    }
+    const value = decl[1]!.trim();
+    if (value === 'inherit') {
+        return undefined;
+    }
+    // A theme-supplied size resolves through the shipped table: the guard
+    // takes the smallest value any look gives the var, so a floor holds for
+    // every theme at once rather than being skipped as unreadable.
+    const themed = value.match(/^var\((--s-[a-z-]+)\)$/);
+    if (themed !== null) {
+        let min = Infinity;
+        for (const t of SHIPPED_THEMES) {
+            const emitted = themeVars(decodeTheme(t.id))[themed[1]!];
+            const px = emitted?.match(/^([\d.]+)px$/);
+            if (px == null) {
+                throw new Error(
+                    `${themed[1]} is used as a font-size and "${emitted}" is not a px value this guard can read`,
+                );
+            }
+            min = Math.min(min, Number(px[1]));
+        }
+        return min;
+    }
+    const sized = value.match(/^([\d.]+)(px|rem)$/);
+    if (sized === null) {
+        throw new Error(
+            `font-size "${value}" cannot be statically resolved — use px, rem or a --s-* var in guarded blocks`,
+        );
+    }
+    const n = Number(sized[1]);
+    return sized[2] === 'px' ? n : n * 16;
+}
+
 describe('muted-text-is-not-microscopic', () => {
     /**
      * `--s-muted` carries real content, not decoration: the rate, the stock,
@@ -2289,17 +2341,17 @@ describe('muted-text-is-not-microscopic', () => {
             /\/\*[\s\S]*?\*\//g,
             '',
         );
+        // The rem fallback in `fontSizePx` rests on the root staying at the
+        // browser default. A `font-size` on html would quietly re-scale it.
+        expect(css).not.toMatch(/html[^{]*\{[^}]*font-size/);
+
         const offenders: string[] = [];
         for (const block of css.split('}')) {
             if (!block.includes('color: var(--s-muted)')) {
                 continue;
             }
-            const size = block.match(/font-size:\s*([\d.]+)px/);
-            if (size === null) {
-                continue;
-            }
-            const px = Number(size[1]);
-            if (px < 11) {
+            const px = fontSizePx(block);
+            if (px !== undefined && px < 11) {
                 const selector = block.split('{')[0]!.trim().replace(/\s+/g, ' ');
                 offenders.push(`${selector} at ${px}px`);
             }
@@ -2334,9 +2386,9 @@ describe('ios-does-not-zoom-a-focused-field', () => {
             if (!/\.paste-in|\.share-url/.test(selector)) {
                 continue;
             }
-            const size = block.match(/font-size:\s*([\d.]+)px/);
-            if (size !== null && Number(size[1]) < 16) {
-                tooSmall.push(`${selector} at ${size[1]}px`);
+            const px = fontSizePx(block);
+            if (px !== undefined && px < 16) {
+                tooSmall.push(`${selector} at ${px}px`);
             }
         }
         expect(tooSmall, 'a field below 16px makes iOS zoom and stay zoomed').toEqual([]);
