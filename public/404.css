@@ -1,20 +1,27 @@
 /* Static, non-hashed, and referenced by 404.html only. Kept as a file rather
    than an inline <style> because style-src is 'self' with no 'unsafe-inline'
-   — an inline block would be blocked by our own policy. */
+   — an inline block would be blocked by our own policy. Palette follows the
+   refreshed Modern (theme.ts): warm off-white canvas, white card, blue-600
+   accent — so a missing file still looks like this product. No webfont: this
+   page must not depend on a hashed asset that may itself be the missing file. */
 :root {
     color-scheme: light dark;
-    --bg: #ffffff;
+    --bg: #f8f8f6;
+    --surface: #ffffff;
     --text: #14171a;
     --muted: #6b7580;
-    --accent: #2c6be4;
+    --accent: #2563eb;
+    --edge: rgba(107, 117, 128, 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
         --bg: #101216;
+        --surface: #171a20;
         --text: #e8eaed;
         --muted: #98a0aa;
         --accent: #7ab4ff;
+        --edge: rgba(152, 160, 170, 0.2);
     }
 }
 
@@ -33,13 +40,21 @@ body {
 }
 
 main {
-    max-width: 32rem;
+    max-width: 34rem;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    padding: 28px 26px;
+    box-shadow:
+        0 1px 2px rgba(20, 23, 26, 0.06),
+        0 8px 24px rgba(20, 23, 26, 0.06);
 }
 
 h1 {
-    margin: 0 0 8px;
-    font-size: 20px;
-    font-weight: 640;
+    margin: 0 0 10px;
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
 }
 
 p {
@@ -56,4 +71,5 @@ code {
 
 a {
     color: var(--accent);
+    font-weight: 620;
 }
