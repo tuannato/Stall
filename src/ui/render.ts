@@ -507,7 +507,10 @@ function paintOffers(
     offers: StallOffer[],
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.itemsForSale(offers.length), view.address));
+    // The header counts what the shop displays: distinct tokens, one card
+    // each. The per-token listing counts live on the cards and in the detail.
+    const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
+    stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address));
     const body = el('main', 'stall-body');
     // Ordered first, then divided. Nothing sorted before this, so two offers of
     // one token could sit either side of a third token's row. Copied: the array
@@ -523,14 +526,15 @@ function paintOffers(
             body.append(sectionHead(section.category, view));
         }
         for (const group of section.groups) {
+            const listings = listingsOf(group.offers);
             if (group.groupTokenId !== undefined) {
-                body.append(collectionHead(group.groupTokenId, group.offers.length, view));
+                body.append(collectionHead(group.groupTokenId, listings.length, view));
             } else if (group.groupLabel !== undefined) {
-                body.append(lookHead(group.groupLabel, group.offers.length));
+                body.append(lookHead(group.groupLabel, listings.length));
             }
             const items = el('div', 'items');
-            for (const offer of group.offers) {
-                items.append(offerRow(offer, view, handlers));
+            for (const listing of listings) {
+                items.append(offerRow(listing, view, handlers));
             }
             body.append(items);
         }
@@ -625,11 +629,19 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
     }
 }
 
-function isExpanded(view: StallView, offer: StallOffer): boolean {
-    return (
-        view.overlay.kind === 'buy' &&
-        view.overlay.outpoint.txid === offer.outpoint.txid &&
-        view.overlay.outpoint.outIdx === offer.outpoint.outIdx
+/**
+ * Any member outpoint keeps the card open: the overlay was opened on the
+ * cheapest row, and a live re-read can hand "cheapest" to a sibling — the
+ * visitor is reading this token, not one UTXO of it.
+ */
+function isExpanded(view: StallView, listing: TokenListing): boolean {
+    if (view.overlay.kind !== 'buy') {
+        return false;
+    }
+    const open = view.overlay.outpoint;
+    return listing.offers.some(
+        (offer) =>
+            offer.outpoint.txid === open.txid && offer.outpoint.outIdx === open.outIdx,
     );
 }
 
@@ -764,6 +776,48 @@ function itemIcon(tokenId: string, name: string, extraClass?: string): HTMLEleme
 /** The offers behind the current screen, or none when it is not a shop. */
 function offersOf(view: StallView): readonly StallOffer[] {
     return view.fetch?.kind === 'offers' ? view.fetch.offers : [];
+}
+
+/**
+ * One token, every offer of it in this stall. The card is the token — the
+ * owner's call, 2026-08-29 — and the handoff was always per token
+ * (`#/token/<id>`), so a token listed at three prices used to be three cards
+ * pointing at one Cashtab page. The offers keep their identity underneath:
+ * the expander and the live diff still speak outpoints.
+ */
+type TokenListing = {
+    tokenId: string;
+    offers: readonly StallOffer[];
+};
+
+/**
+ * Buckets in first-appearance order. `compareOffers` sorts a category's
+ * offers by token id already, so buckets come out contiguous either way.
+ */
+function listingsOf(offers: readonly StallOffer[]): TokenListing[] {
+    const byToken = new Map<string, StallOffer[]>();
+    for (const offer of offers) {
+        const bucket = byToken.get(offer.tokenId);
+        if (bucket === undefined) {
+            byToken.set(offer.tokenId, [offer]);
+        } else {
+            bucket.push(offer);
+        }
+    }
+    return [...byToken.entries()].map(([tokenId, list]) => ({ tokenId, offers: list }));
+}
+
+/**
+ * The card's figure: the cheapest **buyable** ask — an `askedSats` the
+ * covenant encodes, never a computed number, and never the market's (§10:
+ * the index silently drops offers it cannot parse, so "lowest on Agora" is a
+ * claim this app cannot prove; "lowest at this stall" it can). All-unbuyable
+ * falls back to the first row so the card can still say why nothing sells.
+ */
+function cheapestOf(listing: TokenListing): StallOffer {
+    const buyable = listing.offers.filter((offer) => !isUnbuyable(offer));
+    const pool = buyable.length > 0 ? buyable : listing.offers;
+    return pool.reduce((best, offer) => (offer.askedSats < best.askedSats ? offer : best));
 }
 
 /**
@@ -1312,11 +1366,13 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 }
 
 function offerRow(
-    offer: StallOffer,
+    listing: TokenListing,
     view: StallView,
     handlers: StallHandlers,
 ): HTMLElement {
-    const expanded = isExpanded(view, offer);
+    // The card speaks for its cheapest buyable row; the detail shows them all.
+    const offer = cheapestOf(listing);
+    const expanded = isExpanded(view, listing);
     const card = el('div', expanded ? 'item open' : 'item');
     const name = tokenName(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
@@ -1346,8 +1402,11 @@ function offerRow(
      * ticker with no count still says which token it is.
      */
     const known = knownDecimals(view.tokens, offer.tokenId);
+    // Summed across every listing of this token: each addend is a UTXO's own
+    // remaining atoms, so the sum is chain truth, not an estimate.
+    const totalAtoms = listing.offers.reduce((sum, o) => sum + o.atoms, 0n);
     const left =
-        known === undefined ? undefined : copy.remainingAtoms(formatAtoms(offer.atoms, known));
+        known === undefined ? undefined : copy.remainingAtoms(formatAtoms(totalAtoms, known));
     const stock =
         left === undefined ? ticker : ticker !== undefined ? `${ticker} · ${left}` : left;
     if (stock !== undefined) {
@@ -1390,6 +1449,12 @@ function offerRow(
             fiatLine.setAttribute('data-role', 'fiat');
             price.append(fiatLine);
         }
+        // Which meaning the figure has, said outright — never a second "from".
+        if (listing.offers.length > 1) {
+            price.append(
+                el('span', 'item-lots', copy.lowestOfListings(listing.offers.length)),
+            );
+        }
     }
     head.append(price);
     head.addEventListener('click', () => {
@@ -1401,7 +1466,7 @@ function offerRow(
     });
     card.append(head);
     if (expanded) {
-        card.append(itemDetail(view, offer));
+        card.append(itemDetail(view, listing));
     }
     return card;
 }
@@ -1432,7 +1497,8 @@ function rateLine(offer: StallOffer, view: StallView): HTMLElement {
  * In-place detail. Lives next to the row button, never inside it: an `<a>`
  * nested in `button.item` would fire the row's own click.
  */
-function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
+function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
+    const offer = cheapestOf(listing);
     const panel = el('div', 'item-detail');
     panel.setAttribute('data-role', 'detail');
 
@@ -1483,6 +1549,13 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     panel.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
     panel.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
 
+    // Every listing of this token, cheapest first — the rest of what the
+    // card's "lowest of N" promised. Each figure is that offer's own
+    // `askedSats`; each row's meta is its own minimum take and stock.
+    if (listing.offers.length > 1) {
+        panel.append(listingsBlock(listing, view));
+    }
+
     panel.append(tokenFacts(offer, meta, ticker));
     const described = tokenDescription(view, offer.tokenId);
     if (described !== undefined) {
@@ -1522,6 +1595,48 @@ function itemDetail(view: StallView, offer: StallOffer): HTMLElement {
     }
     panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
     return panel;
+}
+
+/**
+ * Every listing of one token in this stall, cheapest first. Each row's figure
+ * is that offer's own `askedSats` — a real asked amount, so it wears
+ * `data-role="price"` and the probe guards it like any other money figure.
+ * The meta beside it is the row's own minimum take and remaining stock; an
+ * unbuyable row says so instead of advertising a price its covenant refuses.
+ */
+function listingsBlock(listing: TokenListing, view: StallView): HTMLElement {
+    const wrap = el('div', 'listings');
+    wrap.setAttribute('data-role', 'listings');
+    wrap.append(
+        el('div', 'token-desc-label', copy.listingsAtThisStall(listing.offers.length)),
+    );
+    const d = decimalsOf(view.tokens, listing.tokenId);
+    const known = knownDecimals(view.tokens, listing.tokenId);
+    const ticker = tokenTicker(view.tokens, listing.tokenId);
+    const sorted = [...listing.offers].sort((a, b) =>
+        a.askedSats < b.askedSats ? -1 : a.askedSats > b.askedSats ? 1 : 0,
+    );
+    for (const offer of sorted) {
+        const line = el('div', 'listing-line');
+        if (isUnbuyable(offer)) {
+            line.append(el('span', 'listing-x', copy.DASHED_PRICE));
+            line.append(el('span', 'listing-meta', copy.UNBUYABLE_BADGE));
+        } else {
+            const figure = el('span', 'listing-x', copy.payAmount(formatXec(offer.askedSats)));
+            figure.setAttribute('data-role', 'price');
+            line.append(figure);
+            const minAtoms = formatAtoms(offer.askedAtoms, d);
+            const parts = [
+                copy.listingMin(ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms),
+            ];
+            if (known !== undefined) {
+                parts.push(copy.remainingAtoms(formatAtoms(offer.atoms, known)));
+            }
+            line.append(el('span', 'listing-meta', parts.join(' · ')));
+        }
+        wrap.append(line);
+    }
+    return wrap;
 }
 
 /**
@@ -1676,12 +1791,20 @@ function confirmLeaving(href: string): HTMLElement {
     return scrim;
 }
 
+/**
+ * Folded behind a native disclosure: the 64-character token id took two lines
+ * in the middle of a card whose job is the price and the buy control. The
+ * facts stay one tap away and fully rendered when open — and the layout probe
+ * opens every <details> before it measures, so the fold cannot become a place
+ * where a wrapped label or a covered figure hides (P0.5).
+ */
 function tokenFacts(
     offer: StallOffer,
     meta: TokenMeta | undefined,
     ticker: string | undefined,
 ): HTMLElement {
-    const box = el('div', 'token-facts');
+    const box = el('details', 'token-facts');
+    box.append(el('summary', 'token-facts-summary', copy.TOKEN_FACTS_SUMMARY));
     if (ticker !== undefined) {
         box.append(sheetRow(copy.TOKEN_TICKER, ticker));
     }

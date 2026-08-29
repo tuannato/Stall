@@ -194,6 +194,8 @@ export const TRY_AGAIN = 'Try again';
 export const YOU_PAY = 'You pay';
 export const MIN_PURCHASE = 'Minimum purchase';
 export const THIS_STALLS_STOCK = "This stall's stock";
+/** The fold over the technical rows — reference data, one tap away. */
+export const TOKEN_FACTS_SUMMARY = 'Token details';
 export const TOKEN_TICKER = 'Ticker';
 export const TOKEN_DECIMALS = 'Decimals';
 export const TOKEN_ID = 'Token ID';
@@ -224,6 +226,26 @@ export const HANDOFF_PRICE_IS_NOT_THE_ROW =
  */
 export const PRICE_FROM = 'from';
 export const UNBUYABLE_BADGE = 'Not buyable';
+
+/**
+ * A token listed more than once is one card, and the card's figure is the
+ * cheapest current ask. Deliberately not a second "from": `PRICE_FROM` already
+ * means "the minimum take costs less than the lot", and one word carrying both
+ * meanings on one card is how a buyer mis-reads a price. This label says
+ * exactly which meaning the figure has, and the count invites the detail,
+ * where every listing is shown.
+ */
+export function lowestOfListings(n: number): string {
+    return `lowest of ${n} listings`;
+}
+
+/** The detail's heading over every listing of one token, scoped to this shop. */
+export function listingsAtThisStall(n: number): string {
+    return `${n} listings at this stall`;
+}
+
+/** One listing's minimum take, inline beside its asked amount. */
+export const listingMin = (formatted: string): string => `min ${formatted}`;
 
 export function unbuyableLine(minimum: string, left: string): string {
     return `The contract will not accept less than ${minimum}, and only ${left} is left. No amount can be bought; only the seller can cancel it.`;

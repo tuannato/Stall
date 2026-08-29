@@ -73,7 +73,7 @@ import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
-import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING } from './copy';
+import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -355,15 +355,21 @@ describe('asked-amount-not-covered', () => {
     });
 
     it('lets an expanded row span the grid so the neighbour keeps its price', () => {
+        // A different token: two offers of one token are one card now, and
+        // this test is about a card's expansion beside another card.
         const neighbour: StallOffer = {
             ...OFFER,
+            tokenId: OTHER_TOKEN,
             outpoint: { txid: OUTPOINT.txid, outIdx: 1 },
         };
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER, neighbour] },
                 overlay: { kind: 'buy', outpoint: OUTPOINT },
-                tokens: new Map([[TOKEN_ID, BEANS]]),
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
+                ]),
                 // Any look: the span is no longer one layout's privilege, so
                 // the guarantee is asserted on the default one.
                 theme: decodeTheme(RURAL_THEME_ID),
@@ -372,8 +378,9 @@ describe('asked-amount-not-covered', () => {
         const stall = root.querySelector('.stall') as HTMLElement;
         const cards = [...stall.querySelectorAll('.item')];
         expect(cards).toHaveLength(2);
-        expect(cards[0]?.classList.contains('open')).toBe(true);
-        expect(cards[1]?.classList.contains('open')).toBe(false);
+        // By class, not by position: `compareOffers` orders by token id, and
+        // which token happens to sort first is not what this test is about.
+        expect(cards.filter((c) => c.classList.contains('open'))).toHaveLength(1);
         const prices = stall.querySelectorAll('[data-role="price"]');
         expect(prices).toHaveLength(2);
         expect(prices[0]?.textContent).toBe('1,200');
@@ -1331,7 +1338,11 @@ describe('token icon', () => {
                 OFFER,
                 { ...OFFER, outpoint: { txid: OUTPOINT.txid, outIdx: 1 } },
             ];
-            const view = offersView(two);
+            // Grouped, one token is one card — the two cells sharing the
+            // cached image are the card's own icon and the open detail's hero.
+            const view = offersView(two, undefined, {
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+            });
             paint(view);
             expect(images).toHaveLength(1);
             expect(images[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
@@ -2109,13 +2120,15 @@ describe('initials-survive-an-astral-name', () => {
     });
 });
 
-describe('same-token-rows-are-adjacent-on-screen', () => {
+describe('grouped-price-is-an-asked-amount-of-this-stall', () => {
     /**
-     * `compareOffers` has its own test, but a correct comparator nobody calls
-     * paints nothing — the shape of the `--s-accent-2` bug. This asserts the
-     * painted order, so removing the sort from `paintOffers` turns it red.
+     * One token, one card (owner, 2026-08-29). The card's figure must be an
+     * `askedSats` the covenant encodes — the cheapest buyable of this stall's
+     * own listings, never the market's (§10: the index silently drops offers,
+     * so "lowest on Agora" is unprovable) and never a computed number. The
+     * count label is its own words, because "from" already means minimum-take.
      */
-    it('prints both offers of a token together, cheaper first', () => {
+    it('shows one card per token, priced at the cheapest ask', () => {
         const dear: StallOffer = {
             ...OFFER,
             outpoint: { ...OUTPOINT, outIdx: 3 },
@@ -2145,18 +2158,49 @@ describe('same-token-rows-are-adjacent-on-screen', () => {
                 ]),
             ),
         );
+        // One card per token now (owner, 2026-08-29): the two Beans offers
+        // are one card whose figure is the cheapest ask — an actual
+        // `askedSats`, never computed — with a count label that is not a
+        // second "from".
         const names = [...root.querySelectorAll('.item-n')].map((n) => n.textContent);
-        expect(names, 'the two Beans rows are not split by Tea').toEqual([
-            'Green Tea',
-            'Roasted Beans',
-            'Roasted Beans',
-        ]);
+        expect(names, 'two tokens, two cards').toEqual(['Green Tea', 'Roasted Beans']);
         const prices = [...root.querySelectorAll('[data-role="price"]')].map(
             (p) => p.textContent,
         );
-        // Within the token, the cheaper rate is printed first.
-        expect(prices[1]).toBe('300');
-        expect(prices[2]).toBe('900');
+        expect(prices[1], 'the grouped card shows the cheapest ask').toBe('300');
+        const lots = root.querySelector('.item-lots');
+        expect(lots?.textContent).toBe(lowestOfListings(2));
+    });
+
+    it('lists every offer of the token in the detail, cheapest first', () => {
+        const dear: StallOffer = {
+            ...OFFER,
+            outpoint: { ...OUTPOINT, outIdx: 3 },
+            askedSats: 900n * 100n,
+            priceNanoSatsPerAtom: 900n * 100n * 1_000_000_000n,
+        };
+        const cheap: StallOffer = {
+            ...OFFER,
+            outpoint: { ...OUTPOINT, outIdx: 4 },
+            askedSats: 300n * 100n,
+            priceNanoSatsPerAtom: 300n * 100n * 1_000_000_000n,
+        };
+        const { root } = paint(
+            offersView([dear, cheap], undefined, {
+                overlay: { kind: 'buy', outpoint: cheap.outpoint },
+            }),
+        );
+        const block = root.querySelector('[data-role="listings"]');
+        expect(block, 'the detail carries the listings block').not.toBeNull();
+        expect(block!.textContent).toContain(listingsAtThisStall(2));
+        const figures = [...block!.querySelectorAll('[data-role="price"]')].map(
+            (n) => n.textContent,
+        );
+        // Each figure is that offer's own asked amount, cheapest first, and
+        // each wears the price role so the layout guard protects it too.
+        expect(figures).toEqual(['300 XEC', '900 XEC']);
+        // The card's stock line is the sum of real UTXO remainders.
+        expect(root.querySelector('.item-q')?.textContent).toContain('24 left');
     });
 });
 

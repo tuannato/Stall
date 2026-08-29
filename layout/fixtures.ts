@@ -91,11 +91,21 @@ export const SCREENS: Record<string, StallView> = {
     offers: base({
         fetch: {
             kind: 'offers',
-            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n), offer(NFT, 2, 50_000n)],
+            // T1 twice on purpose: the grouped card (cheapest ask + count
+            // label) is a measured surface, not a code path the probe skips.
+            offers: [
+                offer(T1, 0, 120_000n),
+                offer(T1, 3, 150_000n),
+                offer(T2, 1, 87_500n),
+                offer(NFT, 2, 50_000n),
+            ],
         },
     }),
     expanded: base({
-        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)] },
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n), offer(T1, 3, 150_000n), offer(T2, 1, 87_500n)],
+        },
         overlay: { kind: 'buy', outpoint: OUT },
         // The longest thing a seller can publish, with no spaces to break on.
         descriptions: new Map([[T1, UNBROKEN]]),
