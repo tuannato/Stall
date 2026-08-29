@@ -894,6 +894,136 @@ textarea.paste-in {
     gap: 9px;
 }
 
+/*
+ * The shell: the panel scrolls in its own region and the bar sits after it,
+ * outside the scroll. Never sticky, never fixed — a bar overlaying scrolling
+ * content covers whatever figure passes under it, and the probe refused
+ * exactly that on the shell's first run. Outside the shell (door, invalid)
+ * there is no scroller and the page scrolls as before.
+ */
+.stall-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/*
+ * Inside the height-capped scroller, children size to their content and the
+ * body grows from **basis auto** — `.stall-body`'s own `flex: 1` means
+ * `1 1 0%`, and a zero basis in a fixed-height column handed the body only
+ * the leftover slack: 82px for 243px of cards, which then painted straight
+ * over the footer ("Name this stall" through the price cell) on every stall.
+ * Found by the pixel-contrast pass, which was reporting real overlap while
+ * its author was blaming the screenshot pipeline.
+ */
+.stall-scroll > * {
+    flex: 0 0 auto;
+}
+
+.stall-scroll > .stall-body {
+    flex: 1 0 auto;
+    min-height: auto;
+}
+
+/*
+ * With a scroller inside, the stall is the app frame: exactly the viewport,
+ * content scrolling within, the bar always in reach and never over anything.
+ * Screens without a scroller keep the plain page flow.
+ */
+.frame:has(.stall-scroll) {
+    height: 100%;
+}
+
+.stall:has(.stall-scroll) {
+    max-height: 100%;
+}
+
+.tabs {
+    flex: none;
+    display: flex;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    background: var(--s-surface);
+}
+
+.tab {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 52px;
+    border: 0;
+    background: transparent;
+    color: var(--s-muted);
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 12.5px;
+    font-weight: 640;
+    cursor: pointer;
+    padding: 0 8px;
+}
+
+/* The storefront is the shell's centre of gravity, so its tab leads. */
+.tab-shop {
+    font-size: 13.5px;
+}
+
+.tab[aria-selected='true'] {
+    color: var(--s-accent);
+    box-shadow: inset 0 2px 0 var(--s-accent);
+}
+
+/*
+ * The seller's name on the centre tab: subordinate to our label, one line,
+ * cut with an ellipsis — a 32-byte name must never widen the bar.
+ */
+.tab-name {
+    color: var(--s-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 34vw;
+}
+
+/* The activity feed: watched transactions, newest first. */
+.events {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 9px 12px;
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: var(--s-radius);
+    font-size: 13px;
+}
+
+.event-time {
+    color: var(--s-muted);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.event-kind {
+    min-width: 0;
+}
+
+.event-txid {
+    color: var(--s-muted);
+    font-size: 11.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .addr {
     font-family: var(--s-font);
     font-size: 11.5px;

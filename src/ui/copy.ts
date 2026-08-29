@@ -258,6 +258,45 @@ export const TRIED = 'tried';
 export const OPEN_ANOTHER_STALL = 'Open another stall';
 
 /**
+ * The three tabs. Our words lead everywhere: the centre tab is `Shop · <name>`
+ * with the seller's name subordinate (owner's call after the critic argued a
+ * bare name in our navigation bar is chrome in our voice — a stall named
+ * "Settings" would read as Stall speaking). Unnamed stalls show `Shop` alone.
+ */
+export const TAB_SHOP = 'Shop';
+export const TAB_STUDIO = 'Studio';
+export const TAB_ACTIVITY = 'Activity';
+
+/** The studio: the seller's tools behind one tab, launching the same sheets. */
+export const STUDIO_SUB = 'Seller studio';
+export const STUDIO_LEDE =
+    'The tools for whoever holds this stall’s wallet. Anyone can look; only that wallet can sign.';
+export const STUDIO_OPEN_SETTINGS = 'Name this stall, choose a look';
+export const STUDIO_SETTINGS_HINT =
+    'One small record signs your name, look, decorations and token descriptions — built here, signed in your wallet.';
+
+/** The activity panel: what this page watched arrive, said honestly. */
+export const ACTIVITY_SUB = 'Live activity';
+export const activitySince = (time: string): string =>
+    `Watching since ${time} — what this page has seen arrive, newest first. Nothing is stored.`;
+export const ACTIVITY_GAPS =
+    'Some activity may be missing: the connection dropped or a transaction could not be read.';
+export const ACTIVITY_NOT_WATCHING =
+    'Not watching. This screen has no live connection — activity starts once the stall’s offers can be read.';
+export const ACTIVITY_QUIET = 'Nothing has arrived yet. New activity appears here on its own.';
+/**
+ * Event rows say only what a transaction provably was. `book` deliberately
+ * never says "sold": a cancel and a fully-taken offer are the same shape on
+ * the wire, and naming a sale where a seller withdrew stock is a money claim
+ * this page cannot back (PLAN-REDESIGN P3.5).
+ */
+export const EVENT_BOOK = 'The offer book moved';
+export const EVENT_SETTINGS = 'Stall settings published';
+export const EVENT_DESCRIPTION = 'A token description published';
+export const EVENT_TOKEN_MOVE = 'A decoration token moved';
+export const EVENT_OTHER = 'A transaction at this address';
+
+/**
  * Says what the control does, not what it feels like. "Save" would suggest the
  * stall is kept here; nothing is. What is kept is which stall this browser
  * opens when someone types the bare domain.

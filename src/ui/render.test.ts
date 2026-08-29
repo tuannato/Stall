@@ -73,7 +73,7 @@ import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
-import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings } from './copy';
+import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER } from './copy';
 import { renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -110,6 +110,7 @@ function handlers() {
         onToggleDefault: vi.fn(),
         onOpenPublish: vi.fn(),
         onClosePublish: vi.fn(),
+        onSwitchPanel: vi.fn(),
     };
 }
 
@@ -3473,3 +3474,105 @@ describe('the-fittings-shop-reads-as-three-runs', () => {
     });
 });
 
+
+describe('the-shell-and-its-tabs', () => {
+    it('tabs on a resolved stall: our word leads, the name rides subordinate', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            offersView([OFFER], undefined, { stallName: 'Riverside Goods' }),
+            h,
+        );
+        const bar = root.querySelector('nav.tabs');
+        expect(bar).not.toBeNull();
+        const shop = root.querySelector('[data-role="tab-shop"]') as HTMLElement;
+        expect(shop.getAttribute('aria-selected')).toBe('true');
+        expect(shop.querySelector('.tab-label')?.textContent).toBe(TAB_SHOP);
+        // The name is subordinate, never the label itself — and never the
+        // address: only a manifest name rides the bar.
+        expect(shop.querySelector('.tab-name')?.textContent).toBe('\u00b7 Riverside Goods');
+        const studio = root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement;
+        studio.click();
+        expect(h.onSwitchPanel).toHaveBeenCalledWith('studio');
+    });
+
+    it('an unnamed stall shows our word alone — the address never rides the bar', () => {
+        const { root } = paint(offersView([OFFER], undefined, { stallName: undefined }));
+        const shop = root.querySelector('[data-role="tab-shop"]') as HTMLElement;
+        expect(shop.querySelector('.tab-name')).toBeNull();
+        expect(shop.textContent).toBe(TAB_SHOP);
+    });
+
+    it('no tabs off the stall: the door and an unreadable link carry none', () => {
+        const { root } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+        });
+        expect(root.querySelector('nav.tabs')).toBeNull();
+    });
+
+    it('the studio is a launcher that opens the same modal sheet', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
+        // One panel in the DOM at a time: no offer cards behind the studio.
+        expect(root.querySelector('.item')).toBeNull();
+        const open = root.querySelector(
+            '[data-role="studio-open-publish"]',
+        ) as HTMLButtonElement;
+        expect(open).not.toBeNull();
+        open.click();
+        expect(h.onOpenPublish).toHaveBeenCalled();
+        // And with the overlay set, the same modal sheet mounts over the panel.
+        const withSheet = paint(
+            offersView([OFFER], undefined, {
+                panel: 'studio',
+                overlay: { kind: 'publish' },
+            }),
+        );
+        expect(withSheet.root.querySelector('[data-role="sheet-scrim"]')).not.toBeNull();
+    });
+});
+
+describe('an-unwatched-stall-does-not-show-an-empty-feed', () => {
+    it('says "not watching" on a screen with no socket, never an empty list', () => {
+        const { root } = paint(
+            offersView([], undefined, {
+                panel: 'activity',
+                fetch: {
+                    kind: 'unreachable',
+                    triedAtMs: 1_756_400_000_000,
+                    hosts: [],
+                },
+            }),
+        );
+        expect(root.textContent).toContain(ACTIVITY_NOT_WATCHING);
+        expect(root.querySelector('[data-role="events"]')).toBeNull();
+    });
+
+    it('says its gaps out loud, and its quiet honestly', () => {
+        const noisy = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                activityGaps: 1,
+                events: [
+                    { txid: 'ab'.repeat(32), kind: 'book', seenAtMs: 1_756_400_000_000 },
+                    { txid: 'cd'.repeat(32), kind: 'other', seenAtMs: 1_756_399_000_000 },
+                ],
+            }),
+        );
+        expect(noisy.root.textContent).toContain(ACTIVITY_GAPS);
+        const kinds = [...noisy.root.querySelectorAll('.event-kind')].map(
+            (n) => n.textContent,
+        );
+        expect(kinds).toEqual([EVENT_BOOK, EVENT_OTHER]);
+        // No row ever says "sold": a cancel and a full take are one shape.
+        expect(noisy.root.textContent).not.toContain('sold');
+
+        const quiet = paint(offersView([OFFER], undefined, { panel: 'activity' }));
+        expect(quiet.root.textContent).toContain(ACTIVITY_QUIET);
+        expect(quiet.root.textContent).not.toContain(ACTIVITY_GAPS);
+    });
+});

@@ -102,6 +102,12 @@ export function boot(
      * nothing, and the ring still has to remember them.
      */
     let events: readonly StallEvent[] = [];
+    /**
+     * Holes the ring is known to have: reconnects, and txids the page saw
+     * named but could not read. The activity panel refuses to let its list
+     * read as complete while this is above zero.
+     */
+    let activityGaps = 0;
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -180,6 +186,14 @@ export function boot(
                 }
                 paint();
             },
+            onSwitchPanel: (panel) => {
+                // UI state only, never history.state: the popstate listener
+                // runs refresh(), which closes the socket, empties the event
+                // ring and re-runs the whole load — a Back that did all that
+                // to leave a tab would wipe the feed the tab shows.
+                state = { ...state, view: { ...state.view, panel } };
+                paint();
+            },
         });
     };
 
@@ -253,6 +267,15 @@ export function boot(
         state = { ...state, view: { ...state.view, events } };
     };
 
+    /**
+     * A hole in the ring, counted rather than hidden: the panel would
+     * otherwise present a list with a piece missing as the whole story.
+     */
+    const recordGap = (): void => {
+        activityGaps += 1;
+        state = { ...state, view: { ...state.view, activityGaps } };
+    };
+
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
         live?.close();
@@ -261,6 +284,7 @@ export function boot(
         // carrying them across a route change would attribute one seller's
         // traffic to another.
         events = [];
+        activityGaps = 0;
         // Paint the parsed route before the index is asked, so a paste is not
         // a no-op while Chronik is in flight. Home is local; still cheap.
         state = openingFromLocation();
@@ -269,7 +293,10 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
-        state = next;
+        // The activity caption dates from here — the last full load — because
+        // this function just emptied the ring; "since the page opened" would
+        // claim coverage across a gap it cannot see.
+        state = { ...next, view: { ...next.view, watchedSinceMs: Date.now() } };
         paint();
         watch(claimed);
     };
@@ -505,17 +532,25 @@ export function boot(
         const script = p2pkhOutputScript(stall.hash);
         const chronik = createChronik();
         let facts = NO_FACTS;
+        let ringMoved = false;
         for (const txid of txids) {
             if (!TXID.test(txid)) {
+                // A hole, counted — never a `break`: breaking dropped every
+                // later txid in the burst from the ring with nothing to say a
+                // piece was missing (PLAN-REDESIGN P3.5, critic finding 4).
                 facts = ALL_FACTS;
-                break;
+                recordGap();
+                ringMoved = true;
+                continue;
             }
             let tx;
             try {
                 tx = await chronik.tx(txid);
             } catch {
                 facts = ALL_FACTS;
-                break;
+                recordGap();
+                ringMoved = true;
+                continue;
             }
             if (claimed !== generation) {
                 return;
@@ -525,9 +560,20 @@ export function boot(
             // never fetched has no kind to give it, and inventing `other` for
             // one would put a claim in the ring that nothing checked.
             recordEvent(txid, eventKindOf(tx, classified));
+            ringMoved = true;
             facts = unionFacts(facts, classified);
         }
-        if (claimed !== generation || !anyFact(facts)) {
+        if (claimed !== generation) {
+            return;
+        }
+        // The activity panel reads the ring, so a burst that changed it is a
+        // paint — through `livePaint`, which holds off while a record is being
+        // composed. A burst of ordinary payments changes no fact and used to
+        // paint nothing; now the feed is on screen, it is the fact.
+        if (ringMoved) {
+            livePaint();
+        }
+        if (!anyFact(facts)) {
             return;
         }
         // Each reader runs at most once for a burst, however many transactions
@@ -602,6 +648,11 @@ export function boot(
                     void readFacts(claimed, stall, txids);
                 },
                 onReestablished: () => {
+                    // What happened while the socket was down is unknown, and
+                    // the ring cannot show it — say so rather than letting the
+                    // feed read as complete across the gap.
+                    recordGap();
+                    livePaint();
                     void refreshAllFacts(claimed, stall);
                 },
             },

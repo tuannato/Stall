@@ -125,6 +125,15 @@ export type Overlay =
     /** Composing the settings transaction. Disclosure, not a wallet. */
     | { kind: 'publish' };
 
+/**
+ * Which panel of a resolved stall is on screen. **App state, never
+ * `history.state`**: the only popstate listener runs `refresh()`, which
+ * closes the socket, empties the event ring and re-runs the whole load — a
+ * panel switch on Back would wipe the very feed the activity panel renders
+ * (PLAN-REDESIGN P3, critic finding 1). Absent means the storefront.
+ */
+export type PanelKind = 'shop' | 'studio' | 'activity';
+
 export type SessionTokenCache = Map<string, TokenMeta>;
 
 /**
@@ -224,4 +233,19 @@ export type StallView = {
      * the ordinary case — it is not a claim that nothing happened.
      */
     events?: readonly StallEvent[];
+    /** The active panel of a resolved stall. Absent is the storefront. */
+    panel?: PanelKind;
+    /**
+     * When this page's watching began — the last **full load**, not the page
+     * open: `refresh()` empties the ring, so a caption dated from the page
+     * open would claim coverage across a gap it cannot see.
+     */
+    watchedSinceMs?: number;
+    /**
+     * How many holes the ring is known to have: reconnects (what happened
+     * while the socket was down is unknown) and txids the page saw named but
+     * could not read. Zero is a real claim; above zero the panel says
+     * activity may be missing rather than letting the list read as complete.
+     */
+    activityGaps?: number;
 };

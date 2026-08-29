@@ -142,6 +142,33 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'idle' },
         tokens: new Map(),
     },
+    /* The other two panels of the shell. One panel in the DOM at a time. */
+    studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
+    activity: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        panel: 'activity',
+        watchedSinceMs: TRIED_AT_MS,
+        activityGaps: 1,
+        events: [
+            { txid: 'ab'.repeat(32), kind: 'book', seenAtMs: TRIED_AT_MS },
+            { txid: 'cd'.repeat(32), kind: 'settings', seenAtMs: TRIED_AT_MS - 60_000 },
+            { txid: 'ee'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 120_000 },
+        ],
+    }),
+    /*
+     * Name-stress screens: the sign, the tab bar and the title all carry a
+     * seller's name, and the shipped fixture name is friendly. These are not:
+     * 32 bytes with no break opportunity, and an all-emoji name that spends
+     * four bytes a glyph. The probe's sideways-scroll check is the guard.
+     */
+    'hostile-name': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        stallName: 'W'.repeat(32),
+    }),
+    'emoji-name': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        stallName: '\u{1F6D2}'.repeat(8),
+    }),
     /*
      * The state screens. Most sellers meet one of these before they ever see
      * an offer — a new seller pastes before listing and lands on
@@ -201,4 +228,11 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'unreachable',
     'unreadable',
     'plugin-missing',
+    // Not state screens, but the same budget rule: the studio and activity
+    // panels paint no offer cards, and the name-stress screens exist for the
+    // sign and the bar, not for decoration interactions.
+    'studio',
+    'activity',
+    'hostile-name',
+    'emoji-name',
 ]);

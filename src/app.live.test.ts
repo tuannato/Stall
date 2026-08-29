@@ -428,6 +428,11 @@ describe('an-unclassifiable-event-asks-everything', () => {
      * A transaction we could not fetch is one we cannot rule out. Asking costs
      * two capped walks; guessing "nothing" costs the seller a settings publish
      * that never lands, and they have no way to find out.
+     *
+     * Every txid in the burst is still tried — the loop used to `break` on the
+     * first failure, which silently dropped every later transaction from the
+     * activity ring with nothing to say a piece was missing. The fact readers
+     * still run at most once for the whole burst.
      */
     it('runs every fact reader once when the transaction cannot be read', async () => {
         bootStall(stallEmpty());
@@ -436,7 +441,7 @@ describe('an-unclassifiable-event-asks-everything', () => {
         watches[0]!.hooks.onBurst?.(['06'.repeat(32), '07'.repeat(32)]);
         await flush();
 
-        expect(chain.calls.tx, 'stops asking once it has to ask everything').toBe(1);
+        expect(chain.calls.tx, 'every txid is tried; the ring needs each one').toBe(2);
         expect(chain.calls.stl1).toBe(1);
         expect(chain.calls.stld).toBe(1);
     });
@@ -932,5 +937,78 @@ describe('event-ring-is-capped-and-newest-first', () => {
             events.some((event) => event.txid === first),
             'the previous stall traffic followed the visitor',
         ).toBe(false);
+    });
+});
+
+describe('a-panel-switch-does-not-reload-the-stall', () => {
+    /**
+     * The shell's panels are app state, never history.state: the only
+     * popstate listener runs refresh(), which closes the socket, empties the
+     * event ring and re-runs the whole load — a Back that did all that to
+     * leave a tab would wipe the very feed the tab shows. A tab costs a
+     * paint, nothing else.
+     */
+    it('switches panels with no load, no navigation, and no ring reset', async () => {
+        const counter = bootStall(stallEmpty());
+        await flush();
+        expect(counter.loads).toBe(1);
+        const txid = publish(
+            signedTx({ txid: '0a'.repeat(32), outputs: [STRANGER_SCRIPT] }),
+        );
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+        expect(painted.view?.events?.length).toBe(1);
+        const url = location.href;
+
+        const toActivity = counter.root.querySelector(
+            '[data-role="tab-activity"]',
+        ) as HTMLButtonElement;
+        expect(toActivity).not.toBeNull();
+        toActivity.click();
+        await flush();
+
+        expect(counter.loads, 'a tab is a paint, not a load').toBe(1);
+        expect(location.href, 'no navigation').toBe(url);
+        expect(painted.view?.panel).toBe('activity');
+        expect(painted.view?.events?.length, 'the ring survives').toBe(1);
+        expect(watches[0]!.closed, 'the socket stays open').toBe(false);
+
+        const toShop = counter.root.querySelector(
+            '[data-role="tab-shop"]',
+        ) as HTMLButtonElement;
+        toShop.click();
+        await flush();
+        expect(painted.view?.panel).toBe('shop');
+        expect(counter.loads).toBe(1);
+    });
+
+    it('keeps one title for one link, whichever panel is open', async () => {
+        const counter = bootStall(stallEmpty());
+        await flush();
+        const before = document.title;
+        (counter.root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        await flush();
+        expect(document.title, 'panels share the route, so they share its title').toBe(
+            before,
+        );
+    });
+});
+
+describe('a-reconnect-gap-is-said-not-hidden', () => {
+    /**
+     * What happened while the socket was down is unknown, and the ring cannot
+     * show it. The counter is the honesty: above zero, the activity panel says
+     * the list may be missing pieces instead of letting it read as complete.
+     */
+    it('counts a reconnect and a txid it could not read as gaps', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        watches[0]!.hooks.onReestablished?.();
+        await flush();
+        expect(painted.view?.activityGaps).toBe(1);
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['0b'.repeat(32)]);
+        await flush();
+        expect(painted.view?.activityGaps).toBe(2);
     });
 });

@@ -39,7 +39,9 @@ import type {
     FetchStatus,
     HostAttempt,
     Outpoint,
+    PanelKind,
     RouteWhy,
+    StallEvent,
     StallOffer,
     StallView,
     TokenMeta,
@@ -69,6 +71,8 @@ export type StallHandlers = {
     /** Change the currency the fiat line is read in. */
     onChangeFiat?: (code: string) => void;
     onClosePublish?: () => void;
+    /** Switch the shell's panel. UI state only: no navigation, no load. */
+    onSwitchPanel?: (panel: PanelKind) => void;
 };
 
 /**
@@ -152,9 +156,46 @@ export function renderStall(
         case 'unresolved':
             paintUnresolved(stall, view, handlers);
             break;
-        case 'pubkey':
-            paintPubkey(stall, view, handlers);
+        case 'pubkey': {
+            // The three-panel shell. The shared link always lands on the
+            // storefront; the panel is app state, never history.state
+            // (PLAN-REDESIGN P3 — Back must not reload the stall or empty
+            // the activity ring). One panel in the DOM at a time: a hidden
+            // panel's protected boxes have no box at all, which stops the
+            // layout probe cold.
+            //
+            // The panel paints into its own scroll region and the bar sits
+            // after it, outside the scroll — never sticky, never fixed: a bar
+            // that overlays scrolling content covers whatever figure happens
+            // to pass under it, and the probe rightly refused exactly that on
+            // its first run (`you-pay figure is covered by button.tab`).
+            const scroller = el('div', 'stall-scroll');
+            if (view.panel === 'studio') {
+                paintStudio(scroller, view, handlers);
+            } else if (view.panel === 'activity') {
+                paintActivity(scroller, view, handlers);
+            } else {
+                paintPubkey(scroller, view, handlers);
+            }
+            stall.append(scroller);
+            stall.append(stallTabs(view, handlers));
             break;
+        }
+    }
+
+    /*
+     * The publish sheet mounts here, once, for every pubkey screen with an
+     * address — it used to mount only inside paintOffers and paintEmpty, so
+     * the footer's publish control on other screens flipped the overlay and
+     * painted nothing. The studio launcher needs it on its panel too.
+     */
+    if (
+        view.route.kind === 'pubkey' &&
+        view.overlay.kind === 'publish' &&
+        view.address !== undefined &&
+        view.address !== ''
+    ) {
+        stall.append(publishOverlay(view, handlers));
     }
 
     // After the screen, because a `yard` needs the footer to sit above and a
@@ -436,9 +477,6 @@ function paintEmpty(
     stall.append(header(displayName(view), copy.EMPTY_SUB, view.address));
     const body = el('main', 'stall-body');
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
-    if (view.overlay.kind === 'publish') {
-        stall.append(publishOverlay(view, handlers));
-    }
     settingsNotes(body, view);
     // The live path no longer applies an empty answer, so a stall whose last
     // offer genuinely sold keeps that row until someone asks again. This is
@@ -546,9 +584,6 @@ function paintOffers(
     }
     stall.append(body);
 
-    if (view.overlay.kind === 'publish') {
-        stall.append(publishOverlay(view, handlers));
-    }
     settingsNotes(body, view);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -1957,7 +1992,10 @@ function placeAttachmentNodes(
             node.append(el('div', `${row.cls!}-bug`));
             const foot = stall.querySelector('.stall-foot');
             if (foot !== null) {
-                stall.insertBefore(node, foot);
+                // The foot's own parent, not `stall`: inside the shell the
+                // footer lives in the scroll region, and `insertBefore` with
+                // the wrong parent throws.
+                foot.parentElement!.insertBefore(node, foot);
             } else {
                 stall.append(node);
             }
@@ -1981,6 +2019,169 @@ function ornamentStrip(theme: DecodedTheme): HTMLElement | null {
  * one, because wanting this stall back tomorrow does not depend on today's
  * index answering.
  */
+/**
+ * The shell's tab bar: Studio · Shop · Activity, our words leading. The
+ * centre tab may carry the seller's manifest name **subordinate** to our
+ * label (`Shop · <name>`) — never alone: a seller's 32 bytes styled as our
+ * navigation is chrome in our voice, and a stall named "Settings" would read
+ * as Stall speaking. Only the manifest name rides here, never the address.
+ *
+ * Sticky in flow, never `position: fixed`: the layout probe samples at
+ * scroll 0, and a fixed bar sitting on the footer address at the bottom of a
+ * long page would be invisible to it.
+ */
+function stallTabs(view: StallView, handlers: StallHandlers): HTMLElement {
+    const bar = el('nav', 'tabs');
+    bar.setAttribute('role', 'tablist');
+    bar.setAttribute('aria-label', 'Stall panels');
+    const active: PanelKind = view.panel ?? 'shop';
+    const tabs: { key: PanelKind; label: string; name?: string }[] = [
+        { key: 'studio', label: copy.TAB_STUDIO },
+        { key: 'shop', label: copy.TAB_SHOP, name: view.stallName },
+        { key: 'activity', label: copy.TAB_ACTIVITY },
+    ];
+    for (const tab of tabs) {
+        const btn = el('button', tab.key === 'shop' ? 'tab tab-shop' : 'tab');
+        btn.type = 'button';
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', active === tab.key ? 'true' : 'false');
+        btn.setAttribute('data-role', `tab-${tab.key}`);
+        btn.setAttribute('data-focus-key', `tab-${tab.key}`);
+        btn.append(el('span', 'tab-label', tab.label));
+        if (tab.name !== undefined && tab.name !== '') {
+            btn.append(el('span', 'tab-name', `· ${tab.name}`));
+        }
+        const go = handlers.onSwitchPanel;
+        if (go !== undefined) {
+            btn.addEventListener('click', () => go(tab.key));
+        }
+        bar.append(btn);
+    }
+    return bar;
+}
+
+/**
+ * The seller studio: a launcher, not the sheet dismantled. It opens the same
+ * modal publish sheet the footer control does, so the scrim, the tab trap,
+ * and the mid-compose guard all keep their meaning (PLAN-REDESIGN P3).
+ * Anyone can look — only this stall's wallet can sign, and the copy says so.
+ */
+function paintStudio(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    stall.append(header(displayName(view), copy.STUDIO_SUB, view.address));
+    const body = el('main', 'stall-body');
+    body.append(el('p', 'fine', copy.STUDIO_LEDE));
+    const canPublish =
+        view.address !== undefined &&
+        view.address !== '' &&
+        handlers.onOpenPublish !== undefined;
+    if (canPublish) {
+        const open = el('button', 'buy', copy.STUDIO_OPEN_SETTINGS);
+        open.type = 'button';
+        open.setAttribute('data-role', 'studio-open-publish');
+        open.setAttribute('data-focus-key', 'studio-open-publish');
+        const go = handlers.onOpenPublish!;
+        open.addEventListener('click', () => go());
+        body.append(open);
+        body.append(el('p', 'fine', copy.STUDIO_SETTINGS_HINT));
+    } else {
+        body.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
+    }
+    const raw = identityOf(view);
+    const onToggle = handlers.onToggleDefault;
+    if (raw !== undefined && onToggle !== undefined) {
+        const isDefault = view.isDefaultStall === true;
+        const btn = el(
+            'button',
+            'mini another',
+            isDefault ? copy.OPENING_BY_DEFAULT : copy.OPEN_BY_DEFAULT,
+        );
+        btn.type = 'button';
+        btn.setAttribute('data-role', 'studio-default-stall');
+        btn.setAttribute('data-focus-key', 'studio-default-stall');
+        btn.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
+        btn.addEventListener('click', () => onToggle(raw));
+        body.append(btn);
+    }
+    body.append(shareControl());
+    stall.append(body);
+}
+
+/**
+ * The activity panel: what this page watched arrive, said honestly.
+ *
+ * The list never stands in for coverage it does not have: screens with no
+ * live socket say "not watching" instead of showing an empty feed (an empty
+ * list there would be a statement about us painted as one about the seller —
+ * the §4 collapse); a known gap says activity may be missing; the caption
+ * dates from the last full load, because `refresh()` empties the ring.
+ */
+function paintActivity(
+    stall: HTMLElement,
+    view: StallView,
+    _handlers: StallHandlers,
+): void {
+    stall.append(header(displayName(view), copy.ACTIVITY_SUB, view.address));
+    const body = el('main', 'stall-body');
+    const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
+    if (!watching) {
+        body.append(el('p', 'note', copy.ACTIVITY_NOT_WATCHING));
+        stall.append(body);
+        return;
+    }
+    if (view.watchedSinceMs !== undefined) {
+        body.append(el('p', 'fine', copy.activitySince(formatTriedAt(view.watchedSinceMs))));
+    }
+    if ((view.activityGaps ?? 0) > 0) {
+        body.append(el('p', 'note', copy.ACTIVITY_GAPS));
+    }
+    const events = view.events ?? [];
+    if (events.length === 0) {
+        body.append(el('p', 'mid-p', copy.ACTIVITY_QUIET));
+    } else {
+        const list = el('div', 'events');
+        list.setAttribute('data-role', 'events');
+        for (const event of events) {
+            list.append(eventRow(event));
+        }
+        body.append(list);
+    }
+    stall.append(body);
+}
+
+/**
+ * One watched transaction. The kind label says only what the classifier
+ * proves — `book` never says "sold": a cancel and a fully-taken offer are the
+ * same shape on the wire. The txid is shortened for a glance; it is data,
+ * not a link — this page links out to a market, not to an explorer, and a
+ * row must not grow a control the visitor did not ask for.
+ */
+function eventRow(event: StallEvent): HTMLElement {
+    const row = el('div', 'event');
+    row.append(el('span', 'event-time', formatTriedAt(event.seenAtMs)));
+    row.append(el('span', 'event-kind', eventLabel(event.kind)));
+    row.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
+    return row;
+}
+
+function eventLabel(kind: StallEvent['kind']): string {
+    switch (kind) {
+        case 'book':
+            return copy.EVENT_BOOK;
+        case 'settings':
+            return copy.EVENT_SETTINGS;
+        case 'description':
+            return copy.EVENT_DESCRIPTION;
+        case 'token-move':
+            return copy.EVENT_TOKEN_MOVE;
+        case 'other':
+            return copy.EVENT_OTHER;
+    }
+}
+
 function stallFooter(
     identity: string | undefined,
     view: StallView,

@@ -128,9 +128,21 @@ function coveredBy(node: Element): string | undefined {
         [box.left + 2, box.bottom - 2],
         [box.right - 2, box.bottom - 2],
     ];
+    // Content inside the shell's scroll region keeps its full rect even when
+    // part of it is scrolled out of the clip. A point beyond the clip is not
+    // covered — it is reachable by scrolling, and the tab bar sits outside
+    // the clip in flow, so it can never cover what is inside. Points within
+    // the clip are still fully checked.
+    const clip = node.closest('.stall-scroll')?.getBoundingClientRect();
     for (const [x, y] of points) {
         if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
             // Off screen is its own failure, reported by the viewport check.
+            continue;
+        }
+        if (
+            clip !== undefined &&
+            (y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right)
+        ) {
             continue;
         }
         const hit = document.elementFromPoint(x, y);
@@ -320,6 +332,15 @@ function measure(screen: string, themeLabel: string): Failure[] {
         fail(
             'page scrolls sideways',
             `scrollWidth ${doc.scrollWidth} > viewport ${window.innerWidth}`,
+        );
+    }
+    // The shell's scroll region hides its own overflow from the page, so the
+    // same rule is asked of it directly.
+    const scroller = root.querySelector('.stall-scroll');
+    if (scroller !== null && scroller.scrollWidth > scroller.clientWidth + 1) {
+        fail(
+            'the panel scrolls sideways',
+            `scrollWidth ${scroller.scrollWidth} > ${scroller.clientWidth}`,
         );
     }
 
@@ -540,8 +561,17 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
     }
     // The runner grows the emulated viewport to this and repaints before the
     // shot: `captureBeyondViewport` does not reliably paint backgrounds below
-    // the fold — a below-fold buy control sampled as near-white.
-    return { targets, pageH: document.documentElement.scrollHeight };
+    // the fold — a below-fold buy control sampled as near-white. The shell
+    // hides its height inside its scroll region, so that is asked too: at the
+    // grown viewport the region stretches and everything is on screen.
+    const scrollRegion = document.querySelector('.stall-scroll');
+    return {
+        targets,
+        pageH: Math.max(
+            document.documentElement.scrollHeight,
+            scrollRegion?.scrollHeight ?? 0,
+        ),
+    };
 };
 
 const result = document.createElement('pre');

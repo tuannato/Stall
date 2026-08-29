@@ -305,6 +305,10 @@ let server;
 let browser;
 let profile;
 let failed = false;
+// The ceiling is enforcement, not a sentence in a plan: the second command in
+// CLAUDE.md §11 has to stay something everyone actually runs.
+const RUNTIME_CEILING_S = 60;
+const startedAt = Date.now();
 try {
     run('npx', ['vite', 'build', '--logLevel', 'error']);
     server = spawn('npx', ['vite', 'preview', '--port', PORT, '--strictPort'], {
@@ -470,11 +474,40 @@ try {
                         sessionId,
                     );
                     const prep = await prepare();
-                    const shot = await cdp.send(
-                        'Page.captureScreenshot',
-                        { format: 'png', fromSurface: true },
-                        sessionId,
-                    );
+                    const capture = async () => {
+                        const shot = await cdp.send(
+                            'Page.captureScreenshot',
+                            { format: 'png', fromSurface: true },
+                            sessionId,
+                        );
+                        return decodePng(Buffer.from(shot.data, 'base64'));
+                    };
+                    let img = await capture();
+                    // A failing box is re-shot once before it is believed:
+                    // capture right after an emulated resize can raster a
+                    // stale frame — measured: the live DOM held transparent
+                    // glyphs and unmoved boxes while the shot showed the text
+                    // still painted. A real defect is steady state (the
+                    // planted-colour falsification fails both shots); a stale
+                    // surface is not.
+                    let retried = false;
+                    for (const t of prep.targets) {
+                        let worst = worstContrastInBox(img, t, t.color);
+                        if (worst === undefined) continue;
+                        boxes += 1;
+                        if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
+                            await sleep(250);
+                            img = await capture();
+                            retried = true;
+                            worst = worstContrastInBox(img, t, t.color);
+                        }
+                        if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
+                            dim.push(
+                                `${screen} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
+                            );
+                        }
+                    }
                     await cdp.send(
                         'Emulation.setDeviceMetricsOverride',
                         {
@@ -485,18 +518,6 @@ try {
                         },
                         sessionId,
                     );
-                    const img = decodePng(Buffer.from(shot.data, 'base64'));
-                    for (const t of prep.targets) {
-                        const worst = worstContrastInBox(img, t, t.color);
-                        if (worst === undefined) continue;
-                        boxes += 1;
-                        if (worst < PIXEL_CONTRAST_FLOOR) {
-                            dim.push(
-                                `${screen} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
-                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
-                            );
-                        }
-                    }
                 }
             }
         }
@@ -517,6 +538,15 @@ try {
         console.error(`✗ contrast: ${err.message}`);
     }
     cdp.close();
+    const elapsedS = (Date.now() - startedAt) / 1000;
+    if (elapsedS > RUNTIME_CEILING_S) {
+        failed = true;
+        console.error(
+            `✗ runtime: ${elapsedS.toFixed(1)}s > ${RUNTIME_CEILING_S}s — prune the matrix before it stops being run`,
+        );
+    } else {
+        console.log(`✓ runtime: ${elapsedS.toFixed(1)}s (ceiling ${RUNTIME_CEILING_S}s)`);
+    }
 } catch (err) {
     failed = true;
     console.error(`\nlayout-check: ${err.message}`);
