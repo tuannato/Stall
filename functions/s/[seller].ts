@@ -13,7 +13,7 @@
  * only, which HTMLRewriter escapes — no string HTML anywhere.
  */
 import { chronikFetcher, resolveManifestTextByHash, stallHashOf } from '../lib/resolve';
-import { sellerIdentity, unfurlText } from '../lib/unfurl';
+import { ogImageFor, sellerIdentity, unfurlText } from '../lib/unfurl';
 
 /**
  * The Workers runtime global, declared minimally rather than pulling
@@ -33,7 +33,7 @@ type PagesContext = {
     waitUntil: (promise: Promise<unknown>) => void;
 };
 
-type ResolvedText = { name: string; tagline?: string };
+type ResolvedText = { name: string; tagline?: string; themeId: number };
 
 /**
  * The manifest name and tagline, through the protobuf-lite walk in
@@ -96,7 +96,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         }
         const canonical = new URL(context.request.url);
         const url = `https://stall.cash${canonical.pathname}`;
-        return new HTMLRewriter()
+        let rewriter = new HTMLRewriter()
             .on('title', {
                 element(el: { setInnerContent: (s: string) => void }) {
                     el.setInnerContent(text.title);
@@ -107,8 +107,18 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
             .on('meta[property="og:url"]', metaContent(url))
             .on('meta[property="og:description"]', metaContent(text.description))
             .on('meta[name="twitter:description"]', metaContent(text.description))
-            .on('meta[name="description"]', metaContent(text.description))
-            .transform(upstream);
+            .on('meta[name="description"]', metaContent(text.description));
+        // The picture follows the look, but only when a manifest proved one:
+        // an identity-only card keeps the shipped platform image — a themed
+        // still would claim a choice the seller never made.
+        if (resolved !== undefined) {
+            const image = `https://stall.cash${ogImageFor(resolved.themeId)}`;
+            rewriter = rewriter
+                .on('meta[property="og:image"]', metaContent(image))
+                .on('meta[name="twitter:image"]', metaContent(image))
+                .on('meta[property="og:image:alt"]', metaContent(text.title));
+        }
+        return rewriter.transform(upstream);
     } catch {
         return upstream;
     }

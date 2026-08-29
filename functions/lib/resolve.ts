@@ -242,7 +242,7 @@ function opReturnPushes(outputScriptHex: string): Uint8Array[] | undefined {
     return pushes;
 }
 
-export type LiteManifestText = { name: string; tagline?: string };
+export type LiteManifestText = { name: string; tagline?: string; themeId: number };
 
 /**
  * Name and tagline from one STL1 record, under the app's own screens —
@@ -274,6 +274,7 @@ export function liteManifestText(pushes: Uint8Array[]): LiteManifestText | undef
     if (pushes[2]!.length !== 1) {
         return undefined;
     }
+    const themeId = pushes[2]![0]!;
     let tagline: string | undefined;
     for (let i = 3; i < pushes.length; i += 1) {
         const push = pushes[i]!;
@@ -294,7 +295,7 @@ export function liteManifestText(pushes: Uint8Array[]): LiteManifestText | undef
         }
         break;
     }
-    return tagline === undefined ? { name } : { name, tagline };
+    return tagline === undefined ? { name, themeId } : { name, tagline, themeId };
 }
 
 /**
@@ -464,5 +465,7 @@ export async function resolveManifestTextByHash(
             break;
         }
     }
-    return best === undefined ? undefined : { name: best.name, tagline: best.tagline };
+    return best === undefined
+        ? undefined
+        : { name: best.name, tagline: best.tagline, themeId: best.themeId };
 }

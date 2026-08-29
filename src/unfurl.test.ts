@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sellerIdentity, unfurlText, usableName } from '../functions/lib/unfurl';
+import { ogImageFor, sellerIdentity, unfurlText, usableName } from '../functions/lib/unfurl';
 import {
     bytesToHex,
     hash160Hex,
@@ -240,6 +240,13 @@ describe('the-edge-reader-mirrors-the-app', () => {
         const lite = liteManifestText(pushes)!;
         expect(lite.name).toBe(app.name);
         expect(lite.tagline).toBe(app.tagline);
+        // The theme byte rides too — it picks the card's picture — and an id
+        // we ship no card for maps to Modern, mirroring decodeTheme's fall.
+        expect(lite.themeId).toBe(app.theme.id);
+        expect(ogImageFor(2)).toBe('/og/stall-neo.png');
+        expect(ogImageFor(3)).toBe('/og/stall-rural.png');
+        expect(ogImageFor(1)).toBe('/og/stall-modern.png');
+        expect(ogImageFor(0xfe)).toBe('/og/stall-modern.png');
         // Unreadable for the app is nothing for the edge: a name with a bidi
         // override throws there and answers undefined here.
         const bidi = [...pushes];

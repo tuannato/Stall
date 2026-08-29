@@ -69,6 +69,24 @@ export type UnfurlText = {
 };
 
 /**
+ * The card's picture, by the look the manifest asked for. Ships as three
+ * crafted 1200x630 stills under /og/ — unfurlers accept PNG and little else,
+ * and rasterising text at the edge is the wasm this origin evicted — so the
+ * image carries the *look* while the title carries the name, which every
+ * platform renders in text anyway. An id we ship no card for gets Modern,
+ * mirroring `decodeTheme`'s fallback.
+ */
+export function ogImageFor(themeId: number): string {
+    if (themeId === 0x02) {
+        return '/og/stall-neo.png';
+    }
+    if (themeId === 0x03) {
+        return '/og/stall-rural.png';
+    }
+    return '/og/stall-modern.png';
+}
+
+/**
  * The words on the card. With a screened name the stall speaks first; with
  * only an identity the card is still unmistakably *this* stall's; with
  * neither, the generic platform card stands and no rewrite happens at all.
