@@ -111,6 +111,9 @@ function handlers() {
         onOpenPublish: vi.fn(),
         onClosePublish: vi.fn(),
         onSwitchPanel: vi.fn(),
+        onTogglePin: vi.fn(),
+        onChangeSort: vi.fn(),
+        onChangeFilter: vi.fn(),
     };
 }
 
@@ -3634,5 +3637,273 @@ describe('the-browser-chrome-joins-the-look', () => {
         } finally {
             meta.remove();
         }
+    });
+});
+
+describe('the-door-remembers-what-this-browser-pinned', () => {
+    function homeView(pins: string[]): StallView {
+        return {
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            pinnedStalls: pins,
+        };
+    }
+
+    it('paints each pin as a link that opens the full route token', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, homeView([ADDR, PK]), h);
+        const wrap = root.querySelector('[data-role="pinned-stalls"]');
+        expect(wrap).not.toBeNull();
+        const opens = [...root.querySelectorAll('[data-role="pinned-open"]')];
+        expect(opens).toHaveLength(2);
+        // Glance length on screen; the click carries the untouched token.
+        expect(opens[0]!.textContent).toContain('…');
+        expect(opens[0]!.textContent!.length).toBeLessThan(20);
+        (opens[0] as HTMLButtonElement).click();
+        expect(h.onOpenStall).toHaveBeenCalledWith(ADDR);
+        const unpins = [...root.querySelectorAll('[data-role="pinned-unpin"]')];
+        (unpins[1] as HTMLButtonElement).click();
+        expect(h.onTogglePin).toHaveBeenCalledWith(PK);
+    });
+
+    it('an unpinned door carries no pinned section at all', () => {
+        const { root } = paint(homeView([]));
+        expect(root.querySelector('[data-role="pinned-stalls"]')).toBeNull();
+    });
+});
+
+describe('the-studio-pin-says-which-way-it-goes', () => {
+    it('offers the pin, names the unpin, and reports state to the keyboard', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
+        const pin = root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        expect(pin.textContent).toBe(copy.PIN_TO_DOOR);
+        expect(pin.getAttribute('aria-pressed')).toBe('false');
+        pin.click();
+        expect(h.onTogglePin).toHaveBeenCalledWith(ADDR);
+
+        const pinned = paint(
+            offersView([OFFER], undefined, { panel: 'studio', isPinnedStall: true }),
+        );
+        const on = pinned.root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        expect(on.textContent).toBe(copy.PINNED_ON_DOOR);
+        expect(on.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('a-full-door-refuses-with-a-sentence-not-a-dead-control', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            offersView([OFFER], undefined, { panel: 'studio', pinnedDoorFull: true }),
+            h,
+        );
+        const pin = root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        expect(pin.disabled).toBe(true);
+        expect(root.textContent).toContain(copy.PIN_DOOR_FULL);
+        pin.click();
+        expect(h.onTogglePin).not.toHaveBeenCalled();
+        // A stall already pinned is never the one refused: its control is the
+        // unpin, full door or not.
+        const pinned = paint(
+            offersView([OFFER], undefined, {
+                panel: 'studio',
+                pinnedDoorFull: true,
+                isPinnedStall: true,
+            }),
+        );
+        const on = pinned.root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        expect(on.disabled).toBe(false);
+        expect(on.textContent).toBe(copy.PINNED_ON_DOOR);
+    });
+});
+
+describe('the-poster-is-the-share-link-made-printable', () => {
+    it('opens from the studio with the name, the QR and the untouched link', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    stallName: 'Riverside Goods',
+                    tagline: 'Fresh weekly',
+                }),
+                h,
+            );
+            const open = root.querySelector('[data-role="open-poster"]') as HTMLButtonElement;
+            expect(open).not.toBeNull();
+            open.click();
+            const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
+            expect(sheet).not.toBeNull();
+            expect(sheet.querySelector('.poster-name')?.textContent).toBe('Riverside Goods');
+            expect(sheet.querySelector('.poster-tagline')?.textContent).toBe('Fresh weekly');
+            expect(sheet.querySelector('svg.poster-qr')).not.toBeNull();
+            // The link on the page is the link itself, never a shortened one:
+            // a poster outlives this browser, so the words must carry it whole.
+            expect(sheet.querySelector('.poster-url')?.textContent).toContain('/s/');
+
+            const printed = vi.fn();
+            (window as { print: () => void }).print = printed;
+            (sheet.querySelector('[data-role="poster-print"]') as HTMLButtonElement).click();
+            expect(printed).toHaveBeenCalled();
+            (sheet.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
+            expect(root.querySelector('[data-role="poster"]')).toBeNull();
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('printing is a dialog the seller opened, never a repaint', () => {
+        // The poster manages its own removal like the leave-confirm: nothing
+        // in the app state changes, so closing it cannot lose panel or sheet.
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
+            (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+            expect(root.querySelector('[data-role="poster"]')).not.toBeNull();
+            expect(h.onSwitchPanel).not.toHaveBeenCalled();
+            expect(h.onOpenPublish).not.toHaveBeenCalled();
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('big-shop-tools', () => {
+    /** Seven distinct tokens: the threshold where the tools appear. */
+    const idOf = (i: number): string => (0x20 + i).toString(16).repeat(32);
+    const NAMES = ['Mango', 'Apple', 'Cherry', 'Banana', 'Fig', 'Elder', 'Date'];
+    // Prices deliberately not in alphabetical order.
+    const SATS = [700n, 300n, 500n, 100n, 600n, 200n, 400n].map((n) => n * 100n);
+
+    function lot(i: number, over: Partial<StallOffer> = {}): StallOffer {
+        return {
+            outpoint: { txid: 'ef'.repeat(32), outIdx: i },
+            tokenId: idOf(i),
+            atoms: 5n,
+            variant: 'PARTIAL',
+            askedSats: SATS[i]!,
+            askedAtoms: 1n,
+            priceNanoSatsPerAtom: SATS[i]! * 1_000_000_000n,
+            ...over,
+        };
+    }
+
+    function bigShop(over: Partial<StallView> = {}): StallView {
+        const offers = NAMES.map((_, i) => lot(i));
+        const tokens = new Map(
+            NAMES.map((name, i) => [
+                idOf(i),
+                { tokenId: idOf(i), name, ticker: '', decimals: 0 } as TokenMeta,
+            ]),
+        );
+        return offersView(offers, tokens, over);
+    }
+
+    function cardNames(root: HTMLElement): string[] {
+        return [...root.querySelectorAll('.item-n')].map((n) => n.textContent ?? '');
+    }
+
+    it('a small shop stays a stall: no tools below the threshold', () => {
+        const { root } = paint(offersView([OFFER]));
+        expect(root.querySelector('[data-role="shop-tools"]')).toBeNull();
+    });
+
+    it('a big shop gets the find box and the sort, and reports typing', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, bigShop(), h);
+        expect(root.querySelector('[data-role="shop-tools"]')).not.toBeNull();
+        const find = root.querySelector('[data-role="shop-filter"]') as HTMLInputElement;
+        find.value = 'app';
+        find.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(h.onChangeFilter).toHaveBeenCalledWith('app');
+        const sort = root.querySelector('[data-role="shop-sort"]') as HTMLSelectElement;
+        sort.value = 'price-asc';
+        sort.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(h.onChangeSort).toHaveBeenCalledWith('price-asc');
+    });
+
+    it('the filter narrows the shelves and never the header count', () => {
+        const { root } = paint(bigShop({ shopFilter: 'apple' }));
+        expect(cardNames(root)).toEqual(['Apple']);
+        // The header keeps counting everything listed: the filter is a way of
+        // looking, not a claim about the stall.
+        expect(root.textContent).toContain(itemsForSale(7));
+    });
+
+    it('an emptied shelf blames the filter, never the stall', () => {
+        const { root } = paint(bigShop({ shopFilter: 'zzz' }));
+        expect(cardNames(root)).toEqual([]);
+        expect(root.textContent).toContain(copy.SHOP_FILTER_NONE);
+        expect(root.textContent).not.toContain(EMPTY_TITLE);
+    });
+
+    it('price sorts order cards by the figure each card shows', () => {
+        const asc = paint(bigShop({ shopSort: 'price-asc' }));
+        expect(cardNames(asc.root)).toEqual([
+            'Banana', 'Elder', 'Apple', 'Date', 'Cherry', 'Fig', 'Mango',
+        ]);
+        const desc = paint(bigShop({ shopSort: 'price-desc' }));
+        expect(cardNames(desc.root)).toEqual([
+            'Mango', 'Fig', 'Cherry', 'Date', 'Apple', 'Elder', 'Banana',
+        ]);
+        const name = paint(bigShop({ shopSort: 'name' }));
+        expect(cardNames(name.root)).toEqual([
+            'Apple', 'Banana', 'Cherry', 'Date', 'Elder', 'Fig', 'Mango',
+        ]);
+    });
+
+    it('a-dashed-card-never-wins-cheapest', () => {
+        // Banana is the cheapest card, but all its rows are unbuyable: its
+        // figure is a dash, and a dash must not outrank a price that can be
+        // paid — in either direction.
+        const offers = NAMES.map((_, i) =>
+            i === 3 ? lot(i, { minAcceptedAtoms: 50n }) : lot(i),
+        );
+        const tokens = new Map(
+            NAMES.map((name, i) => [
+                idOf(i),
+                { tokenId: idOf(i), name, ticker: '', decimals: 0 } as TokenMeta,
+            ]),
+        );
+        const asc = paint(offersView(offers, tokens, { shopSort: 'price-asc' }));
+        expect(cardNames(asc.root).at(-1)).toBe('Banana');
+        const desc = paint(offersView(offers, tokens, { shopSort: 'price-desc' }));
+        expect(cardNames(desc.root).at(-1)).toBe('Banana');
+    });
+
+    it('an explicit sort is one flat run; the curated default keeps sections', () => {
+        const sorted = paint(bigShop({ shopSort: 'price-asc' }));
+        expect(sorted.root.querySelector('.section-head')).toBeNull();
+        const curated = paint(bigShop());
+        expect(cardNames(curated.root)).toHaveLength(7);
+    });
+});
+
+describe('the-printed-poster-outweighs-the-hidden-app', () => {
+    /**
+     * The print stylesheet hides `#app *` and shows the poster subtree — and
+     * a show rule without the id loses that specificity contest, which
+     * printed a blank page (measured under emulated print media, not
+     * deduced). happy-dom does not cascade, so this reads the stylesheet:
+     * the hide rule and the id-bearing show rule must travel together.
+     */
+    it('keeps the id on the show rule that must outrank the hide rule', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        const print = css.match(/@media print\s*\{([\s\S]+?)\n\}/);
+        expect(print, 'no @media print block at all').not.toBeNull();
+        const block = print![1]!;
+        expect(block).toContain('#app *');
+        expect(block).toMatch(/#app \.poster-page,\s*[^{]*#app \.poster-page \*/);
     });
 });

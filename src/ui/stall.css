@@ -1637,6 +1637,159 @@ textarea.paste-in {
 }
 
 /*
+ * The pinned stalls on the door. Rows, not cards: the apex never fetches, so
+ * each pin is a route token and a link — a card shape would promise a shop
+ * preview this screen refuses to fake.
+ */
+.pinned {
+    margin-top: 4px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
+    border-radius: var(--s-radius);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pinned .fine {
+    color: var(--s-muted);
+    margin: 0;
+}
+
+.pinned-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pinned-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pinned-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 14px;
+    font-weight: 620;
+    text-align: left;
+    padding: 11px 12px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+    color: var(--s-text);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pinned-drop {
+    flex: 0 0 auto;
+    border: 0;
+    background: transparent;
+    color: var(--s-muted);
+    font-size: 12px;
+    font-weight: 620;
+    padding: 13px 8px;
+    min-height: 44px;
+    cursor: pointer;
+}
+
+/*
+ * The big-shop tools. Fields borrow `.paste-in` (the 16px iOS floor with it),
+ * so only the row shape lives here. In flow above the shelves, never sticky:
+ * a bar that overlays scrolling content covers whatever passes under it.
+ */
+.shop-tools {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.shop-find {
+    flex: 1 1 200px;
+    width: auto;
+    min-width: 0;
+}
+
+.shop-sort-label {
+    flex: 0 1 auto;
+}
+
+.shop-sort {
+    width: auto;
+}
+
+/*
+ * The poster. The page inside the sheet is exactly what prints: black on
+ * white — a poster inherits no theme, for the same reason a QR does not (§9:
+ * it has to work, here as ink) — with the theme present as one accent bar,
+ * because a border prints where a background does not.
+ */
+.poster-box {
+    gap: 14px;
+}
+
+.poster-page {
+    background: #ffffff;
+    color: #000000;
+    border: 1px solid color-mix(in srgb, #000 20%, transparent);
+    border-top: 10px solid var(--s-accent);
+    border-radius: 8px;
+    padding: 30px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    text-align: center;
+}
+
+.poster-name {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.poster-tagline {
+    margin: 0;
+    font-size: 15px;
+    color: #444444;
+    overflow-wrap: anywhere;
+}
+
+.poster-qr {
+    max-width: min(64vw, 300px);
+    padding: 8px;
+    border-radius: 0;
+}
+
+.poster-scan {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.poster-url {
+    margin: 0;
+    font-size: 12px;
+    color: #555555;
+    overflow-wrap: anywhere;
+}
+
+.poster-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/*
  * Desktop. The one breakpoint: every `-d` half of a pair is swapped here, and
  * nothing else changes. Values that differ only by viewport and are identical
  * across all three looks are written here directly — a variable that always
@@ -1762,6 +1915,69 @@ textarea.paste-in {
         max-width: var(--s-sheet-max-d);
         border-radius: var(--s-sheet-radius-d);
         max-height: 86vh;
+    }
+}
+
+/*
+ * Print: the poster page and nothing else. Visibility rather than display,
+ * because visibility inherits and a descendant can turn it back on — which is
+ * exactly the shape "hide the app, show one subtree" needs. Only the poster
+ * sheet opts in, so printing any other screen prints the page as it looks.
+ */
+@media print {
+    body:has(.poster-scrim) {
+        background: #ffffff;
+    }
+
+    body:has(.poster-scrim) #app * {
+        visibility: hidden;
+    }
+
+    /*
+     * `#app` on the show rule, not for scoping but for weight: the hide rule
+     * above carries the id, so a show rule without it loses the specificity
+     * contest and the printed page comes out blank — measured, not deduced.
+     */
+    body:has(.poster-scrim) #app .poster-page,
+    body:has(.poster-scrim) #app .poster-page * {
+        visibility: visible;
+    }
+
+    body:has(.poster-scrim) .poster-scrim {
+        position: static;
+        padding: 0;
+        background: none;
+    }
+
+    /* Unclipped and unbounded: the sheet's screen ceiling would cut the QR. */
+    body:has(.poster-scrim) .poster-box {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        border: 0;
+        box-shadow: none;
+    }
+
+    body:has(.poster-scrim) .poster-page {
+        position: fixed;
+        inset: 0;
+        border-radius: 0;
+        border-width: 0;
+        border-top-width: 12mm;
+        justify-content: center;
+        gap: 8mm;
+    }
+
+    body:has(.poster-scrim) .poster-qr {
+        max-width: 110mm;
+    }
+
+    body:has(.poster-scrim) .poster-name {
+        font-size: 34pt;
+    }
+
+    body:has(.poster-scrim) .poster-controls {
+        display: none;
     }
 }
 

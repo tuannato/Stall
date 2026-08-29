@@ -65,6 +65,9 @@ export const handlers: StallHandlers = {
     onOpenPublish: () => {},
     onClosePublish: () => {},
     onChangeFiat: () => {},
+    onTogglePin: () => {},
+    onChangeSort: () => {},
+    onChangeFilter: () => {},
 };
 
 export const base = (over: Partial<StallView>): StallView => ({
@@ -142,6 +145,9 @@ export const SCREENS: Record<string, StallView> = {
         route: { kind: 'home' },
         overlay: { kind: 'idle' },
         tokens: new Map(),
+        // A door with pins is the superset screen: an empty pinned list
+        // paints nothing, so the bare door needs no fixture of its own.
+        pinnedStalls: [ADDR, PK, `02${'bb'.repeat(32)}`],
     },
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
@@ -155,6 +161,27 @@ export const SCREENS: Record<string, StallView> = {
             { txid: 'cd'.repeat(32), kind: 'settings', seenAtMs: TRIED_AT_MS - 60_000 },
             { txid: 'ee'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 120_000 },
         ],
+    }),
+    /*
+     * A shop big enough for the tools row: seven distinct tokens is the
+     * threshold where the find box and the sort appear, and an explicit
+     * price sort paints the flat run instead of sections \u2014 both surfaces
+     * the smaller fixtures never show the probe.
+     */
+    crowded: base({
+        fetch: {
+            kind: 'offers',
+            offers: Array.from({ length: 7 }, (_, i) =>
+                offer((0x20 + i).toString(16).repeat(32), i, 10_000n * BigInt(7 - i)),
+            ),
+        },
+        tokens: new Map(
+            Array.from({ length: 7 }, (_, i) => {
+                const id = (0x20 + i).toString(16).repeat(32);
+                return [id, meta(id, `Crate ${i + 1}`, 'SLP_TOKEN_TYPE_FUNGIBLE')];
+            }),
+        ),
+        shopSort: 'price-asc',
     }),
     /* The featured token leads the shop under our chip \u2014 tag 0x03. */
     featured: base({
@@ -258,4 +285,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'emoji-name',
     'offers-changed',
     'featured',
+    // Exists for the tools row and the flat sorted run; the decoration
+    // interactions it could stage are the same ones `offers` already does.
+    'crowded',
 ]);

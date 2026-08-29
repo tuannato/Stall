@@ -41,6 +41,7 @@ import type {
     Outpoint,
     PanelKind,
     RouteWhy,
+    ShopSort,
     StallEvent,
     StallOffer,
     StallView,
@@ -73,6 +74,12 @@ export type StallHandlers = {
     onClosePublish?: () => void;
     /** Switch the shell's panel. UI state only: no navigation, no load. */
     onSwitchPanel?: (panel: PanelKind) => void;
+    /** Pin or unpin this stall on the browser's front door. */
+    onTogglePin?: (raw: string) => void;
+    /** Reorder a big shop's cards. UI state only, like the panel. */
+    onChangeSort?: (sort: ShopSort) => void;
+    /** Narrow a big shop to cards matching the typed text. */
+    onChangeFilter?: (text: string) => void;
 };
 
 /**
@@ -124,6 +131,16 @@ function restoreFocus(root: HTMLElement, key: string | null): void {
     for (const node of root.querySelectorAll('[data-focus-key]')) {
         if (node.getAttribute('data-focus-key') === key) {
             (node as HTMLElement).focus();
+            // A rebuilt text field starts its caret at 0, so a visitor typing
+            // into the find box would insert every next letter at the front.
+            if (node instanceof HTMLInputElement) {
+                const end = node.value.length;
+                try {
+                    node.setSelectionRange(end, end);
+                } catch {
+                    // Some input types refuse selection; focus is enough.
+                }
+            }
             return;
         }
     }
@@ -145,7 +162,7 @@ export function renderStall(
 
     switch (view.route.kind) {
         case 'home':
-            paintHome(stall, handlers);
+            paintHome(stall, view, handlers);
             break;
         case 'invalid':
             paintInvalid(stall, view.route.raw, handlers, view.route.why);
@@ -248,14 +265,76 @@ function applyTheme(
     }
 }
 
-function paintHome(stall: HTMLElement, handlers: StallHandlers): void {
+function paintHome(
+    stall: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
     stall.append(header(copy.HOME_TITLE, copy.HOME_LEDE));
     const body = el('main', 'stall-body');
     body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
     body.append(pasteForm(handlers));
+    const pinned = pinnedDoor(view, handlers);
+    if (pinned !== null) {
+        body.append(pinned);
+    }
     body.append(el('p', 'fine', copy.HOME_SELLER));
     body.append(demoSoon(handlers));
     stall.append(body);
+}
+
+/**
+ * The stalls this browser pinned. Route tokens from storage, painted as links
+ * and nothing more: the apex never fetches, so no card here may promise a
+ * name, a look or an inventory — that is the stall's own page to keep.
+ */
+function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement | null {
+    const pins = view.pinnedStalls ?? [];
+    if (pins.length === 0) {
+        return null;
+    }
+    const wrap = el('div', 'pinned');
+    wrap.setAttribute('data-role', 'pinned-stalls');
+    wrap.append(el('div', 'mid-t', copy.PINNED_TITLE));
+    wrap.append(el('p', 'fine', copy.PINNED_LEDE));
+    const list = el('div', 'pinned-list');
+    for (const raw of pins) {
+        const row = el('div', 'pinned-row');
+        const open = el('button', 'pinned-open', shortStallToken(raw));
+        open.type = 'button';
+        open.setAttribute('data-role', 'pinned-open');
+        // Value-compared by restoreFocus, never a selector — raw is storage.
+        open.setAttribute('data-focus-key', `pin:${raw}`);
+        const go = handlers.onOpenStall;
+        if (go !== undefined) {
+            open.addEventListener('click', () => go(raw));
+        }
+        row.append(open);
+        const drop = el('button', 'pinned-drop', copy.PIN_REMOVE);
+        drop.type = 'button';
+        drop.setAttribute('data-role', 'pinned-unpin');
+        drop.setAttribute('data-focus-key', `unpin:${raw}`);
+        drop.setAttribute('aria-label', copy.unpinLabel(shortStallToken(raw)));
+        const toggle = handlers.onTogglePin;
+        if (toggle !== undefined) {
+            drop.addEventListener('click', () => toggle(raw));
+        }
+        row.append(drop);
+        list.append(row);
+    }
+    wrap.append(list);
+    return wrap;
+}
+
+/**
+ * A route token at glance length. Display only — the full token stays the
+ * value every control carries; nothing routes on this string.
+ */
+function shortStallToken(raw: string): string {
+    const body = raw.toLowerCase().startsWith('ecash:')
+        ? raw.slice('ecash:'.length)
+        : raw;
+    return body.length <= 14 ? body : `${body.slice(0, 6)}…${body.slice(-4)}`;
 }
 
 /**
@@ -557,6 +636,27 @@ function paintOffers(
     stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address, view.tagline));
     const body = el('main', 'stall-body');
     /*
+     * A big shop gets tools; a small one stays a stall. The threshold counts
+     * the full shop, never the filtered remainder, so the tools cannot
+     * filter themselves off the page. The filter narrows what is painted —
+     * a way of looking, never a claim: the header above keeps counting
+     * everything listed, and an emptied shelf says the filter did it.
+     */
+    const tools = distinct >= SHOP_TOOLS_MIN;
+    if (tools) {
+        body.append(shopTools(view, handlers));
+    }
+    const filter = tools ? normalizedFilter(view.shopFilter) : undefined;
+    const shown =
+        filter === undefined
+            ? offers
+            : offers.filter((o) => tokenMatchesFilter(view.tokens, o.tokenId, filter));
+    if (filter !== undefined && shown.length === 0) {
+        const none = el('p', 'mid-p', copy.SHOP_FILTER_NONE);
+        none.setAttribute('data-role', 'filter-none');
+        body.append(none);
+    }
+    /*
      * The featured token leads the shop (manifest tag 0x03): its card is
      * pulled above the sections under our own "Featured" chip and excluded
      * from them, so one listing is never two cards. Only when actually
@@ -564,7 +664,7 @@ function paintOffers(
      */
     const featuredId = view.featuredTokenId;
     const featuredOffers =
-        featuredId === undefined ? [] : offers.filter((o) => o.tokenId === featuredId);
+        featuredId === undefined ? [] : shown.filter((o) => o.tokenId === featuredId);
     if (featuredOffers.length > 0) {
         const wrap = el('section', 'featured-wrap');
         wrap.setAttribute('data-role', 'featured');
@@ -576,34 +676,46 @@ function paintOffers(
     }
     const shelfOffers =
         featuredOffers.length > 0
-            ? offers.filter((o) => o.tokenId !== featuredId)
-            : offers;
+            ? shown.filter((o) => o.tokenId !== featuredId)
+            : shown;
     // Ordered first, then divided. Nothing sorted before this, so two offers of
     // one token could sit either side of a third token's row. Copied: the array
     // belongs to the caller's view.
     const ordered = [...shelfOffers].sort(compareOffers);
-    const sections = sectionsOf(ordered, view.tokens, (id) => view.nftGroups?.get(id));
-    // One section is not a division, it is a heading over the whole shop. A
-    // stall that sells only tokens should look like a stall, not a filing
-    // cabinet with one drawer.
-    const divided = sections.length > 1;
-    for (const section of sections) {
-        if (divided) {
-            body.append(sectionHead(section.category, view));
-        }
-        for (const group of section.groups) {
-            const listings = listingsOf(group.offers);
-            if (group.groupTokenId !== undefined) {
-                body.append(collectionHead(group.groupTokenId, listings.length, view));
-            } else if (group.groupLabel !== undefined) {
-                body.append(lookHead(group.groupLabel, listings.length));
+    const sort: ShopSort = tools ? (view.shopSort ?? 'curated') : 'curated';
+    if (sort === 'curated') {
+        const sections = sectionsOf(ordered, view.tokens, (id) => view.nftGroups?.get(id));
+        // One section is not a division, it is a heading over the whole shop. A
+        // stall that sells only tokens should look like a stall, not a filing
+        // cabinet with one drawer.
+        const divided = sections.length > 1;
+        for (const section of sections) {
+            if (divided) {
+                body.append(sectionHead(section.category, view));
             }
-            const items = el('div', 'items');
-            for (const listing of listings) {
-                items.append(offerRow(listing, view, handlers));
+            for (const group of section.groups) {
+                const listings = listingsOf(group.offers);
+                if (group.groupTokenId !== undefined) {
+                    body.append(collectionHead(group.groupTokenId, listings.length, view));
+                } else if (group.groupLabel !== undefined) {
+                    body.append(lookHead(group.groupLabel, listings.length));
+                }
+                const items = el('div', 'items');
+                for (const listing of listings) {
+                    items.append(offerRow(listing, view, handlers));
+                }
+                body.append(items);
             }
-            body.append(items);
         }
+    } else {
+        // An explicit sort is one flat run: a price order that restarted at
+        // every section border would not be a price order. The section and
+        // collection headings return with the curated default.
+        const items = el('div', 'items');
+        for (const listing of sortedListings(listingsOf(ordered), sort, view.tokens)) {
+            items.append(offerRow(listing, view, handlers));
+        }
+        body.append(items);
     }
     // Said on the shop that works, because that is where it is invisible.
     const dropped = view.fetch?.kind === 'offers' ? (view.fetch.dropped ?? 0) : 0;
@@ -881,6 +993,134 @@ function cheapestOf(listing: TokenListing): StallOffer {
     const buyable = listing.offers.filter((offer) => !isUnbuyable(offer));
     const pool = buyable.length > 0 ? buyable : listing.offers;
     return pool.reduce((best, offer) => (offer.askedSats < best.askedSats ? offer : best));
+}
+
+/**
+ * Cards or more before the sort and the find box appear. Below this they are
+ * chrome on a shop a glance already covers.
+ */
+const SHOP_TOOLS_MIN = 7;
+
+/** The typed filter as it is matched, or undefined for "not filtering". */
+function normalizedFilter(text: string | undefined): string | undefined {
+    const trimmed = (text ?? '').trim().toLowerCase();
+    return trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Matched on what the card shows — name and ticker — plus the token id, for
+ * the visitor who pasted one. Case-blind substring; no pattern language, so
+ * nothing typed can become a selector or a regex.
+ */
+function tokenMatchesFilter(
+    tokens: StallView['tokens'],
+    tokenId: string,
+    filter: string,
+): boolean {
+    if (tokenId.toLowerCase().includes(filter)) {
+        return true;
+    }
+    if (tokenName(tokens, tokenId).toLowerCase().includes(filter)) {
+        return true;
+    }
+    const ticker = tokenTicker(tokens, tokenId);
+    return ticker !== undefined && ticker.toLowerCase().includes(filter);
+}
+
+/**
+ * The explicit orders. Price sorts by the figure the card shows — its
+ * cheapest buyable `askedSats`, a number a covenant encodes — never by a rate
+ * across tokens, which compares nothing a visitor sees. Cards whose figure is
+ * dashed (all rows unbuyable) sink to the end in either direction rather than
+ * winning "cheapest" with a price that cannot be paid.
+ */
+function sortedListings(
+    listings: TokenListing[],
+    sort: Exclude<ShopSort, 'curated'>,
+    tokens: StallView['tokens'],
+): TokenListing[] {
+    if (sort === 'name') {
+        return [...listings].sort((a, b) =>
+            tokenName(tokens, a.tokenId).localeCompare(tokenName(tokens, b.tokenId)),
+        );
+    }
+    const keyOf = (listing: TokenListing): bigint | undefined => {
+        const offer = cheapestOf(listing);
+        return isUnbuyable(offer) ? undefined : offer.askedSats;
+    };
+    const flip = sort === 'price-desc' ? -1 : 1;
+    return [...listings].sort((a, b) => {
+        const ka = keyOf(a);
+        const kb = keyOf(b);
+        if (ka === undefined && kb === undefined) {
+            return 0;
+        }
+        if (ka === undefined) {
+            return 1;
+        }
+        if (kb === undefined) {
+            return -1;
+        }
+        if (ka === kb) {
+            return 0;
+        }
+        return ka < kb ? -flip : flip;
+    });
+}
+
+/**
+ * The find box and the sort, painted only over a big shop. Rebuilt on every
+ * keystroke like everything else; the focus-key machinery keeps the caret's
+ * field, and `restoreFocus` puts the caret back at the end of it.
+ */
+function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
+    const wrap = el('div', 'shop-tools');
+    wrap.setAttribute('data-role', 'shop-tools');
+    const find = el('input', 'paste-in shop-find');
+    find.type = 'search';
+    find.maxLength = 64;
+    find.placeholder = copy.SHOP_FILTER_HINT;
+    find.setAttribute('aria-label', copy.SHOP_FILTER_HINT);
+    find.value = view.shopFilter ?? '';
+    find.setAttribute('data-role', 'shop-filter');
+    find.setAttribute('data-focus-key', 'shop-filter');
+    const onFilter = handlers.onChangeFilter;
+    if (onFilter !== undefined) {
+        find.addEventListener('input', () => onFilter(find.value));
+    }
+    wrap.append(find);
+    const label = el('label', 'paste-label shop-sort-label', copy.SHOP_SORT_LABEL);
+    const select = el('select', 'paste-in shop-sort');
+    select.name = 'shop-sort';
+    select.setAttribute('data-role', 'shop-sort');
+    select.setAttribute('data-focus-key', 'shop-sort');
+    const options: { value: ShopSort; label: string }[] = [
+        { value: 'curated', label: copy.SHOP_SORT_CURATED },
+        { value: 'price-asc', label: copy.SHOP_SORT_PRICE_ASC },
+        { value: 'price-desc', label: copy.SHOP_SORT_PRICE_DESC },
+        { value: 'name', label: copy.SHOP_SORT_NAME },
+    ];
+    const active: ShopSort = view.shopSort ?? 'curated';
+    for (const option of options) {
+        const opt = el('option', undefined, option.label);
+        opt.value = option.value;
+        if (option.value === active) {
+            opt.selected = true;
+        }
+        select.append(opt);
+    }
+    const onSort = handlers.onChangeSort;
+    if (onSort !== undefined) {
+        select.addEventListener('change', () => {
+            const picked = options.find((o) => o.value === select.value);
+            if (picked !== undefined) {
+                onSort(picked.value);
+            }
+        });
+    }
+    label.append(select);
+    wrap.append(label);
+    return wrap;
 }
 
 /**
@@ -2242,8 +2482,119 @@ function paintStudio(
         btn.addEventListener('click', () => onToggle(raw));
         body.append(btn);
     }
+    const onPin = handlers.onTogglePin;
+    if (raw !== undefined && onPin !== undefined) {
+        const pinned = view.isPinnedStall === true;
+        const full = !pinned && view.pinnedDoorFull === true;
+        const pin = el('button', 'mini another', pinned ? copy.PINNED_ON_DOOR : copy.PIN_TO_DOOR);
+        pin.type = 'button';
+        pin.setAttribute('data-role', 'studio-pin');
+        pin.setAttribute('data-focus-key', 'studio-pin');
+        pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+        if (full) {
+            // A full door refuses rather than evicting a pin somebody chose
+            // (saved.ts). A disabled control with no sentence would read as
+            // broken, so the bound and the way out are said next to it.
+            pin.disabled = true;
+            body.append(pin);
+            body.append(el('p', 'fine', copy.PIN_DOOR_FULL));
+        } else {
+            pin.addEventListener('click', () => onPin(raw));
+            body.append(pin);
+        }
+    }
     body.append(shareControl());
+    posterControl(body, view);
     stall.append(body);
+}
+
+/**
+ * The poster: the share link made physical, for the stall that also exists as
+ * a table on a street. Pure client — the QR is the same module matrix the
+ * share control draws, nothing is fetched — and the print stylesheet in
+ * stall.css shows the poster page alone. The QR stays black on white with its
+ * quiet zone (§9); the sheet previews exactly what the printer gets.
+ */
+function posterControl(body: HTMLElement, view: StallView): void {
+    const url = shareUrl();
+    // No QR, no poster: past the library's ceiling the poster would be a
+    // sheet of text, and the share control already explains the long link.
+    if (!fitsQr(url)) {
+        return;
+    }
+    const wrap = el('div', 'poster-launch');
+    wrap.append(el('p', 'fine', copy.POSTER_LEDE));
+    const open = el('button', 'mini another', copy.POSTER_OPEN);
+    open.type = 'button';
+    open.setAttribute('data-role', 'open-poster');
+    open.setAttribute('data-focus-key', 'open-poster');
+    open.addEventListener('click', () => {
+        // Self-managed like confirmLeaving: the sheet owns its own removal,
+        // so no app state and no repaint — printing is not a view change.
+        body.closest('.stall')?.append(posterSheet(view, url));
+    });
+    wrap.append(open);
+    body.append(wrap);
+}
+
+function posterSheet(view: StallView, url: string): HTMLElement {
+    const scrim = el('div', 'sheet-scrim poster-scrim');
+    scrim.setAttribute('data-role', 'poster');
+    const box = el('div', 'sheet poster-box');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-label', copy.POSTER_TITLE);
+    box.tabIndex = -1;
+
+    // The page itself — the print stylesheet shows exactly this subtree.
+    const page = el('div', 'poster-page');
+    const name = displayName(view);
+    if (name !== undefined) {
+        page.append(el('div', 'poster-name', name));
+    }
+    if (view.tagline !== undefined && view.tagline !== '') {
+        page.append(el('p', 'poster-tagline', view.tagline));
+    }
+    const qr = qrSvg(url, copy.SHARE_QR_ALT);
+    qr.classList.add('poster-qr');
+    page.append(qr);
+    page.append(el('p', 'poster-scan', copy.POSTER_SCAN));
+    page.append(el('p', 'poster-url', url));
+    box.append(page);
+
+    const controls = el('div', 'poster-controls');
+    const print = el('button', 'buy', copy.POSTER_PRINT);
+    print.type = 'button';
+    print.setAttribute('data-role', 'poster-print');
+    print.addEventListener('click', () => {
+        window.print();
+    });
+    const close = el('button', 'mini', copy.POSTER_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'poster-close');
+    const done = (): void => scrim.remove();
+    close.addEventListener('click', done);
+    scrim.addEventListener('click', (ev) => {
+        if (ev.target === scrim) {
+            done();
+        }
+    });
+    scrim.addEventListener('keydown', (ev) => {
+        if ((ev as KeyboardEvent).key === 'Escape') {
+            ev.preventDefault();
+            done();
+        }
+    });
+    controls.append(print, close);
+    box.append(controls);
+    scrim.append(box);
+    trapTab(box);
+    queueMicrotask(() => {
+        if (box.isConnected) {
+            box.focus();
+        }
+    });
+    return scrim;
 }
 
 /**

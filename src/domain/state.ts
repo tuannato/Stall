@@ -134,6 +134,13 @@ export type Overlay =
  */
 export type PanelKind = 'shop' | 'studio' | 'activity';
 
+/**
+ * How a big shop's cards are ordered. `curated` is the shipped order —
+ * sections by kind, `compareOffers` within them; the rest are one flat run,
+ * because a price order that stopped at section borders would not be one.
+ */
+export type ShopSort = 'curated' | 'price-asc' | 'price-desc' | 'name';
+
 export type SessionTokenCache = Map<string, TokenMeta>;
 
 /**
@@ -253,6 +260,25 @@ export type StallView = {
     fiatHint?: string;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
+    /**
+     * The stalls this browser pinned to the front door — route tokens from
+     * `saved.ts`, read at paint time like `isDefaultStall`. Only the door
+     * renders them; the apex never fetches, so each is a link, not a preview.
+     */
+    pinnedStalls?: readonly string[];
+    /** True when this stall is on this browser's door. */
+    isPinnedStall?: boolean;
+    /** True when the door holds its full 12 and a new pin would be refused. */
+    pinnedDoorFull?: boolean;
+    /**
+     * How a big shop's cards are ordered, and the visitor's find-box text.
+     * UI state only, like `panel` — never history, never storage: a sort is a
+     * way of looking at the shelves, not a fact about the stall. The price
+     * sorts order cards by the figure each card already shows (its cheapest
+     * buyable `askedSats`), so no number is computed that is not on screen.
+     */
+    shopSort?: ShopSort;
+    shopFilter?: string;
     /**
      * Tokens whose cards the next paint may pulse — **one-shot**: set only by
      * a message-triggered re-read in the same window as a burst whose plugin

@@ -327,6 +327,51 @@ export const EVENT_OTHER = 'A transaction at this address';
 export const OPEN_BY_DEFAULT = 'Open this stall by default';
 export const OPENING_BY_DEFAULT = 'Opens by default — stop';
 
+/**
+ * Pins. Same register as the default-stall control: what the control does,
+ * never "save" — nothing about the stall is kept, only its route token, and
+ * the lede says whose browser holds it. The full-door line states the bound
+ * and the way out, because a disabled control with no sentence reads as
+ * broken, and a silent eviction would drop a pin somebody chose.
+ */
+export const PINNED_TITLE = 'Pinned stalls';
+export const PINNED_LEDE = 'Kept in this browser only — never on the chain.';
+export const PIN_TO_DOOR = 'Pin to the front door';
+export const PINNED_ON_DOOR = 'Pinned to the front door — remove';
+export const PIN_REMOVE = 'Unpin';
+export const unpinLabel = (which: string): string => `Unpin ${which}`;
+export const PIN_DOOR_FULL =
+    'The front door holds 12 pinned stalls and is full. Unpin one there to pin this one.';
+
+/**
+ * The poster: the share link made printable. The lede says what comes out —
+ * a page, from this browser, nothing sent anywhere.
+ */
+export const POSTER_TITLE = 'Print a poster';
+export const POSTER_LEDE =
+    'A printable page for a real-world stall: your name and a code that opens this shop.';
+export const POSTER_OPEN = 'Print a poster';
+export const POSTER_PRINT = 'Print';
+export const POSTER_CLOSE = 'Close';
+export const POSTER_SCAN = 'Scan to open this stall';
+
+/**
+ * The big-shop tools. The sort options name the figure they order by — the
+ * price on the card, which is this stall's cheapest asked amount for that
+ * token — and never claim a market-wide anything (§10: the index silently
+ * drops offers, so "lowest on Agora" is unprovable here). The empty-filter
+ * line blames the filter, never the stall: an emptied shelf under a typed
+ * word must not read as an empty shop.
+ */
+export const SHOP_FILTER_HINT = 'Find in this stall';
+export const SHOP_SORT_LABEL = 'Sort';
+export const SHOP_SORT_CURATED = 'By shelf';
+export const SHOP_SORT_PRICE_ASC = 'Price on card — low first';
+export const SHOP_SORT_PRICE_DESC = 'Price on card — high first';
+export const SHOP_SORT_NAME = 'Name';
+export const SHOP_FILTER_NONE =
+    'Nothing listed here matches that. Clear the find box to see the whole stall.';
+
 export function itemsForSale(n: number): string {
     return n === 1 ? '1 item for sale' : `${n} items for sale`;
 }

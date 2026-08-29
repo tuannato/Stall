@@ -9,7 +9,20 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
-import { clearSavedStall, hasSavedFiat, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
+import {
+    clearSavedStall,
+    hasSavedFiat,
+    isPinnedStall,
+    isSavedStall,
+    pinnedDoorIsFull,
+    pinStall,
+    readPinnedStalls,
+    readSavedFiat,
+    readSavedStall,
+    saveFiat,
+    saveStall,
+    unpinStall,
+} from './saved';
 import { MAX_STALL_EVENTS } from './domain/state';
 import type {
     BookShape,
@@ -201,6 +214,11 @@ export function boot(
         const view: StallView = {
             ...state.view,
             isDefaultStall: isSavedStall(identityOf(state.view)),
+            // Same read-at-paint rule as the default flag: a pin toggles
+            // without a refetch, and a stale list would lie about itself.
+            pinnedStalls: readPinnedStalls(),
+            isPinnedStall: isPinnedStall(identityOf(state.view)),
+            pinnedDoorFull: pinnedDoorIsFull(),
             fiatCode,
             fiatRate,
         };
@@ -253,6 +271,27 @@ export function boot(
                 // ring and re-runs the whole load — a Back that did all that
                 // to leave a tab would wipe the feed the tab shows.
                 state = { ...state, view: { ...state.view, panel } };
+                paint();
+            },
+            onTogglePin: (raw) => {
+                if (isPinnedStall(raw)) {
+                    unpinStall(raw);
+                } else {
+                    pinStall(raw);
+                }
+                paint();
+            },
+            onChangeSort: (sort) => {
+                // A way of looking at the shelves, not a fact about the
+                // stall: UI state like `panel`, gone on the next full load.
+                state = { ...state, view: { ...state.view, shopSort: sort } };
+                paint();
+            },
+            onChangeFilter: (text) => {
+                state = {
+                    ...state,
+                    view: { ...state.view, shopFilter: text.slice(0, 64) },
+                };
                 paint();
             },
         });
