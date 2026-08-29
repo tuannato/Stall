@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
 import { STLD_HEX, encodeDescriptionHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
+import { MAX_STALL_EVENTS, type StallView } from './domain/state';
 import type { ChainTx, HistoryPage } from './net/chain';
 import { UNKNOWN_TXID } from './net/live';
 import { p2pkhOutputScript } from './net/script';
@@ -200,6 +201,27 @@ vi.mock('./net/price', () => ({
     fetchXecPrice: async () => undefined,
 }));
 
+/**
+ * The last view painted.
+ *
+ * The event ring is state nothing renders yet, so there is no text on screen to
+ * read it back from. The real `renderStall` still runs — every other test in
+ * this file asserts on the DOM it produces — and the view it was handed is
+ * captured on the way through.
+ */
+const painted: { view?: StallView } = {};
+
+vi.mock('./ui', async (importOriginal) => {
+    const real = await importOriginal<typeof import('./ui')>();
+    return {
+        ...real,
+        renderStall: (root: HTMLElement, view: StallView, handlers: never) => {
+            painted.view = view;
+            return real.renderStall(root, view, handlers);
+        },
+    };
+});
+
 const { boot } = await import('./app');
 type State = import('./app').AppState;
 
@@ -292,6 +314,7 @@ beforeEach(() => {
     window.history.replaceState(null, '', stallPath(PK));
     resetChain();
     watches.length = 0;
+    painted.view = undefined;
     localStorage.clear();
 });
 
@@ -755,5 +778,159 @@ describe('a-live-holdings-change-takes-a-decoration-off', () => {
         watches[0]!.hooks.onReestablished?.();
         await flush();
         expect(worn(root), 'gone with the token').toBe(false);
+    });
+});
+
+describe('event-ring-is-capped-and-newest-first', () => {
+    /**
+     * The substrate for a live activity feed, laid down before anything renders
+     * it: the classifier already names every transaction the script
+     * subscription carries, and throwing that answer away meant a future feed
+     * would have to read the socket a second time.
+     *
+     * **Nothing on screen shows this**, which is exactly why it needs a test:
+     * a ring that silently stopped recording, or one that grew without bound,
+     * would look identical from the outside. The cap is §2's rule about buffers
+     * — a busy address names transactions as fast as the socket delivers them —
+     * and the dedupe is chronik's own behaviour: one transaction arrives at
+     * least twice, for the mempool and then for the block.
+     */
+    const payment = (txid: string): ChainTx => ({
+        txid,
+        inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+        outputs: [{ outputScript: STALL_SCRIPT }],
+    });
+
+    /** 64 lowercase hex, distinct per index, and not shaped like any other fixture. */
+    const paymentTxid = (i: number): string => `${(i + 0x40).toString(16)}`.repeat(32);
+
+    it('keeps the newest 50, one per txid, and names what each one was', async () => {
+        bootStall(stallEmpty());
+        await flush();
+
+        const overflow = MAX_STALL_EVENTS + 5;
+        const txids: string[] = [];
+        for (let i = 0; i < overflow; i += 1) {
+            const txid = paymentTxid(i);
+            chain.txs.set(txid, payment(txid));
+            txids.push(txid);
+        }
+        // Last, so the burst ends in a fact that paints. Nothing paints for the
+        // ring itself — that is the rule, not an accident of this fixture.
+        const settingsTxid = publish(
+            signedTx({
+                txid: '0a'.repeat(32),
+                outputs: [stl1Output('Ripe Beans')],
+                height: 800_003,
+            }),
+        );
+        txids.push(settingsTxid);
+
+        watches[0]!.hooks.onBurst?.(txids);
+        await flush(20);
+
+        const events = painted.view?.events;
+        expect(events, 'the ring never reached the view').toBeDefined();
+        expect(events, 'a busy address must not grow this without bound').toHaveLength(
+            MAX_STALL_EVENTS,
+        );
+
+        // Newest first: the burst is read in order and each event goes on the
+        // front, so the settings record the seller just signed is row one.
+        expect(events?.[0]?.txid).toBe(settingsTxid);
+        expect(events?.[0]?.kind).toBe('settings');
+        expect(events?.[1]?.txid, 'the payment just before it').toBe(
+            paymentTxid(overflow - 1),
+        );
+        expect(events?.[1]?.kind, 'an ordinary payment is not a sale').toBe('other');
+
+        // 55 payments plus the record is 56 seen, so the six oldest fell off
+        // the back — not the six newest off the front, which is the same length
+        // and the opposite feed.
+        const kept = new Set(events?.map((event) => event.txid));
+        expect(kept.has(paymentTxid(0)), 'the oldest survived the cap').toBe(false);
+        expect(kept.has(paymentTxid(5)), 'the sixth-oldest survived the cap').toBe(false);
+        expect(kept.has(paymentTxid(6)), 'the 50th-newest is the last one kept').toBe(true);
+        expect(kept.has(paymentTxid(overflow - 1)), 'the newest payment is kept').toBe(true);
+
+        // Newest first is a claim about time too, not only about order.
+        const stamps = events?.map((event) => event.seenAtMs) ?? [];
+        for (let i = 1; i < stamps.length; i += 1) {
+            expect(stamps[i - 1]!).toBeGreaterThanOrEqual(stamps[i]!);
+        }
+    });
+
+    it('counts one transaction once, however many times the socket names it', async () => {
+        bootStall(stallEmpty());
+        await flush();
+
+        const settingsTxid = publish(
+            signedTx({
+                txid: '0b'.repeat(32),
+                outputs: [stl1Output('Ripe Beans')],
+                height: 800_004,
+            }),
+        );
+        // The mempool arrival and the confirmation, which is what chronik
+        // actually sends — plus a repeat inside one burst for good measure.
+        watches[0]!.hooks.onBurst?.([settingsTxid, settingsTxid]);
+        await flush(20);
+        watches[0]!.hooks.onBurst?.([settingsTxid]);
+        await flush(20);
+
+        const events = painted.view?.events ?? [];
+        expect(events.filter((event) => event.txid === settingsTxid)).toHaveLength(1);
+        expect(events, 'a confirmation is not a second event').toHaveLength(1);
+    });
+
+    it('starts a new ring when the visitor opens another stall', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const first = paymentTxid(1);
+        chain.txs.set(first, payment(first));
+        watches[0]!.hooks.onBurst?.([first]);
+        await flush(20);
+        // Nothing paints for a plain payment, so ask for a paint that is not
+        // about the ring: the currency control repaints whatever is on screen.
+        root.querySelector<HTMLSelectElement>('select')?.dispatchEvent(
+            new Event('change', { bubbles: true }),
+        );
+        expect(painted.view?.events?.length ?? 0, 'the payment was recorded').toBe(1);
+
+        // These are transactions at one address. Carrying them to the next
+        // stall would attribute one seller's traffic to another.
+        window.history.pushState(null, '', stallPath('02' + 'bb'.repeat(32)));
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush(20);
+
+        // **The last watch, not `watches[1]`.** `boot` never removes its
+        // `popstate` listener, so every instance booted earlier in this file
+        // refreshes on this event too and opens a watch of its own. Listeners
+        // fire in registration order and this test booted last, so the watch it
+        // owns is the one at the end — anything else asserts on another test's
+        // app, which is how this test passed while proving nothing.
+        const mine = watches.at(-1)!;
+
+        // Asserted by recording on the *new* stall rather than by reading the
+        // view straight after the route change: a fresh load carries no events
+        // either way, so an uncleared ring only shows itself on the next event
+        // it mirrors — which is exactly how it would reach a visitor's screen.
+        const second = publish(
+            signedTx({
+                txid: '0c'.repeat(32),
+                outputs: [stl1Output('Ripe Beans')],
+                height: 800_005,
+            }),
+        );
+        mine.hooks.onBurst?.([second]);
+        await flush(20);
+
+        const events = painted.view?.events ?? [];
+        expect(events).toHaveLength(1);
+        expect(events[0]?.txid).toBe(second);
+        expect(
+            events.some((event) => event.txid === first),
+            'the previous stall traffic followed the visitor',
+        ).toBe(false);
     });
 });

@@ -12,13 +12,26 @@ export const HISTORY_PAGE_SIZE = 50;
  */
 export const MAX_HISTORY_PAGES = 10;
 
+/**
+ * Per-input and per-output plugin entries, as a node running the plugin reports
+ * them. Keyed by plugin name; the value's shape is the plugin's business and
+ * nothing here reads it — only whether the key is there.
+ *
+ * Optional twice over: a node without the plugin sends no such field, and this
+ * type is structural, so nothing may assume chronik filled what it did not
+ * promise.
+ */
+export type ChainPluginEntries = Record<string, unknown>;
+
 export type ChainTxInput = {
     inputScript: string;
     outputScript?: string;
+    plugins?: ChainPluginEntries;
 };
 
 export type ChainTxOutput = {
     outputScript: string;
+    plugins?: ChainPluginEntries;
 };
 
 export type ChainTx = {

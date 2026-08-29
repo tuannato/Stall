@@ -1,8 +1,11 @@
+import { Agora } from 'ecash-agora';
+import type { ChronikClient, PluginUtxos } from 'chronik-client';
 import { toHex } from 'ecash-lib';
 import { nanoSatsPerAtom } from '../domain/money';
 import type { FetchStatus, HostAttempt, StallOffer } from '../domain/state';
 import { isPluginMissing, isTimeout, isUnreachable, messageOf } from './errors';
 import { CHRONIK_HOSTS } from './hosts';
+import { AGORA_PLUGIN, stallGroup } from './live';
 
 type PartialParams = {
     minAcceptedAtoms?: () => bigint;
@@ -19,14 +22,100 @@ export type AgoraOfferView = {
     askedSats: (acceptedAtoms?: bigint) => bigint;
 };
 
-export type AgoraReader = {
-    activeOffersByPubKey(pubkeyHex: string): Promise<readonly AgoraOfferView[]>;
+/**
+ * The offer book, one utxo at a time.
+ *
+ * Two members rather than the library's one `activeOffersByPubKey`, because
+ * that call fetches and parses in a single `flatMap` and a parse that throws
+ * takes the whole call down with it. `agora.py` binds nothing to the ad
+ * script's `cancel_pk`, so **any stranger can put a utxo in any seller's
+ * group** for the price of dust: a PARTIAL with no enforced locktime makes
+ * `_parsePartialOfferUtxo` throw `Outdated plugin`, and a ONESHOT with a
+ * truncated `outputsSer` makes `readTxOutput` underflow. Either one used to be
+ * painted as `unreachable` with all three hosts listed as failed — our failure
+ * reported as the network's, on a shop that was answering.
+ *
+ * Splitting the two lets `loadOffers` put a `try` around each utxo instead of
+ * around the whole book, so one bad covenant costs one row.
+ */
+export type AgoraOfferReader = {
+    /**
+     * The group's utxos as the plugin indexed them, unparsed. Throws the way
+     * any chronik read throws, which is what `errors.ts` classifies.
+     */
+    pluginUtxos(group: string): Promise<readonly unknown[]>;
+    /**
+     * One utxo, read as an offer.
+     *
+     * `undefined` for a covenant this reader does not recognise at all — an
+     * unknown variant, a non-SLP oneshot, an unsafe set of enforced outputs.
+     * **May throw** for one it starts to read and cannot finish. The two are
+     * not the same answer and `loadOffers` does not treat them as one.
+     */
+    parseOfferUtxo(utxo: unknown): AgoraOfferView | undefined;
 };
 
-export async function loadOffers(agora: AgoraReader, pubkeyHex: string): Promise<FetchStatus> {
-    let raw: readonly AgoraOfferView[];
+/** The one shape the adapter needs from a chronik client, named so the cast is small. */
+type PluginReader = {
+    plugin(pluginName: string): { utxos(groupHex: string): Promise<PluginUtxos> };
+};
+
+/**
+ * The real reader: chronik's own plugin endpoint, and the library's own parser.
+ *
+ * The fetch is `chronik.plugin('agora').utxos(group)`, which is the request
+ * `activeOffersByPubKey` already makes — `Agora`'s constructor is
+ * `this.plugin = chronik.plugin(PLUGIN_NAME)`, so this is the same GET through
+ * the same failover, and an absent group answers HTTP 200 with an empty list
+ * rather than a 404. It is called here rather than through the instance because
+ * `Agora.plugin` is private.
+ *
+ * `PluginUtxos` is unwrapped **here**: `loadOffers` counts listings, and a
+ * wrapper object it had to reach through would be one more place that could
+ * silently answer for the wrong field.
+ *
+ * The parse reaches a private member, and reaches it **as a method on the
+ * instance**. Both variant parsers call `this._parse...OfferUtxo` and the
+ * partial one reads `this.dustSats`, so a detached function throws `TypeError`
+ * on every utxo — which, behind the per-utxo `try` below, would turn a whole
+ * working shop into a quiet page of dropped rows. Nothing public exposes the
+ * per-utxo parse, and re-implementing the covenant maths here would be a second
+ * opinion about money. `offer-parse-adapter-parses-a-real-partial-fixture` is
+ * what holds this: a renamed member, a changed drop rule and a lost `this` all
+ * fail it.
+ */
+export function agoraOfferReader(chronik: ChronikClient): AgoraOfferReader {
+    const agora = new Agora(chronik);
+    const plugin = (chronik as unknown as PluginReader).plugin(AGORA_PLUGIN);
+    return {
+        async pluginUtxos(group: string): Promise<readonly unknown[]> {
+            const answer = await plugin.utxos(group);
+            return answer.utxos;
+        },
+        parseOfferUtxo(utxo: unknown): AgoraOfferView | undefined {
+            return reachParser(agora)._parseOfferUtxo(utxo, 'OPEN');
+        },
+    };
+}
+
+/** The private member, typed. Called on `agora` so the parsers keep their `this`. */
+function reachParser(agora: Agora): {
+    _parseOfferUtxo(utxo: unknown, status: string): AgoraOfferView | undefined;
+} {
+    return agora as unknown as {
+        _parseOfferUtxo(utxo: unknown, status: string): AgoraOfferView | undefined;
+    };
+}
+
+export async function loadOffers(
+    reader: AgoraOfferReader,
+    pubkeyHex: string,
+): Promise<FetchStatus> {
+    let utxos: readonly unknown[];
+    // Scoped to the fetch on purpose. A parse that crashes is not three hosts
+    // failing to answer, and a catch around both would print it as one.
     try {
-        raw = await agora.activeOffersByPubKey(pubkeyHex);
+        utxos = await reader.pluginUtxos(stallGroup(pubkeyHex));
     } catch (err) {
         const triedAtMs = Date.now();
         const hosts = hostAttempts(err);
@@ -39,23 +128,53 @@ export async function loadOffers(agora: AgoraReader, pubkeyHex: string): Promise
         return { kind: 'unreachable', triedAtMs, hosts };
     }
 
-    if (raw.length === 0) {
+    if (utxos.length === 0) {
         return { kind: 'empty' };
     }
 
     const offers: StallOffer[] = [];
-    for (const offer of raw) {
-        const mapped = mapOffer(offer);
-        if (mapped) {
-            offers.push(mapped);
+    /** Utxos this app started to read as a listing. Reported as `returned`. */
+    let attempted = 0;
+    let dropped = 0;
+    for (const utxo of utxos) {
+        let parsed: AgoraOfferView | undefined;
+        try {
+            parsed = reader.parseOfferUtxo(utxo);
+        } catch {
+            // A listing this app could not read: counted, and it costs itself.
+            attempted += 1;
+            dropped += 1;
+            continue;
         }
+        if (parsed === undefined) {
+            // **Silent, deliberately.** Nothing binds a group entry to the
+            // seller — `cancel_pk` and `maker_pk` are whatever bytes an ad
+            // script wrote — so anyone can drop junk covenants into any
+            // seller's group for dust. Counting those would let a stranger
+            // paint "listings this page could not read" onto a stall that is
+            // simply empty, which is the empty-versus-unreadable collapse
+            // arriving from outside. The library ignores them today; so do we.
+            continue;
+        }
+        attempted += 1;
+        const mapped = mapOffer(parsed);
+        if (mapped === undefined) {
+            dropped += 1;
+            continue;
+        }
+        offers.push(mapped);
     }
+
     if (offers.length === 0) {
-        // The index had listings; every one of them failed to map. Calling
-        // that empty would blame the seller for our failure.
-        return { kind: 'unreadable', triedAtMs: Date.now(), returned: raw.length };
+        if (dropped === 0) {
+            // Every utxo in the group was junk this reader does not recognise.
+            // A group full of a stranger's dust is not a shop we failed to read.
+            return { kind: 'empty' };
+        }
+        // Listings were there and every one of them failed. Calling that empty
+        // would blame the seller for our failure.
+        return { kind: 'unreadable', triedAtMs: Date.now(), returned: attempted };
     }
-    const dropped = raw.length - offers.length;
     return dropped > 0 ? { kind: 'offers', offers, dropped } : { kind: 'offers', offers };
 }
 

@@ -14,10 +14,14 @@ describe('plugin-missing-is-not-empty', () => {
     });
 
     it('loadOffers maps the plugin 404 to plugin-missing, never empty', async () => {
+        // The fetch is what fails here, and it is the only thing that may reach
+        // the host classification: a parse that crashes is our failure, not
+        // three hosts refusing to answer.
         const agora = {
-            activeOffersByPubKey: async () => {
+            pluginUtxos: async () => {
                 throw PLUGIN_ERR;
             },
+            parseOfferUtxo: () => undefined,
         };
         const status = await loadOffers(agora, '02' + 'aa'.repeat(32));
         expect(status.kind).toBe('plugin-missing');

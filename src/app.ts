@@ -1,4 +1,3 @@
-import { Agora } from 'ecash-agora';
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
@@ -11,22 +10,32 @@ import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
 import { clearSavedStall, isSavedStall, readSavedFiat, readSavedStall, saveFiat, saveStall } from './saved';
+import { MAX_STALL_EVENTS } from './domain/state';
 import type {
     FetchStatus,
     Overlay,
     Outpoint,
     RouteParse,
     SessionTokenCache,
+    StallEvent,
+    StallEventKind,
     StallOffer,
     StallView,
     TokenMeta,
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
-import { createChronik, loadManifest, loadOffers, loadTokenMeta, resolveSeller } from './net';
+import {
+    agoraOfferReader,
+    createChronik,
+    loadManifest,
+    loadOffers,
+    loadTokenMeta,
+    resolveSeller,
+} from './net';
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions } from './net/descriptions';
-import { ALL_FACTS, NO_FACTS, anyFact, classifyTx, unionFacts } from './net/classify';
+import { ALL_FACTS, NO_FACTS, anyFact, classifyTx, eventKindOf, unionFacts } from './net/classify';
 import { p2pkhOutputScript } from './net/script';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
@@ -83,6 +92,16 @@ export function boot(
      */
     let fiatCode = readSavedFiat();
     let fiatRate: bigint | undefined;
+    /**
+     * The transactions this page has watched arrive, newest first.
+     *
+     * **Nothing renders it.** It is the substrate for a live activity feed, and
+     * it is laid down now so that feed is one render rather than a second pass
+     * over the socket. Kept here rather than only on the view because a paint is
+     * not guaranteed: a burst of ordinary payments changes no fact and paints
+     * nothing, and the ring still has to remember them.
+     */
+    let events: readonly StallEvent[] = [];
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -212,10 +231,36 @@ export function boot(
         void refresh();
     };
 
+    /**
+     * Remember one transaction, once.
+     *
+     * **Deduped by txid, first sighting kept.** chronik names one transaction at
+     * least twice — added to the mempool, then confirmed — and a feed that
+     * listed a sale twice would be wrong about the shop. Keeping the first
+     * sighting rather than re-fronting the later one also keeps the order
+     * stable: a confirmation is not a new event, and a reader watching the list
+     * must not see rows rearrange under them.
+     *
+     * No paint. Nothing on screen reads this, so painting for it would be a
+     * repaint the visitor did not ask for — and `renderStall` throws the tree
+     * away, which is what `livePaint` exists to be careful about.
+     */
+    const recordEvent = (txid: string, kind: StallEventKind): void => {
+        if (events.some((event) => event.txid === txid)) {
+            return;
+        }
+        events = [{ txid, kind, seenAtMs: Date.now() }, ...events].slice(0, MAX_STALL_EVENTS);
+        state = { ...state, view: { ...state.view, events } };
+    };
+
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
         live?.close();
         live = undefined;
+        // A new stall is a new ring. These are transactions at one address, and
+        // carrying them across a route change would attribute one seller's
+        // traffic to another.
+        events = [];
         // Paint the parsed route before the index is asked, so a paste is not
         // a no-op while Chronik is in flight. Home is local; still cheap.
         state = openingFromLocation();
@@ -475,7 +520,12 @@ export function boot(
             if (claimed !== generation) {
                 return;
             }
-            facts = unionFacts(facts, classifyTx(tx, script, wanted));
+            const classified = classifyTx(tx, script, wanted);
+            // One event per transaction that was actually read. A txid that was
+            // never fetched has no kind to give it, and inventing `other` for
+            // one would put a claim in the ring that nothing checked.
+            recordEvent(txid, eventKindOf(tx, classified));
+            facts = unionFacts(facts, classified);
         }
         if (claimed !== generation || !anyFact(facts)) {
             return;
@@ -521,7 +571,21 @@ export function boot(
             {
                 onChanged: () => {
                     void (async () => {
-                        const status = await loadOffers(new Agora(createChronik()), pubkeyHex);
+                        let status: FetchStatus;
+                        try {
+                            status = await loadOffers(
+                                agoraOfferReader(createChronik()),
+                                pubkeyHex,
+                            );
+                        } catch {
+                            // `loadOffers` answers rather than throws for
+                            // everything it foresees, so a rejection here is
+                            // something it did not — and an unhandled one on a
+                            // page that is otherwise fine. The painted book
+                            // stands, exactly as it does for an answer that is
+                            // not definite.
+                            return;
+                        }
                         if (claimed !== generation || !isDefiniteResult(status)) {
                             return;
                         }
@@ -719,7 +783,7 @@ async function loadCurrent(): Promise<AppState> {
         };
     }
 
-    const agora = new Agora(chronik);
+    const reader = agoraOfferReader(chronik);
     const address = route.address ?? p2pkhAddress(route.pubkeyHex);
     const hash = toHex(shaRmd160(fromHex(route.pubkeyHex)));
     const cachedName = sessionNames.get(route.pubkeyHex);
@@ -752,7 +816,7 @@ async function loadCurrent(): Promise<AppState> {
 
     let fetch: FetchStatus;
     try {
-        fetch = await loadOffers(agora, route.pubkeyHex);
+        fetch = await loadOffers(reader, route.pubkeyHex);
     } catch {
         fetch = unreachableNow();
     }

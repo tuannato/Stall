@@ -1,6 +1,8 @@
 import { STLD_HEX } from '../domain/description';
 import { isStl1 } from '../domain/manifest';
+import type { StallEventKind } from '../domain/state';
 import type { ChainTx } from './chain';
+import { AGORA_PLUGIN } from './live';
 import { opReturnPushes } from './script';
 
 /**
@@ -94,6 +96,61 @@ export function classifyTx(
         descriptions,
         holdings: movesAWantedToken(tx, stallOutputScript.toLowerCase(), wantedTokenIds),
     };
+}
+
+/**
+ * Whether this transaction touched the agora plugin at all.
+ *
+ * A node running `agora.py` tags the inputs and outputs it indexed, so a
+ * listing, a take and a cancel all carry an entry and ordinary money does not.
+ * Only the key is read — what the plugin put in the value is the plugin's
+ * business, and reading it here would be a second parser of the same bytes.
+ *
+ * **A `false` is weaker than it looks and no screen may state it.** A node
+ * without the plugin sends no entries at all, and this app's own hosts are
+ * chosen for having it (§4) but a fixture and a future host need not. Used only
+ * to name an event that already happened, never to decide that one did not.
+ */
+export function touchesAgora(tx: ChainTx): boolean {
+    for (const input of tx.inputs) {
+        if (input.plugins?.[AGORA_PLUGIN] !== undefined) {
+            return true;
+        }
+    }
+    for (const output of tx.outputs) {
+        if (output.plugins?.[AGORA_PLUGIN] !== undefined) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * One name for one transaction, from the classification already made of it.
+ *
+ * A transaction can be several things at once — a settings record paid for out
+ * of a sale — so this is a priority, not a set: what a reader would call it if
+ * they had to use one word. The stall's own records come first because they are
+ * the rarest and the most consequential; ordinary money is last because it is
+ * almost all of the traffic.
+ *
+ * Pure, and deliberately takes the `FactsToRead` rather than re-deriving it: two
+ * places deciding what an `STL1` looks like is how they drift apart.
+ */
+export function eventKindOf(tx: ChainTx, facts: FactsToRead): StallEventKind {
+    if (facts.settings) {
+        return 'settings';
+    }
+    if (facts.descriptions) {
+        return 'description';
+    }
+    if (facts.holdings) {
+        return 'token-move';
+    }
+    if (touchesAgora(tx)) {
+        return 'book';
+    }
+    return 'other';
 }
 
 /**

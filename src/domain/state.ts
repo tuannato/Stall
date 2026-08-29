@@ -88,18 +88,32 @@ export type FetchStatus =
      */
     | { kind: 'opening' }
     /**
-     * `dropped` counts listings the index returned that this app refused to
-     * map. Optional, and painted only when it is above zero: seven of ten shown
-     * reads as seven listed, which is our failure printed as a fact about
-     * somebody's inventory. It cannot see an offer the agora library dropped
-     * before we ever saw it — that one is still open, and §10 says so.
+     * `dropped` counts listings this app started to read and could not finish:
+     * a covenant that **crashed the parser**, and one that parsed but could not
+     * be priced. Optional, and painted only when it is above zero — seven of
+     * ten shown reads as seven listed, which is our failure printed as a fact
+     * about somebody's inventory.
+     *
+     * **What it still cannot see, in two different places.** A utxo the plugin
+     * never indexed is invisible to every reader of the group, Cashtab
+     * included: `agora.py` returns nothing for a non-SLP oneshot, so an ALP one
+     * exists on chain and is in no group at all. And a utxo the parser answers
+     * `undefined` for is skipped in silence on purpose — nothing binds a group
+     * entry to the seller, so counting a stranger's dust-funded junk would let
+     * anyone print a drop count on anyone's stall.
      */
     | { kind: 'offers'; offers: StallOffer[]; dropped?: number }
     | { kind: 'empty' }
     /**
-     * The index returned listings and none of them could be read. Our failure,
+     * The group held listings and none of them could be read. Our failure,
      * never an empty shop — `empty` is a statement about the seller. No host
      * list: nothing timed out, the answer was the part we could not use.
+     *
+     * `returned` is how many utxos this app **started to read as a listing** —
+     * not how many the group held. The silently skipped ones are excluded for
+     * the reason above, so a stranger cannot inflate this number. In this branch
+     * it necessarily equals `dropped` would-be rows: reaching here means every
+     * attempt failed.
      */
     | { kind: 'unreadable'; triedAtMs: number; returned: number }
     | { kind: 'unreachable'; triedAtMs: number; hosts: HostAttempt[] }
@@ -112,6 +126,35 @@ export type Overlay =
     | { kind: 'publish' };
 
 export type SessionTokenCache = Map<string, TokenMeta>;
+
+/**
+ * What one transaction at this stall turned out to be.
+ *
+ * `book` is an agora-touching transaction — a listing, a take, a cancel. The
+ * rest are what the script subscription carries: the stall's own records, a
+ * decoration's token moving, and ordinary money, which is most of it.
+ */
+export type StallEventKind = 'book' | 'settings' | 'description' | 'token-move' | 'other';
+
+/**
+ * One transaction the live socket named, once it had been read.
+ *
+ * `seenAtMs` is when **this page** saw it, not when the chain did: a message
+ * arrives for the mempool and again for the block, and a first-seen stamp is
+ * the honest thing a reader can say without a timestamp from the node.
+ */
+export type StallEvent = {
+    txid: string;
+    kind: StallEventKind;
+    seenAtMs: number;
+};
+
+/**
+ * How many of them are kept. A ring, not a log: §2 caps every buffer, and this
+ * one grows on somebody else's schedule — a busy address can name transactions
+ * as fast as the socket delivers them.
+ */
+export const MAX_STALL_EVENTS = 50;
 
 export type StallView = {
     route: RouteResolution;
@@ -168,4 +211,17 @@ export type StallView = {
     nftGroups?: ReadonlyMap<string, string>;
     /** The group lookup hit its cap, so some NFTs are shown without a collection. */
     nftGroupsTruncated?: boolean;
+    /**
+     * The transactions this page has watched arrive, newest first.
+     *
+     * **Nothing renders this.** It is the substrate a live activity feed would
+     * render, laid down now so the feed is one render rather than a second pass
+     * over the socket. Capped at `MAX_STALL_EVENTS`, deduped by txid, held in
+     * memory for one painted stall and **never persisted**: §2 lets
+     * `localStorage` hold display preferences and nothing that grows.
+     *
+     * Absent means no transaction has arrived yet, which on a quiet stall is
+     * the ordinary case — it is not a claim that nothing happened.
+     */
+    events?: readonly StallEvent[];
 };

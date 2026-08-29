@@ -5,7 +5,15 @@ import { encodeDescriptionHex } from '../domain/description';
 import { encodeManifestHex } from '../domain/manifest';
 import { DEFAULT_THEME_ID } from '../domain/theme';
 import type { ChainTx } from './chain';
-import { ALL_FACTS, NO_FACTS, anyFact, classifyTx, unionFacts } from './classify';
+import {
+    ALL_FACTS,
+    NO_FACTS,
+    anyFact,
+    classifyTx,
+    eventKindOf,
+    touchesAgora,
+    unionFacts,
+} from './classify';
 import { p2pkhOutputScript } from './script';
 
 const TOKEN_WORN = 'aa'.repeat(32);
@@ -178,5 +186,56 @@ describe('classifier-answers-combine-without-losing-one', () => {
         // A burst is folded one transaction at a time, so this must never
         // subtract: the sale that arrived after the publish cannot unset it.
         expect(unionFacts(unionFacts(NO_FACTS, ALL_FACTS), NO_FACTS)).toEqual(ALL_FACTS);
+    });
+});
+
+describe('one-transaction-gets-one-name', () => {
+    /**
+     * The substrate for a future activity feed. Nothing renders these yet, so
+     * what is pinned here is the naming rule itself: a priority, not a set, so a
+     * settings record paid for out of a sale is called a settings record.
+     */
+    const agoraEntry = { agora: { groups: [], data: [] } };
+
+    it('names an agora-touched transaction the book', () => {
+        const sale: ChainTx = {
+            ...tx({ inputs: [AGORA_SCRIPT], outputs: [STALL, AGORA_SCRIPT] }),
+            inputs: [
+                { inputScript: '00', outputScript: AGORA_SCRIPT, plugins: agoraEntry },
+            ],
+        };
+        expect(touchesAgora(sale)).toBe(true);
+        expect(eventKindOf(sale, classifyTx(sale, STALL, WANTED))).toBe('book');
+    });
+
+    it('names an ordinary payment nothing in particular', () => {
+        const payment = tx({ outputs: [STALL] });
+        // No plugin entry at all, which is also what a node without the plugin
+        // sends for every transaction — so `false` here is weak, and no screen
+        // may turn it into "this was not a sale".
+        expect(touchesAgora(payment)).toBe(false);
+        expect(eventKindOf(payment, classifyTx(payment, STALL, WANTED))).toBe('other');
+    });
+
+    it('lets the stall own records outrank the book', () => {
+        const publishOutOfASale: ChainTx = {
+            ...tx({ outputs: [STALL, stl1()] }),
+            outputs: [
+                { outputScript: STALL },
+                { outputScript: stl1() },
+                { outputScript: AGORA_SCRIPT, plugins: agoraEntry },
+            ],
+        };
+        expect(touchesAgora(publishOutOfASale), 'the sale is visible').toBe(true);
+        expect(
+            eventKindOf(publishOutOfASale, classifyTx(publishOutOfASale, STALL, WANTED)),
+        ).toBe('settings');
+    });
+
+    it('names a description and a decoration move', () => {
+        const words = tx({ outputs: [STALL, stld(TOKEN_OTHER, 'Grown on the hill')] });
+        expect(eventKindOf(words, classifyTx(words, STALL, WANTED))).toBe('description');
+        const moved = tx({ outputs: [STALL], tokens: [TOKEN_WORN] });
+        expect(eventKindOf(moved, classifyTx(moved, STALL, WANTED))).toBe('token-move');
     });
 });

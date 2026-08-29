@@ -7,11 +7,10 @@
  *
  *   node --experimental-strip-types scripts/verify-live-stall.mjs <address|pubkey>
  */
-import { Agora } from 'ecash-agora';
 import { ChronikClient } from 'chronik-client';
 import { formatAtoms, formatXec } from '../src/domain/money.ts';
 import { parseSellerParam } from '../src/domain/route.ts';
-import { loadOffers } from '../src/net/offers.ts';
+import { agoraOfferReader, loadOffers } from '../src/net/offers.ts';
 import { loadTokenMeta } from '../src/net/tokens.ts';
 import { resolveSeller } from '../src/net/resolve.ts';
 import { CHRONIK_HOSTS } from '../src/net/hosts.ts';
@@ -48,11 +47,17 @@ async function main() {
         throw new Error(`not resolvable to a pubkey: ${route.kind}`);
     }
 
-    const fetched = await loadOffers(new Agora(chronik), route.pubkeyHex);
+    const fetched = await loadOffers(agoraOfferReader(chronik), route.pubkeyHex);
     console.log('\n=== fetch ===', fetched.kind);
     if (fetched.kind !== 'offers') {
         console.log(fetched);
         return;
+    }
+    if (fetched.dropped !== undefined) {
+        // A listing the parser could not finish reading. Printed because this
+        // script exists to see what a real group holds, and a silent drop here
+        // is the defect the per-utxo read was written for.
+        console.log(`(${fetched.dropped} listing(s) could not be read)`);
     }
 
     const metas = await loadTokenMeta(chronik, fetched.offers.map((o) => o.tokenId));
