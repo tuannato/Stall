@@ -366,16 +366,18 @@ describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
     it('encodes the full record, round-trips it, and states its size', () => {
         const name = 'N'.repeat(32);
         const tagline = 'T'.repeat(64);
+        const announcement = 'A'.repeat(64);
         const featuredTokenId = 'ab'.repeat(32);
         const hex = encodeManifestHex(name, DEFAULT_THEME_ID, 0xffff, {
             tagline,
             featuredTokenId,
             fiatHint: 'vnd',
+            announcement,
         });
         expect(hex).toBeDefined();
         // 5 lokad + 33 name + 2 theme + 4 flags + 66 tagline + 34 featured
-        // + 5 fiat = 149 of 222.
-        expect(hex!.length / 2).toBe(149);
+        // + 5 fiat + 66 announcement = 215 of 222.
+        expect(hex!.length / 2).toBe(215);
         expect(hex!.length / 2).toBeLessThanOrEqual(OP_RETURN_BUDGET);
 
         const back = decodeEncoded(hex!);
@@ -383,6 +385,7 @@ describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
         expect(back.tagline).toBe(tagline);
         expect(back.featuredTokenId).toBe(featuredTokenId);
         expect(back.fiatHint).toBe('vnd');
+        expect(back.announcement).toBe(announcement);
     });
 
     it('refuses what decode would drop, so it never writes a dead field', () => {
@@ -398,6 +401,40 @@ describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
         expect(
             encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { fiatHint: 'US1' }),
         ).toBeUndefined();
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { announcement: 'x\u202ey' }),
+        ).toBeUndefined();
+        expect(
+            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { announcement: 'A'.repeat(65) }),
+        ).toBeUndefined();
+    });
+});
+
+describe('an-announcement-is-a-sentence-not-a-status', () => {
+    /**
+     * Tag 0x05 (D5). The field carries the seller's own dated words and no
+     * status bit: an away-flag goes stale with nobody able to clear it, while
+     * "back on the 10th" ages in front of the reader. Screened like the name
+     * and the tagline \u2014 one line, legible, 64 bytes \u2014 and a malformed payload
+     * voids the field alone, never the record.
+     */
+    it('round-trips an announcement and drops a malformed one alone', () => {
+        const hex = encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, {
+            announcement: 'Back on the 10th',
+        })!;
+        const back = decodeEncoded(hex);
+        expect(back.announcement).toBe('Back on the 10th');
+        expect(back.name).toBe('Shop');
+
+        // A bidi override under tag 0x05, hand-built: the name and the look
+        // still read; only the field is nothing.
+        const badText = new TextEncoder().encode('100 XEC\u202e');
+        const tagged = new Uint8Array(1 + badText.length);
+        tagged[0] = 0x05;
+        tagged.set(badText, 1);
+        const decoded = decodeManifestPushes([...pushes('Shop'), tagged]);
+        expect(decoded.announcement).toBeUndefined();
+        expect(decoded.name).toBe('Shop');
     });
 });
 

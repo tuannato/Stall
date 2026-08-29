@@ -171,3 +171,100 @@ describe('description-refuses-bidi-and-invisible-formatting', () => {
         expect(encodeDescriptionHex(TOKEN, 'Cà phê rang mộc')).toBeDefined();
     });
 });
+
+describe('a-shelf-rides-the-record-as-a-tagged-field', () => {
+    /**
+     * STLD tag 0x01 (P9): the seller's own heading over this token's card.
+     * The same tag grammar as STL1's — first byte is the tag, empty pushes
+     * skipped, first tag wins, unknown tags ignored — and the same screen as
+     * the description text: a heading is a better place to hide a character
+     * than a sentence, not a worse one.
+     */
+    it('round-trips a shelf beside the text and alone on a tombstone', () => {
+        const withText = encodeDescriptionHex(TOKEN, 'Roasted weekly.', {
+            shelf: 'Coffee',
+        })!;
+        expect(decodeDescriptionPushes(pushesOf(withText))).toEqual({
+            kind: 'text',
+            tokenId: TOKEN,
+            text: 'Roasted weekly.',
+            shelf: 'Coffee',
+        });
+        // "No words, shelved" is one record: the tombstone shape plus the
+        // tag, because one record is the whole truth about one token.
+        const shelfOnly = encodeDescriptionHex(TOKEN, '', { shelf: 'Kệ trà' })!;
+        expect(decodeDescriptionPushes(pushesOf(shelfOnly))).toEqual({
+            kind: 'tombstone',
+            tokenId: TOKEN,
+            shelf: 'Kệ trà',
+        });
+        // Empty text with no shelf stays a refusal here: a removal is an
+        // instruction and keeps its own encoder.
+        expect(encodeDescriptionHex(TOKEN, '')).toBeUndefined();
+        expect(encodeDescriptionHex(TOKEN, '', { shelf: '' })).toBeUndefined();
+    });
+
+    it('a-malformed-shelf-voids-the-field-alone-never-the-record', () => {
+        const base = pushesOf(encodeDescriptionHex(TOKEN, 'Fine words.')!);
+        const tagged = (payload: Uint8Array): Uint8Array => {
+            const out = new Uint8Array(1 + payload.length);
+            out[0] = 0x01;
+            out.set(payload, 1);
+            return out;
+        };
+        // A bidi override under the known tag: the text still reads.
+        const bidi = decodeDescriptionPushes([
+            ...base,
+            tagged(new TextEncoder().encode('K‮')),
+        ]);
+        expect(bidi?.kind).toBe('text');
+        expect(bidi?.shelf).toBeUndefined();
+        // Over the byte cap: same outcome.
+        const long = decodeDescriptionPushes([
+            ...base,
+            tagged(new TextEncoder().encode('S'.repeat(33))),
+        ]);
+        expect(long?.shelf).toBeUndefined();
+        // An unknown tag is somebody else's field, not a reason to refuse.
+        const unknown = decodeDescriptionPushes([
+            ...base,
+            new Uint8Array([0x77, 0x01]),
+        ]);
+        expect(unknown?.kind).toBe('text');
+        // A repeated shelf tag keeps the first — last-wins would let a
+        // trailing push silently overrule the one before it.
+        const twice = decodeDescriptionPushes([
+            ...base,
+            tagged(new TextEncoder().encode('First')),
+            tagged(new TextEncoder().encode('Second')),
+        ]);
+        expect(twice?.shelf).toBe('First');
+    });
+
+    it('tag-budget-is-enforced-across-the-record', () => {
+        /**
+         * The 222-byte ceiling is shared, so the caps trade off: at a full
+         * 180-byte description no shelf fits at all, at 179 exactly one byte
+         * of shelf lands the record on 222 exactly. Asserted at the boundary
+         * so the headroom is a number, not a feeling.
+         */
+        const full = 'D'.repeat(MAX_DESCRIPTION_BYTES);
+        expect(encodeDescriptionHex(TOKEN, full)).toBeDefined();
+        expect(encodeDescriptionHex(TOKEN, full, { shelf: 'K' })).toBeUndefined();
+        const exact = encodeDescriptionHex(TOKEN, 'D'.repeat(179), { shelf: 'K' });
+        expect(exact).toBeDefined();
+        expect(exact!.length / 2).toBe(222);
+        const back = decodeDescriptionPushes(pushesOf(exact!));
+        expect(back?.shelf).toBe('K');
+    });
+
+    it('refuses a shelf the decoder would drop, so it never writes a dead field', () => {
+        expect(
+            encodeDescriptionHex(TOKEN, 'Fine.', { shelf: 'K‮' }),
+        ).toBeUndefined();
+        expect(
+            encodeDescriptionHex(TOKEN, 'Fine.', { shelf: 'S'.repeat(33) }),
+        ).toBeUndefined();
+        expect(encodeDescriptionHex(TOKEN, 'Fine.', { shelf: '   ' })).toBeUndefined();
+    });
+});

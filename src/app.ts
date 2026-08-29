@@ -519,6 +519,7 @@ export function boot(
             view.tagline = manifest.tagline;
             view.featuredTokenId = manifest.featuredTokenId;
             view.fiatHint = manifest.fiatHint;
+            view.announcement = manifest.announcement;
             view.theme = manifest.theme;
             view.attachmentFlags = flags;
             // Recomputed here and not left to the holdings read below, because a
@@ -605,10 +606,23 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
-        if (lookup.descriptions.size === 0 && (state.view.descriptions?.size ?? 0) > 0) {
+        // The shelves ride the same records, so the same guard covers both:
+        // a wholly empty answer never erases either map already on screen.
+        const gotNothing = lookup.descriptions.size === 0 && lookup.shelves.size === 0;
+        const hadSomething =
+            (state.view.descriptions?.size ?? 0) > 0 ||
+            (state.view.shelves?.size ?? 0) > 0;
+        if (gotNothing && hadSomething) {
             return;
         }
-        state = { ...state, view: { ...state.view, descriptions: lookup.descriptions } };
+        state = {
+            ...state,
+            view: {
+                ...state.view,
+                descriptions: lookup.descriptions,
+                shelves: lookup.shelves,
+            },
+        };
         livePaint();
     };
 
@@ -1086,6 +1100,7 @@ async function loadCurrent(): Promise<AppState> {
      */
     const descriptionLookup = (await descriptionsSoon) ?? {
         descriptions: new Map<string, string>(),
+        shelves: new Map<string, string>(),
         unreadable: new Set<string>(),
         truncated: false,
     };
@@ -1095,6 +1110,7 @@ async function loadCurrent(): Promise<AppState> {
     let tagline: string | undefined;
     let featuredTokenId: string | undefined;
     let fiatHint: string | undefined;
+    let announcement: string | undefined;
     let settingsTruncated = false;
     let settingsUnreadable = false;
     let attachmentFlags = 0;
@@ -1110,6 +1126,7 @@ async function loadCurrent(): Promise<AppState> {
                 tagline = manifest.tagline;
                 featuredTokenId = manifest.featuredTokenId;
                 fiatHint = manifest.fiatHint;
+                announcement = manifest.announcement;
                 // One tagged field, read by its tag rather than its position.
                 // A payload that is not two bytes, or a bit with no row in this
                 // theme's table, is nothing at all — never a reason to refuse
@@ -1172,9 +1189,11 @@ async function loadCurrent(): Promise<AppState> {
             tagline,
             featuredTokenId,
             fiatHint,
+            announcement,
             address,
             tokens,
             descriptions: descriptionLookup.descriptions,
+            shelves: descriptionLookup.shelves,
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,

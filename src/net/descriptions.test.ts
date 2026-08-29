@@ -380,3 +380,64 @@ describe('description-does-not-cross-stalls', () => {
             });
     });
 });
+
+describe('a-shelf-arrives-with-the-record-that-won', () => {
+    /**
+     * The shelves map is read from the same winning record as the text —
+     * tombstones included, which is how "no words, shelved" travels — so the
+     * heading and the words can never come from two different records for
+     * one token.
+     */
+    function shelved(tokenId: string, text: string, shelf: string): string {
+        const hex = encodeDescriptionHex(tokenId, text, { shelf });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return `6a${hex}`;
+    }
+
+    it('maps the winner shelf, and a shelf-only record shelves without words', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: 'a1',
+                        outputs: [shelved(TOKEN_A, 'Roasted weekly.', 'Coffee')],
+                        height: 10,
+                    }),
+                    tx({
+                        txid: 'b2',
+                        outputs: [shelved(TOKEN_B, '', 'Kệ trà')],
+                        height: 11,
+                    }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.descriptions.get(TOKEN_A)).toBe('Roasted weekly.');
+            expect(got.shelves.get(TOKEN_A)).toBe('Coffee');
+            // Shelved with no words: absent from descriptions, present here.
+            expect(got.descriptions.has(TOKEN_B)).toBe(false);
+            expect(got.shelves.get(TOKEN_B)).toBe('Kệ trà');
+        });
+    });
+
+    it('a newer record without a shelf takes the shelf down with the words', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: 'a1',
+                        outputs: [shelved(TOKEN_A, 'Old words.', 'Old shelf')],
+                        height: 10,
+                    }),
+                    tx({ txid: 'b2', outputs: [stld(TOKEN_A, 'New words.')], height: 11 }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.descriptions.get(TOKEN_A)).toBe('New words.');
+            // One record is the whole truth about one token: the winner has
+            // no shelf, so this token is on no shelf.
+            expect(got.shelves.has(TOKEN_A)).toBe(false);
+        });
+    });
+});

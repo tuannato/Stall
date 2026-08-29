@@ -15,6 +15,7 @@ import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import {
     MAX_DESCRIPTION_BYTES,
     descriptionBytes,
+    descriptionRecordBytes,
     encodeDescriptionHex,
     encodeRemovalHex,
 } from '../domain/description';
@@ -554,6 +555,25 @@ function retryControl(handlers: StallHandlers): HTMLElement {
     return retry;
 }
 
+/**
+ * The seller's notice (STL1 tag 0x05), leading the shop because "back on the
+ * 10th" is what a visitor needs before they browse. Labelled as the seller's
+ * words — the same trust shape as a description: signature verified, sentence
+ * unvouched — and painted on the empty screen too, where "away until Monday"
+ * is most of the explanation.
+ */
+function announcementNote(view: StallView): HTMLElement | null {
+    const text = view.announcement;
+    if (text === undefined || text === '') {
+        return null;
+    }
+    const wrap = el('div', 'notice');
+    wrap.setAttribute('data-role', 'announcement');
+    wrap.append(el('span', 'notice-chip', copy.ANNOUNCEMENT_CHIP));
+    wrap.append(el('p', 'notice-text', text));
+    return wrap;
+}
+
 function paintEmpty(
     stall: HTMLElement,
     view: StallView,
@@ -561,6 +581,10 @@ function paintEmpty(
 ): void {
     stall.append(header(displayName(view), copy.EMPTY_SUB, view.address, view.tagline));
     const body = el('main', 'stall-body');
+    const notice = announcementNote(view);
+    if (notice !== null) {
+        body.append(notice);
+    }
     body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
     settingsNotes(body, view);
     // The live path no longer applies an empty answer, so a stall whose last
@@ -635,6 +659,10 @@ function paintOffers(
     const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
     stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address, view.tagline));
     const body = el('main', 'stall-body');
+    const notice = announcementNote(view);
+    if (notice !== null) {
+        body.append(notice);
+    }
     /*
      * A big shop gets tools; a small one stays a stall. The threshold counts
      * the full shop, never the filtered remainder, so the tools cannot
@@ -684,7 +712,43 @@ function paintOffers(
     const ordered = [...shelfOffers].sort(compareOffers);
     const sort: ShopSort = tools ? (view.shopSort ?? 'curated') : 'curated';
     if (sort === 'curated') {
-        const sections = sectionsOf(ordered, view.tokens, (id) => view.nftGroups?.get(id));
+        /*
+         * The seller's own shelves lead the curated view (STLD tag 0x01):
+         * tokens whose winning record names a shelf are pulled out of the
+         * type sections and grouped under that heading, in the order the
+         * curated sort first meets them. The heading is seller text — the
+         * decoder screened it, and it lands as textContent, never markup.
+         * An explicit sort below flattens shelves and sections alike.
+         */
+        const named = view.shelves;
+        let unshelved = ordered;
+        if (named !== undefined && named.size > 0) {
+            const runs = new Map<string, StallOffer[]>();
+            unshelved = [];
+            for (const offer of ordered) {
+                const shelfName = named.get(offer.tokenId);
+                if (shelfName === undefined) {
+                    unshelved.push(offer);
+                    continue;
+                }
+                const run = runs.get(shelfName);
+                if (run === undefined) {
+                    runs.set(shelfName, [offer]);
+                } else {
+                    run.push(offer);
+                }
+            }
+            for (const [shelfName, run] of runs) {
+                const listings = listingsOf(run);
+                body.append(shelfHead(shelfName, listings.length));
+                const items = el('div', 'items');
+                for (const listing of listings) {
+                    items.append(offerRow(listing, view, handlers));
+                }
+                body.append(items);
+            }
+        }
+        const sections = sectionsOf(unshelved, view.tokens, (id) => view.nftGroups?.get(id));
         // One section is not a division, it is a heading over the whole shop. A
         // stall that sells only tokens should look like a stall, not a filing
         // cabinet with one drawer.
@@ -774,6 +838,20 @@ function lookHead(look: string, count: number): HTMLElement {
     const wrap = el('div', 'collection-head');
     wrap.setAttribute('data-role', 'decor-run');
     wrap.append(el('div', 'collection-name', copy.decorFor(look)));
+    wrap.append(el('div', 'collection-count', copy.itemsForSale(count)));
+    return wrap;
+}
+
+/**
+ * The seller's own heading over a run of their cards (STLD tag 0x01). The
+ * collection-head shape on purpose: a shelf is the seller's collection. Like
+ * every heading here it carries a count and **no price** — a heading priced
+ * at its cheapest member is a number no covenant encodes (§8).
+ */
+function shelfHead(name: string, count: number): HTMLElement {
+    const wrap = el('div', 'collection-head');
+    wrap.setAttribute('data-role', 'shelf');
+    wrap.append(el('div', 'collection-name', name));
     wrap.append(el('div', 'collection-count', copy.itemsForSale(count)));
     return wrap;
 }
@@ -1175,6 +1253,21 @@ function describeSection(
     textLabel.append(field);
     wrap.append(textLabel);
 
+    // The shelf (STLD tag 0x01): one more field in the same record. maxLength
+    // counts characters and is only first aid; the byte cap and the shared
+    // budget are the encoder's, and the one meter below shows the record.
+    const shelfLabel = el('label', 'paste-label', copy.DESC_SHELF_LABEL);
+    const shelfField = el('input', 'paste-in');
+    shelfField.type = 'text';
+    shelfField.name = 'describe-shelf';
+    shelfField.maxLength = 32;
+    shelfField.autocomplete = 'off';
+    shelfField.spellcheck = false;
+    shelfField.setAttribute('data-role', 'describe-shelf');
+    shelfField.setAttribute('data-focus-key', 'describe-shelf');
+    shelfLabel.append(shelfField);
+    wrap.append(shelfLabel);
+
     const counter = el('p', 'fine', '');
     counter.setAttribute('data-role', 'describe-bytes');
     wrap.append(counter);
@@ -1234,18 +1327,36 @@ function describeSection(
     const refresh = (): void => {
         const tokenId = picker.value;
         const text = field.value;
+        const shelf = shelfField.value;
         const used = descriptionBytes(text);
-        counter.textContent = copy.descBytesLeft(used, MAX_DESCRIPTION_BYTES);
+        // One meter for both fields, in record bytes against the shared
+        // ceiling — two meters would promise two budgets where there is one,
+        // and the 180-byte text cap alone cannot say why a shelf was refused.
+        counter.textContent = copy.descBytesLeft(
+            descriptionRecordBytes(text, shelf),
+            OP_RETURN_BUDGET,
+        );
 
-        const hex = text === '' ? undefined : encodeDescriptionHex(tokenId, text);
+        const empty = text === '' && shelf === '';
+        const hex = empty
+            ? undefined
+            : encodeDescriptionHex(tokenId, text, {
+                  shelf: shelf === '' ? undefined : shelf,
+              });
         const ready = hex !== undefined;
-        err.hidden = ready || text === '';
+        err.hidden = ready || empty;
+        // Which rule bit, most specific first: the text's own caps, then the
+        // shared record budget, then the text's screen, then the shelf's.
         err.textContent =
             used > MAX_DESCRIPTION_BYTES
                 ? copy.DESC_TOO_LONG
                 : /[\r\n]/.test(text)
                   ? copy.DESC_ONE_LINE
-                  : copy.DESC_REFUSED;
+                  : descriptionRecordBytes(text, shelf) > OP_RETURN_BUDGET
+                    ? copy.DESC_OVER_BUDGET
+                    : text !== '' && encodeDescriptionHex(tokenId, text) === undefined
+                      ? copy.DESC_REFUSED
+                      : copy.DESC_SHELF_REFUSED;
 
         bytes.hidden = !ready;
         bytes.textContent = ready ? hex : '';
@@ -1271,9 +1382,11 @@ function describeSection(
             qrBox.hidden = true;
         }
 
-        // Only offered when this page found words to remove. Publishing a
-        // removal over nothing costs a fee and changes nothing.
-        const existing = view.descriptions?.get(tokenId);
+        // Only offered when this page found something to remove — words or a
+        // shelf, since one removal record erases the whole document for this
+        // token. Publishing a removal over nothing costs a fee and changes
+        // nothing.
+        const existing = view.descriptions?.get(tokenId) ?? view.shelves?.get(tokenId);
         const removalHex = existing === undefined ? undefined : encodeRemovalHex(tokenId);
         const canRemove = removalHex !== undefined;
         remove.hidden = !canRemove;
@@ -1321,12 +1434,20 @@ function describeSection(
         }
     });
     field.addEventListener('input', refresh);
+    shelfField.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
+    shelfField.addEventListener('input', refresh);
     picker.addEventListener('change', () => {
         // The words belong to the token, so switching tokens loads theirs.
         field.value = view.descriptions?.get(picker.value) ?? '';
+        shelfField.value = view.shelves?.get(picker.value) ?? '';
         refresh();
     });
     field.value = view.descriptions?.get(picker.value) ?? '';
+    shelfField.value = view.shelves?.get(picker.value) ?? '';
     refresh();
     return wrap;
 }
@@ -1469,6 +1590,21 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     taglineInput.value = view.tagline ?? '';
     taglineLabel.append(taglineInput);
 
+    // The announcement (tag 0x05): the seller's dated sentence, painted
+    // above the shelves with a "from the seller" chip. Same screen, same
+    // budget, same record as everything else on this sheet.
+    const announceLabel = el('label', 'paste-label', copy.PUBLISH_ANNOUNCEMENT_LABEL);
+    const announceInput = el('input', 'paste-in');
+    announceInput.type = 'text';
+    announceInput.name = 'announcement';
+    announceInput.autocomplete = 'off';
+    announceInput.spellcheck = false;
+    announceInput.setAttribute('data-role', 'publish-announcement');
+    announceInput.setAttribute('data-focus-key', 'publish-announcement');
+    announceInput.setAttribute('aria-label', copy.PUBLISH_ANNOUNCEMENT_LABEL);
+    announceInput.value = view.announcement ?? '';
+    announceLabel.append(announceInput);
+
     const featuredLabel = el('label', 'paste-label', copy.PUBLISH_FEATURED_LABEL);
     featuredLabel.setAttribute('data-role', 'theme-picker');
     const featuredSelect = el('select', 'paste-in');
@@ -1548,20 +1684,28 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             tagline: taglineInput.value === '' ? undefined : taglineInput.value,
             featuredTokenId: featuredSelect.value === '' ? undefined : featuredSelect.value,
             fiatHint: fiatSelect.value === '' ? undefined : fiatSelect.value,
+            announcement: announceInput.value === '' ? undefined : announceInput.value,
         };
         const hex = encodeManifestHex(input.value, Number(select.value), flags, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
-        // Which field refused: the name's own rules first, then the tagline's,
-        // then the shared ceiling — the seller is told the one that bit.
+        // Which field refused: the name's own rules first, then the
+        // announcement's, then the tagline's and the shared ceiling — the
+        // seller is told the one that bit.
         const nameAlone = encodeManifestHex(input.value, Number(select.value), flags);
+        const sansAnnouncement = encodeManifestHex(input.value, Number(select.value), flags, {
+            ...extras,
+            announcement: undefined,
+        });
         err.hidden = ready || input.value === '';
         err.textContent = ready
             ? ''
             : nameAlone === undefined
               ? copy.PUBLISH_NAME_TOO_LONG
-              : copy.PUBLISH_TAGLINE_INVALID;
+              : sansAnnouncement !== undefined
+                ? copy.PUBLISH_ANNOUNCEMENT_INVALID
+                : copy.PUBLISH_TAGLINE_INVALID;
         budget.textContent =
             hex === undefined ? '' : copy.publishBudget(hex.length / 2, OP_RETURN_BUDGET);
         budget.hidden = hex === undefined;
@@ -1605,6 +1749,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
     input.addEventListener('input', refresh);
     taglineInput.addEventListener('input', refresh);
+    announceInput.addEventListener('input', refresh);
     featuredSelect.addEventListener('change', refresh);
     fiatSelect.addEventListener('change', refresh);
     select.addEventListener('change', () => {
@@ -1713,7 +1858,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
 
     renderDecor(painted);
-    form.append(label, taglineLabel, themeLabel, featuredLabel, fiatLabel, budget, err, sameLook, decorWrap);
+    form.append(label, taglineLabel, announceLabel, themeLabel, featuredLabel, fiatLabel, budget, err, sameLook, decorWrap);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));

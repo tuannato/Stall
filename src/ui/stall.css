@@ -1637,6 +1637,40 @@ textarea.paste-in {
 }
 
 /*
+ * The seller's announcement. A quiet card above the shelves — surface, not
+ * accent-on-accent: the words are the seller's and the chip says so, so the
+ * frame must not dress them as ours. The accent edge is the only flourish.
+ */
+.notice {
+    background: var(--s-surface);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 40%, transparent);
+    border-left: 4px solid var(--s-accent);
+    border-radius: var(--s-radius);
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.notice-chip {
+    /* 11px is the floor for muted type — the weakest colour may not also be
+       the smallest size (muted-text-is-not-microscopic). */
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+}
+
+.notice-text {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--s-text);
+    overflow-wrap: anywhere;
+}
+
+/*
  * The pinned stalls on the door. Rows, not cards: the apex never fetches, so
  * each pin is a route token and a link — a card shape would promise a shop
  * preview this screen refuses to fake.

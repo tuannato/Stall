@@ -104,6 +104,11 @@ export const SCREENS: Record<string, StallView> = {
                 offer(NFT, 2, 50_000n),
             ],
         },
+        // The P9 surfaces, measured where they live: the seller's notice
+        // above the shelves, and one seller-named shelf pulling T1 out of
+        // the type sections under its own heading.
+        announcement: 'Back on the 10th — orders ship then',
+        shelves: new Map([[T1, 'Morning roast']]),
     }),
     expanded: base({
         fetch: {
@@ -140,7 +145,9 @@ export const SCREENS: Record<string, StallView> = {
             ]),
         ),
     }),
-    empty: base({ fetch: { kind: 'empty' } }),
+    // The announcement on the empty shop, where "away until Monday" is most
+    // of the explanation a visitor gets.
+    empty: base({ fetch: { kind: 'empty' }, announcement: 'Away until Monday' }),
     door: {
         route: { kind: 'home' },
         overlay: { kind: 'idle' },

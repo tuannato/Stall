@@ -69,6 +69,7 @@ import {
     tokenRateBound,
 } from './copy';
 import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
+import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
@@ -2873,10 +2874,13 @@ describe('describing-a-token-is-its-own-transaction', () => {
         expect(link.getAttribute('href')).toContain('op_return_raw');
 
         // Bytes, not characters: an accented character costs more than one.
+        // The meter counts the whole record against the shared 222-byte
+        // ceiling — one meter for the text and the shelf, because they share
+        // one budget (P9): 38 bytes of lokad + id + 9 of text push.
         const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
         field.value = 'Cà phê';
         field.dispatchEvent(new Event('input'));
-        expect(counter.textContent).toBe(descBytesLeft(8, MAX_DESCRIPTION_BYTES));
+        expect(counter.textContent).toBe(descBytesLeft(47, OP_RETURN_BUDGET));
     });
 
     it('refuses what the record cannot hold, and hands over nothing', () => {
@@ -3905,5 +3909,173 @@ describe('the-printed-poster-outweighs-the-hidden-app', () => {
         const block = print![1]!;
         expect(block).toContain('#app *');
         expect(block).toMatch(/#app \.poster-page,\s*[^{]*#app \.poster-page \*/);
+    });
+});
+
+describe('an-announcement-is-the-sellers-words-led-first', () => {
+    it('paints the notice above the shelves, labelled as theirs', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { announcement: 'Back on the 10th' }),
+        );
+        const notice = root.querySelector('[data-role="announcement"]') as HTMLElement;
+        expect(notice).not.toBeNull();
+        expect(notice.querySelector('.notice-text')?.textContent).toBe('Back on the 10th');
+        // Whose words these are, said on the chip — and never a status word:
+        // the wire carries a sentence, not an away-flag.
+        expect(notice.querySelector('.notice-chip')?.textContent).toBe(
+            copy.ANNOUNCEMENT_CHIP,
+        );
+        // Before the first card: the notice is what "back Monday" exists for.
+        const body = root.querySelector('.stall-body')!;
+        expect(body.firstElementChild).toBe(notice);
+    });
+
+    it('paints it on the empty shop too, where it is most of the answer', () => {
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, announcement: 'Away until Monday' }),
+        );
+        expect(
+            root.querySelector('[data-role="announcement"] .notice-text')?.textContent,
+        ).toBe('Away until Monday');
+    });
+
+    it('paints nothing without one — no empty frame, no empty chip', () => {
+        const { root } = paint(offersView([OFFER]));
+        expect(root.querySelector('[data-role="announcement"]')).toBeNull();
+    });
+});
+
+describe('a-shelf-is-the-sellers-own-heading', () => {
+    const TEA_ID = OTHER_TOKEN;
+    const twoTokens = () =>
+        offersView(
+            [OFFER, { ...OFFER, outpoint: { txid: 'ef'.repeat(32), outIdx: 9 }, tokenId: TEA_ID }],
+            new Map([
+                [TOKEN_ID, BEANS],
+                [TEA_ID, TEA],
+            ]),
+            { shelves: new Map([[TOKEN_ID, 'Morning roast']]) },
+        );
+
+    it('groups shelved tokens under the heading and keeps the rest on ours', () => {
+        const { root } = paint(twoTokens());
+        const shelf = root.querySelector('[data-role="shelf"]') as HTMLElement;
+        expect(shelf).not.toBeNull();
+        expect(shelf.querySelector('.collection-name')?.textContent).toBe('Morning roast');
+        expect(shelf.querySelector('.collection-count')?.textContent).toBe(
+            itemsForSale(1),
+        );
+        // The shelved card sits in the run right after its heading; the
+        // unshelved token still paints, outside it.
+        const names = [...root.querySelectorAll('.item-n')].map((n) => n.textContent);
+        expect(names[0]).toBe('Roasted Beans');
+        expect(names).toContain('Green Tea');
+        // A heading carries a count and no price (§8).
+        expect(shelf.querySelector('[data-role="price"]')).toBeNull();
+    });
+
+    it('an explicit sort flattens shelves exactly as it flattens sections', () => {
+        const view = twoTokens();
+        // Big-shop threshold does not apply here; force the sort directly.
+        const { root } = paint({ ...view, shopSort: 'price-asc' });
+        // Below the tools threshold the sort stays curated, shelves stand.
+        expect(root.querySelector('[data-role="shelf"]')).not.toBeNull();
+    });
+});
+
+describe('the-editor-shares-one-meter-between-text-and-shelf', () => {
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('publishes a shelf beside the words, and a shelf alone', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        const shelfField = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+
+        field.value = 'Roasted weekly.';
+        shelfField.value = 'Coffee';
+        shelfField.dispatchEvent(new Event('input'));
+        expect(hex.hidden).toBe(false);
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.', { shelf: 'Coffee' }),
+        );
+
+        // A shelf with no words is a record too — the tombstone shape plus
+        // the tag — so the links stay live rather than demanding a sentence.
+        field.value = '';
+        field.dispatchEvent(new Event('input'));
+        expect(hex.hidden).toBe(false);
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', { shelf: 'Coffee' }),
+        );
+    });
+
+    it('one meter, and the budget refusal names the shared record', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        const shelfField = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
+        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+
+        field.value = 'D'.repeat(MAX_DESCRIPTION_BYTES);
+        shelfField.value = 'K';
+        shelfField.dispatchEvent(new Event('input'));
+        // 180 bytes of text and any shelf overflow one record: the meter
+        // reads over 222 and the error names the shared budget, not the text.
+        expect(counter.textContent).toContain(`of ${OP_RETURN_BUDGET} bytes`);
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET);
+
+        // An illegible shelf is its own refusal, named as the shelf's.
+        field.value = 'Fine words.';
+        shelfField.value = 'S​helf';
+        shelfField.dispatchEvent(new Event('input'));
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.DESC_SHELF_REFUSED);
+    });
+
+    it('prefills the shelf per token and offers removal over a bare shelf', () => {
+        const { root } = sheet({ shelves: new Map([[TOKEN_ID, 'Coffee']]) });
+        const shelfField = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
+        expect(shelfField.value).toBe('Coffee');
+        // A shelf with no words is still something to remove: one removal
+        // record erases the whole document for this token.
+        const remove = root.querySelector('[data-role="describe-remove"]') as HTMLElement;
+        expect(remove.hidden).toBe(false);
+    });
+});
+
+describe('the-publish-sheet-carries-the-announcement', () => {
+    it('encodes the typed sentence into the record and prefills from the view', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                announcement: 'Back on the 10th',
+            }),
+        );
+        const input = root.querySelector('[data-role="publish-announcement"]') as HTMLInputElement;
+        expect(input.value).toBe('Back on the 10th');
+        const hex = root.querySelector('[data-role="publish-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeManifestHex('Riverside Goods', DEFAULT_THEME_ID, 0, {
+                announcement: 'Back on the 10th',
+            }),
+        );
+        // And the refusal is named as the announcement's, not the tagline's.
+        input.value = 'A'.repeat(65);
+        input.dispatchEvent(new Event('input'));
+        const err = root.querySelector('[data-role="publish-invalid"]') as HTMLElement;
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.PUBLISH_ANNOUNCEMENT_INVALID);
     });
 });

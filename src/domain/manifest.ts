@@ -22,6 +22,15 @@ export type StallManifest = {
     featuredTokenId?: string;
     /** Tag 0x04: a display-currency suggestion. The buyer's choice wins. */
     fiatHint?: string;
+    /**
+     * Tag 0x05: the seller's notice, painted where a visitor reads before
+     * they browse — "back on the 10th", "new stock Friday". Labelled as the
+     * seller's words and carrying **no status semantics**: this permanently
+     * replaces the away-mode idea (D5) — a status bit over a live covenant
+     * goes stale with no one able to clear it, while a dated sentence ages
+     * in front of the reader exactly as trustworthy as it is.
+     */
+    announcement?: string;
 };
 
 /*
@@ -33,8 +42,16 @@ export type StallManifest = {
 export const TAGLINE_TAG = 0x02;
 export const FEATURED_TAG = 0x03;
 export const FIAT_HINT_TAG = 0x04;
+export const ANNOUNCEMENT_TAG = 0x05;
 
 export const MAX_TAGLINE_BYTES = 64;
+/**
+ * One sentence is the size of the thing: "back on the 10th", "new stock
+ * Friday". At every other field's simultaneous maximum the record sits at
+ * 149 of 222, so 64 leaves headroom rather than spending it — asserted in
+ * `a-record-this-app-writes-fits-the-op-return-budget`.
+ */
+export const MAX_ANNOUNCEMENT_BYTES = 64;
 
 /**
  * The whole `op_return_raw` payload ceiling, shared by every record this app
@@ -89,9 +106,12 @@ export function isStl1(pushes: Uint8Array[]): boolean {
  * tag 0. A tag that appears twice keeps the first: last-wins would let a
  * trailing push silently overrule the one before it.
  */
-function decodeExtras(pushes: Uint8Array[]): ReadonlyMap<number, Uint8Array> {
+export function decodeTaggedExtras(
+    pushes: Uint8Array[],
+    from: number,
+): ReadonlyMap<number, Uint8Array> {
     const extras = new Map<number, Uint8Array>();
-    for (let i = REQUIRED_PUSHES; i < pushes.length; i++) {
+    for (let i = from; i < pushes.length; i++) {
         const push = pushes[i]!;
         if (push.length < 1) {
             continue;
@@ -136,10 +156,14 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
     if (themeBytes.length !== THEME_ID_BYTES) {
         throw new ManifestDecodeError('theme id is not one byte');
     }
-    const extras = decodeExtras(pushes);
-    const tagline = readTagline(extras.get(TAGLINE_TAG));
+    const extras = decodeTaggedExtras(pushes, REQUIRED_PUSHES);
+    const tagline = readTaggedText(extras.get(TAGLINE_TAG), MAX_TAGLINE_BYTES);
     const featuredTokenId = readTokenIdField(extras.get(FEATURED_TAG));
     const fiatHint = readFiatHint(extras.get(FIAT_HINT_TAG));
+    const announcement = readTaggedText(
+        extras.get(ANNOUNCEMENT_TAG),
+        MAX_ANNOUNCEMENT_BYTES,
+    );
     return {
         name,
         theme: decodeTheme(themeBytes[0]!),
@@ -147,12 +171,20 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
         ...(tagline === undefined ? {} : { tagline }),
         ...(featuredTokenId === undefined ? {} : { featuredTokenId }),
         ...(fiatHint === undefined ? {} : { fiatHint }),
+        ...(announcement === undefined ? {} : { announcement }),
     };
 }
 
-/** 1–64 legible utf-8 bytes, or nothing — never a reason to void the record. */
-function readTagline(payload: Uint8Array | undefined): string | undefined {
-    if (payload === undefined || payload.length < 1 || payload.length > MAX_TAGLINE_BYTES) {
+/**
+ * 1–max legible utf-8 bytes, or nothing — never a reason to void the record.
+ * Shared by the tagline and the announcement: both are one seller-written
+ * line, screened like the name, and two copies of that rule would drift.
+ */
+export function readTaggedText(
+    payload: Uint8Array | undefined,
+    maxBytes: number,
+): string | undefined {
+    if (payload === undefined || payload.length < 1 || payload.length > maxBytes) {
         return undefined;
     }
     let text: string;
@@ -271,6 +303,7 @@ export type ManifestExtras = {
     tagline?: string;
     featuredTokenId?: string;
     fiatHint?: string;
+    announcement?: string;
 };
 
 export function encodeManifestHex(
@@ -337,6 +370,17 @@ export function encodeManifestHex(
                 ]),
             ),
         );
+    }
+    if (extras.announcement !== undefined && extras.announcement !== '') {
+        const bytes = new TextEncoder().encode(extras.announcement);
+        if (
+            bytes.length < 1 ||
+            bytes.length > MAX_ANNOUNCEMENT_BYTES ||
+            !isLegibleText(extras.announcement)
+        ) {
+            return undefined;
+        }
+        pushes.push(scriptPush(concatBytes([Uint8Array.of(ANNOUNCEMENT_TAG), bytes])));
     }
     const record = concatBytes(pushes);
     // The shared ceiling, enforced where the bytes are made: a record this

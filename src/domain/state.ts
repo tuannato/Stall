@@ -258,6 +258,20 @@ export type StallView = {
     featuredTokenId?: string;
     /** The seller's display-currency suggestion — manifest tag 0x04. */
     fiatHint?: string;
+    /**
+     * The seller's notice — manifest tag 0x05, screened like the name.
+     * Labelled as theirs on screen and carrying no status semantics: a dated
+     * sentence ages in front of the reader; a status bit goes stale in
+     * silence (D5, the away-mode replacement).
+     */
+    announcement?: string;
+    /**
+     * tokenId → the seller's own shelf heading (STLD tag 0x01). Same record
+     * as the description, same trust: signature verified, words unvouched.
+     * Same absence rule as `descriptions` — absent is "none found", which is
+     * not "none published".
+     */
+    shelves?: ReadonlyMap<string, string>;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

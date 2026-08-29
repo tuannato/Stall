@@ -35,6 +35,13 @@ export type DescriptionLookup = {
     /** tokenId → the winning text. A token whose winner is a removal is absent. */
     readonly descriptions: ReadonlyMap<string, string>;
     /**
+     * tokenId → the seller's shelf heading (STLD tag 0x01). Read from the
+     * same winning record as the text — including a tombstone, which is how
+     * "no words, shelved" travels — so the two can never come from two
+     * different records for one token.
+     */
+    readonly shelves: ReadonlyMap<string, string>;
+    /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
      * first when it holds the second.
@@ -50,6 +57,7 @@ export type DescriptionLookup = {
 
 const EMPTY: DescriptionLookup = {
     descriptions: new Map(),
+    shelves: new Map(),
     unreadable: new Set(),
     truncated: false,
 };
@@ -105,6 +113,7 @@ async function walk(
     }
 
     const descriptions = new Map<string, string>();
+    const shelves = new Map<string, string>();
     for (const [tokenId, records] of found) {
         // Two readable records for one token in one transaction cannot be
         // ranked apart — same txid, same height — so which one wins is where
@@ -123,12 +132,20 @@ async function walk(
         const winner = pickManifestWinner(records);
         // No winner means every record for this token is unmined and
         // unfinalised — one node's opinion, which §5 says never wins.
-        if (winner === undefined || winner.kind === 'tombstone') {
+        if (winner === undefined) {
+            continue;
+        }
+        // The shelf rides whichever record won — a tombstone included, which
+        // is how "no words, shelved" travels as one record.
+        if (winner.shelf !== undefined) {
+            shelves.set(tokenId, winner.shelf);
+        }
+        if (winner.kind === 'tombstone') {
             continue;
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, unreadable, truncated: total > pages };
+    return { descriptions, shelves, unreadable, truncated: total > pages };
 }
 
 function collectPage(

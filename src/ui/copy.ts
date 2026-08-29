@@ -110,6 +110,14 @@ export const PUBLISH_TAGLINE_INVALID =
     'A tagline is one legible line, up to 64 bytes. Accents and emoji cost more than one byte each.';
 export const PUBLISH_FEATURED_LABEL = 'Featured token (optional)';
 export const PUBLISH_FIAT_LABEL = 'Suggest a display currency (optional)';
+/**
+ * The announcement (tag 0x05). A dated sentence, not a status: "back on the
+ * 10th" ages in front of the reader, while an away-flag goes stale with
+ * nobody able to clear it — which is why this replaced that idea for good.
+ */
+export const PUBLISH_ANNOUNCEMENT_LABEL = 'Announcement (optional)';
+export const PUBLISH_ANNOUNCEMENT_INVALID =
+    'An announcement is one legible line, up to 64 bytes. Accents and emoji cost more than one byte each.';
 /** The shared record ceiling, made visible before anything is signed. */
 export const publishBudget = (used: number, max: number): string =>
     `Record size: ${used} of ${max} bytes`;
@@ -563,6 +571,14 @@ export const NFT_GROUPS_TRUNCATED =
 export const TOKEN_DESCRIPTION_LABEL = 'From the seller';
 
 /**
+ * The announcement's chip: the same attribution as a description, because it
+ * is the same trust shape — a signature verified, words unvouched. Never a
+ * status word like "away" or "open": the sentence is the seller's claim and
+ * the label only says whose.
+ */
+export const ANNOUNCEMENT_CHIP = 'From the seller';
+
+/**
  * Describing a token. Its own record and its own transaction — one per token,
  * so a seller must know before they sign that changing three descriptions costs
  * three fees. Nothing here watches their wallet, for the same reason the
@@ -574,6 +590,17 @@ export const DESC_LEDE =
     'Your own words about one token you list. This builds a second small transaction — one for each token you describe, and one more each time you change one.';
 export const DESC_TOKEN_LABEL = 'Which token';
 export const DESC_TEXT_LABEL = 'What buyers should know';
+/**
+ * The shelf (STLD tag 0x01): the seller's own heading over this token's
+ * card. One field, one meter — the shelf and the description share one
+ * record's budget, so at a full description no shelf fits, and the meter
+ * below both fields is the honest place that shows it.
+ */
+export const DESC_SHELF_LABEL = 'Shelf (optional) — your own heading over this token';
+export const DESC_SHELF_REFUSED =
+    'A shelf is one short legible heading, up to 32 bytes. Accents and emoji cost more than one byte each.';
+export const DESC_OVER_BUDGET =
+    'The description and the shelf share one record, and together they are over its size. Shorten either until the meter is not over.';
 export const DESC_TOO_LONG =
     'That is longer than one record holds. Shorten it until the counter is not over.';
 export const DESC_REFUSED =
