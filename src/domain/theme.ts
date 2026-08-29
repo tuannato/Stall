@@ -127,7 +127,10 @@ export type DecodedTheme = {
 };
 
 export const FONT_STACKS = [
-    'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    // Inter is self-hosted (see the @font-face pair in stall.css); everything
+    // after it is the fallback chain while it loads, and the per-glyph net
+    // for characters outside the two vendored subsets.
+    'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
     '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
 ] as const;

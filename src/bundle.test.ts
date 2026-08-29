@@ -2,8 +2,20 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 /** Structural, because `rollup` is not a dependency of this app to import types from. */
-type BuiltPart = { type: string; code?: string; fileName?: string };
+type BuiltPart = {
+    type: string;
+    code?: string;
+    fileName?: string;
+    source?: string | Uint8Array;
+};
 type BuiltOutput = { output: readonly BuiltPart[] };
+
+function partsOf(result: unknown): readonly BuiltPart[] {
+    const outputs = Array.isArray(result)
+        ? (result as readonly BuiltOutput[])
+        : [result as BuiltOutput];
+    return outputs.flatMap((o) => o.output);
+}
 
 /**
  * What the origin actually serves, not what `src/` imports.
@@ -57,6 +69,71 @@ describe('built-bundle-has-no-key-derivation', () => {
             'ECASH_LIB_WASM_BASE64',
         );
         expect(code, 'wasm is being instantiated at runtime').not.toContain('initSync');
+    }, 120_000);
+});
+
+/**
+ * Nothing this origin serves may be a `data:` URL. Vite inlines any asset
+ * under 4096 bytes unless told otherwise, and the deployed CSP refuses
+ * `data:` in both `font-src` and `img-src` — so a small font subset or icon
+ * would ship, pass every test that reads code, and silently fail to render in
+ * the one place that matters. `assetsInlineLimit: 0` in vite.config.ts is the
+ * setting; this proves the output.
+ */
+describe('nothing-is-served-as-a-data-url', () => {
+    it('emits no data: url in its stylesheets, and no cross-origin font', async () => {
+        const result = await build({ logLevel: 'silent', build: { write: false } });
+        const parts = partsOf(result);
+        expect(parts.length, 'nothing was built').toBeGreaterThan(0);
+        // The stylesheets specifically: an inlined asset lands in the emitted
+        // CSS as `url(data:...)`. Scanning script text instead reads library
+        // string constants — a dependency legitimately contains "data:image"
+        // as prose, and that is not an asset this origin serves.
+        const css = parts
+            .filter((part) => (part.fileName ?? '').endsWith('.css'))
+            .map((part) => (typeof part.source === 'string' ? part.source : ''))
+            .join('\n');
+        expect(css.length, 'no stylesheet was emitted').toBeGreaterThan(0);
+        expect(css).not.toMatch(/url\(\s*['"]?data:/);
+        // Self-hosted means self-hosted: a font fetched from a CDN would need
+        // the CSP to grow and hands a third party every visitor.
+        expect(css).not.toMatch(/url\(\s*['"]?https?:/);
+        // The faces are actually in the output, so an empty CSS file cannot
+        // read as a pass.
+        const woff = parts.filter((p) => (p.fileName ?? '').endsWith('.woff2'));
+        expect(woff.length, 'the two Inter subsets are emitted as files').toBe(2);
+    }, 120_000);
+});
+
+/**
+ * The served weight has a ceiling. The wasm removal (§9) took the script from
+ * ~2.05 MB to ~0.39 MB, and nothing since has watched the sum — a third font
+ * subset or a careless dependency would land unnoticed. Raising this number
+ * is allowed and must be a deliberate diff, not a surprise.
+ */
+describe('served-weight-has-a-ceiling', () => {
+    // Measured 564,858 the day the two Inter subsets landed; the margin is
+    // for ordinary growth. An 85 KB latin-ext subset re-added by accident
+    // lands past this and fails, which is the point.
+    const CEILING_BYTES = 640_000;
+
+    it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
+        const result = await build({ logLevel: 'silent', build: { write: false } });
+        const parts = partsOf(result);
+        let total = 0;
+        for (const part of parts) {
+            if (typeof part.code === 'string') {
+                total += part.code.length;
+            } else if (typeof part.source === 'string') {
+                total += part.source.length;
+            } else if (part.source instanceof Uint8Array) {
+                total += part.source.byteLength;
+            }
+        }
+        expect(total, 'nothing was built').toBeGreaterThan(100_000);
+        expect(total, 'the served weight grew past the stated ceiling').toBeLessThan(
+            CEILING_BYTES,
+        );
     }, 120_000);
 });
 

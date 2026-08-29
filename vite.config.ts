@@ -263,6 +263,11 @@ export default defineConfig({
         // no 'unsafe-inline' and no hash for. Disabling it keeps the built
         // document free of inline script instead of growing a hash ritual.
         modulePreload: { polyfill: false },
+        // Never a `data:` URL: Vite inlines any asset under 4096 bytes, and
+        // both `font-src` and `img-src` in the deployed CSP refuse `data:` —
+        // a small font subset would silently fall back to the system stack.
+        // Test: `nothing-is-served-as-a-data-url`.
+        assetsInlineLimit: 0,
     },
     server: {
         headers: {
