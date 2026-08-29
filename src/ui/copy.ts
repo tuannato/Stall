@@ -73,6 +73,9 @@ export const DECOR_NOT_MINTED =
     'This one is not on sale yet. You can look at it; nothing can hold it until it exists.';
 export const DECOR_HELD = 'This stall holds the token, so publishing will paint it.';
 export const DECOR_SHOP = 'See the decorations';
+/** The footer credit: the catalogue's own billboard, in our words. */
+export const wearing = (labels: readonly string[]): string =>
+    `Wearing: ${labels.join(' \u00b7 ')}`;
 /**
  * Where that link goes. **Undefined until the shop exists**: a control that
  * cannot be aimed is not painted, for the same reason the buy link is never

@@ -3292,10 +3292,13 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('offers one control per slot, not one per row', () => {
         const root = sheet();
-        // Rural has a yard and a mood, so two selects and no more.
+        // Rural ships four slots now — yard, mood, badge, trim — so four
+        // selects and no more, however many rows a slot holds.
         expect(root.querySelector('[data-role="decor-yard"]')).not.toBeNull();
         expect(root.querySelector('[data-role="decor-mood"]')).not.toBeNull();
-        expect(root.querySelectorAll('.decor select').length).toBe(2);
+        expect(root.querySelector('[data-role="decor-badge"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="decor-trim"]')).not.toBeNull();
+        expect(root.querySelectorAll('.decor select').length).toBe(4);
     });
 
     it('opens the look picker on every look, not just the second one', () => {
@@ -3382,7 +3385,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 });
 
 describe('a-worn-decoration-reaches-the-stall', () => {
-    it('puts a root row on the stall and builds a node row above the footer', () => {
+    it('puts a root row on the stall and builds the yard under the sign', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
@@ -3394,7 +3397,9 @@ describe('a-worn-decoration-reaches-the-stall', () => {
         const strip = root.querySelector('.att-beetle')!;
         expect(strip).not.toBeNull();
         expect(strip.querySelector('.att-beetle-bug')).not.toBeNull();
-        expect(strip.nextElementSibling?.classList.contains('stall-foot')).toBe(true);
+        // A stage, not the footer's doormat: the first billboard pass found
+        // the beetle below the fold on every screen.
+        expect(strip.previousElementSibling?.classList.contains('stall-head')).toBe(true);
     });
 
     it('moves the palette for a mood, through the contrast floor', () => {

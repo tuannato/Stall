@@ -180,9 +180,16 @@ body {
  * controls here are named for what they do.
  */
 
-/* Modern · fringe · Pinstripe. In flow at the top edge; in-flow cannot cover. */
+/*
+ * Modern · fringe · Pinstripe. A tailored frame now, not one line: a strong
+ * top bar, a hairline around all four edges, and an inner pinstripe drawn
+ * with an inset shadow — every stroke on the root's own box, where paint
+ * cannot leave and cannot cover.
+ */
 .stall.att-pinstripe {
-    border-top: 3px solid var(--s-accent);
+    border: 1px solid color-mix(in srgb, var(--s-accent) 55%, transparent);
+    border-top: 4px solid var(--s-accent);
+    box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--s-accent) 12%, transparent);
 }
 
 /*
@@ -199,30 +206,44 @@ body {
 }
 
 /*
- * Neo city · fringe · Neon rain. Its box is the ticker strip's box exactly, so
- * it can only ever overlap what the strip already overlaps — nothing. The
- * streaks are a moving background inside that box, not elements that travel.
+ * Neo city · fringe · Neon rain. The whole page now: two layers of streaks
+ * at different depths falling as background motion on the stall itself —
+ * behind every surface, so it cannot cover, and the rendered-pixel pass
+ * samples whatever lands behind a figure. Layered over the look's own
+ * backdrop, which is restated here because background-image does not merge.
  */
-.att-rain {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: repeating-linear-gradient(
-        108deg,
-        color-mix(in srgb, var(--s-accent) 55%, transparent) 0 1px,
-        transparent 1px 9px
-    );
-    background-size: 100% 22px;
-    opacity: 0.55;
-    animation: att-rain-fall 900ms linear infinite;
+.stall.att-rainfall {
+    background-image:
+        repeating-linear-gradient(
+            168deg,
+            color-mix(in srgb, var(--s-accent) 13%, transparent) 0 1px,
+            transparent 1px 34px
+        ),
+        repeating-linear-gradient(
+            172deg,
+            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 0 1px,
+            transparent 1px 55px
+        ),
+        var(--s-backdrop);
+    background-size:
+        100% 260px,
+        100% 420px,
+        auto;
+    animation: att-rainfall-drift 1400ms linear infinite;
 }
 
-@keyframes att-rain-fall {
+@keyframes att-rainfall-drift {
     from {
-        background-position: 0 0;
+        background-position:
+            0 0,
+            0 0,
+            0 0;
     }
     to {
-        background-position: 0 22px;
+        background-position:
+            0 260px,
+            0 420px,
+            0 0;
     }
 }
 
@@ -236,22 +257,38 @@ body {
 .att-beetle {
     position: relative;
     overflow: hidden;
-    height: 22px;
+    height: 30px;
     flex: none;
     pointer-events: none;
+    /* The yard itself: grass tufts along the bottom edge, in the look's ink. */
+    background-image: repeating-linear-gradient(
+        105deg,
+        color-mix(in srgb, var(--s-accent) 26%, transparent) 0 2px,
+        transparent 2px 9px
+    );
+    background-size: 100% 10px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    border-bottom: 1px dashed color-mix(in srgb, var(--s-muted) 45%, transparent);
 }
 
 .att-beetle-bug {
     position: absolute;
-    bottom: 5px;
+    bottom: 7px;
     left: 0;
-    width: 13px;
-    height: 9px;
+    width: 22px;
+    height: 14px;
     pointer-events: none;
-    border-radius: 46% 46% 42% 42%;
-    background: var(--s-muted);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-bg) 45%, transparent);
-    animation: att-beetle-crawl 15s linear infinite;
+    border-radius: 50% 50% 44% 44%;
+    background: radial-gradient(
+        circle at 30% 35%,
+        color-mix(in srgb, var(--s-muted) 80%, var(--s-text)),
+        var(--s-text) 78%
+    );
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--s-bg) 40%, transparent),
+        inset -6px 0 0 0 color-mix(in srgb, var(--s-bg) 25%, transparent);
+    animation: att-beetle-crawl 9s linear infinite;
 }
 
 @keyframes att-beetle-crawl {
@@ -279,18 +316,127 @@ body {
     }
 }
 
+/* Modern · badge · Brass pin. A small turned-metal stud beside the name. */
+.att-pin {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #f6e3b4, #c99a4e 55%, #8a6228 100%);
+    box-shadow:
+        0 1px 1px color-mix(in srgb, var(--s-text) 30%, transparent),
+        inset 0 -1px 1px color-mix(in srgb, var(--s-text) 25%, transparent);
+}
+
 /*
- * Reduced motion: things stand still and events disappear. A beetle that has
- * stopped is a beetle; rain that has stopped is a smear of lines nobody asked
- * for, so it goes.
+ * Modern · trim · Blueprint. Root paint on the cards' own boxes: drafting
+ * lines — accent borders, a squared corner tick drawn with a two-stop
+ * gradient in the card's top-left, section titles in the accent ink.
+ */
+.stall.att-blueprint .item {
+    border: 1px solid color-mix(in srgb, var(--s-accent) 45%, transparent);
+    background-image:
+        linear-gradient(
+            color-mix(in srgb, var(--s-accent) 55%, transparent),
+            color-mix(in srgb, var(--s-accent) 55%, transparent)
+        ),
+        linear-gradient(
+            color-mix(in srgb, var(--s-accent) 55%, transparent),
+            color-mix(in srgb, var(--s-accent) 55%, transparent)
+        );
+    background-size:
+        18px 2px,
+        2px 18px;
+    background-position:
+        10px 10px,
+        10px 10px;
+    background-repeat: no-repeat;
+}
+
+.stall.att-blueprint .section-title {
+    color: var(--s-accent);
+}
+
+/*
+ * Neo city · trim · Circuit edge. The cards go live: accent borders, an
+ * inner glow, and the icon's cut corner echoed on the card's own clip.
+ */
+.stall.att-circuit .item {
+    border: 1px solid color-mix(in srgb, var(--s-accent) 50%, transparent);
+    box-shadow: inset 0 0 16px color-mix(in srgb, var(--s-accent) 8%, transparent);
+}
+
+.stall.att-circuit .item-head {
+    background-image: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--s-accent) 6%, transparent),
+        transparent 60%
+    );
+}
+
+/* Neo city · badge · Holotag. A holographic sliver beside the name — the
+   sheen is a static gradient: this look's one mover is the rain. */
+.att-holotag {
+    width: 34px;
+    height: 15px;
+    flex: none;
+    pointer-events: none;
+    border-radius: 3px;
+    background: linear-gradient(
+        104deg,
+        var(--s-accent) 0%,
+        var(--s-accent-2) 45%,
+        var(--s-accent) 90%
+    );
+    box-shadow: 0 0 8px color-mix(in srgb, var(--s-accent) 45%, transparent);
+    clip-path: polygon(0 0, 100% 0, 100% 70%, 88% 100%, 0 100%);
+}
+
+/* Rural · badge · Straw charm. A woven diamond hung beside the name. */
+.att-charm {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    pointer-events: none;
+    rotate: 45deg;
+    border-radius: 2px;
+    background: repeating-linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--s-accent) 70%, var(--s-bg)) 0 3px,
+        color-mix(in srgb, var(--s-muted) 70%, var(--s-bg)) 3px 6px
+    );
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-text) 35%, transparent);
+}
+
+/*
+ * Rural · trim · Stitched. The cards become sewn patches: a heavier dashed
+ * seam, a linen weave inside, and rounded corners like worn cloth.
+ */
+.stall.att-stitched .item {
+    border: 2px dashed color-mix(in srgb, var(--s-muted) 65%, transparent);
+    border-radius: 12px;
+    background-image: repeating-linear-gradient(
+        0deg,
+        color-mix(in srgb, var(--s-muted) 4%, transparent) 0 1px,
+        transparent 1px 4px
+    );
+}
+
+/*
+ * Reduced motion: things stand still — and stay visible. A beetle that has
+ * stopped is a beetle, and page-wide rain that has stopped is streaked
+ * glass, a texture like the scanline beside it. (The old 50px strip *was* a
+ * smear when stopped and used to be removed; the billboard check now insists
+ * a paid decoration never vanishes for a reduced-motion buyer.)
  */
 @media (prefers-reduced-motion: reduce) {
     .att-beetle-bug {
         animation: none;
     }
 
-    .att-rain {
-        display: none;
+    .stall.att-rainfall {
+        animation: none;
     }
 }
 

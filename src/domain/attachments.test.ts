@@ -39,6 +39,14 @@ describe('attachment-table-ids-are-pinned', () => {
             '2:1:fringe',
             '3:0:yard',
             '3:1:mood',
+            // The second wave, 2026-08-29 — unminted until the fittings stall
+            // opens, permanent from the first record that sets them.
+            '1:2:badge',
+            '1:3:trim',
+            '2:2:trim',
+            '2:3:badge',
+            '3:2:badge',
+            '3:3:trim',
         ]);
     });
 
@@ -75,7 +83,14 @@ describe('attachment-table-ids-are-pinned', () => {
             // bare class on the root.
             expect(a.paint, `${a.label} does not say where it paints`).toBeDefined();
             if (a.motion) {
-                expect(a.paint, `${a.label} moves without a node`).toBe('node');
+                // A mover needs either a box the guard can measure, or paint
+                // that cannot leave the element it sits on: background motion
+                // on the root, which the rendered-pixel pass samples wherever
+                // it lands behind a figure. A travelling sprite without a box
+                // stays forbidden — 'node' is what gives it one.
+                expect(['node', 'root'], `${a.label} moves without a home`).toContain(
+                    a.paint,
+                );
             }
         }
     });
@@ -231,5 +246,29 @@ describe('attachmentClasses', () => {
         expect(
             attachmentNodesWanted(wornAttachments(RURAL_THEME_ID, bits(0))).map((a) => a.cls),
         ).toEqual(['att-beetle']);
+    });
+});
+
+describe('a-published-mood-is-painted-as-authored', () => {
+    /**
+     * `legibleOn` corrects silently, so a mood whose palette trips the floor
+     * ships as ink and nobody is told. Every shipped mood must come through
+     * `themeVars` byte-identical to what its author wrote — a corrected mood
+     * is a look nobody reviewed, sold as one somebody did.
+     */
+    it('emits every mood palette uncorrected, on its own theme', () => {
+        for (const row of SHIPPED_ATTACHMENTS.filter((a) => a.slot === 'mood')) {
+            const vars = themeVars(withMood(decodeTheme(row.themeId), [row]));
+            const p = row.palette!;
+            const want = (c: { r: number; g: number; b: number }): string =>
+                `rgb(${c.r}, ${c.g}, ${c.b})`;
+            expect(vars['--s-text'], `${row.label} text was corrected`).toBe(want(p.text!));
+            expect(vars['--s-muted'], `${row.label} muted was corrected`).toBe(
+                want(p.muted!),
+            );
+            expect(vars['--s-accent'], `${row.label} accent was corrected`).toBe(
+                want(p.accent!),
+            );
+        }
     });
 });

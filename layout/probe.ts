@@ -462,6 +462,86 @@ for (const screen of measured) {
 }
 
 /**
+ * The billboard: a decoration nobody can see is not a product.
+ *
+ * Every catalogue row is worn alone on the offers screen and asked to show
+ * itself, by its kind. A **node** row must have a real box of sellable size
+ * inside the first fold — the first run of this check found the beetle below
+ * the fold on every screen, which is why the yard moved under the sign. A
+ * **root** row must change the painted style signature of the page. A
+ * **mood** must move the canvas itself further than a person can fail to
+ * notice — the first Sun-faded moved the background four points and a buyer
+ * could not tell they were wearing it.
+ */
+function styleSignature(): string {
+    const stallNode = document.querySelector('.stall');
+    if (stallNode === null) {
+        return '';
+    }
+    const parts: string[] = [];
+    const st = getComputedStyle(stallNode);
+    parts.push(st.backgroundImage, st.border, st.boxShadow);
+    const name = document.querySelector('.stall-name');
+    if (name !== null) {
+        const ns = getComputedStyle(name);
+        parts.push(ns.textShadow, ns.color);
+    }
+    const card = document.querySelector('.item');
+    if (card !== null) {
+        const cs = getComputedStyle(card);
+        parts.push(cs.border, cs.boxShadow, cs.backgroundImage, cs.borderRadius);
+    }
+    return parts.join('|');
+}
+
+for (const theme of SHIPPED_THEMES) {
+    paint('offers', theme.id, []);
+    const bare = styleSignature();
+    for (const row of attachmentsForTheme(theme.id)) {
+        paint('offers', theme.id, [row]);
+        const bill = (check: string, detail: string): void => {
+            failures.push({ screen: 'billboard', theme: theme.label, check, detail });
+        };
+        if (row.slot === 'mood') {
+            const base = decodeTheme(theme.id);
+            const p = row.palette ?? {};
+            const bg = p.bg ?? base.bg;
+            const surface = p.surface ?? base.surface;
+            const dist =
+                Math.abs(bg.r - base.bg.r) +
+                Math.abs(bg.g - base.bg.g) +
+                Math.abs(bg.b - base.bg.b) +
+                Math.abs(surface.r - base.surface.r) +
+                Math.abs(surface.g - base.surface.g) +
+                Math.abs(surface.b - base.surface.b);
+            if (dist < 60) {
+                bill('a mood nobody can see', `${row.label} moves the canvas by ${dist}`);
+            }
+            continue;
+        }
+        if (row.paint === 'node') {
+            const node = document.querySelector(`.${row.cls}`);
+            if (node === null) {
+                bill('a decoration that painted nothing', row.label);
+                continue;
+            }
+            const box = node.getBoundingClientRect();
+            if (box.width * box.height < 100) {
+                bill('too small to sell', `${row.label} is ${Math.round(box.width)}x${Math.round(box.height)}`);
+            }
+            if (box.top < 0 || box.bottom > window.innerHeight) {
+                bill(
+                    'not in the first fold',
+                    `${row.label} at ${Math.round(box.top)}..${Math.round(box.bottom)}`,
+                );
+            }
+        } else if (styleSignature() === bare) {
+            bill('invisible root paint', row.label);
+        }
+    }
+}
+
+/**
  * The rendered-background contrast hook, driven by `layout-check.mjs`.
  *
  * `legibleOn` proves text against the two flat palette roles; nothing proves

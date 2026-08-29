@@ -15,7 +15,7 @@
 import type { DecodedTheme, Rgb } from './theme';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID } from './theme';
 
-export type AttachmentSlot = 'crest' | 'fringe' | 'yard' | 'mood';
+export type AttachmentSlot = 'crest' | 'fringe' | 'yard' | 'mood' | 'badge' | 'trim';
 
 /** The palette roles a `mood` may move. Deliberately not the shape or the font. */
 export type PaletteDelta = Partial<
@@ -123,8 +123,12 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 1,
         slot: 'fringe',
         label: 'Neon rain',
-        paint: 'node',
-        cls: 'att-rain',
+        // Root paint now: rain falls the whole page as background layers on
+        // the stall itself — behind every surface, so it cannot cover, and
+        // the pixel pass arbitrates what lands behind each figure. The first
+        // version was a strip 50px tall that read as a texture bug.
+        paint: 'root',
+        cls: 'att-rainfall',
         motion: true,
     },
     {   
@@ -147,14 +151,81 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         // Bleached and warmed, like a stall that has stood a season. Age is the
         // one credential a decoration can honestly wear, because it claims
         // nothing anybody could check.
+        // Bleached far enough to be seen: the first palette moved the
+        // background four points and a buyer could not tell they were
+        // wearing it. The probe's billboard check now fails a mood whose
+        // canvas moves less than a person can notice.
         palette: {
-            bg: rgb(247, 240, 226),
-            surface: rgb(238, 226, 203),
-            text: rgb(74, 60, 44),
-            muted: rgb(150, 132, 108),
-            accent: rgb(178, 106, 74),
-            accentTwo: rgb(150, 132, 108),
+            bg: rgb(255, 251, 241),
+            surface: rgb(252, 247, 238),
+            text: rgb(96, 84, 66),
+            muted: rgb(146, 128, 102),
+            accent: rgb(172, 102, 64),
+            accentTwo: rgb(146, 128, 102),
         },
+    },
+    /*
+     * The second wave, minted when the fittings stall opens: rows without a
+     * tokenId are previewable in the picker ("not on sale yet") and fail the
+     * entitlement check by design, so the catalogue can grow ahead of the
+     * shop. Bits 2 and 3 of each theme are claimed here and are permanent
+     * from the first record that sets them.
+     */
+    {
+        themeId: DEFAULT_THEME_ID,
+        bit: 2,
+        slot: 'badge',
+        label: 'Brass pin',
+        paint: 'node',
+        cls: 'att-pin',
+        motion: false,
+    },
+    {
+        themeId: DEFAULT_THEME_ID,
+        bit: 3,
+        slot: 'trim',
+        label: 'Blueprint',
+        paint: 'root',
+        cls: 'att-blueprint',
+        motion: false,
+    },
+    {
+        themeId: NEO_CITY_THEME_ID,
+        bit: 2,
+        slot: 'trim',
+        label: 'Circuit edge',
+        paint: 'root',
+        cls: 'att-circuit',
+        motion: false,
+    },
+    {
+        themeId: NEO_CITY_THEME_ID,
+        bit: 3,
+        slot: 'badge',
+        label: 'Holotag',
+        // Static on purpose: Neon rain is this look's one mover, and the
+        // holographic sheen reads as material, not motion.
+        paint: 'node',
+        cls: 'att-holotag',
+        motion: false,
+    },
+    {
+        themeId: RURAL_THEME_ID,
+        bit: 2,
+        slot: 'badge',
+        label: 'Straw charm',
+        paint: 'node',
+        cls: 'att-charm',
+        motion: false,
+    },
+    {
+        themeId: RURAL_THEME_ID,
+        bit: 3,
+        slot: 'trim',
+        label: 'Stitched',
+        paint: 'root',
+        cls: 'att-stitched',
+        motion: false,
     },
 ];
 

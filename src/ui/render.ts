@@ -2110,21 +2110,28 @@ function placeAttachmentNodes(
     }
     for (const row of attachmentNodesWanted(worn)) {
         const node = el('div', row.cls!);
+        node.setAttribute('aria-hidden', 'true');
         if (row.slot === 'fringe') {
             stall.querySelector('.orn')?.append(node);
+            continue;
+        }
+        if (row.slot === 'badge') {
+            // In flow beside the sign's headings: a real box the guard
+            // measures, jewellery rather than a control — `aria-hidden` and
+            // `pointer-events: none` say so twice.
+            stall.querySelector('.stall-sign')?.append(node);
             continue;
         }
         if (row.slot === 'yard') {
             // The sprite is a second real node rather than a pseudo-element:
             // `::before` has no box, so the guard cannot measure it, and it is
-            // refused outright for exactly that reason.
+            // refused outright for exactly that reason. The yard sits under
+            // the sign now — a stage, not the footer's doormat: the first
+            // billboard pass found the beetle below the fold on every screen.
             node.append(el('div', `${row.cls!}-bug`));
-            const foot = stall.querySelector('.stall-foot');
-            if (foot !== null) {
-                // The foot's own parent, not `stall`: inside the shell the
-                // footer lives in the scroll region, and `insertBefore` with
-                // the wrong parent throws.
-                foot.parentElement!.insertBefore(node, foot);
+            const head = stall.querySelector('.stall-head');
+            if (head !== null) {
+                head.after(node);
             } else {
                 stall.append(node);
             }
@@ -2331,7 +2338,7 @@ function stallFooter(
 ): HTMLElement {
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
-    return footer(identity, {
+    const ft = footer(identity, {
         // A stall that never resolved is not a shareable shop: its link opens a
         // page that says the address has never sent. The caller drops share
         // there. Everywhere else the link is the point.
@@ -2357,6 +2364,19 @@ function stallFooter(
                 ? { raw, isDefault: view.isDefaultStall === true, onToggle }
                 : undefined,
     });
+    /*
+     * The credit line: every worn decoration named, in our words. It is the
+     * catalogue's own billboard — a visitor who likes what a stall wears is
+     * told what it is called, and, once the fittings stall exists, where it
+     * came from.
+     */
+    const worn = view.worn ?? [];
+    if (worn.length > 0) {
+        ft.append(
+            el('p', 'fine wearing', copy.wearing(worn.map((row) => row.label))),
+        );
+    }
+    return ft;
 }
 
 function footer(
