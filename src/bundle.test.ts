@@ -2,7 +2,7 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 /** Structural, because `rollup` is not a dependency of this app to import types from. */
-type BuiltPart = { type: string; code?: string };
+type BuiltPart = { type: string; code?: string; fileName?: string };
 type BuiltOutput = { output: readonly BuiltPart[] };
 
 /**
@@ -57,6 +57,41 @@ describe('built-bundle-has-no-key-derivation', () => {
             'ECASH_LIB_WASM_BASE64',
         );
         expect(code, 'wasm is being instantiated at runtime').not.toContain('initSync');
+    }, 120_000);
+});
+
+/**
+ * The showroom is a workshop tool, not a page this origin serves.
+ *
+ * `layout/gallery.html` paints the fixture stall with seekable animations and
+ * a control strip — exactly the kind of page that must never ride along into
+ * production, where its fixture shop would be one route-typo away from looking
+ * like a real seller. The build has a single entry (`index.html`), so the
+ * gallery is excluded by construction; this reads the emitted output so that a
+ * future second entry cannot bring it in silently.
+ */
+describe('gallery-is-not-served', () => {
+    it('emits no gallery file and no showroom code', async () => {
+        const result = (await build({
+            logLevel: 'silent',
+            build: { write: false },
+        })) as unknown as BuiltOutput | readonly BuiltOutput[];
+        const outputs = Array.isArray(result) ? result : [result as BuiltOutput];
+        const parts = outputs.flatMap((o) => o.output);
+        expect(parts.length, 'nothing was built').toBeGreaterThan(0);
+
+        for (const part of parts) {
+            expect(part.fileName ?? '', 'a gallery file is in the build').not.toContain(
+                'gallery',
+            );
+        }
+        const code = parts
+            .filter((part) => part.type === 'chunk')
+            .map((part) => part.code ?? '')
+            .join('\n');
+        expect(code, 'showroom code is in the served script').not.toContain(
+            '__galleryReady',
+        );
     }, 120_000);
 });
 
