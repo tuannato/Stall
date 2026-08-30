@@ -257,6 +257,12 @@ export function boot(
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
+            onPreviewLook: (preview) => {
+                // No paint: the sheet already patched the DOM, and painting
+                // would rebuild it under the seller's hands. The remembered
+                // value is for every LATER paint — tab switches included.
+                state = { ...state, view: { ...state.view, previewLook: preview } };
+            },
             onToggleDefault: (raw) => {
                 if (isSavedStall(raw)) {
                     clearSavedStall();

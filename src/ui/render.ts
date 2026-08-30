@@ -89,6 +89,11 @@ export type StallHandlers = {
     onChangeSort?: (sort: ShopSort) => void;
     /** Narrow a big shop to cards matching the typed text. */
     onChangeFilter?: (text: string) => void;
+    /**
+     * The seller tries a look on. Undefined clears it — picking the
+     * record's own look back is how a preview ends.
+     */
+    onPreviewLook?: (preview: { themeId: number; attachmentFlags: number } | undefined) => void;
 };
 
 /**
@@ -166,8 +171,25 @@ export function renderStall(
     applyTitle(view);
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
-    const theme = view.theme ?? DEFAULT_THEME;
-    applyTheme(stall, theme, view.worn ?? []);
+    // A look being tried on outranks the record's own on every paint —
+    // that is what lets the seller walk to the Shop tab and see the
+    // candidate storefront instead of snapping back. Previewing shows the
+    // rows regardless of holding (looking is free); only a published
+    // record ever needs the entitlement.
+    const previewed =
+        view.previewLook !== undefined &&
+        (view.previewLook.themeId !== (view.theme ?? DEFAULT_THEME).id ||
+            view.previewLook.attachmentFlags !== (view.attachmentFlags ?? 0))
+            ? view.previewLook
+            : undefined;
+    const theme = previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+    applyTheme(
+        stall,
+        theme,
+        previewed !== undefined
+            ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+            : (view.worn ?? []),
+    );
 
     switch (view.route.kind) {
         case 'home':
@@ -1565,13 +1587,6 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
             if (ev.target !== scrim) {
                 return;
             }
-            // While the panel is lowered the scrim is transparent and the stall
-            // is what the seller is looking at, so a click on it means "come
-            // back", not "throw away the name I typed". Escape still closes.
-            if (scrim.classList.contains('peek')) {
-                scrim.classList.remove('peek');
-                return;
-            }
             close();
         });
         // Escape is the other way out. Without it `aria-modal` was a claim the
@@ -1591,18 +1606,6 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     sheet.tabIndex = -1;
     sheet.setAttribute('data-focus-key', 'publish-sheet');
     trapTab(sheet);
-    // Not `keydown`: a keyboard seller changes the look with the arrow keys,
-    // and raising the panel on the key that just lowered it would make the
-    // control unusable without a mouse.
-    for (const kind of ['pointerdown', 'focusin'] as const) {
-        sheet.addEventListener(kind, (ev) => {
-            const target = ev.target instanceof Element ? ev.target : null;
-            if (target !== null && target.closest('[data-role="theme-picker"]') !== null) {
-                return;
-            }
-            scrim.classList.remove('peek');
-        });
-    }
     queueMicrotask(() => {
         if (sheet.isConnected) {
             sheet.focus();
@@ -1824,14 +1827,24 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     taglineInput.addEventListener('input', refresh);
     announceInput.addEventListener('input', refresh);
     fiatSelect.addEventListener('change', refresh);
+
+    const reportPreview = (themeId: number, chosenFlags: number): void => {
+        const recordTheme = view.theme?.id ?? DEFAULT_THEME.id;
+        const recordFlags = view.attachmentFlags ?? 0;
+        handlers.onPreviewLook?.(
+            themeId === recordTheme && chosenFlags === recordFlags
+                ? undefined
+                : { themeId, attachmentFlags: chosenFlags },
+        );
+    };
     select.addEventListener('change', () => {
         refresh();
-        // Paint the chosen look on the seller's own stall straight away. It is
-        // a preview and nothing more: no record is signed here, so a reload
-        // brings back whatever the chain says — which is what the note beside
-        // this control has always been about. Applied to the live `.stall`
-        // rather than through a repaint, because a repaint would rebuild this
-        // sheet and take the focus out of the picker.
+        // Paint the chosen look on the seller's own stall straight away and
+        // remember it in view state: the DOM patch keeps the picker's focus
+        // (a repaint would rebuild this sheet), and the remembered preview is
+        // what every LATER paint applies — so walking to the Shop tab shows
+        // the candidate storefront instead of snapping back. No record is
+        // signed here; a reload still brings back whatever the chain says.
         const chosen = Number(select.value);
         // Flags do not travel across a look. Bit N means row N of *this*
         // theme's table, so carrying them over would hand the seller a
@@ -1840,6 +1853,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         flags = 0;
         renderDecor(chosen);
         previewLook(select, chosen, flags);
+        reportPreview(chosen, flags);
         refresh();
     });
     form.addEventListener('submit', (event) => event.preventDefault());
@@ -1911,6 +1925,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     flags |= 1 << Number(slotSelect.value);
                 }
                 previewLook(select, Number(select.value), flags);
+                reportPreview(Number(select.value), flags);
                 decorNote.textContent = describeChoice(Number(select.value));
                 decorNote.hidden = decorNote.textContent === '';
                 refresh();
@@ -2630,7 +2645,6 @@ function previewLook(anchor: Element, themeId: number, flags: number): void {
     const worn = wornAttachments(themeId, flags);
     applyTheme(stall as HTMLElement, decodeTheme(themeId), worn);
     placeAttachmentNodes(stall as HTMLElement, worn);
-    anchor.closest('[data-role="sheet-scrim"]')?.classList.add('peek');
 }
 
 function placeAttachmentNodes(

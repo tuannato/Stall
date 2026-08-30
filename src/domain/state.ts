@@ -202,6 +202,14 @@ export type StallView = {
     /** The flags this stall's own record set, so the picker opens on them. */
     attachmentFlags?: number;
     /**
+     * A look the seller is trying on, session-only and never persisted:
+     * every paint applies it over the record's own look until it is
+     * cleared, so switching to the Shop tab shows the candidate storefront
+     * instead of snapping back (owner, 2026-08-30 — the old sheet-peek
+     * choreography is retired with it).
+     */
+    previewLook?: { themeId: number; attachmentFlags: number };
+    /**
      * Token ids the stall address holds, when a holdings read answered. Absent
      * means "not read", which is not the same as "holds nothing" — the picker
      * says the weaker thing rather than telling a seller they own nothing.

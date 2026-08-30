@@ -1609,7 +1609,12 @@ textarea.paste-in {
     gap: var(--s-tabs-gap);
     /* The full dress's dock, in flow and centred by its own auto margins —
        never fixed: a bar that overlays scrolling content covers whatever
-       figure passes under it, and that rule outranks fidelity. */
+       figure passes under it, and that rule outranks fidelity. Its own
+       stacking context keeps it ABOVE everything the page paints (owner,
+       2026-08-30): a tilted card's corner or a decoration's glow must
+       never sit over the way out. */
+    position: relative;
+    z-index: 2;
     width: fit-content;
     max-width: 100%;
     padding: 5px;
@@ -2095,24 +2100,6 @@ textarea.paste-in {
     background: color-mix(in srgb, #000 55%, transparent);
     padding: 0;
     z-index: 20;
-}
-
-/*
- * Judging a look through a sheet is judging the sheet. Changing the theme
- * lowers the panel and drops the dim, because a stall seen through 55% black
- * is not the stall — the seller is choosing colours, and the scrim was
- * repainting every one of them. The panel keeps a strip on screen so it is
- * plainly still open, and anything touched inside it raises it again.
- */
-.sheet-scrim.peek {
-    background: transparent;
-    justify-content: flex-end;
-}
-
-.sheet-scrim.peek .sheet {
-    transform: translateY(calc(100% - 52px));
-    /* The theme behind must not be read through the panel's own background. */
-    box-shadow: 0 -10px 24px color-mix(in srgb, #000 28%, transparent);
 }
 
 .sheet {
