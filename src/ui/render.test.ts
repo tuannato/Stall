@@ -42,7 +42,6 @@ import {
     PUBLISH_MUST_SIGN,
     PUBLISH_NAME_TOO_LONG,
     PUBLISH_UNAVAILABLE,
-    SET_UP_THIS_STALL,
     PUBLISH_SAME_LOOK,
     PUBLISH_AFTER_SIGNING,
     PUBLISH_CHECK_NOW,
@@ -596,7 +595,9 @@ describe('empty-unnamed-is-still-this-seller', () => {
         expect(name!.textContent).toBe(ADDR);
         expect(root.textContent).toContain(EMPTY_TITLE);
         expect(root.textContent).toContain(LIST_IN_CASHTAB);
-        expect(root.querySelector('[data-role="copy-link"]')).not.toBeNull();
+        // The share block moved behind the Studio tab with the rest of the
+        // seller tools; the storefront stays pure for a visitor.
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
         expect(document.title).toBe(ADDR);
         expect(document.title).not.toBe(HOME_TITLE);
     });
@@ -628,7 +629,7 @@ describe('cached-unreachable-without-manifest-name', () => {
 });
 
 describe('copy-link', () => {
-    it('is on a pubkey stall and not on the apex', () => {
+    it('is behind the studio tab, not on the storefront or the apex', () => {
         const home = paint({
             route: { kind: 'home' },
             overlay: { kind: 'idle' },
@@ -636,14 +637,24 @@ describe('copy-link', () => {
         }).root;
         expect(home.querySelector('[data-role="copy-link"]')).toBeNull();
 
-        const stall = paint(
+        // The shop tab is pure storefront (owner's call, 2026-08-30).
+        const shop = paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
                 stallName: "Nato's Corner",
             }),
         ).root;
-        expect(stall.querySelector('[data-role="copy-link"]')).not.toBeNull();
-        expect(stall.textContent).toContain(COPY_LINK);
+        expect(shop.querySelector('[data-role="copy-link"]')).toBeNull();
+
+        const studio = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                stallName: "Nato's Corner",
+                panel: 'studio',
+            }),
+        ).root;
+        expect(studio.querySelector('[data-role="copy-link"]')).not.toBeNull();
+        expect(studio.textContent).toContain(COPY_LINK);
     });
 
     it('falls back to a selectable field when clipboard is missing', () => {
@@ -656,6 +667,7 @@ describe('copy-link', () => {
             const { root } = paint(
                 idlePubkey({
                     fetch: { kind: 'empty' },
+                    panel: 'studio',
                 }),
             );
             const btn = root.querySelector('.share button.mini') as HTMLButtonElement;
@@ -1179,34 +1191,52 @@ describe('default-stall-control-says-which-way-it-goes', () => {
         return root.querySelector('[data-role="default-stall"]');
     }
 
-    it('offers to make this the default, and says so once it is', () => {
-        const off = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
-        expect(control(off)?.textContent).toBe(OPEN_BY_DEFAULT);
-        expect(control(off)?.getAttribute('aria-pressed')).toBe('false');
+    function studioControl(root: HTMLElement): HTMLButtonElement | null {
+        return root.querySelector('[data-role="studio-default-stall"]');
+    }
+
+    it('offers to make this the default in the studio, and says so once it is', () => {
+        // The storefront footer dropped it with the rest of the seller
+        // tools (owner's call, 2026-08-30): the studio is its home.
+        const shop = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
+        expect(control(shop)).toBeNull();
+
+        const off = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }),
+        ).root;
+        expect(studioControl(off)?.textContent).toBe(OPEN_BY_DEFAULT);
+        expect(studioControl(off)?.getAttribute('aria-pressed')).toBe('false');
 
         const on = paint(
-            idlePubkey({ fetch: { kind: 'empty' }, isDefaultStall: true }),
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'studio',
+                isDefaultStall: true,
+            }),
         ).root;
-        expect(control(on)?.textContent).toBe(OPENING_BY_DEFAULT);
-        expect(control(on)?.getAttribute('aria-pressed')).toBe('true');
+        expect(studioControl(on)?.textContent).toBe(OPENING_BY_DEFAULT);
+        expect(studioControl(on)?.getAttribute('aria-pressed')).toBe('true');
         expect(OPEN_BY_DEFAULT).not.toBe(OPENING_BY_DEFAULT);
     });
 
     it('hands back the route token this stall answers to', () => {
-        const { root, h } = paint(idlePubkey({ fetch: { kind: 'empty' } }));
-        control(root)?.click();
+        const { root, h } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }),
+        );
+        studioControl(root)?.click();
         expect(h.onToggleDefault).toHaveBeenCalledWith(ADDR);
     });
 
-    it('is offered on an unreachable stall too', () => {
+    it('is reachable from an unreachable stall too', () => {
         // Wanting this stall back tomorrow does not depend on an index
-        // answering today.
+        // answering today — the tabs still paint, so the studio still opens.
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] },
+                panel: 'studio',
             }),
         );
-        expect(control(root)).not.toBeNull();
+        expect(studioControl(root)).not.toBeNull();
     });
 
     it('is not offered for a link that is not a stall', () => {
@@ -1593,10 +1623,15 @@ describe('publish-sheet', () => {
         err: root.querySelector('[data-role="publish-invalid"]') as HTMLElement | null,
     });
 
-    it('offers the control on a stall that resolved to an address', () => {
+    it('the shop tab is pure storefront: publish lives behind the studio', () => {
+        // The seller's tools moved behind the Studio tab (owner's call,
+        // 2026-08-30) — a visitor's storefront carries no publish control.
         const { root } = paint(idlePubkey({ fetch: { kind: 'empty' } }));
-        const btn = root.querySelector('[data-role="open-publish"]');
-        expect(btn?.textContent).toBe(SET_UP_THIS_STALL);
+        expect(root.querySelector('[data-role="open-publish"]')).toBeNull();
+        const studio = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }));
+        expect(
+            studio.root.querySelector('[data-role="studio-open-publish"]'),
+        ).not.toBeNull();
     });
 
     /**
@@ -1796,7 +1831,11 @@ describe('resolved-stall-shows-the-share-link-as-the-prize', () => {
     for (const [label, fetch] of cases) {
         it(`says what the link is for and draws its QR (${label})`, () => {
             const { root } = paint(
-                idlePubkey({ fetch, tokens: new Map([[TOKEN_ID, BEANS]]) }),
+                idlePubkey({
+                    fetch,
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    panel: 'studio',
+                }),
             );
             const share = root.querySelector('[data-role="copy-link"]') as HTMLElement;
             expect(share).not.toBeNull();
@@ -2019,7 +2058,8 @@ describe('unscannable-link-drops-the-qr-not-the-page', () => {
         const before = window.location.href;
         window.history.replaceState({}, '', `/s/x${search}`);
         try {
-            return paint(idlePubkey({ fetch: { kind: 'empty' } }));
+            // The share block lives behind the studio tab now.
+            return paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }));
         } finally {
             window.history.replaceState({}, '', before);
         }
@@ -3687,50 +3727,58 @@ describe('the-door-remembers-what-this-browser-pinned', () => {
     });
 });
 
-describe('the-studio-pin-says-which-way-it-goes', () => {
-    it('offers the pin, names the unpin, and reports state to the keyboard', () => {
+describe('the-sign-pin-says-which-way-it-goes', () => {
+    /**
+     * One icon at the name's corner replaced the studio's text button
+     * (owner's call, 2026-08-30). The words moved into the label — a
+     * screen reader still hears which way the toggle goes.
+     */
+    it('offers the pin on the storefront sign and reports state', () => {
         const h = handlers();
         const root = document.createElement('div');
-        renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
-        const pin = root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
-        expect(pin.textContent).toBe(copy.PIN_TO_DOOR);
+        renderStall(root, offersView([OFFER]), h);
+        const pin = root.querySelector('[data-role="pin-stall"]') as HTMLButtonElement;
+        expect(pin, 'the pin sits on the shop sign').not.toBeNull();
         expect(pin.getAttribute('aria-pressed')).toBe('false');
+        expect(pin.getAttribute('aria-label')).toBe(copy.PIN_TO_DOOR);
+        expect(pin.querySelector('svg'), 'icon, not words').not.toBeNull();
         pin.click();
         expect(h.onTogglePin).toHaveBeenCalledWith(ADDR);
 
-        const pinned = paint(
-            offersView([OFFER], undefined, { panel: 'studio', isPinnedStall: true }),
-        );
-        const on = pinned.root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
-        expect(on.textContent).toBe(copy.PINNED_ON_DOOR);
+        const pinned = paint(offersView([OFFER], undefined, { isPinnedStall: true }));
+        const on = pinned.root.querySelector('[data-role="pin-stall"]') as HTMLButtonElement;
         expect(on.getAttribute('aria-pressed')).toBe('true');
+        expect(on.classList.contains('pinned')).toBe(true);
+        // The studio's text pin is gone — one control, one place.
+        const studio = paint(offersView([OFFER], undefined, { panel: 'studio' }));
+        expect(studio.root.querySelector('[data-role="studio-pin"]')).toBeNull();
+        expect(
+            studio.root.querySelector('[data-role="pin-stall"]'),
+            'the sign carries it on every panel',
+        ).not.toBeNull();
     });
 
-    it('a-full-door-refuses-with-a-sentence-not-a-dead-control', () => {
+    it('a-full-door-refuses-with-a-named-reason-not-a-dead-control', () => {
         const h = handlers();
         const root = document.createElement('div');
-        renderStall(
-            root,
-            offersView([OFFER], undefined, { panel: 'studio', pinnedDoorFull: true }),
-            h,
-        );
-        const pin = root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        renderStall(root, offersView([OFFER], undefined, { pinnedDoorFull: true }), h);
+        const pin = root.querySelector('[data-role="pin-stall"]') as HTMLButtonElement;
         expect(pin.disabled).toBe(true);
-        expect(root.textContent).toContain(copy.PIN_DOOR_FULL);
+        expect(pin.getAttribute('aria-label')).toBe(copy.PIN_DOOR_FULL);
+        expect(pin.title).toBe(copy.PIN_DOOR_FULL);
         pin.click();
         expect(h.onTogglePin).not.toHaveBeenCalled();
         // A stall already pinned is never the one refused: its control is the
         // unpin, full door or not.
         const pinned = paint(
             offersView([OFFER], undefined, {
-                panel: 'studio',
                 pinnedDoorFull: true,
                 isPinnedStall: true,
             }),
         );
-        const on = pinned.root.querySelector('[data-role="studio-pin"]') as HTMLButtonElement;
+        const on = pinned.root.querySelector('[data-role="pin-stall"]') as HTMLButtonElement;
         expect(on.disabled).toBe(false);
-        expect(on.textContent).toBe(copy.PINNED_ON_DOOR);
+        expect(on.getAttribute('aria-pressed')).toBe('true');
     });
 });
 

@@ -655,7 +655,15 @@ function paintEmpty(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.EMPTY_SUB, view.address, view.tagline));
+    stall.append(
+        header(
+            displayName(view),
+            copy.EMPTY_SUB,
+            view.address,
+            view.tagline,
+            signPinOf(view, handlers),
+        ),
+    );
     const body = el('main', 'stall-body');
     const notice = announcementNote(view);
     if (notice !== null) {
@@ -733,7 +741,15 @@ function paintOffers(
     // The header counts what the shop displays: distinct tokens, one card
     // each. The per-token listing counts live on the cards and in the detail.
     const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
-    stall.append(header(displayName(view), copy.itemsForSale(distinct), view.address, view.tagline));
+    stall.append(
+        header(
+            displayName(view),
+            copy.itemsForSale(distinct),
+            view.address,
+            view.tagline,
+            signPinOf(view, handlers),
+        ),
+    );
     const body = el('main', 'stall-body');
     const notice = announcementNote(view);
     if (notice !== null) {
@@ -2443,11 +2459,15 @@ function sheetRow(label: string, value: string, big = false): HTMLElement {
     return row;
 }
 
+/** The sign's pin control, when this screen offers one. */
+type SignPin = { pinned: boolean; full: boolean; onToggle: () => void };
+
 function header(
     name?: string,
     sub?: string,
     address?: string,
     tagline?: string,
+    pin?: SignPin,
 ): HTMLElement {
     const hd = el('header', 'stall-head');
     // The brand mark leads every screen — the app's identity, sitting beside
@@ -2460,7 +2480,18 @@ function header(
         // The one <h1> on every screen. A screen reader needs an outline to
         // navigate by; the whole site was <div>s. `stall.css` selects on class,
         // so nothing restyles.
-        headings.append(el('h1', 'stall-name', name));
+        const h1 = el('h1', 'stall-name', name);
+        if (pin !== undefined) {
+            // The pin sits at the name's corner — one icon, not a sentence
+            // (owner's call 2026-08-30): pinning is a visitor's flick, and
+            // the words live in the aria-label where a reader needs them.
+            const row = el('div', 'stall-name-row');
+            row.append(h1);
+            row.append(signPinButton(pin, name));
+            headings.append(row);
+        } else {
+            headings.append(h1);
+        }
     }
     // The seller's own line, screened at decode like the name (tag 0x02) and
     // rendered as text through `textContent` like everything else. It is
@@ -2480,6 +2511,58 @@ function header(
         hd.append(el('div', 'addr', address));
     }
     return hd;
+}
+
+/**
+ * The icon-only pin at the sign's corner. A thumbtack drawn through the DOM
+ * (never markup strings), state on `aria-pressed`, words in the label. A
+ * full door disables it and says which rule bit — the same refusal the
+ * studio's text button used to carry, at a fraction of the room.
+ */
+function signPinButton(pin: SignPin, name: string): HTMLButtonElement {
+    const btn = el('button', pin.pinned ? 'pin-btn pinned' : 'pin-btn');
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'pin-stall');
+    btn.setAttribute('data-focus-key', 'pin-stall');
+    btn.setAttribute('aria-pressed', pin.pinned ? 'true' : 'false');
+    const blocked = !pin.pinned && pin.full;
+    btn.setAttribute(
+        'aria-label',
+        blocked ? copy.PIN_DOOR_FULL : pin.pinned ? copy.unpinLabel(name) : copy.PIN_TO_DOOR,
+    );
+    if (blocked) {
+        btn.disabled = true;
+        btn.title = copy.PIN_DOOR_FULL;
+    } else {
+        btn.title = pin.pinned ? copy.PINNED_ON_DOOR : copy.PIN_TO_DOOR;
+        btn.addEventListener('click', pin.onToggle);
+    }
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('pin-ic');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute(
+        'd',
+        'M15 2 L20 7 L18.6 8.4 L18 8.2 L14.4 11.8 L14.8 15 L13.4 16.4 L9.8 12.8 L5.4 17.2 L4 16.8 L4.4 15.4 L8.8 11 L5.2 7.4 L6.6 6 L9.8 6.4 L13.4 2.8 L13.2 2.2 Z',
+    );
+    svg.append(path);
+    btn.append(svg);
+    return btn;
+}
+
+/** The sign pin for a resolved stall, when the app wired a toggle. */
+function signPinOf(view: StallView, handlers: StallHandlers): SignPin | undefined {
+    const raw = identityOf(view);
+    const onPin = handlers.onTogglePin;
+    if (raw === undefined || onPin === undefined) {
+        return undefined;
+    }
+    return {
+        pinned: view.isPinnedStall === true,
+        full: view.pinnedDoorFull === true,
+        onToggle: () => onPin(raw),
+    };
 }
 
 /**
@@ -2668,7 +2751,15 @@ function paintStudio(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.STUDIO_SUB, view.address, view.tagline));
+    stall.append(
+        header(
+            displayName(view),
+            copy.STUDIO_SUB,
+            view.address,
+            view.tagline,
+            signPinOf(view, handlers),
+        ),
+    );
     const body = el('main', 'stall-body');
     body.append(el('p', 'fine', copy.STUDIO_LEDE));
     const canPublish =
@@ -2702,27 +2793,6 @@ function paintStudio(
         btn.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
         btn.addEventListener('click', () => onToggle(raw));
         body.append(btn);
-    }
-    const onPin = handlers.onTogglePin;
-    if (raw !== undefined && onPin !== undefined) {
-        const pinned = view.isPinnedStall === true;
-        const full = !pinned && view.pinnedDoorFull === true;
-        const pin = el('button', 'mini another', pinned ? copy.PINNED_ON_DOOR : copy.PIN_TO_DOOR);
-        pin.type = 'button';
-        pin.setAttribute('data-role', 'studio-pin');
-        pin.setAttribute('data-focus-key', 'studio-pin');
-        pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-        if (full) {
-            // A full door refuses rather than evicting a pin somebody chose
-            // (saved.ts). A disabled control with no sentence would read as
-            // broken, so the bound and the way out are said next to it.
-            pin.disabled = true;
-            body.append(pin);
-            body.append(el('p', 'fine', copy.PIN_DOOR_FULL));
-        } else {
-            pin.addEventListener('click', () => onPin(raw));
-            body.append(pin);
-        }
     }
     body.append(shareControl());
     posterControl(body, view);
@@ -2830,9 +2900,17 @@ function posterSheet(view: StallView, url: string): HTMLElement {
 function paintActivity(
     stall: HTMLElement,
     view: StallView,
-    _handlers: StallHandlers,
+    handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.ACTIVITY_SUB, view.address, view.tagline));
+    stall.append(
+        header(
+            displayName(view),
+            copy.ACTIVITY_SUB,
+            view.address,
+            view.tagline,
+            signPinOf(view, handlers),
+        ),
+    );
     const body = el('main', 'stall-body');
     const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
     if (!watching) {
@@ -2910,29 +2988,27 @@ function stallFooter(
 ): HTMLElement {
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
+    /*
+     * A resolved stall has the Studio tab, and the seller's tools live
+     * there now (owner's call, 2026-08-30): the shop tab is pure
+     * storefront, so its footer keeps only what a visitor uses — the way
+     * out and the currency. Every pubkey screen has the tab bar, failure
+     * states included, so "the studio has it" holds on all of them. The
+     * unresolved routes have no tabs and keep the fuller footer: a seller
+     * stranded there still deserves the default toggle, and there is no
+     * studio to send them to.
+     */
+    const hasStudio = view.route.kind === 'pubkey';
     const ft = footer(identity, {
         // A stall that never resolved is not a shareable shop: its link opens a
         // page that says the address has never sent. The caller drops share
-        // there. Everywhere else the link is the point.
-        share: opts.share ?? true,
+        // there. Everywhere else the link belongs to the studio's share block.
+        share: hasStudio ? false : (opts.share ?? true),
         goHome: handlers.onGoHome,
         fiatCode: view.fiatCode,
         onChangeFiat: handlers.onChangeFiat,
-        // Only where the sheet can actually open. `publishSheet` is mounted by
-        // `paintOffers` and `paintEmpty`, both under `paintPubkey`; on any
-        // other screen this was a button that flipped the overlay and repainted
-        // the same page — no sheet, no error, no feedback. An address route
-        // that never resolved still carries `view.address`, so the address
-        // alone was never the right condition. Stall cannot know who is
-        // looking; the copy says only this stall's wallet can sign.
-        onPublish:
-            view.route.kind === 'pubkey' &&
-            view.address !== undefined &&
-            view.address !== ''
-                ? handlers.onOpenPublish
-                : undefined,
         defaultStall:
-            raw !== undefined && onToggle !== undefined
+            !hasStudio && raw !== undefined && onToggle !== undefined
                 ? { raw, isDefault: view.isDefaultStall === true, onToggle }
                 : undefined,
     });
@@ -2956,7 +3032,6 @@ function footer(
     extra?: {
         share?: boolean;
         goHome?: () => void;
-        onPublish?: () => void;
         defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
         fiatCode?: string;
         onChangeFiat?: (code: string) => void;
@@ -2967,15 +3042,6 @@ function footer(
     // stays because every caller still identifies the stall it is footing.
     void address;
     const ft = el('footer', 'stall-foot');
-    const publish = extra?.onPublish;
-    if (publish !== undefined) {
-        const btn = el('button', 'mini another', copy.SET_UP_THIS_STALL);
-        btn.type = 'button';
-        btn.setAttribute('data-role', 'open-publish');
-    btn.setAttribute('data-focus-key', 'open-publish');
-        btn.addEventListener('click', publish);
-        ft.append(btn);
-    }
     const pin = extra?.defaultStall;
     if (pin !== undefined) {
         const label = pin.isDefault ? copy.OPENING_BY_DEFAULT : copy.OPEN_BY_DEFAULT;

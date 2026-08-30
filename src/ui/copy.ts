@@ -43,7 +43,6 @@ export const SETTINGS_UNREADABLE =
 export const THEME_UNKNOWN =
     'This seller chose a look this page does not ship, so it is showing the default one.';
 
-export const SET_UP_THIS_STALL = 'Name this stall';
 export const PUBLISH_TITLE = 'Name this stall';
 export const PUBLISH_NAME_LABEL = 'Stall name';
 export const PUBLISH_THEME_LABEL = 'Look';

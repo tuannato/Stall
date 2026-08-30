@@ -575,7 +575,9 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
         const { root } = bootStall(stallEmpty());
         await flush();
 
-        (root.querySelector('[data-role="open-publish"]') as HTMLButtonElement).click();
+        // The publish control lives behind the Studio tab now.
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="studio-open-publish"]') as HTMLButtonElement).click();
         const input = root.querySelector(
             'input[name="stall-name"]',
         ) as HTMLInputElement;
@@ -608,7 +610,9 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
         // paints nobody asked for wait.
         const { root } = bootStall(stallEmpty({ stallName: 'Ripe Beans' }));
         await flush();
-        (root.querySelector('[data-role="open-publish"]') as HTMLButtonElement).click();
+        // The publish control lives behind the Studio tab now.
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="studio-open-publish"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="publish"]')).not.toBeNull();
         (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="publish"]')).toBeNull();

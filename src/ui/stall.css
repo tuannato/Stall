@@ -1553,10 +1553,16 @@ textarea.paste-in {
     border-radius: var(--s-qr-radius);
 }
 
+/*
+ * QR sizes are scanning surface, not decoration: the publish BIP21 packs a
+ * whole record into the code, and dense modules under ~200px misread on a
+ * worn phone camera. Bigger across the board (owner's call, 2026-08-30) —
+ * the publish one most of all, because it is the one that signs money.
+ */
 .share-qr {
-    max-width: 168px;
+    max-width: 240px;
     align-self: flex-start;
-    padding: 6px;
+    padding: 8px;
 }
 
 .publish-qr {
@@ -1567,8 +1573,8 @@ textarea.paste-in {
 }
 
 .publish-qr .qr {
-    max-width: 208px;
-    padding: 8px;
+    max-width: min(100%, 320px);
+    padding: 10px;
 }
 
 /*
@@ -1731,6 +1737,57 @@ textarea.paste-in {
     padding: 13px 8px;
     min-height: 44px;
     cursor: pointer;
+}
+
+/*
+ * The sign's pin: one icon at the name's corner, 44px of hit area around
+ * 18px of thumbtack. State is the fill — accent when pinned, muted line
+ * when not — and the words live in the label, where a reader gets them.
+ */
+.stall-name-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.pin-btn {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    margin: -10px 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: var(--s-muted);
+    cursor: pointer;
+}
+
+.pin-btn .pin-ic {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+}
+
+.pin-btn:hover {
+    color: var(--s-accent);
+}
+
+.pin-btn.pinned {
+    color: var(--s-accent);
+}
+
+.pin-btn.pinned .pin-ic {
+    fill: currentColor;
+}
+
+.pin-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 /*
