@@ -609,113 +609,6 @@ body {
     }
 }
 
-/* Modern · badge · Brass pin. A small turned-metal stud beside the name. */
-.att-pin {
-    width: 14px;
-    height: 14px;
-    flex: none;
-    pointer-events: none;
-    border-radius: 50%;
-    background: radial-gradient(circle at 32% 30%, #f6e3b4, #c99a4e 55%, #8a6228 100%);
-    box-shadow:
-        0 1px 1px color-mix(in srgb, var(--s-text) 30%, transparent),
-        inset 0 -1px 1px color-mix(in srgb, var(--s-text) 25%, transparent);
-}
-
-/*
- * Modern · trim · Blueprint. Root paint on the cards' own boxes: drafting
- * lines — accent borders, a squared corner tick drawn with a two-stop
- * gradient in the card's top-left, section titles in the accent ink.
- */
-.stall.att-blueprint .item {
-    border: 1px solid color-mix(in srgb, var(--s-accent) 45%, transparent);
-    background-image:
-        linear-gradient(
-            color-mix(in srgb, var(--s-accent) 55%, transparent),
-            color-mix(in srgb, var(--s-accent) 55%, transparent)
-        ),
-        linear-gradient(
-            color-mix(in srgb, var(--s-accent) 55%, transparent),
-            color-mix(in srgb, var(--s-accent) 55%, transparent)
-        );
-    background-size:
-        18px 2px,
-        2px 18px;
-    background-position:
-        10px 10px,
-        10px 10px;
-    background-repeat: no-repeat;
-}
-
-.stall.att-blueprint .section-title {
-    color: var(--s-accent);
-}
-
-/*
- * Neo city · trim · Circuit edge. The cards go live: accent borders, an
- * inner glow, and the icon's cut corner echoed on the card's own clip.
- */
-.stall.att-circuit .item {
-    border: 1px solid color-mix(in srgb, var(--s-accent) 50%, transparent);
-    box-shadow: inset 0 0 16px color-mix(in srgb, var(--s-accent) 8%, transparent);
-}
-
-.stall.att-circuit .item-head {
-    background-image: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--s-accent) 6%, transparent),
-        transparent 60%
-    );
-}
-
-/* Neo city · badge · Holotag. A holographic sliver beside the name — the
-   sheen is a static gradient: this look's one mover is the rain. */
-.att-holotag {
-    width: 34px;
-    height: 15px;
-    flex: none;
-    pointer-events: none;
-    border-radius: 3px;
-    background: linear-gradient(
-        104deg,
-        var(--s-accent) 0%,
-        var(--s-accent-2) 45%,
-        var(--s-accent) 90%
-    );
-    box-shadow: 0 0 8px color-mix(in srgb, var(--s-accent) 45%, transparent);
-    clip-path: polygon(0 0, 100% 0, 100% 70%, 88% 100%, 0 100%);
-}
-
-/* Rural · badge · Straw charm. A woven diamond hung beside the name. */
-.att-charm {
-    width: 15px;
-    height: 15px;
-    flex: none;
-    pointer-events: none;
-    rotate: 45deg;
-    border-radius: 2px;
-    background: repeating-linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--s-accent) 70%, var(--s-bg)) 0 3px,
-        color-mix(in srgb, var(--s-muted) 70%, var(--s-bg)) 3px 6px
-    );
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-text) 35%, transparent);
-}
-
-/*
- * Rural · trim · Stitched. The cards become sewn patches: a heavier dashed
- * seam, a linen weave inside, and rounded corners like worn cloth.
- */
-.stall.att-stitched .item {
-    border: 2px dashed color-mix(in srgb, var(--s-muted) 65%, transparent);
-    border-radius: 12px;
-    background-image: repeating-linear-gradient(
-        0deg,
-        color-mix(in srgb, var(--s-muted) 4%, transparent) 0 1px,
-        transparent 1px 4px
-    );
-}
-
 /*
  * Reduced motion: things stand still — and stay visible. A beetle that has
  * stopped is a beetle, and page-wide rain that has stopped is streaked
@@ -1271,8 +1164,6 @@ body {
 
 .item-u {
     display: block;
-    color: var(--s-unit-ink);
-    font-weight: 700;
     font-size: var(--s-unit-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
@@ -2181,7 +2072,6 @@ textarea.paste-in {
 
 .notice-text {
     margin: 0;
-    color: var(--s-notice-ink);
     font-size: 14.5px;
     color: var(--s-text);
     overflow-wrap: anywhere;

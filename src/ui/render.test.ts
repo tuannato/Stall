@@ -1256,29 +1256,8 @@ describe('default-stall-control-says-which-way-it-goes', () => {
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
 
-describe('every-theme-var-reaches-the-stylesheet', () => {
-    /**
-     * `--s-accent-2` was emitted on every paint and read by no rule, so
-     * `accentTwo` in the shipped table painted nothing: a seller publishing a
-     * two-colour look got one colour and no way to tell why. A variable nobody
-     * consumes is a value the chain carried for nothing, and neither the theme
-     * table nor `asked-amount-not-covered` can see it — one asserts what
-     * `themeVars` returns, the other never opens a stylesheet.
-     */
-    it('consumes every --s-* that themeVars emits', () => {
-        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
-            /\/\*[\s\S]*?\*\//g,
-            '',
-        );
-        const emitted = Object.keys(themeVars(DEFAULT_THEME));
-        expect(emitted.length).toBeGreaterThan(0);
-        for (const name of emitted) {
-            expect(css, `${name} is emitted on every paint and read by no rule`).toContain(
-                `var(${name})`,
-            );
-        }
-    });
-});
+/* every-theme-var-reaches-the-stylesheet moved to theme-sheets.test.ts,
+   widened to all four sheets by the 2026-08-30 review. */
 const OTHER_TOKEN = '11'.repeat(32);
 const TEA: TokenMeta = {
     tokenId: OTHER_TOKEN,

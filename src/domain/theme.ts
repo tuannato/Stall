@@ -131,7 +131,6 @@ export type Shape = {
     priceGlow?: string;
     noticeBg?: string;
     noticeBorder?: string;
-    noticeInk?: string;
     chipBg?: string;
     chipInk?: string;
     chipRadius?: string;
@@ -167,7 +166,6 @@ export type Shape = {
     itemNameD?: string;
     priceBorder?: string;
     priceAnim?: string;
-    unitInk?: string;
     tabsBlur?: string;
     tabsGap?: string;
     tabPad?: string;
@@ -342,7 +340,6 @@ export const DEFAULT_THEME: DecodedTheme = {
         pricePadD: '0',
         itemName: '15.5px',
         itemNameD: '17px',
-        unitInk: 'color-mix(in srgb, var(--s-accent) 80%, var(--s-text))',
     },
 };
 
@@ -451,7 +448,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 noticeBg:
                     'linear-gradient(90deg, color-mix(in srgb, var(--s-accent-2) 16%, transparent), transparent)',
                 noticeBorder: '1px solid color-mix(in srgb, var(--s-accent-2) 55%, transparent)',
-                noticeInk: 'color-mix(in srgb, var(--s-accent-2) 25%, var(--s-text))',
                 chipBg: 'var(--s-accent-2)',
                 chipInk: '#1a070e',
                 chipPad: '4px 9px',
@@ -470,7 +466,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 pricePadD: '0',
                 itemName: '14px',
                 itemNameD: '16px',
-                unitInk: 'var(--s-accent)',
                 tabsMargin: '10px auto 14px',
                 tabsBg: 'color-mix(in srgb, var(--s-bg) 94%, transparent)',
                 tabsBorder: '1px solid color-mix(in srgb, var(--s-accent) 50%, transparent)',
@@ -587,7 +582,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                  */
                 noticeBg: 'var(--s-surface)',
                 noticeBorder: '2px solid var(--s-accent-2)',
-                noticeInk: 'var(--s-text)',
                 chipBg: 'var(--s-accent)',
                 chipInk: '#fff3ea',
                 chipRadius: '999px',
@@ -615,7 +609,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 priceBorder: '1.5px solid var(--s-accent)',
                 priceAnim: 'rural-tag-sway 5.5s ease-in-out infinite',
                 priceInk: '#2e1f08',
-                unitInk: 'var(--s-accent)',
                 signSizeD: '44px',
                 iconD: '48px',
                 itemName: '16.5px',
@@ -850,7 +843,6 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-notice-bg': s.noticeBg ?? 'var(--s-surface)',
         '--s-notice-border':
             s.noticeBorder ?? '1px solid color-mix(in srgb, var(--s-muted) 40%, transparent)',
-        '--s-notice-ink': s.noticeInk ?? 'var(--s-text)',
         '--s-chip-bg': s.chipBg ?? 'transparent',
         '--s-chip-ink': s.chipInk ?? 'var(--s-muted)',
         '--s-chip-radius': s.chipRadius ?? '0px',
@@ -882,7 +874,6 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-item-name-d': s.itemNameD ?? s.itemName ?? '15px',
         '--s-price-border': s.priceBorder ?? '0',
         '--s-price-anim': s.priceAnim ?? 'none',
-        '--s-unit-ink': s.unitInk ?? 'var(--s-muted)',
         '--s-tabs-blur': s.tabsBlur ?? 'none',
         '--s-tabs-gap': s.tabsGap ?? '2px',
         '--s-tab-pad': s.tabPad ?? '9px 14px',
