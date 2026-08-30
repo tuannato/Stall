@@ -154,9 +154,10 @@ export const PUBLISH_UNAVAILABLE =
     'This stall has no address yet, so there is nothing to publish from.';
 
 export const EMPTY_SUB = 'Nothing for sale right now';
-export const EMPTY_TITLE = 'This stall is empty';
-export const EMPTY_BODY =
-    'The seller has no live offers. Anything they list will appear here on its own.';
+/* The generic empty copy retired 2026-08-30: each look speaks its own
+   sparse voice from the theme row (theme.sparse). */
+/** The sparse CTA under each look's own empty shelf — the words are shared. */
+export const LIST_FIRST = 'List your first item';
 
 /**
  * Our failure, said out loud on a working shop. `unreadable` covers the case
@@ -506,8 +507,6 @@ export const HOME_DEMO_OPEN = 'Open this stall';
  * can address the seller directly (nobody else can be looking at an address
  * that has never sent); a resolved, empty one cannot.
  */
-export const LIST_IN_CASHTAB =
-    'If this is your stall: list the token in Cashtab, and it will appear here on its own.';
 
 /** The clickable form, for a screen where the seller has not listed yet. */
 export const LIST_IN_CASHTAB_LINK = 'List a token in Cashtab';

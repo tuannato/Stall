@@ -43,7 +43,178 @@
     }
 }
 
+
+/* — Sparse-shop chrome, ported from states/modern-*.html — */
+.t-modern .tagline-invite {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 8px 0 0;
+    padding: 6px 11px;
+    border: 1.5px dashed rgba(37, 99, 235, 0.45);
+    border-radius: 9px;
+    background: rgba(37, 99, 235, 0.05);
+    color: #3b62c4;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 550;
+    text-align: left;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-modern .tagline-invite:hover {
+    background: rgba(37, 99, 235, 0.1);
+    border-color: rgba(37, 99, 235, 0.7);
+}
+
+.t-modern .tagline-invite b {
+    font-weight: 800;
+}
+
+.t-modern .notice-invite {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.45);
+    border: 1.5px dashed rgba(37, 99, 235, 0.38);
+    border-radius: 14px;
+    text-align: left;
+    font-family: inherit;
+    font-size: 13px;
+    color: #5f6975;
+    margin-bottom: 10px;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-modern .notice-invite:hover {
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(37, 99, 235, 0.6);
+}
+
+.t-modern .ghost-chip {
+    flex: none;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1.5px dashed rgba(37, 99, 235, 0.5);
+    color: #3b62c4;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.t-modern .sparse-empty {
+    margin: 28px 10px 0;
+}
+
+.t-modern .sparse-empty-t {
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+}
+
+.t-modern .sparse-empty-s {
+    margin-top: 4px;
+    font-size: 12.5px;
+    color: #5f6975;
+}
+
+.t-modern .sparse-shelf {
+    margin: 16px auto 0;
+    max-width: 230px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, rgba(95, 105, 117, 0.45), transparent);
+    box-shadow: 0 6px 10px rgba(20, 23, 26, 0.12);
+}
+
+.t-modern .cta {
+    margin: 18px 0 0;
+    padding: 10px 16px;
+    border: 1.5px solid #2563eb;
+    border-radius: 11px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    transition: background 0.2s;
+}
+
+.t-modern .cta:hover {
+    background: #1d4fc4;
+}
+
+/* The light-well: the showroom's own glow, framed and bounded — drawn
+   entirely as background layers (the att-drift pattern): a child box with
+   a negative offset kept its geometry under the clip and read as cover
+   over the card above. Backgrounds have no box at all. */
+.t-modern .sparse-motif {
+    height: 190px;
+    margin-top: 22px;
+    border: 1px solid rgba(95, 105, 117, 0.12);
+    border-radius: 20px;
+    background-color: rgba(255, 255, 255, 0.38);
+    background-image:
+        linear-gradient(90deg, transparent, #2563eb 35%, #7fa6f2 50%, #2563eb 65%, transparent),
+        linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.35), transparent),
+        radial-gradient(circle 75px at 24% 55%, #c9d9f8, transparent 70%),
+        radial-gradient(circle 60px at 92% 0%, #d7e4fb, transparent 70%),
+        radial-gradient(circle 55px at 50% 105%, #e3e7ee, transparent 70%);
+    background-repeat: no-repeat;
+    background-size:
+        200% 1px,
+        calc(100% - 36px) 1px,
+        100% 100%,
+        100% 100%,
+        100% 100%;
+    background-position:
+        18px 58%,
+        18px 58%,
+        0 0,
+        0 0,
+        0 0;
+    animation: t-modern-msweep 6s linear infinite;
+}
+
+.t-modern .sm-1,
+.t-modern .sm-2,
+.t-modern .sm-3,
+.t-modern .sm-line,
+.t-modern .sm-sweep {
+    display: none;
+}
+
+@keyframes t-modern-msweep {
+    from {
+        background-position:
+            calc(18px + 100%) 58%,
+            18px 58%,
+            0 0,
+            0 0,
+            0 0;
+    }
+    to {
+        background-position:
+            calc(18px - 100%) 58%,
+            18px 58%,
+            0 0,
+            0 0,
+            0 0;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .t-modern .sparse-motif {
+        animation: none;
+    }
+
     .t-modern .stall-head {
         animation: none;
         /* Parked mid-panel, still visible: the signature never vanishes. */

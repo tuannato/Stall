@@ -168,7 +168,7 @@ export type WatchHooks = {
  * socket fires between those, and the re-read is a separate HTTP call that
  * starts again at the first host, so a replica that has seen the spend and not
  * the remainder answers `200` with no rows. That is our race, and painting
- * `EMPTY_TITLE` from it says the seller has nothing — the one sentence this
+ * the empty screen built from it says the seller has nothing — the one sentence this
  * project promised not to write from a guess.
  *
  * The cost is real and chosen: a stall whose last offer genuinely sold keeps

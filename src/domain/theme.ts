@@ -22,6 +22,23 @@ export type OrnamentKind = 'ticker' | 'plate';
 export type Ornament = { label: string; kind: OrnamentKind };
 
 /**
+ * The sparse-shop chrome (design round 2026-08-30): what a look says and
+ * paints when the shop has 0-2 items. Same contract as the ornament — the
+ * **kind** selects a shipped motif (a fixed child set the renderer builds,
+ * styled per look), the strings are the look's own voice, and all of it is
+ * table data: the chain still supplies only a row id.
+ */
+export type SparseMotifKind = 'lightwell' | 'floor' | 'planks';
+export type SparseChrome = {
+    kind: SparseMotifKind;
+    emptyTitle: string;
+    emptySub: string;
+    taglineInvite: string;
+    noticeChip: string;
+    noticeInvite: string;
+};
+
+/**
  * The shape half of a shipped look: one DOM painted as three shops. Like the
  * palette, every value here is **ours** — the chain names a row and never
  * carries a byte of it, so nothing an attacker chooses reaches the paint path.
@@ -214,6 +231,8 @@ export type DecodedTheme = {
     softness: number;
     /** A shipped header strip, or absent — Modern ships none. */
     ornament?: Ornament;
+    /** The look's sparse-shop voice and closing motif. */
+    sparse: SparseChrome;
     /** The shape half of the look. Ours, never the chain's. */
     shape: Shape;
 };
@@ -239,6 +258,14 @@ export const RURAL_THEME_ID = 0x03;
 export const DEFAULT_THEME: DecodedTheme = {
     id: DEFAULT_THEME_ID,
     known: true,
+    sparse: {
+        kind: 'lightwell',
+        emptyTitle: 'The shelf is up — nothing on it yet.',
+        emptySub: 'Your first listing lands right here.',
+        taglineInvite: 'Write a tagline — one line under your name',
+        noticeChip: 'Your note',
+        noticeInvite: 'Buyers read this first — post a restock date, a market day, a hello.',
+    },
     /*
      * Refined 2026-08-29 (PLAN-REDESIGN P1, under D1's mapping-frozen rule):
      * the canvas moves off pure white and the cards become the light layer on
@@ -389,6 +416,14 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             signGlow:
                 '0 0 8px color-mix(in srgb, var(--s-accent) 80%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 45%, transparent)',
             ornament: { label: '// stall.cash', kind: 'ticker' },
+            sparse: {
+                kind: 'floor',
+                emptyTitle: 'Vacant — nothing listed',
+                emptySub: 'Your first item takes this slot.',
+                taglineInvite: 'type a tagline — it glows up here',
+                noticeChip: 'No signal',
+                noticeInvite: 'Broadcast something — buyers see it first.',
+            },
             shape: {
                 padM: '12px',
                 padD: '28px 24px',
@@ -518,6 +553,14 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             backdrop:
                 'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-muted) 6%, transparent) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--s-muted) 6%, transparent) 0 1px, transparent 1px 3px)',
             ornament: { label: 'Market stall', kind: 'plate' },
+            sparse: {
+                kind: 'planks',
+                emptyTitle: 'The counter is wiped down — nothing out yet.',
+                emptySub: 'Whatever you list first sits right here.',
+                taglineInvite: 'write a line under your name…',
+                noticeChip: 'Your note',
+                noticeInvite: 'Pin a note for your customers — market days, thank-yous.',
+            },
             shape: {
                 padM: '20px 18px',
                 padD: '32px 40px',

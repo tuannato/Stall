@@ -16,7 +16,10 @@ vi.mock('./net/price', () => ({
     fetchXecPrice: async () => undefined,
 }));
 import { sellerFromPath, stallPath } from './domain/route';
-import { EMPTY_TITLE, HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
+import { HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
+import { DEFAULT_THEME } from './domain/theme';
+
+const EMPTY_TITLE = DEFAULT_THEME.sparse.emptyTitle;
 
 const PK = '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';

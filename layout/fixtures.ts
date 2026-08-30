@@ -163,6 +163,17 @@ export const SCREENS: Record<string, StallView> = {
             ...Array.from({ length: 10 }, (_, i) => `02${(0xb0 + i).toString(16).repeat(32)}`),
         ],
     },
+    /*
+     * One item, nothing written: the sparse chrome at full strength — both
+     * invitations and the look's closing motif. The probe measures the
+     * motif's absolute children against every protected box here.
+     */
+    sparse: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        tagline: undefined,
+        announcement: undefined,
+        shelves: undefined,
+    }),
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
     activity: base({

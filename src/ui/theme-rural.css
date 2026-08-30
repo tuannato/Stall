@@ -382,6 +382,213 @@
         drop-shadow(0 -1px 1px rgba(58, 42, 24, 0.55));
 }
 
+
+/* — Sparse-shop chrome, ported from states/rural-*.html. The pin dot on
+   the note is a real .invite-pin node, never a positioned pseudo. — */
+.t-rural .tagline-invite {
+    display: inline-block;
+    margin: 8px auto 0;
+    padding: 5px 12px;
+    border: 1.5px dashed rgba(255, 246, 230, 0.5);
+    border-radius: 999px;
+    background: rgba(255, 246, 230, 0.07);
+    color: #f3ddbe;
+    font-style: italic;
+    font-size: 12.5px;
+    font-family: inherit;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-rural .tagline-invite:hover {
+    background: rgba(255, 246, 230, 0.15);
+    border-color: rgba(255, 246, 230, 0.8);
+}
+
+.t-rural .notice-invite {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: calc(100% - 12px);
+    margin: 0 6px 10px;
+    padding: 12px 14px;
+    border: 1.5px dashed rgba(158, 70, 32, 0.5);
+    border-radius: 6px;
+    background: rgba(255, 253, 244, 0.65);
+    text-align: left;
+    font-family: inherit;
+    font-size: 13px;
+    font-style: italic;
+    color: #6b5942;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-rural .invite-pin {
+    display: block;
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    width: 9px;
+    height: 9px;
+    margin-left: -4px;
+    border-radius: 50%;
+    background: #9e4620;
+    box-shadow: 0 1px 2px rgba(58, 42, 24, 0.4);
+}
+
+.t-rural .notice-invite:hover {
+    background: rgba(255, 253, 244, 0.95);
+    border-color: rgba(158, 70, 32, 0.8);
+}
+
+.t-rural .ghost-chip {
+    flex: none;
+    padding: 4px 10px;
+    border: 1.5px dashed rgba(158, 70, 32, 0.55);
+    border-radius: 999px;
+    color: #9e4620;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-style: normal;
+}
+
+.t-rural .sparse-empty {
+    margin: 30px 8px 0;
+}
+
+.t-rural .sparse-empty-t {
+    font-size: 15.5px;
+    font-style: italic;
+    color: var(--s-text);
+}
+
+.t-rural .sparse-empty-s {
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--s-muted);
+}
+
+.t-rural .sparse-shelf {
+    margin: 16px auto 0;
+    width: 220px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #b08a5e, #8a6a4f);
+    box-shadow:
+        0 3px 0 rgba(107, 89, 66, 0.35),
+        0 10px 16px rgba(58, 42, 24, 0.18);
+}
+
+.t-rural .cta {
+    margin: 18px 0 0;
+    padding: 10px 18px;
+    border: 1.5px solid #9e4620;
+    border-radius: 999px;
+    background: #9e4620;
+    color: #fff3ea;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: inherit;
+    transition: background 0.2s;
+}
+
+.t-rural .cta:hover {
+    background: #7c3414;
+}
+
+/* The counter front: three worn planks, two carved lines, the mark
+   branded into the middle like an iron stamp. */
+.t-rural .sparse-motif {
+    height: 180px;
+    margin: 24px 0 0;
+    border-top: 2px solid rgba(58, 42, 24, 0.35);
+}
+
+.t-rural .sm-pl {
+    left: 0;
+    right: 0;
+}
+
+.t-rural .sm-p1 {
+    top: 0;
+    height: 34%;
+    background:
+        radial-gradient(ellipse 16px 7px at 22% 55%, rgba(74, 46, 22, 0.45), rgba(74, 46, 22, 0.12) 60%, transparent 72%),
+        repeating-linear-gradient(180deg, rgba(94, 58, 30, 0.12) 0 1px, transparent 1px 7px),
+        linear-gradient(180deg, #b48d61, #9a7550);
+    border-bottom: 2px solid rgba(58, 42, 24, 0.3);
+}
+
+.t-rural .sm-p2 {
+    top: 34%;
+    height: 33%;
+    background:
+        radial-gradient(ellipse 14px 6px at 74% 40%, rgba(74, 46, 22, 0.45), rgba(74, 46, 22, 0.12) 60%, transparent 72%),
+        repeating-linear-gradient(180deg, rgba(94, 58, 30, 0.12) 0 1px, transparent 1px 7px),
+        linear-gradient(180deg, #ad8558, #956f4b);
+    border-bottom: 2px solid rgba(58, 42, 24, 0.3);
+}
+
+.t-rural .sm-p3 {
+    top: 67%;
+    height: 33%;
+    background:
+        radial-gradient(ellipse 18px 8px at 40% 60%, rgba(74, 46, 22, 0.45), rgba(74, 46, 22, 0.12) 60%, transparent 72%),
+        repeating-linear-gradient(180deg, rgba(94, 58, 30, 0.12) 0 1px, transparent 1px 7px),
+        linear-gradient(180deg, #b08a5e, #8f6a47);
+}
+
+.t-rural .sm-carve {
+    top: 50%;
+    width: calc(50% - 78px);
+    height: 7px;
+    margin-top: -3px;
+    border-top: 2px solid rgba(46, 26, 10, 0.4);
+    border-bottom: 2px solid rgba(46, 26, 10, 0.28);
+}
+
+.t-rural .sm-carve-l {
+    left: 24px;
+}
+
+.t-rural .sm-carve-r {
+    right: 24px;
+}
+
+.t-rural .sm-brand {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    border: 3px double rgba(46, 26, 10, 0.55);
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle, rgba(46, 26, 10, 0.22), rgba(46, 26, 10, 0.05) 65%, transparent 75%);
+}
+
+.t-rural .sm-brand .stall-mark {
+    position: static;
+    width: 38px;
+    height: 46px;
+    filter: sepia(1) saturate(0.5) brightness(0.45) contrast(1.15);
+    opacity: 0.85;
+}
+
+@media (min-width: 680px) {
+    .t-rural .sparse-motif {
+        margin: 28px 0 0;
+        height: 210px;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .t-rural .item-p {
         animation: none;

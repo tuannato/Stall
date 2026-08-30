@@ -765,6 +765,52 @@ body {
     }
 }
 
+/*
+ * The sparse-shop chrome's skeleton (design round 2026-08-30). Structure
+ * only — each look speaks in its own file. The invitations are buttons
+ * that open the publish sheet; the motif is the look's closing material,
+ * absolute children inside one measured in-flow box (never a positioned
+ * pseudo — the design's pin dot and cursor are real nodes here).
+ */
+.tagline-invite,
+.notice-invite {
+    cursor: pointer;
+}
+
+.invite-pin,
+.invite-cursor {
+    display: none;
+}
+
+.sparse-empty {
+    text-align: center;
+}
+
+.sparse-empty-t,
+.sparse-empty-s {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.cta {
+    display: inline-block;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sparse-motif {
+    position: relative;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.sparse-motif i,
+.sparse-motif span,
+.sparse-motif div {
+    position: absolute;
+    display: block;
+}
+
 /* The decoration block in the settings sheet: a picker, a note, a way out. */
 .decor {
     display: flex;

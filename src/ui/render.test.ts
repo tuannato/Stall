@@ -20,7 +20,6 @@ import {
     COPY_LINK,
     COPY_LINK_FALLBACK,
     DASHED_PRICE,
-    EMPTY_TITLE,
     HANDOFF_FINE_PRINT,
     HANDOFF_MAY_PRESELECT,
     HANDOFF_PRICE_IS_NOT_THE_ROW,
@@ -35,7 +34,6 @@ import {
     HOME_TITLE,
     LINK_COPIED,
     LINK_UNREADABLE_TITLE,
-    LIST_IN_CASHTAB,
     MIN_PURCHASE,
     OPEN_ANOTHER_STALL,
     OPEN_BY_DEFAULT,
@@ -151,7 +149,7 @@ describe('empty vs unreachable', () => {
         );
         const text = root.textContent ?? '';
         expect(text).toContain(EMPTY_TITLE);
-        expect(text).toContain(LIST_IN_CASHTAB);
+        expect(text).toContain(LIST_FIRST_LABEL);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(root.querySelector('button.buy')).toBeNull();
         expect(h.onRetry).not.toHaveBeenCalled();
@@ -595,7 +593,7 @@ describe('empty-unnamed-is-still-this-seller', () => {
         expect(name).not.toBeNull();
         expect(name!.textContent).toBe(ADDR);
         expect(root.textContent).toContain(EMPTY_TITLE);
-        expect(root.textContent).toContain(LIST_IN_CASHTAB);
+        expect(root.textContent).toContain(LIST_FIRST_LABEL);
         // The share block moved behind the Studio tab with the rest of the
         // seller tools; the storefront stays pure for a visitor.
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -1256,6 +1254,11 @@ describe('default-stall-control-says-which-way-it-goes', () => {
 });
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
+
+// The default look's sparse voice — the empty screen's title since the
+// generic copy retired (each look speaks its own, from theme.sparse).
+const EMPTY_TITLE = DEFAULT_THEME.sparse.emptyTitle;
+const LIST_FIRST_LABEL = 'List your first item';
 
 /* every-theme-var-reaches-the-stylesheet moved to theme-sheets.test.ts,
    widened to all four sheets by the 2026-08-30 review. */

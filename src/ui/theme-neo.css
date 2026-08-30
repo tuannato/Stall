@@ -355,9 +355,332 @@
         drop-shadow(0 0 14px rgba(44, 233, 224, 0.35));
 }
 
+
+/* — Sparse-shop chrome, ported from states/neo-*.html. The design's
+   positioned pseudos are converted: the bracket frame is the block's own
+   background layers, the sign's hanger stem is a real .sm-stem node. — */
+.t-neo .tagline-invite {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 8px 0 0;
+    padding: 6px 10px;
+    border: 1px dashed rgba(255, 77, 122, 0.55);
+    background: rgba(255, 77, 122, 0.05);
+    color: #ff8fb0;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-align: left;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-neo .tagline-invite:hover {
+    background: rgba(255, 77, 122, 0.1);
+    border-color: rgba(255, 77, 122, 0.85);
+}
+
+.t-neo .tagline-invite b {
+    color: #3df2ea;
+    font-weight: 800;
+}
+
+.t-neo .invite-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 12px;
+    background: #ff8fb0;
+    animation: t-neo-cur 1.1s steps(1) infinite;
+}
+
+.t-neo .notice-invite {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px dashed rgba(255, 77, 122, 0.5);
+    background: rgba(255, 77, 122, 0.04);
+    text-align: left;
+    font-family: inherit;
+    font-size: 12px;
+    color: #b08ca3;
+    margin-bottom: 10px;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.t-neo .notice-invite:hover {
+    background: rgba(255, 77, 122, 0.09);
+    border-color: rgba(255, 77, 122, 0.8);
+}
+
+.t-neo .notice-invite .invite-cursor {
+    flex: none;
+    background: rgba(255, 77, 122, 0.7);
+    animation-duration: 1.3s;
+}
+
+.t-neo .ghost-chip {
+    flex: none;
+    padding: 4px 9px;
+    border: 1px dashed rgba(255, 77, 122, 0.6);
+    color: #ff8fb0;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.t-neo .sparse-empty {
+    margin: 24px 2px 0;
+    padding: 28px 14px;
+    /* The design's corner brackets, as the block's own background. */
+    background-image:
+        linear-gradient(#2ce9e0, #2ce9e0),
+        linear-gradient(#2ce9e0, #2ce9e0),
+        linear-gradient(#2ce9e0, #2ce9e0),
+        linear-gradient(#2ce9e0, #2ce9e0),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a);
+    background-repeat: no-repeat;
+    background-size:
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px;
+    background-position:
+        left top,
+        left top,
+        right top,
+        right top,
+        left bottom,
+        left bottom,
+        right bottom,
+        right bottom;
+}
+
+.t-neo .sparse-empty-t {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8aa6c9;
+}
+
+.t-neo .sparse-empty-s {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #5e7799;
+}
+
+.t-neo .sparse-shelf {
+    display: none;
+}
+
+.t-neo .cta {
+    margin: 16px 0 0;
+    padding: 10px 14px;
+    border: 1px solid rgba(44, 233, 224, 0.8);
+    background: rgba(44, 233, 224, 0.16);
+    color: #3df2ea;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: inherit;
+    transition: box-shadow 0.2s;
+}
+
+.t-neo .cta:hover {
+    box-shadow: 0 0 16px rgba(44, 233, 224, 0.35);
+}
+
+/* The alley: floor, haze, an OPEN sign on its stem, chevrons walking in. */
+.t-neo .sparse-motif {
+    height: 210px;
+    /* No negative full-bleed: the design's page had its own margins to
+       eat; ours is the scroll region, and 24 borrowed pixels were a
+       sideways scroll on every publish screen. */
+    margin: 16px 0 0;
+}
+
+.t-neo .sm-floor {
+    left: -30%;
+    right: -30%;
+    bottom: -70px;
+    height: 170px;
+    background:
+        repeating-linear-gradient(90deg, rgba(44, 233, 224, 0.3) 0 1px, transparent 1px 42px),
+        repeating-linear-gradient(0deg, rgba(44, 233, 224, 0.3) 0 1px, transparent 1px 28px);
+    transform: perspective(320px) rotateX(58deg);
+    transform-origin: 50% 0;
+    opacity: 0.45;
+    -webkit-mask: linear-gradient(#000 30%, rgba(0, 0, 0, 0));
+    mask: linear-gradient(#000 30%, rgba(0, 0, 0, 0));
+}
+
+.t-neo .sm-haze {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 90px;
+    background: linear-gradient(rgba(0, 0, 0, 0), rgba(255, 77, 122, 0.14));
+}
+
+.t-neo .sm-neon {
+    left: 34px;
+    top: 12px;
+    bottom: 48px;
+    width: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    padding: 8px 0;
+    border: 2px solid rgba(255, 77, 122, 0.85);
+    background: rgba(13, 19, 34, 0.85);
+    box-shadow:
+        0 0 18px rgba(255, 77, 122, 0.5),
+        inset 0 0 14px rgba(255, 77, 122, 0.22);
+    animation: t-neo-mflick 7s steps(1) infinite;
+}
+
+.t-neo .sm-stem {
+    top: -10px;
+    left: 50%;
+    width: 2px;
+    height: 10px;
+    margin-left: -1px;
+    background: rgba(255, 77, 122, 0.6);
+}
+
+.t-neo .sm-neon span {
+    position: static;
+    font-size: 19px;
+    font-weight: 800;
+    color: #ff8fb0;
+    text-shadow:
+        0 0 10px rgba(255, 77, 122, 0.95),
+        0 0 26px rgba(255, 77, 122, 0.5);
+}
+
+.t-neo .sm-chevrons {
+    right: 70px;
+    top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+}
+
+.t-neo .sm-chevrons i {
+    position: static;
+    width: 22px;
+    height: 22px;
+    border-right: 3px solid #2ce9e0;
+    border-bottom: 3px solid #2ce9e0;
+    transform: rotate(45deg);
+    filter: drop-shadow(0 0 8px rgba(44, 233, 224, 0.8));
+    animation: t-neo-astep 1.8s ease-in-out infinite;
+}
+
+.t-neo .sm-chevrons i:nth-child(2) {
+    animation-delay: 0.3s;
+}
+
+.t-neo .sm-chevrons i:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+.t-neo .sm-cap {
+    right: 28px;
+    bottom: 14px;
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #8aa6c9;
+}
+
+@keyframes t-neo-cur {
+    0%,
+    49% {
+        opacity: 1;
+    }
+    50%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes t-neo-astep {
+    0%,
+    100% {
+        opacity: 0.2;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes t-neo-mflick {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    7% {
+        opacity: 0.6;
+    }
+    8% {
+        opacity: 1;
+    }
+    54% {
+        opacity: 0.7;
+    }
+    55% {
+        opacity: 1;
+    }
+}
+
+@media (min-width: 680px) {
+    .t-neo .sparse-motif {
+        margin: 22px 0 0;
+        height: 240px;
+    }
+
+    .t-neo .sm-neon {
+        left: 64px;
+    }
+
+    .t-neo .sm-chevrons {
+        right: 120px;
+    }
+
+    .t-neo .sm-cap {
+        right: 78px;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .t-neo .item-caret {
+    .t-neo .item-caret,
+    .t-neo .invite-cursor,
+    .t-neo .sm-neon,
+    .t-neo .sm-chevrons i {
         animation: none;
+    }
+
+    .t-neo .invite-cursor,
+    .t-neo .sm-chevrons i {
+        opacity: 1;
     }
 }
 

@@ -697,6 +697,96 @@ function announcementNote(view: StallView): HTMLElement | null {
     return wrap;
 }
 
+
+/**
+ * The sparse-shop chrome (design round 2026-08-30). Three pieces, all
+ * driven by the theme row's `sparse` data: an invitation under the name
+ * when the seller has no tagline, a ghost note where the announcement
+ * would sit, and a closing motif in the look's own material so an empty
+ * lower half reads as intent instead of absence. The invitations open the
+ * publish sheet — they are honest wayfinding, not controls of their own.
+ */
+function taglineInvite(view: StallView, handlers: StallHandlers): HTMLElement | null {
+    if ((view.tagline ?? '') !== '' || handlers.onOpenPublish === undefined) {
+        return null;
+    }
+    const theme = view.theme ?? DEFAULT_THEME;
+    const btn = el('button', 'tagline-invite');
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'edit-tagline');
+    btn.append(el('b', undefined, theme.sparse.kind === 'floor' ? '>' : '+'));
+    btn.append(document.createTextNode(theme.sparse.taglineInvite));
+    const cursor = el('i', 'invite-cursor');
+    cursor.setAttribute('aria-hidden', 'true');
+    btn.append(cursor);
+    btn.addEventListener('click', () => handlers.onOpenPublish!());
+    return btn;
+}
+
+function noticeInvite(view: StallView, handlers: StallHandlers): HTMLElement | null {
+    if ((view.announcement ?? '') !== '' || handlers.onOpenPublish === undefined) {
+        return null;
+    }
+    const theme = view.theme ?? DEFAULT_THEME;
+    const btn = el('button', 'notice-invite');
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'announcement-invite');
+    const pin = el('i', 'invite-pin');
+    pin.setAttribute('aria-hidden', 'true');
+    btn.append(pin);
+    btn.append(el('span', 'ghost-chip', theme.sparse.noticeChip));
+    btn.append(el('span', 'invite-text', theme.sparse.noticeInvite));
+    const cursor = el('i', 'invite-cursor');
+    cursor.setAttribute('aria-hidden', 'true');
+    btn.append(cursor);
+    btn.addEventListener('click', () => handlers.onOpenPublish!());
+    return btn;
+}
+
+/** The kind's fixed child set — like the ornament, adding a look means
+ *  adding a row that picks a kind, never growing this function per theme. */
+function sparseMotif(view: StallView): HTMLElement {
+    const theme = view.theme ?? DEFAULT_THEME;
+    // The kind rides as `sm-kind-*`, never bare `sm-${kind}`: 'floor' is
+    // also a CHILD class, and the collision dressed the container as its
+    // own perspective grid — measured as a 28px sideways scroll.
+    const motif = el('div', `sparse-motif sm-kind-${theme.sparse.kind}`);
+    motif.setAttribute('aria-hidden', 'true');
+    if (theme.sparse.kind === 'floor') {
+        motif.append(el('i', 'sm-floor'), el('i', 'sm-haze'));
+        const sign = el('div', 'sm-neon');
+        sign.append(el('i', 'sm-stem'));
+        for (const ch of 'OPEN') {
+            sign.append(el('span', undefined, ch));
+        }
+        motif.append(sign);
+        const chevrons = el('div', 'sm-chevrons');
+        chevrons.append(el('i'), el('i'), el('i'));
+        motif.append(chevrons);
+        motif.append(el('span', 'sm-cap', 'scan to enter'));
+    } else if (theme.sparse.kind === 'planks') {
+        motif.append(
+            el('i', 'sm-pl sm-p1'),
+            el('i', 'sm-pl sm-p2'),
+            el('i', 'sm-pl sm-p3'),
+            el('i', 'sm-carve sm-carve-l'),
+            el('i', 'sm-carve sm-carve-r'),
+        );
+        const brand = el('div', 'sm-brand');
+        brand.append(stallMark());
+        motif.append(brand);
+    } else {
+        motif.append(
+            el('i', 'sm-1'),
+            el('i', 'sm-2'),
+            el('i', 'sm-3'),
+            el('i', 'sm-line'),
+            el('i', 'sm-sweep'),
+        );
+    }
+    return motif;
+}
+
 function paintEmpty(
     stall: HTMLElement,
     view: StallView,
@@ -712,16 +802,31 @@ function paintEmpty(
         ),
     );
     const body = el('main', 'stall-body');
-    const notice = announcementNote(view);
+    const notice = announcementNote(view) ?? noticeInvite(view, handlers);
     if (notice !== null) {
         body.append(notice);
     }
-    body.append(mid(copy.EMPTY_TITLE, [copy.EMPTY_BODY, copy.LIST_IN_CASHTAB]));
+    stall.querySelector('.stall-headings')?.append(
+        ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
+    );
+    const theme = view.theme ?? DEFAULT_THEME;
+    const emptyBlock = el('div', 'sparse-empty');
+    emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
+    emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));
+    emptyBlock.append(el('div', 'sparse-shelf'));
+    const cta = el('a', 'cta', copy.LIST_FIRST);
+    cta.setAttribute('data-role', 'list-first');
+    cta.href = CASHTAB_LIST_URL;
+    cta.target = '_blank';
+    cta.rel = 'noopener';
+    emptyBlock.append(cta);
+    body.append(emptyBlock);
     settingsNotes(body, view);
     // The live path no longer applies an empty answer, so a stall whose last
     // offer genuinely sold keeps that row until someone asks again. This is
     // where they ask.
     body.append(retryControl(handlers));
+    body.append(sparseMotif(view));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -902,6 +1007,23 @@ function paintOffers(
     const dropped = view.fetch?.kind === 'offers' ? (view.fetch.dropped ?? 0) : 0;
     if (dropped > 0) {
         body.append(el('p', 'fine', copy.droppedOffers(dropped)));
+    }
+    // A shop of one or two is a big stage with a small cast: the look's own
+    // closing motif fills the lower half with intent, and the empty fields
+    // invite the seller by name. Presence keys on the SHOWN count — a
+    // filter narrowing to two earns the motif too, and its arrival is an
+    // append below the cards, never a re-layout above them.
+    if (shown.length <= 2) {
+        stall.querySelector('.stall-headings')?.append(
+            ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
+        );
+        if (announcementNote(view) === null) {
+            const invite = noticeInvite(view, handlers);
+            if (invite !== null) {
+                body.prepend(invite);
+            }
+        }
+        body.append(sparseMotif(view));
     }
     stall.append(body);
 
