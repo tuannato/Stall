@@ -2121,9 +2121,16 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
     // a failed load keeps them, exactly as the small one does.
     const name = meta?.name ?? meta?.ticker ?? offer.tokenId;
     panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg'));
+    // Every fact lives in its own column beside the hero image. A wrapper,
+    // not grid placement: the desktop grid once made the icon span 99
+    // implicit rows, and ~90 empty rows each bought a row-gap — a thousand
+    // pixels of blank track painted inside the open card (reported three
+    // times before it was measured).
+    const rows = el('div', 'detail-rows');
+    panel.append(rows);
 
     if (isUnbuyable(offer)) {
-        panel.append(
+        rows.append(
             el(
                 'div',
                 'ctx',
@@ -2133,47 +2140,47 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
                 ),
             ),
         );
-        panel.append(tokenFacts(offer, meta, ticker));
+        rows.append(tokenFacts(offer, meta, ticker));
     const described = tokenDescription(view, offer.tokenId);
     if (described !== undefined) {
-        panel.append(described);
+        rows.append(described);
     }
     const link = tokenLink(meta);
     if (link !== undefined) {
-        panel.append(link);
+        rows.append(link);
     }
         // No link out: Cashtab will not show this row either.
-        panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+        rows.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
         return panel;
     }
 
     const asked = formatXec(offer.askedSats);
     const minAtoms = formatAtoms(offer.askedAtoms, d);
     const stock = formatAtoms(offer.atoms, d);
-    panel.append(
+    rows.append(
         sheetRow(
             copy.MIN_PURCHASE,
             ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms,
         ),
     );
-    panel.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
-    panel.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
+    rows.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
+    rows.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
 
     // Every listing of this token, cheapest first — the rest of what the
     // card's "lowest of N" promised. Each figure is that offer's own
     // `askedSats`; each row's meta is its own minimum take and stock.
     if (listing.offers.length > 1) {
-        panel.append(listingsBlock(listing, view));
+        rows.append(listingsBlock(listing, view));
     }
 
-    panel.append(tokenFacts(offer, meta, ticker));
+    rows.append(tokenFacts(offer, meta, ticker));
     const described = tokenDescription(view, offer.tokenId);
     if (described !== undefined) {
-        panel.append(described);
+        rows.append(described);
     }
     const link = tokenLink(meta);
     if (link !== undefined) {
-        panel.append(link);
+        rows.append(link);
     }
 
     // No network fee row: this origin builds nothing, so it has no fee to
@@ -2187,8 +2194,8 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
     // the danger colour on every expanded card spent the one colour that should
     // mean something has gone wrong. `.ctx` keeps the validation errors and the
     // unbuyable line above, where red is the truth.
-    panel.append(el('div', 'note', copy.HANDOFF_MAY_PRESELECT));
-    panel.append(el('div', 'note', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
+    rows.append(el('div', 'note', copy.HANDOFF_MAY_PRESELECT));
+    rows.append(el('div', 'note', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
 
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
@@ -2201,9 +2208,9 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
         cta.addEventListener('click', (event) => {
             event.stopPropagation();
         });
-        panel.append(cta);
+        rows.append(cta);
     }
-    panel.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+    rows.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
     return panel;
 }
 

@@ -1340,6 +1340,14 @@ textarea.paste-in {
     border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
 }
 
+/* The facts, one column beside (desktop) or under (mobile) the hero image. */
+.detail-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    min-width: 0;
+}
+
 /*
  * The token's own image, large, at the top of an opened card. Reuses the icon
  * cache and clipping of `.item-ic`; only size and placement differ.
@@ -2302,54 +2310,34 @@ textarea.paste-in {
     }
 
     /*
-     * The expanded card, two columns. It spans the whole grid, so on a wide
-     * screen it was one stacked column with a centred hero and a great deal of
-     * nothing beside it.
-     *
-     * The image column is fixed at its own size and the text column is
-     * `minmax(0, 1fr)`. Never the other way round: `YOU_PAY` is the asked
-     * amount of the disclosure, and an image column that could grow would push
-     * it out of view — CLAUDE.md §6, nothing we ship may cover the price.
-     *
-     * No new --s-* var: all three looks want the same split, and a variable
-     * that always holds one value is a value the stylesheet already knows.
+     * The hero image beside one column of facts. A wrapper (.detail-rows),
+     * never grid placement: the previous grid had the icon span 99 implicit
+     * rows so the facts would auto-flow down track 2 — and ~90 of those
+     * rows were empty yet each one still bought an 11px row-gap, painting
+     * a thousand pixels of blank track inside the open card. Reported by
+     * the owner three times before it was measured; a structure that
+     * cannot express the bug replaced the numbers that tried to avoid it.
      */
     .item-detail {
-        display: grid;
-        /*
-         * Free again, because the card above it is what is capped now. An
-         * uncapped card with an uncapped column threw the label and its figure
-         * to opposite ends — measured at 1280px, a label at x=203 and its
-         * number at x=1185 — and that is what the cap on the card fixes,
-         * without also squeezing the token id onto two lines.
-         */
-        grid-template-columns: var(--s-hero) minmax(0, 1fr);
-        column-gap: 20px;
-        row-gap: 11px;
-        align-items: start;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
+    .detail-rows {
+        flex: 1;
+        min-width: 0;
     }
 
     /*
-     * Column tracks and an explicit row span — never a shared area name. Two
-     * items given the same `grid-area` occupy the same cell and paint on top of
-     * one another, and one of the things stacked here is the figure the buyer
-     * pays. Placing by column lets the rest auto-flow down track 2 instead.
+     * The hero must out-rank this block's own `.item-ic` sizing above —
+     * one class was how the "large" image shipped at 48px, identical to
+     * the row icon it exists to outgrow.
      */
-    .item-detail > .item-ic-lg {
-        grid-column: 1;
-        /*
-         * `1 / -1` resolves against the *explicit* grid, which has one row —
-         * so the image sat in row 1 and stretched it to its own height,
-         * opening a 130px hole between the first two facts. The rows here are
-         * implicit, so the span has to be counted, not anchored to `-1`.
-         */
-        grid-row: 1 / span 99;
-        align-self: start;
-        margin-bottom: 0;
-    }
-
-    .item-detail > *:not(.item-ic-lg) {
-        grid-column: 2;
+    .item-ic.item-ic-lg {
+        width: var(--s-hero);
+        height: var(--s-hero);
+        align-self: flex-start;
     }
 
     .sheet-scrim {

@@ -1,4 +1,4 @@
-import { fromHex, toHex } from 'ecash-lib';
+import { toHex } from 'ecash-lib';
 import { encodeAttachmentFlags } from './attachments';
 import { isLegibleText } from './text';
 import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
@@ -199,13 +199,6 @@ export function readTaggedText(
     return isLegibleText(text) ? text : undefined;
 }
 
-/** Exactly a genesis txid's 32 bytes, or nothing. */
-function readTokenIdField(payload: Uint8Array | undefined): string | undefined {
-    if (payload === undefined || payload.length !== 32) {
-        return undefined;
-    }
-    return toHex(payload);
-}
 
 /**
  * Three ASCII letters, lowercased — the shape of an ISO code. Whether the
