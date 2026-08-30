@@ -439,13 +439,42 @@ export function tokenTypeLabel(type: string, protocol: string): string | undefin
 /** The apex. No identity, because Stall has no account to show. */
 export const HOME_TITLE = 'Stall';
 export const HOME_LEDE = "A shop page for one seller's listings on eCash Agora.";
-export const HOME_HOW =
-    'Every stall lives at /s/ followed by the seller\u2019s eCash address. Open that link and you see what they have listed right now, priced as the contract on chain encodes it.';
-export const HOME_NO_ACCOUNT =
-    'There is nothing to sign up for and nothing to install. Stall reads the chain and holds no keys.';
 
 export const OPENING_SUB = 'Opening this stall';
 export const OPENING_BODY = 'Reading the chain for this seller.';
+
+/**
+ * The door's three chips — the two intro paragraphs compressed to the three
+ * facts a visitor actually scans for (Stall Design, direction D). The one
+ * sentence kept in prose is the trust line under them.
+ */
+export const HOME_CHIPS = [
+    'One link: /s/ + your address',
+    'Prices straight from the chain',
+    'No signup, no install',
+] as const;
+export const HOME_CHIPS_FINE = 'Stall reads the chain and holds no keys.';
+
+/**
+ * The tilted storefront preview on the wide door. Fixture words, painted
+ * `aria-hidden` and inert: it illustrates the *shape* every stall opens as,
+ * not a shop this origin claims exists — the caption says exactly that. The
+ * address is the fixture dummy nobody holds; the prices are illustrative
+ * round numbers the owner approved; the icon is a real token's (see
+ * `DOOR_PREVIEW_ICON_TOKEN`), recolored per row.
+ */
+export const HOME_PREVIEW = {
+    name: 'Riverside Goods',
+    tagline: 'Fresh from the riverside — roasted and packed weekly',
+    sub: '3 items for sale',
+    items: [
+        { name: 'Roasted Beans', qty: 'ROAS · 24 left', price: 'from 1,200' },
+        { name: 'Green Tea', qty: 'GREE · 12 left', price: 'from 875' },
+        { name: 'Pixel #1', qty: 'PIXE · 12 left', price: 'from 500' },
+    ],
+    address: 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09',
+    caption: 'Every stall opens as a page like this.',
+} as const;
 
 export const HOME_PASTE_LABEL = 'Open a stall';
 export const HOME_PASTE_HINT =

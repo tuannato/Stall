@@ -57,6 +57,7 @@ import {
 } from '../domain/theme';
 import { stallMark } from './brand';
 import * as copy from './copy';
+import mingoIcon from './mingo-icon.png';
 import './stall.css';
 
 export type StallHandlers = {
@@ -266,22 +267,97 @@ function applyTheme(
     }
 }
 
+/**
+ * The door, direction D from the Stall Design project ("Stall front"): the
+ * paste box is the hero on a market-stall scene — canopy above, counter slab
+ * under the box — with the old intro paragraphs compressed into three chips.
+ * The scene is structure, not decoration, and it is door-only chrome: none
+ * of it exists on a seller's stall, so none of it can cover a price.
+ */
 function paintHome(
     stall: HTMLElement,
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(copy.HOME_TITLE, copy.HOME_LEDE));
-    const body = el('main', 'stall-body');
-    body.append(mid('', [copy.HOME_HOW, copy.HOME_NO_ACCOUNT]));
+    stall.classList.add('door');
+    const canopy = el('div', 'door-canopy');
+    canopy.setAttribute('aria-hidden', 'true');
+    stall.append(canopy);
+    const body = el('main', 'stall-body door-wrap');
+    const brand = el('header', 'door-brand');
+    brand.append(stallMark());
+    brand.append(el('h1', 'door-word', copy.HOME_TITLE));
+    brand.append(el('p', 'door-value', copy.HOME_LEDE));
+    body.append(brand);
     body.append(pasteForm(handlers));
+    const chips = el('ul', 'door-chips');
+    for (const chip of copy.HOME_CHIPS) {
+        chips.append(el('li', undefined, chip));
+    }
+    body.append(chips);
+    body.append(el('p', 'fine door-chips-fine', copy.HOME_CHIPS_FINE));
     const pinned = pinnedDoor(view, handlers);
     if (pinned !== null) {
         body.append(pinned);
     }
-    body.append(el('p', 'fine', copy.HOME_SELLER));
+    const yours = el('p', 'fine door-yours', copy.HOME_SELLER);
+    body.append(yours);
     body.append(demoSoon(handlers));
+    body.append(doorPreview());
     stall.append(body);
+}
+
+/*
+ * The door preview's tile art is the mingo token's icon (token
+ * d6c88f410551f1eaa48cc65ee381cbec770d0797c508e10a75da835030024cdb, the
+ * owner's own), vendored as a fingerprinted same-origin asset rather than
+ * fetched from the icon Worker on every door load — the owner's call: the
+ * apex stays a page that asks nothing of any other service. Recolored per
+ * row with CSS filters; the flat tile underneath still covers a failed load.
+ */
+
+/**
+ * The tilted storefront preview on the wide door: what a stall looks like,
+ * shown instead of described. Decorative and inert — `aria-hidden`, no
+ * controls, fixture content — because the door must not promise any real
+ * shop's inventory (§3); the caption names it as the page's shape.
+ */
+function doorPreview(): HTMLElement {
+    const aside = el('aside', 'door-preview');
+    aside.setAttribute('aria-hidden', 'true');
+    aside.setAttribute('data-role', 'door-preview');
+    const card = el('div', 'pv-card');
+    const head = el('div', 'pv-head');
+    head.append(stallMark());
+    const id = el('div');
+    id.append(el('p', 'pv-name', copy.HOME_PREVIEW.name));
+    id.append(el('p', 'pv-tagline', copy.HOME_PREVIEW.tagline));
+    id.append(el('p', 'pv-sub', copy.HOME_PREVIEW.sub));
+    head.append(id);
+    card.append(head);
+    copy.HOME_PREVIEW.items.forEach((item, i) => {
+        const row = el('div', 'pv-item');
+        const ic = el('i', `pv-ic pv-i${i + 1}`);
+        const img = el('img', 'pv-icimg');
+        img.src = mingoIcon;
+        img.alt = '';
+        img.addEventListener('error', () => img.remove());
+        ic.append(img);
+        row.append(ic);
+        const mid2 = el('span', 'pv-b');
+        mid2.append(el('span', 'pv-n', item.name));
+        mid2.append(el('span', 'pv-q', item.qty));
+        row.append(mid2);
+        const price = el('span', 'pv-p');
+        price.append(el('span', 'pv-x', item.price));
+        price.append(el('span', 'pv-u', copy.XEC));
+        row.append(price);
+        card.append(row);
+    });
+    card.append(el('div', 'pv-foot', copy.HOME_PREVIEW.address));
+    aside.append(card);
+    aside.append(el('span', 'pv-tag', copy.HOME_PREVIEW.caption));
+    return aside;
 }
 
 /**
@@ -3099,11 +3175,23 @@ function applyTitle(view: StallView): void {
     }
 }
 
+/**
+ * The hero paste box (Stall Design, direction D): the label is the page's
+ * display line, the `s/` prefix shows the shape of the link being built, the
+ * button lives inside the box, and the hint sits on the counter slab under
+ * it. Same control contract as ever — same input attributes, same
+ * `paste-invalid` line, same submit path into `onOpenStall`.
+ */
 function pasteForm(handlers: StallHandlers): HTMLFormElement {
-    const form = el('form', 'paste');
-    const label = el('label', 'paste-label', copy.HOME_PASTE_LABEL);
-    const input = el('input', 'paste-in');
+    const form = el('form', 'paste door-paste');
+    const label = el('label', 'door-display', copy.HOME_PASTE_LABEL);
+    label.htmlFor = 'seller-input';
+    const unit = el('div', 'door-unit');
+    const pfx = el('span', 'door-pfx', 's/');
+    pfx.setAttribute('aria-hidden', 'true');
+    const input = el('input', 'paste-in door-paste-in');
     input.type = 'text';
+    input.id = 'seller-input';
     input.name = 'seller';
     input.autocomplete = 'off';
     input.spellcheck = false;
@@ -3114,12 +3202,22 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     input.setAttribute('autocapitalize', 'none');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('aria-label', copy.HOME_PASTE_LABEL);
-    const hint = el('p', 'fine', copy.HOME_PASTE_HINT);
+    const submit = el('button', 'buy door-open', copy.HOME_PASTE_SUBMIT);
+    submit.type = 'submit';
+    unit.append(pfx, input, submit);
+    const slab = el('div', 'door-slab');
+    // The counter's legs are a real node, not a positioned ::after: the
+    // layout probe refuses positioned pseudo-elements outright — no box to
+    // measure against the protected ones — and the door is measured
+    // decorated like every screen.
+    const legs = el('div', 'door-legs');
+    legs.setAttribute('aria-hidden', 'true');
+    slab.append(legs);
+    const hint = el('p', 'fine door-hint', copy.HOME_PASTE_HINT);
     const err = el('p', 'ctx', '');
     err.hidden = true;
     err.setAttribute('data-role', 'paste-invalid');
-    const submit = el('button', 'buy', copy.HOME_PASTE_SUBMIT);
-    submit.type = 'submit';
+    slab.append(hint, err);
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         const raw = input.value.trim();
@@ -3135,8 +3233,7 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
         err.hidden = true;
         handlers.onOpenStall?.(raw);
     });
-    label.append(input);
-    form.append(label, hint, err, submit);
+    form.append(label, unit, slab);
     return form;
 }
 

@@ -30,7 +30,6 @@ import {
     HOME_DEMO_SOON,
     UNRESOLVABLE_NEXT,
     SHARE_LEDE,
-    HOME_NO_ACCOUNT,
     HOME_PASTE_INVALID,
     HOME_PASTE_SUBMIT,
     HOME_TITLE,
@@ -459,7 +458,12 @@ describe('home is not an unreadable link', () => {
         });
         const text = root.textContent ?? '';
         expect(text).toContain(HOME_LEDE);
-        expect(text).toContain(HOME_NO_ACCOUNT);
+        // The two intro paragraphs became three chips and one trust line
+        // (Stall Design, direction D) — the same facts, scannable.
+        expect(text).toContain(copy.HOME_CHIPS_FINE);
+        for (const chip of copy.HOME_CHIPS) {
+            expect(text).toContain(chip);
+        }
         expect(text).toContain(HOME_PASTE_SUBMIT);
         expect(text).not.toContain(LINK_UNREADABLE_TITLE);
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -1901,9 +1905,11 @@ describe('brand mark leads the header', () => {
         ];
         for (const view of views) {
             const { root } = paint(view);
-            const head = root.querySelector('.stall-head') as HTMLElement | null;
-            expect(head, 'every header exists').not.toBeNull();
-            const sign = head!.querySelector('.stall-sign') as HTMLElement | null;
+            // The door carries its own brand header (direction D); a stall
+            // keeps the sign. Either way the mark leads a <header>.
+            const sign = root.querySelector(
+                view.route.kind === 'home' ? 'header.door-brand' : '.stall-head .stall-sign',
+            ) as HTMLElement | null;
             expect(sign, 'the sign carries the mark and the headings').not.toBeNull();
             const mark = sign!.querySelector('img.stall-mark') as HTMLImageElement | null;
             expect(mark, 'the mark leads the sign').not.toBeNull();
@@ -1911,7 +1917,10 @@ describe('brand mark leads the header', () => {
             expect(mark!.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
             expect(mark!.alt, 'decorative: the name beside it announces identity').toBe('');
             expect(sign!.firstElementChild, 'mark precedes the headings').toBe(mark);
-            expect(head!.firstElementChild, 'the sign leads the header').toBe(sign);
+            if (view.route.kind !== 'home') {
+                const head = root.querySelector('.stall-head') as HTMLElement;
+                expect(head.firstElementChild, 'the sign leads the header').toBe(sign);
+            }
         }
     });
 });

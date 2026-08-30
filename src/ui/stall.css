@@ -2015,3 +2015,619 @@ textarea.paste-in {
     }
 }
 
+
+/*
+ * The door, direction D ("Stall front") from the Stall Design project. All
+ * door-only chrome, scoped under `.stall.door`: none of it exists on a
+ * seller's stall, so none of it can touch a price. The scene is structure —
+ * canopy above the page, the paste box on a counter slab — and the box is
+ * the hero: the product of this page is a link, and the box is where it is
+ * made. Colors are the shipped default look's, stated here because the door
+ * always paints that look.
+ */
+.stall.door {
+    /* The slab below bleeds to the viewport edge; clip, never a scrollbar. */
+    overflow-x: clip;
+    background-image: radial-gradient(
+        1200px 420px at 50% -140px,
+        rgba(37, 99, 235, 0.08),
+        transparent 70%
+    );
+    background-repeat: no-repeat;
+}
+
+.door-canopy {
+    height: 58px;
+    background:
+        linear-gradient(rgba(20, 23, 26, 0.1), rgba(0, 0, 0, 0) 8px),
+        repeating-linear-gradient(90deg, #2563eb 0 34px, #f4f7fe 34px 68px);
+    -webkit-mask:
+        linear-gradient(#000 0 0) top / 100% calc(100% - 16px) no-repeat,
+        radial-gradient(circle at 50% 0, #000 16.5px, rgba(0, 0, 0, 0) 17px)
+            bottom / 34px 16px repeat-x;
+    mask:
+        linear-gradient(#000 0 0) top / 100% calc(100% - 16px) no-repeat,
+        radial-gradient(circle at 50% 0, #000 16.5px, rgba(0, 0, 0, 0) 17px)
+            bottom / 34px 16px repeat-x;
+    animation: door-wave 7s ease-in-out infinite;
+}
+
+.door-wrap {
+    display: block;
+    max-width: 430px;
+    margin: 0 auto;
+    padding: 22px 16px 40px;
+    gap: 0;
+}
+
+.door-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    flex-wrap: wrap;
+}
+
+.door-brand .stall-mark {
+    width: 30px;
+    height: 36px;
+    flex: none;
+}
+
+.door-word {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.door-value {
+    margin: 6px 0 0;
+    width: 100%;
+    font-size: 13.5px;
+    color: var(--s-muted);
+}
+
+.door-paste {
+    margin-top: 26px;
+}
+
+/*
+ * The display line. Sized by clamp, not a fixed 64px: "Open a stall" at 64px
+ * with nowrap is 397px of glyphs — measured — and the probe rightly fails a
+ * door that scrolls sideways at 390.
+ */
+.door-display {
+    display: block;
+    font-size: clamp(40px, 15.5vw, 64px);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.door-unit {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+    padding: 12px;
+    background: #fff;
+    border: 2px solid #2563eb;
+    border-radius: 18px;
+    box-shadow:
+        0 2px 6px rgba(20, 23, 26, 0.08),
+        0 16px 40px rgba(37, 99, 235, 0.16);
+    transition: box-shadow 0.35s ease;
+}
+
+.door-unit:focus-within {
+    box-shadow:
+        0 0 0 6px rgba(37, 99, 235, 0.16),
+        0 2px 6px rgba(20, 23, 26, 0.08),
+        0 20px 52px rgba(37, 99, 235, 0.28);
+}
+
+.door-pfx {
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    color: #1d4fc4;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.door .door-paste-in {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    height: 48px;
+    border: 0;
+    outline: none;
+    padding: 0 4px;
+    background: transparent;
+    color: #14171a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 16px;
+}
+
+.door-open {
+    flex: 1 1 100%;
+    height: 52px;
+    border: 0;
+    border-radius: 11px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 16.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    animation: door-breathe 3.6s ease-in-out infinite;
+}
+
+.door-open:hover {
+    background: #1d4fc4;
+}
+
+/*
+ * The counter: full-bleed via the 50vw trick, which is why the door clips
+ * overflow-x. White text on the darker end of the gradient: #fff on #1D4FC4
+ * measures 6.4:1.
+ */
+.door-slab {
+    position: relative;
+    margin: -22px calc(50% - 50vw) 58px;
+    padding: 44px 24px 12px;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0) 10px),
+        linear-gradient(#2e63d8, #1d4fc4);
+    border-bottom: 4px solid #16389b;
+}
+
+/* A real node, never a positioned ::after — the probe refuses those. */
+.door-legs {
+    position: absolute;
+    top: 100%;
+    left: 9%;
+    right: 9%;
+    height: 50px;
+    background:
+        linear-gradient(#16389b, #16389b) left top / 16px 100% no-repeat,
+        linear-gradient(#16389b, #16389b) right top / 16px 100% no-repeat;
+    pointer-events: none;
+}
+
+.door-hint {
+    margin: 0 auto;
+    max-width: 400px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #fff;
+    text-align: center;
+}
+
+.door-slab .ctx {
+    margin: 8px auto 0;
+    max-width: 400px;
+    font-size: 13px;
+    color: #ffe1da;
+    text-align: center;
+    background: none;
+    border: 0;
+    padding: 0;
+}
+
+.door-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.door-chips li {
+    padding: 7px 13px;
+    border: 1.5px solid rgba(37, 99, 235, 0.35);
+    border-radius: 999px;
+    background: #fff;
+    color: #1d4fc4;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.door-chips-fine {
+    margin: 12px 2px 0;
+}
+
+.door .pinned {
+    margin-top: 30px;
+    border: 0;
+    padding: 0;
+}
+
+.door .pinned-list {
+    margin-top: 12px;
+    background: #fff;
+    border: 1px solid rgba(95, 105, 117, 0.16);
+    border-radius: 14px;
+    overflow: hidden;
+    display: block;
+}
+
+.door .pinned-row {
+    justify-content: space-between;
+    padding: 13px 14px;
+}
+
+.door .pinned-row + .pinned-row {
+    border-top: 1px solid rgba(95, 105, 117, 0.14);
+}
+
+.door .pinned-open {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #14171a;
+    flex: 0 1 auto;
+}
+
+.door .pinned-open:hover {
+    color: #2563eb;
+}
+
+.door-yours {
+    margin: 18px 2px 0;
+}
+
+.door .demo-soon {
+    margin-top: 26px;
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(95, 105, 117, 0.2);
+    border-radius: 14px;
+}
+
+.door-preview {
+    display: none;
+}
+
+@keyframes door-wave {
+    50% {
+        transform: translateY(4px);
+    }
+}
+
+@keyframes door-breathe {
+    0%,
+    100% {
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+    }
+    50% {
+        box-shadow: 0 8px 30px rgba(37, 99, 235, 0.6);
+    }
+}
+
+@keyframes door-floaty {
+    50% {
+        transform: rotate(2.5deg) translateY(-8px);
+    }
+}
+
+@media (min-width: 680px) {
+    .door-canopy {
+        height: 84px;
+        background:
+            linear-gradient(rgba(20, 23, 26, 0.1), rgba(0, 0, 0, 0) 8px),
+            repeating-linear-gradient(90deg, #2563eb 0 42px, #f4f7fe 42px 84px);
+        -webkit-mask:
+            linear-gradient(#000 0 0) top / 100% calc(100% - 19px) no-repeat,
+            radial-gradient(circle at 50% 0, #000 20.5px, rgba(0, 0, 0, 0) 21px)
+                bottom / 42px 19px repeat-x;
+        mask:
+            linear-gradient(#000 0 0) top / 100% calc(100% - 19px) no-repeat,
+            radial-gradient(circle at 50% 0, #000 20.5px, rgba(0, 0, 0, 0) 21px)
+                bottom / 42px 19px repeat-x;
+    }
+
+    .door-wrap {
+        display: grid;
+        max-width: 1200px;
+        padding: 40px 40px 64px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            'brand brand'
+            'paste paste'
+            'chips cfine'
+            'pinned pinned'
+            'yours demo';
+        column-gap: 40px;
+        row-gap: 0;
+        align-content: start;
+    }
+
+    .door-brand {
+        grid-area: brand;
+    }
+
+    .door-brand .stall-mark {
+        width: 36px;
+        height: 43px;
+    }
+
+    .door-word {
+        font-size: 26px;
+    }
+
+    .door-value {
+        width: auto;
+        margin: 0 0 0 10px;
+        font-size: 14.5px;
+    }
+
+    .door-paste {
+        grid-area: paste;
+        margin-top: 34px;
+    }
+
+    .door-display {
+        font-size: clamp(64px, 7.4vw, 92px);
+    }
+
+    .door-unit {
+        flex-wrap: nowrap;
+        align-items: center;
+        margin-top: 28px;
+        padding: 12px 12px 12px 18px;
+    }
+
+    .door-open {
+        flex: 0 0 190px;
+        height: 56px;
+    }
+
+    .door .door-paste-in {
+        height: 56px;
+        font-size: 17px;
+    }
+
+    .door-slab {
+        margin: -24px 0 62px;
+        padding: 46px 28px 14px;
+        border-radius: 0 0 6px 6px;
+    }
+
+    .door-hint {
+        font-size: 13.5px;
+    }
+
+    .door-chips {
+        grid-area: chips;
+        align-self: start;
+    }
+
+    .door-chips-fine {
+        grid-area: cfine;
+        margin: 6px 2px 0;
+        align-self: start;
+    }
+
+    .door .pinned {
+        grid-area: pinned;
+        margin-top: 34px;
+    }
+
+    .door-yours {
+        grid-area: yours;
+        margin: 34px 2px 0;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid rgba(95, 105, 117, 0.2);
+        border-radius: 14px;
+        align-self: start;
+    }
+
+    .door .demo-soon {
+        grid-area: demo;
+        margin-top: 34px;
+        align-self: start;
+    }
+
+    .door-preview {
+        grid-area: pv;
+        display: none;
+        position: relative;
+        align-self: start;
+        margin-top: 8px;
+        pointer-events: none;
+    }
+
+    @media (min-width: 1100px) {
+        .door-wrap {
+            grid-template-columns:
+                minmax(0, 1.05fr) minmax(0, 0.95fr)
+                minmax(320px, 400px);
+            grid-template-areas:
+                'brand brand pv'
+                'paste paste pv'
+                'chips cfine pv'
+                'pinned yours demo';
+        }
+
+        .door-preview {
+            display: block;
+        }
+    }
+
+    .pv-card {
+        background: #fff;
+        border: 1px solid rgba(95, 105, 117, 0.18);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow:
+            0 3px 8px rgba(20, 23, 26, 0.07),
+            0 26px 60px rgba(20, 23, 26, 0.16);
+        transform: rotate(2.5deg);
+        animation: door-floaty 6.5s ease-in-out infinite;
+    }
+
+    .pv-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(95, 105, 117, 0.16);
+    }
+
+    .pv-head .stall-mark {
+        width: 24px;
+        height: 29px;
+        flex: none;
+    }
+
+    .pv-name {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .pv-tagline {
+        margin: 2px 0 0;
+        font-size: 11.5px;
+        color: #5f6975;
+    }
+
+    .pv-sub {
+        margin: 3px 0 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: #1d4fc4;
+    }
+
+    .pv-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 0;
+        border-bottom: 1px solid rgba(95, 105, 117, 0.12);
+    }
+
+    /*
+     * The tiles: one real icon (mingo, the owner's own token), recolored per
+     * row. The flat color underneath is the fallback the shop's own icon
+     * rule promises — a failed load leaves it, never a broken-image glyph.
+     */
+    .pv-ic {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex: none;
+        overflow: hidden;
+    }
+
+    .pv-icimg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+    }
+
+    .pv-i1 {
+        background: #bdd3f8;
+    }
+
+    .pv-i1 .pv-icimg {
+        filter: hue-rotate(120deg) saturate(0.8);
+    }
+
+    .pv-i2 {
+        background: #dbe6fb;
+    }
+
+    .pv-i2 .pv-icimg {
+        filter: hue-rotate(165deg) saturate(0.7) brightness(1.08);
+    }
+
+    .pv-i3 {
+        background: #f3d8cf;
+    }
+
+    .pv-i3 .pv-icimg {
+        filter: hue-rotate(-95deg) saturate(0.9) brightness(1.05);
+    }
+
+    .pv-b {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .pv-n {
+        display: block;
+        font-size: 13.5px;
+        font-weight: 600;
+    }
+
+    .pv-q {
+        display: block;
+        margin-top: 1px;
+        font-size: 11px;
+        color: #5f6975;
+    }
+
+    .pv-p {
+        text-align: right;
+    }
+
+    .pv-x {
+        display: block;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .pv-u {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: #5f6975;
+    }
+
+    .pv-foot {
+        margin-top: 12px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #f1f4fa;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: #454f59;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pv-tag {
+        display: block;
+        margin-top: 16px;
+        text-align: center;
+        font-size: 12.5px;
+        font-style: italic;
+        color: #5f6975;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .door-canopy,
+    .door-open,
+    .pv-card {
+        animation: none;
+    }
+
+    .door-unit {
+        transition: none;
+    }
+}
