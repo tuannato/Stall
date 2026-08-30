@@ -1,0 +1,200 @@
+/*
+ * Modern, ported directly from the design's stylesheet
+ * (storefront/modern-fd*.html) under the same licensed deviations as the
+ * other two files. The drifting light and the sheen live in the decor
+ * rows, as the extraction split them.
+ */
+
+.stall.t-modern {
+    font-size: 14.5px;
+}
+
+.t-modern .stall-head {
+    background: color-mix(in srgb, var(--s-surface) 74%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(95, 105, 117, 0.16);
+    border-radius: 20px;
+    box-shadow:
+        0 2px 6px rgba(20, 23, 26, 0.05),
+        0 18px 44px rgba(20, 23, 26, 0.08);
+}
+
+.t-modern .stall-sub {
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    border: 0;
+}
+
+.t-modern .addr {
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--s-muted) 8%, var(--s-surface));
+    color: var(--s-muted);
+    font-size: 11.5px;
+    border: 0;
+}
+
+.t-modern .notice {
+    background: color-mix(in srgb, var(--s-surface) 90%, transparent);
+    border: 1px solid rgba(95, 105, 117, 0.18);
+    border-radius: 16px;
+}
+
+.t-modern .notice-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.t-modern .section-head,
+.t-modern .collection-head {
+    border-bottom: 2px solid rgba(95, 105, 117, 0.14);
+    padding-bottom: 5px;
+}
+
+.t-modern .section-title,
+.t-modern .collection-name {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: color-mix(in srgb, var(--s-text) 70%, var(--s-muted));
+}
+
+.t-modern .item {
+    background: var(--s-surface);
+    border: 1px solid rgba(95, 105, 117, 0.14);
+    border-radius: 16px;
+    box-shadow:
+        0 1px 2px rgba(20, 23, 26, 0.06),
+        0 8px 24px rgba(20, 23, 26, 0.06);
+}
+
+.t-modern .item-n {
+    font-size: 15.5px;
+    font-weight: 650;
+}
+
+.t-modern .item-q {
+    font-size: 12px;
+    color: var(--s-muted);
+}
+
+.t-modern .item-x {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--s-text);
+}
+
+.t-modern .item-u {
+    font-weight: 700;
+    color: color-mix(in srgb, var(--s-accent) 82%, var(--s-text));
+}
+
+.t-modern .item-fiat {
+    font-weight: 600;
+    color: color-mix(in srgb, var(--s-accent) 82%, var(--s-text));
+}
+
+.t-modern .item-caret {
+    width: 9px;
+    height: 9px;
+    border: 0;
+    border-right: 2.5px solid #2563eb;
+    border-top: 2.5px solid #2563eb;
+    transform: rotate(45deg);
+    transition: transform 0.2s;
+}
+
+.t-modern .item-head:hover .item-caret {
+    transform: rotate(45deg) translate(2px, -2px);
+}
+
+.t-modern .mini {
+    padding: 10px 14px;
+    border: 1.5px solid rgba(37, 99, 235, 0.5);
+    border-radius: 11px;
+    background: var(--s-surface);
+    color: #1d4fc4;
+    font-size: 13px;
+    font-weight: 600;
+    transition:
+        background 0.2s,
+        color 0.2s;
+}
+
+.t-modern .mini:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
+/* The blurred white dock — in flow, centred. */
+.t-modern .tabs {
+    gap: 4px;
+    padding: 6px;
+    background: color-mix(in srgb, var(--s-surface) 88%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(95, 105, 117, 0.18);
+    border-radius: 999px;
+    box-shadow: 0 8px 30px rgba(20, 23, 26, 0.18);
+}
+
+.t-modern .tab {
+    padding: 9px 14px;
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--s-text) 70%, var(--s-muted));
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.t-modern .tab:hover {
+    background: rgba(37, 99, 235, 0.08);
+}
+
+.t-modern .tab[aria-selected='true'] {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: none;
+}
+
+.t-modern .tab-name {
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+@media (min-width: 680px) {
+    .t-modern .stall-head {
+        padding: 30px;
+        border-radius: 26px;
+    }
+
+    .t-modern .stall-name {
+        font-size: 44px;
+    }
+
+    .t-modern .stall-tagline {
+        font-size: 15px;
+    }
+
+    .t-modern .item-head {
+        padding: 18px 20px;
+    }
+
+    .t-modern .item-n {
+        font-size: 17px;
+    }
+
+    .t-modern .item-x {
+        font-size: 32px;
+    }
+}

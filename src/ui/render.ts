@@ -50,6 +50,9 @@ import type {
 } from '../domain/state';
 import {
     DEFAULT_THEME,
+    DEFAULT_THEME_ID,
+    NEO_CITY_THEME_ID,
+    RURAL_THEME_ID,
     SHIPPED_THEMES,
     decodeTheme,
     themeVars,
@@ -59,6 +62,9 @@ import { stallMark } from './brand';
 import * as copy from './copy';
 import mingoIcon from './mingo-icon.png';
 import './stall.css';
+import './theme-modern.css';
+import './theme-neo.css';
+import './theme-rural.css';
 
 export type StallHandlers = {
     onBuy: (outpoint: Outpoint) => void;
@@ -227,6 +233,13 @@ export function renderStall(
     restoreFocus(root, keptFocus);
 }
 
+/** id → the class its shipped stylesheet is scoped under. */
+const THEME_CLASS: Record<number, string> = {
+    [DEFAULT_THEME_ID]: 't-modern',
+    [NEO_CITY_THEME_ID]: 't-neo',
+    [RURAL_THEME_ID]: 't-rural',
+};
+
 function applyTheme(
     stall: HTMLElement,
     theme: DecodedTheme,
@@ -260,10 +273,17 @@ function applyTheme(
         }
     }
     for (const cls of [...stall.classList]) {
-        if (cls.startsWith('att-')) {
+        if (cls.startsWith('att-') || cls.startsWith('t-')) {
             stall.classList.remove(cls);
         }
     }
+    /*
+     * The look's own stylesheet, by class (owner's ruling, 2026-08-30:
+     * the design files apply directly). The chain still supplies only a
+     * one-byte id — this maps it to a class over CSS we ship, exactly as
+     * the ornament kind always has. Unknown ids wear the default's class.
+     */
+    stall.classList.add(THEME_CLASS[theme.id] ?? 't-modern');
     stall.classList.add(...attachmentClasses(worn));
     const next = ornamentStrip(theme);
     if (next !== null) {

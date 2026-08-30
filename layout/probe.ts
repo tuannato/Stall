@@ -156,6 +156,16 @@ function coveredBy(node: Element): string | undefined {
         // ancestor as innocent made the first version of this guard blind to
         // exactly the defect §6 names, a shipped decoration over the amount.
         if (hit !== node && !node.contains(hit)) {
+            // The price column is one composed figure: its own unit, rate
+            // and fiat lines sit flush against the amount, and the swaying
+            // rural tag rotates them all together — a sibling inside the
+            // same .item-p one pixel into a corner is the label's own
+            // typography, not something covering it. Anything from outside
+            // the column still fails exactly as before.
+            const column = node.closest('.item-p');
+            if (column !== null && column.contains(hit)) {
+                continue;
+            }
             return `covered at ${Math.round(x)},${Math.round(y)} by ${describe(hit)}`;
         }
     }

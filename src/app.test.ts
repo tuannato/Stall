@@ -2,8 +2,19 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { boot, type AppState } from './app';
+
+/*
+ * The price feed answers instantly and never touches the network: every
+ * `boot` here keeps living after its test, and a real coingecko round
+ * (observed rate-limited mid-suite) resolved late, repainted with a stale
+ * view and rewrote the global document.title after the next test's
+ * assertion — a cross-test flake that only showed under load.
+ */
+vi.mock('./net/price', () => ({
+    fetchXecPrice: async () => undefined,
+}));
 import { sellerFromPath, stallPath } from './domain/route';
 import { EMPTY_TITLE, HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
 

@@ -1,0 +1,287 @@
+/*
+ * Neo city, ported directly from the design's own stylesheet
+ * (storefront/neo-fd*.html in the Stall Design project) — the owner's
+ * ruling: the design applies as written. Selectors renamed to this DOM,
+ * values verbatim. Three licensed deviations, each a standing rule that
+ * outranks fidelity: the dock is in flow (a fixed bar covers whatever
+ * price scrolls under it), no positioned pseudo-elements (the probe
+ * cannot measure them — their art lives as background layers and decor
+ * rows), and the address is never truncated.
+ */
+
+.stall.t-neo {
+    font-size: 13.5px;
+}
+
+.t-neo .stall-head {
+    background: linear-gradient(180deg, #0d1322, #0a0f1c);
+    border: 1px solid rgba(44, 233, 224, 0.4);
+    border-radius: 0;
+    box-shadow:
+        0 0 0 1px rgba(44, 233, 224, 0.1),
+        0 0 34px rgba(44, 233, 224, 0.15);
+}
+
+.t-neo .stall-name {
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #e9fffd;
+    text-shadow:
+        0 0 8px rgba(44, 233, 224, 0.9),
+        0 0 28px rgba(44, 233, 224, 0.5);
+}
+
+.t-neo .stall-tagline {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: #ffa3bf;
+}
+
+.t-neo .stall-sub {
+    padding: 3px 9px;
+    border: 1px solid rgba(255, 77, 122, 0.65);
+    border-radius: 0;
+    background: transparent;
+    color: #ff8fb0;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.t-neo .addr {
+    padding: 7px 10px;
+    border: 1px dashed rgba(44, 233, 224, 0.45);
+    border-radius: 0;
+    background: rgba(44, 233, 224, 0.05);
+    color: #8aa6c9;
+    font-size: 11px;
+}
+
+.t-neo .notice {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 77, 122, 0.16),
+        rgba(139, 123, 255, 0.1)
+    );
+    border: 1px solid rgba(255, 77, 122, 0.55);
+    border-radius: 0;
+}
+
+.t-neo .notice-chip {
+    padding: 4px 9px;
+    background: #ff4d7a;
+    color: #1a070e;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    border-radius: 0;
+    clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+
+.t-neo .notice-text {
+    font-size: 12.5px;
+    color: #ffd7e3;
+}
+
+.t-neo .section-head,
+.t-neo .collection-head {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.t-neo .section-title,
+.t-neo .collection-name {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #3df2ea;
+    text-shadow: 0 0 12px rgba(44, 233, 224, 0.5);
+}
+
+.t-neo .collection-count {
+    font-size: 10.5px;
+    color: #8aa6c9;
+    letter-spacing: 0.06em;
+}
+
+.t-neo .item {
+    border: 1px solid rgba(44, 233, 224, 0.42);
+    border-radius: 0;
+    background: var(--s-surface);
+}
+
+.t-neo .item-head {
+    padding: 13px 12px;
+    color: var(--s-text);
+}
+
+.t-neo .item-ic {
+    background: #131b30;
+    border: 1px solid rgba(44, 233, 224, 0.3);
+    border-radius: 0;
+}
+
+.t-neo .item-n {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.t-neo .item-q {
+    font-size: 10.5px;
+    color: var(--s-muted);
+    letter-spacing: 0.05em;
+}
+
+.t-neo .item-from {
+    font-size: 9.5px;
+    color: #8aa6c9;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.t-neo .item-x {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #3df2ea;
+    text-shadow: 0 0 12px rgba(44, 233, 224, 0.6);
+}
+
+.t-neo .item-u {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #3df2ea;
+}
+
+.t-neo .item-rate {
+    font-size: 10px;
+    color: #8aa6c9;
+}
+
+.t-neo .item-fiat {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #ff8fb0;
+}
+
+.t-neo .item-lots {
+    font-size: 9.5px;
+    color: #8aa6c9;
+}
+
+/* The design's blinking chevron, on our caret node — border-drawn. */
+.t-neo .item-caret {
+    width: 0;
+    height: 0;
+    border: 0;
+    border-left: 8px solid #ff4d7a;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    transform: none;
+    filter: drop-shadow(0 0 6px rgba(255, 77, 122, 0.8));
+    animation: t-neo-blinkc 2.2s ease-in-out infinite;
+}
+
+@keyframes t-neo-blinkc {
+    0%,
+    100% {
+        opacity: 0.65;
+        transform: translateX(0);
+    }
+    50% {
+        opacity: 1;
+        transform: translateX(3px);
+    }
+}
+
+.t-neo .mini {
+    padding: 10px 13px;
+    border: 1px solid rgba(44, 233, 224, 0.6);
+    border-radius: 0;
+    background: rgba(44, 233, 224, 0.06);
+    color: #3df2ea;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition:
+        background 0.2s,
+        box-shadow 0.2s;
+}
+
+.t-neo .mini:hover {
+    background: rgba(44, 233, 224, 0.18);
+    box-shadow: 0 0 16px rgba(44, 233, 224, 0.35);
+}
+
+/* The console dock — in flow, centred; skin verbatim. */
+.t-neo .tabs {
+    gap: 2px;
+    padding: 5px;
+    background: rgba(7, 11, 21, 0.94);
+    border: 1px solid rgba(44, 233, 224, 0.5);
+    border-radius: 0;
+    box-shadow: 0 0 24px rgba(44, 233, 224, 0.25);
+}
+
+.t-neo .tab {
+    padding: 9px 13px;
+    color: #8aa6c9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.t-neo .tab:hover {
+    color: #dff6ff;
+}
+
+.t-neo .tab[aria-selected='true'] {
+    background: rgba(44, 233, 224, 0.14);
+    color: #3df2ea;
+    box-shadow: inset 0 -2px 0 #2ce9e0;
+    border-radius: 0;
+}
+
+.t-neo .tab-name {
+    font-weight: 500;
+    text-transform: none;
+}
+
+@media (min-width: 680px) {
+    .t-neo .stall-head {
+        padding: 28px 26px 22px;
+    }
+
+    .t-neo .stall-name {
+        font-size: 44px;
+    }
+
+    .t-neo .stall-tagline {
+        font-size: 14px;
+    }
+
+    .t-neo .item-head {
+        padding: 17px 18px;
+    }
+
+    .t-neo .item-n {
+        font-size: 16px;
+    }
+
+    .t-neo .item-x {
+        font-size: 32px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-neo .item-caret {
+        animation: none;
+    }
+}

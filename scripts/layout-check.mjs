@@ -249,11 +249,21 @@ const PIXEL_CONTRAST_FLOOR = 3;
  * roles, and nothing else proves what is actually painted behind a figure.
  */
 function worstContrastInBox(img, target, textColor) {
+    // Browsers serialize a color-mix() result as color(srgb r g b) with
+    // 0-1 floats; plain colours stay rgb(). Read both.
+    let cr;
+    let cg;
+    let cb;
     const m = textColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (m === null) {
+    const f = textColor.match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/);
+    if (m !== null) {
+        [cr, cg, cb] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    } else if (f !== null) {
+        [cr, cg, cb] = [f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255));
+    } else {
         throw new Error(`unreadable computed colour "${textColor}"`);
     }
-    const textLum = luminance(Number(m[1]), Number(m[2]), Number(m[3]));
+    const textLum = luminance(cr, cg, cb);
     // Narrowed by the corner radius: outside it the pixels are the page
     // behind the control, not the control. See ContrastTarget.r in the probe.
     const r = target.r ?? 0;

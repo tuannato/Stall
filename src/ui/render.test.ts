@@ -3473,8 +3473,9 @@ describe('a-worn-decoration-reaches-the-stall', () => {
         );
         const stall = root.querySelector<HTMLElement>('.stall')!;
         expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(18, 21, 26)');
-        // A mood paints no node and carries no class.
-        expect(stall.className).toBe('stall');
+        // A mood paints no node and carries no class of its own — the
+        // look's stylesheet class is applyTheme's, not the mood's.
+        expect(stall.className).toBe('stall t-modern');
     });
 });
 

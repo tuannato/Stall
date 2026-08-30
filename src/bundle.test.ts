@@ -112,10 +112,11 @@ describe('nothing-is-served-as-a-data-url', () => {
  * is allowed and must be a deliberate diff, not a surprise.
  */
 describe('served-weight-has-a-ceiling', () => {
-    // Measured 564,858 the day the two Inter subsets landed; the margin is
-    // for ordinary growth. An 85 KB latin-ext subset re-added by accident
-    // lands past this and fails, which is the point.
-    const CEILING_BYTES = 640_000;
+    // Measured 564,858 the day the two Inter subsets landed and 649,559
+    // the day the three design stylesheets applied directly (the owner's
+    // ruling). The margin is for ordinary growth; an 85 KB latin-ext
+    // subset re-added by accident still lands past this and fails.
+    const CEILING_BYTES = 700_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

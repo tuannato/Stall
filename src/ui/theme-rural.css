@@ -1,0 +1,248 @@
+/*
+ * Rural, ported directly from the design's stylesheet
+ * (storefront/rural-fd*.html) under the same three licensed deviations
+ * as Neo's file — and one split the owner designed earlier and keeps:
+ * the wood sign, sunburst, bunting and confetti are the paid decor rows,
+ * so the free base stays the paper sign the extraction left it.
+ */
+
+.stall.t-rural {
+    font-size: 15px;
+}
+
+.t-rural .stall-sub {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--s-surface) 70%, white);
+    color: color-mix(in srgb, var(--s-accent) 55%, var(--s-muted));
+    font-size: 12px;
+    font-weight: 700;
+    border: 0;
+}
+
+.t-rural .addr {
+    padding: 7px 12px;
+    border: 1px dashed rgba(107, 89, 66, 0.65);
+    border-radius: 999px;
+    background: var(--s-surface);
+    font-size: 11px;
+    color: var(--s-muted);
+    text-align: center;
+}
+
+/* The gold banner, as designed — with the mood-lesson kept: gold is the
+   frame, the ground stays paper so Sun-faded cannot bury the sentence. */
+.t-rural .notice {
+    background: var(--s-surface);
+    border: 2px solid var(--s-accent-2);
+    box-shadow: 0 4px 12px rgba(58, 42, 24, 0.18);
+}
+
+.t-rural .notice-chip {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: #9e4620;
+    color: #fff3ea;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    box-shadow: 0 0 0 3px rgba(158, 70, 32, 0.3);
+}
+
+.t-rural .notice-text {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--s-text);
+}
+
+.t-rural .section-head,
+.t-rural .collection-head {
+    border-bottom: 4px double rgba(107, 89, 66, 0.5);
+    padding-bottom: 6px;
+    border-left: 0;
+}
+
+.t-rural .section-title,
+.t-rural .collection-name {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: none;
+    color: var(--s-text);
+}
+
+.t-rural .collection-count {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--s-muted);
+}
+
+.t-rural .item {
+    background: var(--s-surface);
+    border: 1px dashed rgba(107, 89, 66, 0.65);
+    border-radius: 12px;
+    box-shadow:
+        0 3px 0 rgba(107, 89, 66, 0.25),
+        0 10px 22px rgba(58, 42, 24, 0.1);
+}
+
+.t-rural .item-head {
+    padding: 15px 13px;
+    color: var(--s-text);
+}
+
+.t-rural .item-ic {
+    border-radius: 50%;
+    background: #f3e7ce;
+    border: 2px solid rgba(107, 89, 66, 0.4);
+}
+
+.t-rural .item-n {
+    font-size: 16.5px;
+    font-weight: 700;
+}
+
+.t-rural .item-q {
+    font-size: 12px;
+    font-style: italic;
+    color: #6b5942;
+}
+
+/*
+ * The tag, verbatim: cardstock, terracotta border the notch trims, the
+ * punched hole ring-drawn into the ground (a positioned pseudo has no
+ * box), swaying on its string.
+ */
+.t-rural .item-p {
+    padding: 8px 10px 8px 26px;
+    background: radial-gradient(
+        circle at 9px 50%,
+        var(--s-bg) 2.2px,
+        var(--s-accent) 3px 4.4px,
+        color-mix(in srgb, var(--s-surface) 82%, var(--s-accent-2)) 5.4px
+    );
+    border: 1.5px solid var(--s-accent);
+    clip-path: polygon(13px 0, 100% 0, 100% 100%, 13px 100%, 0 50%);
+    transform-origin: 0 50%;
+    animation: t-rural-tag 5.5s ease-in-out infinite;
+}
+
+@keyframes t-rural-tag {
+    0%,
+    100% {
+        transform: rotate(-0.8deg);
+    }
+    50% {
+        transform: rotate(0.8deg);
+    }
+}
+
+.t-rural .item-from {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b5942;
+}
+
+.t-rural .item-x {
+    font-size: 25px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--s-text);
+}
+
+.t-rural .item-u {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--s-accent);
+}
+
+.t-rural .item-rate {
+    font-size: 10.5px;
+    color: var(--s-muted);
+}
+
+.t-rural .item-fiat {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--s-accent);
+}
+
+.t-rural .item-lots {
+    font-size: 10px;
+    color: var(--s-muted);
+}
+
+.t-rural .item-caret {
+    width: 9px;
+    height: 9px;
+    border: 0;
+    border-right: 2.5px solid #9e4620;
+    border-top: 2.5px solid #9e4620;
+    transform: rotate(45deg);
+}
+
+.t-rural .mini {
+    padding: 10px 16px;
+    border: 1.5px solid #9e4620;
+    border-radius: 999px;
+    background: var(--s-surface);
+    color: var(--s-accent);
+    font-size: 13.5px;
+    font-weight: 600;
+    transition:
+        background 0.2s,
+        color 0.2s;
+}
+
+.t-rural .mini:hover {
+    background: #9e4620;
+    color: #fff3ea;
+}
+
+/* The ticket dock — in flow, centred; perforations and all. */
+.t-rural .tabs {
+    padding: 5px;
+    background: color-mix(in srgb, var(--s-surface) 55%, var(--s-bg));
+    border: 1.5px solid color-mix(in srgb, var(--s-muted) 60%, transparent);
+    border-radius: 13px;
+    box-shadow: 0 8px 24px rgba(58, 42, 24, 0.25);
+}
+
+.t-rural .tab {
+    padding: 9px 14px;
+    color: var(--s-muted);
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.t-rural .tab + .tab {
+    border-left: 1.5px dashed rgba(107, 89, 66, 0.5);
+}
+
+.t-rural .tab:hover {
+    color: #9e4620;
+}
+
+.t-rural .tab[aria-selected='true'] {
+    background: #9e4620;
+    color: #fff3ea;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.t-rural .tab-name {
+    font-weight: 500;
+}
+
+@media (min-width: 680px) {
+    .t-rural .stall-name {
+        font-size: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-rural .item-p {
+        animation: none;
+    }
+}
