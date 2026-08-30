@@ -3348,13 +3348,17 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('offers one control per slot, not one per row', () => {
         const root = sheet();
-        // Rural ships four slots now — yard, mood, badge, trim — so four
-        // selects and no more, however many rows a slot holds.
-        expect(root.querySelector('[data-role="decor-yard"]')).not.toBeNull();
-        expect(root.querySelector('[data-role="decor-mood"]')).not.toBeNull();
-        expect(root.querySelector('[data-role="decor-badge"]')).not.toBeNull();
-        expect(root.querySelector('[data-role="decor-trim"]')).not.toBeNull();
-        expect(root.querySelectorAll('.decor select').length).toBe(4);
+        // Rural ships six slots after extraction round 1 — yard, mood,
+        // crest, trim, fringe, badge is gone — so exactly as many selects
+        // as slots, however many rows a slot holds.
+        const slots = ['yard', 'mood', 'crest', 'trim', 'fringe'];
+        for (const slot of slots) {
+            expect(
+                root.querySelector(`[data-role="decor-${slot}"]`),
+                `rural offers the ${slot} slot`,
+            ).not.toBeNull();
+        }
+        expect(root.querySelectorAll('.decor select').length).toBe(slots.length);
     });
 
     it('opens the look picker on every look, not just the second one', () => {

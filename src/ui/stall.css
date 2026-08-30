@@ -250,6 +250,61 @@ body {
 }
 
 /*
+ * Modern · trim · Drifting light. The showroom's three soft colour fields
+ * as radial layers on the root — the full dress drifted them; shipped
+ * still, because the sheen holds this look's one mover slot.
+ */
+.stall.att-drift {
+    background-image:
+        radial-gradient(
+            340px 340px at -80px -40px,
+            color-mix(in srgb, var(--s-accent) 16%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            300px 300px at calc(100% + 80px) 220px,
+            color-mix(in srgb, var(--s-muted) 14%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            320px 320px at -60px calc(100% - 40px),
+            color-mix(in srgb, var(--s-accent) 12%, transparent),
+            transparent 70%
+        ),
+        var(--s-backdrop);
+}
+
+/*
+ * Modern · badge · Sheen sweep. A light pass across every card, drawn as
+ * an animated background layer on the card's own box — never a node, never
+ * a pseudo-element, nothing that can leave the card. Modern's one mover;
+ * reduced motion parks the band mid-card, still visible.
+ */
+.stall.att-sheen .item {
+    background-image: linear-gradient(
+        100deg,
+        transparent 42%,
+        color-mix(in srgb, var(--s-text) 5%, transparent) 50%,
+        transparent 58%
+    );
+    background-repeat: no-repeat;
+    background-size: 300% 100%;
+    background-position: -100% 0;
+    animation: att-sheen-pass 6s ease-in-out infinite;
+}
+
+@keyframes att-sheen-pass {
+    0%,
+    45% {
+        background-position: -100% 0;
+    }
+    80%,
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/*
  * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
  * to a real in-flow band under the sign: a doubled grid tipped away with a
  * transform, fading upward. A node, never a pseudo-element — the probe
@@ -334,6 +389,119 @@ body {
             transparent 70%
         ),
         var(--s-backdrop);
+}
+
+/*
+ * Rural · crest · Hanging sign. The full dress's wood shop sign, cut to a
+ * class: plank gradient and rope bars painted as background layers inside
+ * the head's own padding, cream ink on the name and tagline — which is why
+ * this is decor and not base: the paper sign underneath stays a complete
+ * look for a seller who buys nothing. Static; the beetle keeps the mover.
+ */
+.stall.att-woodsign .stall-head {
+    background-image:
+        linear-gradient(
+            color-mix(in srgb, var(--s-muted) 55%, transparent),
+            color-mix(in srgb, var(--s-muted) 55%, transparent)
+        ),
+        linear-gradient(
+            color-mix(in srgb, var(--s-muted) 55%, transparent),
+            color-mix(in srgb, var(--s-muted) 55%, transparent)
+        ),
+        repeating-linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--s-text) 16%, transparent) 0 1.5px,
+            transparent 1.5px 26px
+        ),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--s-accent) 38%, var(--s-muted)),
+            color-mix(in srgb, var(--s-accent) 30%, color-mix(in srgb, var(--s-muted) 80%, var(--s-text)))
+        );
+    background-repeat: no-repeat;
+    background-size:
+        3px 18px,
+        3px 18px,
+        100% calc(100% - 18px),
+        100% calc(100% - 18px);
+    background-position:
+        left 26% top,
+        right 26% top,
+        left 0 top 18px,
+        left 0 top 18px;
+    border-bottom: 3px solid color-mix(in srgb, var(--s-text) 55%, transparent);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--s-text) 22%, transparent);
+}
+
+.stall.att-woodsign .stall-name,
+.stall.att-woodsign .stall-tagline,
+.stall.att-woodsign .stall-sub {
+    color: #fff6e6;
+    text-shadow: 0 1px 0 color-mix(in srgb, var(--s-text) 45%, transparent);
+}
+
+/*
+ * The address lives inside the head too, and the first run of the contrast
+ * pass measured it at 1.13:1 on the planks — dark muted ink on dark wood.
+ * Cream, like everything else the sign carries.
+ */
+.stall.att-woodsign .addr {
+    color: #f3ddbe;
+    border-color: color-mix(in srgb, #fff6e6 45%, transparent);
+}
+
+.stall.att-woodsign .pin-btn {
+    color: #f3ddbe;
+}
+
+/*
+ * Rural · trim · Sunburst. The ray wheel behind the sign as one repeating
+ * conic layer on the root, soft enough that the weave still reads through
+ * it. Static at ship — the 70s spin yielded to the beetle.
+ */
+.stall.att-sunburst {
+    background-image:
+        repeating-conic-gradient(
+            from 0deg at 50% -140px,
+            color-mix(in srgb, var(--s-accent-2) 14%, transparent) 0 9deg,
+            transparent 9deg 18deg
+        ),
+        var(--s-backdrop);
+}
+
+/*
+ * Rural · fringe · Bunting. The craft-fair triangle rows as a real node in
+ * the ornament strip — three inks from the look's own palette, drawn with
+ * conic triangles, swaying not at all: the beetle keeps this look's mover.
+ */
+.att-bunting {
+    position: relative;
+    display: block;
+    width: 100%;
+    align-self: stretch;
+    height: 24px;
+    flex: none;
+    pointer-events: none;
+    background:
+        linear-gradient(var(--s-muted), var(--s-muted)) top / 100% 3px no-repeat,
+        conic-gradient(
+                from 318deg at 16.6% 100%,
+                var(--s-accent) 0 84deg,
+                rgba(0, 0, 0, 0) 0
+            )
+            0 3px / 108px 21px repeat-x,
+        conic-gradient(
+                from 318deg at 50% 100%,
+                var(--s-accent-2) 0 84deg,
+                rgba(0, 0, 0, 0) 0
+            )
+            0 3px / 108px 21px repeat-x,
+        conic-gradient(
+                from 318deg at 83.3% 100%,
+                var(--s-muted) 0 84deg,
+                rgba(0, 0, 0, 0) 0
+            )
+            0 3px / 108px 21px repeat-x;
 }
 
 /*
@@ -526,6 +694,12 @@ body {
 
     .stall.att-rainfall {
         animation: none;
+    }
+
+    /* Parked mid-card, still visible: paid decor never vanishes. */
+    .stall.att-sheen .item {
+        animation: none;
+        background-position: 50% 0;
     }
 }
 

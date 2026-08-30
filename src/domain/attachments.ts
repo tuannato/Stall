@@ -155,13 +155,20 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         // background four points and a buyer could not tell they were
         // wearing it. The probe's billboard check now fails a mood whose
         // canvas moves less than a person can notice.
+        /*
+         * Re-bleached 2026-08-30: the new rural paper (251,242,223) crept
+         * within 46 channels of the old fade and the billboard pass rightly
+         * called it a mood nobody can see. Paler and greyer now — 66
+         * channels off the base — with the muted ink darkened to keep its
+         * 4.5:1 on the brighter sheet.
+         */
         palette: {
-            bg: rgb(255, 251, 241),
-            surface: rgb(252, 247, 238),
+            bg: rgb(255, 254, 250),
+            surface: rgb(247, 244, 238),
             text: rgb(96, 84, 66),
-            muted: rgb(146, 128, 102),
+            muted: rgb(118, 104, 84),
             accent: rgb(172, 102, 64),
-            accentTwo: rgb(146, 128, 102),
+            accentTwo: rgb(118, 104, 84),
         },
     },
     /*
@@ -171,23 +178,28 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * shop. Bits 2 and 3 of each theme are claimed here and are permanent
      * from the first record that sets them.
      */
+    /*
+     * Extraction round 1: Brass pin and Blueprint were unminted, so their
+     * bits take the showroom's pieces. The sheen is Modern's one mover —
+     * this look shipped none before.
+     */
     {
         themeId: DEFAULT_THEME_ID,
         bit: 2,
-        slot: 'badge',
-        label: 'Brass pin',
-        paint: 'node',
-        cls: 'att-pin',
+        slot: 'trim',
+        label: 'Drifting light',
+        paint: 'root',
+        cls: 'att-drift',
         motion: false,
     },
     {
         themeId: DEFAULT_THEME_ID,
         bit: 3,
-        slot: 'trim',
-        label: 'Blueprint',
+        slot: 'badge',
+        label: 'Sheen sweep',
         paint: 'root',
-        cls: 'att-blueprint',
-        motion: false,
+        cls: 'att-sheen',
+        motion: true,
     },
     /*
      * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
@@ -223,22 +235,39 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-aurora',
         motion: false,
     },
+    /*
+     * Extraction round 1: Straw charm and Stitched were unminted, so their
+     * bits take the full dress's pieces. The beetle keeps this look's one
+     * mover — a static beetle is a dead one — so the bunting and the rest
+     * ship still. The hanging sign is decor rather than base on purpose:
+     * cream ink on wood needs its own class, and the free base stays a
+     * complete paper sign without it.
+     */
     {
         themeId: RURAL_THEME_ID,
         bit: 2,
-        slot: 'badge',
-        label: 'Straw charm',
-        paint: 'node',
-        cls: 'att-charm',
+        slot: 'crest',
+        label: 'Hanging sign',
+        paint: 'root',
+        cls: 'att-woodsign',
         motion: false,
     },
     {
         themeId: RURAL_THEME_ID,
         bit: 3,
         slot: 'trim',
-        label: 'Stitched',
+        label: 'Sunburst',
         paint: 'root',
-        cls: 'att-stitched',
+        cls: 'att-sunburst',
+        motion: false,
+    },
+    {
+        themeId: RURAL_THEME_ID,
+        bit: 4,
+        slot: 'fringe',
+        label: 'Bunting',
+        paint: 'node',
+        cls: 'att-bunting',
         motion: false,
     },
 ];

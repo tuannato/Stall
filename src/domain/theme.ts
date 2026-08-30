@@ -162,10 +162,15 @@ export const DEFAULT_THEME: DecodedTheme = {
      * the canvas moves off pure white and the cards become the light layer on
      * it, so elevation reads as elevation instead of a grey box on a void.
      */
-    bg: { r: 248, g: 248, b: 246 },
+    /*
+     * Re-cut 2026-08-30 from the approved full dress (extraction round 1):
+     * the canvas cools a step further and the muted ink deepens with it —
+     * measured at 4.6:1 on the new ground.
+     */
+    bg: { r: 242, g: 242, b: 239 },
     surface: { r: 255, g: 255, b: 255 },
     text: { r: 20, g: 23, b: 26 },
-    muted: { r: 107, g: 117, b: 128 },
+    muted: { r: 95, g: 105, b: 117 },
     accent: { r: 37, g: 99, b: 235 },
     danger: { r: 178, g: 58, b: 46 },
     accentTwo: { r: 37, g: 99, b: 235 },
@@ -317,20 +322,26 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
     [
         RURAL_THEME_ID,
         {
-            bg: { r: 251, g: 244, b: 230 },
-            surface: { r: 243, g: 231, b: 206 },
-            text: { r: 58, g: 44, b: 28 },
-            muted: { r: 138, g: 116, b: 88 },
-            accent: { r: 180, g: 85, b: 44 },
+            /*
+             * Re-cut 2026-08-30 from the approved full dress (extraction
+             * round 1): warmer paper, terracotta deepened, and the second
+             * accent turned harvest gold — the craft-fair tricolor's other
+             * ink.
+             */
+            bg: { r: 251, g: 242, b: 223 },
+            surface: { r: 255, g: 253, b: 244 },
+            text: { r: 58, g: 42, b: 24 },
+            muted: { r: 107, g: 89, b: 66 },
+            accent: { r: 158, g: 70, b: 32 },
             danger: { r: 155, g: 53, b: 32 },
-            accentTwo: { r: 138, g: 116, b: 88 },
+            accentTwo: { r: 201, g: 138, b: 44 },
             fontIndex: 2,
             softness: 8,
             // Paper, not pixels: two crossing weaves of the ink at three
             // percent. Strong enough to read as grain up close, weak enough
             // that the contrast pass cannot tell it from the sheet.
             backdrop:
-                'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-muted) 3%, transparent) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--s-muted) 3%, transparent) 0 1px, transparent 1px 3px)',
+                'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-muted) 6%, transparent) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--s-muted) 6%, transparent) 0 1px, transparent 1px 3px)',
             ornament: { label: 'Market stall', kind: 'plate' },
             shape: {
                 padM: '20px 18px',
@@ -341,8 +352,11 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 gap: '16px',
                 cardPad: '18px',
                 cardGap: '14px',
-                cardBorder: '1px dashed color-mix(in srgb, var(--s-muted) 60%, transparent)',
-                cardShadow: 'none',
+                cardBorder: '1px dashed color-mix(in srgb, var(--s-muted) 65%, transparent)',
+                // The full dress's set-down card: a hard ground shadow and a
+                // soft one, like a crate on a table.
+                cardShadow:
+                    '0 3px 0 color-mix(in srgb, var(--s-muted) 25%, transparent), 0 10px 22px color-mix(in srgb, var(--s-text) 8%, transparent)',
                 icon: '52px',
                 iconRadius: '999px',
                 iconClip: 'none',
