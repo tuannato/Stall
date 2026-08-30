@@ -790,7 +790,8 @@ body {
 /* The seller's line under their name — their sign, their voice. */
 .stall-tagline {
     font-size: 13.5px;
-    color: color-mix(in srgb, var(--s-text) 78%, var(--s-muted));
+    color: var(--s-tagline-ink);
+    font-style: var(--s-tagline-style);
     line-height: 1.4;
     overflow-wrap: anywhere;
 }
@@ -835,6 +836,23 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0;
+}
+
+/*
+ * The look's own section marker (Neo's gradient wedge). An inline-block
+ * pseudo, never positioned — it has a box in flow, which is what keeps it
+ * on the right side of the probe's pseudo-element rule. Size and gap are
+ * zero for looks that ship none, so nothing indents.
+ */
+.section-title::before {
+    content: '';
+    display: inline-block;
+    width: var(--s-sect-mark-size);
+    height: var(--s-sect-mark-size);
+    margin-right: var(--s-sect-mark-gap);
+    background: var(--s-sect-mark);
+    clip-path: polygon(0 0, 100% 0, 100% 100%);
+    vertical-align: baseline;
 }
 
 /*
@@ -899,6 +917,7 @@ body {
     background: var(--s-surface);
     color: inherit;
     overflow: hidden;
+    transition: transform 0.18s ease;
     transition:
         translate 140ms ease,
         box-shadow 140ms ease;
@@ -1054,6 +1073,23 @@ body {
     padding: var(--s-price-pad-m);
     border-left: var(--s-price-edge-m);
     padding-left: var(--s-price-edge-pad-m);
+    /* The craft-fair tag: ground and notch clip on the price column's own
+       box — everything the column holds rides inside the tag. */
+    background: var(--s-price-bg);
+    clip-path: var(--s-price-clip);
+}
+
+/* The full dress's lift, shared by every look; reduced motion stills it. */
+@media (hover: hover) {
+    .item:hover {
+        transform: translateY(-2px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .item:hover {
+        transform: none;
+    }
 }
 
 .item-a {
@@ -1395,9 +1431,13 @@ textarea.paste-in {
 .tabs {
     flex: none;
     display: flex;
-    border-top: var(--s-tabs-border);
+    /* Full border, not border-top: the floating pill bars are detached
+       boxes; on an attached bar the edge lines simply meet the screen. */
+    border: var(--s-tabs-border);
     background: var(--s-tabs-bg);
     border-radius: var(--s-tabs-radius);
+    margin: var(--s-tabs-margin);
+    box-shadow: var(--s-tabs-shadow);
 }
 
 .tab {

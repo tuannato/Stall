@@ -141,6 +141,15 @@ export type Shape = {
     tabsBg?: string;
     tabsBorder?: string;
     tabsRadius?: string;
+    taglineInk?: string;
+    taglineStyle?: string;
+    sectMark?: string;
+    sectMarkSize?: string;
+    sectMarkGap?: string;
+    tabsMargin?: string;
+    tabsShadow?: string;
+    priceBg?: string;
+    priceClip?: string;
 };
 
 export type DecodedTheme = {
@@ -284,7 +293,9 @@ export const DEFAULT_THEME: DecodedTheme = {
         chipPad: '4px 10px',
         sectRule: '2px solid color-mix(in srgb, var(--s-muted) 14%, transparent)',
         tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 18%, transparent)',
-        tabsRadius: '16px 16px 0 0',
+        tabsRadius: '999px',
+        tabsMargin: '10px 12px 12px',
+        tabsShadow: '0 6px 24px color-mix(in srgb, var(--s-text) 12%, transparent)',
     },
 };
 
@@ -401,6 +412,10 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 sectInk: 'var(--s-accent)',
                 tabsBg: 'var(--s-bg)',
                 tabsBorder: '1px solid color-mix(in srgb, var(--s-accent) 28%, transparent)',
+                taglineInk: 'color-mix(in srgb, var(--s-accent-2) 70%, white)',
+                sectMark: 'linear-gradient(135deg, var(--s-accent), var(--s-accent-2))',
+                sectMarkSize: '10px',
+                sectMarkGap: '8px',
             },
         },
     ],
@@ -466,8 +481,8 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 priceRuleD: '1px dashed color-mix(in srgb, var(--s-muted) 55%, transparent)',
                 priceGapM: '14px',
                 priceGapD: '14px',
-                pricePadM: '13px 0 0',
-                pricePadD: '13px 0 0',
+                pricePadM: '12px 12px 12px 28px',
+                pricePadD: '12px 12px 12px 28px',
                 areasM: '"ic name" "price price"',
                 areasD: '"ic" "name" "price"',
                 colsM: '52px minmax(0, 1fr)',
@@ -515,7 +530,20 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 sectRule: '4px double color-mix(in srgb, var(--s-muted) 50%, transparent)',
                 sectInk: 'var(--s-text)',
                 tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 35%, transparent)',
-                tabsRadius: '999px 999px 0 0',
+                tabsRadius: '999px',
+                tabsMargin: '10px 14px 12px',
+                tabsShadow: '0 6px 20px color-mix(in srgb, var(--s-text) 18%, transparent)',
+                taglineStyle: 'italic',
+                /*
+                 * The craft-fair price tag: a left-notched clip on the price
+                 * column and a punched hole drawn into its ground. The ground
+                 * is a bg/gold mix, never a raw accent (the Sun-faded lesson),
+                 * and the clip is generous — the whole column, rate and fiat
+                 * included, rides inside the tag.
+                 */
+                priceBg:
+                    'radial-gradient(circle at 11px 50%, transparent 3.5px, color-mix(in srgb, var(--s-bg) 90%, var(--s-accent-2)) 4.5px)',
+                priceClip: 'polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%)',
             },
         },
     ],
@@ -746,5 +774,15 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-tabs-border':
             s.tabsBorder ?? '1px solid color-mix(in srgb, var(--s-muted) 22%, transparent)',
         '--s-tabs-radius': s.tabsRadius ?? '0px',
+        '--s-tagline-ink':
+            s.taglineInk ?? 'color-mix(in srgb, var(--s-text) 78%, var(--s-muted))',
+        '--s-tagline-style': s.taglineStyle ?? 'normal',
+        '--s-sect-mark': s.sectMark ?? 'none',
+        '--s-sect-mark-size': s.sectMarkSize ?? '0px',
+        '--s-sect-mark-gap': s.sectMarkGap ?? '0px',
+        '--s-tabs-margin': s.tabsMargin ?? '0',
+        '--s-tabs-shadow': s.tabsShadow ?? 'none',
+        '--s-price-bg': s.priceBg ?? 'none',
+        '--s-price-clip': s.priceClip ?? 'none',
     };
 }
