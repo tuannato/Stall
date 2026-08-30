@@ -319,8 +319,12 @@ let browser;
 let profile;
 let failed = false;
 // The ceiling is enforcement, not a sentence in a plan: the second command in
-// CLAUDE.md §11 has to stay something everyone actually runs.
-const RUNTIME_CEILING_S = 60;
+// CLAUDE.md §11 has to stay something everyone actually runs. Raised 60 → 150
+// on 2026-08-30 when the contrast pass took on the desktop width — that one
+// run found the translucent-dock defect and three sampler holes, so the
+// doubling is paid for; measured 107–120s, and the headroom is jitter, not an
+// invitation. If this grows again, prune the matrix instead.
+const RUNTIME_CEILING_S = 150;
 const startedAt = Date.now();
 try {
     run('npx', ['vite', 'build', '--logLevel', 'error']);
@@ -435,102 +439,135 @@ try {
      * flat palette roles; this proves it against what is actually painted
      * behind every money figure — gradients, scanlines and worn decorations
      * included. The page hides the glyphs, the shot samples the boxes.
+     *
+     * Both widths, since the 2026-08-30 review: the desktop chrome is its own
+     * set of grounds (the fd head panels, the 860px column), and a
+     * mobile-only pass certifies pixels nobody paints at 1280.
      */
     try {
-        await cdp.send(
-            'Page.navigate',
-            { url: `http://localhost:${PORT}/layout/probe.html?screens=` },
-            sessionId,
-        );
-        await waitForFlag(cdp, sessionId, '__probeReady');
-        const screens = await evalJson(cdp, sessionId, 'window.__screens');
-        const themes = await evalJson(cdp, sessionId, 'window.__themes');
         let boxes = 0;
         const dim = [];
-        for (const screen of screens) {
-            for (const theme of themes) {
-                for (const wornAll of [false, true]) {
-                    // Two animation frames between hiding the glyphs and the
-                    // shot: the style change needs a composited frame, and a
-                    // screenshot taken before one still shows the text — which
-                    // read as 1.00:1 wherever a sample point landed on a glyph.
-                    const prepare = async () => {
-                        const r = await cdp.send(
-                            'Runtime.evaluate',
+        for (const vp of VIEWPORTS) {
+            await cdp.send(
+                'Emulation.setDeviceMetricsOverride',
+                { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
+                sessionId,
+            );
+            await cdp.send(
+                'Page.navigate',
+                { url: `http://localhost:${PORT}/layout/probe.html?screens=` },
+                sessionId,
+            );
+            await waitForFlag(cdp, sessionId, '__probeReady');
+            const screens = await evalJson(cdp, sessionId, 'window.__screens');
+            const themes = await evalJson(cdp, sessionId, 'window.__themes');
+            for (const screen of screens) {
+                for (const theme of themes) {
+                    for (const wornAll of [false, true]) {
+                        // Two animation frames between hiding the glyphs and the
+                        // shot: the style change needs a composited frame, and a
+                        // screenshot taken before one still shows the text — which
+                        // read as 1.00:1 wherever a sample point landed on a glyph.
+                        const prepare = async () => {
+                            const r = await cdp.send(
+                                'Runtime.evaluate',
+                                {
+                                    expression:
+                                        `(async () => { ` +
+                                        `const out = window.__contrastPrepare(` +
+                                        `${JSON.stringify(screen)}, ${theme}, ${wornAll}); ` +
+                                        // The self-hosted face swaps metrics when
+                                        // it lands and the fit-content dock
+                                        // re-centres with it — boxes taken before
+                                        // the swap sample a neighbour's ground.
+                                        `await document.fonts.ready; ` +
+                                        `await new Promise((res) => ` +
+                                        `requestAnimationFrame(() => requestAnimationFrame(res))); ` +
+                                        `return JSON.stringify(out); })()`,
+                                    awaitPromise: true,
+                                    returnByValue: true,
+                                },
+                                sessionId,
+                            );
+                            if (r.exceptionDetails) {
+                                throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            }
+                            return JSON.parse(r.result.value);
+                        };
+                        // First paint tells us how tall the page is; the viewport
+                        // grows to hold all of it and the paint is redone at that
+                        // size, because `captureBeyondViewport` does not reliably
+                        // paint backgrounds below the fold — a below-fold buy
+                        // control sampled as near-white.
+                        const first = await prepare();
+                        if (first.targets.length === 0) continue;
+                        const shotH = Math.max(vp.height, first.pageH);
+                        await cdp.send(
+                            'Emulation.setDeviceMetricsOverride',
+                            { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
+                            sessionId,
+                        );
+                        const prep = await prepare();
+                        // The boxes are re-read at the last moment before every
+                        // shot: anything that lands between prepare and capture
+                        // (a late face, an image) moves the layout under
+                        // coordinates already taken.
+                        const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                        const capture = async () => {
+                            const shot = await cdp.send(
+                                'Page.captureScreenshot',
+                                { format: 'png', fromSurface: true },
+                                sessionId,
+                            );
+                            return decodePng(Buffer.from(shot.data, 'base64'));
+                        };
+                        let img = await capture();
+                        let targets = await liveBoxes();
+                        // A failing box is re-shot once before it is believed:
+                        // capture right after an emulated resize can raster a
+                        // stale frame — measured: the live DOM held transparent
+                        // glyphs and unmoved boxes while the shot showed the text
+                        // still painted. A real defect is steady state (the
+                        // planted-colour falsification fails both shots); a stale
+                        // surface is not.
+                        let retried = false;
+                        if (prep.targets.length !== 0 && targets.length === 0) {
+                            throw new Error(`${screen}: prepared targets but re-read none`);
+                        }
+                        for (let ti = 0; ti < targets.length; ti += 1) {
+                            let t = targets[ti];
+                            let worst = worstContrastInBox(img, t, t.color);
+                            if (worst === undefined) continue;
+                            boxes += 1;
+                            if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
+                                await sleep(250);
+                                img = await capture();
+                                const again = await liveBoxes();
+                                if (again.length === targets.length) {
+                                    targets = again;
+                                    t = targets[ti];
+                                }
+                                retried = true;
+                                worst = worstContrastInBox(img, t, t.color);
+                            }
+                            if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
+                                dim.push(
+                                    `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                        `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
+                                );
+                            }
+                        }
+                        await cdp.send(
+                            'Emulation.setDeviceMetricsOverride',
                             {
-                                expression:
-                                    `new Promise((res) => { ` +
-                                    `const out = JSON.stringify(window.__contrastPrepare(` +
-                                    `${JSON.stringify(screen)}, ${theme}, ${wornAll})); ` +
-                                    `requestAnimationFrame(() => requestAnimationFrame(() => res(out))); })`,
-                                awaitPromise: true,
-                                returnByValue: true,
+                                width: vp.width,
+                                height: vp.height,
+                                deviceScaleFactor: 1,
+                                mobile: false,
                             },
                             sessionId,
                         );
-                        if (r.exceptionDetails) {
-                            throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                        }
-                        return JSON.parse(r.result.value);
-                    };
-                    // First paint tells us how tall the page is; the viewport
-                    // grows to hold all of it and the paint is redone at that
-                    // size, because `captureBeyondViewport` does not reliably
-                    // paint backgrounds below the fold — a below-fold buy
-                    // control sampled as near-white.
-                    const first = await prepare();
-                    if (first.targets.length === 0) continue;
-                    const shotH = Math.max(mobile.height, first.pageH);
-                    await cdp.send(
-                        'Emulation.setDeviceMetricsOverride',
-                        { width: mobile.width, height: shotH, deviceScaleFactor: 1, mobile: false },
-                        sessionId,
-                    );
-                    const prep = await prepare();
-                    const capture = async () => {
-                        const shot = await cdp.send(
-                            'Page.captureScreenshot',
-                            { format: 'png', fromSurface: true },
-                            sessionId,
-                        );
-                        return decodePng(Buffer.from(shot.data, 'base64'));
-                    };
-                    let img = await capture();
-                    // A failing box is re-shot once before it is believed:
-                    // capture right after an emulated resize can raster a
-                    // stale frame — measured: the live DOM held transparent
-                    // glyphs and unmoved boxes while the shot showed the text
-                    // still painted. A real defect is steady state (the
-                    // planted-colour falsification fails both shots); a stale
-                    // surface is not.
-                    let retried = false;
-                    for (const t of prep.targets) {
-                        let worst = worstContrastInBox(img, t, t.color);
-                        if (worst === undefined) continue;
-                        boxes += 1;
-                        if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
-                            await sleep(250);
-                            img = await capture();
-                            retried = true;
-                            worst = worstContrastInBox(img, t, t.color);
-                        }
-                        if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
-                            dim.push(
-                                `${screen} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
-                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
-                            );
-                        }
                     }
-                    await cdp.send(
-                        'Emulation.setDeviceMetricsOverride',
-                        {
-                            width: mobile.width,
-                            height: mobile.height,
-                            deviceScaleFactor: 1,
-                            mobile: false,
-                        },
-                        sessionId,
-                    );
                 }
             }
         }

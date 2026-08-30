@@ -140,11 +140,14 @@
     color: #ffffff;
 }
 
-/* The blurred white dock — in flow, centred. */
+/* The blurred white dock — in flow, centred. Opaque ground, not the fd's
+   88% + transparent: a translucent dock over Drifting light's orbs put the
+   tab labels on a bright field at 2.48:1 under After hours. The blur keeps
+   the glass reading; the ground stops borrowing whatever floats past. */
 .t-modern .tabs {
     gap: 4px;
     padding: 6px;
-    background: color-mix(in srgb, var(--s-surface) 88%, transparent);
+    background: color-mix(in srgb, var(--s-surface) 88%, var(--s-bg));
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(95, 105, 117, 0.18);

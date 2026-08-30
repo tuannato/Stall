@@ -609,47 +609,6 @@ body {
     }
 }
 
-/*
- * Reduced motion: things stand still — and stay visible. A beetle that has
- * stopped is a beetle, and page-wide rain that has stopped is streaked
- * glass, a texture like the scanline beside it. (The old 50px strip *was* a
- * smear when stopped and used to be removed; the billboard check now insists
- * a paid decoration never vanishes for a reduced-motion buyer.)
- */
-@media (prefers-reduced-motion: reduce) {
-    .att-beetle-bug {
-        animation: none;
-    }
-
-    .stall.att-rainfall {
-        animation: none;
-    }
-
-    /* Parked mid-card, still visible: paid decor never vanishes. */
-    .stall.att-sheen .item {
-        animation: none;
-        background-position: 50% 0;
-    }
-
-    /* Round 3's movers, stilled in place — visible, never gone. */
-    .stall.att-aurora,
-    .stall.att-confetti,
-    .stall.att-drift,
-    .att-bunting,
-    .att-sunburst {
-        animation: none;
-    }
-
-    .stall-name {
-        animation: none;
-    }
-
-    .item-head {
-        animation: none;
-        background-position: 50% 0;
-    }
-}
-
 /* The decoration block in the settings sheet: a picker, a note, a way out. */
 .decor {
     display: flex;
@@ -3119,3 +3078,59 @@ textarea.paste-in {
         transition: none;
     }
 }
+
+/*
+ * Reduced motion: things stand still — and stay visible. A beetle that has
+ * stopped is a beetle, and page-wide rain that has stopped is streaked
+ * glass, a texture like the scanline beside it. (The old 50px strip *was* a
+ * smear when stopped and used to be removed; the billboard check now insists
+ * a paid decoration never vanishes for a reduced-motion buyer.)
+ */
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE. Its rules win by order, not
+ * specificity — the round-3 base motion consumers (.stall-name,
+ * .item-head) were appended *below* the old position of this block, so
+ * same-specificity base rules re-won and Neo kept flickering for every
+ * reduced-motion visitor. `reduced motion left something running` in the
+ * layout probe is the guard; per-theme animations still need the reduce
+ * block inside their own theme file, which out-specifies this one.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .item-p {
+        animation: none;
+    }
+
+
+    .att-beetle-bug {
+        animation: none;
+    }
+
+    .stall.att-rainfall {
+        animation: none;
+    }
+
+    /* Parked mid-card, still visible: paid decor never vanishes. */
+    .stall.att-sheen .item {
+        animation: none;
+        background-position: 50% 0;
+    }
+
+    /* Round 3's movers, stilled in place — visible, never gone. */
+    .stall.att-aurora,
+    .stall.att-confetti,
+    .stall.att-drift,
+    .att-bunting,
+    .att-sunburst {
+        animation: none;
+    }
+
+    .stall-name {
+        animation: none;
+    }
+
+    .item-head {
+        animation: none;
+        background-position: 50% 0;
+    }
+}
+

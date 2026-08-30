@@ -1,0 +1,166 @@
+# PROBE-RULES — every rule, with the incident that earned it
+
+The layout guard (`layout/probe.ts` + `scripts/layout-check.mjs`, run as
+`pnpm test:layout`) is the only thing in this repository that can see a
+layout. Its rules accumulated one measured incident at a time; this file is
+the ledger, so the next amendment starts from what is already known instead
+of rediscovering it. Overwrite entries when a rule changes — this is current
+truth with citations, not history.
+
+## Why a browser at all
+
+`asked-amount-not-covered` inspects what `themeVars()` returns and never
+opens a stylesheet; happy-dom does not lay out. Three defects shipped in one
+session under that regime: a grid row stretched to an image's height and
+opened a 130px hole, `hidden` lost to a class that set `display`, and a hex
+record ran off the side of the sheet. A missing browser **fails the run** —
+a guard that quietly does not run is counted as coverage while protecting
+nothing.
+
+## Geometry rules
+
+- **Boxes, not hit testing.** A decoration worth the name carries
+  `pointer-events: none`, and `elementFromPoint` skips exactly that.
+  Measured: a red box laid over a price returned *the price* as the hit.
+  Every decoration's box is compared against every protected box.
+- **An ancestor counts as covering.** `elementFromPoint` attributes a
+  pseudo-element's paint to the element that owns it, so treating ancestors
+  as innocent made the first version blind to a shipped decoration over the
+  amount.
+- **A positioned pseudo-element is refused outright.** It is not in the DOM:
+  no `getBoundingClientRect`, no hit — measured: an `::after` with
+  `inset: 0` and `pointer-events: none` over the price passed both checks.
+  Decorations are real nodes. (This is why the rural tag's punched hole is a
+  background radial and the sunburst spins via a registered `@property`
+  angle — a rotating wheel's box sweeps the protected address.)
+- **The price column is one composed figure.** Its own unit/rate/fiat lines
+  sit flush against the amount and the swaying rural tag rotates them
+  together; a sibling inside the same `.item-p` is typography, not cover.
+- **Seek and measurement share one tree.** `renderStall` throws the tree
+  away on every paint; the first over-time loop seeked `getAnimations()`
+  then repainted, measuring fresh nodes at t=0 six times. Proved by planting
+  a sprite empty at t=0 that covers the screen mid-cycle.
+- **A label never wraps** — measured on the *text* via Range rects, because
+  a flex label's box stretches to its neighbour ("Token ID" broke across
+  two lines beside a wrapped token id at 540px).
+- **The theme reaches all four edges.** Measured at 375x812: an 8px border
+  and 42% of the screen unthemed, invisible for two months because the
+  default is white on a white canvas.
+- **Nothing scrolls sideways** — the page and the shell's scroll region,
+  which hides its own overflow from the page.
+- **The modal is the one scoped exception, stated rather than waived.**
+  While a sheet is open, the figures inside *it* must be uncovered and the
+  sheet bounded and scrollable; covering the stall behind is what the seller
+  opened it to do. The first run reported the scrim covering the price
+  behind it — the boundary that had never been written down.
+- **The viewport comes from CDP, not `--window-size`.** New headless clamps
+  below ~500px: asking for 390 measured 500 while the runner printed 390.
+  The runner fails when the page's own measurement disagrees with the ask.
+- **The door only wears the default look.** The apex paints
+  `view.theme ?? DEFAULT_THEME` and never fetches, so door-under-Neo is a
+  screen no visitor can reach — its red was a false alarm (Neo's mini ink
+  over the door's light ground) and its green was budget spent on nothing.
+
+## Rendered-pixel contrast (pass 4)
+
+`legibleOn` proves text against the two flat palette roles; only pixels
+prove it against what is actually painted behind a figure. The page turns
+every target's glyphs transparent, the runner screenshots and samples the
+boxes against the declared ink. Floor: `PIXEL_CONTRAST_FLOOR = 3`.
+
+Sampling amendments, each measured:
+
+- **Descendants are blanked too.** A child with its own ink does not
+  inherit the blanking: `.tab-name` (the seller's name, muted channel)
+  stayed painted and was sampled as "ground" — the shop tab reported at
+  1.17:1 against its own sibling text.
+- **Borders are chrome, never ground — all four sides.** A dashed pill edge
+  blended to 2.2:1 against its ink; later the rural dock's divider, drawn as
+  a `border-left` the top-width-only inset never saw, reported 2.3–2.9 on
+  tabs whose real ground cleared 5.8.
+- **Corner radius narrows the horizontal range** — outside the radius the
+  pixels are the page behind the control (Modern's white page behind a white
+  pill sampled 1.00:1).
+- **Text inside a transformed ancestor gets an 8px pad** — an axis-aligned
+  box around rotated content smears border and ground pixels past every
+  edge (the swinging wood sign).
+- **The scroll clip bounds every sample box.** Content scrolled out of the
+  shell's clip keeps its full rect; a studio control's box sampled where
+  the dock actually paints reported 1.00:1 against the selected tab's blue.
+  Same boundary `coveredBy` already held.
+- **Boxes are re-read at the last moment before every shot**, after
+  `document.fonts.ready`: the self-hosted face swaps metrics when it lands
+  and the fit-content dock re-centres with it.
+- **The viewport grows to the page height and the paint is redone** —
+  `captureBeyondViewport` does not reliably paint backgrounds below the
+  fold (a below-fold buy control sampled near-white).
+- **A failing box is re-shot once before it is believed** — capture right
+  after an emulated resize can raster a stale frame; a real defect is
+  steady state.
+- **Two glyph-settle frames after blanking** — a shot before a composited
+  frame still shows the text (1.00:1 wherever a point landed on a glyph).
+- **`color(srgb r g b)` is parsed alongside `rgb()`** — browsers serialize
+  `color-mix()` results as srgb floats.
+- **The QR is excluded**: black-on-white with a quiet zone by its own rule
+  and test, never themed.
+- **Both widths.** The desktop chrome is its own set of grounds (fd desktop
+  head panels, the 860px column); the first two-width run found the
+  translucent Modern dock at 2.48:1 over Drifting light's orbs under After
+  hours — mobile-only had certified pixels nobody paints at 1280.
+
+## Reduced motion (pass 3)
+
+- The page's own `matchMedia` answer is required — emulation that silently
+  did not apply is the 500px lesson again.
+- The pass must measure a non-zero screen list, or it is vacuous green.
+- **Stillness is asserted, not assumed** (`reduced motion left something
+  running`): every `document.getAnimations()` entry still running under
+  emulated reduce is a failure, once per painted combination. Incident: the
+  round-3 motion consumers were appended *below* stall.css's reduce block
+  and re-won by order — Neo flickered (neo-flick, neo-pulse, neo-sheen) for
+  every reduced-motion visitor while the geometry-only pass stayed green.
+  The reduce block now sits last in stall.css and says why; theme files
+  carry their own reduce blocks, which out-specify it.
+- Scope hole, named: transitions fire on interaction and are invisible to
+  an idle `getAnimations()` scan.
+
+## Clip-path text containment
+
+A clip-path is invisible to both the box check and the hit test: the
+clipped-away region has no paint but the text keeps its rect. Every text
+line inside a `polygon(...)`-clipped element must sit inside the polygon
+(corners + centre, ray casting, half-pixel edge tolerance). The parser
+handles `px`, `%`, bare `0` and single-operation `calc(A% ± Bpx)` — any
+other grammar **fails loudly** instead of being measured wrong. Closed
+preemptively by the 2026-08-30 review (`.item-p` and `.notice-chip` ship
+clips today); no incident yet.
+
+## Billboard (a decoration nobody can see is not a product)
+
+- A **node** row: a real box of sellable size (≥100px²) inside the first
+  fold — the first run found the beetle below the fold on every screen.
+- A **root** row must change the painted style signature
+  (`styleSignature()` — eight properties on three elements; the review
+  marked this the guard's weakest joint, to be generalised into a full
+  computed-style diff by the catalogue plan).
+- A **mood** must move the canvas ≥60 channel-points — the first Sun-faded
+  moved it four and a buyer could not tell they were wearing it.
+
+## Budget
+
+`RUNTIME_CEILING_S = 150` (raised from 60 on 2026-08-30 when contrast took
+on the desktop width; measured 107–120s). The ceiling is enforcement: the
+CLAUDE.md §11 second command has to stay something everyone actually runs.
+If the runtime grows again, prune the matrix, do not raise the number
+first. The reduced-motion pass re-measures only the animating screens;
+state screens buy only the bare and fully-worn variants.
+
+## What this guard still cannot see
+
+- Interaction-triggered transitions under reduced motion (above).
+- Whether a `t-*`-scoped theme override applies on every screen a base var
+  consumer paints — `scripts/audit-shadowing.mjs` is static; its SHADOWED
+  list stays a candidate list until a DOM pass proves screen coverage.
+- Anything in the vitest suite's happy-dom, which does not lay out — the
+  two runners cover different failure classes and neither substitutes for
+  the other.

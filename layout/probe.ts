@@ -172,6 +172,64 @@ function coveredBy(node: Element): string | undefined {
     return undefined;
 }
 
+/**
+ * Resolve a computed `polygon(...)` into pixel vertices for one box. Handles
+ * the coordinate forms our sheets actually use — `px`, `%`, bare `0`, and
+ * single-operation `calc(A% ± Bpx)` — and refuses anything else, so a new
+ * clip grammar fails loudly instead of being measured wrong.
+ */
+function parsePolygon(clip: string, w: number, h: number): [number, number][] | undefined {
+    const inner = clip.slice(clip.indexOf('(') + 1, clip.lastIndexOf(')'));
+    const resolve = (token: string, size: number): number | undefined => {
+        const t = token.trim();
+        const calc = /^calc\(\s*([\d.]+)%\s*([+-])\s*([\d.]+)px\s*\)$/.exec(t);
+        if (calc !== null) {
+            const pct = (Number.parseFloat(calc[1]!) / 100) * size;
+            const px = Number.parseFloat(calc[3]!);
+            return calc[2] === '-' ? pct - px : pct + px;
+        }
+        if (/^[\d.]+%$/.test(t)) return (Number.parseFloat(t) / 100) * size;
+        if (/^[\d.]+px$/.test(t)) return Number.parseFloat(t);
+        if (t === '0') return 0;
+        return undefined;
+    };
+    const out: [number, number][] = [];
+    for (const pair of inner.split(',')) {
+        // A calc() vertex contains spaces, so split on the boundary between
+        // its closing paren (or a bare token) and the next token instead.
+        const m = /^\s*(calc\([^)]*\)|\S+)\s+(calc\([^)]*\)|\S+)\s*$/.exec(pair);
+        if (m === null) return undefined;
+        const x = resolve(m[1]!, w);
+        const y = resolve(m[2]!, h);
+        if (x === undefined || y === undefined) return undefined;
+        out.push([x, y]);
+    }
+    return out.length >= 3 ? out : undefined;
+}
+
+/** Ray casting, with a half-pixel tolerance for glyph rects on the edge. */
+function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+        const [xi, yi] = poly[i]!;
+        const [xj, yj] = poly[j]!;
+        // On-edge counts as inside: distance from point to segment <= 0.5px.
+        const dx = xj - xi;
+        const dy = yj - yi;
+        const len2 = dx * dx + dy * dy;
+        const s = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2));
+        const ex = xi + s * dx - x;
+        const ey = yi + s * dy - y;
+        if (ex * ex + ey * ey <= 0.25) {
+            return true;
+        }
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
 function describe(node: Element): string {
     const cls = typeof node.className === 'string' ? node.className : '';
     return `${node.tagName.toLowerCase()}${cls === '' ? '' : `.${cls.split(/\s+/).join('.')}`}`;
@@ -316,6 +374,51 @@ function measure(screen: string, themeLabel: string): Failure[] {
         );
     }
 
+    /*
+     * A clip-path is invisible to both the box check and the hit test: the
+     * clipped-away region has no paint, but the text inside keeps its rect,
+     * so a notch cut through a label reads as a perfectly healthy box. Every
+     * text line inside a polygon-clipped element must sit inside the polygon.
+     */
+    for (const clipped of surface.querySelectorAll<HTMLElement>('*')) {
+        const clip = getComputedStyle(clipped).clipPath;
+        if (!clip.startsWith('polygon(')) {
+            continue;
+        }
+        const box = clipped.getBoundingClientRect();
+        const poly = parsePolygon(clip, box.width, box.height);
+        if (poly === undefined) {
+            fail('a clip-path this check cannot read', `${describe(clipped)}: ${clip}`);
+            continue;
+        }
+        const walker = document.createTreeWalker(clipped, NodeFilter.SHOW_TEXT);
+        for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+            if ((t.textContent ?? '').trim() === '') {
+                continue;
+            }
+            const range = document.createRange();
+            range.selectNodeContents(t);
+            for (const rect of range.getClientRects()) {
+                const points: [number, number][] = [
+                    [rect.left - box.left, rect.top - box.top],
+                    [rect.right - box.left, rect.top - box.top],
+                    [rect.left - box.left, rect.bottom - box.top],
+                    [rect.right - box.left, rect.bottom - box.top],
+                    [rect.left + rect.width / 2 - box.left, rect.top + rect.height / 2 - box.top],
+                ];
+                const escaped = points.find(([x, y]) => !pointInPolygon(x, y, poly));
+                if (escaped !== undefined) {
+                    fail(
+                        'text escapes its clip',
+                        `"${(t.textContent ?? '').trim().slice(0, 20)}" in ${describe(clipped)} at ${Math.round(escaped[0])},${Math.round(escaped[1])}`,
+                    );
+                    break;
+                }
+            }
+            range.detach?.();
+        }
+    }
+
     if (scrim !== null) {
         // A sheet taller than the screen with nothing to scroll would strand
         // whatever is below it — including a figure a seller is about to sign.
@@ -383,6 +486,38 @@ function measure(screen: string, themeLabel: string): Failure[] {
  */
 const STEPS = 6;
 
+/**
+ * Under reduced motion, stillness is asserted, not assumed. The reduce
+ * blocks are ordinary rules and lose ordinary cascade fights — the round-3
+ * motion consumers were appended below stall.css's reduce block and re-won
+ * by order, so Neo kept flickering for every reduced-motion visitor while
+ * the geometry-only pass stayed green. Checked once per painted combination,
+ * not once per measurement, so one leak is one line.
+ */
+function reducedMotionLeaks(screen: string, themeLabel: string): Failure[] {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return [];
+    }
+    const out: Failure[] = [];
+    for (const anim of document.getAnimations()) {
+        if (anim.playState !== 'running') {
+            continue;
+        }
+        const name = anim instanceof CSSAnimation ? anim.animationName : anim.constructor.name;
+        const target =
+            anim.effect instanceof KeyframeEffect && anim.effect.target !== null
+                ? describe(anim.effect.target)
+                : '?';
+        out.push({
+            screen,
+            theme: themeLabel,
+            check: 'reduced motion left something running',
+            detail: `${name} on ${target}`,
+        });
+    }
+    return out;
+}
+
 function checkOverTime(
     screen: string,
     themeId: number,
@@ -391,6 +526,7 @@ function checkOverTime(
 ): Failure[] {
     paint(screen, themeId, worn);
     const out = measure(screen, themeLabel);
+    out.push(...reducedMotionLeaks(screen, themeLabel));
     // Queried after the paint, so these are the animations on the tree that is
     // about to be measured — and it must stay that way. Repainting between the
     // seek and the measurement is what made the first version of this loop a
@@ -457,10 +593,21 @@ function screensToRun(): string[] {
     return asked.split(',').filter((name) => name in SCREENS);
 }
 
+/**
+ * The apex paints `view.theme ?? DEFAULT_THEME` and never fetches, so the
+ * door can only ever wear the default look. A door-under-Neo combination is
+ * a screen no visitor can reach: its red is a false alarm (measured — the
+ * Neo mini ink over the door's light ground), and its green is budget spent
+ * certifying nothing.
+ */
+function themesFor(screen: string): readonly (typeof SHIPPED_THEMES)[number][] {
+    return screen === 'door' ? SHIPPED_THEMES.slice(0, 1) : [...SHIPPED_THEMES];
+}
+
 const failures: Failure[] = [];
 const measured = screensToRun();
 for (const screen of measured) {
-    for (const theme of SHIPPED_THEMES) {
+    for (const theme of themesFor(screen)) {
         for (const worn of variantsFor(screen, theme.id)) {
             const label =
                 worn.length === 0
@@ -614,6 +761,7 @@ declare global {
             themeId: number,
             wornAll: boolean,
         ) => { targets: ContrastTarget[] };
+        __contrastBoxes: () => ContrastTarget[];
         __screens: string[];
         __themes: number[];
         __probeReady: boolean;
@@ -635,7 +783,78 @@ function insideTransform(node: HTMLElement): boolean {
     return false;
 }
 
+/** The nodes the last `__contrastPrepare` blanked, for late box re-reads. */
+let preparedNodes: HTMLElement[] = [];
+
+/** One node's sample box and static fields, or nothing worth sampling. */
+function targetFor(node: HTMLElement): ContrastTarget | undefined {
+    let box: { x: number; y: number; width: number; height: number } =
+        node.getBoundingClientRect();
+    // Content scrolled out of the shell's clip keeps its full rect, and a
+    // box sampled where the page paints something else entirely reported
+    // a studio control at 1.00:1 against the dock's selected-tab blue
+    // sitting at those coordinates. Same boundary `coveredBy` already
+    // holds: sample only what the clip lets the page paint.
+    const clip = node.closest('.stall-scroll')?.getBoundingClientRect();
+    if (clip !== undefined) {
+        const x = Math.max(box.x, clip.x);
+        const y = Math.max(box.y, clip.y);
+        box = {
+            x,
+            y,
+            width: Math.min(box.x + box.width, clip.right) - x,
+            height: Math.min(box.y + box.height, clip.bottom) - y,
+        };
+    }
+    if (box.width < 2 || box.height < 2) {
+        return undefined;
+    }
+    const style = getComputedStyle(node);
+    // The colour the glyphs would paint in: read from the blanking backup,
+    // because a re-read after `__contrastPrepare` sees `transparent`.
+    const ink = node.style.color === 'transparent' ? node.dataset['probeInk']! : style.color;
+    node.dataset['probeInk'] = ink;
+    const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+    return {
+        x: box.x,
+        y: box.y,
+        w: box.width,
+        h: box.height,
+        color: ink,
+        r: Math.min(radius, box.width / 2, box.height / 2),
+        // A bordered pill's dashed edge sampled as "background" reported
+        // the rural address at 2.2:1 against its own border blend. The
+        // border is chrome, not ground — the runner insets past it. The
+        // widest of the four sides, because the rural dock draws its
+        // divider as a border-left the top-width alone never saw.
+        bw: Math.max(
+            Number.parseFloat(style.borderTopWidth) || 0,
+            Number.parseFloat(style.borderRightWidth) || 0,
+            Number.parseFloat(style.borderBottomWidth) || 0,
+            Number.parseFloat(style.borderLeftWidth) || 0,
+        ),
+        pad: insideTransform(node) ? 8 : 0,
+        sel: describe(node),
+    };
+}
+
+/**
+ * The boxes as they are RIGHT NOW, for the runner to read immediately before
+ * the shot. The self-hosted face swaps metrics whenever it lands, the
+ * fit-content dock re-centres, and coordinates taken at prepare time sampled
+ * the neighbouring selected tab's ground — 1.20:1 reported on a dock whose
+ * DOM held nothing but cream at those coordinates.
+ */
+window.__contrastBoxes = () =>
+    preparedNodes
+        .map((node) => targetFor(node))
+        .filter((t): t is ContrastTarget => t !== undefined);
+
 window.__contrastPrepare = (screen, themeId, wornAll) => {
+    if (screen === 'door' && themeId !== SHIPPED_THEMES[0]!.id) {
+        // The apex can only wear the default look — see themesFor.
+        return { targets: [], pageH: 0 };
+    }
     const worn = wornAll ? wornAttachments(themeId, 0xffff) : [];
     paint(screen, themeId, worn);
     // Freeze motion at an arbitrary instant so a streak is on screen, not
@@ -654,30 +873,21 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
     // reported the address behind the publish sheet at 1.00:1.
     const scrim = document.querySelector('[data-role="sheet-scrim"]');
     const scope: ParentNode = scrim ?? document;
+    preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
     const targets: ContrastTarget[] = [];
-    for (const node of scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)) {
-        const box = node.getBoundingClientRect();
-        if (box.width < 2 || box.height < 2) {
-            continue;
+    for (const node of preparedNodes) {
+        const target = targetFor(node);
+        if (target !== undefined) {
+            targets.push(target);
         }
-        const style = getComputedStyle(node);
-        const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
-        targets.push({
-            x: box.x,
-            y: box.y,
-            w: box.width,
-            h: box.height,
-            color: style.color,
-            r: Math.min(radius, box.width / 2, box.height / 2),
-            // A bordered pill's dashed edge sampled as "background" reported
-            // the rural address at 2.2:1 against its own border blend. The
-            // border is chrome, not ground — the runner insets past it.
-            bw: Number.parseFloat(style.borderTopWidth) || 0,
-            pad: insideTransform(node) ? 8 : 0,
-            sel: describe(node),
-        });
-        node.style.color = 'transparent';
-        node.style.textShadow = 'none';
+        // The descendants too: a child with its own ink (`.tab-name` holds
+        // the seller's name in the muted channel) does not inherit the
+        // blanking, and its glyphs sampled as "ground" reported the shop tab
+        // at 1.17:1 — the ink compared against its own sibling text.
+        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            el.style.color = 'transparent';
+            el.style.textShadow = 'none';
+        }
     }
     // The runner grows the emulated viewport to this and repaints before the
     // shot: `captureBeyondViewport` does not reliably paint backgrounds below
