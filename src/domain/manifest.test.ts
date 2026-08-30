@@ -367,23 +367,21 @@ describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
         const name = 'N'.repeat(32);
         const tagline = 'T'.repeat(64);
         const announcement = 'A'.repeat(64);
-        const featuredTokenId = 'ab'.repeat(32);
         const hex = encodeManifestHex(name, DEFAULT_THEME_ID, 0xffff, {
             tagline,
-            featuredTokenId,
             fiatHint: 'vnd',
             announcement,
         });
         expect(hex).toBeDefined();
-        // 5 lokad + 33 name + 2 theme + 4 flags + 66 tagline + 34 featured
-        // + 5 fiat + 66 announcement = 215 of 222.
-        expect(hex!.length / 2).toBe(215);
+        // 5 lokad + 33 name + 2 theme + 4 flags + 66 tagline + 5 fiat
+        // + 66 announcement = 181 of 222. (0x03 is burned — its 34 bytes
+        // left the maximum when the featured feature was removed.)
+        expect(hex!.length / 2).toBe(181);
         expect(hex!.length / 2).toBeLessThanOrEqual(OP_RETURN_BUDGET);
 
         const back = decodeEncoded(hex!);
         expect(back.name).toBe(name);
         expect(back.tagline).toBe(tagline);
-        expect(back.featuredTokenId).toBe(featuredTokenId);
         expect(back.fiatHint).toBe('vnd');
         expect(back.announcement).toBe(announcement);
     });
@@ -394,9 +392,6 @@ describe('a-record-this-app-writes-fits-the-op-return-budget', () => {
         ).toBeUndefined();
         expect(
             encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { tagline: 'T'.repeat(65) }),
-        ).toBeUndefined();
-        expect(
-            encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { featuredTokenId: 'ab' }),
         ).toBeUndefined();
         expect(
             encodeManifestHex('Shop', DEFAULT_THEME_ID, 0, { fiatHint: 'US1' }),
@@ -444,7 +439,7 @@ describe('unknown-tag-payload-is-ignored-alone', () => {
      * else — the mirror of unknown tags being skipped. Refusing the record
      * would let one bad byte take a seller's name and look down with it.
      */
-    it('drops a malformed featured id and keeps the tagline beside it', () => {
+    it('drops a malformed fiat hint, skips the burned 0x03, keeps the tagline', () => {
         const lokadPush = lokad();
         const name = new TextEncoder().encode('Shop');
         const theme = new Uint8Array([DEFAULT_THEME_ID]);
@@ -452,19 +447,21 @@ describe('unknown-tag-payload-is-ignored-alone', () => {
             0x02,
             ...new TextEncoder().encode('Fresh weekly'),
         ]);
-        const badFeatured = new Uint8Array([0x03, ...new Uint8Array(31).fill(0xab)]);
+        // 0x03 once carried a featured token id and is burned: a record from
+        // that era still decodes, the tag now skipped like any unknown one.
+        const burnedFeatured = new Uint8Array([0x03, ...new Uint8Array(32).fill(0xab)]);
         const badFiat = new Uint8Array([0x04, 0x55, 0x24, 0x31]);
         const m = decodeManifestPushes([
             lokadPush,
             name,
             theme,
             goodTagline,
-            badFeatured,
+            burnedFeatured,
             badFiat,
         ]);
         expect(m.name).toBe('Shop');
         expect(m.tagline).toBe('Fresh weekly');
-        expect(m.featuredTokenId).toBeUndefined();
+        expect('featuredTokenId' in m).toBe(false);
         expect(m.fiatHint).toBeUndefined();
     });
 

@@ -107,7 +107,6 @@ export const PUBLISH_NAME_TOO_LONG =
 export const PUBLISH_TAGLINE_LABEL = 'Tagline (optional)';
 export const PUBLISH_TAGLINE_INVALID =
     'A tagline is one legible line, up to 64 bytes. Accents and emoji cost more than one byte each.';
-export const PUBLISH_FEATURED_LABEL = 'Featured token (optional)';
 export const PUBLISH_FIAT_LABEL = 'Suggest a display currency (optional)';
 /**
  * The announcement (tag 0x05). A dated sentence, not a status: "back on the
@@ -120,9 +119,6 @@ export const PUBLISH_ANNOUNCEMENT_INVALID =
 /** The shared record ceiling, made visible before anything is signed. */
 export const publishBudget = (used: number, max: number): string =>
     `Record size: ${used} of ${max} bytes`;
-/** Our chrome over the seller's chosen card — a merchandising label, ours. */
-export const FEATURED = 'Featured';
-
 /**
  * A stall with no settings is painted in the shipped default, so the first look
  * in the picker is the look already on screen. Publishing it is a real thing to

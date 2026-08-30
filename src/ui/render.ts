@@ -801,32 +801,10 @@ function paintOffers(
         none.setAttribute('data-role', 'filter-none');
         body.append(none);
     }
-    /*
-     * The featured token leads the shop (manifest tag 0x03): its card is
-     * pulled above the sections under our own "Featured" chip and excluded
-     * from them, so one listing is never two cards. Only when actually
-     * listed — a featured id with no live offer paints nothing at all.
-     */
-    const featuredId = view.featuredTokenId;
-    const featuredOffers =
-        featuredId === undefined ? [] : shown.filter((o) => o.tokenId === featuredId);
-    if (featuredOffers.length > 0) {
-        const wrap = el('section', 'featured-wrap');
-        wrap.setAttribute('data-role', 'featured');
-        wrap.append(el('span', 'featured-chip', copy.FEATURED));
-        wrap.append(
-            offerRow({ tokenId: featuredId!, offers: featuredOffers }, view, handlers),
-        );
-        body.append(wrap);
-    }
-    const shelfOffers =
-        featuredOffers.length > 0
-            ? shown.filter((o) => o.tokenId !== featuredId)
-            : shown;
     // Ordered first, then divided. Nothing sorted before this, so two offers of
     // one token could sit either side of a third token's row. Copied: the array
     // belongs to the caller's view.
-    const ordered = [...shelfOffers].sort(compareOffers);
+    const ordered = [...shown].sort(compareOffers);
     const sort: ShopSort = tools ? (view.shopSort ?? 'curated') : 'curated';
     if (sort === 'curated') {
         /*
@@ -1722,30 +1700,6 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     announceInput.value = view.announcement ?? '';
     announceLabel.append(announceInput);
 
-    const featuredLabel = el('label', 'paste-label', copy.PUBLISH_FEATURED_LABEL);
-    featuredLabel.setAttribute('data-role', 'theme-picker');
-    const featuredSelect = el('select', 'paste-in');
-    featuredSelect.name = 'featured';
-    featuredSelect.setAttribute('data-role', 'publish-featured');
-    featuredSelect.setAttribute('data-focus-key', 'publish-featured');
-    featuredSelect.setAttribute('aria-label', copy.PUBLISH_FEATURED_LABEL);
-    {
-        const none = el('option', undefined, copy.DECOR_NONE);
-        none.value = '';
-        featuredSelect.append(none);
-        for (const tokenId of [...new Set(offersOf(view).map((o) => o.tokenId))]) {
-            const opt = el('option', undefined, tokenName(view.tokens, tokenId));
-            opt.value = tokenId;
-            featuredSelect.append(opt);
-        }
-        featuredSelect.value =
-            view.featuredTokenId !== undefined &&
-            [...featuredSelect.options].some((o) => o.value === view.featuredTokenId)
-                ? view.featuredTokenId
-                : '';
-    }
-    featuredLabel.append(featuredSelect);
-
     const fiatLabel = el('label', 'paste-label', copy.PUBLISH_FIAT_LABEL);
     fiatLabel.setAttribute('data-role', 'theme-picker');
     const fiatSelect = el('select', 'paste-in');
@@ -1799,7 +1753,6 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const refresh = (): void => {
         const extras = {
             tagline: taglineInput.value === '' ? undefined : taglineInput.value,
-            featuredTokenId: featuredSelect.value === '' ? undefined : featuredSelect.value,
             fiatHint: fiatSelect.value === '' ? undefined : fiatSelect.value,
             announcement: announceInput.value === '' ? undefined : announceInput.value,
         };
@@ -1870,7 +1823,6 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     input.addEventListener('input', refresh);
     taglineInput.addEventListener('input', refresh);
     announceInput.addEventListener('input', refresh);
-    featuredSelect.addEventListener('change', refresh);
     fiatSelect.addEventListener('change', refresh);
     select.addEventListener('change', () => {
         refresh();
@@ -1978,7 +1930,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
 
     renderDecor(painted);
-    form.append(label, taglineLabel, announceLabel, themeLabel, featuredLabel, fiatLabel, budget, err, sameLook, decorWrap);
+    form.append(label, taglineLabel, announceLabel, themeLabel, fiatLabel, budget, err, sameLook, decorWrap);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));

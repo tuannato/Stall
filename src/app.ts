@@ -517,7 +517,6 @@ export function boot(
             const flags = decodeAttachmentFlags(manifest.extras.get(ATTACHMENT_FLAGS_TAG));
             view.stallName = manifest.name;
             view.tagline = manifest.tagline;
-            view.featuredTokenId = manifest.featuredTokenId;
             view.fiatHint = manifest.fiatHint;
             view.announcement = manifest.announcement;
             view.theme = manifest.theme;
@@ -1108,7 +1107,6 @@ async function loadCurrent(): Promise<AppState> {
     let stallName = cachedName;
     let theme = cachedTheme;
     let tagline: string | undefined;
-    let featuredTokenId: string | undefined;
     let fiatHint: string | undefined;
     let announcement: string | undefined;
     let settingsTruncated = false;
@@ -1124,7 +1122,6 @@ async function loadCurrent(): Promise<AppState> {
                 stallName = manifest.name;
                 theme = manifest.theme;
                 tagline = manifest.tagline;
-                featuredTokenId = manifest.featuredTokenId;
                 fiatHint = manifest.fiatHint;
                 announcement = manifest.announcement;
                 // One tagged field, read by its tag rather than its position.
@@ -1187,7 +1184,6 @@ async function loadCurrent(): Promise<AppState> {
             overlay: { kind: 'idle' },
             stallName,
             tagline,
-            featuredTokenId,
             fiatHint,
             announcement,
             address,

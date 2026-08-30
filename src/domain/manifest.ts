@@ -19,7 +19,6 @@ export type StallManifest = {
     /** Tag 0x02: the seller's line under their name. Screened like the name. */
     tagline?: string;
     /** Tag 0x03: the token whose card leads the shop. A genesis txid. */
-    featuredTokenId?: string;
     /** Tag 0x04: a display-currency suggestion. The buyer's choice wins. */
     fiatHint?: string;
     /**
@@ -40,6 +39,12 @@ export type StallManifest = {
  * record — the mirror of unknown tags being skipped.
  */
 export const TAGLINE_TAG = 0x02;
+/**
+ * BURNED, never re-use. 0x03 carried a featured token id from 2026-08-29 to
+ * 2026-08-30, when the owner removed the feature. Records carrying it are
+ * permanent, so the number stays allocated forever and readers now skip it
+ * exactly like any unknown tag.
+ */
 export const FEATURED_TAG = 0x03;
 export const FIAT_HINT_TAG = 0x04;
 export const ANNOUNCEMENT_TAG = 0x05;
@@ -158,7 +163,6 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
     }
     const extras = decodeTaggedExtras(pushes, REQUIRED_PUSHES);
     const tagline = readTaggedText(extras.get(TAGLINE_TAG), MAX_TAGLINE_BYTES);
-    const featuredTokenId = readTokenIdField(extras.get(FEATURED_TAG));
     const fiatHint = readFiatHint(extras.get(FIAT_HINT_TAG));
     const announcement = readTaggedText(
         extras.get(ANNOUNCEMENT_TAG),
@@ -169,7 +173,6 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
         theme: decodeTheme(themeBytes[0]!),
         extras,
         ...(tagline === undefined ? {} : { tagline }),
-        ...(featuredTokenId === undefined ? {} : { featuredTokenId }),
         ...(fiatHint === undefined ? {} : { fiatHint }),
         ...(announcement === undefined ? {} : { announcement }),
     };
@@ -301,7 +304,6 @@ function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
  */
 export type ManifestExtras = {
     tagline?: string;
-    featuredTokenId?: string;
     fiatHint?: string;
     announcement?: string;
 };
@@ -347,16 +349,6 @@ export function encodeManifestHex(
             return undefined;
         }
         pushes.push(scriptPush(concatBytes([Uint8Array.of(TAGLINE_TAG), bytes])));
-    }
-    if (extras.featuredTokenId !== undefined && extras.featuredTokenId !== '') {
-        if (!/^[0-9a-f]{64}$/.test(extras.featuredTokenId)) {
-            return undefined;
-        }
-        pushes.push(
-            scriptPush(
-                concatBytes([Uint8Array.of(FEATURED_TAG), fromHex(extras.featuredTokenId)]),
-            ),
-        );
     }
     if (extras.fiatHint !== undefined && extras.fiatHint !== '') {
         if (!/^[a-z]{3}$/.test(extras.fiatHint)) {

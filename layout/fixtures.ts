@@ -197,14 +197,6 @@ export const SCREENS: Record<string, StallView> = {
         ),
         shopSort: 'price-asc',
     }),
-    /* The featured token leads the shop under our chip \u2014 tag 0x03. */
-    featured: base({
-        fetch: {
-            kind: 'offers',
-            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n), offer(NFT, 2, 50_000n)],
-        },
-        featuredTokenId: T2,
-    }),
     /*
      * A card mid-flourish: the one instant the pulse animation exists, so
      * `checkOverTime` has something to seek — a runtime-only class would be
@@ -298,7 +290,6 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'hostile-name',
     'emoji-name',
     'offers-changed',
-    'featured',
     // Exists for the tools row and the flat sorted run; the decoration
     // interactions it could stage are the same ones `offers` already does.
     'crowded',
