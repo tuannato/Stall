@@ -948,13 +948,21 @@ body {
     }
 }
 
+/*
+ * A token's name gets two lines before it is cut (design review 2026-08-30:
+ * one nowrap line turned "The Sign Hums" into "THE SIGN H…" on Neo). Two,
+ * not unbounded: a hostile 32-byte name must not stretch every card.
+ */
 .item-n {
     font-size: var(--s-item-name);
     font-weight: var(--s-name-weight);
     letter-spacing: var(--s-track);
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
 }
 
 .item-q {

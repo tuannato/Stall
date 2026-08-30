@@ -163,11 +163,12 @@
     border-radius: 0;
 }
 
+/* The seller's merchandise keeps its own case — chrome shouts, goods do
+   not (design review 2026-08-30: uppercase truncated real names). */
 .t-neo .item-n {
     font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
 }
 
 .t-neo .item-q {
@@ -321,6 +322,13 @@
     .t-neo .item-x {
         font-size: 32px;
     }
+}
+
+/* The mark under neon — same glyph, cyan halo. Glow follows the mark's own
+   alpha like a text-shadow follows glyphs; it has no box and covers nothing. */
+.t-neo .stall-mark {
+    filter: drop-shadow(0 0 5px rgba(44, 233, 224, 0.75))
+        drop-shadow(0 0 14px rgba(44, 233, 224, 0.35));
 }
 
 @media (prefers-reduced-motion: reduce) {
