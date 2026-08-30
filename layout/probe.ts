@@ -561,6 +561,8 @@ type ContrastTarget = {
     w: number;
     h: number;
     color: string;
+    /** Border width: the border's own pixels are never the text's ground. */
+    bw: number;
     /**
      * The element's own corner radius, clamped to half its box. A rounded
      * control's corner pixels are the page behind it, and on Modern that page
@@ -634,6 +636,10 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
             h: box.height,
             color: style.color,
             r: Math.min(radius, box.width / 2, box.height / 2),
+            // A bordered pill's dashed edge sampled as "background" reported
+            // the rural address at 2.2:1 against its own border blend. The
+            // border is chrome, not ground — the runner insets past it.
+            bw: Number.parseFloat(style.borderTopWidth) || 0,
             sel: describe(node),
         });
         node.style.color = 'transparent';

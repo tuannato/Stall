@@ -104,6 +104,43 @@ export type Shape = {
     sheetRadiusD: string;
     sheetMaxD: string;
     sheetBorder?: string;
+    /*
+     * The chrome layer (extraction round 1.5): the per-look treatment of
+     * the header panel, the status chip, the address, the price ink, the
+     * announcement, the section rules and the tab bar — the difference,
+     * measured against the approved full dresses, between a palette swap
+     * and the look itself.
+     */
+    headBg?: string;
+    headBorder?: string;
+    headRadius?: string;
+    headShadow?: string;
+    headBlur?: string;
+    headMargin?: string;
+    subBg?: string;
+    subInk?: string;
+    subBorder?: string;
+    subRadius?: string;
+    subPad?: string;
+    addrBg?: string;
+    addrBorder?: string;
+    addrRadius?: string;
+    addrPad?: string;
+    addrAlign?: string;
+    priceInk?: string;
+    priceGlow?: string;
+    noticeBg?: string;
+    noticeBorder?: string;
+    noticeInk?: string;
+    chipBg?: string;
+    chipInk?: string;
+    chipRadius?: string;
+    chipPad?: string;
+    sectRule?: string;
+    sectInk?: string;
+    tabsBg?: string;
+    tabsBorder?: string;
+    tabsRadius?: string;
 };
 
 export type DecodedTheme = {
@@ -225,6 +262,29 @@ export const DEFAULT_THEME: DecodedTheme = {
         sheetRadiusM: '20px 20px 0 0',
         sheetRadiusD: '16px',
         sheetMaxD: '560px',
+        // Chrome (round 1.5): the glass showroom.
+        headBg: 'color-mix(in srgb, var(--s-surface) 74%, transparent)',
+        headBorder: '1px solid color-mix(in srgb, var(--s-muted) 16%, transparent)',
+        headRadius: '20px',
+        headShadow:
+            '0 2px 6px color-mix(in srgb, var(--s-text) 5%, transparent), 0 18px 44px color-mix(in srgb, var(--s-text) 8%, transparent)',
+        headBlur: 'blur(14px)',
+        headMargin: '14px 14px 0',
+        subBg: 'var(--s-accent)',
+        subInk: '#ffffff',
+        subRadius: '999px',
+        subPad: '4px 11px',
+        addrBg: 'color-mix(in srgb, var(--s-muted) 8%, var(--s-surface))',
+        addrRadius: '10px',
+        addrPad: '7px 10px',
+        noticeBorder: '1px solid color-mix(in srgb, var(--s-muted) 22%, transparent)',
+        chipBg: 'var(--s-accent)',
+        chipInk: '#ffffff',
+        chipRadius: '999px',
+        chipPad: '4px 10px',
+        sectRule: '2px solid color-mix(in srgb, var(--s-muted) 14%, transparent)',
+        tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 18%, transparent)',
+        tabsRadius: '16px 16px 0 0',
     },
 };
 
@@ -316,6 +376,31 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 sheetRadiusD: '0px',
                 sheetMaxD: '540px',
                 sheetBorder: '1px solid color-mix(in srgb, var(--s-accent) 40%, transparent)',
+                // Chrome (round 1.5): the night market's panel and inks.
+                headBg: 'linear-gradient(180deg, var(--s-surface), color-mix(in srgb, var(--s-surface) 72%, var(--s-bg)))',
+                headBorder: '1px solid color-mix(in srgb, var(--s-accent) 40%, transparent)',
+                headShadow:
+                    '0 0 0 1px color-mix(in srgb, var(--s-accent) 10%, transparent), 0 0 34px color-mix(in srgb, var(--s-accent) 15%, transparent)',
+                headMargin: '12px 12px 0',
+                subInk: 'color-mix(in srgb, var(--s-accent-2) 75%, white)',
+                subBorder: '1px solid color-mix(in srgb, var(--s-accent-2) 65%, transparent)',
+                subRadius: '0px',
+                subPad: '3px 9px',
+                addrBg: 'color-mix(in srgb, var(--s-accent) 5%, transparent)',
+                addrBorder: '1px dashed color-mix(in srgb, var(--s-accent) 45%, transparent)',
+                addrPad: '7px 10px',
+                priceInk: 'var(--s-accent)',
+                priceGlow: '0 0 14px color-mix(in srgb, var(--s-accent) 45%, transparent)',
+                noticeBg:
+                    'linear-gradient(90deg, color-mix(in srgb, var(--s-accent-2) 16%, transparent), transparent)',
+                noticeBorder: '1px solid color-mix(in srgb, var(--s-accent-2) 55%, transparent)',
+                noticeInk: 'color-mix(in srgb, var(--s-accent-2) 25%, var(--s-text))',
+                chipBg: 'var(--s-accent-2)',
+                chipInk: '#1a070e',
+                chipPad: '4px 9px',
+                sectInk: 'var(--s-accent)',
+                tabsBg: 'var(--s-bg)',
+                tabsBorder: '1px solid color-mix(in srgb, var(--s-accent) 28%, transparent)',
             },
         },
     ],
@@ -402,6 +487,35 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 sheetRadiusM: '22px 22px 0 0',
                 sheetRadiusD: '18px',
                 sheetMaxD: '560px',
+                // Chrome (round 1.5): the craft fair's pills, gold ribbon
+                // and double rules. The wood sign stays a decoration.
+                subBg: 'var(--s-surface)',
+                subInk: 'color-mix(in srgb, var(--s-accent) 55%, var(--s-muted))',
+                subBorder: '1px solid color-mix(in srgb, var(--s-muted) 35%, transparent)',
+                subRadius: '999px',
+                subPad: '4px 12px',
+                addrBg: 'var(--s-surface)',
+                addrBorder: '1px dashed color-mix(in srgb, var(--s-muted) 65%, transparent)',
+                addrRadius: '999px',
+                addrPad: '7px 12px',
+                addrAlign: 'center',
+                /*
+                 * Gold as the ribbon's border, never its ground: the ground
+                 * stays surface, whose ink pair legibleOn already corrects —
+                 * a raw accent-2 ground turned to mud under the Sun-faded
+                 * mood and swallowed the seller's sentence.
+                 */
+                noticeBg: 'var(--s-surface)',
+                noticeBorder: '2px solid var(--s-accent-2)',
+                noticeInk: 'var(--s-text)',
+                chipBg: 'var(--s-accent)',
+                chipInk: '#fff3ea',
+                chipRadius: '999px',
+                chipPad: '5px 9px',
+                sectRule: '4px double color-mix(in srgb, var(--s-muted) 50%, transparent)',
+                sectInk: 'var(--s-text)',
+                tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 35%, transparent)',
+                tabsRadius: '999px 999px 0 0',
             },
         },
     ],
@@ -600,5 +714,37 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-sheet-radius-d': s.sheetRadiusD,
         '--s-sheet-max-d': s.sheetMaxD,
         '--s-sheet-border': s.sheetBorder ?? '0',
+        '--s-head-bg': s.headBg ?? 'none',
+        '--s-head-border': s.headBorder ?? '0',
+        '--s-head-radius': s.headRadius ?? '0px',
+        '--s-head-shadow': s.headShadow ?? 'none',
+        '--s-head-blur': s.headBlur ?? 'none',
+        '--s-head-margin': s.headMargin ?? '0',
+        '--s-sub-bg': s.subBg ?? 'transparent',
+        '--s-sub-ink': s.subInk ?? 'var(--s-muted)',
+        '--s-sub-border': s.subBorder ?? '0',
+        '--s-sub-radius': s.subRadius ?? '999px',
+        '--s-sub-pad': s.subPad ?? '0',
+        '--s-addr-bg': s.addrBg ?? 'transparent',
+        '--s-addr-border': s.addrBorder ?? '0',
+        '--s-addr-radius': s.addrRadius ?? '0px',
+        '--s-addr-pad': s.addrPad ?? '0',
+        '--s-addr-align': s.addrAlign ?? 'left',
+        '--s-price-ink': s.priceInk ?? 'var(--s-text)',
+        '--s-price-glow': s.priceGlow ?? 'none',
+        '--s-notice-bg': s.noticeBg ?? 'var(--s-surface)',
+        '--s-notice-border':
+            s.noticeBorder ?? '1px solid color-mix(in srgb, var(--s-muted) 40%, transparent)',
+        '--s-notice-ink': s.noticeInk ?? 'var(--s-text)',
+        '--s-chip-bg': s.chipBg ?? 'transparent',
+        '--s-chip-ink': s.chipInk ?? 'var(--s-muted)',
+        '--s-chip-radius': s.chipRadius ?? '0px',
+        '--s-chip-pad': s.chipPad ?? '0',
+        '--s-sect-rule': s.sectRule ?? '0',
+        '--s-sect-ink': s.sectInk ?? 'var(--s-muted)',
+        '--s-tabs-bg': s.tabsBg ?? 'var(--s-surface)',
+        '--s-tabs-border':
+            s.tabsBorder ?? '1px solid color-mix(in srgb, var(--s-muted) 22%, transparent)',
+        '--s-tabs-radius': s.tabsRadius ?? '0px',
     };
 }

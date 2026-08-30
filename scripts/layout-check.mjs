@@ -257,10 +257,13 @@ function worstContrastInBox(img, target, textColor) {
     // Narrowed by the corner radius: outside it the pixels are the page
     // behind the control, not the control. See ContrastTarget.r in the probe.
     const r = target.r ?? 0;
-    const x0 = Math.max(0, Math.floor(target.x + r) + 1);
-    const y0 = Math.max(0, Math.floor(target.y) + 1);
-    const x1 = Math.min(img.width - 1, Math.ceil(target.x + target.w - r) - 1);
-    const y1 = Math.min(img.height - 1, Math.ceil(target.y + target.h) - 1);
+    // The border's own pixels are chrome, never the text's ground: a dashed
+    // pill edge blended to 2.2:1 against its ink is not a reading surface.
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0);
+    const x0 = Math.max(0, Math.floor(target.x + r + bw) + 1);
+    const y0 = Math.max(0, Math.floor(target.y + bw) + 1);
+    const x1 = Math.min(img.width - 1, Math.ceil(target.x + target.w - r - bw) - 1);
+    const y1 = Math.min(img.height - 1, Math.ceil(target.y + target.h - bw) - 1);
     if (x1 <= x0 || y1 <= y0) return undefined;
     let worst = Infinity;
     const stepX = Math.max(1, Math.floor((x1 - x0) / 12));

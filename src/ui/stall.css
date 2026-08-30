@@ -448,10 +448,20 @@ body {
 .stall.att-woodsign .addr {
     color: #f3ddbe;
     border-color: color-mix(in srgb, #fff6e6 45%, transparent);
+    /* The base look's paper pill under cream ink read at 1.2:1 on the
+       planks — the sign carries a darkened glass pill instead. */
+    background: color-mix(in srgb, #1c1006 45%, transparent);
 }
 
 .stall.att-woodsign .pin-btn {
     color: #f3ddbe;
+}
+
+/* The status pill on wood: same darkened glass as the address. */
+.stall.att-woodsign .stall-sub {
+    color: #f3ddbe;
+    background: color-mix(in srgb, #1c1006 45%, transparent);
+    border-color: color-mix(in srgb, #fff6e6 40%, transparent);
 }
 
 /*
@@ -719,7 +729,16 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
+    /* The chrome layer: the look's own header panel. `border` first, so a
+       look that keeps only the underline can still win with sign-rule. */
+    background: var(--s-head-bg);
+    border: var(--s-head-border);
     border-bottom: var(--s-sign-rule);
+    border-radius: var(--s-head-radius);
+    box-shadow: var(--s-head-shadow);
+    backdrop-filter: var(--s-head-blur);
+    -webkit-backdrop-filter: var(--s-head-blur);
+    margin: var(--s-head-margin);
 }
 
 /*
@@ -778,7 +797,12 @@ body {
 
 .stall-sub {
     font-size: 12.5px;
-    color: var(--s-muted);
+    align-self: flex-start;
+    color: var(--s-sub-ink);
+    background: var(--s-sub-bg);
+    border: var(--s-sub-border);
+    border-radius: var(--s-sub-radius);
+    padding: var(--s-sub-pad);
 }
 
 .stall-body {
@@ -800,12 +824,14 @@ body {
     flex-direction: column;
     gap: 4px;
     margin-top: 4px;
+    border-bottom: var(--s-sect-rule);
+    padding-bottom: 4px;
 }
 
 .section-title {
     font-size: 12px;
     font-weight: 660;
-    color: var(--s-muted);
+    color: var(--s-sect-ink);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0;
@@ -1053,6 +1079,9 @@ body {
     white-space: nowrap;
     font-family: var(--s-font);
     line-height: 1.05;
+    /* Ink and glow only — the number itself is the covenant's (§8). */
+    color: var(--s-price-ink);
+    text-shadow: var(--s-price-glow);
 }
 
 .item-u {
@@ -1366,8 +1395,9 @@ textarea.paste-in {
 .tabs {
     flex: none;
     display: flex;
-    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
-    background: var(--s-surface);
+    border-top: var(--s-tabs-border);
+    background: var(--s-tabs-bg);
+    border-radius: var(--s-tabs-radius);
 }
 
 .tab {
@@ -1515,6 +1545,11 @@ textarea.paste-in {
     color: var(--s-muted);
     word-break: break-all;
     line-height: 1.45;
+    background: var(--s-addr-bg);
+    border: var(--s-addr-border);
+    border-radius: var(--s-addr-radius);
+    padding: var(--s-addr-pad);
+    text-align: var(--s-addr-align);
 }
 
 /*
@@ -1911,9 +1946,8 @@ textarea.paste-in {
  * frame must not dress them as ours. The accent edge is the only flourish.
  */
 .notice {
-    background: var(--s-surface);
-    border: 1px solid color-mix(in srgb, var(--s-muted) 40%, transparent);
-    border-left: 4px solid var(--s-accent);
+    background: var(--s-notice-bg);
+    border: var(--s-notice-border);
     border-radius: var(--s-radius);
     padding: 10px 14px;
     margin-bottom: 10px;
@@ -1929,11 +1963,16 @@ textarea.paste-in {
     font-weight: 650;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--s-muted);
+    align-self: flex-start;
+    color: var(--s-chip-ink);
+    background: var(--s-chip-bg);
+    border-radius: var(--s-chip-radius);
+    padding: var(--s-chip-pad);
 }
 
 .notice-text {
     margin: 0;
+    color: var(--s-notice-ink);
     font-size: 14.5px;
     color: var(--s-text);
     overflow-wrap: anywhere;
