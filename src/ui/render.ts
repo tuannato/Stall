@@ -2672,7 +2672,11 @@ function placeAttachmentNodes(
             // refused outright for exactly that reason. The yard sits under
             // the sign now — a stage, not the footer's doormat: the first
             // billboard pass found the beetle below the fold on every screen.
-            node.append(el('div', `${row.cls!}-bug`));
+            // Only the beetle carries a sprite; a yard row that is all stage
+            // (the grid horizon) gets no empty child to style around.
+            if (row.cls === 'att-beetle') {
+                node.append(el('div', `${row.cls}-bug`));
+            }
             const head = stall.querySelector('.stall-head');
             if (head !== null) {
                 head.after(node);

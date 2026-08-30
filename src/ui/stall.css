@@ -201,8 +201,8 @@ body {
 .stall.att-hum .stall-name {
     color: var(--s-accent);
     text-shadow:
-        0 0 6px color-mix(in srgb, var(--s-accent) 70%, transparent),
-        0 0 14px color-mix(in srgb, var(--s-accent) 35%, transparent);
+        0 0 8px color-mix(in srgb, var(--s-accent) 85%, transparent),
+        0 0 20px color-mix(in srgb, var(--s-accent) 45%, transparent);
 }
 
 /*
@@ -215,21 +215,23 @@ body {
 .stall.att-rainfall {
     background-image:
         repeating-linear-gradient(
-            168deg,
-            color-mix(in srgb, var(--s-accent) 13%, transparent) 0 1px,
-            transparent 1px 34px
+            115deg,
+            transparent 0 46px,
+            color-mix(in srgb, var(--s-accent-2) 15%, transparent) 46px 47px,
+            transparent 47px 90px
         ),
         repeating-linear-gradient(
-            172deg,
-            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 0 1px,
-            transparent 1px 55px
+            115deg,
+            transparent 0 64px,
+            color-mix(in srgb, var(--s-accent) 11%, transparent) 64px 65px,
+            transparent 65px 118px
         ),
         var(--s-backdrop);
     background-size:
-        100% 260px,
-        100% 420px,
+        100% 300px,
+        100% 460px,
         auto;
-    animation: att-rainfall-drift 1400ms linear infinite;
+    animation: att-rainfall-drift 1600ms linear infinite;
 }
 
 @keyframes att-rainfall-drift {
@@ -241,10 +243,97 @@ body {
     }
     to {
         background-position:
-            0 260px,
-            0 420px,
+            0 300px,
+            0 460px,
             0 0;
     }
+}
+
+/*
+ * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
+ * to a real in-flow band under the sign: a doubled grid tipped away with a
+ * transform, fading upward. A node, never a pseudo-element — the probe
+ * measures boxes — and static: the rain keeps this look's one mover.
+ */
+.att-horizon {
+    position: relative;
+    height: 72px;
+    flex: none;
+    pointer-events: none;
+    overflow: hidden;
+    background:
+        repeating-linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--s-accent) 26%, transparent) 0 1px,
+            transparent 1px 42px
+        ),
+        repeating-linear-gradient(
+            0deg,
+            color-mix(in srgb, var(--s-accent) 26%, transparent) 0 1px,
+            transparent 1px 26px
+        );
+    transform: perspective(360px) rotateX(54deg);
+    transform-origin: 50% 100%;
+    -webkit-mask: linear-gradient(rgba(0, 0, 0, 0), #000 78%);
+    mask: linear-gradient(rgba(0, 0, 0, 0), #000 78%);
+}
+
+/*
+ * Neo city · badge · Corner brackets. Target brackets on every card,
+ * drawn as background layers on the card itself — no pseudo-element, no
+ * extra box, nothing that can leave the card or reach its price. Cyan up,
+ * pink down, the look's two inks.
+ */
+.stall.att-brackets .item {
+    background-image:
+        linear-gradient(var(--s-accent), var(--s-accent)),
+        linear-gradient(var(--s-accent), var(--s-accent)),
+        linear-gradient(var(--s-accent), var(--s-accent)),
+        linear-gradient(var(--s-accent), var(--s-accent)),
+        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
+        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
+        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
+        linear-gradient(var(--s-accent-2), var(--s-accent-2));
+    background-repeat: no-repeat;
+    background-size:
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px,
+        12px 2px,
+        2px 12px;
+    background-position:
+        left 4px top 4px,
+        left 4px top 4px,
+        right 4px top 4px,
+        right 4px top 4px,
+        left 4px bottom 4px,
+        left 4px bottom 4px,
+        right 4px bottom 4px,
+        right 4px bottom 4px;
+}
+
+/*
+ * Neo city · trim · Aurora glows. The full dress's blurred light orbs as
+ * two radial layers on the root's own background — edge lighting behind
+ * every surface, static at ship: the pulse yielded the mover slot to the
+ * rain, and the light still reads standing still.
+ */
+.stall.att-aurora {
+    background-image:
+        radial-gradient(
+            300px 300px at -60px 30%,
+            color-mix(in srgb, var(--s-accent) 13%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            320px 320px at calc(100% + 70px) 62%,
+            color-mix(in srgb, var(--s-accent-2) 12%, transparent),
+            transparent 70%
+        ),
+        var(--s-backdrop);
 }
 
 /*

@@ -235,11 +235,16 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
     [
         NEO_CITY_THEME_ID,
         {
-            bg: { r: 8, g: 10, b: 18 },
-            surface: { r: 17, g: 21, b: 36 },
+            /*
+             * Re-cut 2026-08-30 from the approved full dress (extraction
+             * round 1): a deeper night, a brighter cyan, and the muted
+             * channel lifted so small print holds 4.5:1 on the new black.
+             */
+            bg: { r: 5, g: 6, b: 13 },
+            surface: { r: 13, g: 19, b: 34 },
             text: { r: 223, g: 246, b: 255 },
-            muted: { r: 110, g: 134, b: 168 },
-            accent: { r: 24, g: 224, b: 216 },
+            muted: { r: 138, g: 166, b: 201 },
+            accent: { r: 44, g: 233, b: 224 },
             danger: { r: 255, g: 77, b: 122 },
             accentTwo: { r: 255, g: 77, b: 122 },
             fontIndex: 1,
@@ -249,8 +254,10 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             // rendered-pixel contrast pass arbitrates both.
             backdrop:
                 'repeating-linear-gradient(0deg, color-mix(in srgb, var(--s-accent) 4%, transparent) 0 1px, transparent 1px 4px), linear-gradient(180deg, color-mix(in srgb, var(--s-accent) 9%, var(--s-bg)) 0%, var(--s-bg) 480px)',
+            // The neon sign itself, from the full dress: a tight core and a
+            // wide halo. Text-shadow has no box, so it stays on the name.
             signGlow:
-                '0 0 16px color-mix(in srgb, var(--s-accent) 35%, transparent)',
+                '0 0 8px color-mix(in srgb, var(--s-accent) 80%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 45%, transparent)',
             ornament: { label: '// stall.cash', kind: 'ticker' },
             shape: {
                 padM: '12px',
@@ -261,8 +268,9 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 gap: '6px',
                 cardPad: '11px 12px',
                 cardGap: '11px',
-                cardBorder: '1px solid color-mix(in srgb, var(--s-accent) 22%, transparent)',
-                cardShadow: 'none',
+                cardBorder: '1px solid color-mix(in srgb, var(--s-accent) 42%, transparent)',
+                cardShadow:
+                    '0 0 0 1px color-mix(in srgb, var(--s-accent) 10%, transparent), 0 0 22px color-mix(in srgb, var(--s-accent) 10%, transparent)',
                 icon: '40px',
                 iconRadius: '0px',
                 // The cut corner is the look's signature. A clip never moves a
@@ -292,7 +300,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 itemsD: 'repeat(3, minmax(0, 1fr))',
                 signPadM: '16px 12px 13px',
                 signPadD: '30px 24px 20px',
-                signSize: '21px',
+                signSize: '25px',
                 signCase: 'uppercase',
                 signRule: '1px solid color-mix(in srgb, var(--s-accent) 22%, transparent)',
                 nameWeight: '700',

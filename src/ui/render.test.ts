@@ -3427,9 +3427,10 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         const theme = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
         theme.value = String(NEO_CITY_THEME_ID);
         theme.dispatchEvent(new Event('change', { bubbles: true }));
-        // Neo's slots are crest and fringe; bit 0 there is a different row, so
-        // carrying the flag over would wear something never chosen.
-        expect(root.querySelector('[data-role="decor-yard"]')).toBeNull();
+        // Neo has no mood row; bit 0 there is a different row, so carrying
+        // the flag over would wear something never chosen. (The yard slot
+        // stopped being the discriminator when Neo grew a Grid horizon.)
+        expect(root.querySelector('[data-role="decor-mood"]')).toBeNull();
         const crest = root.querySelector<HTMLSelectElement>('[data-role="decor-crest"]')!;
         expect(crest.value).toBe('');
         root.remove();

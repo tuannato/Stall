@@ -189,24 +189,38 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-blueprint',
         motion: false,
     },
+    /*
+     * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
+     * were Circuit edge and Holotag — unminted, so free to replace — and
+     * the pieces cut from the approved full dress take their bits. Bit 4
+     * is new. Neon rain keeps the mover slot; everything else ships
+     * static-rich on purpose.
+     */
     {
         themeId: NEO_CITY_THEME_ID,
         bit: 2,
-        slot: 'trim',
-        label: 'Circuit edge',
-        paint: 'root',
-        cls: 'att-circuit',
+        slot: 'yard',
+        label: 'Grid horizon',
+        paint: 'node',
+        cls: 'att-horizon',
         motion: false,
     },
     {
         themeId: NEO_CITY_THEME_ID,
         bit: 3,
         slot: 'badge',
-        label: 'Holotag',
-        // Static on purpose: Neon rain is this look's one mover, and the
-        // holographic sheen reads as material, not motion.
-        paint: 'node',
-        cls: 'att-holotag',
+        label: 'Corner brackets',
+        paint: 'root',
+        cls: 'att-brackets',
+        motion: false,
+    },
+    {
+        themeId: NEO_CITY_THEME_ID,
+        bit: 4,
+        slot: 'trim',
+        label: 'Aurora glows',
+        paint: 'root',
+        cls: 'att-aurora',
         motion: false,
     },
     {

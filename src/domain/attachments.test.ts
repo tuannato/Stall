@@ -43,8 +43,11 @@ describe('attachment-table-ids-are-pinned', () => {
             // opens, permanent from the first record that sets them.
             '1:2:badge',
             '1:3:trim',
-            '2:2:trim',
+            // Extraction round 1: bits 2-4 re-cut from the full dress while
+            // unminted — the sanctioned cheapest moment, updated on purpose.
+            '2:2:yard',
             '2:3:badge',
+            '2:4:trim',
             '3:2:badge',
             '3:3:trim',
         ]);
