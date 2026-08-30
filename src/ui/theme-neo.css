@@ -386,3 +386,21 @@
     content: '// ';
     color: #3df2ea;
 }
+
+/* The currency control in console chrome, as the design's fiat panel. */
+.t-neo .stall-foot .paste-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    font-size: 11px;
+    color: #8aa6c9;
+}
+
+.t-neo .stall-foot .paste-in {
+    background: #0d1322;
+    border: 1px solid rgba(44, 233, 224, 0.35);
+    border-radius: 0;
+    /* Literal with its literal ground — the pair guard caught the mixed
+       version the hour it was written. */
+    color: #dff6ff;
+}

@@ -52,14 +52,22 @@ describe('every-theme-var-reaches-the-stylesheet', () => {
      * theme-neo.css's background stack), and the one-file version would have
      * called every such var dead.
      */
-    it('consumes every --s-* the table emits, in one of the four sheets', () => {
+    it('consumes every --s-* the table emits, in a sheet or another emitted value', () => {
         const css = allCss();
+        // A var may also be consumed inside another emitted value —
+        // --s-shade exists only inside the shadow strings the table itself
+        // emits, and calling that dead would ban the pattern that lets a
+        // mood re-ink elevation.
+        const values = [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]
+            .map((id) => Object.values(themeVars(decodeTheme(id))).join(' '))
+            .join(' ');
         const emitted = emittedNames();
         expect(emitted.size).toBeGreaterThan(0);
         for (const name of emitted) {
-            expect(css, `${name} is emitted on every paint and read by no rule`).toContain(
-                `var(${name})`,
-            );
+            expect(
+                css.includes(`var(${name})`) || values.includes(`var(${name})`),
+                `${name} is emitted on every paint and read by no rule`,
+            ).toBe(true);
         }
     });
 });

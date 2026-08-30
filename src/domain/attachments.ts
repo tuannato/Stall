@@ -19,7 +19,7 @@ export type AttachmentSlot = 'crest' | 'fringe' | 'yard' | 'mood' | 'badge' | 't
 
 /** The palette roles a `mood` may move. Deliberately not the shape or the font. */
 export type PaletteDelta = Partial<
-    Pick<DecodedTheme, 'bg' | 'surface' | 'text' | 'muted' | 'accent' | 'accentTwo'>
+    Pick<DecodedTheme, 'bg' | 'surface' | 'text' | 'muted' | 'accent' | 'accentTwo' | 'shade'>
 >;
 
 export type ShippedAttachment = {
@@ -95,6 +95,10 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
             muted: rgb(140, 153, 168),
             accent: rgb(91, 147, 255),
             accentTwo: rgb(91, 147, 255),
+            // Elevation at night is a light tone, not a darker black: the
+            // shadows mix a few percent of this over a near-black ground,
+            // which is the only way a card still lifts (review, Modern #4).
+            shade: rgb(170, 196, 240),
         },
     },
     {   

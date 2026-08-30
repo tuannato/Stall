@@ -202,6 +202,14 @@ export type DecodedTheme = {
     accent: Rgb;
     danger: Rgb;
     accentTwo: Rgb;
+    /**
+     * The ink elevation is drawn in — shadows under cards, panels, docks.
+     * Defaults to the text ink, which is right on every light ground; a
+     * dark mood SETS it to a light tone, because a near-black shadow on a
+     * near-black ground is no elevation at all (review: After hours
+     * collapsed the design's 9-unit card lift to 1).
+     */
+    shade?: Rgb;
     fontIndex: number;
     softness: number;
     /** A shipped header strip, or absent — Modern ships none. */
@@ -263,7 +271,7 @@ export const DEFAULT_THEME: DecodedTheme = {
         cardGap: '12px',
         cardBorder: '1px solid color-mix(in srgb, var(--s-muted) 14%, transparent)',
         cardShadow:
-            '0 1px 2px color-mix(in srgb, var(--s-text) 6%, transparent), 0 8px 24px color-mix(in srgb, var(--s-text) 6%, transparent)',
+            '0 1px 2px color-mix(in srgb, var(--s-shade) 6%, transparent), 0 8px 24px color-mix(in srgb, var(--s-shade) 6%, transparent)',
         icon: '44px',
         iconRadius: '13px',
         iconClip: 'none',
@@ -304,9 +312,9 @@ export const DEFAULT_THEME: DecodedTheme = {
         headBorder: '1px solid color-mix(in srgb, var(--s-muted) 16%, transparent)',
         headRadius: '20px',
         headShadow:
-            '0 2px 6px color-mix(in srgb, var(--s-text) 5%, transparent), 0 18px 44px color-mix(in srgb, var(--s-text) 8%, transparent)',
+            '0 2px 6px color-mix(in srgb, var(--s-shade) 5%, transparent), 0 18px 44px color-mix(in srgb, var(--s-shade) 8%, transparent)',
         headBlur: 'blur(14px)',
-        headMargin: '14px 14px 0',
+        headMargin: '14px 18px 0',
         subBg: 'var(--s-accent)',
         subInk: '#ffffff',
         subRadius: '999px',
@@ -326,7 +334,7 @@ export const DEFAULT_THEME: DecodedTheme = {
         // the full dress — a floating dock overlays whatever price scrolls
         // under it, and that rule is not the owner's to waive lightly.
         tabsMargin: '10px auto 14px',
-        tabsShadow: '0 8px 30px color-mix(in srgb, var(--s-text) 18%, transparent)',
+        tabsShadow: '0 8px 30px color-mix(in srgb, var(--s-shade) 18%, transparent)',
         tabsBg: 'color-mix(in srgb, var(--s-surface) 88%, transparent)',
         tabsBlur: 'blur(16px)',
         tabsGap: '4px',
@@ -742,6 +750,7 @@ export function themeVars(theme: DecodedTheme): Record<string, string> {
         '--s-bg': rgbCss(bg),
         '--s-surface': rgbCss(surface),
         '--s-text': rgbCss(legibleOn(theme.text, bg, surface)),
+        '--s-shade': rgbCss(theme.shade ?? theme.text),
         '--s-muted': rgbCss(legibleOn(theme.muted, bg, surface)),
         '--s-accent': rgbCss(legibleOn(theme.accent, bg)),
         '--s-danger': rgbCss(legibleOn(theme.danger, surface)),
