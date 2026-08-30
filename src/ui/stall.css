@@ -536,36 +536,57 @@ body {
  * the ornament strip — three inks from the look's own palette, drawn with
  * conic triangles, swaying not at all: the beetle keeps this look's mover.
  */
+/*
+ * Two rows, three inks — terracotta, gold, and the design's GREEN,
+ * restored by the owner (decoration CSS is ours; no chain byte carries
+ * it). The second row hangs offset and dimmer, exactly as the fd drew
+ * it; both grow at desktop. One brown sawtooth across 1280px was the
+ * review's "two-tone bunting that never grows".
+ */
 .att-bunting {
     position: relative;
     display: block;
     width: 100%;
     align-self: stretch;
-    height: 24px;
+    height: 52px;
     flex: none;
     pointer-events: none;
     background:
-        linear-gradient(var(--s-muted), var(--s-muted)) top / 100% 3px no-repeat,
-        conic-gradient(
-                from 318deg at 16.6% 100%,
-                var(--s-accent) 0 84deg,
-                rgba(0, 0, 0, 0) 0
-            )
-            0 3px / 108px 21px repeat-x,
-        conic-gradient(
-                from 318deg at 50% 100%,
-                var(--s-accent-2) 0 84deg,
-                rgba(0, 0, 0, 0) 0
-            )
-            0 3px / 108px 21px repeat-x,
-        conic-gradient(
-                from 318deg at 83.3% 100%,
-                var(--s-muted) 0 84deg,
-                rgba(0, 0, 0, 0) 0
-            )
-            0 3px / 108px 21px repeat-x;
+        linear-gradient(#8a7458, #8a7458) top / 100% 3px no-repeat,
+        conic-gradient(from 318deg at 16.6% 100%, #9e4620 0 84deg, rgba(0, 0, 0, 0) 0)
+            0 3px / 108px 24px repeat-x,
+        conic-gradient(from 318deg at 50% 100%, #c98a2c 0 84deg, rgba(0, 0, 0, 0) 0)
+            0 3px / 108px 24px repeat-x,
+        conic-gradient(from 318deg at 83.3% 100%, #5b7b46 0 84deg, rgba(0, 0, 0, 0) 0)
+            0 3px / 108px 24px repeat-x,
+        conic-gradient(from 318deg at 16.6% 100%, rgba(158, 70, 32, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+            54px 26px / 108px 24px repeat-x,
+        conic-gradient(from 318deg at 50% 100%, rgba(91, 123, 70, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+            54px 26px / 108px 24px repeat-x,
+        conic-gradient(from 318deg at 83.3% 100%, rgba(201, 138, 44, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+            54px 26px / 108px 24px repeat-x;
     transform-origin: 50% 0;
     animation: att-bunting-sway 6s ease-in-out infinite;
+}
+
+@media (min-width: 680px) {
+    .att-bunting {
+        height: 68px;
+        background:
+            linear-gradient(#8a7458, #8a7458) top / 100% 3px no-repeat,
+            conic-gradient(from 318deg at 16.6% 100%, #9e4620 0 84deg, rgba(0, 0, 0, 0) 0)
+                0 3px / 144px 32px repeat-x,
+            conic-gradient(from 318deg at 50% 100%, #c98a2c 0 84deg, rgba(0, 0, 0, 0) 0)
+                0 3px / 144px 32px repeat-x,
+            conic-gradient(from 318deg at 83.3% 100%, #5b7b46 0 84deg, rgba(0, 0, 0, 0) 0)
+                0 3px / 144px 32px repeat-x,
+            conic-gradient(from 318deg at 16.6% 100%, rgba(158, 70, 32, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+                72px 34px / 144px 32px repeat-x,
+            conic-gradient(from 318deg at 50% 100%, rgba(91, 123, 70, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+                72px 34px / 144px 32px repeat-x,
+            conic-gradient(from 318deg at 83.3% 100%, rgba(201, 138, 44, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
+                72px 34px / 144px 32px repeat-x;
+    }
 }
 
 @keyframes att-bunting-sway {
@@ -2232,18 +2253,40 @@ textarea.paste-in {
  * 18px of thumbtack. State is the fill — accent when pinned, muted line
  * when not — and the words live in the label, where a reader gets them.
  */
+/*
+ * The pin is OUT of the text flow (owner, 2026-08-30): inline after the
+ * name it widened the row, so a centred sign painted its name off-centre
+ * and a long name wrapped earlier than the name alone would. Absolutely
+ * pinned to the row's corner instead — a real node the probe can measure,
+ * near nothing protected — so the name lays out exactly as if the pin did
+ * not exist.
+ */
 .stall-name-row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
     min-width: 0;
+    width: 100%;
+}
+
+.stall-name-row .stall-name {
+    padding-right: 44px;
+}
+
+@media (min-width: 680px) {
+    .t-rural .stall-name-row .stall-name {
+        /* Symmetric on the centred board, so the centre holds. */
+        padding-inline: 44px;
+    }
 }
 
 .pin-btn {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 50%;
+    right: 0;
+    translate: 0 -50%;
     width: 44px;
     height: 44px;
-    margin: -10px 0;
     display: grid;
     place-items: center;
     border: 0;

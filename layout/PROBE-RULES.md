@@ -88,6 +88,11 @@ Sampling amendments, each measured:
   shell's clip keeps its full rect; a studio control's box sampled where
   the dock actually paints reported 1.00:1 against the selected tab's blue.
   Same boundary `coveredBy` already held.
+- **A clipped sliver is skipped, not sampled.** A control cut to under
+  16px at the region's edge holds no line of text — it is all border and
+  corner arc, and sampling one reported a pill's terracotta ink against
+  its own terracotta top border at 1.04:1. The control is measured in
+  full wherever it stands clear of the edge.
 - **Boxes are re-read at the last moment before every shot**, after
   `document.fonts.ready`: the self-hosted face swaps metrics when it lands
   and the fit-content dock re-centres with it.

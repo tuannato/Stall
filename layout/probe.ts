@@ -839,8 +839,8 @@ let preparedNodes: HTMLElement[] = [];
 
 /** One node's sample box and static fields, or nothing worth sampling. */
 function targetFor(node: HTMLElement): ContrastTarget | undefined {
-    let box: { x: number; y: number; width: number; height: number } =
-        node.getBoundingClientRect();
+    const full = node.getBoundingClientRect();
+    let box: { x: number; y: number; width: number; height: number } = full;
     // Content scrolled out of the shell's clip keeps its full rect, and a
     // box sampled where the page paints something else entirely reported
     // a studio control at 1.00:1 against the dock's selected-tab blue
@@ -856,6 +856,16 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             width: Math.min(box.x + box.width, clip.right) - x,
             height: Math.min(box.y + box.height, clip.bottom) - y,
         };
+        // A clipped SLIVER holds no line of text — a control cut to 6px at
+        // the region's edge is all border and corner arc, and sampling it
+        // reported a pill's ink against its own top border at 1.04:1. The
+        // control is measured in full wherever it stands clear of the edge.
+        if (
+            (box.height < 16 && box.height < full.height - 1) ||
+            (box.width < 16 && box.width < full.width - 1)
+        ) {
+            return undefined;
+        }
     }
     if (box.width < 2 || box.height < 2) {
         return undefined;

@@ -10,7 +10,20 @@
 }
 
 .t-modern .stall-head {
-    background: color-mix(in srgb, var(--s-surface) 74%, transparent);
+    /* The panel plus its signature: the 3px blue sweep pinned to the
+       bottom edge — a background layer, never a pseudo-element. */
+    background-color: color-mix(in srgb, var(--s-surface) 74%, transparent);
+    background-image: linear-gradient(
+        90deg,
+        transparent,
+        #2563eb 30%,
+        #7fa6f2 50%,
+        #2563eb 70%,
+        transparent
+    );
+    background-size: 100% 3px;
+    background-position: bottom;
+    background-repeat: no-repeat;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(95, 105, 117, 0.16);
@@ -55,32 +68,50 @@
     letter-spacing: 0.06em;
 }
 
+/* The design's heading device: a signboard, not a table header — full
+   ink, 800, uppercase, and a text-sized gradient underline. No left bar,
+   no full-width rule. */
 .t-modern .section-head,
 .t-modern .collection-head {
-    border-bottom: 2px solid rgba(95, 105, 117, 0.14);
-    padding-bottom: 5px;
+    border-bottom: 0;
+    border-left: 0;
+    padding-bottom: 0;
+    padding-left: 0;
 }
 
 .t-modern .section-title,
 .t-modern .collection-name {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    color: color-mix(in srgb, var(--s-text) 70%, var(--s-muted));
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--s-text);
+    width: fit-content;
+    padding-bottom: 6px;
+    background-image: linear-gradient(90deg, var(--s-accent), transparent);
+    background-size: 100% 2px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
 }
 
 .t-modern .item {
     background: var(--s-surface);
     border: 1px solid rgba(95, 105, 117, 0.14);
-    border-radius: 16px;
+    border-radius: 18px;
     box-shadow:
         0 1px 2px rgba(20, 23, 26, 0.06),
         0 8px 24px rgba(20, 23, 26, 0.06);
 }
 
+.t-modern .stall-name {
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
 .t-modern .item-n {
     font-size: 15.5px;
-    font-weight: 650;
+    font-weight: 700;
 }
 
 .t-modern .item-q {
@@ -89,9 +120,17 @@
 }
 
 .t-modern .item-x {
-    font-weight: 700;
+    font-size: 26px;
+    font-weight: 800;
     letter-spacing: -0.01em;
     color: var(--s-text);
+}
+
+.t-modern .item-from {
+    text-transform: uppercase;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
 }
 
 .t-modern .item-u {
@@ -209,4 +248,21 @@
     .t-modern .item-x {
         font-size: 32px;
     }
+}
+
+.t-modern .notice-text {
+    font-size: 13.5px;
+}
+
+/* The design's page stays continuous — no rule cutting the foot off. */
+.t-modern .stall-foot {
+    border-top: 0;
+}
+
+.t-modern .wearing {
+    width: fit-content;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--s-muted) 10%, var(--s-surface));
+    color: var(--s-muted);
 }

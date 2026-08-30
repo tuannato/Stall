@@ -20,36 +20,34 @@
  * (no positioned pseudo), cream ink on everything the board carries.
  */
 .t-rural .stall-head {
-    background: none;
+    /* Two cords in the top padding, tying the board into the bunting —
+       the board below paints to its own edges (the old 18px unpainted
+       band read as a clipped sign on every load). */
+    background-image:
+        linear-gradient(#8a7458, #8a7458),
+        linear-gradient(#8a7458, #8a7458);
+    background-repeat: no-repeat;
+    background-size:
+        3px 26px,
+        3px 26px;
+    background-position:
+        left 26% top,
+        right 26% top;
     border: 0;
     box-shadow: none;
-    padding: 0 0 10px;
+    padding: 24px 0 10px;
     align-items: center;
 }
 
 .t-rural .stall-sign {
     background-image:
-        linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
-        linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
         repeating-linear-gradient(
             180deg,
             rgba(58, 42, 24, 0.18) 0 1.5px,
             transparent 1.5px 26px
         ),
         linear-gradient(180deg, #8a5a33, #7a4c28);
-    background-repeat: no-repeat;
-    background-size:
-        3px 18px,
-        3px 18px,
-        100% calc(100% - 18px),
-        100% calc(100% - 18px);
-    background-position:
-        left 26% top,
-        right 26% top,
-        left 0 top 18px,
-        left 0 top 18px;
     border: 3px solid #5e3a1e;
-    border-top: 0;
     border-radius: 10px;
     box-shadow: 0 12px 28px rgba(58, 42, 24, 0.3);
     flex: none;
@@ -68,6 +66,10 @@
     50% {
         transform: rotate(0.6deg);
     }
+}
+
+.t-rural .stall-name {
+    font-size: 29px;
 }
 
 .t-rural .stall-name,
@@ -349,6 +351,28 @@
     .t-rural .stall-headings {
         align-items: center;
     }
+
+    /* The design's desktop scale — stated HERE because this file's own
+       mobile rules out-specify the base's desktop media rules. */
+    .t-rural .item-x {
+        font-size: 31px;
+    }
+
+    .t-rural .item-n {
+        font-size: 19px;
+    }
+
+    .t-rural .item-head {
+        padding: 18px;
+    }
+
+    .t-rural .stall-tagline {
+        font-size: 15px;
+    }
+
+    .t-rural .items {
+        gap: 16px;
+    }
 }
 
 /* The mark, embossed into the wood it hangs on — treatment, never a new
@@ -366,4 +390,43 @@
     .t-rural .stall-sign {
         animation: none;
     }
+}
+
+.t-rural .section-head,
+.t-rural .collection-head {
+    margin-top: 20px;
+    margin-bottom: 9px;
+}
+
+.t-rural .stall-foot {
+    border-top: 0;
+}
+
+/* The ticket's inner dashed edge — an outline has no box, so the probe
+   stays sighted where the design's inset pseudo could not be measured. */
+.t-rural .item-head {
+    outline: 1px dashed color-mix(in srgb, var(--s-muted) 35%, transparent);
+    outline-offset: -5px;
+}
+
+/* Pinned a little crooked, as a craft fair is; straight under the hand.
+   The probe's contrast pad already covers text in transformed ancestors. */
+.t-rural .items .item:nth-child(3n + 1) {
+    rotate: -0.6deg;
+}
+
+.t-rural .items .item:nth-child(3n + 2) {
+    rotate: 0.5deg;
+}
+
+.t-rural .items .item:hover,
+.t-rural .items .item.open {
+    rotate: 0deg;
+}
+
+/* The catalogue credit in the look's own voice (owner: keep, dress it). */
+.t-rural .wearing {
+    font-style: italic;
+    text-align: center;
+    color: var(--s-muted);
 }

@@ -88,7 +88,27 @@
 .t-neo .section-head,
 .t-neo .collection-head {
     border-bottom: 0;
+    border-left: 0;
     padding-bottom: 0;
+    padding-left: 0;
+    margin-top: 20px;
+    margin-bottom: 9px;
+}
+
+/* The shelf wears the same wedge the sections do — cyan into the
+   design's violet, its third ink. */
+.t-neo .collection-name::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    background: linear-gradient(135deg, #2ce9e0, #8b7bff);
+    clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+.t-neo .section-title::before {
+    background: linear-gradient(135deg, #2ce9e0, #8b7bff);
 }
 
 .t-neo .section-title,
@@ -339,4 +359,30 @@
     .t-neo .item-caret {
         animation: none;
     }
+}
+
+.t-neo .items {
+    gap: 12px;
+}
+
+.t-neo .stall-foot {
+    border-top: 0;
+}
+
+@media (min-width: 680px) {
+    .t-neo .items {
+        gap: 14px;
+    }
+}
+
+.t-neo .wearing {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10.5px;
+    color: #8aa6c9;
+}
+
+.t-neo .wearing::before {
+    content: '// ';
+    color: #3df2ea;
 }
