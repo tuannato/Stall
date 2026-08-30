@@ -2675,10 +2675,16 @@ function placeAttachmentNodes(
                 node.append(el('div', `${row.cls}-bug`));
             }
             const head = stall.querySelector('.stall-head');
-            if (head !== null) {
+            if (head === null) {
+                stall.append(node);
+            } else if (row.cls === 'att-beetle') {
+                // The beetle's rail is a stage under the sign.
                 head.after(node);
             } else {
-                stall.append(node);
+                // A yard that is all floor (the grid horizon) belongs ABOVE
+                // the sign: between the sign and the goods it read as a
+                // divider band costing ~75px against the design's zero.
+                head.before(node);
             }
         }
     }

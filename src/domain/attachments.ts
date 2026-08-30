@@ -239,7 +239,11 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 3,
         slot: 'trim',
         label: 'Sunburst',
-        paint: 'node',
+        // Root, not a node: a shallow stage box could never be the design's
+        // sky-filling wheel without overlapping a protected box; a root
+        // background has no box to overlap and the falloff is baked into
+        // its own layers (review S6).
+        paint: 'root',
         cls: 'att-sunburst',
         motion: true,
     },

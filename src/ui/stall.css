@@ -199,7 +199,9 @@ body {
  * small enough that it cannot reach the address below it.
  */
 .stall.att-hum .stall-name {
-    color: var(--s-accent);
+    /* Shadow only — the paid glow must never repaint the tube's white-hot
+       core: neon reads as lit because the core stays near-white (review
+       S6; the row once flattened the sign to plain accent cyan). */
     text-shadow:
         0 0 8px color-mix(in srgb, var(--s-accent) 85%, transparent),
         0 0 20px color-mix(in srgb, var(--s-accent) 45%, transparent);
@@ -292,11 +294,14 @@ body {
  * the band mid-card, still visible.
  */
 .stall.att-sheen .item {
+    /* The design's band, not a 5% whisper: the owner's ruling is that the
+       project is honest, and a sheen nobody can see is a decoration sold
+       and not delivered. The design's tinted streak, verbatim. */
     background-image: linear-gradient(
         100deg,
-        transparent 42%,
-        color-mix(in srgb, var(--s-text) 5%, transparent) 50%,
-        transparent 58%
+        transparent 38%,
+        rgba(219, 230, 251, 0.85) 50%,
+        transparent 62%
     );
     background-repeat: no-repeat;
     background-size: 300% 100%;
@@ -365,6 +370,14 @@ body {
             transparent 70%
         ),
         var(--s-backdrop);
+    background-size:
+        300px 300px,
+        320px 320px,
+        auto;
+    /* The orbs are two lamps at the page's edges, never a tile: with the
+       breathe keyframes animating background-size, default repeat laid a
+       300px grid of them across the whole ground (review S5). */
+    background-repeat: no-repeat, no-repeat, repeat;
     animation: att-aurora-breathe 8s ease-in-out infinite;
 }
 
@@ -381,6 +394,91 @@ body {
             360px 360px,
             380px 380px,
             auto;
+    }
+}
+
+
+/*
+ * Both neo root rows worn together. Two rules at equal specificity cannot
+ * compose background lists — the later one erased the rain outright
+ * (image AND animation), inherited its sizes and tiled the orbs across
+ * the ground. So the full dress is written as its own rule, orbs first,
+ * streaks beneath, the backdrop last, with keyframes that carry all five
+ * layers. The worn-together billboard check keeps this honest.
+ */
+.stall.att-rainfall.att-aurora {
+    background-image:
+        radial-gradient(
+            300px 300px at -60px 30%,
+            color-mix(in srgb, var(--s-accent) 13%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            320px 320px at calc(100% + 70px) 62%,
+            color-mix(in srgb, var(--s-accent-2) 12%, transparent),
+            transparent 70%
+        ),
+        repeating-linear-gradient(
+            115deg,
+            transparent 0 46px,
+            color-mix(in srgb, var(--s-accent-2) 15%, transparent) 46px 47px,
+            transparent 47px 90px
+        ),
+        repeating-linear-gradient(
+            115deg,
+            transparent 0 64px,
+            color-mix(in srgb, var(--s-accent) 11%, transparent) 64px 65px,
+            transparent 65px 118px
+        ),
+        var(--s-backdrop);
+    background-size:
+        300px 300px,
+        320px 320px,
+        100% 300px,
+        100% 460px,
+        auto;
+    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat;
+    animation:
+        att-aurora-rain-breathe 8s ease-in-out infinite,
+        att-aurora-rain-drift 1600ms linear infinite;
+}
+
+@keyframes att-aurora-rain-breathe {
+    0%,
+    100% {
+        background-size:
+            300px 300px,
+            320px 320px,
+            100% 300px,
+            100% 460px,
+            auto;
+    }
+    50% {
+        background-size:
+            360px 360px,
+            380px 380px,
+            100% 300px,
+            100% 460px,
+            auto;
+    }
+}
+
+@keyframes att-aurora-rain-drift {
+    from {
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0 0;
+    }
+    to {
+        background-position:
+            0 0,
+            0 0,
+            0 300px,
+            0 460px,
+            0 0;
     }
 }
 
@@ -403,51 +501,33 @@ body {
  * placed to stay above the address line, which is protected.
  */
 /*
- * The spin is an angle, not a transform: a rotating 460px wheel's box
- * sweeps over the protected address however it is clipped, so the rays
- * rotate by animating a registered custom property inside the conic
- * gradient instead. One shallow box, above the address, spinning paint.
+ * Rural · trim · Sunburst. ROOT paint since the review: a shallow stage
+ * box could never be the design's sky-filling wheel without overlapping a
+ * protected box, and a root background has no box at all. The falloff is
+ * its own radial layer fading into the page ground — a mask would need a
+ * pseudo-element — and the spin animates the registered angle, because a
+ * rotating element's bounding box sweeps the address.
  */
-@property --att-sun-angle {
-    syntax: '<angle>';
-    inherits: false;
-    initial-value: 0deg;
-}
-
-.att-sunburst {
-    position: relative;
-    /* A real box for the billboard to measure, folded out of the flow by
-       its own negative margin — the head paints over it, the way the full
-       dress overlaid the rays. */
-    /* 72: the no-tagline headers seat the address higher, the swinging
-       sign lifts it a few px more mid-cycle, and the stage must end above
-       it on every screen at every seek instant the probe stages. */
-    height: 72px;
-    margin-bottom: -72px;
-    flex: none;
-    pointer-events: none;
-    background: repeating-conic-gradient(
-        from var(--att-sun-angle) at 50% 150px,
-        color-mix(in srgb, var(--s-accent-2) 15%, transparent) 0 9deg,
-        transparent 9deg 18deg
-    );
-    -webkit-mask: radial-gradient(circle at 50% 150px, transparent 60px, #000 90px, transparent 240px);
-    mask: radial-gradient(circle at 50% 150px, transparent 60px, #000 90px, transparent 240px);
+.stall.att-sunburst {
+    background-image:
+        radial-gradient(
+            circle 620px at 50% 110px,
+            transparent 0 30%,
+            var(--s-bg) 64%
+        ),
+        repeating-conic-gradient(
+            from var(--att-sun-angle) at 50% 110px,
+            color-mix(in srgb, var(--s-accent-2) 17%, transparent) 0 9deg,
+            transparent 9deg 18deg
+        ),
+        var(--s-backdrop);
+    background-repeat: no-repeat, repeat, repeat;
     animation: att-sunburst-spin 70s linear infinite;
 }
 
 @keyframes att-sunburst-spin {
     to {
         --att-sun-angle: 360deg;
-    }
-}
-
-/* The desktop header is a row, so its address sits far higher — and the
-   swinging sign lifts it a few px more. The stage ends well above both. */
-@media (min-width: 680px) {
-    .att-sunburst {
-        height: 48px;
-        margin-bottom: -48px;
     }
 }
 
@@ -536,6 +616,61 @@ body {
             0 160px,
             0 160px,
             0 160px,
+            0 0;
+    }
+}
+
+/* Both rural root rows worn together — the same erasure class the neo
+   pair had: written out, dots over rays over paper. */
+.stall.att-sunburst.att-confetti {
+    background-image:
+        radial-gradient(
+            3px 3px at 30px 40px,
+            color-mix(in srgb, var(--s-accent) 40%, transparent),
+            transparent 4px
+        ),
+        radial-gradient(
+            2.5px 2.5px at 90px 110px,
+            color-mix(in srgb, var(--s-muted) 45%, transparent),
+            transparent 4px
+        ),
+        radial-gradient(
+            2px 2px at 150px 70px,
+            color-mix(in srgb, var(--s-accent-2) 50%, transparent),
+            transparent 3px
+        ),
+        radial-gradient(
+            circle 620px at 50% 110px,
+            transparent 0 30%,
+            var(--s-bg) 64%
+        ),
+        repeating-conic-gradient(
+            from var(--att-sun-angle) at 50% 110px,
+            color-mix(in srgb, var(--s-accent-2) 17%, transparent) 0 9deg,
+            transparent 9deg 18deg
+        ),
+        var(--s-backdrop);
+    background-size:
+        180px 160px,
+        180px 160px,
+        180px 160px,
+        auto,
+        auto,
+        auto;
+    background-repeat: repeat, repeat, repeat, no-repeat, repeat, repeat;
+    animation:
+        att-confetti-sun-fall 14s linear infinite,
+        att-sunburst-spin 70s linear infinite;
+}
+
+@keyframes att-confetti-sun-fall {
+    to {
+        background-position:
+            0 160px,
+            0 160px,
+            0 160px,
+            0 0,
+            0 0,
             0 0;
     }
 }
@@ -3097,12 +3232,18 @@ textarea.paste-in {
         background-position: 50% 0;
     }
 
-    /* Round 3's movers, stilled in place — visible, never gone. */
+    /* Round 3's movers, stilled in place — visible, never gone. The
+       composed full-dress rules carry higher specificity than their
+       single-row parents, so they are named here too — the stillness
+       guard caught exactly this the day they were written. */
     .stall.att-aurora,
     .stall.att-confetti,
     .stall.att-drift,
+    .stall.att-rainfall.att-aurora,
+    .stall.att-sunburst.att-confetti,
     .att-bunting,
-    .att-sunburst {
+    .att-sunburst,
+    .stall.att-sunburst {
         animation: none;
     }
 

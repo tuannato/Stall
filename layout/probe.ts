@@ -717,6 +717,36 @@ for (const theme of SHIPPED_THEMES) {
             bill('a paid row paints nothing the base look does not', row.label);
         }
     }
+
+    /*
+     * Worn TOGETHER, the root rows must all still be there. Two root rules
+     * at equal specificity cannot compose background lists — measured:
+     * aurora erased the neon rain outright (image and animation) and the
+     * full dress equalled aurora alone. Each single-row signature is
+     * compared against the all-root dress; equality means every other row
+     * was erased by the cascade.
+     */
+    const rootRows = attachmentsForTheme(theme.id).filter(
+        (row) => row.paint === 'root' && row.slot !== 'mood',
+    );
+    if (rootRows.length > 1) {
+        const singles = rootRows.map((row) => {
+            paint('offers', theme.id, [row]);
+            return paintSignature();
+        });
+        paint('offers', theme.id, rootRows);
+        const together = paintSignature();
+        for (let i = 0; i < rootRows.length; i += 1) {
+            if (together === singles[i]) {
+                failures.push({
+                    screen: 'billboard',
+                    theme: theme.label,
+                    check: 'a worn-together row erases the others',
+                    detail: `the full dress computes identically to ${rootRows[i]!.label} alone`,
+                });
+            }
+        }
+    }
 }
 
 /**
