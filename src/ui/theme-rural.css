@@ -10,11 +10,75 @@
     font-size: 15px;
 }
 
+/*
+ * The hanging wood sign IS rural's header — the design has no signless
+ * rural, and the live audit showed the bare head reading as unfinished.
+ * Planks and rope bars as background layers inside the head's own box
+ * (no positioned pseudo), cream ink on everything the sign carries, the
+ * swing of a sign on ropes — inset 6px so the rotated bounding box never
+ * grows the panel sideways.
+ */
+.t-rural .stall-head {
+    background-image:
+        linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
+        linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
+        repeating-linear-gradient(
+            180deg,
+            rgba(58, 42, 24, 0.18) 0 1.5px,
+            transparent 1.5px 26px
+        ),
+        linear-gradient(180deg, #8a5a33, #7a4c28);
+    background-repeat: no-repeat;
+    background-size:
+        3px 18px,
+        3px 18px,
+        100% calc(100% - 18px),
+        100% calc(100% - 18px);
+    background-position:
+        left 26% top,
+        right 26% top,
+        left 0 top 18px,
+        left 0 top 18px;
+    border: 3px solid #5e3a1e;
+    border-top: 0;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(58, 42, 24, 0.3);
+    width: calc(100% - 12px);
+    margin-inline: 6px;
+    transform-origin: 50% -48px;
+    animation: t-rural-swing 7s ease-in-out infinite;
+}
+
+@keyframes t-rural-swing {
+    0%,
+    100% {
+        transform: rotate(-0.6deg);
+    }
+    50% {
+        transform: rotate(0.6deg);
+    }
+}
+
+.t-rural .stall-name,
+.t-rural .stall-tagline {
+    color: #fff6e6;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.t-rural .stall-tagline {
+    font-style: italic;
+    color: #f3ddbe;
+}
+
+.t-rural .pin-btn {
+    color: #f3ddbe;
+}
+
 .t-rural .stall-sub {
     padding: 4px 12px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--s-surface) 70%, white);
-    color: color-mix(in srgb, var(--s-accent) 55%, var(--s-muted));
+    background: #fff6e6;
+    color: #7a4c28;
     font-size: 12px;
     font-weight: 700;
     border: 0;
@@ -22,11 +86,11 @@
 
 .t-rural .addr {
     padding: 7px 12px;
-    border: 1px dashed rgba(107, 89, 66, 0.65);
+    border: 1px dashed rgba(255, 246, 230, 0.45);
     border-radius: 999px;
-    background: var(--s-surface);
+    background: rgba(28, 16, 6, 0.45);
     font-size: 11px;
-    color: var(--s-muted);
+    color: #f3ddbe;
     text-align: center;
 }
 
@@ -243,6 +307,10 @@
 
 @media (prefers-reduced-motion: reduce) {
     .t-rural .item-p {
+        animation: none;
+    }
+
+    .t-rural .stall-head {
         animation: none;
     }
 }

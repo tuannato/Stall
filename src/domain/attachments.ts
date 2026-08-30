@@ -205,8 +205,9 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
      * were Circuit edge and Holotag — unminted, so free to replace — and
      * the pieces cut from the approved full dress take their bits. Bit 4
-     * is new. Round 3 (owner ruling 2026-08-30) restored every piece's
-     * full-dress motion — the one-mover cap is retired.
+     * is new. Round 3 restored every piece's full-dress motion; the live
+     * audit folded the corner brackets into the base (the design has no
+     * bracketless Neo), retiring bit 3 unminted.
      */
     {
         themeId: NEO_CITY_THEME_ID,
@@ -215,15 +216,6 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Grid horizon',
         paint: 'node',
         cls: 'att-horizon',
-        motion: false,
-    },
-    {
-        themeId: NEO_CITY_THEME_ID,
-        bit: 3,
-        slot: 'badge',
-        label: 'Corner brackets',
-        paint: 'root',
-        cls: 'att-brackets',
         motion: false,
     },
     {
@@ -238,19 +230,10 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
     /*
      * Extraction round 1: Straw charm and Stitched were unminted, so their
      * bits take the full dress's pieces; round 3 restored every piece's
-     * full-dress motion and added Confetti (bit 5). The hanging sign is
-     * decor rather than base on purpose: cream ink on wood needs its own
-     * class, and the free base stays a complete paper sign without it.
+     * full-dress motion and added Confetti (bit 5). The live audit folded
+     * the hanging sign into the base — the design has no signless rural,
+     * and the bare header read as unfinished — retiring bit 2 unminted.
      */
-    {
-        themeId: RURAL_THEME_ID,
-        bit: 2,
-        slot: 'crest',
-        label: 'Hanging sign',
-        paint: 'root',
-        cls: 'att-woodsign',
-        motion: true,
-    },
     {
         themeId: RURAL_THEME_ID,
         bit: 3,

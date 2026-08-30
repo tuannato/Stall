@@ -3348,9 +3348,9 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('offers one control per slot, not one per row', () => {
         const root = sheet();
-        // Rural ships every slot after rounds 1-3 — so exactly as many
-        // selects as slots, however many rows a slot holds.
-        const slots = ['yard', 'mood', 'crest', 'trim', 'fringe', 'badge'];
+        // Rural after the live audit: the hanging sign folded into the
+        // base, so crest is gone — five slots, five selects.
+        const slots = ['yard', 'mood', 'trim', 'fringe', 'badge'];
         for (const slot of slots) {
             expect(
                 root.querySelector(`[data-role="decor-${slot}"]`),

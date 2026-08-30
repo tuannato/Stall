@@ -2066,14 +2066,13 @@ function offerRow(
     if (stock !== undefined) {
         info.append(el('span', 'item-q', stock));
     }
+    head.append(info);
     // A touch device gets no cursor and no hover, so nothing said these rows
     // open. `aria-expanded` already told a screen reader; this tells a thumb.
-    // Inside the name column on purpose — a fourth grid child with no named
-    // area is auto-placed, and the implicit row it grows lands beside the price.
+    // The design's own fourth column — a named grid area now, so it can sit
+    // at the row's right edge instead of dangling under the name.
     const caret = el('span', 'item-caret');
     caret.setAttribute('aria-hidden', 'true');
-    info.append(caret);
-    head.append(info);
     const price = el('span', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
@@ -2111,6 +2110,7 @@ function offerRow(
         }
     }
     head.append(price);
+    head.append(caret);
     head.addEventListener('click', () => {
         if (expanded) {
             handlers.onCloseSheet();

@@ -344,42 +344,6 @@ body {
     mask: linear-gradient(rgba(0, 0, 0, 0), #000 78%);
 }
 
-/*
- * Neo city · badge · Corner brackets. Target brackets on every card,
- * drawn as background layers on the card itself — no pseudo-element, no
- * extra box, nothing that can leave the card or reach its price. Cyan up,
- * pink down, the look's two inks.
- */
-.stall.att-brackets .item {
-    background-image:
-        linear-gradient(var(--s-accent), var(--s-accent)),
-        linear-gradient(var(--s-accent), var(--s-accent)),
-        linear-gradient(var(--s-accent), var(--s-accent)),
-        linear-gradient(var(--s-accent), var(--s-accent)),
-        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
-        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
-        linear-gradient(var(--s-accent-2), var(--s-accent-2)),
-        linear-gradient(var(--s-accent-2), var(--s-accent-2));
-    background-repeat: no-repeat;
-    background-size:
-        12px 2px,
-        2px 12px,
-        12px 2px,
-        2px 12px,
-        12px 2px,
-        2px 12px,
-        12px 2px,
-        2px 12px;
-    background-position:
-        left 4px top 4px,
-        left 4px top 4px,
-        right 4px top 4px,
-        right 4px top 4px,
-        left 4px bottom 4px,
-        left 4px bottom 4px,
-        right 4px bottom 4px,
-        right 4px bottom 4px;
-}
 
 /*
  * Neo city · trim · Aurora glows. The full dress's blurred light orbs as
@@ -419,110 +383,13 @@ body {
     }
 }
 
-/*
- * Rural · crest · Hanging sign. The full dress's wood shop sign, cut to a
- * class: plank gradient and rope bars painted as background layers inside
- * the head's own padding, cream ink on the name and tagline — which is why
- * this is decor and not base: the paper sign underneath stays a complete
- * look for a seller who buys nothing. Static; the beetle keeps the mover.
- */
-/* A full-width sign mid-swing pokes past the edge by sin(0.6deg) — clipped,
-   never a scrollbar, the same ruling the door's counter already carries. */
-.stall.att-woodsign {
-    overflow-x: clip;
-}
 
-/* The shell screens scroll inside .stall-scroll — the swing must be
-   clipped where the scrolling is measured, not only at the root. */
-.stall.att-woodsign .stall-scroll {
-    overflow-x: clip;
-}
 
-.stall.att-woodsign .stall-head {
-    background-image:
-        linear-gradient(
-            color-mix(in srgb, var(--s-muted) 55%, transparent),
-            color-mix(in srgb, var(--s-muted) 55%, transparent)
-        ),
-        linear-gradient(
-            color-mix(in srgb, var(--s-muted) 55%, transparent),
-            color-mix(in srgb, var(--s-muted) 55%, transparent)
-        ),
-        repeating-linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--s-text) 16%, transparent) 0 1.5px,
-            transparent 1.5px 26px
-        ),
-        linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--s-accent) 38%, var(--s-muted)),
-            color-mix(in srgb, var(--s-accent) 30%, color-mix(in srgb, var(--s-muted) 80%, var(--s-text)))
-        );
-    background-repeat: no-repeat;
-    background-size:
-        3px 18px,
-        3px 18px,
-        100% calc(100% - 18px),
-        100% calc(100% - 18px);
-    background-position:
-        left 26% top,
-        right 26% top,
-        left 0 top 18px,
-        left 0 top 18px;
-    border-bottom: 3px solid color-mix(in srgb, var(--s-text) 55%, transparent);
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--s-text) 22%, transparent);
-    transform-origin: 50% -48px;
-    animation: att-woodsign-swing 7s ease-in-out infinite;
-    /*
-     * Inset so the swing's rotated bounding box stays inside the panel:
-     * transformed descendants extend scrollable overflow, `clip` cannot
-     * pair with an auto axis, and a hanging sign that does not touch the
-     * walls is truer to the thing anyway.
-     */
-    width: calc(100% - 12px);
-    margin-inline: 6px;
-}
 
-@keyframes att-woodsign-swing {
-    0%,
-    100% {
-        transform: rotate(-0.6deg);
-    }
-    50% {
-        transform: rotate(0.6deg);
-    }
-}
 
-.stall.att-woodsign .stall-name,
-.stall.att-woodsign .stall-tagline,
-.stall.att-woodsign .stall-sub {
-    color: #fff6e6;
-    text-shadow: 0 1px 0 color-mix(in srgb, var(--s-text) 45%, transparent);
-}
 
-/*
- * The address lives inside the head too, and the first run of the contrast
- * pass measured it at 1.13:1 on the planks — dark muted ink on dark wood.
- * Cream, like everything else the sign carries.
- */
-.stall.att-woodsign .addr {
-    color: #f3ddbe;
-    border-color: color-mix(in srgb, #fff6e6 45%, transparent);
-    /* The base look's paper pill under cream ink read at 1.2:1 on the
-       planks — the sign carries a darkened glass pill instead. */
-    background: color-mix(in srgb, #1c1006 45%, transparent);
-}
 
-.stall.att-woodsign .pin-btn {
-    color: #f3ddbe;
-}
 
-/* The status pill on wood: same darkened glass as the address. */
-.stall.att-woodsign .stall-sub {
-    color: #f3ddbe;
-    background: color-mix(in srgb, #1c1006 45%, transparent);
-    border-color: color-mix(in srgb, #fff6e6 40%, transparent);
-}
 
 /*
  * Rural · trim · Sunburst. The ray wheel behind the sign as one repeating
@@ -875,8 +742,7 @@ body {
     .stall.att-confetti,
     .stall.att-drift,
     .att-bunting,
-    .att-sunburst,
-    .stall.att-woodsign .stall-head {
+    .att-sunburst {
         animation: none;
     }
 
@@ -984,7 +850,11 @@ body {
 }
 
 .stall-body {
-    flex: 1;
+    /* Natural height, never grown: flex-grow parked the footer at the
+       bottom of the viewport with a dead void above it on short shops —
+       the live audit's worst offender. The stall's background owns the
+       space below the content instead. */
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     padding: var(--s-pad-m);
@@ -1202,6 +1072,9 @@ body {
     border-bottom: 1.5px solid var(--s-muted);
     rotate: 45deg;
     transition: rotate 120ms ease;
+    grid-area: caret;
+    justify-self: end;
+    align-self: center;
 }
 
 .item.open .item-caret {
@@ -1322,14 +1195,35 @@ body {
     }
 }
 
+/* Nine layers now: the eight bracket corners hold still while the last
+   (the sheen band) crosses. A single-value keyframe would re-position
+   every layer and tear the brackets off mid-pass. */
 @keyframes neo-sheen {
     0%,
     50% {
-        background-position: -150% 0;
+        background-position:
+            left 4px top 4px,
+            left 4px top 4px,
+            right 4px top 4px,
+            right 4px top 4px,
+            left 4px bottom 4px,
+            left 4px bottom 4px,
+            right 4px bottom 4px,
+            right 4px bottom 4px,
+            -150% 0;
     }
     90%,
     100% {
-        background-position: 250% 0;
+        background-position:
+            left 4px top 4px,
+            left 4px top 4px,
+            right 4px top 4px,
+            right 4px top 4px,
+            left 4px bottom 4px,
+            left 4px bottom 4px,
+            right 4px bottom 4px,
+            right 4px bottom 4px,
+            250% 0;
     }
 }
 
@@ -1666,10 +1560,7 @@ textarea.paste-in {
     flex: 0 0 auto;
 }
 
-.stall-scroll > .stall-body {
-    flex: 1 0 auto;
-    min-height: auto;
-}
+
 
 /*
  * With a scroller inside, the stall is the app frame: exactly the viewport,
@@ -1745,6 +1636,11 @@ textarea.paste-in {
  * The seller's name on the centre tab: subordinate to our label, one line,
  * cut with an ellipsis — a 32-byte name must never widen the bar.
  */
+.tab[aria-selected='true'] .tab-name {
+    color: inherit;
+    opacity: 0.85;
+}
+
 .tab-name {
     color: var(--s-muted);
     font-weight: 500;
