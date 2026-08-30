@@ -630,30 +630,47 @@ for (const screen of measured) {
  * notice — the first Sun-faded moved the background four points and a buyer
  * could not tell they were wearing it.
  */
-function styleSignature(): string {
-    const stallNode = document.querySelector('.stall');
-    if (stallNode === null) {
-        return '';
+/**
+ * The FULL computed style of every element in the painted tree — not the
+ * eight hand-picked properties the first version sampled, which the review
+ * named the guard's weakest joint: a root row painting anywhere those eight
+ * did not look was invisible to it, and a row folded into the base look kept
+ * reading as "different" only by luck. Animations are frozen at t=0 first,
+ * because a computed value mid-keyframe is time noise that would let an
+ * invisible row read as change.
+ */
+function paintSignature(): string {
+    for (const a of document.getAnimations()) {
+        a.pause();
+        try {
+            a.currentTime = 0;
+        } catch {
+            // A finished animation holds still on its own.
+        }
     }
     const parts: string[] = [];
-    const st = getComputedStyle(stallNode);
-    parts.push(st.backgroundImage, st.border, st.boxShadow);
-    const name = document.querySelector('.stall-name');
-    if (name !== null) {
-        const ns = getComputedStyle(name);
-        parts.push(ns.textShadow, ns.color);
+    for (const node of document.getElementById('app')!.querySelectorAll('*')) {
+        // The footer's "Wearing: …" credit changes with the worn list by
+        // design, so it differs on every worn paint — leaving it in made the
+        // whole check vacuous green (proved by neutralising a row's paint:
+        // nothing went red until the credit was excluded).
+        if (node.closest('.stall-foot') !== null) {
+            continue;
+        }
+        const cs = getComputedStyle(node);
+        let acc = node.tagName;
+        for (let i = 0; i < cs.length; i += 1) {
+            const prop = cs[i]!;
+            acc += `;${prop}:${cs.getPropertyValue(prop)}`;
+        }
+        parts.push(acc);
     }
-    const card = document.querySelector('.item');
-    if (card !== null) {
-        const cs = getComputedStyle(card);
-        parts.push(cs.border, cs.boxShadow, cs.backgroundImage, cs.borderRadius);
-    }
-    return parts.join('|');
+    return parts.join('\n');
 }
 
 for (const theme of SHIPPED_THEMES) {
     paint('offers', theme.id, []);
-    const bare = styleSignature();
+    const bare = paintSignature();
     for (const row of attachmentsForTheme(theme.id)) {
         paint('offers', theme.id, [row]);
         const bill = (check: string, detail: string): void => {
@@ -692,8 +709,12 @@ for (const theme of SHIPPED_THEMES) {
                     `${row.label} at ${Math.round(box.top)}..${Math.round(box.bottom)}`,
                 );
             }
-        } else if (styleSignature() === bare) {
-            bill('invisible root paint', row.label);
+        } else if (paintSignature() === bare) {
+            // a-paid-row-paints-something-the-base-look-does-not: a row whose
+            // whole subtree computes identically to the bare look is selling
+            // paint the base already gives away — the brackets-folded-into-base
+            // failure, caught before a fold ships instead of after.
+            bill('a paid row paints nothing the base look does not', row.label);
         }
     }
 }
