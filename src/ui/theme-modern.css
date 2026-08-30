@@ -123,7 +123,10 @@
     border: 1.5px solid rgba(37, 99, 235, 0.5);
     border-radius: 11px;
     background: var(--s-surface);
-    color: #1d4fc4;
+    /* Token, not the design's #1d4fc4: these controls sit on every screen a
+       mood repaints, and a literal ink over a token ground broke 2.31:1
+       under After hours. The accent is arbitrated per palette. */
+    color: var(--s-accent);
     font-size: 13px;
     font-weight: 600;
     transition:

@@ -600,6 +600,11 @@ const CONTRAST_TEXT = [
     '[data-role="describe-hex"]',
     '[data-role="fiat"]',
     '[data-role="rate"]',
+    // Every control on the publish/handoff path, and the dock: a theme file
+    // pairing a literal ink with a token ground shipped these at 2.31:1
+    // under the After-hours mood while this list looked elsewhere.
+    '.mini',
+    '.tab',
 ].join(', ');
 
 declare global {

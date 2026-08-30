@@ -446,7 +446,8 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 addrBorder: '1px dashed color-mix(in srgb, var(--s-accent) 45%, transparent)',
                 addrPad: '7px 10px',
                 priceInk: 'var(--s-accent)',
-                priceGlow: '0 0 14px color-mix(in srgb, var(--s-accent) 45%, transparent)',
+                // The fd's glow, restated over the accent so a mood keeps it.
+                priceGlow: '0 0 12px color-mix(in srgb, var(--s-accent) 60%, transparent)',
                 noticeBg:
                     'linear-gradient(90deg, color-mix(in srgb, var(--s-accent-2) 16%, transparent), transparent)',
                 noticeBorder: '1px solid color-mix(in srgb, var(--s-accent-2) 55%, transparent)',

@@ -140,7 +140,9 @@ describe('theme-cannot-hide-the-asked-amount', () => {
         const vars = themeVars(invisible);
         const bg = rgbOf(vars['--s-bg']!);
 
-        // The price inherits --s-text; the buy label is --s-bg on --s-accent.
+        // The price reads --s-price-ink, which defaults to --s-text and may
+        // point at another channel (Neo aims it at --s-accent) — so every
+        // channel a price ink can resolve to must clear the bar here.
         expect(contrastRatio(rgbOf(vars['--s-text']!), bg)).toBeGreaterThanOrEqual(
             MIN_CONTRAST,
         );

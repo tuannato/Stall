@@ -16,7 +16,9 @@
  * Planks and rope bars as background layers inside the head's own box
  * (no positioned pseudo), cream ink on everything the sign carries, the
  * swing of a sign on ropes — inset 6px so the rotated bounding box never
- * grows the panel sideways.
+ * grows the panel sideways. The swing runs ONCE and settles: the seller's
+ * address lives on this sign, and 42 characters a buyer compares
+ * character-by-character must not be in perpetual motion (review A3).
  */
 .t-rural .stall-head {
     background-image:
@@ -46,16 +48,24 @@
     width: calc(100% - 12px);
     margin-inline: 6px;
     transform-origin: 50% -48px;
-    animation: t-rural-swing 7s ease-in-out infinite;
+    animation: t-rural-swing 5.5s ease-out 1 both;
 }
 
 @keyframes t-rural-swing {
-    0%,
-    100% {
-        transform: rotate(-0.6deg);
+    0% {
+        transform: rotate(-0.8deg);
     }
-    50% {
-        transform: rotate(0.6deg);
+    30% {
+        transform: rotate(0.5deg);
+    }
+    60% {
+        transform: rotate(-0.25deg);
+    }
+    85% {
+        transform: rotate(0.1deg);
+    }
+    100% {
+        transform: rotate(0deg);
     }
 }
 

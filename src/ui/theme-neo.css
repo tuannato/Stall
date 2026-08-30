@@ -183,12 +183,16 @@
     letter-spacing: 0.1em;
 }
 
+/*
+ * No ink or glow here on purpose: the asked amount reads
+ * var(--s-price-ink)/var(--s-price-glow) from stall.css, which Neo's row
+ * points at the arbitrated accent. A literal here sat outside every
+ * contrast arbitration a mood or a dark record would need.
+ */
 .t-neo .item-x {
     font-size: 26px;
     font-weight: 800;
     letter-spacing: 0.02em;
-    color: #3df2ea;
-    text-shadow: 0 0 12px rgba(44, 233, 224, 0.6);
 }
 
 .t-neo .item-u {

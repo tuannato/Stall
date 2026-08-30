@@ -251,8 +251,8 @@ body {
 
 /*
  * Modern · trim · Drifting light. The showroom's three soft colour fields
- * as radial layers on the root — the full dress drifted them; shipped
- * still, because the sheen holds this look's one mover slot.
+ * as radial layers on the root, drifting as the full dress drew them
+ * (motion restored in round 3; reduced motion parks them in place).
  */
 .stall.att-drift {
     background-image:
@@ -288,8 +288,8 @@ body {
 /*
  * Modern · badge · Sheen sweep. A light pass across every card, drawn as
  * an animated background layer on the card's own box — never a node, never
- * a pseudo-element, nothing that can leave the card. Modern's one mover;
- * reduced motion parks the band mid-card, still visible.
+ * a pseudo-element, nothing that can leave the card. Reduced motion parks
+ * the band mid-card, still visible.
  */
 .stall.att-sheen .item {
     background-image: linear-gradient(
@@ -319,7 +319,8 @@ body {
  * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
  * to a real in-flow band under the sign: a doubled grid tipped away with a
  * transform, fading upward. A node, never a pseudo-element — the probe
- * measures boxes — and static: the rain keeps this look's one mover.
+ * measures boxes — and static by design: a floor reads as material, and
+ * this row is priced as material, not as an event.
  */
 .att-horizon {
     position: relative;
