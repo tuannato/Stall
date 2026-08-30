@@ -2252,8 +2252,16 @@ textarea.paste-in {
     background: #fff;
     border: 1px solid rgba(95, 105, 117, 0.16);
     border-radius: 14px;
-    overflow: hidden;
     display: block;
+    /*
+     * A full door holds twelve pins, and twelve rows is over half a phone
+     * screen: the panel scrolls its own rows instead of stretching the
+     * page (owner's call, 2026-08-30). Five and a half rows visible — the
+     * cut row is what says there is more.
+     */
+    max-height: 260px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .door .pinned-row {

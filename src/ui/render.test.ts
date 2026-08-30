@@ -4088,3 +4088,22 @@ describe('the-publish-sheet-carries-the-announcement', () => {
         expect(err.textContent).toBe(copy.PUBLISH_ANNOUNCEMENT_INVALID);
     });
 });
+
+describe('a-full-door-scrolls-its-pins-not-the-page', () => {
+    /**
+     * Twelve pins is the cap and over half a phone screen of rows: the
+     * panel owns the scrolling (owner's call, 2026-08-30). happy-dom does
+     * not lay out, so this reads the stylesheet — the door probe measures
+     * the real thing at the full twelve.
+     */
+    it('bounds the pinned list and lets it scroll its own rows', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rule = css.match(/\.door \.pinned-list\s*\{([^}]+)\}/);
+        expect(rule, 'the door styles its pinned list').not.toBeNull();
+        expect(rule![1]).toMatch(/max-height:\s*\d+px/);
+        expect(rule![1]).toMatch(/overflow-y:\s*auto/);
+    });
+});

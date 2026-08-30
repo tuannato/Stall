@@ -154,7 +154,14 @@ export const SCREENS: Record<string, StallView> = {
         tokens: new Map(),
         // A door with pins is the superset screen: an empty pinned list
         // paints nothing, so the bare door needs no fixture of its own.
-        pinnedStalls: [ADDR, PK, `02${'bb'.repeat(32)}`],
+        // Twelve — the cap — so the probe measures the door at its fullest:
+        // the pinned panel scrolls its own rows rather than stretching the
+        // page, and only a full panel can prove that.
+        pinnedStalls: [
+            ADDR,
+            PK,
+            ...Array.from({ length: 10 }, (_, i) => `02${(0xb0 + i).toString(16).repeat(32)}`),
+        ],
     },
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
