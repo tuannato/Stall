@@ -226,6 +226,10 @@
     border-left: 8px solid #ff4d7a;
     border-top: 6px solid transparent;
     border-bottom: 6px solid transparent;
+    /* The base's chevron uses the individual `rotate`; `transform: none`
+       never touches it, which tilted this triangle 45°. */
+    rotate: 0deg;
+    margin-top: 0;
     transform: none;
     filter: drop-shadow(0 0 6px rgba(255, 77, 122, 0.8));
     animation: t-neo-blinkc 2.2s ease-in-out infinite;

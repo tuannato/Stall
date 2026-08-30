@@ -651,10 +651,13 @@ body {
 
 .stall-sign {
     display: flex;
-    align-items: center;
+    /* Cap-height alignment, as designed: centering sat the mark beside
+       the tagline instead of the name. */
+    align-items: flex-start;
     gap: 12px;
     min-width: 0;
     flex: 1;
+    width: 100%;
 }
 
 .stall-headings {
@@ -1107,7 +1110,10 @@ body {
     align-items: var(--s-price-cross-m);
     justify-content: var(--s-price-just-m);
     gap: var(--s-price-inner-gap);
-    flex-wrap: wrap;
+    /* One baseline row, never wrapped: XEC dropping under the number made
+       the rural ticket a tall pentagon and every card 25-46% over the
+       design's height. The probe arbitrates narrow widths. */
+    flex-wrap: nowrap;
 }
 
 .item-from {
@@ -1130,7 +1136,6 @@ body {
 }
 
 .item-u {
-    display: block;
     font-size: var(--s-unit-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
@@ -1581,7 +1586,10 @@ textarea.paste-in {
 }
 
 .addr {
-    font-family: var(--s-font);
+    /* A machine string reads in a machine face — every design sets the
+       address in mono, and a proportional address is harder to compare
+       character by character. */
+    font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 11.5px;
     color: var(--s-muted);
     word-break: break-all;
@@ -1992,9 +2000,12 @@ textarea.paste-in {
     border-radius: var(--s-radius);
     padding: 10px 14px;
     margin-bottom: 10px;
+    /* A band, not a form field: the chip sits beside the sentence in every
+       design. The sentence wraps inside its own flex item. */
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
 }
 
 .notice-chip {
@@ -2244,12 +2255,21 @@ textarea.paste-in {
         margin-inline: auto;
     }
 
+    /*
+     * The head keeps the mobile column at every width. The row experiment
+     * wrapped every 44px name, stranded the mark beside the second line
+     * and floated the address as a pill — three independent reviewers
+     * ranked it the top desktop break on all three looks. And one measure
+     * with the cards: the panel caps at the body's INNER column, because
+     * head-at-860 over cards-at-792 gave the page three left edges.
+     */
     .stall-head {
-        flex-direction: row;
-        align-items: center;
-        gap: 20px;
-        flex-wrap: wrap;
+        max-width: calc(var(--s-content-max-d) - 2 * var(--s-pad-x-d));
         padding: var(--s-sign-pad-d);
+    }
+
+    .stall-mark {
+        height: 55px;
     }
 
     .stall-body {

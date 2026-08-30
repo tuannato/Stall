@@ -272,9 +272,11 @@ export const DEFAULT_THEME: DecodedTheme = {
         priceSize: '30px',
         priceWeight: '650',
         priceTrack: '-.02em',
-        priceDir: 'column',
-        priceInnerGap: '2px',
-        priceCross: 'flex-end',
+        // The design's one baseline row — "FROM 1,200 XEC". Column was the
+        // review's largest geometry delta: every Modern card ~46% too tall.
+        priceDir: 'row',
+        priceInnerGap: '5px',
+        priceCross: 'baseline',
         priceJust: 'flex-end',
         priceAlign: 'right',
         unit: '11px',
@@ -409,8 +411,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 unit: '11px',
                 paid: '21px',
 
-                                priceEdgeM: '1px solid color-mix(in srgb, var(--s-accent) 26%, transparent)',
-                priceEdgePadM: '12px',
                 areasM: '"ic name price caret"',
                 areasD: '"ic name price caret"',
                 colsM: '40px minmax(0, 1fr) auto 16px',

@@ -2043,8 +2043,11 @@ function offerRow(
         const asked = el('span', 'item-x', formatXec(offer.askedSats));
         asked.setAttribute('data-role', 'price');
         amount.append(asked);
+        // The unit rides the amount's own baseline row — "from 1,200 XEC"
+        // is one line in every design; a block unit under the number was
+        // what stretched every card on every look.
+        amount.append(el('span', 'item-u', copy.XEC));
         price.append(amount);
-        price.append(el('span', 'item-u', copy.XEC));
         price.append(rateLine(offer, view));
     }
     // Fiat sits beside the rate, at rate size, in its own node — never inside

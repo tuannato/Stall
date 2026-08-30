@@ -11,16 +11,23 @@
 }
 
 /*
- * The hanging wood sign IS rural's header — the design has no signless
- * rural, and the live audit showed the bare head reading as unfinished.
- * Planks and rope bars as background layers inside the head's own box
- * (no positioned pseudo), cream ink on everything the sign carries, the
- * swing of a sign on ropes — inset 6px so the rotated bounding box never
- * grows the panel sideways. The swing runs ONCE and settles: the seller's
- * address lives on this sign, and 42 characters a buyer compares
- * character-by-character must not be in perpetual motion (review A3).
+ * The hanging wood sign IS rural's header — but the BOARD is the
+ * .stall-sign, not the whole head: the address stands OUTSIDE it on the
+ * paper below (owner ruling 2026-08-30, "theo design"), which is what
+ * lets the board keep the design's perpetual sway — review A3 objected
+ * to a moving ADDRESS, and the address no longer rides the ropes.
+ * Planks and rope bars as background layers inside the board's own box
+ * (no positioned pseudo), cream ink on everything the board carries.
  */
 .t-rural .stall-head {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0 0 10px;
+    align-items: center;
+}
+
+.t-rural .stall-sign {
     background-image:
         linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
         linear-gradient(rgba(138, 116, 88, 0.9), rgba(138, 116, 88, 0.9)),
@@ -45,27 +52,21 @@
     border-top: 0;
     border-radius: 10px;
     box-shadow: 0 12px 28px rgba(58, 42, 24, 0.3);
-    width: calc(100% - 12px);
-    margin-inline: 6px;
+    flex: none;
+    width: calc(100% - 28px);
+    margin-inline: auto;
+    padding: 22px 18px 16px;
     transform-origin: 50% -48px;
-    animation: t-rural-swing 5.5s ease-out 1 both;
+    animation: t-rural-swing 7s ease-in-out infinite;
 }
 
 @keyframes t-rural-swing {
-    0% {
-        transform: rotate(-0.8deg);
-    }
-    30% {
-        transform: rotate(0.5deg);
-    }
-    60% {
-        transform: rotate(-0.25deg);
-    }
-    85% {
-        transform: rotate(0.1deg);
-    }
+    0%,
     100% {
-        transform: rotate(0deg);
+        transform: rotate(-0.6deg);
+    }
+    50% {
+        transform: rotate(0.6deg);
     }
 }
 
@@ -94,14 +95,18 @@
     border: 0;
 }
 
+/* On the paper below the board, as designed — a cream pill, dead still. */
 .t-rural .addr {
-    padding: 7px 12px;
-    border: 1px dashed rgba(255, 246, 230, 0.45);
+    padding: 7px 14px;
+    border: 1px dashed rgba(107, 89, 66, 0.55);
     border-radius: 999px;
-    background: rgba(28, 16, 6, 0.45);
+    background: var(--s-surface);
     font-size: 11px;
-    color: #f3ddbe;
+    color: var(--s-muted);
     text-align: center;
+    align-self: center;
+    width: auto;
+    max-width: calc(100% - 28px);
 }
 
 /* The gold banner, as designed — with the mood-lesson kept: gold is the
@@ -110,6 +115,17 @@
     background: var(--s-surface);
     border: 2px solid var(--s-accent-2);
     box-shadow: 0 4px 12px rgba(58, 42, 24, 0.18);
+    padding: 12px 22px;
+    /* The ribbon's notched ends, trimmed from the box exactly as the tag
+       trims its own border. */
+    clip-path: polygon(
+        0 0,
+        100% 0,
+        calc(100% - 12px) 50%,
+        100% 100%,
+        0 100%,
+        12px 50%
+    );
 }
 
 .t-rural .notice-chip {
@@ -247,13 +263,15 @@
     color: var(--s-muted);
 }
 
+/* Same composition trap as Modern: rotate lives in the base, never here. */
 .t-rural .item-caret {
     width: 9px;
     height: 9px;
     border: 0;
     border-right: 2.5px solid #9e4620;
     border-top: 2.5px solid #9e4620;
-    transform: rotate(45deg);
+    border-bottom: 0;
+    rotate: 45deg;
 }
 
 .t-rural .mini {
@@ -315,16 +333,21 @@
     }
 
     /*
-     * The sign stays a hanging card at desktop (design review 2026-08-30:
-     * the mobile framed sign full-bled into a wide plank at 1280 and lost
-     * the thing it is — a sign on ropes, not a banner).
+     * The board is a hanging card at desktop: 556px, centred, mark above
+     * a centred name — the design's composition, not a widened banner.
      */
-    .t-rural .stall-head {
-        max-width: 720px;
-        width: calc(100% - 24px);
-        margin-inline: auto;
+    .t-rural .stall-sign {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        max-width: 556px;
         border-radius: 14px;
+        padding: 24px 22px 20px;
         box-shadow: 0 18px 40px rgba(58, 42, 24, 0.32);
+    }
+
+    .t-rural .stall-headings {
+        align-items: center;
     }
 }
 
@@ -340,7 +363,7 @@
         animation: none;
     }
 
-    .t-rural .stall-head {
+    .t-rural .stall-sign {
         animation: none;
     }
 }
