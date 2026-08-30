@@ -246,6 +246,10 @@ function applyTheme(
     document
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute('content', vars['--s-bg']!);
+    // And so does the page behind the page: rubber-band overscroll shows
+    // whatever colour <html> carries, and white above a night market reads
+    // as a broken frame (owner report, 2026-08-30).
+    document.documentElement.style.backgroundColor = vars['--s-bg']!;
     // The strip is part of the look, so a live preview has to swap it too —
     // otherwise choosing Modern leaves Neo's ticker running above a white shop.
     // Direct children only, and walked rather than selected: `:scope >` is not

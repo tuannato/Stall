@@ -158,6 +158,28 @@ export type Shape = {
     nameAnim?: string;
     cardAnim?: string;
     cardSheen?: string;
+    /* Full-fidelity pass (owner: "giống hoàn toàn"). */
+    contentMaxD?: string;
+    signSizeD?: string;
+    priceSizeD?: string;
+    iconD?: string;
+    itemName?: string;
+    itemNameD?: string;
+    priceBorder?: string;
+    priceAnim?: string;
+    unitInk?: string;
+    tabsBlur?: string;
+    tabsGap?: string;
+    tabPad?: string;
+    tabInk?: string;
+    tabSize?: string;
+    tabCase?: string;
+    tabTrack?: string;
+    tabDivider?: string;
+    tabActiveBg?: string;
+    tabActiveInk?: string;
+    tabActiveShadow?: string;
+    tabActiveRadius?: string;
 };
 
 export type DecodedTheme = {
@@ -259,14 +281,12 @@ export const DEFAULT_THEME: DecodedTheme = {
         priceAlign: 'right',
         unit: '11px',
         paid: '25px',
-        priceRuleD: '1px solid color-mix(in srgb, var(--s-muted) 20%, transparent)',
-        priceGapD: '14px',
-        pricePadD: '13px 0 0',
+
         areasM: '"ic name price"',
-        areasD: '"ic name" "price price"',
+        areasD: '"ic name price"',
         colsM: '52px minmax(0, 1fr) auto',
-        colsD: '52px minmax(0, 1fr)',
-        itemsD: 'repeat(3, minmax(0, 1fr))',
+        colsD: 'var(--s-icon-d) minmax(0, 1fr) auto',
+        itemsD: 'minmax(0, 1fr)',
         signPadM: '24px 18px 18px',
         signPadD: '40px 34px 26px',
         signSize: '25px',
@@ -302,8 +322,27 @@ export const DEFAULT_THEME: DecodedTheme = {
         sectRule: '2px solid color-mix(in srgb, var(--s-muted) 14%, transparent)',
         tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 18%, transparent)',
         tabsRadius: '999px',
-        tabsMargin: '10px 12px 12px',
-        tabsShadow: '0 6px 24px color-mix(in srgb, var(--s-text) 12%, transparent)',
+        // In flow and centred, never fixed: the one licensed deviation from
+        // the full dress — a floating dock overlays whatever price scrolls
+        // under it, and that rule is not the owner's to waive lightly.
+        tabsMargin: '10px auto 14px',
+        tabsShadow: '0 8px 30px color-mix(in srgb, var(--s-text) 18%, transparent)',
+        tabsBg: 'color-mix(in srgb, var(--s-surface) 88%, transparent)',
+        tabsBlur: 'blur(16px)',
+        tabsGap: '4px',
+        tabPad: '9px 14px',
+        tabInk: 'color-mix(in srgb, var(--s-text) 78%, var(--s-muted))',
+        tabActiveBg: 'var(--s-accent)',
+        tabActiveInk: '#ffffff',
+        signSizeD: '44px',
+        priceSizeD: '32px',
+        iconD: '56px',
+        priceRuleD: '0',
+        priceGapD: '0',
+        pricePadD: '0',
+        itemName: '15.5px',
+        itemNameD: '17px',
+        unitInk: 'color-mix(in srgb, var(--s-accent) 80%, var(--s-text))',
     },
 };
 
@@ -362,8 +401,8 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 iconClip: 'polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%)',
                 hero: '120px',
                 heroRadius: '0px',
-                priceSize: '23px',
-                priceWeight: '700',
+                priceSize: '26px',
+                priceWeight: '800',
                 priceTrack: '.02em',
                 priceDir: 'row',
                 priceInnerGap: '6px',
@@ -372,16 +411,14 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 priceAlign: 'right',
                 unit: '11px',
                 paid: '21px',
-                priceRuleD: '1px solid color-mix(in srgb, var(--s-accent) 26%, transparent)',
-                priceGapD: '10px',
-                pricePadD: '9px 0 0',
-                priceEdgeM: '1px solid color-mix(in srgb, var(--s-accent) 26%, transparent)',
+
+                                priceEdgeM: '1px solid color-mix(in srgb, var(--s-accent) 26%, transparent)',
                 priceEdgePadM: '12px',
                 areasM: '"ic name price"',
-                areasD: '"ic name" "price price"',
+                areasD: '"ic name price"',
                 colsM: '40px minmax(0, 1fr) auto',
-                colsD: '40px minmax(0, 1fr)',
-                itemsD: 'repeat(3, minmax(0, 1fr))',
+                colsD: 'var(--s-icon-d) minmax(0, 1fr) auto',
+                itemsD: 'minmax(0, 1fr)',
                 signPadM: '16px 12px 13px',
                 signPadD: '30px 24px 20px',
                 signSize: '25px',
@@ -418,14 +455,33 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 chipInk: '#1a070e',
                 chipPad: '4px 9px',
                 sectInk: 'var(--s-accent)',
-                tabsBg: 'var(--s-bg)',
-                tabsBorder: '1px solid color-mix(in srgb, var(--s-accent) 28%, transparent)',
                 taglineInk: 'color-mix(in srgb, var(--s-accent-2) 70%, white)',
                 sectMark: 'linear-gradient(135deg, var(--s-accent), var(--s-accent-2))',
                 sectMarkSize: '10px',
                 sectMarkGap: '8px',
                 // The full dress's live neon: the sign misses a beat twice
                 // a cycle, every card breathes, and a sheen crosses it.
+                signSizeD: '44px',
+                priceSizeD: '32px',
+                iconD: '56px',
+                priceRuleD: '0',
+                priceGapD: '0',
+                pricePadD: '0',
+                itemName: '14px',
+                itemNameD: '16px',
+                unitInk: 'var(--s-accent)',
+                tabsMargin: '10px auto 14px',
+                tabsBg: 'color-mix(in srgb, var(--s-bg) 94%, transparent)',
+                tabsBorder: '1px solid color-mix(in srgb, var(--s-accent) 50%, transparent)',
+                tabsShadow: '0 0 24px color-mix(in srgb, var(--s-accent) 25%, transparent)',
+                tabPad: '9px 13px',
+                tabSize: '12px',
+                tabCase: 'uppercase',
+                tabTrack: '.06em',
+                tabActiveBg: 'color-mix(in srgb, var(--s-accent) 14%, transparent)',
+                tabActiveInk: 'var(--s-accent)',
+                tabActiveShadow: 'inset 0 -2px 0 var(--s-accent)',
+                tabActiveRadius: '0px',
                 nameAnim: 'neo-flick 6s steps(1) infinite',
                 cardAnim:
                     'neo-pulse 4.5s ease-in-out infinite, neo-sheen 6s ease-in-out infinite',
@@ -485,24 +541,19 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 priceCross: 'baseline',
                 priceJust: 'flex-end',
                 priceAlign: 'right',
-                // The only look that centres its card on a wide screen, so the
-                // price keeps its own row rather than a right-hand column.
-                priceCrossD: 'center',
-                priceJustD: 'center',
-                priceAlignD: 'center',
                 unit: '12px',
                 paid: '27px',
-                priceRuleM: '1px dashed color-mix(in srgb, var(--s-muted) 55%, transparent)',
-                priceRuleD: '1px dashed color-mix(in srgb, var(--s-muted) 55%, transparent)',
-                priceGapM: '14px',
-                priceGapD: '14px',
-                pricePadM: '12px 12px 12px 28px',
-                pricePadD: '12px 12px 12px 28px',
-                areasM: '"ic name" "price price"',
-                areasD: '"ic" "name" "price"',
-                colsM: '52px minmax(0, 1fr)',
-                colsD: 'minmax(0, 1fr)',
-                itemsD: 'repeat(3, minmax(0, 1fr))',
+                priceGapM: '0',
+                priceGapD: '0',
+                pricePadM: '8px 10px 8px 26px',
+                pricePadD: '8px 10px 8px 26px',
+                // The full dress rides the tag inline on the row — the
+                // stacked card was never its shape.
+                areasM: '"ic name price"',
+                areasD: '"ic name price"',
+                colsM: '48px minmax(0, 1fr) auto',
+                colsD: '48px minmax(0, 1fr) auto',
+                itemsD: 'minmax(0, 1fr)',
                 cardTextD: 'center',
                 cardItemsD: 'center',
                 signPadM: '22px 18px 17px',
@@ -544,10 +595,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 chipPad: '5px 9px',
                 sectRule: '4px double color-mix(in srgb, var(--s-muted) 50%, transparent)',
                 sectInk: 'var(--s-text)',
-                tabsBorder: '1px solid color-mix(in srgb, var(--s-muted) 35%, transparent)',
-                tabsRadius: '999px',
-                tabsMargin: '10px 14px 12px',
-                tabsShadow: '0 6px 20px color-mix(in srgb, var(--s-text) 18%, transparent)',
                 taglineStyle: 'italic',
                 /*
                  * The craft-fair price tag: a left-notched clip on the price
@@ -556,9 +603,35 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                  * and the clip is generous — the whole column, rate and fiat
                  * included, rides inside the tag.
                  */
+                /*
+                 * The tag, to the pixel: warm cardstock ground with the
+                 * punched hole ring-drawn into it (a positioned pseudo has
+                 * no box, so the hole is background), the terracotta
+                 * border the clip trims at the notch exactly as the full
+                 * dress trims it, and the sway of a tag on a string.
+                 */
                 priceBg:
-                    'radial-gradient(circle at 11px 50%, transparent 3.5px, color-mix(in srgb, var(--s-bg) 90%, var(--s-accent-2)) 4.5px)',
-                priceClip: 'polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%)',
+                    'radial-gradient(circle at 9px 50%, var(--s-bg) 2.2px, var(--s-accent) 3px 4.4px, color-mix(in srgb, #fff3d9 90%, var(--s-accent-2)) 5.4px)',
+                priceClip: 'polygon(13px 0, 100% 0, 100% 100%, 13px 100%, 0 50%)',
+                priceBorder: '1.5px solid var(--s-accent)',
+                priceAnim: 'rural-tag-sway 5.5s ease-in-out infinite',
+                priceInk: '#2e1f08',
+                unitInk: 'var(--s-accent)',
+                signSizeD: '44px',
+                iconD: '48px',
+                itemName: '16.5px',
+                itemNameD: '16.5px',
+                tabsMargin: '10px auto 14px',
+                tabsBg: 'color-mix(in srgb, var(--s-surface) 45%, #f3e7ce)',
+                tabsBorder: '1.5px solid color-mix(in srgb, var(--s-muted) 60%, transparent)',
+                tabsRadius: '13px',
+                tabsShadow: '0 8px 24px color-mix(in srgb, var(--s-text) 25%, transparent)',
+                tabPad: '9px 14px',
+                tabSize: '13.5px',
+                tabDivider: '1.5px dashed color-mix(in srgb, var(--s-muted) 50%, transparent)',
+                tabActiveBg: 'var(--s-accent)',
+                tabActiveInk: '#fff3ea',
+                tabActiveRadius: '8px',
             },
         },
     ],
@@ -802,5 +875,26 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-name-anim': s.nameAnim ?? 'none',
         '--s-card-anim': s.cardAnim ?? 'none',
         '--s-card-sheen': s.cardSheen ?? 'none',
+        '--s-content-max-d': s.contentMaxD ?? '860px',
+        '--s-sign-size-d': s.signSizeD ?? '44px',
+        '--s-price-size-d': s.priceSizeD ?? s.priceSize,
+        '--s-icon-d': s.iconD ?? s.icon,
+        '--s-item-name': s.itemName ?? '15px',
+        '--s-item-name-d': s.itemNameD ?? s.itemName ?? '15px',
+        '--s-price-border': s.priceBorder ?? '0',
+        '--s-price-anim': s.priceAnim ?? 'none',
+        '--s-unit-ink': s.unitInk ?? 'var(--s-muted)',
+        '--s-tabs-blur': s.tabsBlur ?? 'none',
+        '--s-tabs-gap': s.tabsGap ?? '2px',
+        '--s-tab-pad': s.tabPad ?? '9px 14px',
+        '--s-tab-ink': s.tabInk ?? 'var(--s-muted)',
+        '--s-tab-size': s.tabSize ?? '13px',
+        '--s-tab-case': s.tabCase ?? 'none',
+        '--s-tab-track': s.tabTrack ?? '0',
+        '--s-tab-divider': s.tabDivider ?? '0',
+        '--s-tab-active-bg': s.tabActiveBg ?? 'transparent',
+        '--s-tab-active-ink': s.tabActiveInk ?? 'var(--s-accent)',
+        '--s-tab-active-shadow': s.tabActiveShadow ?? 'none',
+        '--s-tab-active-radius': s.tabActiveRadius ?? '999px',
     };
 }

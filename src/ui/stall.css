@@ -1223,7 +1223,7 @@ body {
 }
 
 .item-n {
-    font-size: 15.5px;
+    font-size: var(--s-item-name);
     font-weight: var(--s-name-weight);
     letter-spacing: var(--s-track);
     white-space: nowrap;
@@ -1250,10 +1250,24 @@ body {
     padding: var(--s-price-pad-m);
     border-left: var(--s-price-edge-m);
     padding-left: var(--s-price-edge-pad-m);
-    /* The craft-fair tag: ground and notch clip on the price column's own
-       box — everything the column holds rides inside the tag. */
+    /* The craft-fair tag: ground, border and notch clip on the price
+       column's own box — everything the column holds rides inside the
+       tag, and the tag sways on its string. */
     background: var(--s-price-bg);
+    border: var(--s-price-border);
     clip-path: var(--s-price-clip);
+    transform-origin: 0 50%;
+    animation: var(--s-price-anim);
+}
+
+@keyframes rural-tag-sway {
+    0%,
+    100% {
+        transform: rotate(-0.8deg);
+    }
+    50% {
+        transform: rotate(0.8deg);
+    }
 }
 
 /*
@@ -1362,6 +1376,8 @@ body {
 
 .item-u {
     display: block;
+    color: var(--s-unit-ink);
+    font-weight: 700;
     font-size: var(--s-unit-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
@@ -1671,32 +1687,46 @@ textarea.paste-in {
 .tabs {
     flex: none;
     display: flex;
-    /* Full border, not border-top: the floating pill bars are detached
-       boxes; on an attached bar the edge lines simply meet the screen. */
+    gap: var(--s-tabs-gap);
+    /* The full dress's dock, in flow and centred by its own auto margins —
+       never fixed: a bar that overlays scrolling content covers whatever
+       figure passes under it, and that rule outranks fidelity. */
+    width: fit-content;
+    max-width: 100%;
+    padding: 5px;
     border: var(--s-tabs-border);
     background: var(--s-tabs-bg);
     border-radius: var(--s-tabs-radius);
     margin: var(--s-tabs-margin);
     box-shadow: var(--s-tabs-shadow);
+    backdrop-filter: var(--s-tabs-blur);
+    -webkit-backdrop-filter: var(--s-tabs-blur);
 }
 
 .tab {
-    flex: 1;
+    flex: none;
     min-width: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
-    min-height: 52px;
+    min-height: 44px;
     border: 0;
     background: transparent;
-    color: var(--s-muted);
+    color: var(--s-tab-ink);
     font: inherit;
     font-family: var(--s-font);
-    font-size: 12.5px;
+    font-size: var(--s-tab-size);
     font-weight: 640;
+    text-transform: var(--s-tab-case);
+    letter-spacing: var(--s-tab-track);
     cursor: pointer;
-    padding: 0 8px;
+    padding: var(--s-tab-pad);
+}
+
+/* The craft-fair dock's ticket perforations, none elsewhere. */
+.tab + .tab {
+    border-left: var(--s-tab-divider);
 }
 
 /* The storefront is the shell's centre of gravity, so its tab leads. */
@@ -1705,8 +1735,10 @@ textarea.paste-in {
 }
 
 .tab[aria-selected='true'] {
-    color: var(--s-accent);
-    box-shadow: inset 0 2px 0 var(--s-accent);
+    color: var(--s-tab-active-ink);
+    background: var(--s-tab-active-bg);
+    box-shadow: var(--s-tab-active-shadow);
+    border-radius: var(--s-tab-active-radius);
 }
 
 /*
@@ -2480,7 +2512,7 @@ textarea.paste-in {
     .stall-body,
     .stall-foot {
         width: 100%;
-        max-width: 1104px;
+        max-width: var(--s-content-max-d);
         margin-inline: auto;
     }
 
@@ -2506,6 +2538,30 @@ textarea.paste-in {
         align-items: start;
     }
 
+    /* The full dress at 680+: the sign grows to display size, the price
+       and icon with it — a single 860px column of row cards. */
+    .stall-name {
+        font-size: var(--s-sign-size-d);
+    }
+
+    .item-x {
+        font-size: var(--s-price-size-d);
+    }
+
+    .item-n {
+        font-size: var(--s-item-name-d);
+    }
+
+    .item-ic {
+        width: var(--s-icon-d);
+        height: var(--s-icon-d);
+    }
+
+    .item-p {
+        border-left: var(--s-price-edge-m);
+        padding-left: var(--s-price-edge-pad-m);
+    }
+
     .item-head {
         grid-template-areas: var(--s-areas-d);
         grid-template-columns: var(--s-cols-d);
@@ -2518,8 +2574,6 @@ textarea.paste-in {
         border-top: var(--s-price-rule-d);
         margin-top: var(--s-price-gap-d);
         padding: var(--s-price-pad-d);
-        border-left: 0;
-        padding-left: 0;
     }
 
     .item-a {
