@@ -69,7 +69,7 @@ export const DECOR_LEDE =
 export const DECOR_PREVIEW_ONLY =
     'You are looking at it, not wearing it. Publishing this changes nothing until the stall holds the token.';
 export const DECOR_NOT_MINTED =
-    'This one is not on sale yet. You can look at it; nothing can hold it until it exists.';
+    'This one is not on sale yet. You can look at it, but the record you sign here will not name it — nothing can hold it until it exists.';
 export const DECOR_HELD = 'This stall holds the token, so publishing will paint it.';
 export const DECOR_SHOP = 'See the decorations';
 /** The footer credit: the catalogue's own billboard, in our words. */

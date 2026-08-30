@@ -4,6 +4,7 @@ import {
     ATTACHMENT_FLAGS_TAG,
     SHIPPED_ATTACHMENTS,
     attachmentsForTheme,
+    publishableFlags,
     attachmentClasses,
     attachmentNodesWanted,
     decodeAttachmentFlags,
@@ -110,6 +111,31 @@ describe('attachment-table-ids-are-pinned', () => {
             for (const row of attachmentsForTheme(id)) {
                 expect(typeof row.motion, `${row.label} declares motion`).toBe('boolean');
             }
+        }
+    });
+
+    it('an-unminted-row-cannot-be-published', () => {
+        /*
+         * The bit rule, decided 2026-08-30 after the on-chain walk (no
+         * record has ever set a retired bit): a record may only name bits
+         * whose rows are minted, so shipping a row does not pin it —
+         * minting does. Unknown bits pass through: they may be a future
+         * table's rows, and republishing settings must not silently edit
+         * a record the seller already had.
+         */
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const rows = attachmentsForTheme(id);
+            const all = rows.reduce((f, r) => f | (1 << r.bit), 0);
+            const signable = publishableFlags(id, all);
+            for (const row of rows) {
+                expect(
+                    (signable & (1 << row.bit)) !== 0,
+                    `${row.label} ${row.tokenId === undefined ? 'is unminted and must not publish' : 'is minted and must survive'}`,
+                ).toBe(row.tokenId !== undefined);
+            }
+            // A bit no shipped row owns is not this table's to erase.
+            const unknown = 1 << 15;
+            expect(publishableFlags(id, unknown)).toBe(unknown);
         }
     });
 

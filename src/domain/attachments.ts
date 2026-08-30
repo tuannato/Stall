@@ -294,6 +294,31 @@ export function attachmentsForTheme(themeId: number): readonly ShippedAttachment
 }
 
 /**
+ * The flags a record may carry: every bit naming a shipped row that has no
+ * token yet is masked out before anything is signed.
+ *
+ * A published record pointing at an unminted row would pin that row's meaning
+ * while there is still nothing to hold — and re-pointing a bit is only
+ * harmless while no record on chain has ever set it (walked and verified
+ * 2026-08-30: bits Neo-3 and Rural-2 were retired clean). The picker still
+ * *previews* an unminted row — looking is free — but the record it hands to a
+ * wallet never names one, so shipping a row does not pin it; minting does.
+ *
+ * Bits naming no shipped row pass through untouched: they may belong to a
+ * future table, and republishing settings must not silently edit a record the
+ * seller already had.
+ */
+export function publishableFlags(themeId: number, flags: number): number {
+    let out = flags;
+    for (const row of attachmentsForTheme(themeId)) {
+        if (row.tokenId === undefined) {
+            out &= ~(1 << row.bit);
+        }
+    }
+    return out;
+}
+
+/**
  * What is actually worn: at most one per slot, **lowest bit first**.
  *
  * Not the manifest's repeated-tag rule wearing a new hat. That one resolves the

@@ -33,6 +33,7 @@ import {
     attachmentNodesWanted,
     attachmentsForTheme,
     withMood,
+    publishableFlags,
     wornAttachments,
     type ShippedAttachment,
 } from '../domain/attachments';
@@ -1802,15 +1803,18 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             fiatHint: fiatSelect.value === '' ? undefined : fiatSelect.value,
             announcement: announceInput.value === '' ? undefined : announceInput.value,
         };
-        const hex = encodeManifestHex(input.value, Number(select.value), flags, extras);
+        // The record never names an unminted row's bit — previewing one is
+        // free, signing it would pin a row nothing can hold yet (§6).
+        const signable = publishableFlags(Number(select.value), flags);
+        const hex = encodeManifestHex(input.value, Number(select.value), signable, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
         // Which field refused: the name's own rules first, then the
         // announcement's, then the tagline's and the shared ceiling — the
         // seller is told the one that bit.
-        const nameAlone = encodeManifestHex(input.value, Number(select.value), flags);
-        const sansAnnouncement = encodeManifestHex(input.value, Number(select.value), flags, {
+        const nameAlone = encodeManifestHex(input.value, Number(select.value), signable);
+        const sansAnnouncement = encodeManifestHex(input.value, Number(select.value), signable, {
             ...extras,
             announcement: undefined,
         });
