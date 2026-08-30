@@ -51,6 +51,7 @@ describe('attachment-table-ids-are-pinned', () => {
             '3:2:crest',
             '3:3:trim',
             '3:4:fringe',
+            '3:5:badge',
         ]);
     });
 
@@ -99,10 +100,18 @@ describe('attachment-table-ids-are-pinned', () => {
         }
     });
 
-    it('ships at most one mover per look', () => {
+    it('a mover is flagged as one — the flag is what reduced-motion trusts', () => {
+        /*
+         * The one-mover-per-look cap was retired 2026-08-30 by the owner:
+         * the full dresses are the product, and their density is the point.
+         * What remains load-bearing is the flag itself — every animated row
+         * says so, because the reduced-motion stylesheet blocks and the
+         * probe's seek pass are built on it.
+         */
         for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
-            const movers = attachmentsForTheme(id).filter((a) => a.motion);
-            expect(movers.length, `theme ${id} has ${movers.length} moving rows`).toBeLessThan(2);
+            for (const row of attachmentsForTheme(id)) {
+                expect(typeof row.motion, `${row.label} declares motion`).toBe('boolean');
+            }
         }
     });
 

@@ -180,8 +180,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      */
     /*
      * Extraction round 1: Brass pin and Blueprint were unminted, so their
-     * bits take the showroom's pieces. The sheen is Modern's one mover —
-     * this look shipped none before.
+     * bits take the showroom's pieces; round 3 set the light drifting
+     * again, as the full dress had it.
      */
     {
         themeId: DEFAULT_THEME_ID,
@@ -190,7 +190,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Drifting light',
         paint: 'root',
         cls: 'att-drift',
-        motion: false,
+        motion: true,
     },
     {
         themeId: DEFAULT_THEME_ID,
@@ -205,8 +205,8 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
      * were Circuit edge and Holotag — unminted, so free to replace — and
      * the pieces cut from the approved full dress take their bits. Bit 4
-     * is new. Neon rain keeps the mover slot; everything else ships
-     * static-rich on purpose.
+     * is new. Round 3 (owner ruling 2026-08-30) restored every piece's
+     * full-dress motion — the one-mover cap is retired.
      */
     {
         themeId: NEO_CITY_THEME_ID,
@@ -233,15 +233,14 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Aurora glows',
         paint: 'root',
         cls: 'att-aurora',
-        motion: false,
+        motion: true,
     },
     /*
      * Extraction round 1: Straw charm and Stitched were unminted, so their
-     * bits take the full dress's pieces. The beetle keeps this look's one
-     * mover — a static beetle is a dead one — so the bunting and the rest
-     * ship still. The hanging sign is decor rather than base on purpose:
-     * cream ink on wood needs its own class, and the free base stays a
-     * complete paper sign without it.
+     * bits take the full dress's pieces; round 3 restored every piece's
+     * full-dress motion and added Confetti (bit 5). The hanging sign is
+     * decor rather than base on purpose: cream ink on wood needs its own
+     * class, and the free base stays a complete paper sign without it.
      */
     {
         themeId: RURAL_THEME_ID,
@@ -250,16 +249,16 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Hanging sign',
         paint: 'root',
         cls: 'att-woodsign',
-        motion: false,
+        motion: true,
     },
     {
         themeId: RURAL_THEME_ID,
         bit: 3,
         slot: 'trim',
         label: 'Sunburst',
-        paint: 'root',
+        paint: 'node',
         cls: 'att-sunburst',
-        motion: false,
+        motion: true,
     },
     {
         themeId: RURAL_THEME_ID,
@@ -268,7 +267,16 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Bunting',
         paint: 'node',
         cls: 'att-bunting',
-        motion: false,
+        motion: true,
+    },
+    {
+        themeId: RURAL_THEME_ID,
+        bit: 5,
+        slot: 'badge',
+        label: 'Confetti',
+        paint: 'root',
+        cls: 'att-confetti',
+        motion: true,
     },
 ];
 

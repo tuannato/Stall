@@ -150,6 +150,14 @@ export type Shape = {
     tabsShadow?: string;
     priceBg?: string;
     priceClip?: string;
+    /*
+     * Base motion (round 3, owner ruling): animation shorthands naming
+     * keyframes the stylesheet ships. The chain still supplies only a row
+     * id; these strings are table data pointing at our own @keyframes.
+     */
+    nameAnim?: string;
+    cardAnim?: string;
+    cardSheen?: string;
 };
 
 export type DecodedTheme = {
@@ -416,6 +424,13 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 sectMark: 'linear-gradient(135deg, var(--s-accent), var(--s-accent-2))',
                 sectMarkSize: '10px',
                 sectMarkGap: '8px',
+                // The full dress's live neon: the sign misses a beat twice
+                // a cycle, every card breathes, and a sheen crosses it.
+                nameAnim: 'neo-flick 6s steps(1) infinite',
+                cardAnim:
+                    'neo-pulse 4.5s ease-in-out infinite, neo-sheen 6s ease-in-out infinite',
+                cardSheen:
+                    'linear-gradient(100deg, transparent 42%, color-mix(in srgb, var(--s-accent-2) 12%, transparent) 48%, color-mix(in srgb, var(--s-accent) 10%, transparent) 54%, transparent 60%)',
             },
         },
     ],
@@ -784,5 +799,8 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-tabs-shadow': s.tabsShadow ?? 'none',
         '--s-price-bg': s.priceBg ?? 'none',
         '--s-price-clip': s.priceClip ?? 'none',
+        '--s-name-anim': s.nameAnim ?? 'none',
+        '--s-card-anim': s.cardAnim ?? 'none',
+        '--s-card-sheen': s.cardSheen ?? 'none',
     };
 }

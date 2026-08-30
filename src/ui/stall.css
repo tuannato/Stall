@@ -272,6 +272,17 @@ body {
             transparent 70%
         ),
         var(--s-backdrop);
+    animation: att-drift-drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes att-drift-drift {
+    to {
+        background-position:
+            60px 40px,
+            -50px 60px,
+            40px -30px,
+            0 0;
+    }
 }
 
 /*
@@ -389,6 +400,23 @@ body {
             transparent 70%
         ),
         var(--s-backdrop);
+    animation: att-aurora-breathe 8s ease-in-out infinite;
+}
+
+@keyframes att-aurora-breathe {
+    0%,
+    100% {
+        background-size:
+            300px 300px,
+            320px 320px,
+            auto;
+    }
+    50% {
+        background-size:
+            360px 360px,
+            380px 380px,
+            auto;
+    }
 }
 
 /*
@@ -398,6 +426,18 @@ body {
  * this is decor and not base: the paper sign underneath stays a complete
  * look for a seller who buys nothing. Static; the beetle keeps the mover.
  */
+/* A full-width sign mid-swing pokes past the edge by sin(0.6deg) — clipped,
+   never a scrollbar, the same ruling the door's counter already carries. */
+.stall.att-woodsign {
+    overflow-x: clip;
+}
+
+/* The shell screens scroll inside .stall-scroll — the swing must be
+   clipped where the scrolling is measured, not only at the root. */
+.stall.att-woodsign .stall-scroll {
+    overflow-x: clip;
+}
+
 .stall.att-woodsign .stall-head {
     background-image:
         linear-gradient(
@@ -431,6 +471,26 @@ body {
         left 0 top 18px;
     border-bottom: 3px solid color-mix(in srgb, var(--s-text) 55%, transparent);
     box-shadow: 0 10px 24px color-mix(in srgb, var(--s-text) 22%, transparent);
+    transform-origin: 50% -48px;
+    animation: att-woodsign-swing 7s ease-in-out infinite;
+    /*
+     * Inset so the swing's rotated bounding box stays inside the panel:
+     * transformed descendants extend scrollable overflow, `clip` cannot
+     * pair with an auto axis, and a hanging sign that does not touch the
+     * walls is truer to the thing anyway.
+     */
+    width: calc(100% - 12px);
+    margin-inline: 6px;
+}
+
+@keyframes att-woodsign-swing {
+    0%,
+    100% {
+        transform: rotate(-0.6deg);
+    }
+    50% {
+        transform: rotate(0.6deg);
+    }
 }
 
 .stall.att-woodsign .stall-name,
@@ -469,14 +529,58 @@ body {
  * conic layer on the root, soft enough that the weave still reads through
  * it. Static at ship — the 70s spin yielded to the beetle.
  */
-.stall.att-sunburst {
-    background-image:
-        repeating-conic-gradient(
-            from 0deg at 50% -140px,
-            color-mix(in srgb, var(--s-accent-2) 14%, transparent) 0 9deg,
-            transparent 9deg 18deg
-        ),
-        var(--s-backdrop);
+/*
+ * A zero-height stage before the head; the wheel is its child — a real
+ * box the guard measures — spinning the full dress's slow spin. Sized and
+ * placed to stay above the address line, which is protected.
+ */
+/*
+ * The spin is an angle, not a transform: a rotating 460px wheel's box
+ * sweeps over the protected address however it is clipped, so the rays
+ * rotate by animating a registered custom property inside the conic
+ * gradient instead. One shallow box, above the address, spinning paint.
+ */
+@property --att-sun-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
+.att-sunburst {
+    position: relative;
+    /* A real box for the billboard to measure, folded out of the flow by
+       its own negative margin — the head paints over it, the way the full
+       dress overlaid the rays. */
+    /* 72: the no-tagline headers seat the address higher, the swinging
+       sign lifts it a few px more mid-cycle, and the stage must end above
+       it on every screen at every seek instant the probe stages. */
+    height: 72px;
+    margin-bottom: -72px;
+    flex: none;
+    pointer-events: none;
+    background: repeating-conic-gradient(
+        from var(--att-sun-angle) at 50% 150px,
+        color-mix(in srgb, var(--s-accent-2) 15%, transparent) 0 9deg,
+        transparent 9deg 18deg
+    );
+    -webkit-mask: radial-gradient(circle at 50% 150px, transparent 60px, #000 90px, transparent 240px);
+    mask: radial-gradient(circle at 50% 150px, transparent 60px, #000 90px, transparent 240px);
+    animation: att-sunburst-spin 70s linear infinite;
+}
+
+@keyframes att-sunburst-spin {
+    to {
+        --att-sun-angle: 360deg;
+    }
+}
+
+/* The desktop header is a row, so its address sits far higher — and the
+   swinging sign lifts it a few px more. The stage ends well above both. */
+@media (min-width: 680px) {
+    .att-sunburst {
+        height: 48px;
+        margin-bottom: -48px;
+    }
 }
 
 /*
@@ -512,6 +616,60 @@ body {
                 rgba(0, 0, 0, 0) 0
             )
             0 3px / 108px 21px repeat-x;
+    transform-origin: 50% 0;
+    animation: att-bunting-sway 6s ease-in-out infinite;
+}
+
+@keyframes att-bunting-sway {
+    0%,
+    100% {
+        transform: rotate(-0.6deg);
+    }
+    50% {
+        transform: rotate(0.6deg);
+    }
+}
+
+/*
+ * Rural · badge · Confetti. The fair's falling specks as three dot layers
+ * on the root, drifting one tile per loop. Behind every surface, over the
+ * look's own backdrop, which is restated because background-image does
+ * not merge.
+ */
+.stall.att-confetti {
+    background-image:
+        radial-gradient(
+            3px 3px at 30px 40px,
+            color-mix(in srgb, var(--s-accent) 40%, transparent),
+            transparent 4px
+        ),
+        radial-gradient(
+            2.5px 2.5px at 90px 110px,
+            color-mix(in srgb, var(--s-muted) 45%, transparent),
+            transparent 4px
+        ),
+        radial-gradient(
+            2px 2px at 150px 70px,
+            color-mix(in srgb, var(--s-accent-2) 50%, transparent),
+            transparent 3px
+        ),
+        var(--s-backdrop);
+    background-size:
+        180px 160px,
+        180px 160px,
+        180px 160px,
+        auto;
+    animation: att-confetti-fall 14s linear infinite;
+}
+
+@keyframes att-confetti-fall {
+    to {
+        background-position:
+            0 160px,
+            0 160px,
+            0 160px,
+            0 0;
+    }
 }
 
 /*
@@ -708,6 +866,25 @@ body {
 
     /* Parked mid-card, still visible: paid decor never vanishes. */
     .stall.att-sheen .item {
+        animation: none;
+        background-position: 50% 0;
+    }
+
+    /* Round 3's movers, stilled in place — visible, never gone. */
+    .stall.att-aurora,
+    .stall.att-confetti,
+    .stall.att-drift,
+    .att-bunting,
+    .att-sunburst,
+    .stall.att-woodsign .stall-head {
+        animation: none;
+    }
+
+    .stall-name {
+        animation: none;
+    }
+
+    .item-head {
         animation: none;
         background-position: 50% 0;
     }
@@ -1077,6 +1254,69 @@ body {
        box — everything the column holds rides inside the tag. */
     background: var(--s-price-bg);
     clip-path: var(--s-price-clip);
+}
+
+/*
+ * Base motion (round 3): the look's own pulse and sheen, var-named
+ * keyframes we ship. The sheen is a background layer on the card's box —
+ * no pseudo-element, nothing that can leave it.
+ */
+.stall-name {
+    animation: var(--s-name-anim);
+}
+
+.item-head {
+    background-image: var(--s-card-sheen);
+    background-repeat: no-repeat;
+    background-size: 220% 100%;
+    background-position: -150% 0;
+    animation: var(--s-card-anim);
+}
+
+@keyframes neo-flick {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    7% {
+        opacity: 1;
+    }
+    7.5% {
+        opacity: 0.55;
+    }
+    8% {
+        opacity: 1;
+    }
+    41% {
+        opacity: 1;
+    }
+    41.4% {
+        opacity: 0.75;
+    }
+    41.8% {
+        opacity: 1;
+    }
+}
+
+@keyframes neo-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 10px color-mix(in srgb, var(--s-accent) 10%, transparent);
+    }
+    50% {
+        box-shadow: 0 0 26px color-mix(in srgb, var(--s-accent) 24%, transparent);
+    }
+}
+
+@keyframes neo-sheen {
+    0%,
+    50% {
+        background-position: -150% 0;
+    }
+    90%,
+    100% {
+        background-position: 250% 0;
+    }
 }
 
 /* The full dress's lift, shared by every look; reduced motion stills it. */

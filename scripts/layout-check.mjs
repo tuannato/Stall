@@ -259,7 +259,7 @@ function worstContrastInBox(img, target, textColor) {
     const r = target.r ?? 0;
     // The border's own pixels are chrome, never the text's ground: a dashed
     // pill edge blended to 2.2:1 against its ink is not a reading surface.
-    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0);
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.pad ?? 0);
     const x0 = Math.max(0, Math.floor(target.x + r + bw) + 1);
     const y0 = Math.max(0, Math.floor(target.y + bw) + 1);
     const x1 = Math.min(img.width - 1, Math.ceil(target.x + target.w - r - bw) - 1);

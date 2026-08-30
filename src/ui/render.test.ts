@@ -3348,10 +3348,9 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('offers one control per slot, not one per row', () => {
         const root = sheet();
-        // Rural ships six slots after extraction round 1 — yard, mood,
-        // crest, trim, fringe, badge is gone — so exactly as many selects
-        // as slots, however many rows a slot holds.
-        const slots = ['yard', 'mood', 'crest', 'trim', 'fringe'];
+        // Rural ships every slot after rounds 1-3 — so exactly as many
+        // selects as slots, however many rows a slot holds.
+        const slots = ['yard', 'mood', 'crest', 'trim', 'fringe', 'badge'];
         for (const slot of slots) {
             expect(
                 root.querySelector(`[data-role="decor-${slot}"]`),

@@ -2666,6 +2666,13 @@ function placeAttachmentNodes(
             stall.querySelector('.stall-sign')?.append(node);
             continue;
         }
+        if (row.slot === 'trim') {
+            // Behind the sign: a shallow stage before the head that paints
+            // its own rays — one real box the guard can measure, folded out
+            // of the flow by its own negative margin.
+            stall.querySelector('.stall-head')?.before(node);
+            continue;
+        }
         if (row.slot === 'yard') {
             // The sprite is a second real node rather than a pseudo-element:
             // `::before` has no box, so the guard cannot measure it, and it is

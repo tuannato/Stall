@@ -564,6 +564,12 @@ type ContrastTarget = {
     /** Border width: the border's own pixels are never the text's ground. */
     bw: number;
     /**
+     * Extra safety inset for text inside a transformed ancestor (the
+     * swinging wood sign): an axis-aligned box around rotated content
+     * smears border and ground pixels a few px past every edge.
+     */
+    pad: number;
+    /**
      * The element's own corner radius, clamped to half its box. A rounded
      * control's corner pixels are the page behind it, and on Modern that page
      * is the same white as the control's label — sampled as 1.00:1. Inside a
@@ -601,6 +607,18 @@ declare global {
 
 window.__screens = Object.keys(SCREENS);
 window.__themes = SHIPPED_THEMES.map((t) => t.id);
+
+/** True when any ancestor up to the stall carries a live transform. */
+function insideTransform(node: HTMLElement): boolean {
+    let cur: HTMLElement | null = node;
+    while (cur !== null && !cur.classList.contains('frame')) {
+        if (getComputedStyle(cur).transform !== 'none') {
+            return true;
+        }
+        cur = cur.parentElement;
+    }
+    return false;
+}
 
 window.__contrastPrepare = (screen, themeId, wornAll) => {
     const worn = wornAll ? wornAttachments(themeId, 0xffff) : [];
@@ -640,6 +658,7 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
             // the rural address at 2.2:1 against its own border blend. The
             // border is chrome, not ground — the runner insets past it.
             bw: Number.parseFloat(style.borderTopWidth) || 0,
+            pad: insideTransform(node) ? 8 : 0,
             sel: describe(node),
         });
         node.style.color = 'transparent';
