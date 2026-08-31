@@ -243,6 +243,72 @@ describe('two-descriptions-for-one-token-in-one-tx-are-unreadable', () => {
         });
     });
 
+    /**
+     * The exclusion is per-transaction, and both directions matter. The
+     * walk-scoped version of this rule suppressed a token forever: one old
+     * double-write beat every clean, finalized record that came after it, and
+     * republishing could not cure it — the exact "our refusal deletes what a
+     * seller published" mistake §4 names for fetch failures. And within the
+     * ambiguous transaction itself, the first output of the pair must not
+     * survive in the candidate list, or output order still picks the winner
+     * this rule exists to refuse.
+     */
+    it('an old double-write does not outlast a clean record', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: '05'.repeat(32),
+                        height: 5,
+                        isFinal: true,
+                        outputs: [stld(TOKEN_A, 'one'), stld(TOKEN_A, 'two')],
+                    }),
+                    tx({
+                        txid: '06'.repeat(32),
+                        height: 99,
+                        isFinal: true,
+                        outputs: [stld(TOKEN_A, 'clean and newer')],
+                    }),
+                ],
+            }),
+        ).then((out) => {
+            expect(
+                out.descriptions.get(TOKEN_A),
+                'a clean record outranks an older ambiguity',
+            ).toBe('clean and newer');
+        });
+    });
+
+    it('a newer double-write leaves the shown record and says a newer one exists', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: '07'.repeat(32),
+                        height: 5,
+                        isFinal: true,
+                        outputs: [stld(TOKEN_A, 'older and clean')],
+                    }),
+                    tx({
+                        txid: '08'.repeat(32),
+                        height: 99,
+                        isFinal: true,
+                        outputs: [stld(TOKEN_A, 'one'), stld(TOKEN_A, 'two')],
+                    }),
+                ],
+            }),
+        ).then((out) => {
+            expect(
+                out.descriptions.get(TOKEN_A),
+                'the ambiguous pair contributes nothing, not its first output',
+            ).toBe('older and clean');
+            expect(
+                out.unreadable.has(TOKEN_A),
+                'and the screen can say a newer record could not be used',
+            ).toBe(true);
+        });
+    });
+
     it('accepts several tokens described in one transaction', () => {
         return load(
             chronikWith({

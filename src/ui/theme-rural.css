@@ -331,7 +331,7 @@
     color: #9e4620;
 }
 
-.t-rural .tab[aria-selected='true'] {
+.t-rural .tab[aria-current='page'] {
     background: #9e4620;
     color: #fff3ea;
     border-radius: 8px;
@@ -602,15 +602,6 @@
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .t-rural .item-p {
-        animation: none;
-    }
-
-    .t-rural .stall-sign {
-        animation: none;
-    }
-}
 
 .t-rural .section-head,
 .t-rural .collection-head {
@@ -649,4 +640,27 @@
     font-style: italic;
     text-align: center;
     color: var(--s-muted);
+}
+
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE — same rule and same measured reason
+ * as stall.css's own reduce block: it wins same-specificity fights by
+ * order. Transitions are named alongside the animations; the probe's
+ * armed-transition check is the guard.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .t-rural .item-p {
+        animation: none;
+    }
+
+    .t-rural .stall-sign {
+        animation: none;
+    }
+
+    .t-rural .mini,
+    .t-rural .tagline-invite,
+    .t-rural .notice-invite,
+    .t-rural .cta {
+        transition: none;
+    }
 }

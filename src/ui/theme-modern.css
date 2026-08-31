@@ -210,17 +210,6 @@
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .t-modern .sparse-motif {
-        animation: none;
-    }
-
-    .t-modern .stall-head {
-        animation: none;
-        /* Parked mid-panel, still visible: the signature never vanishes. */
-        background-position: 50% 100%;
-    }
-}
 
 .t-modern .stall-sub {
     padding: 4px 11px;
@@ -414,7 +403,7 @@
     background: rgba(37, 99, 235, 0.08);
 }
 
-.t-modern .tab[aria-selected='true'] {
+.t-modern .tab[aria-current='page'] {
     background: #2563eb;
     color: #ffffff;
     box-shadow: none;
@@ -467,4 +456,33 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--s-muted) 10%, var(--s-surface));
     color: var(--s-muted);
+}
+
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE — the same rule stall.css states for
+ * its own reduce block, for the same measured reason: these rules win
+ * same-specificity fights by order, and this file's motion consumers used
+ * to sit *below* the block, so the caret kept sliding for every
+ * reduced-motion visitor while the stillness pass (animations only)
+ * stayed green. Transitions are named here too now; the probe's
+ * armed-transition check is the guard.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .t-modern .sparse-motif {
+        animation: none;
+    }
+
+    .t-modern .stall-head {
+        animation: none;
+        /* Parked mid-panel, still visible: the signature never vanishes. */
+        background-position: 50% 100%;
+    }
+
+    .t-modern .tagline-invite,
+    .t-modern .notice-invite,
+    .t-modern .cta,
+    .t-modern .item-caret,
+    .t-modern .mini {
+        transition: none;
+    }
 }

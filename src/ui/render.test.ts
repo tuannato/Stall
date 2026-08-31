@@ -2277,7 +2277,7 @@ describe('repaint-keeps-the-focused-control', () => {
         }
     });
 
-    it('drops focus when the control it was on is gone', () => {
+    it('lands on neutral ground when the control it was on is gone', () => {
         const root = document.createElement('div');
         document.body.append(root);
         try {
@@ -2285,10 +2285,84 @@ describe('repaint-keeps-the-focused-control', () => {
             (root.querySelector('button.item-head') as HTMLButtonElement).focus();
             // The offer sold: its outpoint is spent, so the row is not "the same
             // row that moved" and must not hand focus to whatever replaced it.
+            // But `<body>` is not the answer either — that resets a screen
+            // reader to the top of the page. The container is neutral ground.
             renderStall(root, idlePubkey({ fetch: { kind: 'empty' } }), handlers());
             expect(root.querySelector('button.item-head')).toBeNull();
-            expect(document.activeElement).not.toBe(null);
             expect((document.activeElement as HTMLElement).closest('.item-head')).toBeNull();
+            expect(document.activeElement, 'the shop, not the page').toBe(
+                root.querySelector('.stall'),
+            );
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('hands focus back to the opener when the sheet closes', () => {
+        /**
+         * The WAI-ARIA dialog contract: focus returns to the control that
+         * opened the dialog. The sheet's own controls vanish with it, so
+         * without the opener snapshot every close dropped a keyboard
+         * visitor at `<body>` — and the openers already carry focus keys.
+         */
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const idle = offersView([OFFER]);
+            renderStall(root, idle, handlers());
+            const opener = root.querySelector('[data-focus-key="tab-studio"]') as HTMLElement;
+            opener.focus();
+
+            renderStall(root, offersView([OFFER], undefined, { overlay: { kind: 'publish' } }), handlers());
+            // Focus is wherever the sheet put it; what matters is that the
+            // opener's key was snapshot on the idle→open edge.
+            renderStall(root, idle, handlers());
+            expect(
+                document.activeElement?.getAttribute('data-focus-key'),
+                'the control that opened the sheet has it back',
+            ).toBe('tab-studio');
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('a-book-move-is-spoken-not-only-pulsed', () => {
+    /**
+     * The page's premise is a live socket, and every visible signal of a move
+     * — the outline pulse, the feed row — is silent to a screen reader. One
+     * polite region on `<body>`, beside the root and not inside it, because
+     * an aria-live node rebuilt by the very paint it announces is one a
+     * reader never hears.
+     */
+    it('announces into a persistent region outside the replaced tree', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, { justChanged: new Set([OFFER.tokenId]) }),
+                handlers(),
+            );
+            const region = document.getElementById('sr-live');
+            expect(region).not.toBeNull();
+            expect(region!.closest('.frame'), 'outside the replaced tree').toBeNull();
+            expect(region!.getAttribute('role')).toBe('status');
+            expect(region!.textContent).toBe(EVENT_BOOK);
+
+            // The same message twice still reads as a change to the region,
+            // or the second move of a busy stall is never announced.
+            renderStall(
+                root,
+                offersView([OFFER], undefined, { justChanged: new Set([OFFER.tokenId]) }),
+                handlers(),
+            );
+            expect(region!.textContent).not.toBe(EVENT_BOOK);
+            expect(region!.textContent!.trimEnd()).toBe(EVENT_BOOK);
+
+            // A quiet paint says nothing new.
+            renderStall(root, offersView([OFFER]), handlers());
+            expect(region!.textContent!.trimEnd()).toBe(EVENT_BOOK);
         } finally {
             root.remove();
         }
@@ -3562,8 +3636,14 @@ describe('the-shell-and-its-tabs', () => {
         );
         const bar = root.querySelector('nav.tabs');
         expect(bar).not.toBeNull();
+        // Navigation semantics, not the tab pattern: `aria-current` on the
+        // active panel's button, and no `tablist`/`tab` roles — the half of
+        // that pattern this bar once claimed promised arrow-key behaviour
+        // that was never implemented.
+        expect(bar?.getAttribute('role')).toBeNull();
         const shop = root.querySelector('[data-role="tab-shop"]') as HTMLElement;
-        expect(shop.getAttribute('aria-selected')).toBe('true');
+        expect(shop.getAttribute('role')).toBeNull();
+        expect(shop.getAttribute('aria-current')).toBe('page');
         expect(shop.querySelector('.tab-label')?.textContent).toBe(TAB_SHOP);
         // The name is subordinate, never the label itself — and never the
         // address: only a manifest name rides the bar.

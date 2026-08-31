@@ -323,7 +323,7 @@
     color: #dff6ff;
 }
 
-.t-neo .tab[aria-selected='true'] {
+.t-neo .tab[aria-current='page'] {
     background: rgba(44, 233, 224, 0.14);
     color: #3df2ea;
     box-shadow: inset 0 -2px 0 #2ce9e0;
@@ -683,19 +683,6 @@
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .t-neo .item-caret,
-    .t-neo .invite-cursor,
-    .t-neo .sm-neon,
-    .t-neo .sm-chevrons i {
-        animation: none;
-    }
-
-    .t-neo .invite-cursor,
-    .t-neo .sm-chevrons i {
-        opacity: 1;
-    }
-}
 
 .t-neo .items {
     gap: 12px;
@@ -739,4 +726,31 @@
     /* Literal with its literal ground — the pair guard caught the mixed
        version the hour it was written. */
     color: #dff6ff;
+}
+
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE — same rule and same measured reason
+ * as stall.css's own reduce block: it wins same-specificity fights by
+ * order. Transitions are named alongside the animations; the probe's
+ * armed-transition check is the guard.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .t-neo .item-caret,
+    .t-neo .invite-cursor,
+    .t-neo .sm-neon,
+    .t-neo .sm-chevrons i {
+        animation: none;
+    }
+
+    .t-neo .invite-cursor,
+    .t-neo .sm-chevrons i {
+        opacity: 1;
+    }
+
+    .t-neo .mini,
+    .t-neo .tagline-invite,
+    .t-neo .notice-invite,
+    .t-neo .cta {
+        transition: none;
+    }
 }

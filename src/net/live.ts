@@ -101,6 +101,22 @@ export const BURST_MS = 700;
  */
 export const UNKNOWN_TXID = 'unknown';
 
+/**
+ * The most transactions one burst will name individually.
+ *
+ * The script subscription hears every ordinary payment to the stall's
+ * address, and dust is cheap — so `seen` was the one buffer in the app with
+ * no cap, and every txid in it cost the consumer a serial `chronik.tx`
+ * round trip in every open tab. Past this many distinct txids in one
+ * window, naming them stops being an economy: the burst degrades to one
+ * `UNKNOWN_TXID` entry, which the consumer already treats as "fetch
+ * nothing, wake every fact reader, and mark the ring's gap" — the same
+ * honest shape as a message that carried no txid. The consumer stays
+ * serial on purpose: the ring is arrival-ordered, and under this cap the
+ * loop is bounded. Test: `a-flood-degrades-to-one-unknown-not-a-fetch-storm`.
+ */
+export const MAX_BURST_TXIDS = 8;
+
 export function stallGroup(pubkeyHex: string): string {
     return PUBKEY_GROUP_PREFIX + pubkeyHex;
 }
@@ -316,7 +332,10 @@ export function watchStall(
             if (closed || msg.type !== 'Tx') {
                 return;
             }
-            seen.add(typeof msg.txid === 'string' ? msg.txid : UNKNOWN_TXID);
+            // Set semantics first, cap second: the same txid arriving as
+            // mempool and then confirmed is one entry, not two toward the cap.
+            const txid = typeof msg.txid === 'string' ? msg.txid : UNKNOWN_TXID;
+            seen.add(seen.size >= MAX_BURST_TXIDS && !seen.has(txid) ? UNKNOWN_TXID : txid);
             rereadCoalesced();
         },
         onConnect: subscribe,

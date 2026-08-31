@@ -320,3 +320,32 @@ describe('decoration-does-not-queue-behind-the-price', () => {
         expect(manifest.slice(0, 200)).toMatch(/\.catch\(/);
     });
 });
+
+describe('a-full-load-wears-nothing-it-cannot-prove', () => {
+    /**
+     * §7: the flag is not the entitlement. `wornAttachments` skips the
+     * holdings check when handed `undefined` — the picker's preview
+     * affordance — and `loadCurrent`'s `heldTokens` is `undefined` on
+     * exactly the two paths that must fail closed on a visitor's screen: a
+     * holdings read that did not answer, and a record whose bits name only
+     * unminted rows. The live path (`refreshHoldings`) already guards this;
+     * the full load shipped without the guard while its own comment claimed
+     * "fails closed".
+     *
+     * Source-read, like the ordering test above: `loadCurrent` is wiring, and
+     * the fail-closed behaviour itself is pinned in `attachments.test.ts` —
+     * what has to stay true here is that the wiring never hands the preview
+     * affordance to a visitor.
+     */
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'app.ts'), 'utf8');
+    const body = (() => {
+        const from = source.indexOf('async function loadCurrent');
+        return source.slice(from, source.indexOf('\n}\n', from));
+    })();
+
+    it('the view\'s worn list is computed against a definite holdings set', () => {
+        const worn = body.slice(body.indexOf('worn: wornAttachments('));
+        expect(worn.length, 'loadCurrent no longer computes worn').toBeGreaterThan(0);
+        expect(worn.slice(0, 200)).toMatch(/heldTokens \?\? NOTHING_HELD/);
+    });
+});

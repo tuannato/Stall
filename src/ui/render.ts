@@ -138,10 +138,16 @@ function focusKeyOf(node: Element | null): string | null {
 /**
  * Compared by value, never interpolated into a selector: an offer's key carries
  * a chain-derived txid, and `querySelector` would be parsing it.
+ *
+ * Says whether it landed: the caller owns what happens when the control is
+ * gone, because "gone" means two different things — a sold row must not hand
+ * focus to whatever replaced it, and a closed sheet must hand focus back to
+ * its opener rather than dropping a keyboard visitor at `<body>`, which
+ * resets a screen reader to the top of the page.
  */
-function restoreFocus(root: HTMLElement, key: string | null): void {
+function restoreFocus(root: HTMLElement, key: string | null): boolean {
     if (key === null) {
-        return;
+        return false;
     }
     for (const node of root.querySelectorAll('[data-focus-key]')) {
         if (node.getAttribute('data-focus-key') === key) {
@@ -156,9 +162,41 @@ function restoreFocus(root: HTMLElement, key: string | null): void {
                     // Some input types refuse selection; focus is enough.
                 }
             }
-            return;
+            return true;
         }
     }
+    return false;
+}
+
+/**
+ * Across paints, one fact each: whether the last painted view held an open
+ * overlay, and the focus key of the control the visitor was on when it
+ * opened. Module state rather than view state on purpose — it describes the
+ * DOM this module just built, not the stall, and it must survive
+ * `replaceChildren` exactly because nothing in the tree does.
+ */
+let overlayWasOpen = false;
+let overlayOpener: string | null = null;
+
+/**
+ * The one node a live update may speak through. It lives on `<body>`, beside
+ * the root and not inside it, because `renderStall` replaces the whole tree
+ * on every paint — an `aria-live` region rebuilt with the paint it is meant
+ * to announce is a region a screen reader never hears. Polite, and only for
+ * the book: a page whose premise is a live socket said nothing at all to a
+ * visitor who cannot see the outline pulse.
+ */
+function announce(doc: Document, message: string): void {
+    let region = doc.getElementById('sr-live');
+    if (region === null) {
+        region = doc.createElement('div');
+        region.id = 'sr-live';
+        region.className = 'sr-live';
+        region.setAttribute('role', 'status');
+        doc.body.append(region);
+    }
+    // The same text twice is not re-announced; alternate an invisible tail.
+    region.textContent = region.textContent === message ? `${message} ` : message;
 }
 
 /**
@@ -189,6 +227,16 @@ export function renderStall(
 ): void {
     paintedIconCells.clear();
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
+    // Snapshot the opener on the idle→open edge only: a live repaint while
+    // the sheet is up finds focus *inside* the sheet, and overwriting the
+    // snapshot with that would return focus to a control about to vanish.
+    const overlayOpen = view.overlay.kind !== 'idle';
+    if (overlayOpen && !overlayWasOpen) {
+        overlayOpener = focusKeyOf(root.ownerDocument.activeElement);
+    }
+    if ((view.justChanged?.size ?? 0) > 0) {
+        announce(root.ownerDocument, copy.EVENT_BOOK);
+    }
     root.replaceChildren();
     applyTitle(view);
     const frame = el('div', 'frame');
@@ -265,7 +313,29 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
-    restoreFocus(root, keptFocus);
+    // The container is the last resort a repaint may hand focus to: not
+    // tabbable, but focusable by script, so an orphaned keyboard visitor
+    // resumes from the shop instead of from `<body>` at the top of the page.
+    stall.tabIndex = -1;
+    let landed = restoreFocus(root, keptFocus);
+    if (!overlayOpen && overlayWasOpen) {
+        // The sheet just closed. Its own controls are gone with it, so the
+        // WAI-ARIA dialog contract applies: focus returns to the control
+        // that opened it. `keptFocus` wins when it still exists — Escape
+        // pressed with focus on a control the shop kept is not a hand-off.
+        if (!landed) {
+            landed = restoreFocus(root, overlayOpener);
+        }
+        overlayOpener = null;
+    }
+    if (!landed && keptFocus !== null) {
+        // The control the visitor was on is gone — a sold row, a removed
+        // screen — and nothing better claimed the focus. A sold row's
+        // replacement must NOT (the test that pins this says why); the
+        // container is neutral ground.
+        stall.focus();
+    }
+    overlayWasOpen = overlayOpen;
 }
 
 /** id → the class its shipped stylesheet is scoped under. */
@@ -2933,8 +3003,13 @@ function ornamentStrip(theme: DecodedTheme): HTMLElement | null {
  * long page would be invisible to it.
  */
 function stallTabs(view: StallView, handlers: StallHandlers): HTMLElement {
+    // A `<nav>` of buttons with `aria-current`, deliberately NOT
+    // `role="tablist"`: these switch full panels, not in-page tabpanels,
+    // and the half of the tab pattern this bar used to claim (`tablist` +
+    // `tab` + `aria-selected`, with no `tabpanel`, no `aria-controls`, no
+    // arrow keys) promises a screen reader keyboard behaviour that was
+    // never there — worse than plain buttons that say where you are.
     const bar = el('nav', 'tabs');
-    bar.setAttribute('role', 'tablist');
     bar.setAttribute('aria-label', 'Stall panels');
     const active: PanelKind = view.panel ?? 'shop';
     const tabs: { key: PanelKind; label: string; name?: string }[] = [
@@ -2945,8 +3020,9 @@ function stallTabs(view: StallView, handlers: StallHandlers): HTMLElement {
     for (const tab of tabs) {
         const btn = el('button', tab.key === 'shop' ? 'tab tab-shop' : 'tab');
         btn.type = 'button';
-        btn.setAttribute('role', 'tab');
-        btn.setAttribute('aria-selected', active === tab.key ? 'true' : 'false');
+        if (active === tab.key) {
+            btn.setAttribute('aria-current', 'page');
+        }
         btn.setAttribute('data-role', `tab-${tab.key}`);
         btn.setAttribute('data-focus-key', `tab-${tab.key}`);
         btn.append(el('span', 'tab-label', tab.label));

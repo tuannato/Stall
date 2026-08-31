@@ -143,8 +143,18 @@ Sampling amendments, each measured:
   every reduced-motion visitor while the geometry-only pass stayed green.
   The reduce block now sits last in stall.css and says why; theme files
   carry their own reduce blocks, which out-specify it.
-- Scope hole, named: transitions fire on interaction and are invisible to
-  an idle `getAnimations()` scan.
+- **A waiting transition is a leak too** (`reduced motion left a
+  transition armed`): under emulated reduce, any element whose computed
+  `transition-duration` is non-zero (with a `transition-property` that is
+  not `none`) fails, per painted combination. A transition never appears
+  in `getAnimations()` at rest — it only runs while a property is
+  mid-change — so the stillness scan above is structurally blind to it.
+  Incident 2026-08-31: `.t-modern .item-caret` kept its 0.2s slide under
+  reduce because the theme selector (0-2-0) out-specifies stall.css's
+  reduce block (0-1-0), and thirteen theme-file transition rules had no
+  kill at all. Every theme file's reduce block now sits LAST in its own
+  file (stall.css's rule, same measured reason) and names its
+  transitions alongside its animations.
 
 ## Clip-path text containment
 
@@ -179,7 +189,6 @@ state screens buy only the bare and fully-worn variants.
 
 ## What this guard still cannot see
 
-- Interaction-triggered transitions under reduced motion (above).
 - Whether a `t-*`-scoped theme override applies on every screen a base var
   consumer paints — `scripts/audit-shadowing.mjs` is static; its SHADOWED
   list stays a candidate list until a DOM pass proves screen coverage.

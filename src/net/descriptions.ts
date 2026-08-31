@@ -102,29 +102,15 @@ async function walk(
     const pages = Math.min(total, MAX_HISTORY_PAGES);
     const found = new Map<string, LoadedDescription[]>();
     const unreadable = new Set<string>();
-    const ambiguous = new Set<string>();
 
-    collectPage(first, hash, found, unreadable, ambiguous);
+    collectPage(first, hash, found, unreadable);
     for (let page = 1; page < pages; page += 1) {
-        collectPage(
-            await rest.history(page, HISTORY_PAGE_SIZE),
-            hash,
-            found,
-            unreadable,
-            ambiguous,
-        );
+        collectPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, found, unreadable);
     }
 
     const descriptions = new Map<string, string>();
     const shelves = new Map<string, string>();
     for (const [tokenId, records] of found) {
-        // Two readable records for one token in one transaction cannot be
-        // ranked apart — same txid, same height — so which one wins is where
-        // the wallet happened to put them. That is not a record to show; the
-        // token is not answered at all.
-        if (ambiguous.has(tokenId)) {
-            continue;
-        }
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
         // empty-versus-unreachable mistake — the reason a tombstone and an
@@ -156,10 +142,9 @@ function collectPage(
     hash: string,
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
-    ambiguous: Set<string>,
 ): void {
     for (const tx of page.txs) {
-        collectTx(tx, hash, found, unreadable, ambiguous);
+        collectTx(tx, hash, found, unreadable);
     }
 }
 
@@ -171,8 +156,14 @@ function collectPage(
  * several outputs for *different* tokens is the only way to publish several in
  * one transaction, and refusing that would be refusing the feature. Two for the
  * *same* token is the ambiguity: nothing in the transaction says which is meant,
- * and output order is where a wallet happened to put them. That token is
- * unreadable; the rest of the transaction is fine.
+ * and output order is where a wallet happened to put them. **That transaction's
+ * contribution for that token is refused — the rest of the transaction is fine,
+ * and so is every other transaction.** The exclusion is per-tx on purpose: the
+ * walk-scoped version of this set suppressed a token's description forever —
+ * one old double-write outranked every clean, finalized record that came after
+ * it, and republishing could not cure it. The token still lands in
+ * `unreadable`, the same signal an undecodable record leaves: a record exists
+ * that this page could not use, so a shown older record may be superseded.
  *
  * Deliberately not folded into the manifest's `recordFromTx`: `firstStl1`
  * *throws*, and both of its call sites catch around the whole record — so a
@@ -184,7 +175,6 @@ function collectTx(
     hash: string,
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
-    ambiguous: Set<string>,
 ): void {
     if (!txSignedByStall(tx, hash)) {
         // Anyone can put an STLD output on chain naming anyone's token. Without
@@ -192,6 +182,7 @@ function collectTx(
         return;
     }
     const seenHere = new Set<string>();
+    const ambiguousHere = new Set<string>();
     for (const output of tx.outputs) {
         const pushes = opReturnPushes(output.outputScript);
         if (pushes === undefined || !isOurs(pushes)) {
@@ -208,11 +199,25 @@ function collectTx(
             }
             continue;
         }
+        if (ambiguousHere.has(record.tokenId)) {
+            continue;
+        }
         if (seenHere.has(record.tokenId)) {
-            // Ambiguous, not unreadable: both decoded perfectly and neither is
-            // newer than the other. Ranking cannot separate them.
-            ambiguous.add(record.tokenId);
+            // Ambiguous, not unreadable in kind: both decoded perfectly and
+            // neither is newer than the other. The first of the pair is
+            // already in `found` — take it back out, or output order still
+            // picks a winner for exactly the case this branch refuses.
+            ambiguousHere.add(record.tokenId);
             unreadable.add(record.tokenId);
+            const list = found.get(record.tokenId);
+            if (list !== undefined) {
+                const kept = list.filter((r) => r.txid !== tx.txid);
+                if (kept.length === 0) {
+                    found.delete(record.tokenId);
+                } else {
+                    found.set(record.tokenId, kept);
+                }
+            }
             continue;
         }
         seenHere.add(record.tokenId);

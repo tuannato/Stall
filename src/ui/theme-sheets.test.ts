@@ -100,6 +100,53 @@ describe('no-stylesheet-reads-a-var-nobody-emits', () => {
     });
 });
 
+describe('a-var-read-at-rest-resolves-at-rest', () => {
+    /**
+     * The general form of the test above, for every custom property and not
+     * just the `--s-*` table — with the one exclusion that makes it a guard:
+     * a declaration inside `@keyframes` does not count. `--att-sun-angle`
+     * lived only in its keyframe, which left `var()` guaranteed-invalid at
+     * rest, which made the whole Sunburst `background-image` stack —
+     * `--s-backdrop` included — invalid at computed-value time. The
+     * decoration shipped painting nothing, and the billboard guard counted
+     * the removed paint as "a change".
+     *
+     * A legal resolver is one of: the `themeVars` table, a declaration in a
+     * real rule (keyframe steps excluded — `parseRules` already skips
+     * at-rule bodies), or an `@property` registration that carries an
+     * `initial-value` (registration without one changes nothing at rest).
+     */
+    it('every var() read has a value outside @keyframes', () => {
+        const css = allCss();
+        const emitted = emittedNames();
+        const rules = parseRules(css);
+        const atRest = new Set<string>();
+        for (const rule of rules) {
+            for (const m of rule.body.matchAll(/(--[a-z0-9-]+)\s*:/g)) {
+                atRest.add(m[1]!);
+            }
+        }
+        const registered = new Set<string>();
+        for (const m of css.matchAll(/@property\s+(--[a-z0-9-]+)\s*\{([^}]*)\}/g)) {
+            if (/initial-value\s*:/.test(m[2]!)) registered.add(m[1]!);
+        }
+        const reads = new Set<string>();
+        for (const rule of rules) {
+            for (const m of rule.body.matchAll(/var\(\s*(--[a-z0-9-]+)/g)) {
+                reads.add(m[1]!);
+            }
+        }
+        expect(reads.size).toBeGreaterThan(0);
+        for (const name of reads) {
+            expect(
+                emitted.has(name) || atRest.has(name) || registered.has(name),
+                `${name} is read at rest and has no value at rest — ` +
+                    'a keyframe-only declaration leaves it guaranteed-invalid',
+            ).toBe(true);
+        }
+    });
+});
+
 /** Flatten a sheet into rules; descend @media, skip other at-rule bodies
  *  (keyframe steps declare no ink-over-ground pairing worth policing). */
 function parseRules(css: string): { selector: string; body: string }[] {

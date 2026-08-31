@@ -1214,10 +1214,16 @@ async function loadCurrent(): Promise<AppState> {
             theme,
             attachmentFlags,
             heldTokens,
-            // Fails closed: with no holdings answer, nothing is worn. A stall
-            // that paints a decoration it cannot prove is holding is exactly
-            // the consent rule broken from the inside.
-            worn: wornAttachments(theme?.id ?? DEFAULT_THEME_ID, attachmentFlags, heldTokens),
+            // Fails closed: with no holdings answer — a read that failed, or a
+            // record whose bits name only unminted rows — nothing is worn.
+            // `undefined` here would be the picker's skip-the-check affordance
+            // on a visitor's screen, painting a decoration this stall cannot
+            // prove it holds.
+            worn: wornAttachments(
+                theme?.id ?? DEFAULT_THEME_ID,
+                attachmentFlags,
+                heldTokens ?? NOTHING_HELD,
+            ),
             settingsTruncated,
             settingsUnreadable,
         },

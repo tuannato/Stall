@@ -542,6 +542,28 @@ function reducedMotionLeaks(screen: string, themeLabel: string): Failure[] {
             detail: `${name} on ${target}`,
         });
     }
+    // Transitions never appear in `getAnimations()` at rest — one only runs
+    // while a property is mid-change — so the loop above is blind to a
+    // declared duration that will animate the first hover or expand a
+    // reduced-motion visitor causes. Computed style is the only place a
+    // waiting transition exists. Measured 2026-08-31: `.t-modern .item-caret`
+    // kept its 0.2s slide under reduce because the theme selector
+    // out-specifies stall.css's reduce block; every theme file now carries
+    // its own transition kills, and this check is what notices the next one.
+    for (const el of document.getElementById('app')!.querySelectorAll('*')) {
+        const cs = getComputedStyle(el);
+        if (cs.transitionProperty === 'none') {
+            continue;
+        }
+        if (cs.transitionDuration.split(',').some((d) => parseFloat(d) > 0)) {
+            out.push({
+                screen,
+                theme: themeLabel,
+                check: 'reduced motion left a transition armed',
+                detail: `${cs.transitionProperty} ${cs.transitionDuration} on ${describe(el)}`,
+            });
+        }
+    }
     return out;
 }
 

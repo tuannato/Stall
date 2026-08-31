@@ -5,6 +5,7 @@ import { CHRONIK_HOSTS } from './hosts';
 import {
     BURST_MS,
     AGORA_PLUGIN,
+    MAX_BURST_TXIDS,
     MIN_REREAD_MS,
     UNKNOWN_TXID,
     isDefiniteResult,
@@ -390,6 +391,53 @@ describe('failed-refetch-is-not-empty', () => {
         await vi.advanceTimersByTimeAsync(BURST_MS);
         expect(changed).toHaveBeenCalledTimes(2);
         expect(bursts[1]).toEqual([TXID_B]);
+
+        handle.close();
+        vi.useRealTimers();
+    });
+
+    it('a-flood-degrades-to-one-unknown-not-a-fetch-storm', async () => {
+        /**
+         * The script subscription hears every payment to the stall, dust
+         * included, and each named txid costs the consumer one serial
+         * `chronik.tx` in every open tab. `seen` was the app's one unbounded
+         * buffer. Past the cap the burst carries `UNKNOWN_TXID` instead of
+         * more names — the shape the consumer already reads as "wake every
+         * fact reader and mark the gap", so a flood buys one grouped re-read,
+         * never a fetch per dust output.
+         */
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const bursts: string[][] = [];
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onChanged: () => undefined, onBurst: (ids) => bursts.push([...ids]) },
+        );
+        await f.settle();
+
+        // A duplicate is one entry, not two toward the cap: the same sale
+        // arriving as mempool and confirmed must not spend the budget.
+        for (let i = 0; i < MAX_BURST_TXIDS; i += 1) {
+            const txid = i.toString(16).padStart(2, '0').repeat(32);
+            f.fire('Tx', txid);
+            f.fire('Tx', txid);
+        }
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(bursts, 'at the cap, every txid is still named').toHaveLength(1);
+        expect(bursts[0]).toHaveLength(MAX_BURST_TXIDS);
+        expect(bursts[0]).not.toContain(UNKNOWN_TXID);
+
+        // Ten distinct txids past the cap: one UNKNOWN stands for all of
+        // them, and the set stops growing.
+        for (let i = 0; i < MAX_BURST_TXIDS + 10; i += 1) {
+            f.fire('Tx', i.toString(16).padStart(2, '0').repeat(32));
+        }
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(bursts).toHaveLength(2);
+        const flood = bursts[1]!;
+        expect(flood, 'capped names plus one stand-in').toHaveLength(MAX_BURST_TXIDS + 1);
+        expect(flood.filter((id) => id === UNKNOWN_TXID)).toHaveLength(1);
 
         handle.close();
         vi.useRealTimers();

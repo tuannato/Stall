@@ -65,6 +65,33 @@ body {
     min-height: 100%;
 }
 
+/*
+ * The live announcer (`announce` in render.ts): on <body>, beside the root,
+ * because the paint it announces replaces everything inside it. Visually
+ * hidden the accessible way — `display: none` silences a live region.
+ */
+.sr-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/*
+ * The repaint's focus fallback (tabindex="-1", focused by script only when
+ * the control a visitor was on is gone): neutral ground gets no ring — a
+ * visible outline around the whole shop would read as the page selecting
+ * itself.
+ */
+.stall:focus {
+    outline: none;
+}
+
 .stall {
     flex: 1;
     display: flex;
@@ -471,7 +498,24 @@ body {
  * pseudo-element — and the spin animates the registered angle, because a
  * rotating element's bounding box sweeps the address.
  */
+/*
+ * The angle needs BOTH declarations below. The registration is what lets
+ * the 70s spin interpolate (an unregistered custom property animates
+ * discretely); the resting declaration is what keeps `var()` resolvable
+ * where `@property` is not supported and at rest — without it the wheel's
+ * whole `background-image` stack, `--s-backdrop` included, is invalid at
+ * computed-value time and the decoration paints nothing. Shipped that way
+ * unseen: the billboard guard counts a *removed* paint as a change.
+ * Test: `a-var-read-at-rest-resolves-at-rest`.
+ */
+@property --att-sun-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
 .stall.att-sunburst {
+    --att-sun-angle: 0deg;
     background-image:
         radial-gradient(
             circle 620px at 50% 110px,
@@ -1704,7 +1748,7 @@ textarea.paste-in {
     font-size: 13.5px;
 }
 
-.tab[aria-selected='true'] {
+.tab[aria-current='page'] {
     color: var(--s-tab-active-ink);
     background: var(--s-tab-active-bg);
     box-shadow: var(--s-tab-active-shadow);
@@ -1715,7 +1759,7 @@ textarea.paste-in {
  * The seller's name on the centre tab: subordinate to our label, one line,
  * cut with an ellipsis — a 32-byte name must never widen the bar.
  */
-.tab[aria-selected='true'] .tab-name {
+.tab[aria-current='page'] .tab-name {
     color: inherit;
     opacity: 0.85;
 }
@@ -3323,6 +3367,16 @@ textarea.paste-in {
     .item-head {
         animation: none;
         background-position: 50% 0;
+    }
+
+    /* The sheet's slide is declared twice — once near the top of the file
+       where the mid-file reduce block still killed it, and again beside
+       `.sheet-scrim`, BELOW that block, where the base rule re-won by
+       order. The armed-transition probe check caught the second copy the
+       day it was written; the kill lives here, in the block whose whole
+       job is winning by order. */
+    .sheet {
+        transition: none;
     }
 }
 
