@@ -8,7 +8,7 @@ import {
 } from '../domain/cashtab';
 import { FIAT_CURRENCIES, formatFiat, isSupportedFiat } from '../domain/fiat';
 import { sectionsOf, type Category } from '../domain/category';
-import { iconUrl } from '../domain/icons';
+import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
@@ -1149,111 +1149,130 @@ function isExpanded(view: StallView, listing: TokenListing): boolean {
     );
 }
 
-function iconKey(tokenId: string): string | undefined {
-    if (iconUrl(tokenId) === undefined) {
+/**
+ * One icon variant per (size, token): the row's 128 and the opened card's
+ * 256 are separate fetches with separate cache entries, keyed together so
+ * a loaded hero never reveals into a 44px row cell or vice versa. The
+ * `data-token-id` attribute stays the bare id — it is identity, not
+ * variant — and the src check carries the size.
+ */
+function iconRef(
+    tokenId: string,
+    size: IconSize,
+): { key: string; id: string; size: IconSize } | undefined {
+    const id = tokenId.toLowerCase();
+    if (iconUrl(id, size) === undefined) {
         return undefined;
     }
-    return tokenId.toLowerCase();
+    return { key: `${size}/${id}`, id, size };
 }
 
-function iconMatchesToken(img: HTMLImageElement, key: string): boolean {
-    const url = iconUrl(key);
+function iconMatchesToken(
+    img: HTMLImageElement,
+    ref: { id: string; size: IconSize },
+): boolean {
+    const url = iconUrl(ref.id, ref.size);
     if (url === undefined) {
         return false;
     }
-    return img.getAttribute('data-token-id') === key && img.getAttribute('src') === url;
+    return img.getAttribute('data-token-id') === ref.id && img.getAttribute('src') === url;
 }
 
-function ensureIcon(tokenId: string): void {
-    const key = iconKey(tokenId);
-    if (key === undefined || iconCache.has(key)) {
+function ensureIcon(ref: { key: string; id: string; size: IconSize }): void {
+    if (iconCache.has(ref.key)) {
         return;
     }
-    const url = iconUrl(tokenId);
+    const url = iconUrl(ref.id, ref.size);
     if (url === undefined) {
         return;
     }
     const img = new Image();
     img.referrerPolicy = 'no-referrer';
     img.alt = '';
-    img.setAttribute('data-token-id', key);
-    iconCache.set(key, { state: 'pending', img });
+    img.setAttribute('data-token-id', ref.id);
+    iconCache.set(ref.key, { state: 'pending', img });
     img.addEventListener('load', () => {
-        const current = iconCache.get(key);
+        const current = iconCache.get(ref.key);
         if (current === undefined || current.state === 'error' || current.img !== img) {
             return;
         }
-        if (!iconMatchesToken(img, key)) {
+        if (!iconMatchesToken(img, ref)) {
             return;
         }
-        iconCache.set(key, { state: 'loaded', img });
-        revealLoadedIcon(key, img);
+        iconCache.set(ref.key, { state: 'loaded', img });
+        revealLoadedIcon(ref, img);
     });
     img.addEventListener('error', () => {
-        const current = iconCache.get(key);
+        const current = iconCache.get(ref.key);
         if (current === undefined || current.state === 'error' || current.img !== img) {
             return;
         }
-        iconCache.set(key, { state: 'error' });
+        iconCache.set(ref.key, { state: 'error' });
     });
     img.src = url;
 }
 
-function cloneLoadedIcon(tokenId: string): HTMLImageElement | undefined {
-    const key = iconKey(tokenId);
-    if (key === undefined) {
-        return undefined;
-    }
-    const entry = iconCache.get(key);
+function cloneLoadedIcon(
+    ref: { key: string; id: string; size: IconSize },
+): HTMLImageElement | undefined {
+    const entry = iconCache.get(ref.key);
     if (entry === undefined || entry.state !== 'loaded') {
         return undefined;
     }
-    if (!iconMatchesToken(entry.img, key)) {
+    if (!iconMatchesToken(entry.img, ref)) {
         return undefined;
     }
     const clone = entry.img.cloneNode(true) as HTMLImageElement;
-    if (!iconMatchesToken(clone, key)) {
+    if (!iconMatchesToken(clone, ref)) {
         return undefined;
     }
     return clone;
 }
 
-function revealLoadedIcon(key: string, source: HTMLImageElement): void {
-    if (!iconMatchesToken(source, key)) {
+function revealLoadedIcon(
+    ref: { key: string; id: string; size: IconSize },
+    source: HTMLImageElement,
+): void {
+    if (!iconMatchesToken(source, ref)) {
         return;
     }
-    const cells = paintedIconCells.get(key);
+    const cells = paintedIconCells.get(ref.key);
     if (cells === undefined) {
         return;
     }
     for (const cell of cells) {
-        if (cell.getAttribute('data-token-id') !== key) {
+        if (cell.getAttribute('data-token-id') !== ref.id) {
             continue;
         }
         const clone = source.cloneNode(true) as HTMLImageElement;
-        if (!iconMatchesToken(clone, key)) {
+        if (!iconMatchesToken(clone, ref)) {
             continue;
         }
         cell.replaceChildren(clone);
     }
 }
 
-function itemIcon(tokenId: string, name: string, extraClass?: string): HTMLElement {
+function itemIcon(
+    tokenId: string,
+    name: string,
+    extraClass?: string,
+    size: IconSize = ICON_ROW_SIZE,
+): HTMLElement {
     const cell = el('div', 'item-ic');
     if (extraClass !== undefined) {
         cell.classList.add(extraClass);
     }
-    const key = iconKey(tokenId);
-    if (key !== undefined) {
-        cell.setAttribute('data-token-id', key);
-        let cells = paintedIconCells.get(key);
+    const ref = iconRef(tokenId, size);
+    if (ref !== undefined) {
+        cell.setAttribute('data-token-id', ref.id);
+        let cells = paintedIconCells.get(ref.key);
         if (cells === undefined) {
             cells = [];
-            paintedIconCells.set(key, cells);
+            paintedIconCells.set(ref.key, cells);
         }
         cells.push(cell);
-        ensureIcon(tokenId);
-        const clone = cloneLoadedIcon(tokenId);
+        ensureIcon(ref);
+        const clone = cloneLoadedIcon(ref);
         if (clone !== undefined) {
             cell.append(clone);
             return cell;
@@ -2311,7 +2330,7 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
     // and cache as the row icon (our Worker); initials stay until it loads and
     // a failed load keeps them, exactly as the small one does.
     const name = meta?.name ?? meta?.ticker ?? offer.tokenId;
-    panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg'));
+    panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg', ICON_HERO_SIZE));
     // Every fact lives in its own column beside the hero image. A wrapper,
     // not grid placement: the desktop grid once made the icon span 99
     // implicit rows, and ~90 empty rows each bought a row-gap — a thousand

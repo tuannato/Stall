@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ICON_HOST, iconUrl } from '../domain/icons';
+import { ICON_HERO_SIZE, ICON_HOST, iconUrl } from '../domain/icons';
 import {
     BANNED_THEME_PROPS,
     DEFAULT_THEME,
@@ -1354,35 +1354,41 @@ describe('token icon', () => {
         }
     });
 
-    it('icon-src-is-set-once-per-token', () => {
+    it('icon-src-is-set-once-per-token-and-size', () => {
         const { images, restore } = probeImages();
         try {
             const two: StallOffer[] = [
                 OFFER,
                 { ...OFFER, outpoint: { txid: OUTPOINT.txid, outIdx: 1 } },
             ];
-            // Grouped, one token is one card — the two cells sharing the
-            // cached image are the card's own icon and the open detail's hero.
+            // Grouped, one token is one card — and the open detail's hero
+            // is its own variant now: 128 for the 44px row cell, 256 for
+            // the 120–140px hero, each fetched exactly once. A shared 64
+            // was the old contract, and it painted every hero soft.
             const view = offersView(two, undefined, {
                 overlay: { kind: 'buy', outpoint: OUTPOINT },
             });
             paint(view);
-            expect(images).toHaveLength(1);
+            expect(images).toHaveLength(2);
             expect(images[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(images[1]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID, ICON_HERO_SIZE));
             expect(images[0]!.referrerPolicy).toBe('no-referrer');
             images[0]!.dispatchEvent(new Event('load'));
+            images[1]!.dispatchEvent(new Event('load'));
             const again = paint(view);
             paint(view);
-            expect(images).toHaveLength(1);
-            const painted = again.root.querySelectorAll('.item-ic img');
-            expect(painted).toHaveLength(2);
-            expect(painted[0]).not.toBe(images[0]);
-            expect(painted[1]).not.toBe(images[0]);
-            expect(painted[0]).not.toBe(painted[1]);
-            expect(painted[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
-            expect(painted[1]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
-            expect(painted[0]!.getAttribute('data-token-id')).toBe(TOKEN_ID);
-            expect(painted[1]!.getAttribute('data-token-id')).toBe(TOKEN_ID);
+            // Repaints clone the cached nodes; nothing asks the network twice.
+            expect(images).toHaveLength(2);
+            const row = again.root.querySelector('.item-ic:not(.item-ic-lg) img');
+            const hero = again.root.querySelector('.item-ic-lg img');
+            expect(row).not.toBeNull();
+            expect(hero).not.toBeNull();
+            expect(row).not.toBe(images[0]);
+            expect(hero).not.toBe(images[1]);
+            expect(row!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
+            expect(hero!.getAttribute('src')).toBe(iconUrl(TOKEN_ID, ICON_HERO_SIZE));
+            expect(row!.getAttribute('data-token-id')).toBe(TOKEN_ID);
+            expect(hero!.getAttribute('data-token-id')).toBe(TOKEN_ID);
         } finally {
             restore();
         }

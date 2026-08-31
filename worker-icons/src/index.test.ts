@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import {
     CANONICAL_ORIGIN,
     HIT_CACHE_CONTROL,
-    ICON_SIZE,
-    MAX_ICON_BYTES,
+    ICON_SIZES,
+    maxIconBytes,
     MISS_CACHE_CONTROL,
     NO_STORE,
     PNG_MAGIC,
@@ -29,6 +29,9 @@ const REPO = join(HERE, '..', '..');
 const ID = 'a'.repeat(64);
 const ID_UPPER = 'A'.repeat(64);
 const PATH = `/icon/64/${ID}.png`;
+/** The 64 route, as every behaviour test asks for it. */
+const R64 = { id: ID, size: 64 } as const;
+const MAX_64_BYTES = maxIconBytes(64);
 
 /** 1×1 PNG. Fixture only — not a token icon. */
 const PNG = Buffer.from(
@@ -105,7 +108,14 @@ function get(path: string, host = CANONICAL_ORIGIN, headers?: HeadersInit): Requ
 describe('parseIconRoute', () => {
     it('mixed-case-hex-is-canonicalised', () => {
         const route = parseIconRoute(new URL(`${CANONICAL_ORIGIN}/icon/64/${ID_UPPER}.png`));
-        assert.deepEqual(route, { id: ID });
+        assert.deepEqual(route, { id: ID, size: 64 });
+    });
+
+    it('every-allowed-size-parses-to-itself', () => {
+        for (const size of ICON_SIZES) {
+            const route = parseIconRoute(new URL(`${CANONICAL_ORIGIN}/icon/${size}/${ID}.png`));
+            assert.deepEqual(route, { id: ID, size }, String(size));
+        }
     });
 
     it('query-is-404-before-upstream', () => {
@@ -114,7 +124,7 @@ describe('parseIconRoute', () => {
     });
 
     it('other-size-is-404-before-upstream', () => {
-        for (const size of ['32', '128', '256', '512', '0', '064']) {
+        for (const size of ['32', '512', '0', '064', '0128', '96']) {
             assert.equal(
                 parseIconRoute(new URL(`${CANONICAL_ORIGIN}/icon/${size}/${ID}.png`)),
                 null,
@@ -228,7 +238,7 @@ describe('handleRequest upstream', () => {
         assert.equal(res.headers.get('content-type'), 'image/png');
         const body = Buffer.from(await res.arrayBuffer());
         assert.deepEqual(body, PNG);
-        assert.deepEqual(cache.keys(), [canonicalCacheKey(ID)]);
+        assert.deepEqual(cache.keys(), [canonicalCacheKey(R64)]);
     });
 
     it('upstream-content-type-is-ignored', async () => {
@@ -265,7 +275,7 @@ describe('handleRequest upstream', () => {
             });
             return new Response(body, {
                 status: 200,
-                headers: { 'content-length': String(MAX_ICON_BYTES + 1) },
+                headers: { 'content-length': String(MAX_64_BYTES + 1) },
             });
         });
         assert.equal(res.status, 502);
@@ -275,7 +285,7 @@ describe('handleRequest upstream', () => {
 
     it('oversize-stream-without-length-is-aborted', async () => {
         const { res, cache } = await run(get(PATH), async () => {
-            const bytes = new Uint8Array(MAX_ICON_BYTES + 1);
+            const bytes = new Uint8Array(MAX_64_BYTES + 1);
             bytes.set(PNG_MAGIC, 0);
             return new Response(bytes, { status: 200 });
         });
@@ -292,7 +302,7 @@ describe('handleRequest upstream', () => {
             assert.equal(res.status, 404, String(status));
             assert.equal(res.headers.get('cache-control'), MISS_CACHE_CONTROL);
             assert.equal(res.headers.get('content-type'), null);
-            assert.deepEqual(cache.keys(), [canonicalCacheKey(ID)]);
+            assert.deepEqual(cache.keys(), [canonicalCacheKey(R64)]);
         }
     });
 
@@ -329,12 +339,12 @@ describe('handleRequest upstream', () => {
 
     it('mixed-case-hex-is-canonicalised', async () => {
         const { res, calls, cache } = await run(get(`/icon/64/${ID_UPPER}.png`), async (url) => {
-            assert.equal(url, upstreamUrl(ID));
+            assert.equal(url, upstreamUrl(R64));
             return pngResponse();
         });
         assert.equal(res.status, 200);
-        assert.deepEqual(calls.map((c) => c.url), [upstreamUrl(ID)]);
-        assert.deepEqual(cache.keys(), [canonicalCacheKey(ID)]);
+        assert.deepEqual(calls.map((c) => c.url), [upstreamUrl(R64)]);
+        assert.deepEqual(cache.keys(), [canonicalCacheKey(R64)]);
     });
 
     it('upstream-path-is-not-our-route', async () => {
@@ -463,11 +473,21 @@ describe('wiring contracts', () => {
     it('client-path-matches-worker-route', () => {
         const icons = readFileSync(join(REPO, 'src/domain/icons.ts'), 'utf8');
         assert.match(icons, /ICON_HOST = 'https:\/\/icons\.stall\.cash'/);
-        assert.match(icons, /ICON_SIZE = 64/);
-        assert.match(icons, /\/icon\/\$\{ICON_SIZE\}\/\$\{id\}\.png/);
-        assert.equal(ICON_SIZE, 64);
-        assert.equal(canonicalCacheKey(ID), `${CANONICAL_ORIGIN}/icon/64/${ID}.png`);
-        assert.equal(upstreamUrl(ID), `${UPSTREAM_ORIGIN}/64/${ID}.png`);
+        // Every size the client can ask for must be on the worker's
+        // allowlist — the client enum is the contract, the worker route is
+        // the enforcement, and a size added on one side alone is a 404 that
+        // reads as "this token has no icon".
+        assert.match(icons, /ICON_ROW_SIZE = 128/);
+        assert.match(icons, /ICON_HERO_SIZE = 256/);
+        assert.match(icons, /\/icon\/\$\{size\}\/\$\{id\}\.png/);
+        assert.ok((ICON_SIZES as readonly number[]).includes(128));
+        assert.ok((ICON_SIZES as readonly number[]).includes(256));
+        assert.equal(canonicalCacheKey(R64), `${CANONICAL_ORIGIN}/icon/64/${ID}.png`);
+        assert.equal(upstreamUrl(R64), `${UPSTREAM_ORIGIN}/64/${ID}.png`);
+        assert.equal(
+            canonicalCacheKey({ id: ID, size: 256 }),
+            `${CANONICAL_ORIGIN}/icon/256/${ID}.png`,
+        );
     });
 
     it('source-does-not-import-ecash-live', () => {

@@ -14,15 +14,23 @@ export const CANONICAL_ORIGIN = 'https://icons.stall.cash';
 
 export const UPSTREAM_ORIGIN = 'https://icons.etokens.cash';
 
-/** The one size the stall asks for. A wider allowlist is proxy surface it does not use. */
-export const ICON_SIZE = 64;
+/**
+ * The sizes the stall asks for — rows at 128, the opened card's hero at
+ * 256 — and nothing more: a wider allowlist is proxy surface it does not
+ * use. 64 stays allowed for tabs still open across the deploy that raised
+ * the sizes; it leaves once those are gone.
+ */
+export const ICON_SIZES = [64, 128, 256] as const;
+export type IconSize = (typeof ICON_SIZES)[number];
 
 /**
- * 4× a 64×64 RGBA bitmap (16384 bytes). A PNG larger than its uncompressed
- * pixels is extra chunks or not a 64px icon. Chosen by construction, not by
+ * 4× the size's RGBA bitmap. A PNG larger than its uncompressed pixels is
+ * extra chunks or not an icon of that size. Chosen by construction, not by
  * measuring etokens — that needs a network call.
  */
-export const MAX_ICON_BYTES = 65536;
+export function maxIconBytes(size: IconSize): number {
+    return size * size * 4 * 4;
+}
 
 export const UPSTREAM_TIMEOUT_MS = 4000;
 
@@ -44,14 +52,14 @@ export const NO_STORE = 'no-store';
 
 export const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-const PATH = /^\/icon\/64\/([0-9a-fA-F]{64})\.png$/;
+const PATH = /^\/icon\/(64|128|256)\/([0-9a-fA-F]{64})\.png$/;
 
 const SECURITY_HEADERS = {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
 } as const;
 
-export type IconRoute = { id: string };
+export type IconRoute = { id: string; size: IconSize };
 
 export type IconCache = {
     match(key: Request): Promise<Response | undefined>;
@@ -77,16 +85,16 @@ export function parseIconRoute(url: URL): IconRoute | null {
     if (match === null) {
         return null;
     }
-    return { id: match[1]!.toLowerCase() };
+    return { id: match[2]!.toLowerCase(), size: Number(match[1]) as IconSize };
 }
 
-export function canonicalCacheKey(id: string): string {
-    return `${CANONICAL_ORIGIN}/icon/${ICON_SIZE}/${id}.png`;
+export function canonicalCacheKey(route: IconRoute): string {
+    return `${CANONICAL_ORIGIN}/icon/${route.size}/${route.id}.png`;
 }
 
 /** etokens serves `/<size>/<id>.png`, not our `/icon/<size>/…` route. */
-export function upstreamUrl(id: string): string {
-    return `${UPSTREAM_ORIGIN}/${ICON_SIZE}/${id}.png`;
+export function upstreamUrl(route: IconRoute): string {
+    return `${UPSTREAM_ORIGIN}/${route.size}/${route.id}.png`;
 }
 
 export function upstreamRequestInit(): RequestInit {
@@ -219,10 +227,10 @@ function pngHit(bytes: Uint8Array): Response {
     });
 }
 
-async function fetchIcon(id: string, fetchFn: typeof fetch): Promise<Response> {
+async function fetchIcon(route: IconRoute, fetchFn: typeof fetch): Promise<Response> {
     let upstream: Response;
     try {
-        upstream = await fetchFn(upstreamUrl(id), upstreamRequestInit());
+        upstream = await fetchFn(upstreamUrl(route), upstreamRequestInit());
     } catch (err) {
         const e = err as { name?: string; message?: string } | null;
         const name = e?.name ?? 'unknown';
@@ -244,7 +252,7 @@ async function fetchIcon(id: string, fetchFn: typeof fetch): Promise<Response> {
         return badGateway(`upstream-${upstream.status}`);
     }
 
-    const bytes = await readLimited(upstream, MAX_ICON_BYTES);
+    const bytes = await readLimited(upstream, maxIconBytes(route.size));
     if (bytes === null || !isPng(bytes)) {
         // Upstream answered, but not with a PNG we can vouch for. That is our
         // failure, not "this token has no icon" — a 200 HTML challenge page
@@ -268,13 +276,13 @@ export async function handleRequest(
         return junkNotFound();
     }
 
-    const key = new Request(canonicalCacheKey(route.id), { method: 'GET' });
+    const key = new Request(canonicalCacheKey(route), { method: 'GET' });
     const hit = await deps.cache.match(key);
     if (hit !== undefined) {
         return hit;
     }
 
-    const response = await fetchIcon(route.id, deps.fetch);
+    const response = await fetchIcon(route, deps.fetch);
     if (response.status === 200 || response.status === 404) {
         ctx.waitUntil(deps.cache.put(key, response.clone()));
     }
