@@ -100,6 +100,11 @@ Sampling amendments, each measured:
   shell's clip keeps its full rect; a studio control's box sampled where
   the dock actually paints reported 1.00:1 against the selected tab's blue.
   Same boundary `coveredBy` already held.
+- **The clamp is the nearest scrollable ancestor, whoever that is.** The
+  first clamp knew only `.stall-scroll`; the publish sheet scrolls too,
+  and its hex past the sheet's own edge sampled at 1.00:1 against
+  whatever painted at those coordinates. The shell's region and the
+  sheet are one boundary wearing two class names.
 - **A clipped sliver is skipped, not sampled.** A control cut to under
   16px at the region's edge holds no line of text — it is all border and
   corner arc, and sampling one reported a pill's terracotta ink against

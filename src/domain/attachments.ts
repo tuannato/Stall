@@ -187,23 +187,29 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * bits take the showroom's pieces; round 3 set the light drifting
      * again, as the full dress had it.
      */
+    /*
+     * Redesign round 2026-08-31: Drifting light and Sheen sweep leave —
+     * worn alone the drift was invisible in a still, and Modern's buyers
+     * had no OBJECT to show off (the possessions memo's exact case). Both
+     * bits verified never set by any on-chain record before re-aiming.
+     */
     {
         themeId: DEFAULT_THEME_ID,
         bit: 2,
-        slot: 'trim',
-        label: 'Drifting light',
-        paint: 'root',
-        cls: 'att-drift',
-        motion: true,
+        slot: 'crest',
+        label: 'Signature stroke',
+        paint: 'node',
+        cls: 'att-stroke',
+        motion: false,
     },
     {
         themeId: DEFAULT_THEME_ID,
         bit: 3,
         slot: 'badge',
-        label: 'Sheen sweep',
-        paint: 'root',
-        cls: 'att-sheen',
-        motion: true,
+        label: 'Wax seal',
+        paint: 'node',
+        cls: 'att-seal',
+        motion: false,
     },
     /*
      * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3

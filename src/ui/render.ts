@@ -2855,11 +2855,20 @@ function placeAttachmentNodes(
             stall.querySelector('.orn')?.append(node);
             continue;
         }
+        if (row.slot === 'crest') {
+            // Under the seller's own name — the signature stroke's home.
+            const name = stall.querySelector('.stall-name-row') ?? stall.querySelector('.stall-name');
+            name?.after(node);
+            continue;
+        }
         if (row.slot === 'badge') {
-            // In flow beside the sign's headings: a real box the guard
-            // measures, jewellery rather than a control — `aria-hidden` and
-            // `pointer-events: none` say so twice.
-            stall.querySelector('.stall-sign')?.append(node);
+            // In flow INSIDE the headings column, under the chip — never a
+            // sibling of the name row: a 50px badge beside the name wrapped
+            // it at 390px. A real box the guard measures, jewellery rather
+            // than a control.
+            (stall.querySelector('.stall-headings') ?? stall.querySelector('.stall-sign'))?.append(
+                node,
+            );
             continue;
         }
         if (row.slot === 'trim') {

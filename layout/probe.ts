@@ -868,12 +868,21 @@ let preparedNodes: HTMLElement[] = [];
 function targetFor(node: HTMLElement): ContrastTarget | undefined {
     const full = node.getBoundingClientRect();
     let box: { x: number; y: number; width: number; height: number } = full;
-    // Content scrolled out of the shell's clip keeps its full rect, and a
-    // box sampled where the page paints something else entirely reported
-    // a studio control at 1.00:1 against the dock's selected-tab blue
-    // sitting at those coordinates. Same boundary `coveredBy` already
-    // holds: sample only what the clip lets the page paint.
-    const clip = node.closest('.stall-scroll')?.getBoundingClientRect();
+    // Content scrolled out of a clip keeps its full rect, and a box
+    // sampled where the page paints something else entirely reported a
+    // studio control at 1.00:1 against the dock's selected-tab blue — and
+    // later the publish sheet's hex past ITS own scroll edge. The clamp is
+    // the nearest scrollable ancestor, whoever that is: the shell's region
+    // and the sheet are the same boundary wearing two class names.
+    let clipper: HTMLElement | null = node.parentElement;
+    while (clipper !== null) {
+        const oy = getComputedStyle(clipper).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && clipper.scrollHeight > clipper.clientHeight + 1) {
+            break;
+        }
+        clipper = clipper.parentElement;
+    }
+    const clip = clipper?.getBoundingClientRect();
     if (clip !== undefined) {
         const x = Math.max(box.x, clip.x);
         const y = Math.max(box.y, clip.y);

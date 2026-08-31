@@ -42,7 +42,10 @@ describe('attachment-table-ids-are-pinned', () => {
             '3:1:mood',
             // The second wave, 2026-08-29 — unminted until the fittings stall
             // opens, permanent from the first record that sets them.
-            '1:2:trim',
+            // 2026-08-31: Modern's pair re-aimed while unminted (walked:
+            // never set on chain) — weather out, objects in: the signature
+            // stroke under the name, the wax seal beside the headings.
+            '1:2:crest',
             '1:3:badge',
             // Extraction round 1: bits 2-4 re-cut from the full dress while
             // unminted — the sanctioned cheapest moment, updated on purpose.

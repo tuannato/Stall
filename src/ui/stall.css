@@ -252,72 +252,35 @@ body {
 }
 
 /*
- * Modern · trim · Drifting light. The showroom's three soft colour fields
- * as radial layers on the root, drifting as the full dress drew them
- * (motion restored in round 3; reduced motion parks them in place).
+ * Modern · crest · Signature stroke. A hand-inked flourish under the shop
+ * name — an object, unmistakable in a still. The stroke is our own SVG
+ * asset on a real node the probe measures.
  */
-.stall.att-drift {
-    background-image:
-        radial-gradient(
-            340px 340px at -80px -40px,
-            color-mix(in srgb, var(--s-accent) 16%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            300px 300px at calc(100% + 80px) 220px,
-            color-mix(in srgb, var(--s-muted) 14%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            320px 320px at -60px calc(100% - 40px),
-            color-mix(in srgb, var(--s-accent) 12%, transparent),
-            transparent 70%
-        ),
-        var(--s-backdrop);
-    animation: att-drift-drift 24s ease-in-out infinite alternate;
-}
-
-@keyframes att-drift-drift {
-    to {
-        background-position:
-            60px 40px,
-            -50px 60px,
-            40px -30px,
-            0 0;
-    }
+.att-stroke {
+    display: block;
+    width: 200px;
+    max-width: 100%;
+    height: 16px;
+    margin-top: 4px;
+    flex: none;
+    pointer-events: none;
+    background: url('decor/signature-stroke.svg') no-repeat left center / contain;
 }
 
 /*
- * Modern · badge · Sheen sweep. A light pass across every card, drawn as
- * an animated background layer on the card's own box — never a node, never
- * a pseudo-element, nothing that can leave the card. Reduced motion parks
- * the band mid-card, still visible.
+ * Modern · badge · Wax seal. A pressed wax mark beside the sign's
+ * headings, set a little crooked the way a real one lands.
  */
-.stall.att-sheen .item {
-    /* The design's band, not a 5% whisper: the owner's ruling is that the
-       project is honest, and a sheen nobody can see is a decoration sold
-       and not delivered. The design's tinted streak, verbatim. */
-    background-image: linear-gradient(
-        100deg,
-        transparent 38%,
-        rgba(219, 230, 251, 0.85) 50%,
-        transparent 62%
-    );
-    background-repeat: no-repeat;
-    background-size: 300% 100%;
-    background-position: -100% 0;
-    animation: att-sheen-pass 6s ease-in-out infinite;
-}
-
-@keyframes att-sheen-pass {
-    0%,
-    45% {
-        background-position: -100% 0;
-    }
-    80%,
-    100% {
-        background-position: 200% 0;
-    }
+.att-seal {
+    width: 50px;
+    height: 50px;
+    flex: none;
+    align-self: flex-start;
+    margin-top: 8px;
+    pointer-events: none;
+    rotate: -8deg;
+    background: url('decor/wax-seal.svg') no-repeat center / contain;
+    filter: drop-shadow(0 2px 3px rgba(20, 23, 26, 0.25));
 }
 
 /*
@@ -697,70 +660,71 @@ body {
 }
 
 /*
- * Rural · yard · Yard beetle. The strip is a reserved in-flow row of its own,
- * so the sprite has somewhere to be that is not on top of anything: the
- * specimen pinned it 96px off the bottom, which in production is wherever the
- * share code happens to sit. The bug travels by `left` within this box rather
- * than by a percentage transform, so its own box can never leave the strip.
+ * Rural · yard · Yard beetle, v2 (design round 2026-08-31: the owner
+ * called the oval-and-slashes art crude, and it was). The yard is a
+ * living strip — soil, a meadow of drawn tufts, seed heads and one
+ * flower — and the bug is a ladybug with a split shell, legs and
+ * antennae. The art ships as our own static SVG assets (fingerprinted,
+ * img-src 'self'); the crawl stays out here as CSS the stillness guard
+ * can see, so the flip-and-walk-home survives and reduced motion parks
+ * a fully drawn beetle. Inset margins, not full-bleed: the old rail
+ * read as a page break at 1280.
  */
 .att-beetle {
     position: relative;
     overflow: hidden;
-    height: 30px;
+    height: 48px;
+    margin: 10px 2px 14px;
+    --att-bug-trav: calc(100% - 50px);
     flex: none;
     pointer-events: none;
-    /* The yard itself: grass tufts along the bottom edge, in the look's ink. */
-    background-image: repeating-linear-gradient(
-        105deg,
-        color-mix(in srgb, var(--s-accent) 26%, transparent) 0 2px,
-        transparent 2px 9px
-    );
-    background-size: 100% 10px;
-    background-position: 0 100%;
-    background-repeat: no-repeat;
-    border-bottom: 1px dashed color-mix(in srgb, var(--s-muted) 45%, transparent);
+    background-image:
+        url('decor/beetle-yard.svg'),
+        radial-gradient(rgba(110, 66, 31, 0.35) 1px, transparent 1.3px),
+        linear-gradient(180deg, #cdb28c, #b79a73);
+    background-repeat: repeat-x, repeat, no-repeat;
+    background-size:
+        auto 38px,
+        9px 5px,
+        100% 7px;
+    background-position:
+        left bottom 5px,
+        left bottom,
+        left bottom;
 }
 
 .att-beetle-bug {
     position: absolute;
-    bottom: 7px;
-    left: 0;
-    width: 22px;
-    height: 14px;
+    left: 6px;
+    bottom: 6px;
+    width: 44px;
+    height: 29px;
     pointer-events: none;
-    border-radius: 50% 50% 44% 44%;
-    background: radial-gradient(
-        circle at 30% 35%,
-        color-mix(in srgb, var(--s-muted) 80%, var(--s-text)),
-        var(--s-text) 78%
-    );
-    box-shadow:
-        inset 0 0 0 1px color-mix(in srgb, var(--s-bg) 40%, transparent),
-        inset -6px 0 0 0 color-mix(in srgb, var(--s-bg) 25%, transparent);
-    animation: att-beetle-crawl 9s linear infinite;
+    background: url('decor/beetle-bug.svg') no-repeat center / contain;
+    animation: att-beetle-crawl 17s linear infinite;
 }
 
 @keyframes att-beetle-crawl {
     0% {
-        left: 0;
+        left: 6px;
         transform: scaleX(1);
     }
     46% {
-        left: calc(100% - 13px);
+        left: var(--att-bug-trav);
         transform: scaleX(1);
     }
-    /* The turn is a mirror, never a rotation: the specimen's `rotate(180deg)`
-       walks it home belly-up. */
+    /* The turn is a mirror, never a rotation: a rotate walks it home
+       belly-up. `left` for travel so the box never leaves the strip. */
     50% {
-        left: calc(100% - 13px);
+        left: var(--att-bug-trav);
         transform: scaleX(-1);
     }
     96% {
-        left: 0;
+        left: 6px;
         transform: scaleX(-1);
     }
     100% {
-        left: 0;
+        left: 6px;
         transform: scaleX(1);
     }
 }
@@ -3338,19 +3302,12 @@ textarea.paste-in {
         animation: none;
     }
 
-    /* Parked mid-card, still visible: paid decor never vanishes. */
-    .stall.att-sheen .item {
-        animation: none;
-        background-position: 50% 0;
-    }
-
     /* Round 3's movers, stilled in place — visible, never gone. The
        composed full-dress rules carry higher specificity than their
        single-row parents, so they are named here too — the stillness
        guard caught exactly this the day they were written. */
     .stall.att-aurora,
     .stall.att-confetti,
-    .stall.att-drift,
     .stall.att-rainfall.att-aurora,
     .stall.att-sunburst.att-confetti,
     .att-bunting,
