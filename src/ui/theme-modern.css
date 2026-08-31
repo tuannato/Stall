@@ -315,6 +315,19 @@
     color: var(--s-text);
 }
 
+/* The long-figure ladder, phones only — this look's own scale of its own
+   26px. Tier 3 sits on a full row and takes the tier-1 size back. */
+@media (max-width: 679.98px) {
+    .t-modern .item-head[data-price-tier='1'] .item-x,
+    .t-modern .item-head[data-price-tier='3'] .item-x {
+        font-size: 21px;
+    }
+
+    .t-modern .item-head[data-price-tier='2'] .item-x {
+        font-size: 17px;
+    }
+}
+
 .t-modern .item-from {
     text-transform: uppercase;
     font-size: 10.5px;

@@ -14,6 +14,7 @@ import {
     SHIPPED_THEMES,
     decodeTheme,
     themeVars,
+    tierCharCeilings,
 } from '../domain/theme';
 import type { Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
 import {
@@ -71,7 +72,7 @@ import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH } from './copy';
-import { renderStall, resetIconsForTests } from './render';
+import { priceTier, renderStall, resetIconsForTests } from './render';
 
 const PK =
     '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -4142,6 +4143,129 @@ describe('the-publish-sheet-carries-the-announcement', () => {
         const err = root.querySelector('[data-role="publish-invalid"]') as HTMLElement;
         expect(err.hidden).toBe(false);
         expect(err.textContent).toBe(copy.PUBLISH_ANNOUNCEMENT_INVALID);
+    });
+});
+
+describe('a-long-price-steps-down-before-it-moves-rows', () => {
+    /**
+     * The cut points are the contract between render and the tier rules in
+     * the theme sheets: the probe's name-floor rule holds them true against
+     * real layout, and this pins them against a casual re-tune. `from`
+     * rides the figure's line, so it counts (as two characters), and the
+     * ceilings are the look's own — Rural's tag chrome seats one fewer.
+     */
+    const MODERN = tierCharCeilings(DEFAULT_THEME_ID);
+    const RURAL = tierCharCeilings(RURAL_THEME_ID);
+
+    it('walks the ladder in order and only concedes the row at the end', () => {
+        expect(priceTier('1,200', false, MODERN)).toBe(0);
+        // The everyday partial: from + four figures stays at design size.
+        expect(priceTier('1,200', true, MODERN)).toBe(0);
+        expect(priceTier('1,000.01', false, MODERN)).toBe(1);
+        expect(priceTier('99,999.99', false, MODERN)).toBe(1);
+        expect(priceTier('99,999.99', true, MODERN)).toBe(2);
+        // The measured live defect: one letter of name per line.
+        expect(priceTier('100,000,000', false, MODERN)).toBe(2);
+        expect(priceTier('100,000,000', true, MODERN)).toBe(3);
+        expect(priceTier('999,999,999,999.99', false, MODERN)).toBe(3);
+    });
+
+    it('rural tiers the everyday partial its chrome cannot seat', () => {
+        // Measured in the gallery at 390px: `from 1,200` at Rural's design
+        // size left the name column 59px; one tier down it breathes.
+        expect(priceTier('1,200', true, RURAL)).toBe(1);
+        expect(priceTier('1,200', false, RURAL)).toBe(0);
+    });
+});
+
+describe('the-head-wears-the-tier-the-figure-earned', () => {
+    // Its own token: a second offer of BEANS would fold into one grouped
+    // card speaking for the cheapest ask, and the long figure would vanish.
+    const LONG_ID = '99'.repeat(32);
+    const LONG_META: TokenMeta = {
+        tokenId: LONG_ID,
+        name: 'Harvest Ledger',
+        ticker: 'HRVT',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const longOffer = (over: Partial<StallOffer>): StallOffer => ({
+        ...OFFER,
+        tokenId: LONG_ID,
+        // 10^10 sats = 100,000,000 XEC — the live screenshot's figure.
+        askedSats: 10_000_000_000n,
+        ...over,
+    });
+
+    it('stamps data-price-tier on the head, and only when earned', () => {
+        const { root } = paint(
+            idlePubkey({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [LONG_ID, LONG_META],
+                ]),
+                fetch: {
+                    kind: 'offers',
+                    offers: [
+                        OFFER,
+                        longOffer({ outpoint: { txid: 'ab'.repeat(32), outIdx: 1 } }),
+                    ],
+                },
+            }),
+        );
+        const plain = root.querySelector(`[data-focus-key="offer:${'ab'.repeat(32)}:0"]`)!;
+        const long = root.querySelector(`[data-focus-key="offer:${'ab'.repeat(32)}:1"]`)!;
+        // "1,200" with from: everyday, no attribute at all.
+        expect(plain.hasAttribute('data-price-tier')).toBe(false);
+        // "100,000,000" with from: past every legible size — its own row.
+        expect(long.getAttribute('data-price-tier')).toBe('3');
+    });
+
+    it('a whole-lot ask of the same figure steps down instead', () => {
+        const { root } = paint(
+            idlePubkey({
+                tokens: new Map([[LONG_ID, LONG_META]]),
+                fetch: {
+                    kind: 'offers',
+                    // askedAtoms == atoms: no `from`, two characters shorter.
+                    offers: [longOffer({ askedAtoms: 12n })],
+                },
+            }),
+        );
+        const head = root.querySelector('.item-head')!;
+        expect(head.getAttribute('data-price-tier')).toBe('2');
+    });
+});
+
+describe('every-shipped-look-sizes-every-price-tier', () => {
+    /**
+     * The tier sizes live in each theme sheet, next to that look's own
+     * `.item-x` literal — the emitted `--s-price-size` is shadowed by all
+     * three looks (the audit's PARTIAL table), so a base ladder on the var
+     * would be a 0.2px change on Rural. The cost of per-look rules is that
+     * a look can silently forget one and paint the full-size figure into a
+     * tier-2 column; this is what notices.
+     */
+    const LOOKS = ['modern', 'neo', 'rural'] as const;
+
+    it.each(LOOKS)('theme-%s sizes tiers 1, 2 and 3', (look) => {
+        const css = readFileSync(join(UI_DIR, `theme-${look}.css`), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            // Unwrap at-rule blocks: the tier rules live inside the phone
+            // media query, and a flat rule scan must not glue the first
+            // selector inside a block onto the block's own prelude.
+            .replace(/@media[^{]*\{/g, '');
+        const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+        for (const tier of ['1', '2', '3']) {
+            const sized = rules.some(
+                ([, selector, body]) =>
+                    selector!.includes(`.t-${look}`) &&
+                    selector!.includes(`[data-price-tier='${tier}']`) &&
+                    selector!.includes('.item-x') &&
+                    body!.includes('font-size'),
+            );
+            expect(sized, `theme-${look}.css sizes tier ${tier}`).toBe(true);
+        }
     });
 });
 

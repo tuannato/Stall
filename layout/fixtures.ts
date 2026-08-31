@@ -22,12 +22,20 @@ export const T1 = 'cd'.repeat(32);
 export const T2 = '11'.repeat(32);
 export const NFT = 'ee'.repeat(32);
 export const GROUP = 'aa'.repeat(32);
+/** The long-figure rows: one tier-2 card, one tier-3 card (see priceTier). */
+export const LONG = '33'.repeat(32);
+export const LONGER = '44'.repeat(32);
 export const OUT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
 
 /** A frozen instant, so a repainted screen is byte-identical to itself. */
 export const TRIED_AT_MS = 1_756_400_000_000;
 
-export const offer = (tokenId: string, outIdx: number, sats: bigint): StallOffer => ({
+export const offer = (
+    tokenId: string,
+    outIdx: number,
+    sats: bigint,
+    over?: Partial<StallOffer>,
+): StallOffer => ({
     outpoint: { txid: OUT.txid, outIdx },
     tokenId,
     atoms: 12n,
@@ -35,6 +43,7 @@ export const offer = (tokenId: string, outIdx: number, sats: bigint): StallOffer
     askedSats: sats,
     askedAtoms: 1n,
     priceNanoSatsPerAtom: sats * 1_000_000_000n,
+    ...over,
 });
 
 export const meta = (tokenId: string, name: string, type?: string): TokenMeta => ({
@@ -50,6 +59,11 @@ export const tokens = new Map<string, TokenMeta>([
     [T2, meta(T2, 'Green Tea', 'SLP_TOKEN_TYPE_FUNGIBLE')],
     [NFT, meta(NFT, 'Pixel #1', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
     [GROUP, meta(GROUP, 'Pixel Set')],
+    // Multi-word names on the long-figure rows on purpose: the defect this
+    // stresses is the name column collapsing under the price, and a short
+    // name hides it (the critic's Tea-vs-Crate false-positive finding).
+    [LONG, meta(LONG, 'Harvest Ledger', 'SLP_TOKEN_TYPE_FUNGIBLE')],
+    [LONGER, meta(LONGER, 'Century Flag #7', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
 ]);
 
 /** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
@@ -102,6 +116,12 @@ export const SCREENS: Record<string, StallView> = {
                 offer(T1, 3, 150_000n),
                 offer(T2, 1, 87_500n),
                 offer(NFT, 2, 50_000n),
+                // The measured defect, as rows: `100,000,000` XEC squeezed
+                // every name to a letter per line on the live origin. One
+                // whole-lot ask (no `from`, tier 2) and one partial (`from`
+                // pushes it past every legible size, tier 3).
+                offer(LONG, 4, 10_000_000_000n, { askedAtoms: 12n }),
+                offer(LONGER, 5, 10_000_000_000n),
             ],
         },
         // The P9 surfaces, measured where they live: the seller's notice

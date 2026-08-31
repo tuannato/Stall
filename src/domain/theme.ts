@@ -102,6 +102,15 @@ export type Shape = {
     areasD: string;
     colsM: string;
     colsD: string;
+    /**
+     * The same card when the asked figure is too long for the price column
+     * even at the smallest legible size (`data-price-tier="3"`): the tag
+     * takes a row of its own. Table-owned like every other track — the
+     * caret column is 16px on two looks and 14px on Rural, so a hardcoded
+     * base rule would silently widen one theme's track.
+     */
+    areasM3: string;
+    colsM3: string;
     itemsD: string;
     cardTextD?: string;
     cardItemsD?: string;
@@ -252,6 +261,27 @@ export const FONT_STACKS = [
  * all, so a seller who publishes it is asking for what they already had.
  */
 export const DEFAULT_THEME_ID = 0x01;
+
+/**
+ * How many characters of asked figure each look seats at design size, at
+ * tier 1, and at tier 2, on a phone — past the last ceiling the tag takes
+ * its own row. Data beside the look, not CSS: the ceilings pair with the
+ * tier sizes each theme sheet declares, and they differ because the chrome
+ * differs — Rural's tag spends ~39px on notch padding and border and sets
+ * a serif rate line, so it seats one character fewer at every step
+ * (measured in the gallery at 390px: `from 1,200` at design size left the
+ * name column 59px; one tier down it breathes at ~76px).
+ */
+const TIER_CHAR_CEILINGS: ReadonlyMap<number, readonly [number, number, number]> = new Map([
+    [0x01, [7, 9, 12]],
+    [0x02, [7, 9, 12]],
+    [0x03, [6, 8, 11]],
+]);
+
+/** Unknown ids wear the shipped default look, so they tier like it too. */
+export function tierCharCeilings(themeId: number): readonly [number, number, number] {
+    return TIER_CHAR_CEILINGS.get(themeId) ?? TIER_CHAR_CEILINGS.get(DEFAULT_THEME_ID)!;
+}
 export const NEO_CITY_THEME_ID = 0x02;
 export const RURAL_THEME_ID = 0x03;
 
@@ -321,6 +351,8 @@ export const DEFAULT_THEME: DecodedTheme = {
         areasD: '"ic name price caret"',
         colsM: '44px minmax(0, 1fr) auto 16px',
         colsD: 'var(--s-icon-d) minmax(0, 1fr) auto 16px',
+        areasM3: '"ic name caret" "price price price"',
+        colsM3: '44px minmax(0, 1fr) 16px',
         itemsD: 'minmax(0, 1fr)',
         signPadM: '24px 18px 18px',
         signPadD: '40px 34px 26px',
@@ -458,6 +490,8 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 areasD: '"ic name price caret"',
                 colsM: '44px minmax(0, 1fr) auto 16px',
                 colsD: 'var(--s-icon-d) minmax(0, 1fr) auto 16px',
+                areasM3: '"ic name caret" "price price price"',
+                colsM3: '44px minmax(0, 1fr) 16px',
                 itemsD: 'minmax(0, 1fr)',
                 signPadM: '20px 14px 16px',
                 signPadD: '30px 24px 20px',
@@ -595,11 +629,15 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 pricePadM: '8px 10px 8px 26px',
                 pricePadD: '8px 10px 8px 26px',
                 // The full dress rides the tag inline on the row — the
-                // stacked card was never its shape.
+                // stacked card was never its shape. Tier 3 is the one
+                // exception: a figure too long for any legible size takes
+                // its own row rather than crushing the name to a letter.
                 areasM: '"ic name price caret"',
                 areasD: '"ic name price caret"',
                 colsM: '48px minmax(0, 1fr) auto 14px',
                 colsD: 'var(--s-icon-d) minmax(0, 1fr) auto 14px',
+                areasM3: '"ic name caret" "price price price"',
+                colsM3: '48px minmax(0, 1fr) 14px',
                 itemsD: 'minmax(0, 1fr)',
                 signPadM: '22px 18px 17px',
                 signPadD: '34px 40px 26px',
@@ -858,6 +896,8 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-areas-d': s.areasD,
         '--s-cols-m': s.colsM,
         '--s-cols-d': s.colsD,
+        '--s-areas-m3': s.areasM3,
+        '--s-cols-m3': s.colsM3,
         '--s-items-d': s.itemsD,
         '--s-card-text-d': s.cardTextD ?? 'left',
         '--s-card-items-d': s.cardItemsD ?? 'stretch',

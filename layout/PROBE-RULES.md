@@ -60,6 +60,18 @@ nothing.
   `view.theme ?? DEFAULT_THEME` and never fetches, so door-under-Neo is a
   screen no visitor can reach — its red was a false alarm (Neo's mini ink
   over the door's light ground) and its green was budget spent on nothing.
+- **The name column never collapses under the price** (`.item-b` ≥ 64px).
+  The price column is an `auto` track, the name `minmax(0, 1fr)`, and the
+  asked figure may not wrap (§8) — measured live at 375px, a `1,000.01`
+  price held 189px and every name wore 40px; `100,000,000` left one letter
+  per line. No rule watched the name, so `pnpm test:layout` stayed green —
+  the absent rule, not an absent fixture, was the hole. `priceTier`'s type
+  steps, the tier-3 own-row grid and the glance-line `max-width` are the
+  fix this floor keeps honest. Measured on `.item-b`, the grid item: the
+  first draft measured `.item-n`, which shrinks to its text
+  (`align-items: flex-start`) and reads 26px on "Tea" with 140px of room —
+  a false red on short names. Cut points are tuned at this runner's 390px
+  mobile viewport; 375 is ~15px tighter and extrapolated, not measured.
 
 ## Rendered-pixel contrast (pass 4)
 

@@ -2,40 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "stall-dev",
+      "name": "preview",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "dev",
-        "--port",
-        "5173",
-        "--strictPort"
-      ],
-      "port": 5173
-    },
-    {
-      "name": "stall-preview",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "preview",
-        "--port",
-        "4173",
-        "--strictPort"
-      ],
+      "runtimeArgs": ["preview", "--port", "4173", "--strictPort"],
       "port": 4173
-    },
-    {
-      "name": "stall-pages",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "wrangler@latest",
-        "pages",
-        "dev",
-        "dist",
-        "--port",
-        "8830"
-      ],
-      "port": 8830
     }
   ]
 }

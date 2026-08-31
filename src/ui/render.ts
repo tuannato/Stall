@@ -57,6 +57,7 @@ import {
     SHIPPED_THEMES,
     decodeTheme,
     themeVars,
+    tierCharCeilings,
     type DecodedTheme,
 } from '../domain/theme';
 import { stallMark } from './brand';
@@ -160,6 +161,27 @@ function restoreFocus(root: HTMLElement, key: string | null): void {
     }
 }
 
+/**
+ * A look being tried on outranks the record's own on every paint — that is
+ * what lets the seller walk to the Shop tab and see the candidate
+ * storefront instead of snapping back. Previewing shows the rows
+ * regardless of holding (looking is free); only a published record ever
+ * needs the entitlement. One rule, one place: the frame and every card
+ * that must know which look is painting it (`priceTier`'s per-look
+ * ceilings) read it here.
+ */
+function activePreview(view: StallView): { themeId: number; attachmentFlags: number } | undefined {
+    return view.previewLook !== undefined &&
+        (view.previewLook.themeId !== (view.theme ?? DEFAULT_THEME).id ||
+            view.previewLook.attachmentFlags !== (view.attachmentFlags ?? 0))
+        ? view.previewLook
+        : undefined;
+}
+
+function paintedThemeId(view: StallView): number {
+    return activePreview(view)?.themeId ?? (view.theme ?? DEFAULT_THEME).id;
+}
+
 export function renderStall(
     root: HTMLElement,
     view: StallView,
@@ -171,17 +193,7 @@ export function renderStall(
     applyTitle(view);
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
-    // A look being tried on outranks the record's own on every paint —
-    // that is what lets the seller walk to the Shop tab and see the
-    // candidate storefront instead of snapping back. Previewing shows the
-    // rows regardless of holding (looking is free); only a published
-    // record ever needs the entitlement.
-    const previewed =
-        view.previewLook !== undefined &&
-        (view.previewLook.themeId !== (view.theme ?? DEFAULT_THEME).id ||
-            view.previewLook.attachmentFlags !== (view.attachmentFlags ?? 0))
-            ? view.previewLook
-            : undefined;
+    const previewed = activePreview(view);
     const theme = previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
     applyTheme(
         stall,
@@ -2174,10 +2186,19 @@ function offerRow(
         price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
     } else {
         const amount = el('span', 'item-a');
-        if (offer.askedAtoms < offer.atoms) {
+        const hasFrom = offer.askedAtoms < offer.atoms;
+        if (hasFrom) {
             amount.append(el('span', 'item-from', copy.PRICE_FROM));
         }
-        const asked = el('span', 'item-x', formatXec(offer.askedSats));
+        const figure = formatXec(offer.askedSats);
+        // The figure's dress for the width it has — set on the head, which
+        // owns the grid the tier rules re-cut, per the look actually being
+        // painted (a try-on included). Desktop never reads it.
+        const tier = priceTier(figure, hasFrom, tierCharCeilings(paintedThemeId(view)));
+        if (tier > 0) {
+            head.setAttribute('data-price-tier', String(tier));
+        }
+        const asked = el('span', 'item-x', figure);
         asked.setAttribute('data-role', 'price');
         amount.append(asked);
         // The unit rides the amount's own baseline row — "from 1,200 XEC"
@@ -2219,6 +2240,36 @@ function offerRow(
         card.append(itemDetail(view, listing));
     }
     return card;
+}
+
+/**
+ * Which dress the asked figure wears for the width it has, on a phone. The
+ * price column is an `auto` track, so it grows to the figure — which cannot
+ * wrap (§8: the number the covenant encodes, whole) — and the name column
+ * is the one that pays. Tiers 1–2 step the type down; each look states its
+ * own tier sizes in its own sheet, at its own scale. Tier 3 concedes that
+ * no legible size fits and gives the tag a row of its own (`--s-areas-m3`).
+ * The supplementary lines never join this arithmetic: rate, fiat and lots
+ * carry a `max-width` in stall.css and wrap, because a glance-line two rows
+ * tall is fine and a name two letters wide is not.
+ *
+ * Character count, not measurement — render never reads layout. The
+ * ceilings are per look (`tierCharCeilings`, data beside the theme table:
+ * Rural's tag chrome seats one character fewer), and the probe's
+ * name-floor rule is what holds them true on every shipped look; `from`
+ * rides the figure's own line, so it counts as two characters. Desktop has
+ * the width and none of the rules read the attribute there.
+ */
+export function priceTier(
+    figure: string,
+    hasFrom: boolean,
+    ceilings: readonly [number, number, number],
+): 0 | 1 | 2 | 3 {
+    const chars = figure.length + (hasFrom ? 2 : 0);
+    if (chars <= ceilings[0]) return 0;
+    if (chars <= ceilings[1]) return 1;
+    if (chars <= ceilings[2]) return 2;
+    return 3;
 }
 
 /**

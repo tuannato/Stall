@@ -367,6 +367,33 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
     }
 
+    /*
+     * The name column never collapses under the price.
+     *
+     * The price column is an `auto` track and the name column is
+     * `minmax(0, 1fr)`, so a long asked figure — which may not wrap, §8 —
+     * takes whatever it wants and the name pays. Measured on the live origin
+     * at 375px: a `1,000.01` price held the column at 189px and every name
+     * wore 40px; at `100,000,000` a name rendered one letter per line.
+     * `priceTier` (type steps, then a row of its own) and the max-width on
+     * the glance-lines are the fix; this floor is what keeps their cut
+     * points honest on every look. Measured on `.item-b` — the grid item —
+     * because `.item-n` shrinks to its text (`align-items: flex-start`) and
+     * would read 26px on a short name with 140px of room.
+     */
+    for (const nameCol of surface.querySelectorAll('.item-b')) {
+        const box = nameCol.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) {
+            continue;
+        }
+        if (box.width < 64) {
+            fail(
+                'the name column collapsed under the price',
+                `${describe(nameCol)} is ${Math.round(box.width)}px wide`,
+            );
+        }
+    }
+
     for (const pseudo of positionedPseudos(surface)) {
         fail(
             'a positioned pseudo-element cannot be measured',

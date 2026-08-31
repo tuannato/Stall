@@ -1210,6 +1210,42 @@ body {
 }
 
 /*
+ * The name column's defence, phones only — desktop has the width and none
+ * of this applies there (a bare rule here would beat the 680px block on
+ * specificity and stack cards inside an 860px column for no reason).
+ *
+ * Two mechanisms, split by who may wrap. The asked figure may not (§8), so
+ * `priceTier` in render steps its type down and, past any legible size,
+ * hands the tag a row of its own from the shipped table. The supplementary
+ * lines may: rate, fiat and lots are glance-lines, and a cap on their width
+ * is what stops a long rate from pinning the `auto` track at full width
+ * after the figure already shrank — measured, `≈ 100,000,000 XEC/token`
+ * held the column at ~190px while the name wore one letter per line.
+ * Guarded by the probe's name-floor rule, not by this comment.
+ */
+@media (max-width: 679.98px) {
+    .item-p .item-rate,
+    .item-p .item-fiat,
+    .item-p .item-lots {
+        max-width: 176px;
+    }
+
+    .item-head[data-price-tier='3'] {
+        grid-template-areas: var(--s-areas-m3);
+        grid-template-columns: var(--s-cols-m3);
+    }
+
+    /* Its natural width at the row's end, never stretched: Rural's notch,
+       hole and sway are drawn on the box, and a stretched box would swing
+       a 300px tag under the name above it. */
+    .item-head[data-price-tier='3'] .item-p {
+        justify-self: end;
+        max-width: 100%;
+        margin-top: 6px;
+    }
+}
+
+/*
  * Base motion (round 3): the look's own pulse and sheen, var-named
  * keyframes we ship. The sheen is a background layer on the card's box —
  * no pseudo-element, nothing that can leave it.
