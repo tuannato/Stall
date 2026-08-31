@@ -56,6 +56,17 @@ export async function loadManifest(
     chronik: ManifestChronik,
     stall: { address: string; hash: string },
     hintTxid?: string,
+    /**
+     * A pre-read of `chronik.address(stall.address).history(0,
+     * HISTORY_PAGE_SIZE)` — that call and nothing else — shared by the
+     * initial stall open so one page is not fetched three times. It
+     * substitutes for the address head request only: the shorter-index
+     * choice (spam resistance, see `loadDescriptions`) still runs on the
+     * numbers, and a walk that picks the lokad branch never touches it
+     * beyond `numTxs`. Live re-reads pass nothing — what was missed while
+     * a socket was down is unknown, and a stale page must not answer.
+     */
+    addrFirstPage?: Promise<HistoryPage>,
 ): Promise<ManifestLookup> {
     const hash = stall.hash.toLowerCase();
     const broken = { seen: false };
@@ -84,7 +95,7 @@ export async function loadManifest(
     // one did.
     let walked: { best?: LoadedManifest; truncated: boolean };
     try {
-        walked = await walkShorter(chronik, stall.address, hash, broken);
+        walked = await walkShorter(chronik, stall.address, hash, broken, addrFirstPage);
     } catch {
         walked = { truncated: true };
     }
@@ -118,11 +129,12 @@ async function walkShorter(
     address: string,
     hash: string,
     broken: { seen: boolean },
+    addrFirstPage?: Promise<HistoryPage>,
 ): Promise<{ best?: LoadedManifest; truncated: boolean }> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STL1_HEX);
     const [addrPage, lokadPage] = await Promise.all([
-        addrEp.history(0, HISTORY_PAGE_SIZE),
+        addrFirstPage ?? addrEp.history(0, HISTORY_PAGE_SIZE),
         lokadEp.history(0, HISTORY_PAGE_SIZE),
     ]);
 

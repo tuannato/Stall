@@ -41,6 +41,7 @@ import type { DecodedTheme } from './domain/theme';
 import {
     agoraOfferReader,
     createChronik,
+    HISTORY_PAGE_SIZE,
     loadManifest,
     loadOffers,
     loadTokenMeta,
@@ -1026,10 +1027,22 @@ async function loadCurrent(): Promise<AppState> {
      * use: the offers branch below can return before either is awaited, and a
      * promise that rejects with nobody listening is an unhandled rejection.
      */
-    const descriptionsSoon = loadDescriptions(chronik, { address, hash }).catch(
+    /**
+     * Both walks below head the same address history, and each compares it
+     * against its own lokad index — so page 0 of the address is one answer
+     * asked twice in the same instant. Shared as a promise, not a cache:
+     * live re-reads make their own requests. No `.catch` here — the
+     * descriptions walk consumes it synchronously, so a rejection always
+     * has a handler, and both loaders degrade exactly as they would had
+     * their own copy of the request failed (same client, same failover).
+     * A round-trip politeness to the index, not a speed-up: all four head
+     * requests already flew concurrently.
+     */
+    const addrPageSoon = chronik.address(address).history(0, HISTORY_PAGE_SIZE);
+    const descriptionsSoon = loadDescriptions(chronik, { address, hash }, addrPageSoon).catch(
         () => undefined,
     );
-    const manifestSoon = loadManifest(chronik, { address, hash }, hint).catch(
+    const manifestSoon = loadManifest(chronik, { address, hash }, hint, addrPageSoon).catch(
         () => undefined,
     );
 

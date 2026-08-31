@@ -65,9 +65,11 @@ const EMPTY: DescriptionLookup = {
 export async function loadDescriptions(
     chronik: ManifestChronik,
     seller: { address: string; hash: string },
+    /** Same contract as `loadManifest`'s: the address head request only. */
+    addrFirstPage?: Promise<HistoryPage>,
 ): Promise<DescriptionLookup> {
     try {
-        return await walk(chronik, seller.address, seller.hash);
+        return await walk(chronik, seller.address, seller.hash, addrFirstPage);
     } catch {
         // The offers are the shop. A failed description read is a shop with no
         // descriptions, never a shop that did not paint.
@@ -79,11 +81,12 @@ async function walk(
     chronik: ManifestChronik,
     address: string,
     hash: string,
+    addrFirstPage?: Promise<HistoryPage>,
 ): Promise<DescriptionLookup> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STLD_HEX);
     const [addrPage, lokadPage] = await Promise.all([
-        addrEp.history(0, HISTORY_PAGE_SIZE),
+        addrFirstPage ?? addrEp.history(0, HISTORY_PAGE_SIZE),
         lokadEp.history(0, HISTORY_PAGE_SIZE),
     ]);
 

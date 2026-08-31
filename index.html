@@ -14,6 +14,17 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Warm the data path while the script downloads: the first chronik
+         request otherwise pays DNS+TLS *after* boot, inside the one stage
+         everything else waits on. First host only — constructor order is the
+         failover order, so the others are usually never dialled. `crossorigin`
+         matches the anonymous CORS pool fetch/axios use; the icon host serves
+         plain <img> (no-cors), so its preconnect must not carry it. Fonts are
+         deliberately not preloaded: only Modern's stack downloads Inter, and
+         an unconditional preload would tax every Neo and Rural stall 48KB. -->
+    <link rel="preconnect" href="https://chronik-native1.fabien.cash" crossorigin />
+    <link rel="preconnect" href="https://api.coingecko.com" crossorigin />
+    <link rel="preconnect" href="https://icons.stall.cash" />
     <!-- Open Graph / Twitter. Without a wallet the shared link is the whole
          product (CLAUDE.md §9), so the unfurl has to say what the page is.
          The image is the shipped lockup at the platform-standard 1200x630. -->

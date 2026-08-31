@@ -152,6 +152,53 @@ describe('descriptions-are-not-lost-to-the-shorter-index', () => {
     });
 });
 
+describe('the-shorter-index-still-decides-the-walk', () => {
+    /**
+     * The stall open shares one pre-read of the address's page 0 between
+     * this walk and the manifest's (`addrFirstPage`). The trap the sharing
+     * must not spring: "use it as the walk's first page" would walk the
+     * address while the code believes it walked the STLD index — the
+     * shorter-index rule is spam resistance (see the module comment), so
+     * the substitution covers the head request and nothing else.
+     */
+    it('a prefetched busy address still sends the walk down the lokad', async () => {
+        const walked: string[] = [];
+        const prefetch = Promise.resolve({ txs: [], numTxs: 400, numPages: 8 });
+        const out = await loadDescriptions(
+            chronikWith({
+                lokadNumTxs: 0,
+                lokadTxs: [
+                    tx({ txid: '01'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'Beans')] }),
+                ],
+                walked,
+            }),
+            { address: 'ecash:qq', hash: HASH },
+            prefetch,
+        );
+        expect(out.descriptions.get(TOKEN_A)).toBe('Beans');
+        // The head request was the shared page; the walk was the lokad's own.
+        expect(walked).not.toContain('addr:0');
+        expect(walked).toContain('lokad:0');
+    });
+
+    it('a prefetched short address is page 0 itself, fetched by nobody', async () => {
+        const walked: string[] = [];
+        const prefetch = Promise.resolve({
+            ...{ numTxs: 1, numPages: 1 },
+            txs: [tx({ txid: '02'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'Beans')] })],
+        });
+        const out = await loadDescriptions(
+            // The fake's own address page is empty: finding the record
+            // proves the walk read the shared page, not a second fetch.
+            chronikWith({ addressTxs: [], addressNumTxs: 1, lokadNumTxs: 9000, walked }),
+            { address: 'ecash:qq', hash: HASH },
+            prefetch,
+        );
+        expect(out.descriptions.get(TOKEN_A)).toBe('Beans');
+        expect(walked).not.toContain('addr:0');
+    });
+});
+
 describe('a-description-counts-only-when-the-stall-signed-it', () => {
     it('ignores a record anyone else put on chain about this token', () => {
         return load(
