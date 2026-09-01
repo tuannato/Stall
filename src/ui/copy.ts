@@ -55,7 +55,14 @@ export const PUBLISH_THEME_LABEL = 'Look';
  * says who does the signing, which is the whole point of the handoff.
  */
 export const PUBLISH_OPEN_CASHTAB = 'Sign with Cashtab';
-export const PUBLISH_OPEN_PAY = 'Sign with another wallet';
+/**
+ * "App", because "another wallet" alone collides head-on with
+ * PUBLISH_MUST_SIGN two lines under it: there "another wallet" is the thing
+ * that buys a worthless record, here it meant another *application* holding
+ * the same stall wallet. One phrase carrying both meanings on one sheet is a
+ * trap; the label now names the app and MUST_SIGN legitimizes it outright.
+ */
+export const PUBLISH_OPEN_PAY = 'Sign with another wallet app';
 /**
  * Decoration, in the sheet the seller already publishes from. The copy has to
  * carry three states without four controls: a row nobody can buy yet, a row on
@@ -84,6 +91,8 @@ export const wearing = (labels: readonly string[]): string =>
 export const FITTINGS_STALL: string | undefined = undefined;
 
 export const PUBLISH_CLOSE = 'Close';
+/** The top close wears the glyph; the word rides its aria-label. */
+export const PUBLISH_X = '✕';
 
 /**
  * The signer is the whole security story here, and Cashtab cannot tell them:
@@ -95,7 +104,7 @@ export const PUBLISH_LEDE =
 
 /** Paying the right address is not enough: the record counts by who signed. */
 export const PUBLISH_MUST_SIGN =
-    'Sign it with this stall\u2019s own wallet. Paying from another wallet buys a record that will never be this stall\u2019s.';
+    'Sign it with this stall\u2019s own wallet, whatever app holds it. A record signed by any other wallet will never be this stall\u2019s.';
 
 export const PUBLISH_WALLET_SHOWS_HEX =
     'Your wallet will show these bytes rather than the words above. That is the same record, written the way the chain stores it.';
@@ -660,6 +669,12 @@ export const DESC_ONE_LINE =
     'A description is one line. Remove the line break, and the rest is fine.';
 
 export const DESC_REMOVE = 'Remove this description';
+/**
+ * The removal's second road wore PUBLISH_OPEN_PAY verbatim, so two identical
+ * pills signed two different records a few lines apart. Every control is
+ * named for what it does (§2): this one removes.
+ */
+export const DESC_REMOVE_PAY = 'Remove with another wallet app';
 export const DESC_REMOVE_LEDE =
     'This publishes a record that erases what you wrote. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
 export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';

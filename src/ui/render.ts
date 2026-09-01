@@ -1646,7 +1646,7 @@ function describeSection(
     // chain keeps every record ever published, and the copy says so.
     const remove = el('a', 'mini another', copy.DESC_REMOVE);
     remove.setAttribute('data-role', 'describe-remove');
-    const removePay = el('a', 'mini another', copy.PUBLISH_OPEN_PAY);
+    const removePay = el('a', 'mini another', copy.DESC_REMOVE_PAY);
     removePay.setAttribute('data-role', 'describe-remove-pay');
     for (const link of [remove, removePay]) {
         link.rel = 'noopener noreferrer';
@@ -1844,7 +1844,25 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', copy.PUBLISH_TITLE);
-    wrap.append(el('div', 'item-n', copy.PUBLISH_TITLE));
+    /*
+     * The way out sits at both ends. The sheet is 92vh on a phone, so the
+     * scrim is a sliver and Escape needs a keyboard — before this header, a
+     * seller had to scroll past two whole record editors to find the only
+     * visible close. In flow, never positioned: an absolutely placed control
+     * would land in the probe's decoration sweep for nothing.
+     */
+    const head = el('div', 'sheet-head');
+    head.append(el('div', 'item-n', copy.PUBLISH_TITLE));
+    if (handlers.onClosePublish !== undefined) {
+        const x = el('button', 'mini another sheet-x', copy.PUBLISH_X);
+        x.type = 'button';
+        x.setAttribute('data-role', 'publish-close-top');
+        x.setAttribute('data-focus-key', 'publish-close-top');
+        x.setAttribute('aria-label', copy.PUBLISH_CLOSE);
+        x.addEventListener('click', handlers.onClosePublish);
+        head.append(x);
+    }
+    wrap.append(head);
     wrap.append(el('p', 'fine', copy.PUBLISH_LEDE));
 
     const address = view.address;
@@ -2177,14 +2195,22 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.append(qrBox);
     wrap.append(web, app);
 
+    // A second record, in the same place a seller already came to publish one.
+    wrap.append(describeSection(view, address, offersOf(view)));
+
     // Signing happens in another app. The socket now watches the stall address
     // as well as the agora group, so a record published from that wallet does
     // re-read on its own — but only while this page still has a connection, and
     // only if the wallet that signed it is this stall's. Neither is ours to
-    // promise, which is why the copy above states them as conditions and this
+    // promise, which is why the copy states them as conditions and this
     // control exists to ask outright. It runs a full refresh, so the sheet
     // closes and the answer is the stall itself.
+    //
+    // At the sheet's foot, after BOTH record editors, because the refresh
+    // re-reads both records alike — mid-sheet it claimed the settings block
+    // alone and stranded the close below an editor the seller may never open.
     wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
+    const foot = el('div', 'sheet-foot');
     const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
     check.type = 'button';
     check.setAttribute('data-role', 'publish-check');
@@ -2192,10 +2218,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     check.addEventListener('click', () => {
         handlers.onRetry();
     });
-    wrap.append(check);
-
-    // A second record, in the same place a seller already came to publish one.
-    wrap.append(describeSection(view, address, offersOf(view)));
+    foot.append(check);
 
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
     close.type = 'button';
@@ -2204,7 +2227,8 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     if (handlers.onClosePublish !== undefined) {
         close.addEventListener('click', handlers.onClosePublish);
     }
-    wrap.append(close);
+    foot.append(close);
+    wrap.append(foot);
     refresh();
     return wrap;
 }

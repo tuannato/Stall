@@ -48,6 +48,7 @@ import {
     PUBLISH_SAME_LOOK,
     PUBLISH_AFTER_SIGNING,
     PUBLISH_CHECK_NOW,
+    PUBLISH_CLOSE,
     UNRESOLVED_TITLE,
     UNRESOLVED_BODY,
     OPEN_IN_CASHTAB,
@@ -74,7 +75,7 @@ import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
-import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
+import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { priceTier, renderStall, resetIconsForTests } from './render';
 
@@ -2494,6 +2495,59 @@ describe('sheet-closes-on-escape', () => {
     });
 });
 
+describe('the-way-out-is-at-both-ends-of-the-sheet', () => {
+    /**
+     * The sheet is 92vh on a phone — the scrim is a sliver and Escape needs a
+     * keyboard — and it holds two whole record editors, so a close only at the
+     * foot meant scrolling everything to leave. The head carries a close the
+     * seller can always reach; the foot keeps the quiet one beside the
+     * ask-outright control, after both editors, because the refresh it offers
+     * re-reads both records alike.
+     */
+    it('closes from the header without scrolling, and from the foot after the editors', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+            }),
+            h,
+        );
+        const top = root.querySelector(
+            '.sheet-head [data-role="publish-close-top"]',
+        ) as HTMLButtonElement;
+        expect(top, 'the header holds a close').not.toBeNull();
+        expect(top.getAttribute('aria-label')).toBe(PUBLISH_CLOSE);
+        top.click();
+        expect(h.onClosePublish).toHaveBeenCalledTimes(1);
+
+        const bottom = root.querySelector(
+            '.sheet-foot [data-role="publish-close"]',
+        ) as HTMLButtonElement;
+        expect(bottom, 'the foot keeps its close').not.toBeNull();
+        bottom.click();
+        expect(h.onClosePublish).toHaveBeenCalledTimes(2);
+
+        // The ask-outright control sits in the same foot, after both record
+        // editors — the refresh serves the description record too.
+        const check = root.querySelector(
+            '.sheet-foot [data-role="publish-check"]',
+        ) as HTMLElement;
+        expect(check).not.toBeNull();
+        const describe = root.querySelector('[data-role="describe"]');
+        if (describe !== null) {
+            expect(
+                describe.compareDocumentPosition(check) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+                'the foot trails the description editor',
+            ).toBeTruthy();
+        }
+    });
+});
+
 describe('danger-is-reserved-for-what-is-wrong', () => {
     /**
      * The two handoff sentences are the most load-bearing text on the buyer's
@@ -3192,14 +3246,36 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
     });
 
     it('gives each act its own words', () => {
-        // The four labels are distinct, so no two controls read as the same one.
+        // Every wallet-bound label is distinct, so no two controls read as
+        // the same one. The removal's pay link once wore PUBLISH_OPEN_PAY
+        // verbatim — two identical pills signing two different records.
         const labels = [
             OPEN_IN_CASHTAB,
             PUBLISH_OPEN_CASHTAB,
             PUBLISH_OPEN_PAY,
             LIST_IN_CASHTAB_LINK,
+            DESC_REMOVE,
+            DESC_REMOVE_PAY,
         ];
         expect(new Set(labels).size).toBe(labels.length);
+    });
+
+    it('the-removal-road-names-the-removal', () => {
+        // The two pay-bridge links sign different records, so they must not
+        // share a label however they share a mechanism.
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                overlay: { kind: 'publish' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+            }),
+        );
+        const writePay = root.querySelector('[data-role="describe-pay"]')!;
+        const removePay = root.querySelector('[data-role="describe-remove-pay"]')!;
+        expect(writePay.textContent).toBe(PUBLISH_OPEN_PAY);
+        expect(removePay.textContent).toBe(DESC_REMOVE_PAY);
+        expect(removePay.textContent).not.toBe(writePay.textContent);
     });
 });
 

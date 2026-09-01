@@ -2255,6 +2255,37 @@ textarea.paste-in {
     gap: 11px;
 }
 
+/*
+ * The sheet's two ends. The head pairs the title with a close the seller can
+ * reach without scrolling — in flow, so the probe never counts it as a
+ * decoration; each look dresses it through its own `.mini` rule. The foot
+ * pairs the ask-outright control with the quiet close.
+ */
+.sheet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sheet-head .item-n {
+    min-width: 0;
+}
+
+.sheet-x {
+    line-height: 1;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 auto;
+}
+
+.sheet-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
 .demo-soon {
     margin-top: 4px;
     padding: 12px 14px;
