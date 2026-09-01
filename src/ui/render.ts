@@ -49,6 +49,7 @@ import type {
     StallView,
     TokenMeta,
 } from '../domain/state';
+import { MAX_STALL_EVENTS } from '../domain/state';
 import {
     DEFAULT_THEME,
     DEFAULT_THEME_ID,
@@ -3253,12 +3254,20 @@ function paintActivity(
     if (events.length === 0) {
         body.append(el('p', 'mid-p', copy.ACTIVITY_QUIET));
     } else {
-        const list = el('div', 'events');
+        // An <ol>, because the feed IS an ordered list — a reader hears
+        // "list, N items" instead of a run of unrelated lines.
+        const list = el('ol', 'events');
         list.setAttribute('data-role', 'events');
         for (const event of events) {
             list.append(eventRow(event));
         }
         body.append(list);
+        if (events.length >= MAX_STALL_EVENTS) {
+            // A full ring has already dropped its oldest rows in silence.
+            // The lede promises "what this page has seen arrive", and a
+            // rolled ring has seen more than it shows — say so.
+            body.append(el('p', 'fine', copy.activityCapped(MAX_STALL_EVENTS)));
+        }
     }
     stall.append(body);
 }
@@ -3271,7 +3280,7 @@ function paintActivity(
  * row must not grow a control the visitor did not ask for.
  */
 function eventRow(event: StallEvent): HTMLElement {
-    const row = el('div', 'event');
+    const row = el('li', 'event');
     row.append(el('span', 'event-time', formatTriedAt(event.seenAtMs)));
     row.append(el('span', 'event-kind', eventLabel(event.kind, event.book)));
     row.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
@@ -3529,12 +3538,28 @@ function initials(name: string): string {
     return [...name].slice(0, 2).join('').toUpperCase();
 }
 
+const MONTHS = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+/**
+ * A clock time alone is a claim the stamp is from today. An activity row and
+ * a cached failure both outlive midnight in a tab left open, so a stamp from
+ * another day names that day.
+ */
 function formatTriedAt(ms: number): string {
     const d = new Date(ms);
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     const ss = String(d.getSeconds()).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
+    const time = `${hh}:${mm}:${ss}`;
+    const now = new Date();
+    const sameDay =
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+    return sameDay ? time : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${time}`;
 }
 
 function applyTitle(view: StallView): void {

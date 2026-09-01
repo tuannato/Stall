@@ -17,6 +17,7 @@ import {
     tierCharCeilings,
 } from '../domain/theme';
 import type { Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
+import { MAX_STALL_EVENTS } from '../domain/state';
 import {
     COPY_LINK,
     COPY_LINK_FALLBACK,
@@ -74,7 +75,7 @@ import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
-import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH } from './copy';
+import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { priceTier, renderStall, resetIconsForTests } from './render';
 
 const PK =
@@ -3815,6 +3816,67 @@ describe('an-unwatched-stall-does-not-show-an-empty-feed', () => {
         const quiet = paint(offersView([OFFER], undefined, { panel: 'activity' }));
         expect(quiet.root.textContent).toContain(ACTIVITY_QUIET);
         expect(quiet.root.textContent).not.toContain(ACTIVITY_GAPS);
+    });
+
+    /**
+     * A clock time alone claims the stamp is from today. A tab left open
+     * outlives midnight, so a row from another day names that day, and a row
+     * from today stays a bare time — the short form is the common case.
+     */
+    it('a-feed-row-from-another-day-names-its-day', () => {
+        const today = new Date();
+        today.setHours(12, 0, 0, 0);
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [
+                    { txid: 'ab'.repeat(32), kind: 'book', seenAtMs: today.getTime() },
+                    { txid: 'cd'.repeat(32), kind: 'other', seenAtMs: yesterday.getTime() },
+                ],
+            }),
+        );
+        const times = [...root.querySelectorAll('.event-time')].map(
+            (n) => n.textContent,
+        );
+        expect(times[0]).toBe('12:00:00');
+        expect(times[1]).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 12:00:00$/);
+    });
+
+    /**
+     * A full ring has dropped its oldest rows in silence, and the lede's
+     * "what this page has seen arrive" would then overclaim. The line
+     * appears only when the ring is at its cap.
+     */
+    it('a-full-ring-says-older-rows-rolled-off', () => {
+        const capped = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: Array.from({ length: MAX_STALL_EVENTS }, (_, i) => ({
+                    txid: i.toString(16).padStart(2, '0').repeat(32),
+                    kind: 'other' as const,
+                    seenAtMs: 1_756_400_000_000 - i * 1000,
+                })),
+            }),
+        );
+        expect(capped.root.textContent).toContain(activityCapped(MAX_STALL_EVENTS));
+        // The feed is a real list now: an <ol> with one <li> per arrival.
+        const list = capped.root.querySelector('ol[data-role="events"]');
+        expect(list).not.toBeNull();
+        expect(list!.querySelectorAll('li.event').length).toBe(MAX_STALL_EVENTS);
+
+        const few = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [
+                    { txid: 'ab'.repeat(32), kind: 'book', seenAtMs: 1_756_400_000_000 },
+                ],
+            }),
+        );
+        expect(few.root.textContent).not.toContain(
+            activityCapped(MAX_STALL_EVENTS),
+        );
     });
 });
 

@@ -250,9 +250,8 @@ export type StallView = {
     /**
      * The transactions this page has watched arrive, newest first.
      *
-     * **Nothing renders this.** It is the substrate a live activity feed would
-     * render, laid down now so the feed is one render rather than a second pass
-     * over the socket. Capped at `MAX_STALL_EVENTS`, deduped by txid, held in
+     * The Activity tab renders this ring newest-first, and says when the cap
+     * has rolled older rows off. Capped at `MAX_STALL_EVENTS`, deduped by txid, held in
      * memory for one painted stall and **never persisted**: §2 lets
      * `localStorage` hold display preferences and nothing that grows.
      *

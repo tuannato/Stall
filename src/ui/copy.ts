@@ -334,6 +334,12 @@ export const EVENT_BOOK = 'The offer book moved';
 export const EVENT_BOOK_CONSUMED = 'An offer was consumed';
 export const EVENT_BOOK_APPEARED = 'An offer appeared';
 export const EVENT_BOOK_BOTH = 'An offer was consumed and another appeared';
+/**
+ * A full ring has dropped its oldest rows in silence, and the lede's "what
+ * this page has seen arrive" would then overclaim. One line, only when full.
+ */
+export const activityCapped = (kept: number): string =>
+    `Only the newest ${kept} arrivals are kept — older ones have rolled off this page.`;
 export const EVENT_SETTINGS = 'Stall settings published';
 export const EVENT_DESCRIPTION = 'A token description published';
 export const EVENT_TOKEN_MOVE = 'A decoration token moved';

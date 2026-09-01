@@ -1806,6 +1806,11 @@ textarea.paste-in {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* An <ol> for the reader's "list, N items"; the browser's list dress
+       (markers, indent) is not part of any look. */
+    list-style: none;
+    margin: 0;
+    padding: 0;
 }
 
 .event {
