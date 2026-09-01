@@ -293,6 +293,22 @@ export const STUDIO_LEDE =
 export const STUDIO_OPEN_SETTINGS = 'Name this stall, choose a look';
 export const STUDIO_SETTINGS_HINT =
     'One small record signs your name, look, decorations and token descriptions — built here, signed in your wallet.';
+/*
+ * Section titles in the third person: the panel is public — anyone can open
+ * the Studio tab — so "Your stall record" over a stranger's screen would be
+ * the page claiming to know who is reading it. The lede two lines up already
+ * says whose tools these are.
+ */
+export const STUDIO_SEC_RECORD = 'The stall record';
+export const STUDIO_SEC_SHARE = 'Share this stall';
+/*
+ * The browser preference carries no heading — one toggle is not a section —
+ * and this line says where the preference lives, in the register of the
+ * comment above OPEN_BY_DEFAULT: what the control does, not what it feels
+ * like.
+ */
+export const STUDIO_DEFAULT_HINT =
+    'Kept in this browser only — it sets which stall the bare domain opens here. The shared link is unchanged.';
 
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';

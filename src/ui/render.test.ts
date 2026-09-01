@@ -30,6 +30,9 @@ import {
     HOME_DEMO_SOON,
     UNRESOLVABLE_NEXT,
     SHARE_LEDE,
+    STUDIO_DEFAULT_HINT,
+    STUDIO_SEC_RECORD,
+    STUDIO_SEC_SHARE,
     HOME_PASTE_INVALID,
     HOME_PASTE_SUBMIT,
     HOME_TITLE,
@@ -657,6 +660,40 @@ describe('copy-link', () => {
         expect(studio.textContent).toContain(COPY_LINK);
     });
 
+    /**
+     * The copy action sits above the code on every screen that paints the
+     * control: the studio, and the waiting-screen footers (`stallFooter`
+     * defaults `share` to true off the pubkey route — the unresolved screen,
+     * and opening/unreachable reached from it; `unresolvable` opts out). The
+     * 240px QR used to come first and push the field below the fold, which
+     * made the most-used action the least reachable — and nothing would have
+     * gone red if the order regressed, so this is the pin.
+     */
+    it('the-copy-action-precedes-the-code-on-every-screen-that-shares', () => {
+        const screens = [
+            paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' })).root,
+            paint({
+                route: { kind: 'unresolved', address: ADDR },
+                overlay: { kind: 'idle' },
+                address: ADDR,
+                tokens: new Map(),
+            }).root,
+        ];
+        for (const root of screens) {
+            const share = root.querySelector('[data-role="copy-link"]')!;
+            expect(share, 'the screen paints the share control').not.toBeNull();
+            const field = share.querySelector('.share-url')!;
+            const qr = share.querySelector('svg.share-qr')!;
+            expect(field).not.toBeNull();
+            expect(qr).not.toBeNull();
+            expect(
+                field.compareDocumentPosition(qr) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+                'the field comes before the code',
+            ).toBeTruthy();
+        }
+    });
+
     it('falls back to a selectable field when clipboard is missing', () => {
         const original = navigator.clipboard;
         Object.defineProperty(navigator, 'clipboard', {
@@ -679,6 +716,54 @@ describe('copy-link', () => {
                 configurable: true,
                 value: original,
             });
+        }
+    });
+});
+
+describe('the-studio-groups-its-tools', () => {
+    /**
+     * Two titled sections — the record, then the share tools — and the browser
+     * preference trailing with no heading: it is a preference of this browser,
+     * not a seller tool, so it comes last and its fine line says where it
+     * lives. The heads carry their own data-role so a query for the shop's
+     * `section-<category>` heads can never collect a studio head.
+     */
+    it('paints the record, then the share tools, then the browser preference', () => {
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }),
+        );
+        const secs = [...root.querySelectorAll('.studio-sec')];
+        expect(secs.map((s) => s.getAttribute('data-role'))).toEqual([
+            'studio-sec-record',
+            'studio-sec-share',
+        ]);
+        expect(secs[0]!.querySelector('.section-title')?.textContent).toBe(
+            STUDIO_SEC_RECORD,
+        );
+        expect(secs[1]!.querySelector('.section-title')?.textContent).toBe(
+            STUDIO_SEC_SHARE,
+        );
+        // Each tool sits in its group: the publish launcher in the record,
+        // the copy-link and the poster in share, the toggle in neither.
+        expect(
+            secs[0]!.querySelector('[data-role="studio-open-publish"]'),
+        ).not.toBeNull();
+        expect(secs[1]!.querySelector('[data-role="copy-link"]')).not.toBeNull();
+        expect(secs[1]!.querySelector('[data-role="open-poster"]')).not.toBeNull();
+        const pref = root.querySelector('.studio-browser')!;
+        expect(pref).not.toBeNull();
+        expect(
+            pref.querySelector('[data-role="studio-default-stall"]'),
+        ).not.toBeNull();
+        expect(pref.textContent).toContain(STUDIO_DEFAULT_HINT);
+        expect(
+            pref.compareDocumentPosition(secs[1]!) &
+                Node.DOCUMENT_POSITION_PRECEDING,
+            'the preference trails the share tools',
+        ).toBeTruthy();
+        // A studio head never answers a shop-category query.
+        for (const head of root.querySelectorAll('.section-head')) {
+            expect(head.getAttribute('data-role')).toBeNull();
         }
     });
 });

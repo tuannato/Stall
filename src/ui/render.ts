@@ -3043,7 +3043,24 @@ function stallTabs(view: StallView, handlers: StallHandlers): HTMLElement {
  * modal publish sheet the footer control does, so the scrim, the tab trap,
  * and the mid-compose guard all keep their meaning (PLAN-REDESIGN P3).
  * Anyone can look — only this stall's wallet can sign, and the copy says so.
+ *
+ * Two titled sections — the record, then the share tools — wearing the shop's
+ * own `.section-head` chrome so each look's section voice applies, but their
+ * own data-role: `sectionHead` stamps `section-<category>`, and a studio head
+ * answering a shop-category query would poison any test that walks them.
+ * The browser preference trails with no heading of its own: one toggle is not
+ * a section (the "single drawer" rule on `.section-head`'s own comment), and
+ * it comes last because it is a preference of this browser, not a seller tool.
  */
+function studioSection(role: string, title: string): HTMLElement {
+    const sec = el('section', 'studio-sec');
+    sec.setAttribute('data-role', `studio-sec-${role}`);
+    const head = el('div', 'section-head');
+    head.append(el('h2', 'section-title', title));
+    sec.append(head);
+    return sec;
+}
+
 function paintStudio(
     stall: HTMLElement,
     view: StallView,
@@ -3058,8 +3075,10 @@ function paintStudio(
             signPinOf(view, handlers),
         ),
     );
-    const body = el('main', 'stall-body');
-    body.append(el('p', 'fine', copy.STUDIO_LEDE));
+    const body = el('main', 'stall-body studio');
+
+    const record = studioSection('record', copy.STUDIO_SEC_RECORD);
+    record.append(el('p', 'fine', copy.STUDIO_LEDE));
     const canPublish =
         view.address !== undefined &&
         view.address !== '' &&
@@ -3071,14 +3090,22 @@ function paintStudio(
         open.setAttribute('data-focus-key', 'studio-open-publish');
         const go = handlers.onOpenPublish!;
         open.addEventListener('click', () => go());
-        body.append(open);
-        body.append(el('p', 'fine', copy.STUDIO_SETTINGS_HINT));
+        record.append(open);
+        record.append(el('p', 'fine', copy.STUDIO_SETTINGS_HINT));
     } else {
-        body.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
+        record.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
     }
+    body.append(record);
+
+    const share = studioSection('share', copy.STUDIO_SEC_SHARE);
+    share.append(shareControl());
+    posterControl(share, view);
+    body.append(share);
+
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
     if (raw !== undefined && onToggle !== undefined) {
+        const pref = el('div', 'studio-browser');
         const isDefault = view.isDefaultStall === true;
         const btn = el(
             'button',
@@ -3090,10 +3117,10 @@ function paintStudio(
         btn.setAttribute('data-focus-key', 'studio-default-stall');
         btn.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
         btn.addEventListener('click', () => onToggle(raw));
-        body.append(btn);
+        pref.append(btn);
+        pref.append(el('p', 'fine', copy.STUDIO_DEFAULT_HINT));
+        body.append(pref);
     }
-    body.append(shareControl());
-    posterControl(body, view);
     stall.append(body);
 }
 
@@ -3637,19 +3664,7 @@ function shareControl(): HTMLElement {
     // rather than sitting unlabelled at the foot.
     wrap.append(el('p', 'fine', copy.SHARE_LEDE));
     const url = shareUrl();
-    // A link too long to scan gets the copy field and a line saying why. Never
-    // a code: past ~2,300 characters the library throws, and this runs inside
-    // the footer of a tree `renderStall` has already emptied — so the throw
-    // took the whole page down and every repaint took it down again.
-    if (fitsQr(url)) {
-        const qr = qrSvg(url, copy.SHARE_QR_ALT);
-        qr.classList.add('share-qr');
-        wrap.append(qr);
-    } else {
-        const note = el('p', 'fine', copy.SHARE_QR_TOO_LONG);
-        note.setAttribute('data-role', 'qr-too-long');
-        wrap.append(note);
-    }
+    const row = el('div', 'share-row');
     const field = el('input', 'share-url');
     field.type = 'text';
     field.readOnly = true;
@@ -3677,7 +3692,25 @@ function shareControl(): HTMLElement {
         }
         fallback();
     });
-    wrap.append(field, btn);
+    // The copy action before the code: the field and its button share a
+    // wrapping row (the fallback label more than doubles the button — wrap,
+    // never crush the field it tells the reader to select), and the QR comes
+    // after, so the common action is never below the fold behind the slab.
+    row.append(field, btn);
+    wrap.append(row);
+    // A link too long to scan gets the copy field and a line saying why. Never
+    // a code: past ~2,300 characters the library throws, and this runs inside
+    // the footer of a tree `renderStall` has already emptied — so the throw
+    // took the whole page down and every repaint took it down again.
+    if (fitsQr(url)) {
+        const qr = qrSvg(url, copy.SHARE_QR_ALT);
+        qr.classList.add('share-qr');
+        wrap.append(qr);
+    } else {
+        const note = el('p', 'fine', copy.SHARE_QR_TOO_LONG);
+        note.setAttribute('data-role', 'qr-too-long');
+        wrap.append(note);
+    }
     return wrap;
 }
 
