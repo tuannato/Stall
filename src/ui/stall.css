@@ -1470,9 +1470,10 @@ body {
 .desc-section {
     display: flex;
     flex-direction: column;
-    gap: 9px;
-    padding-top: 11px;
-    border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 16px;
+    border-top: 2px solid color-mix(in srgb, var(--s-muted) 18%, transparent);
 }
 
 textarea.paste-in {
@@ -1802,43 +1803,122 @@ textarea.paste-in {
 }
 
 /* The activity feed: watched transactions, newest first. */
+/*
+ * The "watching" line as a live chip (owner's design, 2026-09-01): a small
+ * pulse dot says the page is listening. Its own class, never `:first-child`
+ * — a positional selector would decorate whatever paragraph happens to lead
+ * another screen's body.
+ */
+.activity-lede {
+    padding: 10px 12px;
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: var(--s-radius);
+    color: var(--s-text);
+    font-size: 12px;
+}
+
+.activity-lede::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--s-accent);
+    margin-right: 8px;
+    animation: pnl-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes pnl-pulse {
+    50% {
+        opacity: 0.3;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .activity-lede::before {
+        animation: none;
+    }
+}
+
+/*
+ * The feed as a timeline (owner's design, 2026-09-01): a rail behind accent
+ * dots, rows unboxed. The rail is a background layer on the list itself —
+ * NEVER a positioned pseudo-element, which the probe refuses outright
+ * (`a positioned pseudo-element cannot be measured`; the door's counter
+ * legs hit the same wall). Longhands on purpose: a theme file recolors the
+ * rail by overriding background-image alone, and a `background:` shorthand
+ * there would silently kill the geometry set here.
+ */
 .events {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
     /* An <ol> for the reader's "list, N items"; the browser's list dress
        (markers, indent) is not part of any look. */
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: 0 0 0 2px;
+    background-image: linear-gradient(
+        color-mix(in srgb, var(--s-muted) 25%, transparent) 0 0
+    );
+    background-repeat: no-repeat;
+    background-position: 8.5px 16px;
+    background-size: 2px calc(100% - 32px);
 }
 
 .event {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 10px;
-    align-items: baseline;
-    padding: 9px 12px;
-    background: var(--s-surface);
-    border: var(--s-card-border);
-    border-radius: var(--s-radius);
+    grid-template-columns: 15px minmax(0, 1fr) auto;
+    grid-template-areas:
+        'dot kind txid'
+        'dot time txid';
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+    padding: 10px 2px;
     font-size: 13px;
 }
 
+/* The dot: in flow on its grid area, so the probe has a real box to see. */
+.event::before {
+    content: '';
+    grid-area: dot;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--s-accent);
+    border: 2px solid var(--s-bg);
+    box-sizing: content-box;
+    justify-self: center;
+}
+
 .event-time {
+    grid-area: time;
     color: var(--s-muted);
-    font-size: 11.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
 }
 
 .event-kind {
+    grid-area: kind;
     min-width: 0;
+    font-weight: 620;
+    font-size: 13.5px;
+    color: var(--s-text);
 }
 
 .event-txid {
+    grid-area: txid;
+    align-self: center;
     color: var(--s-muted);
-    font-size: 11.5px;
+    /* 11px, not the design's 10.5: `muted-text-is-not-microscopic` floors
+       the weakest colour's type, and the guard outranks half a pixel. */
+    font-size: 11px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: color-mix(in srgb, var(--s-muted) 12%, transparent);
+    border-radius: 999px;
+    padding: 3px 8px;
 }
 
 .addr {
@@ -2059,13 +2139,54 @@ textarea.paste-in {
 }
 
 /*
- * The record as the wallet will show it. Hex has no spaces, so without this it
- * runs off the side of the sheet — and this is the one screen where a seller
- * reads what they are about to sign.
+ * The record as the wallet will show it. Hex has no spaces, so without the
+ * break it runs off the side of the sheet — and this is the one screen where
+ * a seller reads what they are about to sign. Capped and scrollable (owner's
+ * design, 2026-09-01): a long record folds into a window instead of a wall,
+ * and the probe's box clamp already reads a node past its own scroll edge.
  */
 .publish-hex {
-    font-family: var(--s-font);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    line-height: 1.65;
+    letter-spacing: 0.02em;
+    background: color-mix(in srgb, var(--s-shade) 5%, var(--s-surface));
+    border: var(--s-card-border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    max-height: 92px;
+    overflow: auto;
+    word-break: break-all;
     overflow-wrap: anywhere;
+}
+
+/* The sheet's own polish (owner's design, 2026-09-01). Scoped to the sheet:
+   the door wears .paste-label too and keeps its own dress. */
+.sheet .paste-label {
+    font-size: 12.5px;
+    font-weight: 640;
+    color: var(--s-text);
+}
+
+.sheet .paste-in:focus {
+    outline: 2px solid var(--s-accent);
+    outline-offset: 1px;
+}
+
+.sheet .decor {
+    gap: 10px;
+    padding: 12px;
+    background: color-mix(in srgb, var(--s-accent) 5%, var(--s-surface));
+    border: 1px solid color-mix(in srgb, var(--s-accent) 20%, transparent);
+    border-radius: var(--s-radius);
+}
+
+.sheet .item-n {
+    font-weight: 700;
+}
+
+.sheet .buy + .mini {
+    align-self: center;
 }
 
 .fine {
@@ -2118,7 +2239,37 @@ textarea.paste-in {
 .share {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
+}
+
+/*
+ * The ticket (owner's design, 2026-09-01): the scannable pair — code above,
+ * field below — boxed in a dashed stub like the tear-off slip it is. The QR
+ * seats first VISUALLY via `order`; the DOM keeps the field first, so
+ * keyboard and reader order still lead with the copy action
+ * (`the-copy-action-precedes-the-code-on-every-screen-that-shares` pins the
+ * DOM, and this is why it pins the DOM and not the paint).
+ */
+.share-ticket {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+    padding: 14px 12px;
+    border: 1.5px dashed color-mix(in srgb, var(--s-muted) 40%, transparent);
+    border-radius: var(--s-radius);
+    background: color-mix(in srgb, var(--s-surface) 55%, var(--s-bg));
+}
+
+.share-ticket .share-row {
+    width: 100%;
+}
+
+.share-ticket .share-qr {
+    order: -1;
+    max-width: 172px;
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--s-shade) 18%, transparent);
 }
 
 /*
@@ -2142,25 +2293,69 @@ textarea.paste-in {
 }
 
 /*
- * The studio's titled groups. No box of their own: no design has drawn this
- * screen, and the audit showed every shipped look overrides the `.item` card
- * chrome — a var-skeleton box here would sit flat beside each look's dressed
- * cards. The `.section-head` rule and title, which every theme file already
- * dresses, carry the grouping instead.
+ * The studio's titled groups, boxed (owner's design, 2026-09-01 — the design
+ * now draws this screen, so the earlier "no box" caution is retired: §6, the
+ * var layer is never a cage for screens the design did draw). Neo squares
+ * the corners in its own sheet.
  */
+.stall-body.studio {
+    gap: 16px;
+}
+
 .studio-sec {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: calc(var(--s-radius) + 2px);
+    box-shadow: var(--s-card-shadow);
+    padding: 16px 15px;
+}
+
+.studio-sec .section-head {
+    margin-top: 0;
+}
+
+.studio-sec .buy {
+    margin: 2px 0;
+}
+
+/* The poster row: words left, control right, split from the ticket above. */
+.poster-launch {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 16%, transparent);
+}
+
+.poster-launch .fine {
+    margin: 0;
+}
+
+.poster-launch .mini {
+    white-space: nowrap;
+    align-self: center;
 }
 
 /* The trailing browser preference: a toggle and the line saying where the
-   preference lives. No heading — one control is not a section. */
+   preference lives. No heading — one control is not a section; a dashed
+   stub says "aside" where the solid cards say "tool". */
 .studio-browser {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    margin-top: 6px;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 2px;
+    padding: 12px 14px;
+    border: 1.5px dashed color-mix(in srgb, var(--s-muted) 32%, transparent);
+    border-radius: var(--s-radius);
+}
+
+.studio-browser .mini {
+    align-self: flex-start;
 }
 
 /*
@@ -2210,14 +2405,27 @@ textarea.paste-in {
     padding: 8px;
 }
 
+/* The signing code as a ticket too (owner's design, 2026-09-01), centred in
+   its dashed stub with the lede beneath it. */
 .publish-qr {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    align-items: flex-start;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 14px 12px;
+    border: 1.5px dashed color-mix(in srgb, var(--s-muted) 40%, transparent);
+    border-radius: var(--s-radius);
+    background: color-mix(in srgb, var(--s-surface) 55%, var(--s-bg));
+}
+
+.publish-qr .fine {
+    text-align: center;
+    max-width: 36ch;
 }
 
 .publish-qr .qr {
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--s-shade) 18%, transparent);
     max-width: min(100%, 320px);
     padding: 10px;
 }
@@ -2266,6 +2474,15 @@ textarea.paste-in {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+    /* Stuck to the sheet's own scroll (owner's design, 2026-09-01): the way
+       out rides along instead of living only at scroll 0. Sticky, never
+       fixed — it stays inside the sheet's box, and the probe's decoration
+       sweep collects only absolute/fixed nodes. Opaque ground, or the form
+       scrolls through the title. */
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--s-bg);
 }
 
 .sheet-head .item-n {
@@ -2719,35 +2936,31 @@ textarea.paste-in {
     }
 
     /*
-     * The share group becomes two columns — words and field left, code right
-     * — only when there IS a code: the too-long branch paints a note instead
-     * of `.share-qr`, and auto-placement would strand it in the empty column.
+     * The ticket lies sideways at desk width (owner's design, 2026-09-01):
+     * code left, field right. Auto-placement puts the order:-1 QR in the
+     * first column and the row in the second — and when the too-long note
+     * stands in for the code, the same two columns seat note and row
+     * without a special case.
      */
-    .studio .share:has(> .share-qr) {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        /* The QR spans both rows; without a shape the spanned height is
-           split evenly between two auto rows, opening a void between the
-           lede and the field. First row hugs the lede, the slack falls
-           below the field instead. */
-        grid-template-rows: auto 1fr;
-        column-gap: 20px;
-        row-gap: 6px;
-        align-items: start;
+    .share-ticket {
+        grid-template-columns: auto minmax(0, 1fr);
+        justify-items: start;
+        align-items: center;
     }
 
-    .studio .share:has(> .share-qr) > .fine {
-        grid-column: 1;
+    .share-ticket .share-qr {
+        max-width: 150px;
     }
 
-    .studio .share:has(> .share-qr) > .share-row {
-        grid-column: 1;
-        align-self: start;
+    /* The browser preference lies down too: words beside the toggle. */
+    .studio-browser {
+        flex-direction: row;
+        align-items: center;
+        gap: 14px;
     }
 
-    .studio .share:has(> .share-qr) > .share-qr {
-        grid-column: 2;
-        grid-row: 1 / span 2;
+    .studio-browser .fine {
+        flex: 1;
     }
 }
 

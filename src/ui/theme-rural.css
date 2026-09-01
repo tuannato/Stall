@@ -642,6 +642,15 @@
     color: var(--s-muted);
 }
 
+/* — Panels redesign (owner's design, 2026-09-01): Rural draws its tickets
+   the way it draws everything, in a heavier dashed hand. */
+.t-rural .share-ticket,
+.t-rural .publish-qr,
+.t-rural .studio-browser {
+    border-width: 1.5px;
+    border-style: dashed;
+}
+
 /*
  * THIS BLOCK STAYS LAST IN THE FILE — same rule and same measured reason
  * as stall.css's own reduce block: it wins same-specificity fights by

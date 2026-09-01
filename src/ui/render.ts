@@ -3269,7 +3269,11 @@ function paintActivity(
         return;
     }
     if (view.watchedSinceMs !== undefined) {
-        body.append(el('p', 'fine', copy.activitySince(formatTriedAt(view.watchedSinceMs))));
+        // Its own class, never `:first-child`: the design's live chip must not
+        // leak onto whatever paragraph happens to lead another screen's body.
+        body.append(
+            el('p', 'fine activity-lede', copy.activitySince(formatTriedAt(view.watchedSinceMs))),
+        );
     }
     if ((view.activityGaps ?? 0) > 0) {
         body.append(el('p', 'note', copy.ACTIVITY_GAPS));
@@ -3744,9 +3748,12 @@ function shareControl(): HTMLElement {
     // The copy action before the code: the field and its button share a
     // wrapping row (the fallback label more than doubles the button — wrap,
     // never crush the field it tells the reader to select), and the QR comes
-    // after, so the common action is never below the fold behind the slab.
+    // after IN THE DOM — keyboard and reader order — while the ticket's CSS
+    // may seat the code first visually (owner's design, 2026-09-01).
     row.append(field, btn);
-    wrap.append(row);
+    // The ticket: the scannable pair boxed together, the lede outside it.
+    const ticket = el('div', 'share-ticket');
+    ticket.append(row);
     // A link too long to scan gets the copy field and a line saying why. Never
     // a code: past ~2,300 characters the library throws, and this runs inside
     // the footer of a tree `renderStall` has already emptied — so the throw
@@ -3754,12 +3761,13 @@ function shareControl(): HTMLElement {
     if (fitsQr(url)) {
         const qr = qrSvg(url, copy.SHARE_QR_ALT);
         qr.classList.add('share-qr');
-        wrap.append(qr);
+        ticket.append(qr);
     } else {
         const note = el('p', 'fine', copy.SHARE_QR_TOO_LONG);
         note.setAttribute('data-role', 'qr-too-long');
-        wrap.append(note);
+        ticket.append(note);
     }
+    wrap.append(ticket);
     return wrap;
 }
 

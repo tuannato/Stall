@@ -728,6 +728,39 @@
     color: #dff6ff;
 }
 
+/* — Panels redesign (owner's design, 2026-09-01): Neo squares the studio
+   cards and tickets, tints them its own teal, and glows the timeline. The
+   rail recolor overrides background-image ALONE — stall.css owns the
+   geometry longhands, and a `background:` shorthand here would kill them. */
+.t-neo .studio-sec {
+    border-radius: 0;
+}
+
+.t-neo .share-ticket,
+.t-neo .publish-qr,
+.t-neo .studio-browser {
+    border-radius: 0;
+    border: 1px solid rgba(44, 233, 224, 0.4);
+    background: rgba(44, 233, 224, 0.04);
+}
+
+.t-neo .events {
+    background-image: linear-gradient(rgba(44, 233, 224, 0.3) 0 0);
+}
+
+.t-neo .event::before {
+    border-radius: 0;
+    box-shadow: 0 0 10px rgba(44, 233, 224, 0.6);
+}
+
+.t-neo .event-txid {
+    border-radius: 0;
+}
+
+.t-neo .publish-hex {
+    border-radius: 0;
+}
+
 /*
  * THIS BLOCK STAYS LAST IN THE FILE — same rule and same measured reason
  * as stall.css's own reduce block: it wins same-specificity fights by
