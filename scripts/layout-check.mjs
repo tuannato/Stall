@@ -29,6 +29,20 @@ const VIEWPORTS = [
     { name: 'mobile', width: 390, height: 844 },
     { name: 'desktop', width: 1280, height: 900 },
 ];
+/**
+ * The OBS Browser Source, and the only viewport the broadcast screens are
+ * measured at. The overlay is sized for it — plate 252px, QR 204px, price
+ * 39px — so certifying that chrome at 390px measures pixels nobody paints,
+ * and the page widths skip it for the same reason in reverse. The page owns
+ * the split (`screensForViewport` in `layout/probe.ts`); this passes the flag
+ * and then checks the answer, because a filter nobody audits is how a pass
+ * measures nothing and prints a tick.
+ */
+const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
+const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
+
+const probeUrl = (vp, extra = '') =>
+    `http://localhost:${PORT}/layout/probe.html?viewport=${vp === CANVAS ? 'canvas' : 'page'}${extra}`;
 const PORT = process.env.LAYOUT_PORT ?? '4319';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9339';
 const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
@@ -288,6 +302,86 @@ function worstContrastInBox(img, target, textColor) {
     return worst;
 }
 
+/**
+ * Flatten a capture that kept its alpha onto one flat ground — what OBS does
+ * with the stream running behind the overlay, at the two extremes a streamer
+ * can hand it. PNG alpha is unpremultiplied (measured: a 92% plate comes back
+ * `255,255,255,235`, not `235,235,235,235`), so this is the ordinary
+ * source-over blend and nothing has to be undone first.
+ */
+function compositeOver(img, level) {
+    const out = Buffer.allocUnsafe(img.data.length);
+    for (let i = 0; i < img.data.length; i += 4) {
+        const a = img.data[i + 3] / 255;
+        out[i] = Math.round(img.data[i] * a + level * (1 - a));
+        out[i + 1] = Math.round(img.data[i + 1] * a + level * (1 - a));
+        out[i + 2] = Math.round(img.data[i + 2] * a + level * (1 - a));
+        out[i + 3] = 255;
+    }
+    return { ...img, data: out };
+}
+
+/**
+ * The alpha the capture actually carries outside the plates. This is the
+ * assertion that keeps the composite from being theatre: with no background
+ * override Chrome emits colour type 2 flattened onto white (measured), and
+ * every "over black" figure would then be sampled against a white page while
+ * the line said otherwise.
+ */
+function alphaOutside(img, opaque) {
+    let min = 255;
+    let clear = 0;
+    let total = 0;
+    for (let y = 0; y < img.height; y += 4) {
+        for (let x = 0; x < img.width; x += 4) {
+            if (
+                opaque.some(
+                    (b) => x >= b.x - 2 && x <= b.x + b.w + 2 && y >= b.y - 2 && y <= b.y + b.h + 2,
+                )
+            ) {
+                continue;
+            }
+            const a = img.data[(y * img.width + x) * 4 + 3];
+            min = Math.min(min, a);
+            total += 1;
+            if (a === 0) clear += 1;
+        }
+    }
+    return { min, clear, total };
+}
+
+/** One painted combination, with the glyphs blanked and the frame settled. */
+async function contrastPrepare(cdp, sessionId, screen, theme, wornAll) {
+    const r = await cdp.send(
+        'Runtime.evaluate',
+        {
+            expression:
+                `(async () => { ` +
+                `const out = window.__contrastPrepare(` +
+                `${JSON.stringify(screen)}, ${theme}, ${wornAll}); ` +
+                // The self-hosted face swaps metrics when it lands and the
+                // fit-content dock re-centres with it — boxes taken before the
+                // swap sample a neighbour's ground.
+                `await document.fonts.ready; ` +
+                `await new Promise((res) => ` +
+                `requestAnimationFrame(() => requestAnimationFrame(res))); ` +
+                `return JSON.stringify(out); })()`,
+            awaitPromise: true,
+            returnByValue: true,
+        },
+        sessionId,
+    );
+    if (r.exceptionDetails) {
+        throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+    }
+    return JSON.parse(r.result.value);
+}
+
+async function captureShot(cdp, sessionId) {
+    const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId);
+    return decodePng(Buffer.from(shot.data, 'base64'));
+}
+
 const chromeBin = findChrome();
 if (chromeBin === undefined) {
     console.error(
@@ -326,6 +420,18 @@ let failed = false;
 // invitation. If this grows again, prune the matrix instead.
 const RUNTIME_CEILING_S = 150;
 const startedAt = Date.now();
+/*
+ * Each pass says what it cost. The budget rule is "prune the matrix before
+ * raising the number", and the first session to hit the ceiling had to guess
+ * which pass to prune — these are the numbers that guess should have been.
+ */
+let lastStamp = Date.now();
+const took = () => {
+    const now = Date.now();
+    const s = (now - lastStamp) / 1000;
+    lastStamp = now;
+    return `${s.toFixed(1)}s`;
+};
 try {
     run('npx', ['vite', 'build', '--logLevel', 'error']);
     server = spawn('npx', ['vite', 'preview', '--port', PORT, '--strictPort'], {
@@ -353,7 +459,8 @@ try {
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     await sleep(3000); // The preview server is still coming up.
 
-    for (const vp of VIEWPORTS) {
+    console.log(`  build, preview and browser: ${took()}`);
+    for (const vp of ALL_VIEWPORTS) {
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
             { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
@@ -361,7 +468,7 @@ try {
         );
         let report;
         try {
-            report = await readVerdict(cdp, sessionId, `http://localhost:${PORT}/layout/probe.html`);
+            report = await readVerdict(cdp, sessionId, probeUrl(vp));
         } catch (err) {
             console.error(`✗ ${vp.name}: ${err.message}`);
             failed = true;
@@ -377,12 +484,32 @@ try {
             failed = true;
             continue;
         }
+        /*
+         * The split, audited rather than trusted. The overlay screens belong to
+         * the canvas pass and nothing else does; a filter that quietly answered
+         * "no screens" would print a tick for a pass that measured nothing, and
+         * one that answered "all of them" would certify 252px plates at 390px.
+         */
+        const overlayScreens = await evalJson(cdp, sessionId, 'window.__noDecorScreens');
+        const ran = report.screensMeasured ?? [];
+        const isCanvas = vp === CANVAS;
+        const strays = ran.filter((name) => overlayScreens.includes(name) !== isCanvas);
+        if (ran.length === 0 || strays.length > 0 || (isCanvas && ran.length !== overlayScreens.length)) {
+            failed = true;
+            console.error(
+                `✗ ${vp.name} (${measured}): measured ${ran.length} screen(s)` +
+                    (strays.length > 0 ? ` including ${strays.join(', ')}` : '') +
+                    ` — the viewport split measured the wrong set.`,
+            );
+            continue;
+        }
+        const spent = took();
         if (report.failures.length === 0) {
-            console.log(`✓ ${vp.name} (${measured}): every screen, every look`);
+            console.log(`✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}`);
             continue;
         }
         failed = true;
-        console.error(`✗ ${vp.name} (${measured}): ${report.failures.length} failure(s)`);
+        console.error(`✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}`);
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
         }
@@ -394,43 +521,61 @@ try {
      * screens are re-measured — the media doubles a run, and a still page is
      * the page already measured above.
      */
-    const mobile = VIEWPORTS[0];
-    await cdp.send(
-        'Emulation.setDeviceMetricsOverride',
-        { width: mobile.width, height: mobile.height, deviceScaleFactor: 1, mobile: false },
-        sessionId,
-    );
     await cdp.send(
         'Emulation.setEmulatedMedia',
         { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] },
         sessionId,
     );
-    try {
-        const rm = await readVerdict(
-            cdp,
+    /*
+     * The animating screens, each at the width it is painted at. `broadcast`
+     * is here because `broadcast.css` is a fifth sheet with its own reduce
+     * block and its own two keyframes (`bc-in`, `bc-pulse`) — a block nothing
+     * had ever executed — and it is measured on the canvas because that is the
+     * only viewport its screens run at. The fixture carries `broadcastStepped`
+     * and `broadcastPulse` so both classes are on the tree; without them this
+     * pass would still print a tick while stilling nothing.
+     */
+    const REDUCED = [
+        { vp: VIEWPORTS[0], screens: 'offers,publish' },
+        { vp: CANVAS, screens: 'broadcast' },
+    ];
+    for (const pass of REDUCED) {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: pass.vp.width, height: pass.vp.height, deviceScaleFactor: 1, mobile: false },
             sessionId,
-            `http://localhost:${PORT}/layout/probe.html?screens=offers,publish`,
         );
-        // The page's own answer, not the request: emulation that silently did
-        // not apply is how 500px once passed as 390.
-        if (rm.reducedMotion !== true) {
-            failed = true;
-            console.error('✗ reduced-motion: the page never saw the media feature.');
-        } else if ((rm.screensMeasured ?? []).length !== 2) {
-            failed = true;
-            console.error('✗ reduced-motion: the pass measured nothing — vacuous green.');
-        } else if (rm.failures.length === 0) {
-            console.log('✓ reduced-motion (offers, publish): every look');
-        } else {
-            failed = true;
-            console.error(`✗ reduced-motion: ${rm.failures.length} failure(s)`);
-            for (const f of rm.failures) {
-                console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+        const wanted = pass.screens.split(',').length;
+        const label = `reduced-motion (${pass.screens.replace(/,/g, ', ')} @${pass.vp.name})`;
+        try {
+            const rm = await readVerdict(cdp, sessionId, probeUrl(pass.vp, `&screens=${pass.screens}`));
+            // The page's own answer, not the request: emulation that silently
+            // did not apply is how 500px once passed as 390, and a screen list
+            // that measured the wrong width is the same failure.
+            if (rm.reducedMotion !== true) {
+                failed = true;
+                console.error(`✗ ${label}: the page never saw the media feature.`);
+            } else if (rm.viewport !== pass.vp.width) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: asked for ${pass.vp.width}px and the page measured ${rm.viewport}px.`,
+                );
+            } else if ((rm.screensMeasured ?? []).length !== wanted) {
+                failed = true;
+                console.error(`✗ ${label}: the pass measured nothing — vacuous green.`);
+            } else if (rm.failures.length === 0) {
+                console.log(`✓ ${label}: every look — ${took()}`);
+            } else {
+                failed = true;
+                console.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${took()}`);
+                for (const f of rm.failures) {
+                    console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                }
             }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
         }
-    } catch (err) {
-        failed = true;
-        console.error(`✗ reduced-motion: ${err.message}`);
     }
     await cdp.send('Emulation.setEmulatedMedia', { features: [] }, sessionId);
 
@@ -447,80 +592,65 @@ try {
     try {
         let boxes = 0;
         const dim = [];
-        for (const vp of VIEWPORTS) {
+        for (const vp of ALL_VIEWPORTS) {
             await cdp.send(
                 'Emulation.setDeviceMetricsOverride',
                 { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
                 sessionId,
             );
-            await cdp.send(
-                'Page.navigate',
-                { url: `http://localhost:${PORT}/layout/probe.html?screens=` },
-                sessionId,
-            );
+            await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
             await waitForFlag(cdp, sessionId, '__probeReady');
-            const screens = await evalJson(cdp, sessionId, 'window.__screens');
+            const screens = await evalJson(cdp, sessionId, 'window.__contrastScreens');
             const themes = await evalJson(cdp, sessionId, 'window.__themes');
+            const overlayScreens = await evalJson(cdp, sessionId, 'window.__noDecorScreens');
             for (const screen of screens) {
+                /*
+                 * The overlay wears nothing, so its worn half is the same paint
+                 * measured twice — and the loop is SKIPPED rather than allowed
+                 * to `continue` on zero targets, because `__contrastPrepare` is
+                 * where the cost is: a full paint, `document.fonts.ready` and
+                 * two frames. Door-under-Neo is the pattern that pays it.
+                 */
+                const wornStates = overlayScreens.includes(screen) ? [false] : [false, true];
                 for (const theme of themes) {
-                    for (const wornAll of [false, true]) {
+                    for (const wornAll of wornStates) {
                         // Two animation frames between hiding the glyphs and the
                         // shot: the style change needs a composited frame, and a
                         // screenshot taken before one still shows the text — which
                         // read as 1.00:1 wherever a sample point landed on a glyph.
-                        const prepare = async () => {
-                            const r = await cdp.send(
-                                'Runtime.evaluate',
-                                {
-                                    expression:
-                                        `(async () => { ` +
-                                        `const out = window.__contrastPrepare(` +
-                                        `${JSON.stringify(screen)}, ${theme}, ${wornAll}); ` +
-                                        // The self-hosted face swaps metrics when
-                                        // it lands and the fit-content dock
-                                        // re-centres with it — boxes taken before
-                                        // the swap sample a neighbour's ground.
-                                        `await document.fonts.ready; ` +
-                                        `await new Promise((res) => ` +
-                                        `requestAnimationFrame(() => requestAnimationFrame(res))); ` +
-                                        `return JSON.stringify(out); })()`,
-                                    awaitPromise: true,
-                                    returnByValue: true,
-                                },
-                                sessionId,
-                            );
-                            if (r.exceptionDetails) {
-                                throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                            }
-                            return JSON.parse(r.result.value);
-                        };
+                        const prepare = () =>
+                            contrastPrepare(cdp, sessionId, screen, theme, wornAll);
                         // First paint tells us how tall the page is; the viewport
                         // grows to hold all of it and the paint is redone at that
                         // size, because `captureBeyondViewport` does not reliably
                         // paint backgrounds below the fold — a below-fold buy
                         // control sampled as near-white.
+                        //
+                        // **Only when it actually grows.** A page that already
+                        // fits was being painted, font-settled and frame-settled a
+                        // second time at a size identical to the first, for every
+                        // screen, look and worn state that fits its viewport —
+                        // the largest single cost in this guard, buying nothing.
+                        // Nothing repaints between the two, so the first prepare's
+                        // tree is the tree that gets shot.
                         const first = await prepare();
                         if (first.targets.length === 0) continue;
                         const shotH = Math.max(vp.height, first.pageH);
-                        await cdp.send(
-                            'Emulation.setDeviceMetricsOverride',
-                            { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
-                            sessionId,
-                        );
-                        const prep = await prepare();
+                        const grew = shotH !== vp.height;
+                        if (grew) {
+                            await cdp.send(
+                                'Emulation.setDeviceMetricsOverride',
+                                { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
+                                sessionId,
+                            );
+                        }
+                        const prep = grew ? await prepare() : first;
                         // The boxes are re-read at the last moment before every
                         // shot: anything that lands between prepare and capture
                         // (a late face, an image) moves the layout under
                         // coordinates already taken.
                         const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                        const capture = async () => {
-                            const shot = await cdp.send(
-                                'Page.captureScreenshot',
-                                { format: 'png', fromSurface: true },
-                                sessionId,
-                            );
-                            return decodePng(Buffer.from(shot.data, 'base64'));
-                        };
+                        const capture = () => captureShot(cdp, sessionId);
                         let img = await capture();
                         let targets = await liveBoxes();
                         // A failing box is re-shot once before it is believed:
@@ -557,16 +687,18 @@ try {
                                 );
                             }
                         }
-                        await cdp.send(
-                            'Emulation.setDeviceMetricsOverride',
-                            {
-                                width: vp.width,
-                                height: vp.height,
-                                deviceScaleFactor: 1,
-                                mobile: false,
-                            },
-                            sessionId,
-                        );
+                        if (grew) {
+                            await cdp.send(
+                                'Emulation.setDeviceMetricsOverride',
+                                {
+                                    width: vp.width,
+                                    height: vp.height,
+                                    deviceScaleFactor: 1,
+                                    mobile: false,
+                                },
+                                sessionId,
+                            );
+                        }
                     }
                 }
             }
@@ -575,10 +707,14 @@ try {
             failed = true;
             console.error('✗ contrast: no figure boxes were sampled — vacuous green.');
         } else if (dim.length === 0) {
-            console.log(`✓ contrast: ${boxes} figure boxes sampled against rendered pixels`);
+            console.log(
+                `✓ contrast: ${boxes} figure boxes sampled against rendered pixels — ${took()}`,
+            );
         } else {
             failed = true;
-            console.error(`✗ contrast: ${dim.length} figure(s) on paint below ${PIXEL_CONTRAST_FLOOR}:1`);
+            console.error(
+                `✗ contrast: ${dim.length} figure(s) on paint below ${PIXEL_CONTRAST_FLOOR}:1 — ${took()}`,
+            );
             for (const line of dim) {
                 console.error(`    ${line}`);
             }
@@ -586,6 +722,144 @@ try {
     } catch (err) {
         failed = true;
         console.error(`✗ contrast: ${err.message}`);
+    }
+
+    /*
+     * Pass 5: the transparent wire, in pixels.
+     *
+     * `bg=transparent` means the page paints nothing behind the plates and OBS
+     * composites it over the stream. Nothing in this repository can see that:
+     * the pass above shoots the overlay against the themed ground, and
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` skips a
+     * ground whose value is `transparent` outright, so plate-ink-over-video is
+     * the one contrast question with no reader at all.
+     *
+     * So: capture the overlay with its alpha kept, assert the alpha is really
+     * there, and flatten the frame onto the two grounds a streamer can hand it
+     * — black and white — before running the same sampler as pass 4. `wornAll`
+     * is measured here even though the contrast pass skips it for these
+     * screens: a mood is the ONE worn row that reaches the overlay
+     * (`renderStall` keeps `slot: 'mood'`), and After hours moves both the
+     * plate and its ink.
+     *
+     * The alpha assertion is what keeps this honest. Measured 2026-09-02:
+     * `Page.captureScreenshot { fromSurface: true }` with no override returns
+     * colour type 2, flattened onto white — the composite would have been
+     * theatre, sampling a white page and calling it black.
+     * `Emulation.setDefaultBackgroundColorOverride` with `a: 0` set any time
+     * before the shot returns colour type 6 with alpha 0 outside the plates,
+     * `fromSurface: true` included, and PNG alpha is unpremultiplied
+     * (`255,255,255,235` for a 92% white plate).
+     */
+    try {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: CANVAS.width, height: CANVAS.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        await cdp.send('Page.navigate', { url: probeUrl(CANVAS, '&screens=') }, sessionId);
+        await waitForFlag(cdp, sessionId, '__probeReady');
+        const themes = await evalJson(cdp, sessionId, 'window.__themes');
+        const dim = [];
+        let boxes = 0;
+        let alpha;
+        for (const theme of themes) {
+            for (const wornAll of [false, true]) {
+                const prep = await contrastPrepare(cdp, sessionId, 'broadcast-clear', theme, wornAll);
+                if (prep.targets.length === 0) {
+                    throw new Error('broadcast-clear prepared no figure boxes — vacuous green.');
+                }
+                const clearShot = async () => {
+                    await cdp.send(
+                        'Emulation.setDefaultBackgroundColorOverride',
+                        { color: { r: 0, g: 0, b: 0, a: 0 } },
+                        sessionId,
+                    );
+                    try {
+                        return await captureShot(cdp, sessionId);
+                    } finally {
+                        await cdp.send('Emulation.setDefaultBackgroundColorOverride', {}, sessionId);
+                    }
+                };
+                let img = await clearShot();
+                if (img.bpp !== 4) {
+                    // Measured with the transparency longhands removed: an
+                    // overlay that paints a ground over the whole frame comes
+                    // back as colour type 2 as well, so this message names both
+                    // causes rather than blaming the override.
+                    throw new Error(
+                        `the capture came back flattened (colour type ${img.bpp === 3 ? 2 : '?'}): ` +
+                            'either the overlay painted an opaque ground over the frame, or the ' +
+                            'background override did not apply. Both make every "over black" line a lie.',
+                    );
+                }
+                const opaque = await evalJson(cdp, sessionId, 'window.__opaqueBoxes()');
+                alpha = alphaOutside(img, opaque);
+                if (alpha.total === 0) {
+                    throw new Error('the plates cover the whole frame — nothing outside them to sample.');
+                }
+                if (alpha.min === 255) {
+                    throw new Error(
+                        'every pixel outside the plates is fully opaque — the overlay painted a ground.',
+                    );
+                }
+                let targets = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                const sample = (shot) => {
+                    const found = [];
+                    let counted = 0;
+                    for (const [ground, level] of [
+                        ['black', 0],
+                        ['white', 255],
+                    ]) {
+                        const flat = compositeOver(shot, level);
+                        for (const t of targets) {
+                            const worst = worstContrastInBox(flat, t, t.color);
+                            if (worst === undefined) continue;
+                            counted += 1;
+                            if (worst < PIXEL_CONTRAST_FLOOR) {
+                                found.push(
+                                    `broadcast-clear @canvas / theme ${theme}${wornAll ? ' + worn' : ''} ` +
+                                        `over ${ground}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                        `sits on paint at ${worst.toFixed(2)}:1`,
+                                );
+                            }
+                        }
+                    }
+                    return { found, counted };
+                };
+                let { found, counted } = sample(img);
+                // A failing box is re-shot once before it is believed — the same
+                // rule pass 4 learned: a real defect is steady state.
+                if (found.length > 0) {
+                    await sleep(250);
+                    img = await clearShot();
+                    const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                    if (again.length === targets.length) targets = again;
+                    ({ found } = sample(img));
+                }
+                boxes += counted;
+                dim.push(...found);
+            }
+        }
+        const clearPct = ((alpha.clear / alpha.total) * 100).toFixed(0);
+        if (dim.length === 0) {
+            console.log(
+                `✓ transparency (broadcast-clear @canvas): RGBA capture, ${clearPct}% of the frame ` +
+                    `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,
+            );
+        } else {
+            failed = true;
+            console.error(
+                `✗ transparency: ${dim.length} figure(s) below ${PIXEL_CONTRAST_FLOOR}:1 ` +
+                    `once the stream is behind them — ${took()}`,
+            );
+            for (const line of dim) {
+                console.error(`    ${line}`);
+            }
+        }
+    } catch (err) {
+        failed = true;
+        console.error(`✗ transparency: ${err.message}`);
     }
     cdp.close();
     const elapsedS = (Date.now() - startedAt) / 1000;

@@ -156,6 +156,93 @@ Sampling amendments, each measured:
   file (stall.css's rule, same measured reason) and names its
   transitions alongside its animations.
 
+## The stream overlay: the canvas pass, and pass 5
+
+`?view=broadcast` is a second render path sized for an OBS Browser Source,
+and it broke three of this guard's assumptions at once: it is measured at a
+width no pass had, it paints nothing on purpose, and it is composited over
+somebody else's video.
+
+- **1920x1080, and nowhere else.** The overlay's chrome is a 252px plate, a
+  204px QR and a 39px price. Certifying that at 390px measures pixels nobody
+  paints, and the page widths skip it for the same reason in reverse.
+  `NO_DECOR_SCREENS` (`layout/fixtures.ts`) is the list, `screensForViewport`
+  splits on it, and `?viewport=canvas` is the handshake.
+- **The split is audited, not trusted.** Every geometry pass compares the
+  screens the page says it measured against `window.__noDecorScreens`: the
+  canvas pass must measure all of them and nothing else, the page widths none
+  of them, and neither may measure zero. Proved by pointing the canvas pass at
+  an empty screen list — `measured 0 screen(s)` instead of a tick over a pass
+  that ran nothing.
+- **The overlay wears nothing, so it buys one variant.** `renderStall`'s
+  broadcast branch keeps only `slot: 'mood'` rows and mounts no ornament, so
+  every worn variant is the same tree. `variantsFor` returns the bare list and
+  the contrast driver **skips the `wornAll` loop** rather than painting to
+  return zero targets — the prepare (a full paint, `document.fonts.ready`, two
+  frames) is nearly the whole cost, which is the door-under-Neo lesson again.
+- **Two rules are scoped away, stated rather than waived.** "The theme reaches
+  all four edges" is the opposite of what `bg=transparent` is for, and the
+  `.item-b` name floor is a grid the overlay does not have. The modal remains
+  the one scoped exception.
+- **A rested card mounts no price.** `mode=rail` shows the name alone for
+  three seconds of every eight, and `renderBroadcastView` does not mount
+  `.bc-ext` at `data-state='rest'` — same as the rail preset. A hidden
+  `[data-role="price"]` is what the covered-amount rule exists to refuse, so
+  rest does not leave one in the tree.
+- **`[data-role="stall-name"]` is a contrast target.** It is the only line on
+  the head plate that is not a money figure, and on a transparent wire it sits
+  on the stream with one plate between them.
+
+### `bg=transparent`, in declarations and in pixels
+
+Two halves, because either alone is a lie a reader would believe.
+
+- **The declarations.** On a screen whose `broadcast.transparent` is set,
+  `html`, `body`, `#app`, `.frame`, `.stall` and `.bc` must have a
+  `background-color` with zero alpha and `background-image: none` —
+  `::before` and `::after` **included**. The `html.bc-clear` longhands clear
+  element grounds only; a theme pseudo-element painting a backdrop (Neo's
+  scanlines are the shape to expect) would survive them unseen. Proved by
+  deleting the `html.bc-clear` block from `broadcast.css`: six lines, naming
+  `.stall`'s colour and each look's backdrop image.
+- **The pixels.** `Emulation.setDefaultBackgroundColorOverride` with `a: 0`
+  before the shot, then the frame is flattened in Node onto black **and**
+  white and every contrast target is re-sampled against both. This is the only
+  reader plate-ink-over-video has: the contrast pass shoots the overlay
+  against a themed ground, and
+  `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` skips a ground
+  whose value is `transparent` outright.
+- **The alpha is asserted, or the composite is theatre.** Measured 2026-09-02:
+  `Page.captureScreenshot { format: 'png', fromSurface: true }` with **no**
+  override returns **colour type 2**, flattened onto white — every "over
+  black" line would have been a white page wearing a black label. With the
+  override, the same call returns **colour type 6** with alpha 0 outside the
+  plates; `fromSurface: true` does not flatten it, the override may be set
+  before or after navigation, and `captureBeyondViewport` and
+  `fromSurface: false` make no difference. PNG alpha is **unpremultiplied** (a
+  92% white plate comes back `255,255,255,235`), so the flatten is the
+  ordinary `c*a + ground*(1-a)`. The pass therefore fails loudly when the
+  capture is not RGBA, when nothing outside the plates is under alpha 255, and
+  when the plates cover the whole frame.
+- **Moods are measured here even though the contrast pass skips them.** A mood
+  is the one worn row that reaches the overlay, and After hours moves the
+  plate and its ink together — which is the question CRITIC-2 raised about
+  the pairing test. Six combinations: three looks, worn and bare.
+- Proved red by a plate at `opacity: 0.35`: twelve lines over black and white,
+  including the name plate, while the ordinary contrast pass stayed green at
+  1978 boxes. A plate too translucent for a stream is invisible to every other
+  rule in this repository.
+
+### Reduced motion, on the fifth sheet
+
+`broadcast.css` ships two keyframes (`bc-in`, `bc-pulse`) and its own reduce
+block, and the reduced-motion pass was hard-coded to `offers,publish` — so
+nothing had ever executed it. `broadcast` now runs as a second reduced-motion
+read at the canvas width, and the fixture carries `broadcastStepped` and
+`broadcastPulse` so both classes are on the tree: a runtime-only class is an
+animation this guard can never see. Proved by deleting the reduce block — 27
+failures naming `bc-in on div.bc-ext.in` and `bc-pulse on span.pulse`.
+
 ## Clip-path text containment
 
 A clip-path is invisible to both the box check and the hit test: the
@@ -187,6 +274,30 @@ If the runtime grows again, prune the matrix, do not raise the number
 first. The reduced-motion pass re-measures only the animating screens;
 state screens buy only the bare and fully-worn variants.
 
+**Every pass now prints what it cost**, because the first session to meet the
+ceiling had to guess which pass to prune and the guess would have been wrong:
+measured 2026-09-02, the contrast pass is 95–113s of a ~120s run and
+everything else together is under 25s, build included. Prune there or nowhere.
+
+**Two prunes paid for the canvas, and neither costs coverage.** The tree
+measured 141.0s before this work and 119.7s after, on the same box within an
+hour.
+
+- **The second prepare only when the viewport actually grows.** The contrast
+  pass paints, learns the page height, grows the viewport and paints again —
+  and for every screen that already fits, the second paint, font wait and two
+  frames were identical to the first. Nothing repaints between them, so the
+  first prepare's tree is the tree that gets shot.
+- **The contrast driver has its own screen list** (`__contrastScreens`), not
+  `screensToRun()`. The overlay's five screens share one head plate and one
+  card: `broadcast` carries every figure the other four do, and an ordinary
+  shot of `broadcast-clear` is a shot flattened onto white — which pass 5
+  measures properly, over black and white, instead of paying for it twice.
+
+**The number moves ±15% between runs on the same tree** (98.9s and 113.2s for
+the same contrast pass, an hour apart). A run near the ceiling is not by
+itself a matrix that grew.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var
@@ -195,3 +306,13 @@ state screens buy only the bare and fully-worn variants.
 - Anything in the vitest suite's happy-dom, which does not lay out — the
   two runners cover different failure classes and neither substitutes for
   the other.
+- **Worn decorations on the overlay screens, in the ordinary contrast pass.**
+  Moods reach the overlay and nothing else does, and they are measured over
+  black and white in pass 5 — but never against the themed ground a browser
+  visit paints.
+- **A stream that is neither black nor white.** Black and white are the
+  extremes, not the general case: a plate that clears 3:1 on both can still
+  lose against a mid-tone at the wrong hue. Nothing here reads a video.
+- **Whether the QR scans.** The guard measures that it is not covered and not
+  themed; scanning it from a monitor at 1080p and at 720p is a person with a
+  phone, and has not been done.

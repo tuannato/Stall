@@ -12,7 +12,13 @@
  */
 import { SHIPPED_ATTACHMENTS } from '../src/domain/attachments';
 import { scaleRate } from '../src/domain/fiat';
-import type { Outpoint, StallOffer, StallView, TokenMeta } from '../src/domain/state';
+import type {
+    BroadcastParams,
+    Outpoint,
+    StallOffer,
+    StallView,
+    TokenMeta,
+} from '../src/domain/state';
 import type { StallHandlers } from '../src/ui/render';
 import { CHRONIK_HOSTS } from '../src/net/hosts';
 
@@ -105,25 +111,36 @@ const HOSTS_DOWN = CHRONIK_HOSTS.map((host, i) => ({
     result: (i === 2 ? 'error' : 'timeout') as 'error' | 'timeout',
 }));
 
+/**
+ * The shop's book. Shared with the broadcast screens on purpose: the overlay
+ * walks `listingsInShopOrder` over the same offers the storefront paints, so
+ * two lists would let the two surfaces be measured against different shops.
+ *
+ * T1 twice: the grouped card (cheapest ask + count label) is a measured
+ * surface, not a code path the probe skips. The last two rows are the measured
+ * defect: `100,000,000` XEC squeezed every name to a letter per line on the
+ * live origin. One whole-lot ask (no `from`, tier 2) and one partial (`from`
+ * pushes it past every legible size, tier 3).
+ */
+const SHOP_OFFERS: StallOffer[] = [
+    offer(T1, 0, 120_000n),
+    offer(T1, 3, 150_000n),
+    offer(T2, 1, 87_500n),
+    offer(NFT, 2, 50_000n),
+    offer(LONG, 4, 10_000_000_000n, { askedAtoms: 12n }),
+    offer(LONGER, 5, 10_000_000_000n),
+];
+
+/** The wire the overlay is painted from. `parseBroadcastParams`' shape. */
+const bc = (
+    preset: BroadcastParams['preset'],
+    mode: BroadcastParams['mode'],
+    transparent = false,
+): BroadcastParams => ({ preset, mode, transparent });
+
 export const SCREENS: Record<string, StallView> = {
     offers: base({
-        fetch: {
-            kind: 'offers',
-            // T1 twice on purpose: the grouped card (cheapest ask + count
-            // label) is a measured surface, not a code path the probe skips.
-            offers: [
-                offer(T1, 0, 120_000n),
-                offer(T1, 3, 150_000n),
-                offer(T2, 1, 87_500n),
-                offer(NFT, 2, 50_000n),
-                // The measured defect, as rows: `100,000,000` XEC squeezed
-                // every name to a letter per line on the live origin. One
-                // whole-lot ask (no `from`, tier 2) and one partial (`from`
-                // pushes it past every legible size, tier 3).
-                offer(LONG, 4, 10_000_000_000n, { askedAtoms: 12n }),
-                offer(LONGER, 5, 10_000_000_000n),
-            ],
-        },
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
         // The P9 surfaces, measured where they live: the seller's notice
         // above the shelves, and one seller-named shelf pulling T1 out of
         // the type sections under its own heading.
@@ -294,6 +311,61 @@ export const SCREENS: Record<string, StallView> = {
             hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
         },
     }),
+    /*
+     * The stream overlay, at the four states it spends its time in plus the
+     * transparent wire. Measured at 1920x1080 and nowhere else (see
+     * NO_DECOR_SCREENS): 252px plates certified at 390px are the wrong pixels.
+     *
+     * `broadcastCursor: 3` on both card screens is deliberate. The overlay has
+     * exactly ONE card slot, so the fixture spends it on the figure that breaks
+     * things: listing 3 of this book is `Century Flag #7` at
+     * `from 100,000,000 XEC` — the longest asked amount, the `from` prefix and
+     * a wrapping name, in a plate 252px wide with `white-space: nowrap`. A
+     * shorter card can only pass wherever this one does. (Order, re-derived
+     * from `listingsInShopOrder`: token-id sort puts T2, LONG, T1 in the
+     * etoken section and LONGER, NFT in the nft one.)
+     */
+    broadcast: base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 3,
+        // The two one-shots, so the sheet's `.in` and `.pulse` keyframes are
+        // on the tree the probe measures rather than being classes only a
+        // running app ever applies — a runtime-only animation is one the
+        // reduced-motion pass can never see.
+        broadcastStepped: true,
+        broadcastPulse: true,
+    }),
+    /* `bg=transparent`: the OBS wire, and the only screen C13's rules read. */
+    'broadcast-clear': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('corner', 'fixed', true),
+        broadcastState: 'live',
+        broadcastCursor: 3,
+    }),
+    /* Rail mode's rest half: the head plate alone, no card, for 3s of every 8. */
+    'broadcast-rest': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('corner', 'rail'),
+        broadcastState: 'rest',
+        broadcastCursor: 3,
+    }),
+    /*
+     * The rail preset, pinned at `live`: it mounts no card in any state, so a
+     * card appearing here is a preset that stopped being a rail.
+     */
+    'broadcast-rail': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('rail', 'rail'),
+        broadcastState: 'live',
+    }),
+    /* Nothing listed: the one muted line the overlay is allowed to print. */
+    'broadcast-empty': base({
+        fetch: { kind: 'empty' },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+    }),
 };
 
 /**
@@ -324,4 +396,31 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // Exists for the tools row and the flat sorted run; the decoration
     // interactions it could stage are the same ones `offers` already does.
     'crowded',
+]);
+
+/**
+ * The screens that are not a shop page: the stream overlay.
+ *
+ * Three things follow from that, all in `probe.ts` and `layout-check.mjs`:
+ *
+ * - **They run at 1920x1080 and nowhere else.** The overlay is sized for an
+ *   OBS Browser Source (plate 252px, QR 204px); certifying that chrome at
+ *   390px measures pixels nobody paints. The page passes skip them for the
+ *   same reason in reverse.
+ * - **They wear no decorations.** `renderStall`'s broadcast branch passes only
+ *   `slot: 'mood'` rows to `applyTheme` and mounts no ornament strip, so the
+ *   worn variants are the same paint measured three times. `variantsFor`
+ *   returns the bare list and the contrast driver skips the `wornAll` loop
+ *   outright — a `continue` after `__contrastPrepare` still pays the paint,
+ *   the fonts wait and two frames, which is nearly the whole cost.
+ * - **Two rules are scoped away** (see PROBE-RULES): "the theme reaches all
+ *   four edges" — a transparent overlay paints nothing on purpose — and the
+ *   `.item-b` name floor, which is a grid the overlay does not have.
+ */
+export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
+    'broadcast',
+    'broadcast-clear',
+    'broadcast-rest',
+    'broadcast-rail',
+    'broadcast-empty',
 ]);

@@ -19,7 +19,7 @@ import {
     wornAttachments,
     type ShippedAttachment,
 } from '../src/domain/attachments';
-import { SCREENS, STATE_SCREENS, handlers } from './fixtures';
+import { NO_DECOR_SCREENS, SCREENS, STATE_SCREENS, handlers } from './fixtures';
 
 /**
  * What a decoration may never touch. Wider than the price, because a QR that is
@@ -96,6 +96,34 @@ function positionedPseudos(root: ParentNode): string[] {
         }
     }
     return out;
+}
+
+/**
+ * Every element between the stream and the plates. `applyTheme` and
+ * `stall.css` can each put a ground on one of these, and `broadcast.css`
+ * clears them with longhands under `html.bc-clear`; this is the list that
+ * fight is fought over. `.bc` is included because it is the overlay's own
+ * root — a ground there is a rectangle around both plates.
+ */
+const CLEAR_GROUNDS = ['html', 'body', '#app', '.frame', '.stall', '.bc'];
+
+/**
+ * How much of a computed background colour actually paints. `transparent`
+ * computes to `rgba(0, 0, 0, 0)`, a `color-mix()` result serializes as
+ * `color(srgb r g b / a)`, and anything this cannot read is treated as paint
+ * — a guard that guesses "probably transparent" is the guard that misses.
+ */
+function groundAlpha(value: string): number {
+    const v = value.trim();
+    if (v === '' || v === 'transparent') {
+        return 0;
+    }
+    const fn = /^(?:rgba?|color)\(\s*(?:srgb\s+)?([^)]+)\)$/.exec(v);
+    if (fn !== null) {
+        const parts = fn[1]!.split(/[\s,/]+/).filter((part) => part !== '');
+        return parts.length >= 4 ? Number.parseFloat(parts[3]!) : 1;
+    }
+    return 1;
 }
 
 /** Do two boxes share any area at all? */
@@ -278,6 +306,62 @@ function measure(screen: string, themeLabel: string): Failure[] {
      * of this guard reported the scrim covering the price behind it, which is
      * exactly the boundary that had never been written down.
      */
+    /*
+     * The stream overlay is not a shop page, and two rules below are scoped
+     * away from it by this flag rather than silently passing: the `.item-b`
+     * name floor is a grid it does not have, and "the theme reaches all four
+     * edges" is the opposite of what `bg=transparent` is for. Everything else
+     * — sideways scroll, boxes over protected figures, positioned pseudos,
+     * clip containment, reduced-motion stillness, the contrast floor — is
+     * asked of it exactly as it is asked of the shop.
+     */
+    const overlay = NO_DECOR_SCREENS.has(screen);
+
+    /*
+     * `bg=transparent` must paint NOTHING behind the plates.
+     *
+     * `applyTheme` writes an inline background colour on `<html>` every paint
+     * and `.stall` carries `background-color: var(--s-bg)` plus the look's
+     * backdrop image, so the transparent path is a cascade fight the overlay
+     * can lose quietly: OBS composites the page over the stream, and a ground
+     * that survives is an opaque rectangle over the streamer's own video. The
+     * pixel half of this rule is the runner's (it composites the shot over
+     * black and white); this half reads the declarations, so a failure names
+     * the element instead of a coordinate.
+     *
+     * **Pseudo-elements are read too.** The `html.bc-clear` longhands clear
+     * ELEMENT backgrounds; a theme's `::before` painting a backdrop on
+     * `.stall` (Neo's scanlines are the shape to expect) would survive them
+     * untouched and invisible to an element-level read.
+     */
+    if (SCREENS[screen]?.broadcast?.transparent === true) {
+        for (const sel of CLEAR_GROUNDS) {
+            const node = document.querySelector(sel);
+            if (node === null) {
+                continue;
+            }
+            for (const which of [undefined, '::before', '::after'] as const) {
+                const style = getComputedStyle(node, which);
+                if (which !== undefined && (style.content === 'none' || style.content === '')) {
+                    continue;
+                }
+                const where = `${sel}${which ?? ''}`;
+                if (groundAlpha(style.backgroundColor) > 0) {
+                    fail(
+                        'a transparent broadcast painted a ground',
+                        `${where} has background-color ${style.backgroundColor}`,
+                    );
+                }
+                if (style.backgroundImage !== 'none') {
+                    fail(
+                        'a transparent broadcast painted a ground',
+                        `${where} has background-image ${style.backgroundImage}`,
+                    );
+                }
+            }
+        }
+    }
+
     const scrim = root.querySelector('[data-role="sheet-scrim"]');
     const surface: ParentNode = scrim ?? root;
 
@@ -381,7 +465,7 @@ function measure(screen: string, themeLabel: string): Failure[] {
      * because `.item-n` shrinks to its text (`align-items: flex-start`) and
      * would read 26px on a short name with 140px of room.
      */
-    for (const nameCol of surface.querySelectorAll('.item-b')) {
+    for (const nameCol of overlay ? [] : surface.querySelectorAll('.item-b')) {
         const box = nameCol.getBoundingClientRect();
         if (box.width === 0 || box.height === 0) {
             continue;
@@ -488,7 +572,7 @@ function measure(screen: string, themeLabel: string): Failure[] {
     // and 42% of the screen left unthemed, and invisible for two months because
     // the shipped default is white on a white canvas.
     const stall = root.querySelector('.stall');
-    if (stall !== null && screen !== 'door') {
+    if (stall !== null && screen !== 'door' && !overlay) {
         const box = stall.getBoundingClientRect();
         if (box.top > 1 || box.left > 1 || box.right < window.innerWidth - 1) {
             fail('theme does not reach the edges', `stall box ${JSON.stringify(box.toJSON())}`);
@@ -618,11 +702,34 @@ function checkOverTime(
  * could break that the full set does not needs a card to stage it.
  */
 function variantsFor(screen: string, themeId: number): readonly (readonly ShippedAttachment[])[] {
+    // The overlay wears nothing: `renderStall`'s broadcast branch keeps only
+    // `slot: 'mood'` rows and mounts no ornament strip, so every worn variant
+    // paints the same tree. One bare pass, and the driver skips its `wornAll`
+    // loop too — see NO_DECOR_SCREENS.
+    if (NO_DECOR_SCREENS.has(screen)) {
+        return [[]];
+    }
     const all = wornVariants(themeId);
     if (!STATE_SCREENS.has(screen) || all.length < 2) {
         return all;
     }
     return [all[0]!, all[all.length - 1]!];
+}
+
+/**
+ * The viewport handshake. `?viewport=canvas` is the 1920x1080 pass and runs
+ * the overlay screens **only**; anything else is a page width and runs
+ * everything else.
+ *
+ * The split lives here rather than in the runner's URL on purpose: a screen
+ * added to `SCREENS` must land in exactly one of the two passes without
+ * anybody remembering to edit a list in a shell script, and the verdict
+ * reports `screensMeasured` so the runner can refuse a pass that measured the
+ * wrong side of the line instead of trusting this function.
+ */
+function screensForViewport(): string[] {
+    const canvas = new URLSearchParams(location.search).get('viewport') === 'canvas';
+    return Object.keys(SCREENS).filter((name) => NO_DECOR_SCREENS.has(name) === canvas);
 }
 
 /**
@@ -633,7 +740,7 @@ function variantsFor(screen: string, themeId: number): readonly (readonly Shippe
 function screensToRun(): string[] {
     const asked = new URLSearchParams(location.search).get('screens');
     if (asked === null) {
-        return Object.keys(SCREENS);
+        return screensForViewport();
     }
     // The asked list verbatim, unknown names dropped — `?screens=` measures
     // nothing on purpose (the contrast driver wants the hooks without paying
@@ -852,6 +959,10 @@ const CONTRAST_TEXT = [
     // under the After-hours mood while this list looked elsewhere.
     '.mini',
     '.tab',
+    // The overlay's name plate. It is the only line on a broadcast head that
+    // is not a money figure, and on a transparent wire it sits on the
+    // streamer's video with nothing but the plate between them.
+    '[data-role="stall-name"]',
 ].join(', ');
 
 declare global {
@@ -862,13 +973,39 @@ declare global {
             wornAll: boolean,
         ) => { targets: ContrastTarget[] };
         __contrastBoxes: () => ContrastTarget[];
-        __screens: string[];
+        /**
+         * The boxes allowed to be opaque on a transparent overlay: the two
+         * plates and the QR, which are the text grounds the contrast rule
+         * requires. The runner samples the alpha channel OUTSIDE these.
+         */
+        __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
+        __contrastScreens: string[];
+        /** The overlay screens, so the driver can skip their `wornAll` half. */
+        __noDecorScreens: string[];
         __themes: number[];
         __probeReady: boolean;
     }
 }
 
-window.__screens = Object.keys(SCREENS);
+/*
+ * Which screens the pixel-contrast driver samples, at this viewport.
+ *
+ * Its own list, not `screensToRun()`: a prepare is a full paint plus
+ * `document.fonts.ready` plus two frames, and the contrast pass buys 21
+ * screens x 3 looks x 2 worn states at every width — it is most of the
+ * guard's runtime, so a screen belongs here only if it puts a figure on a
+ * ground no other screen does.
+ *
+ * The overlay's five screens share one head plate and one card between them.
+ * `broadcast` carries every figure the other four carry, on the same plate;
+ * `broadcast-clear` paints no ground at all, so an ordinary shot of it is a
+ * shot flattened onto white — which the transparency pass measures properly,
+ * over black AND white, rather than paying for it twice here.
+ */
+window.__contrastScreens = screensForViewport().filter(
+    (name) => !NO_DECOR_SCREENS.has(name) || name === 'broadcast',
+);
+window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__themes = SHIPPED_THEMES.map((t) => t.id);
 
 /** True when any ancestor up to the stall carries a live transform. */
@@ -968,6 +1105,12 @@ window.__contrastBoxes = () =>
     preparedNodes
         .map((node) => targetFor(node))
         .filter((t): t is ContrastTarget => t !== undefined);
+
+window.__opaqueBoxes = () =>
+    [...document.querySelectorAll('.plate, .qr')].map((node) => {
+        const box = node.getBoundingClientRect();
+        return { x: box.x, y: box.y, w: box.width, h: box.height };
+    });
 
 window.__contrastPrepare = (screen, themeId, wornAll) => {
     if (screen === 'door' && themeId !== SHIPPED_THEMES[0]!.id) {
