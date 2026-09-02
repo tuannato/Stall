@@ -89,7 +89,12 @@ import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { priceTier, renderStall, resetIconsForTests } from './render';
-import { posterSpec, STREAM_CARD_WIDTH } from './posterImage';
+import {
+    lastDrawnPosterSpec,
+    SQUARE_SIZE,
+    STREAM_CARD_WIDTH,
+    STORY_SIZE,
+} from './posterImage';
 import { BROADCAST_BRAND, BROADCAST_CAPTION } from './copy';
 
 const PK =
@@ -4319,6 +4324,25 @@ describe('big-shop-tools', () => {
     });
 });
 
+function cssMediaBlock(css: string, query: string): string {
+    const start = css.indexOf(query);
+    expect(start, query).toBeGreaterThan(-1);
+    const open = css.indexOf('{', start);
+    let depth = 0;
+    for (let i = open; i < css.length; i += 1) {
+        const ch = css[i];
+        if (ch === '{') {
+            depth += 1;
+        } else if (ch === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                return css.slice(open + 1, i);
+            }
+        }
+    }
+    throw new Error(`unclosed ${query}`);
+}
+
 describe('the-print-poster-stays-black-on-white', () => {
     it('keeps .poster-page ground and ink as literals, never theme tokens', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
@@ -4332,6 +4356,16 @@ describe('the-print-poster-stays-black-on-white', () => {
         expect(body).toMatch(/color:\s*#000000/);
         expect(body).not.toMatch(/--s-surface/);
         expect(body).not.toMatch(/--s-text/);
+
+        const print = cssMediaBlock(css, '@media print');
+        expect(print).toMatch(/\.poster-chooser[\s\S]*?display:\s*none/);
+        expect(print).toMatch(/\.poster-png[\s\S]*?display:\s*none/);
+        const printPageRules = [...print.matchAll(/\.poster-page[^{]*\{([^}]+)\}/g)];
+        expect(printPageRules.length, 'print rules for .poster-page').toBeGreaterThan(0);
+        for (const [, rule] of printPageRules) {
+            expect(rule).not.toMatch(/--s-surface/);
+            expect(rule).not.toMatch(/--s-text/);
+        }
     });
 });
 
@@ -4365,11 +4399,9 @@ describe('the-stream-card-is-the-rest-state', () => {
             format.value = 'stream';
             format.dispatchEvent(new Event('change'));
 
-            const png = root.querySelector('[data-role="poster-png"]') as HTMLElement;
-            expect(png).not.toBeNull();
-            expect(png.querySelector('[data-role="price"]')).toBeNull();
-            expect(png.querySelector('.bc-ext')).toBeNull();
-            const canvas = png.querySelector('canvas') as HTMLCanvasElement;
+            const canvas = root.querySelector(
+                '[data-role="poster-png"] canvas',
+            ) as HTMLCanvasElement;
             expect(canvas).not.toBeNull();
             expect(canvas.width).toBe(STREAM_CARD_WIDTH);
 
@@ -4382,24 +4414,44 @@ describe('the-stream-card-is-the-rest-state', () => {
             const widthPx = Number(/width:\s*(\d+)px/.exec(plate?.[2] ?? '')?.[1]);
             expect(STREAM_CARD_WIDTH).toBe(widthPx * 2);
 
-            const url = `${location.origin}/s/${ADDR}`;
-            const spec = posterSpec('stream', {
-                surface: '#111111',
-                text: '#eeeeee',
-                muted: '#999999',
-                accent: '#00aaaa',
-                font: 'sans-serif',
-                name: 'Riverside Goods',
-                tagline: 'Fresh weekly',
-                url,
-                matrix: qrMatrix(url),
-                nameLines: 2,
-            });
-            expect(spec.url).toBeUndefined();
-            expect(spec.brand).toBe(BROADCAST_BRAND);
-            expect(spec.caption).toBe(BROADCAST_CAPTION);
-            expect(JSON.stringify(spec)).not.toMatch(/bc-ext/);
-            expect(JSON.stringify(spec)).not.toMatch(/data-role":"price"/);
+            const spec = lastDrawnPosterSpec();
+            expect(spec, 'drawPoster was handed a stream spec').toBeDefined();
+            const allowed = [
+                'kind',
+                'width',
+                'height',
+                'surface',
+                'text',
+                'muted',
+                'accent',
+                'font',
+                'name',
+                'matrix',
+                'nameLines',
+                'brand',
+                'caption',
+            ];
+            expect(Object.keys(spec!).sort()).toEqual([...allowed].sort());
+            expect(spec!.url).toBeUndefined();
+            expect(spec!.tagline).toBeUndefined();
+            expect(spec!.brand).toBe(BROADCAST_BRAND);
+            expect(spec!.caption).toBe(BROADCAST_CAPTION);
+            const texts = (value: unknown): string[] => {
+                if (typeof value === 'string') {
+                    return [value];
+                }
+                if (Array.isArray(value)) {
+                    return value.flatMap(texts);
+                }
+                if (value !== null && typeof value === 'object') {
+                    return Object.values(value).flatMap(texts);
+                }
+                return [];
+            };
+            for (const t of texts(spec)) {
+                expect(t).not.toMatch(/\bXEC\b/);
+                expect(t).not.toContain(PRICE_FROM);
+            }
         } finally {
             root.remove();
         }
@@ -4432,19 +4484,6 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 'story',
                 'stream',
             ]);
-            const url = `${location.origin}/s/${ADDR}`;
-            const paint = {
-                surface: '#111111',
-                text: '#eeeeee',
-                muted: '#999999',
-                accent: '#00aaaa',
-                font: 'sans-serif',
-                name: 'Riverside Goods',
-                tagline: 'Fresh weekly',
-                url,
-                matrix: qrMatrix(url),
-                nameLines: 2 as const,
-            };
             for (const kind of ['square', 'story', 'stream'] as const) {
                 const format = root.querySelector(
                     '[data-role="poster-format"]',
@@ -4452,14 +4491,71 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 format.value = kind;
                 format.dispatchEvent(new Event('change'));
                 const png = root.querySelector('[data-role="poster-png"]') as HTMLElement;
-                expect(png.querySelector('canvas'), kind).not.toBeNull();
+                const canvas = png.querySelector('canvas') as HTMLCanvasElement;
+                expect(canvas, kind).not.toBeNull();
                 expect(png.querySelector('[data-role="poster-save"]')?.textContent, kind).toBe(
                     'Save PNG',
                 );
-                const spec = posterSpec(kind, paint);
-                expect(spec.matrix.length, kind).toBeGreaterThan(0);
-                expect(spec.caption, kind).toMatch(/scan/i);
+                const spec = lastDrawnPosterSpec();
+                expect(spec, kind).toBeDefined();
+                expect(spec!.kind, kind).toBe(kind);
+                expect(canvas.width, kind).toBe(spec!.width);
+                expect(canvas.height, kind).toBe(spec!.height);
+                expect(spec!.matrix.length, kind).toBeGreaterThan(0);
+                expect(spec!.caption, kind).toMatch(/scan/i);
+                if (kind === 'square') {
+                    expect(canvas.width).toBe(SQUARE_SIZE.width);
+                    expect(canvas.height).toBe(SQUARE_SIZE.height);
+                } else if (kind === 'story') {
+                    expect(canvas.width).toBe(STORY_SIZE.width);
+                    expect(canvas.height).toBe(STORY_SIZE.height);
+                } else {
+                    expect(canvas.width).toBe(STREAM_CARD_WIDTH);
+                }
             }
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('a-poster-button-needs-an-address', () => {
+    /**
+     * The launcher used to gate only on `fitsQr`. The sheet itself also
+     * requires an address, so a pubkey view with none would set overlay to
+     * poster and paint no scrim — `livePaint` then waits forever. Same
+     * address predicate as the publish launcher's `canPublish`.
+     */
+    it('does not paint the launcher when the view has no address', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    address: undefined,
+                }),
+                handlers(),
+            );
+            expect(root.querySelector('[data-role="open-poster"]')).toBeNull();
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('paints the launcher when the view has an address', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, { panel: 'studio' }),
+                handlers(),
+            );
+            expect(root.querySelector('[data-role="open-poster"]')).not.toBeNull();
         } finally {
             root.remove();
         }

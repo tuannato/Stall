@@ -271,8 +271,8 @@ describe('the-recipe-offers-both-source-sizes', () => {
         expect(src).toMatch(/OBS_STICKER_WIDTH/);
         expect(src).toMatch(/OBS_STICKER_HEIGHT/);
         expect(src).toMatch(/OBS_RAIL_STICKER_HEIGHT/);
-        expect(src).not.toMatch(/\b372\b/);
-        expect(src).not.toMatch(/\b800\b/);
-        expect(src).not.toMatch(/\b560\b/);
+        for (const n of [OBS_STICKER_WIDTH, OBS_STICKER_HEIGHT, OBS_RAIL_STICKER_HEIGHT]) {
+            expect(src).not.toMatch(new RegExp(`\\b${String(n)}\\b`));
+        }
     });
 });

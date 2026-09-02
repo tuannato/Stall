@@ -3226,7 +3226,7 @@ function paintStudio(
 
     const share = studioSection('share', copy.STUDIO_SEC_SHARE);
     share.append(shareControl());
-    posterControl(share, handlers);
+    posterControl(share, view, handlers);
     body.append(share);
 
     // The stream overlay's recipe. Its strings live in the module itself,
@@ -3264,11 +3264,18 @@ function paintStudio(
  * stall.css shows the poster page alone. The QR stays black on white with its
  * quiet zone (§9); the sheet previews exactly what the printer gets.
  */
-function posterControl(body: HTMLElement, handlers: StallHandlers): void {
+function posterControl(body: HTMLElement, view: StallView, handlers: StallHandlers): void {
     const url = shareUrl();
-    // No QR, no poster: past the library's ceiling the poster would be a
-    // sheet of text, and the share control already explains the long link.
-    if (!fitsQr(url)) {
+    // Same address gate as the publish launcher: without one the sheet
+    // does not mount, and `onOpenPoster` must not set an overlay that
+    // `livePaint` then waits on forever. No QR, no poster: past the
+    // library's ceiling the poster would be a sheet of text, and the
+    // share control already explains the long link.
+    if (
+        view.address === undefined ||
+        view.address === '' ||
+        !fitsQr(url)
+    ) {
         return;
     }
     const wrap = el('div', 'poster-launch');
@@ -3374,7 +3381,13 @@ function posterSheet(
 
     const pngKind: PosterKind = format === 'print' ? 'square' : format;
     save.addEventListener('click', () => {
-        savePng(canvas, `stall-${pngKind}.png`);
+        if (save.disabled) {
+            return;
+        }
+        save.disabled = true;
+        savePng(canvas, `stall-${pngKind}.png`, () => {
+            save.disabled = false;
+        });
     });
     // PNG formats draw on every mount — the canvas is cheap. Print keeps
     // the page DOM and does not touch the canvas.

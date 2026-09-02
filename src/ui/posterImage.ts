@@ -12,7 +12,11 @@ export const QR_QUIET_ZONE = 4;
 
 export const SQUARE_SIZE = { width: 1080, height: 1080 } as const;
 export const STORY_SIZE = { width: 1080, height: 1920 } as const;
-/** Overlay plate is 252px; the stream card is that rest state at 2×. */
+/**
+ * Overlay plate is 252px; the stream card's width is that plate at 2×.
+ * Height is the PNG's own layout (brand, name lines, QR 408, caption),
+ * not 2× the rest card — see `streamCardHeight`.
+ */
 export const STREAM_CARD_WIDTH = 504;
 
 export type PosterKind = 'square' | 'story' | 'stream';
@@ -72,12 +76,27 @@ export function wrapLines(
     const lines: string[] = [];
     let current = '';
 
+    /**
+     * A 0 or NaN measure is an unloaded face, not "everything fits". One
+     * code unit still goes on a line so we make progress and cannot hang.
+     */
+    const fits = (s: string): boolean => {
+        if (s.length <= 1) {
+            return true;
+        }
+        const w = measure(s);
+        if (!Number.isFinite(w) || w <= 0) {
+            return false;
+        }
+        return w <= maxWidth;
+    };
+
     const takeFit = (word: string): { head: string; rest: string } => {
         if (word.length <= 1) {
             return { head: word, rest: '' };
         }
         let i = 1;
-        while (i < word.length && measure(word.slice(0, i + 1)) <= maxWidth) {
+        while (i < word.length && fits(word.slice(0, i + 1))) {
             i += 1;
         }
         return { head: word.slice(0, i), rest: word.slice(i) };
@@ -86,7 +105,7 @@ export function wrapLines(
     const breakLong = (word: string): void => {
         let rest = word;
         while (rest.length > 0) {
-            if (measure(rest) <= maxWidth) {
+            if (fits(rest)) {
                 current = rest;
                 return;
             }
@@ -102,7 +121,7 @@ export function wrapLines(
 
     for (const word of parts) {
         if (current.length === 0) {
-            if (measure(word) <= maxWidth) {
+            if (fits(word)) {
                 current = word;
             } else {
                 breakLong(word);
@@ -110,13 +129,13 @@ export function wrapLines(
             continue;
         }
         const candidate = `${current} ${word}`;
-        if (measure(candidate) <= maxWidth) {
+        if (fits(candidate)) {
             current = candidate;
             continue;
         }
         lines.push(current);
         current = '';
-        if (measure(word) <= maxWidth) {
+        if (fits(word)) {
             current = word;
         } else {
             breakLong(word);
@@ -126,9 +145,36 @@ export function wrapLines(
         lines.push(current);
     }
     if (maxLines !== undefined && maxLines > 0 && lines.length > maxLines) {
-        return lines.slice(0, maxLines);
+        const kept = lines.slice(0, maxLines);
+        const lastIdx = kept.length - 1;
+        let last = kept[lastIdx] ?? '';
+        const mark = '…';
+        while (last.length > 0 && !fits(`${last}${mark}`)) {
+            last = last.slice(0, -1);
+        }
+        kept[lastIdx] = `${last}${mark}`;
+        return kept;
     }
     return lines.length > 0 ? lines : [''];
+}
+
+/**
+ * Square/Story URL line: the whole link in at most two lines, or nothing.
+ * A truncated cashaddr is a lie; the QR already carries the bytes.
+ */
+export function urlLinesOrNone(
+    url: string,
+    maxWidth: number,
+    measure: (s: string) => number,
+): string[] {
+    const lines = wrapLines(url, maxWidth, measure);
+    if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) {
+        return [];
+    }
+    if (lines.length > 2) {
+        return [];
+    }
+    return lines;
 }
 
 /** Module rects in the QR box, origin at the box's top-left (quiet zone included). */
@@ -155,6 +201,7 @@ export function qrModuleRects(
     return out;
 }
 
+/** PNG layout: brand, name lines, QR 408, caption — not 2× the rest card. */
 function streamCardHeight(nameLines: 2 | 3): number {
     const pad = 36;
     const brand = 53;
@@ -222,7 +269,7 @@ function qrFit(
     return { box: modulePx * modules, modulePx };
 }
 
-function paintQr(
+export function paintQr(
     ctx: CanvasRenderingContext2D,
     matrix: boolean[][],
     x: number,
@@ -291,14 +338,17 @@ function paintSheet(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
         y += 16;
         ctx.fillStyle = spec.muted;
         ctx.font = `400 28px ${spec.font}`;
-        for (const line of wrapLines(spec.tagline, maxText, measure)) {
+        for (const line of wrapLines(spec.tagline, maxText, measure, 2)) {
             ctx.fillText(line, cx, y);
             y += 34;
         }
     }
     const captionSize = 28;
     const urlSize = 22;
-    const urlBlock = spec.url !== undefined ? urlSize * 2.4 + 16 : 0;
+    ctx.font = `400 ${urlSize}px ${spec.font}`;
+    const urlLines =
+        spec.url !== undefined ? urlLinesOrNone(spec.url, maxText, measure) : [];
+    const urlBlock = urlLines.length > 0 ? urlSize * 2.4 + 16 : 0;
     const bottomBlock = captionSize + 12 + urlBlock + padY;
     const qrTop = y + 24;
     const qrAvail = Math.max(0, spec.height - bottomBlock - qrTop);
@@ -311,18 +361,26 @@ function paintSheet(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
     ctx.fillStyle = spec.text;
     ctx.font = `650 ${captionSize}px ${spec.font}`;
     ctx.fillText(spec.caption, cx, by);
-    if (spec.url !== undefined) {
+    if (urlLines.length > 0) {
         by += captionSize + 12;
         ctx.fillStyle = spec.muted;
         ctx.font = `400 ${urlSize}px ${spec.font}`;
-        for (const line of wrapLines(spec.url, maxText, measure, 2)) {
+        for (const line of urlLines) {
             ctx.fillText(line, cx, by);
             by += urlSize * 1.2;
         }
     }
 }
 
+let lastDrawn: PosterSpec | undefined;
+
+/** The spec `drawPoster` was last handed — tests pin this, not a fixture they built. */
+export function lastDrawnPosterSpec(): PosterSpec | undefined {
+    return lastDrawn;
+}
+
 export function drawPoster(canvas: HTMLCanvasElement, spec: PosterSpec): void {
+    lastDrawn = spec;
     canvas.width = spec.width;
     canvas.height = spec.height;
     const ctx = canvas.getContext('2d');
@@ -338,22 +396,44 @@ export function drawPoster(canvas: HTMLCanvasElement, spec: PosterSpec): void {
     paintSheet(ctx, spec);
 }
 
-export function savePng(canvas: HTMLCanvasElement, filename: string): void {
-    canvas.toBlob((blob) => {
-        if (blob === null) {
-            return;
-        }
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.download = filename;
-        a.rel = 'noopener';
-        a.href = href;
-        // In the document for the click, and the URL revoked on a later
-        // tick: a detached anchor and an immediate revoke are the two ways
-        // a browser (Firefox first) abandons the download before it starts.
-        document.body.append(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(href), 1000);
-    }, 'image/png');
+const pngSaves = new WeakSet<HTMLCanvasElement>();
+
+export function savePng(
+    canvas: HTMLCanvasElement,
+    filename: string,
+    onDone?: () => void,
+): void {
+    if (pngSaves.has(canvas)) {
+        return;
+    }
+    pngSaves.add(canvas);
+    const finish = (): void => {
+        pngSaves.delete(canvas);
+        onDone?.();
+    };
+    try {
+        canvas.toBlob((blob) => {
+            try {
+                if (blob === null) {
+                    return;
+                }
+                const href = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.download = filename;
+                a.rel = 'noopener';
+                a.href = href;
+                // In the document for the click, and the URL revoked on a later
+                // tick: a detached anchor and an immediate revoke are the two ways
+                // a browser (Firefox first) abandons the download before it starts.
+                document.body.append(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(href), 1000);
+            } finally {
+                finish();
+            }
+        }, 'image/png');
+    } catch {
+        finish();
+    }
 }

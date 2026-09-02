@@ -259,7 +259,7 @@ export function boot(
             return;
         }
         fiatRate = rate;
-        paint();
+        livePaint();
     };
 
     /**

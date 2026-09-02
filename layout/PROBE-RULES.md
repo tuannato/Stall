@@ -240,10 +240,9 @@ ceiled. Add 120 for the source the recipe asks for:
 
 Corner peak 638 + 120 = **758**, inside the shipped `OBS_STICKER_HEIGHT = 800`
 — left alone. Rail peak 457 + 120 = **577**, and
-`OBS_RAIL_STICKER_HEIGHT` shipped at 560: the incident. 560 was taken from the
-rail wearing the friendly fixture name, one line shorter than a manifest is
-allowed to publish, and CRITIC-3 item 4 had said in words that a three-line
-Neo rail was the one that could clip. Raised to **580**, the smallest multiple
+`OBS_RAIL_STICKER_HEIGHT` shipped at 560: the incident. The rail's first number, 560, was arithmetic off the corner's card; the
+  review had already said in words that a three-line Neo name on the rail
+  was the one that could clip, and the measurement proved it. Raised to **580**, the smallest multiple
 of 20 that holds 577. That is 3px of headroom, which is the point of a rule
 measured to the pixel: the next line of chrome on the rail goes red instead of
 shipping a recipe that cuts the QR in half.
@@ -286,8 +285,9 @@ Two halves, because either alone is a lie a reader would believe.
   when the plates cover the whole frame.
 - **Moods are measured here even though the contrast pass skips them.** A mood
   is the one worn row that reaches the overlay, and After hours moves the
-  plate and its ink together — which is the question CRITIC-2 raised about
-  the pairing test. Six combinations: three looks, worn and bare.
+  plate and its ink together — exactly what the theme pairing test cannot
+  see, since it skips a ground whose value is `transparent`. Six
+  combinations: three looks, worn and bare.
 - Proved red by a plate at `opacity: 0.35`: twelve lines over black and white,
   including the name plate, while the ordinary contrast pass stayed green at
   1978 boxes. A plate too translucent for a stream is invisible to every other

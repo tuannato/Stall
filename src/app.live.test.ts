@@ -213,8 +213,14 @@ vi.mock('./net/live', async (importOriginal) => {
     };
 });
 
+const { priceControl } = vi.hoisted(() => ({
+    priceControl: {
+        fetch: async (_code: string): Promise<bigint | undefined> => undefined,
+    },
+}));
+
 vi.mock('./net/price', () => ({
-    fetchXecPrice: async () => undefined,
+    fetchXecPrice: (code: string) => priceControl.fetch(code),
 }));
 
 /**
@@ -332,6 +338,7 @@ beforeEach(() => {
     watches.length = 0;
     painted.view = undefined;
     localStorage.clear();
+    priceControl.fetch = async () => undefined;
 });
 
 describe('a-settings-publish-lands-without-a-reload', () => {
@@ -678,6 +685,59 @@ describe('the-poster-survives-a-live-repaint', () => {
         ).toBe('offers');
         (root.querySelector('[data-role="tab-shop"]') as HTMLButtonElement).click();
         expect(root.textContent, 'and the new book is on the shop').toContain('Ripe Beans');
+    });
+});
+
+describe('the-poster-survives-a-fiat-answer', () => {
+    /**
+     * `refreshFiat` used to call `paint()` itself. Opening Story, then letting
+     * the boot-time price fetch land, remounted the sheet — the same hole as a
+     * book tick, on a path `livePaint` never saw. The closing paint is the
+     * flush, as it is for the book.
+     */
+    it('keeps the Story sheet node while the mocked price resolves', async () => {
+        let resolvePrice!: (rate: bigint | undefined) => void;
+        priceControl.fetch = () =>
+            new Promise((resolve) => {
+                resolvePrice = resolve;
+            });
+
+        const { root } = bootStall(
+            stallEmpty({ tokens: new Map([[TOKEN, TOKEN_META]]) }),
+        );
+        await flush();
+
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+        const chooser = root.querySelector(
+            '[data-role="poster-format"]',
+        ) as HTMLSelectElement;
+        chooser.value = 'story';
+        chooser.dispatchEvent(new Event('change'));
+        const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
+        expect(sheet, 'Story is open before the rate lands').not.toBeNull();
+        expect(
+            sheet.querySelector('[role="dialog"]')?.getAttribute('data-format'),
+        ).toBe('story');
+
+        resolvePrice(30_000n);
+        await flush();
+
+        expect(
+            root.querySelector('[data-role="poster"]'),
+            'the same sheet node is still mounted',
+        ).toBe(sheet);
+        expect(
+            painted.view?.fiatRate,
+            'the paint waited; the last frame has no rate yet',
+        ).toBeUndefined();
+
+        (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="poster"]')).toBeNull();
+        expect(
+            painted.view?.fiatRate,
+            'the deferred paint arrives with the close',
+        ).toBe(30_000n);
     });
 });
 
