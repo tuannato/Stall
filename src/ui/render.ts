@@ -53,6 +53,7 @@ import { MAX_STALL_EVENTS } from '../domain/state';
 import {
     DEFAULT_THEME,
     DEFAULT_THEME_ID,
+    FONT_STACKS,
     NEO_CITY_THEME_ID,
     RURAL_THEME_ID,
     SHIPPED_THEMES,
@@ -65,6 +66,13 @@ import { stallMark } from './brand';
 import * as copy from './copy';
 import { renderBroadcastView } from './broadcast';
 import { OBS_GUIDE_TITLE, paintObsGuide } from './obsGuide';
+import {
+    drawPoster,
+    posterSpec,
+    savePng,
+    type PosterKind,
+    type PosterPaint,
+} from './posterImage';
 import mingoIcon from './mingo-icon.png';
 import './stall.css';
 import './theme-modern.css';
@@ -3257,20 +3265,65 @@ function posterControl(body: HTMLElement, view: StallView): void {
     open.addEventListener('click', () => {
         // Self-managed like confirmLeaving: the sheet owns its own removal,
         // so no app state and no repaint — printing is not a view change.
-        body.closest('.stall')?.append(posterSheet(view, url));
+        const stall = body.closest('.stall');
+        if (stall instanceof HTMLElement) {
+            stall.append(posterSheet(view, url, stall));
+        }
     });
     wrap.append(open);
     body.append(wrap);
 }
 
-function posterSheet(view: StallView, url: string): HTMLElement {
+function posterPaintFromStall(stall: HTMLElement, view: StallView, url: string): PosterPaint {
+    const fallbackFont = FONT_STACKS[0] ?? 'sans-serif';
+    const surface = stall.style.getPropertyValue('--s-surface');
+    const text = stall.style.getPropertyValue('--s-text');
+    const muted = stall.style.getPropertyValue('--s-muted');
+    const accent = stall.style.getPropertyValue('--s-accent');
+    const font = stall.style.getPropertyValue('--s-font');
+    const tagline = view.tagline !== undefined && view.tagline !== '' ? view.tagline : undefined;
+    return {
+        surface: surface === '' ? '#ffffff' : surface,
+        text: text === '' ? '#000000' : text,
+        muted: muted === '' ? '#555555' : muted,
+        accent: accent === '' ? '#000000' : accent,
+        font: font === '' ? fallbackFont : font,
+        name: displayName(view) ?? url,
+        tagline,
+        url,
+        matrix: qrMatrix(url),
+        nameLines: stall.classList.contains('t-neo') ? 3 : 2,
+    };
+}
+
+function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElement {
+    const paint = posterPaintFromStall(stall, view, url);
     const scrim = el('div', 'sheet-scrim poster-scrim');
     scrim.setAttribute('data-role', 'poster');
     const box = el('div', 'sheet poster-box');
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-modal', 'true');
     box.setAttribute('aria-label', copy.POSTER_TITLE);
+    box.setAttribute('data-format', 'print');
     box.tabIndex = -1;
+
+    const chooser = el('div', 'poster-chooser');
+    const select = el('select', 'paste-in');
+    select.setAttribute('data-role', 'poster-format');
+    select.setAttribute('aria-label', copy.POSTER_TITLE);
+    const formats: Array<['print' | PosterKind, string]> = [
+        ['print', copy.POSTER_FORMAT_PRINT],
+        ['square', copy.POSTER_FORMAT_SQUARE],
+        ['story', copy.POSTER_FORMAT_STORY],
+        ['stream', copy.POSTER_FORMAT_STREAM],
+    ];
+    for (const [value, text] of formats) {
+        const opt = el('option', undefined, text);
+        opt.value = value;
+        select.append(opt);
+    }
+    chooser.append(select);
+    box.append(chooser);
 
     // The page itself — the print stylesheet shows exactly this subtree.
     const page = el('div', 'poster-page');
@@ -3287,6 +3340,38 @@ function posterSheet(view: StallView, url: string): HTMLElement {
     page.append(el('p', 'poster-scan', copy.POSTER_SCAN));
     page.append(el('p', 'poster-url', url));
     box.append(page);
+
+    const png = el('div', 'poster-png');
+    png.setAttribute('data-role', 'poster-png');
+    const canvas = document.createElement('canvas');
+    canvas.setAttribute('data-role', 'poster-canvas');
+    png.append(canvas);
+    png.append(el('p', 'fine', copy.POSTER_PNG_LEDE));
+    const save = el('button', 'buy', copy.POSTER_SAVE);
+    save.type = 'button';
+    save.setAttribute('data-role', 'poster-save');
+    png.append(save);
+    box.append(png);
+
+    let pngKind: PosterKind = 'square';
+    save.addEventListener('click', () => {
+        savePng(canvas, `stall-${pngKind}.png`);
+    });
+
+    const applyFormat = (format: 'print' | PosterKind): void => {
+        box.setAttribute('data-format', format);
+        if (format === 'print') {
+            return;
+        }
+        pngKind = format;
+        drawPoster(canvas, posterSpec(format, paint));
+    };
+    select.addEventListener('change', () => {
+        const value = select.value;
+        if (value === 'print' || value === 'square' || value === 'story' || value === 'stream') {
+            applyFormat(value);
+        }
+    });
 
     const controls = el('div', 'poster-controls');
     const print = el('button', 'buy', copy.POSTER_PRINT);

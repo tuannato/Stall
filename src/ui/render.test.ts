@@ -82,6 +82,8 @@ import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { priceTier, renderStall, resetIconsForTests } from './render';
+import { posterSpec, STREAM_CARD_WIDTH } from './posterImage';
+import { BROADCAST_BRAND, BROADCAST_CAPTION } from './copy';
 
 const PK =
     '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -4278,6 +4280,151 @@ describe('big-shop-tools', () => {
         expect(sorted.root.querySelector('.section-head')).toBeNull();
         const curated = paint(bigShop());
         expect(cardNames(curated.root)).toHaveLength(7);
+    });
+});
+
+describe('the-print-poster-stays-black-on-white', () => {
+    it('keeps .poster-page ground and ink as literals, never theme tokens', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const page = css.match(/\.poster-page\s*\{([^}]+)\}/);
+        expect(page, '.poster-page rule').not.toBeNull();
+        const body = page![1]!;
+        expect(body).toMatch(/background:\s*#ffffff/);
+        expect(body).toMatch(/color:\s*#000000/);
+        expect(body).not.toMatch(/--s-surface/);
+        expect(body).not.toMatch(/--s-text/);
+    });
+});
+
+describe('the-stream-card-is-the-rest-state', () => {
+    it('is a 2× rest sticker: brand, name, QR, caption — no price, no card, no URL', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    stallName: 'Riverside Goods',
+                    tagline: 'Fresh weekly',
+                }),
+                h,
+            );
+            const open = root.querySelector('[data-role="open-poster"]') as HTMLButtonElement;
+            expect(open.textContent).toBe('Poster & images');
+            open.click();
+            const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
+            expect(sheet.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
+                'Poster & images',
+            );
+            const format = sheet.querySelector(
+                '[data-role="poster-format"]',
+            ) as HTMLSelectElement;
+            expect(format, 'format chooser').not.toBeNull();
+            format.value = 'stream';
+            format.dispatchEvent(new Event('change'));
+
+            const png = sheet.querySelector('[data-role="poster-png"]') as HTMLElement;
+            expect(png).not.toBeNull();
+            expect(png.querySelector('[data-role="price"]')).toBeNull();
+            expect(png.querySelector('.bc-ext')).toBeNull();
+            const canvas = png.querySelector('canvas') as HTMLCanvasElement;
+            expect(canvas).not.toBeNull();
+            expect(canvas.width).toBe(STREAM_CARD_WIDTH);
+
+            const css = readFileSync(join(UI_DIR, 'broadcast.css'), 'utf8').replace(
+                /\/\*[\s\S]*?\*\//g,
+                '',
+            );
+            const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+            const plate = rules.find(([, sel]) => sel!.trim() === '.stall.broadcast .bc');
+            const widthPx = Number(/width:\s*(\d+)px/.exec(plate?.[2] ?? '')?.[1]);
+            expect(STREAM_CARD_WIDTH).toBe(widthPx * 2);
+
+            const url = `${location.origin}/s/${ADDR}`;
+            const spec = posterSpec('stream', {
+                surface: '#111111',
+                text: '#eeeeee',
+                muted: '#999999',
+                accent: '#00aaaa',
+                font: 'sans-serif',
+                name: 'Riverside Goods',
+                tagline: 'Fresh weekly',
+                url,
+                matrix: qrMatrix(url),
+                nameLines: 2,
+            });
+            expect(spec.url).toBeUndefined();
+            expect(spec.brand).toBe(BROADCAST_BRAND);
+            expect(spec.caption).toBe(BROADCAST_CAPTION);
+            expect(JSON.stringify(spec)).not.toMatch(/bc-ext/);
+            expect(JSON.stringify(spec)).not.toMatch(/data-role":"price"/);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
+    it('offers Square, Story and Stream card, each with a canvas, Save PNG, a QR matrix and a scan caption', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    stallName: 'Riverside Goods',
+                    tagline: 'Fresh weekly',
+                }),
+                h,
+            );
+            (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+            const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
+            const format = sheet.querySelector(
+                '[data-role="poster-format"]',
+            ) as HTMLSelectElement;
+            expect([...format.options].map((o) => o.value)).toEqual([
+                'print',
+                'square',
+                'story',
+                'stream',
+            ]);
+            const url = `${location.origin}/s/${ADDR}`;
+            const paint = {
+                surface: '#111111',
+                text: '#eeeeee',
+                muted: '#999999',
+                accent: '#00aaaa',
+                font: 'sans-serif',
+                name: 'Riverside Goods',
+                tagline: 'Fresh weekly',
+                url,
+                matrix: qrMatrix(url),
+                nameLines: 2 as const,
+            };
+            for (const kind of ['square', 'story', 'stream'] as const) {
+                format.value = kind;
+                format.dispatchEvent(new Event('change'));
+                const png = sheet.querySelector('[data-role="poster-png"]') as HTMLElement;
+                expect(png.querySelector('canvas'), kind).not.toBeNull();
+                expect(png.querySelector('[data-role="poster-save"]')?.textContent, kind).toBe(
+                    'Save PNG',
+                );
+                const spec = posterSpec(kind, paint);
+                expect(spec.matrix.length, kind).toBeGreaterThan(0);
+                expect(spec.caption, kind).toMatch(/scan/i);
+            }
+        } finally {
+            root.remove();
+        }
     });
 });
 

@@ -1,18 +1,29 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StallView } from '../domain/state';
 import type { StallHandlers } from './render';
 import { identityOf } from './render';
 import { stallPath } from '../domain/route';
 import {
+    OBS_STICKER_HEIGHT,
+    OBS_STICKER_WIDTH,
+    OBS_RAIL_STICKER_HEIGHT,
+} from './obsSizes';
+import {
     broadcastGuideUrl,
     paintObsGuide,
     resetObsGuideForTests,
+    OBS_GUIDE_LEDE,
+    OBS_GUIDE_TITLE,
     OBS_LINK_COPIED,
     OBS_RECIPE_CSS,
     OBS_RECIPE_POSITION,
     OBS_RECIPE_SIZE,
     OBS_RECIPE_SOURCE,
+    OBS_RECIPE_STICKER,
     OBS_RECIPE_TOGGLES,
     OBS_RECIPE_URL,
     OBS_MODE_FIXED,
@@ -23,6 +34,8 @@ import {
     OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
     OBS_TRUTH_STALE_OVERLAY,
 } from './obsGuide';
+
+const UI_DIR = dirname(fileURLToPath(import.meta.url));
 
 const PK = `03${'aa'.repeat(32)}`;
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
@@ -188,6 +201,7 @@ describe('the-obs-guide-paints-the-recipe-and-every-truth', () => {
             OBS_RECIPE_SOURCE,
             OBS_RECIPE_URL,
             OBS_RECIPE_SIZE,
+            OBS_RECIPE_STICKER,
             OBS_RECIPE_CSS,
             OBS_RECIPE_TOGGLES,
             OBS_RECIPE_POSITION,
@@ -202,5 +216,63 @@ describe('the-obs-guide-paints-the-recipe-and-every-truth', () => {
         ]) {
             expect(text).toContain(truth);
         }
+    });
+});
+
+describe('the-recipe-offers-both-source-sizes', () => {
+    /**
+     * Width is the one number the overlay sheet implies (plate + both
+     * insets). Height is owned by `obsSizes` and quoted, never retyped.
+     */
+    it('paints drop-in and sticker lines, and derives sticker width from broadcast.css', () => {
+        const css = readFileSync(join(UI_DIR, 'broadcast.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+        const bodyOf = (want: string): string => {
+            const hit = rules.find(([, sel]) => sel!.trim() === want);
+            expect(hit, want).toBeDefined();
+            return hit![2]!;
+        };
+        const plate = bodyOf('.stall.broadcast .bc');
+        const corner = bodyOf(".stall.broadcast .bc[data-preset='corner']");
+        const widthPx = Number(/width:\s*(\d+)px/.exec(plate)?.[1]);
+        const insetPx = Number(/right:\s*(\d+)px/.exec(corner)?.[1]);
+        expect(Number.isFinite(widthPx), 'plate width from .bc').toBe(true);
+        expect(Number.isFinite(insetPx), 'corner right inset').toBe(true);
+        expect(OBS_STICKER_WIDTH).toBe(widthPx + insetPx + insetPx);
+
+        const section = document.createElement('section');
+        paintObsGuide(section, view(), handlers());
+        const text = section.textContent ?? '';
+        expect(text).toContain('1920');
+        expect(text).toContain('1080');
+        expect(text).toContain(String(OBS_STICKER_WIDTH));
+        expect(text).toContain(String(OBS_STICKER_HEIGHT));
+        expect(text).toContain(String(OBS_RAIL_STICKER_HEIGHT));
+
+        expect(OBS_GUIDE_TITLE).toBe('Stream overlay');
+        expect(OBS_GUIDE_LEDE).not.toMatch(/saved on this device/i);
+        expect(text).toContain(OBS_GUIDE_LEDE);
+
+        expect(text).toMatch(/bottom-right/);
+        expect(text).toMatch(/mid-right/);
+        expect(text).toMatch(/above and below/);
+        expect(text).toMatch(/vertical stream/i);
+        expect(OBS_RECIPE_POSITION).toMatch(/QR scales/i);
+
+        expect(OBS_TRUTH_QR_SCAN).toMatch(/204/);
+        expect(OBS_TRUTH_QR_SCAN).toMatch(/1\s*[×x]/);
+        expect(OBS_TRUTH_QR_SCAN).toMatch(/not measured/);
+        expect(OBS_TRUTH_QR_SCAN).not.toMatch(/floor we measured/i);
+
+        const src = readFileSync(join(UI_DIR, 'obsGuide.ts'), 'utf8');
+        expect(src).toMatch(/OBS_STICKER_WIDTH/);
+        expect(src).toMatch(/OBS_STICKER_HEIGHT/);
+        expect(src).toMatch(/OBS_RAIL_STICKER_HEIGHT/);
+        expect(src).not.toMatch(/\b372\b/);
+        expect(src).not.toMatch(/\b800\b/);
+        expect(src).not.toMatch(/\b560\b/);
     });
 });

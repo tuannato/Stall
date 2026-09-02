@@ -1,5 +1,5 @@
 /**
- * The studio's "Add to OBS" guide: the broadcast view's own generated link,
+ * The studio's stream overlay guide: the broadcast view's own generated link,
  * the OBS Browser Source recipe, and the truths a streamer would otherwise
  * only learn by watching a stream go wrong. CLAUDE.md §4's "The broadcast
  * view" documents the overlay this module only ever *links to* — nothing
@@ -19,13 +19,18 @@ import type { StallView } from '../domain/state';
 import { stallPath } from '../domain/route';
 import type { StallHandlers } from './render';
 import { identityOf } from './render';
+import {
+    OBS_RAIL_STICKER_HEIGHT,
+    OBS_STICKER_HEIGHT,
+    OBS_STICKER_WIDTH,
+} from './obsSizes';
 
 export type ObsPreset = 'corner' | 'rail';
 export type ObsMode = 'fixed' | 'rail';
 
-export const OBS_GUIDE_TITLE = 'Add to OBS';
+export const OBS_GUIDE_TITLE = 'Stream overlay';
 export const OBS_GUIDE_LEDE =
-    'A link for a Browser Source: a rotating card from this shop, sized for a 1920×1080 canvas.';
+    'Two ways to add this shop as a Browser Source: a drop-in 1920×1080 canvas, or a sticker you drag onto the stream.';
 
 export const OBS_PRESET_LABEL = 'Where it sits';
 export const OBS_PRESET_CORNER = 'Corner card';
@@ -42,12 +47,13 @@ export const OBS_COPY_LINK_FALLBACK = 'Select and copy this link.';
 
 export const OBS_RECIPE_SOURCE = 'OBS → Sources → + → Browser.';
 export const OBS_RECIPE_URL = 'URL: the link above.';
-export const OBS_RECIPE_SIZE = 'Width 1920, Height 1080, FPS 30.';
+export const OBS_RECIPE_SIZE = 'Drop-in: Width 1920, Height 1080, FPS 30.';
+export const OBS_RECIPE_STICKER = `Sticker: Width ${OBS_STICKER_WIDTH}, Height ${OBS_STICKER_HEIGHT} (corner) / ${OBS_RAIL_STICKER_HEIGHT} (rail).`;
 export const OBS_RECIPE_CSS = 'Leave Custom CSS empty.';
 export const OBS_RECIPE_TOGGLES =
     'Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active” — both close the source. The book updates over a live socket; if the index was down when the source started, the overlay retries on its own every 30 s. A shut-down source has neither.';
 export const OBS_RECIPE_POSITION =
-    'Position it by dragging the source — the overlay anchors itself to the canvas corner, or the right edge in side-rail mode.';
+    'The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room.';
 
 /**
  * A 1080p frame read on a phone is a fifth of its size — this is the one
@@ -57,7 +63,7 @@ export const OBS_RECIPE_POSITION =
 export const OBS_TRUTH_PHONE_VIEWERS =
     'Phone viewers can’t read this overlay — a 1080p frame is a fifth of its size on a phone screen. Put the same stall link in the stream description or pinned chat.';
 export const OBS_TRUTH_QR_SCAN =
-    'The QR scans from a monitor at 1080p. Whether it scans for viewers watching at 720p is not measured.';
+    'The QR is 204 px at 1× — scale the source to grow it. Whether it scans for viewers watching at 720p is not measured.';
 export const OBS_TRUTH_RAIL_RESTS =
     `“${OBS_MODE_RAIL}” rests without a price for 3 seconds of every 8 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
 export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
@@ -219,6 +225,7 @@ function recipeList(): HTMLElement {
         OBS_RECIPE_SOURCE,
         OBS_RECIPE_URL,
         OBS_RECIPE_SIZE,
+        OBS_RECIPE_STICKER,
         OBS_RECIPE_CSS,
         OBS_RECIPE_TOGGLES,
         OBS_RECIPE_POSITION,

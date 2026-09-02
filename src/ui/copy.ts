@@ -379,16 +379,23 @@ export const PIN_DOOR_FULL =
     'The front door holds 12 pinned stalls and is full. Unpin one there to pin this one.';
 
 /**
- * The poster: the share link made printable. The lede says what comes out —
- * a page, from this browser, nothing sent anywhere.
+ * The poster: the share link made printable, and PNG formats saved on this
+ * device. Print stays a black-on-white page; the images take this look.
  */
-export const POSTER_TITLE = 'Print a poster';
+export const POSTER_TITLE = 'Poster & images';
 export const POSTER_LEDE =
-    'A printable page for a real-world stall: your name and a code that opens this shop.';
-export const POSTER_OPEN = 'Print a poster';
+    'A page to print, or an image to save: your name and a code that opens this shop.';
+export const POSTER_OPEN = 'Poster & images';
 export const POSTER_PRINT = 'Print';
 export const POSTER_CLOSE = 'Close';
 export const POSTER_SCAN = 'Scan to open this stall';
+export const POSTER_PNG_LEDE =
+    'Saved on this device, in this look — the font is what this device resolves.';
+export const POSTER_SAVE = 'Save PNG';
+export const POSTER_FORMAT_PRINT = 'Print';
+export const POSTER_FORMAT_SQUARE = 'Square 1080×1080';
+export const POSTER_FORMAT_STORY = 'Story 1080×1920';
+export const POSTER_FORMAT_STREAM = 'Stream card';
 
 /**
  * The big-shop tools. The sort options name the figure they order by — the
