@@ -15,9 +15,12 @@ import {
     OBS_RECIPE_SOURCE,
     OBS_RECIPE_TOGGLES,
     OBS_RECIPE_URL,
+    OBS_MODE_FIXED,
+    OBS_MODE_RAIL,
     OBS_TRUTH_PHONE_VIEWERS,
     OBS_TRUTH_QR_SCAN,
     OBS_TRUTH_RAIL_RESTS,
+    OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
     OBS_TRUTH_STALE_OVERLAY,
 } from './obsGuide';
 
@@ -51,7 +54,7 @@ beforeEach(() => {
 });
 
 describe('the-obs-guide-url-carries-every-broadcast-param', () => {
-    it('carries view, preset, mode and bg=transparent, path-first, for every combination', () => {
+    it('carries view, preset, mode and bg=transparent, path-first, and omits mode on rail', () => {
         const v = view();
         const path = stallPath(identityOf(v)!);
         for (const preset of ['corner', 'rail'] as const) {
@@ -62,10 +65,40 @@ describe('the-obs-guide-url-carries-every-broadcast-param', () => {
                 const search = new URL(url!).searchParams;
                 expect(search.get('view')).toBe('broadcast');
                 expect(search.get('preset')).toBe(preset);
-                expect(search.get('mode')).toBe(mode);
                 expect(search.get('bg')).toBe('transparent');
+                if (preset === 'rail') {
+                    expect(search.has('mode'), 'the parser ignores mode on rail').toBe(
+                        false,
+                    );
+                } else {
+                    expect(search.get('mode')).toBe(mode);
+                }
             }
         }
+    });
+});
+
+describe('the-rest-truth-follows-the-mode-not-the-preset', () => {
+    /**
+     * `OBS_TRUTH_RAIL_RESTS` is about Price display = Rest, then show a
+     * price — not the Side rail preset, which never shows a price at all.
+     */
+    it('names the mode on the corner preset, and is omitted on side rail', () => {
+        const section = document.createElement('section');
+        paintObsGuide(section, view(), handlers());
+        expect(OBS_TRUTH_RAIL_RESTS).toContain(OBS_MODE_RAIL);
+        expect(OBS_TRUTH_RAIL_RESTS).toContain(OBS_MODE_FIXED);
+        expect(OBS_TRUTH_RAIL_RESTS).not.toMatch(/side.?rail/i);
+        expect(section.textContent).toContain(OBS_TRUTH_RAIL_RESTS);
+        expect(section.textContent).not.toContain(OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE);
+
+        const presetSelect = section.querySelector(
+            '[data-role="obs-preset-picker"]',
+        ) as HTMLSelectElement;
+        presetSelect.value = 'rail';
+        presetSelect.dispatchEvent(new Event('change'));
+        expect(section.textContent).not.toContain(OBS_TRUTH_RAIL_RESTS);
+        expect(section.textContent).toContain(OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE);
     });
 });
 

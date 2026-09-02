@@ -428,10 +428,11 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
 
 describe('a-broadcast-retries-our-failure-on-its-own', () => {
     /**
-     * `watch()` does not open a socket on unreachable / plugin-missing /
-     * unreadable, and the overlay has no retry control. An index that is
-     * down at source-start must heal without the streamer restarting the
-     * Browser Source.
+     * A resolved stall whose fetch failed has no socket to heal the
+     * screen, and the overlay has no retry control. An index that is
+     * down at source-start must heal without the streamer restarting
+     * the Browser Source. Waiting screens keep their script socket
+     * and must not be polled.
      */
     afterEach(() => {
         vi.useRealTimers();
@@ -486,6 +487,30 @@ describe('a-broadcast-retries-our-failure-on-its-own', () => {
         expect(loads).toBe(1);
         await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS);
         expect(loads, 'the shop has a retry control; it does not poll').toBe(1);
+    });
+
+    it('unresolved+unreachable does not retry, because the waiting socket is the heal', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=broadcast`);
+        let loads = 0;
+        boot(document.createElement('div'), async () => {
+            loads += 1;
+            return {
+                view: {
+                    route: { kind: 'unresolved' as const, address: ADDR },
+                    fetch: { kind: 'unreachable' as const, triedAtMs: 0, hosts },
+                    overlay: { kind: 'idle' as const },
+                    address: ADDR,
+                    tokens: new Map(),
+                    broadcast: { preset: 'corner' as const, mode: 'rail' as const, transparent: false },
+                },
+                offers: [],
+            };
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(loads).toBe(1);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS);
+        expect(loads, 'must not reload after 30 s').toBe(1);
     });
 });
 

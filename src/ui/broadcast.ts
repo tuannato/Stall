@@ -103,6 +103,7 @@ export function renderBroadcastView(view: StallView): HTMLElement {
                     figure.classList.add('pulse');
                 }
                 priceRow.append(figure);
+                priceRow.append(el('span', 'bc-why', copy.UNBUYABLE_BADGE));
             } else {
                 if (offer.askedAtoms < offer.atoms) {
                     priceRow.append(el('span', 'bc-from', copy.PRICE_FROM));

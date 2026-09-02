@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { encodeCashAddress } from 'ecashaddrjs';
 import { shaRmd160, toHex } from 'ecash-lib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
 import { STLD_HEX, encodeDescriptionHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
@@ -11,6 +11,7 @@ import { UNKNOWN_TXID } from './net/live';
 import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
+    HOME_LEDE,
     OPENING_BODY,
     UNREACHABLE_BODY,
     UNRESOLVABLE_TITLE,
@@ -83,6 +84,8 @@ const chain = {
     calls: { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 },
     /** What the next live offer re-read answers. Empty when unset. */
     book: undefined as import('./domain/state').FetchStatus | undefined,
+    /** A live re-read that throws rather than answering. */
+    bookThrows: false,
 };
 
 function resetChain(): void {
@@ -94,6 +97,7 @@ function resetChain(): void {
     chain.utxosThrow = false;
     chain.calls = { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 };
     chain.book = undefined;
+    chain.bookThrows = false;
 }
 
 const addressPage = (): HistoryPage => ({
@@ -178,7 +182,12 @@ vi.mock('./net', async (importOriginal) => {
         // The reader is a stub for the same reason — constructing the real
         // one against the fake chronik throws before loadOffers is reached.
         agoraOfferReader: () => ({}) as never,
-        loadOffers: async () => chain.book ?? ({ kind: 'empty' as const }),
+        loadOffers: async () => {
+            if (chain.bookThrows) {
+                throw new Error('index threw');
+            }
+            return chain.book ?? ({ kind: 'empty' as const });
+        },
     };
 });
 
@@ -1116,6 +1125,11 @@ const BROADCAST_FIXED = {
     mode: 'fixed' as const,
     transparent: false,
 };
+const BROADCAST_RETRY_MS = 30_000;
+const BROADCAST_FIXED_MS = 8_000;
+const UNREACHABLE_HOSTS = [
+    { host: 'chronik-native1.fabien.cash', result: 'timeout' as const },
+];
 
 function stallOffers(
     offers: State['offers'],
@@ -1270,6 +1284,208 @@ describe('a-sibling-fill-is-not-this-cards-price-change', () => {
             true,
         );
         expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+    });
+
+    it('this card\'s askedSats dropping pulses the figure even on a recheck', async () => {
+        const dear = { ...OFFER, askedSats: 180_000n };
+        const { root } = bootOverlay(stallOffers([dear]));
+        await flush();
+        const cheaper = { ...OFFER, askedSats: 120_000n };
+        chain.book = { kind: 'offers', offers: [cheaper] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(painted.view?.broadcastPulse, 'a drop is still this card\'s price').toBe(
+            true,
+        );
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            true,
+        );
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+    });
+});
+
+describe('a-broadcast-param-on-the-door-is-dropped', () => {
+    /**
+     * The door is not a stall. `view=broadcast` on `/` is dropped rather
+     * than overlaying the paste screen — `invalid` already keeps its
+     * ordinary screen, and home does too, on purpose.
+     */
+    it('does not copy the param onto a home view', async () => {
+        window.history.replaceState(null, '', '/?view=broadcast');
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+        expect(painted.view?.route.kind).toBe('home');
+        expect(painted.view?.broadcast, 'the door is not a stall').toBeUndefined();
+        expect(root.querySelector('[data-role="broadcast"]')).toBeNull();
+        expect(root.textContent).toContain(HOME_LEDE);
+        expect(location.pathname).toBe('/');
+    });
+});
+
+describe('a-broadcast-retries-our-failure-on-its-own', () => {
+    /**
+     * Waiting screens keep their script socket. A retry timer would
+     * `refresh()` and tear that handle down every 30 s. The retry exists
+     * only for a resolved stall whose fetch failed.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('does not retry unresolved+unreachable, and still holds a live handle', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=broadcast`);
+        let loads = 0;
+        const root = document.createElement('div');
+        boot(root, async () => {
+            loads += 1;
+            return {
+                view: {
+                    route: { kind: 'unresolved' as const, address: ADDR },
+                    fetch: {
+                        kind: 'unreachable' as const,
+                        triedAtMs: 0,
+                        hosts: UNREACHABLE_HOSTS,
+                    },
+                    overlay: { kind: 'idle' as const },
+                    address: ADDR,
+                    tokens: new Map(),
+                    broadcast: BROADCAST_FIXED,
+                },
+                offers: [],
+            };
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(loads).toBe(1);
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        const watch = watches[0];
+        expect(watch, 'the waiting screen opened a script socket').toBeDefined();
+        expect(watch!.stall.pubkeyHex, 'no maker key yet').toBeUndefined();
+        expect(watch!.closed).toBe(false);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS);
+        expect(loads, 'must not reload after 30 s').toBe(1);
+        expect(watch!.closed, 'the waiting handle is still live').toBe(false);
+    });
+});
+
+describe('a-replaced-card-at-the-cursor-fades-and-does-not-pulse', () => {
+    /**
+     * Cursor unchanged, token A gone, token B now at that index: it is a
+     * new card. Fade it. Never pulse — the pulse is this card's price
+     * changing, and this is not the same card.
+     */
+    it('a different token at the same cursor fades in and does not pulse', async () => {
+        const { root } = bootOverlay(stallOffers([OFFER]));
+        await flush();
+        chain.book = { kind: 'offers', offers: [OFFER_B] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(painted.view?.broadcastStepped, 'a new card fades').toBe(true);
+        expect(painted.view?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            false,
+        );
+    });
+});
+
+describe('a-broadcast-failed-reread-is-stale-not-blank', () => {
+    /**
+     * A live overlay whose later re-read fails keeps its last-good card
+     * rather than going blank, marked stale, with the carousel stopped.
+     * Our failure still must not print.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    async function bootLiveOverlay(): Promise<HTMLElement> {
+        vi.useFakeTimers();
+        const { root } = bootOverlay(stallOffers([OFFER, OFFER_B]));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('.bc-item'), 'the card is up').not.toBeNull();
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).not.toBe('stale');
+        return root;
+    }
+
+    it('a live re-read that throws keeps the card, marks stale, and stops the carousel', async () => {
+        const root = await bootLiveOverlay();
+        const cursor = painted.view?.broadcastCursor ?? 0;
+        chain.bookThrows = true;
+        watches[0]!.hooks.onChanged?.('recheck');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).toBe('stale');
+        expect(root.querySelector('.bc-item'), 'the last-good card stays').not.toBeNull();
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+            'a carousel tick would have returned to live',
+        ).toBe('stale');
+        expect(painted.view?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
+            cursor,
+        );
+    });
+
+    it('a live re-read that answers unreachable keeps the card and marks stale', async () => {
+        const root = await bootLiveOverlay();
+        const cursor = painted.view?.broadcastCursor ?? 0;
+        chain.book = {
+            kind: 'unreachable',
+            triedAtMs: 0,
+            hosts: UNREACHABLE_HOSTS,
+        };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).toBe('stale');
+        expect(root.querySelector('.bc-item'), 'the last-good card stays').not.toBeNull();
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+            'a carousel tick would have returned to live',
+        ).toBe('stale');
+        expect(painted.view?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
+            cursor,
+        );
+    });
+});
+
+describe('a-broadcast-definite-apply-clears-stale', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('a later offers apply drops the stale mark', async () => {
+        vi.useFakeTimers();
+        const { root } = bootOverlay(stallOffers([OFFER, OFFER_B]));
+        await vi.advanceTimersByTimeAsync(0);
+        chain.book = {
+            kind: 'unreachable',
+            triedAtMs: 0,
+            hosts: UNREACHABLE_HOSTS,
+        };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).toBe('stale');
+
+        chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(painted.view?.broadcastState, 'fixed mode returns to live').toBe('live');
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).toBe('live');
+        expect(root.querySelector('.bc-item')).not.toBeNull();
     });
 });
 

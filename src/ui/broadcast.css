@@ -127,6 +127,7 @@
 .stall.broadcast .bc-cap,
 .stall.broadcast .bc-from,
 .stall.broadcast .bc-u,
+.stall.broadcast .bc-why,
 .stall.broadcast .bc-empty {
     font-size: 22px;
     line-height: 1.25;

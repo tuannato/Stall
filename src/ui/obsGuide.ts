@@ -45,7 +45,7 @@ export const OBS_RECIPE_URL = 'URL: the link above.';
 export const OBS_RECIPE_SIZE = 'Width 1920, Height 1080, FPS 30.';
 export const OBS_RECIPE_CSS = 'Leave Custom CSS empty.';
 export const OBS_RECIPE_TOGGLES =
-    'Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active” — both close the socket, and the overlay updates live only while it stays connected.';
+    'Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active” — both close the source. The book updates over a live socket; if the index was down when the source started, the overlay retries on its own every 30 s. A shut-down source has neither.';
 export const OBS_RECIPE_POSITION =
     'Position it by dragging the source — the overlay anchors itself to the canvas corner, or the right edge in side-rail mode.';
 
@@ -57,9 +57,11 @@ export const OBS_RECIPE_POSITION =
 export const OBS_TRUTH_PHONE_VIEWERS =
     'Phone viewers can’t read this overlay — a 1080p frame is a fifth of its size on a phone screen. Put the same stall link in the stream description or pinned chat.';
 export const OBS_TRUTH_QR_SCAN =
-    'The QR scans from a monitor at 1080p, and is borderline for viewers watching at 720p.';
+    'The QR scans from a monitor at 1080p. Whether it scans for viewers watching at 720p is not measured.';
 export const OBS_TRUTH_RAIL_RESTS =
-    'Side-rail mode rests without a price for 3 seconds of every 8 — pick “Always show a price” for a shop that should never go quiet.';
+    `“${OBS_MODE_RAIL}” rests without a price for 3 seconds of every 8 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
+export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
+    'Side rail never shows a price — it is the name and the QR only.';
 export const OBS_TRUTH_STALE_OVERLAY =
     'If the overlay stops updating, OBS shut the source down — toggle the source’s visibility to bring it back.';
 
@@ -81,13 +83,15 @@ export function resetObsGuideForTests(): void {
 
 function urlFor(raw: string, preset: ObsPreset, mode: ObsMode): string {
     const path = stallPath(raw);
-    return `${location.origin}${path}?view=broadcast&preset=${preset}&mode=${mode}&bg=transparent`;
+    const modePart = preset === 'rail' ? '' : `&mode=${mode}`;
+    return `${location.origin}${path}?view=broadcast&preset=${preset}${modePart}&bg=transparent`;
 }
 
 /**
  * The exact link the studio hands a streamer: `stallPath(identityOf(view))`
- * plus the four broadcast params, `bg=transparent` always present, and
- * never `location.search` — a `?m=` settings hint pinned into an OBS URL
+ * plus the broadcast params, `bg=transparent` always present, `mode`
+ * omitted when `preset=rail` (the parser ignores it), and never
+ * `location.search` — a `?m=` settings hint pinned into an OBS URL
  * would ride along on every future load of that Browser Source.
  * `undefined` only when this view carries no identity to link to.
  */
@@ -227,12 +231,21 @@ function recipeList(): HTMLElement {
 function truthsList(): HTMLElement {
     const wrap = el('div', 'obs-truths');
     wrap.setAttribute('data-role', 'obs-truths');
-    for (const truth of [
-        OBS_TRUTH_PHONE_VIEWERS,
-        OBS_TRUTH_QR_SCAN,
-        OBS_TRUTH_RAIL_RESTS,
-        OBS_TRUTH_STALE_OVERLAY,
-    ]) {
+    const truths =
+        selectedPreset === 'rail'
+            ? [
+                  OBS_TRUTH_PHONE_VIEWERS,
+                  OBS_TRUTH_QR_SCAN,
+                  OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
+                  OBS_TRUTH_STALE_OVERLAY,
+              ]
+            : [
+                  OBS_TRUTH_PHONE_VIEWERS,
+                  OBS_TRUTH_QR_SCAN,
+                  OBS_TRUTH_RAIL_RESTS,
+                  OBS_TRUTH_STALE_OVERLAY,
+              ];
+    for (const truth of truths) {
         wrap.append(el('p', 'fine', truth));
     }
     return wrap;

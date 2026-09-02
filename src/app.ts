@@ -103,7 +103,10 @@ import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { cheapestOf, identityOf, listingsInShopOrder, renderStall } from './ui';
 
-/** Retry `refresh` while the overlay has no socket and no retry control. */
+/**
+ * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
+ * keep their script socket and must not have this timer tear it down.
+ */
 const BROADCAST_RETRY_MS = 30_000;
 /** `mode=fixed` advances the cursor on this interval. */
 const BROADCAST_FIXED_MS = 8_000;
@@ -117,6 +120,11 @@ const BROADCAST_RAIL_LIVE_MS = 5_000;
  * first, and a first frame without `view.broadcast` is the shop.
  */
 function withBroadcast(state: AppState): AppState {
+    // The door is not a stall. `view=broadcast` on `/` is dropped here;
+    // `invalid` still carries it and `renderStall` keeps the ordinary screen.
+    if (state.view.route.kind === 'home') {
+        return state;
+    }
     const broadcast = parseBroadcastParams(location.search);
     if (broadcast === undefined) {
         return state;
@@ -184,8 +192,9 @@ export function boot(
     /** One socket per painted stall. Closed before the next one opens. */
     let live: LiveHandle | undefined;
     /**
-     * Overlay timers. One carousel per painted stall; one retry while the
-     * overlay has no socket. Cleared wherever `live` is closed (`refresh`).
+     * Overlay timers. One carousel per painted stall; one retry for a
+     * resolved stall whose fetch failed. Cleared wherever `live` is
+     * closed (`refresh`).
      */
     let carousel: ReturnType<typeof setTimeout> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -478,7 +487,9 @@ export function boot(
             return;
         }
         if (isBroadcastFailure(state.view.fetch?.kind)) {
-            if (retry === undefined) {
+            // Only a resolved stall has no socket to heal the screen.
+            // `unresolvable` / `unresolved` keep their waiting handle.
+            if (state.pubkeyHex !== undefined && retry === undefined) {
                 retry = setTimeout(() => {
                     retry = undefined;
                     void refresh();
@@ -1000,13 +1011,14 @@ export function boot(
                                     state.view.broadcast.mode === 'fixed' ? 'live' : 'rest';
                             }
                             const nextCard = shownCard(nextFetch);
-                            if (
-                                prevCard !== undefined &&
-                                nextCard !== undefined &&
-                                prevCard.tokenId === nextCard.tokenId &&
-                                prevCard.askedSats !== nextCard.askedSats
-                            ) {
-                                nextFetch.broadcastPulse = true;
+                            if (prevCard !== undefined && nextCard !== undefined) {
+                                if (prevCard.tokenId !== nextCard.tokenId) {
+                                    // A different token at this cursor is a
+                                    // new card — fade it, never pulse.
+                                    nextFetch.broadcastStepped = true;
+                                } else if (prevCard.askedSats !== nextCard.askedSats) {
+                                    nextFetch.broadcastPulse = true;
+                                }
                             }
                         }
                         state = {

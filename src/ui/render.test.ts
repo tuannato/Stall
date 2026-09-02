@@ -4800,6 +4800,9 @@ describe('a-broadcast-url-with-an-unreadable-seller-still-says-so', () => {
     });
 });
 
+const BROADCAST_NO_CONTROLS =
+    'button, a, input, select, textarea, summary, details, label, [tabindex], [contenteditable], [role="button"]';
+
 describe('a-broadcast-carries-no-controls', () => {
     /**
      * The overlay is watched, never used. A button, a link or a field is
@@ -4819,8 +4822,7 @@ describe('a-broadcast-carries-no-controls', () => {
                     broadcast: { ...BROADCAST, transparent: true },
                 }),
             );
-            expect(root.querySelectorAll('button, a, input, select, textarea'))
-                .toHaveLength(0);
+            expect(root.querySelectorAll(BROADCAST_NO_CONTROLS)).toHaveLength(0);
             expect(root.querySelector('[data-role="retry"]')).toBeNull();
             const qr = root.querySelector('svg.qr');
             expect(qr, 'the code is a qr node').not.toBeNull();
@@ -4833,6 +4835,24 @@ describe('a-broadcast-carries-no-controls', () => {
             expect(qr!.querySelector('path')?.getAttribute('d')).not.toBe(
                 qrPathOf(overlayUrl),
             );
+        } finally {
+            window.history.replaceState({}, '', before);
+        }
+    });
+
+    it('a pubkey-route overlay still QRs the address shop with no query', () => {
+        const before = window.location.href;
+        window.history.replaceState({}, '', `${stallPath(PK)}?view=broadcast`);
+        try {
+            const { root } = paint(broadcastView());
+            expect(root.querySelectorAll(BROADCAST_NO_CONTROLS)).toHaveLength(0);
+            expect(location.pathname).toBe(stallPath(PK));
+            const shop = shopQrHref(ADDR);
+            expect(shop).not.toContain('?');
+            expect(shop).not.toContain(PK);
+            const qr = root.querySelector('svg.qr');
+            expect(qr, 'the code is a qr node').not.toBeNull();
+            expect(qr!.querySelector('path')?.getAttribute('d')).toBe(qrPathOf(shop));
         } finally {
             window.history.replaceState({}, '', before);
         }
@@ -4914,12 +4934,59 @@ describe('a-partial-on-the-overlay-still-says-from', () => {
     });
 });
 
+describe('a-full-lot-on-the-overlay-does-not-say-from', () => {
+    it('omits PRICE_FROM when the take is the whole lot', () => {
+        const full: StallOffer = { ...OFFER, askedAtoms: OFFER.atoms };
+        const { root } = paint(
+            broadcastView({ fetch: { kind: 'offers', offers: [full] } }),
+        );
+        expect(root.querySelector('.bc-from')).toBeNull();
+        expect(root.textContent).not.toContain(PRICE_FROM);
+        expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+    });
+});
+
+describe('an-unbuyable-card-on-the-overlay-says-why', () => {
+    /**
+     * A dash with no why is not honest. The shop already names the
+     * stranded remainder; the overlay must too.
+     */
+    it('prints the badge beside the dash', () => {
+        const stranded: StallOffer = {
+            ...OFFER,
+            atoms: 3n,
+            askedAtoms: 10n,
+            minAcceptedAtoms: 10n,
+        };
+        const { root } = paint(
+            broadcastView({ fetch: { kind: 'offers', offers: [stranded] } }),
+        );
+        const priceRow = root.querySelector('.bc-p');
+        expect(priceRow, 'the price row is on the card').not.toBeNull();
+        expect(root.querySelector('[data-role="price"]')?.textContent).toBe(
+            DASHED_PRICE,
+        );
+        expect(priceRow!.textContent).toContain(UNBUYABLE_BADGE);
+    });
+});
+
 describe('a-broadcast-never-prints-our-failure', () => {
     /**
      * Our failure is never the seller's shop, in the one place a viewer
      * cannot click retry. Empty is the seller's fact and may speak;
      * unreachable is ours and must not.
      */
+    function assertSilentFailure(root: HTMLElement): void {
+        const text = root.textContent ?? '';
+        expect(text).not.toContain(UNREACHABLE_BODY);
+        expect(text).not.toContain(UNREADABLE_BODY);
+        expect(text).not.toContain(TRY_AGAIN);
+        expect(text).not.toContain(OPENING_BODY);
+        expect(text).not.toContain(SETTINGS_UNREADABLE);
+        expect(root.querySelector('.hosts')).toBeNull();
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+    }
+
     it('the unreachable copy is absent on unreachable, and the empty line is only on empty', () => {
         const unreachable = paint(
             idlePubkey({
@@ -4931,14 +4998,14 @@ describe('a-broadcast-never-prints-our-failure', () => {
                 },
             }),
         );
-        const uText = unreachable.root.textContent ?? '';
-        expect(uText).not.toContain(UNREACHABLE_BODY);
-        expect(uText).not.toContain(copy.BROADCAST_EMPTY);
-        expect(unreachable.root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        assertSilentFailure(unreachable.root);
+        expect(unreachable.root.textContent).not.toContain(copy.BROADCAST_EMPTY);
 
         const empty = paint(idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'empty' } }));
         expect(empty.root.textContent).toContain(copy.BROADCAST_EMPTY);
         expect(empty.root.textContent).not.toContain(UNREACHABLE_BODY);
+        expect(empty.root.querySelector('.hosts')).toBeNull();
+        expect(empty.root.textContent).not.toContain(TRY_AGAIN);
 
         const plugin = paint(
             idlePubkey({
@@ -4950,7 +5017,7 @@ describe('a-broadcast-never-prints-our-failure', () => {
                 },
             }),
         );
-        expect(plugin.root.textContent).not.toContain(UNREACHABLE_BODY);
+        assertSilentFailure(plugin.root);
         expect(plugin.root.textContent).not.toContain(copy.BROADCAST_EMPTY);
 
         const unreadable = paint(
@@ -4959,7 +5026,7 @@ describe('a-broadcast-never-prints-our-failure', () => {
                 fetch: { kind: 'unreadable', triedAtMs: 0, returned: 3 },
             }),
         );
-        expect(unreadable.root.textContent).not.toContain(UNREADABLE_BODY);
+        assertSilentFailure(unreadable.root);
         expect(unreadable.root.textContent).not.toContain(copy.BROADCAST_EMPTY);
     });
 });
