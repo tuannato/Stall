@@ -80,6 +80,14 @@ prove it against what is actually painted behind a figure. The page turns
 every target's glyphs transparent, the runner screenshots and samples the
 boxes against the declared ink. Floor: `PIXEL_CONTRAST_FLOOR = 3`.
 
+**`CONTRAST_TEXT` grows with every sheet that declares its own ink.** The
+list is money figures, the controls on the publish path, the dock, the
+overlay's name plate — and `.obs-h`, the studio's step headings. That last
+one is there because `obsGuide.css` is a screen-owned sheet rather than a
+theme file, so `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground`
+never reads it and the pixels are the only judge its ink has. The studio is
+also the one screen a seller reads instructions on rather than a figure.
+
 Sampling amendments, each measured:
 
 - **Descendants are blanked too.** A child with its own ink does not
@@ -155,6 +163,17 @@ Sampling amendments, each measured:
   kill at all. Every theme file's reduce block now sits LAST in its own
   file (stall.css's rule, same measured reason) and names its
   transitions alongside its animations.
+- **The pass runs `offers,publish` and `broadcast`, and never the studio —
+  so the studio's own sheet declares no motion at all.** `obsGuide.css`
+  carries no transition, no animation and no `@keyframes`, and a vitest
+  grep (`the-diagram-has-no-transition`) is what holds it, because nothing
+  in this runner would ever see one. The design's card diagram transitioned
+  its `translate` between presets; `renderBody` calls `replaceChildren()`
+  and rebuilds that subtree on every picker change, so the nodes are always
+  new at their final position and the transition could only ever sit armed
+  — a reduced-motion leak with no animation to pay for it. Adding the
+  studio to `REDUCED` instead would buy a fourth prepare against a budget
+  already at its ceiling.
 
 ## The stream overlay: the canvas pass, and pass 5
 
@@ -333,6 +352,33 @@ CLAUDE.md §11 second command has to stay something everyone actually runs.
 If the runtime grows again, prune the matrix, do not raise the number
 first. The reduced-motion pass re-measures only the animating screens;
 state screens buy only the bare and fully-worn variants.
+
+**The ceiling is a property of the matrix AND of the box, and only one of
+those is in this repository.** Measured 2026-09-02 on the machine that
+ported the studio section, back to back, all rules green in both:
+
+| tree | contrast boxes | contrast | total |
+|---|---|---|---|
+| that day's `main`, 19:00, box idle (the window's own runs) | 1978 | 98.0s | **123.6s / 124.7s** |
+| that day's `main`, 22:00, box busy (the desktop app rendering) | 1978 | 124.1s | **165.0s** |
+| + the studio section, 22:00, same busy box | 2026 | 123.9s | **164.7s** |
+| + the studio section, 22:10, window's run, same busy box | 2026 | 127.7s | **169.2s** |
+
+So `pnpm test:layout` was **already over the ceiling on that hardware before
+the change** — and three hours earlier, on the same hardware with nothing
+else drawing, the same matrix ran at 124s: every pass, the build included,
+was 1.8× slower at 22:00 (mobile 8.9s against 4.9s), which is the box, not
+the matrix. Adding `.obs-h` — 48 boxes, 2.4% of the pass — cost nothing
+a run can distinguish from noise. The lesson is a measuring one: a red
+`runtime:` line is not by itself evidence that the diff in front of you grew
+the matrix. Diff the **box count** first (it is printed on the contrast line
+and is deterministic), and only then compare seconds — and compare them
+back-to-back on one machine, because an earlier reading of 207.5s for the same
+tree came from a box still hot from the vitest suite's five vite builds, and
+two concurrent probe runs on one host also share `--remote-debugging-port=9339`
+and each other's CPU. Whether to prune, raise the number, or call this box
+slow is the owner's call and needs a reading from the machine that sets the
+budget.
 
 **Every pass now prints what it cost**, because the first session to meet the
 ceiling had to guess which pass to prune and the guess would have been wrong:

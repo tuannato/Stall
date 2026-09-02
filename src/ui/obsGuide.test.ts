@@ -28,6 +28,10 @@ import {
     OBS_RECIPE_URL,
     OBS_MODE_FIXED,
     OBS_MODE_RAIL,
+    OBS_STEP_CHOOSE,
+    OBS_STEP_COPY,
+    OBS_STEP_SOURCE,
+    OBS_TRUTHS_TITLE,
     OBS_TRUTH_PHONE_VIEWERS,
     OBS_TRUTH_QR_SCAN,
     OBS_TRUTH_RAIL_RESTS,
@@ -36,6 +40,19 @@ import {
 } from './obsGuide';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
+
+/** The guide's own sheet, comments stripped — a comment cannot paint. */
+const guideCss = (): string =>
+    readFileSync(join(UI_DIR, 'obsGuide.css'), 'utf8').replace(
+        /\/\*[\s\S]*?\*\//g,
+        '',
+    );
+
+function painted(): HTMLElement {
+    const section = document.createElement('section');
+    paintObsGuide(section, view(), handlers());
+    return section;
+}
 
 const PK = `03${'aa'.repeat(32)}`;
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
@@ -274,5 +291,161 @@ describe('the-recipe-offers-both-source-sizes', () => {
         for (const n of [OBS_STICKER_WIDTH, OBS_STICKER_HEIGHT, OBS_RAIL_STICKER_HEIGHT]) {
             expect(src).not.toMatch(new RegExp(`\\b${String(n)}\\b`));
         }
+    });
+});
+
+describe('the-obs-guide-paints-three-steps-in-order', () => {
+    /**
+     * Three numbered steps and then the truths, in the DOM order a phone
+     * reads top to bottom (the desktop two-column block re-places them, and
+     * a grid area is not a reading order). `.section-head` stays the
+     * section's own h2 — `the-studio-groups-its-tools` pins that a studio
+     * head carries no data-role, and the guide must not mint a second one.
+     */
+    it('heads the steps, then the truths, and mints no section head', () => {
+        const section = painted();
+        expect(
+            [...section.querySelectorAll('h3.obs-h')].map((h) => h.textContent),
+        ).toEqual([OBS_STEP_CHOOSE, OBS_STEP_COPY, OBS_STEP_SOURCE, OBS_TRUTHS_TITLE]);
+        expect(section.querySelector('.section-head')).toBeNull();
+        // The step badge has its own class, so `.obs-n` stays the recipe's
+        // alone and the count below means what it says.
+        expect(
+            [...section.querySelectorAll('.obs-sn')].map((n) => n.textContent),
+        ).toEqual(['1', '2', '3']);
+    });
+});
+
+describe('the-recipe-numbers-are-nodes-not-pseudos', () => {
+    /**
+     * The design numbered the recipe with `li::before { position: absolute }`
+     * and the layout probe refuses a positioned pseudo-element outright: it
+     * is not in the DOM, so neither the box check nor the hit test can see
+     * it (PROBE-RULES, "Geometry rules"). Real spans instead — and the sheet
+     * carries no `content:` at all, so the rule cannot come back by a side
+     * door.
+     */
+    it('paints 01…07 as real spans and the sheet generates no content', () => {
+        const section = painted();
+        expect(
+            [
+                ...section.querySelectorAll('[data-role="obs-recipe"] .obs-n'),
+            ].map((n) => n.textContent),
+        ).toEqual(['01', '02', '03', '04', '05', '06', '07']);
+        expect(section.querySelectorAll('.obs-n').length).toBe(7);
+        const css = guideCss();
+        // A property, not a substring: `align-content:` is not generated
+        // content and a rule that reads as one would send the next author
+        // hunting for a defect that is not there.
+        expect(css).not.toMatch(/(?:^|[;{}\s])content\s*:/);
+        expect(css).not.toMatch(/::(before|after)/);
+    });
+});
+
+describe('the-diagram-follows-the-picker', () => {
+    /**
+     * The schematic is the picker's answer drawn: where the card sits, and
+     * whether a price is on it. A resting card and the side rail both mount
+     * NO price node — dimming one would leave a price on a card that never
+     * shows one, which is the same lie `renderBroadcastView` refuses by not
+     * mounting `.bc-ext` at rest (PROBE-RULES, "A rested card mounts no
+     * price"). `data-mode` is dropped on the rail exactly as the generated
+     * URL drops `mode`: the parser ignores it there.
+     */
+    it('tracks both pickers and mounts no price line at rest or on the rail', () => {
+        const section = painted();
+        const dia = (): Element =>
+            section.querySelector('[data-role="obs-diagram"]')!;
+        const price = (): Element | null =>
+            section.querySelector('[data-role="obs-diagram"] .d-price');
+
+        // The shipped default is the corner, resting.
+        expect(dia().getAttribute('data-preset')).toBe('corner');
+        expect(dia().getAttribute('data-mode')).toBe('rail');
+        expect(price()).toBeNull();
+        // No words, and nothing a money rule would have to protect.
+        expect(dia().textContent).toBe('');
+        expect(dia().querySelector('[data-role="price"]')).toBeNull();
+
+        const modeSelect = section.querySelector(
+            '[data-role="obs-mode-picker"]',
+        ) as HTMLSelectElement;
+        modeSelect.value = 'fixed';
+        modeSelect.dispatchEvent(new Event('change'));
+        expect(dia().getAttribute('data-mode')).toBe('fixed');
+        expect(price()).not.toBeNull();
+
+        const presetSelect = section.querySelector(
+            '[data-role="obs-preset-picker"]',
+        ) as HTMLSelectElement;
+        presetSelect.value = 'rail';
+        presetSelect.dispatchEvent(new Event('change'));
+        expect(dia().getAttribute('data-preset')).toBe('rail');
+        expect(dia().getAttribute('data-mode')).toBeNull();
+        expect(price()).toBeNull();
+    });
+});
+
+describe('the-toggle-line-names-both-toggles-in-strong', () => {
+    /**
+     * The two OBS toggles are the line a streamer skims past, so they are
+     * bolded — by SLICING the constant at its quote characters. Retyping
+     * them would put a second copy of pinned copy in this module, and
+     * `the-obs-guide-paints-the-recipe-and-every-truth` would go on passing
+     * while the two drifted apart.
+     */
+    it('bolds the two quoted names without retyping a byte', () => {
+        const section = painted();
+        const items = [...section.querySelectorAll('[data-role="obs-recipe"] li')];
+        expect(items.length).toBe(7);
+        const line = items[5]!;
+        expect(line.textContent).toBe(`06${OBS_RECIPE_TOGGLES}`);
+        const quoted = [...OBS_RECIPE_TOGGLES.matchAll(/“[^”]*”/g)].map(
+            (m) => m[0],
+        );
+        expect(quoted.length, 'the constant still carries two quoted names').toBe(2);
+        expect([...line.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(
+            quoted,
+        );
+    });
+});
+
+describe('the-truths-lead-with-their-first-phrase', () => {
+    /** Same slicing rule as the toggle line: the lead phrase is the constant
+     *  up to its first em dash, never a second copy of it. */
+    it('bolds each truth up to its first em dash and keeps the text intact', () => {
+        const section = painted();
+        const plates = [...section.querySelectorAll('[data-role="obs-truths"] p')];
+        const truths = [
+            OBS_TRUTH_PHONE_VIEWERS,
+            OBS_TRUTH_QR_SCAN,
+            OBS_TRUTH_RAIL_RESTS,
+            OBS_TRUTH_STALE_OVERLAY,
+        ];
+        expect(plates.length).toBe(truths.length);
+        plates.forEach((plate, i) => {
+            const truth = truths[i]!;
+            expect(plate.textContent).toBe(truth);
+            const lead = plate.querySelector('strong');
+            expect(lead, truth).not.toBeNull();
+            expect(lead!.textContent).toBe(truth.slice(0, truth.indexOf(' — ')));
+        });
+    });
+});
+
+describe('the-diagram-has-no-transition', () => {
+    /**
+     * `renderBody` calls `replaceChildren()` and rebuilds the whole subtree
+     * on every picker change, so the diagram's nodes are always brand new at
+     * their final position — a transition could never animate, it could only
+     * sit armed. And the reduced-motion probe pass runs `offers,publish` and
+     * `broadcast` only, never the studio, so nothing else in this repository
+     * would ever see one.
+     */
+    it('declares no transition, animation or keyframes in the guide sheet', () => {
+        const css = guideCss();
+        expect(css).not.toMatch(/transition/);
+        expect(css).not.toMatch(/animation\s*:/);
+        expect(css).not.toMatch(/@keyframes/);
     });
 });

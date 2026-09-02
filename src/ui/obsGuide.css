@@ -1,0 +1,318 @@
+/*
+ * The studio's "Stream overlay" section, scoped under `.obs-guide`.
+ *
+ * A screen-owned sheet, the way `broadcast.css` is one: everything here
+ * paints inside one section of one panel, and nothing outside it reads a
+ * rule below. The shape is the design's (Claude Design, round 4) with its
+ * `ovx-*` names ported to `obs-*`; three of its mechanisms are deliberately
+ * not ported, each for a rule this repository already enforces:
+ *
+ *  - the recipe numbers were `li::before { position: absolute }`. The layout
+ *    probe refuses a positioned pseudo-element outright — it is not in the
+ *    DOM, so neither the box check nor the hit test can see it. They are
+ *    real `<span class="obs-n">` nodes, and nothing here declares `content:`.
+ *  - the copy button hovered with `filter: brightness()`. `filter` is in
+ *    `BANNED_THEME_PROPS`; the hover is a colour swap instead.
+ *  - the two-column block was `@container (min-width: 700px)`. No container
+ *    query exists in this repository; the studio's breakpoint is
+ *    `min-width: 680px`, the same one `stall.css` uses, so the section turns
+ *    with every other studio tool rather than on its own measurement.
+ *
+ * The card diagram declares no transition and no animation. `renderBody`
+ * calls `replaceChildren()` and rebuilds the subtree on every picker change,
+ * so its nodes are always new at their final position — a transition could
+ * only ever sit armed, and the reduced-motion probe pass never runs the
+ * studio screen, so nothing in this repository would see it.
+ * Test: `the-diagram-has-no-transition`.
+ */
+
+.obs-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+/* A step up from `.fine`: this is the section's opening sentence, not a
+ * footnote under a control. */
+.obs-lead {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/*
+ * Phone is one column, in the reading order 1, 2, 3, truths. The desktop
+ * block below re-places the same four children into two columns; a grid
+ * area moves paint, never reading order, which is why the truths sit last
+ * in the DOM and second-from-bottom on a wide screen.
+ */
+.obs-grid {
+    display: grid;
+    gap: 20px;
+    min-width: 0;
+}
+
+.obs-step {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.obs-sh {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+/*
+ * The step heading. `.section-head` is the section's own h2 and must stay
+ * data-role-free (`the-studio-groups-its-tools`), so the steps inside get
+ * their own class — which is also a contrast target in `layout/probe.ts`.
+ */
+.obs-h {
+    margin: 0;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--s-text);
+}
+
+.obs-sn {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--s-radius);
+    background: var(--s-accent);
+    color: var(--s-surface);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+/*
+ * Step 1: the diagram above the pickers, at every width.
+ *
+ * The design put them side by side once its container passed 700px, and that
+ * measurement was of the whole section — but the row lives inside the LEFT
+ * COLUMN of the two-column block, which is 366px at 1280 and never gets
+ * wider (`--s-content-max-d` caps the body at 860px). Measured there: a 56%
+ * diagram leaves the pickers 145px, while "Rest, then show a price" needs
+ * 223px at the 16px iOS floor `.paste-in` sets — clipped by 78px, which is
+ * the round-4 review's own item 4 ("one column on phone; the option labels
+ * are pinned copy") reappearing one breakpoint over. Fitting the control
+ * would leave the picture 127px. Squeezing the control to seat the
+ * explanation is backwards, so the picture takes the whole column and both
+ * stay legible.
+ */
+.obs-choose {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+/*
+ * The schematic. A dark ground because it stands for somebody else's video,
+ * not for this stall's look — the one thing on this screen the theme does
+ * not own. The plates inside are drawn light for the same reason: the
+ * overlay is a light card over a stream on every shipped look.
+ */
+.obs-dia {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--s-radius);
+    background: #191d26;
+    overflow: hidden;
+}
+
+/*
+ * Where the card sits, in viewBox user units: a CSS transform on an SVG
+ * child resolves in user units and scales with the box, so these three
+ * numbers survive every width the section is painted at. The corner is
+ * anchored 10 units off the bottom-right, and its resting card is shorter
+ * by the price row it does not mount — hence two corner offsets. The rail
+ * is centred. The three states are mutually exclusive: `data-mode` is only
+ * set when the mode picker is on screen, exactly as the generated URL only
+ * carries `mode` on the corner.
+ */
+.obs-dia .d-plate {
+    transform: translate(120px, 32px);
+}
+
+.obs-dia[data-mode='rail'] .d-plate {
+    transform: translate(120px, 38px);
+}
+
+.obs-dia[data-preset='rail'] .d-plate {
+    transform: translate(120px, 24px);
+}
+
+.obs-dia .d-frame {
+    fill: rgba(255, 255, 255, 0.14);
+}
+
+.obs-dia .d-card {
+    fill: #f2f5f8;
+}
+
+.obs-dia .d-name {
+    fill: #262b33;
+}
+
+.obs-dia .d-brand,
+.obs-dia .d-price {
+    fill: var(--s-accent);
+}
+
+.obs-dia .d-qr-ink {
+    fill: #14171a;
+}
+
+.obs-dia .d-qr-hole {
+    fill: #f2f5f8;
+}
+
+/*
+ * One column on a phone, at 390 and up. The design put the two pickers side
+ * by side, which ellipsised "Rest, then s…" — and the option labels are
+ * pinned copy, so the fix is the column, not a shorter word.
+ */
+.obs-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    min-width: 0;
+}
+
+.obs-field {
+    min-width: 0;
+    margin: 0;
+}
+
+/*
+ * Step 2 keeps `.share`, `.share-row` and `.share-url` so `stall.css`'s
+ * copy-field rules apply unchanged — including the wrap that gives the
+ * clipboard fallback's whole sentence its own line. Only the hover is new,
+ * and it is a colour swap to the filled state: `filter` is banned, and a
+ * brightness step on a token ground is a colour nobody chose.
+ */
+.obs-copy:hover {
+    background: var(--s-accent);
+    color: var(--s-surface);
+}
+
+/* Step 3: the recipe. Number column, then the line. */
+.obs-recipe {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.obs-recipe li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 9px;
+    align-items: baseline;
+    padding: 9px 0;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 20%, transparent);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--s-text);
+}
+
+.obs-recipe li:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.obs-n {
+    font-family: var(--s-font);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--s-accent);
+}
+
+/* The one line that closes the source if it is skipped, on its own plate. */
+.obs-recipe li.obs-warn {
+    margin: 6px 0;
+    padding: 11px;
+    border-top: 0;
+    border-radius: var(--s-radius);
+    background: color-mix(in srgb, var(--s-accent) 10%, transparent);
+}
+
+.obs-recipe li.obs-warn + li {
+    border-top: 0;
+}
+
+.obs-recipe strong {
+    font-weight: 700;
+}
+
+.obs-truths {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.obs-truths .fine {
+    margin: 0;
+    padding: 9px 11px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 24%, transparent);
+    border-radius: var(--s-radius);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.obs-truths strong {
+    font-weight: 700;
+    color: var(--s-text);
+}
+
+/*
+ * Desktop: the recipe takes the right column whole, the two steps and the
+ * truths stack down the left. The left column is the taller of the two on
+ * every look, so the spanning right column sits at the top of its area
+ * rather than stretching the rows underneath the left one — which is the
+ * round-4 review's "left column ends early", fixed by moving the truths
+ * out of the right column instead of padding the left one.
+ */
+@media (min-width: 680px) {
+    .obs-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            'where source'
+            'copy source'
+            'truths source';
+        align-items: start;
+        gap: 22px 28px;
+    }
+
+    .obs-step-where {
+        grid-area: where;
+    }
+
+    .obs-step-copy {
+        grid-area: copy;
+    }
+
+    .obs-step-source {
+        grid-area: source;
+    }
+
+    .obs-step-truths {
+        grid-area: truths;
+    }
+}

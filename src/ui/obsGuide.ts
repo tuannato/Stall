@@ -24,6 +24,7 @@ import {
     OBS_STICKER_HEIGHT,
     OBS_STICKER_WIDTH,
 } from './obsSizes';
+import './obsGuide.css';
 
 export type ObsPreset = 'corner' | 'rail';
 export type ObsMode = 'fixed' | 'rail';
@@ -31,6 +32,17 @@ export type ObsMode = 'fixed' | 'rail';
 export const OBS_GUIDE_TITLE = 'Stream overlay';
 export const OBS_GUIDE_LEDE =
     'Two ways to add this shop as a Browser Source: a drop-in 1920×1080 canvas, or a sticker you drag onto the stream.';
+
+/**
+ * The three step headings and the truths' title. `OBS_STEP_COPY` reads the
+ * same as `OBS_COPY_LINK` today and is deliberately its own constant: one
+ * is a heading over a field, the other is a button's label, and a rename of
+ * either must not silently rename the other.
+ */
+export const OBS_STEP_CHOOSE = 'Where it sits, how the price shows';
+export const OBS_STEP_COPY = 'Copy link';
+export const OBS_STEP_SOURCE = 'Browser Source';
+export const OBS_TRUTHS_TITLE = 'Before you go live';
 
 export const OBS_PRESET_LABEL = 'Where it sits';
 export const OBS_PRESET_CORNER = 'Corner card';
@@ -125,8 +137,103 @@ function el<K extends keyof HTMLElementTagNameMap>(
     return node;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * One SVG node. `createElementNS`, never `innerHTML`: the CSP is `'self'`
+ * and the diagram is built, not parsed. Class goes through `setAttribute`
+ * because `className` on an SVG element is a read-only `SVGAnimatedString`.
+ */
+function svgEl(
+    tag: string,
+    className: string,
+    attrs: Record<string, number | string> = {},
+): SVGElement {
+    const node = document.createElementNS(SVG_NS, tag) as SVGElement;
+    node.setAttribute('class', className);
+    for (const [name, value] of Object.entries(attrs)) {
+        node.setAttribute(name, String(value));
+    }
+    return node;
+}
+
+/** The head plate's height with a price row on it, and without. */
+const HEAD_TALL = 20;
+const HEAD_SHORT = 14;
+
+/**
+ * The schematic beside the pickers: a frame standing for the stream, and
+ * the overlay's two plates where the chosen preset puts them. It carries no
+ * text and nothing tagged `data-role="price"` — it is a picture of a card,
+ * never a price this app is claiming.
+ *
+ * A resting card and the side rail mount **no** price node at all, rather
+ * than a dimmed one: the overlay itself does not mount `.bc-ext` in either
+ * state, and a hidden price is exactly what the covered-amount rule exists
+ * to refuse. The card is shorter by that row, which is why the CSS carries
+ * two corner offsets — and why `data-mode` is set only when the mode picker
+ * is on screen, the same rule the generated URL follows.
+ *
+ * Geometry is in viewBox user units throughout; the placement transform
+ * lives in `obsGuide.css`, where a user-unit translate scales with the box.
+ */
+function diagram(preset: ObsPreset, mode: ObsMode): SVGElement {
+    const showsPrice = preset === 'corner' && mode === 'fixed';
+    const root = svgEl('svg', 'obs-dia', {
+        viewBox: '0 0 160 90',
+        'aria-hidden': 'true',
+        'data-role': 'obs-diagram',
+        'data-preset': preset,
+    });
+    if (preset !== 'rail') {
+        root.setAttribute('data-mode', mode);
+    }
+    // The stream's own picture, top-left: a window and a caption bar, so the
+    // card reads as sitting over somebody else's video and not on a page.
+    root.append(svgEl('rect', 'd-frame', { x: 9, y: 9, width: 46, height: 27, rx: 2 }));
+    root.append(svgEl('rect', 'd-frame', { x: 9, y: 40, width: 15, height: 4, rx: 1 }));
+
+    const headHeight = showsPrice ? HEAD_TALL : HEAD_SHORT;
+    const card = svgEl('g', 'd-plate');
+    card.append(svgEl('rect', 'd-card', { x: 0, y: 0, width: 30, height: headHeight, rx: 2 }));
+    card.append(svgEl('rect', 'd-brand', { x: 4, y: 4, width: 10, height: 2, rx: 1 }));
+    card.append(svgEl('rect', 'd-name', { x: 4, y: 8, width: 20, height: 3, rx: 1 }));
+    if (showsPrice) {
+        card.append(svgEl('rect', 'd-price', { x: 4, y: 14, width: 14, height: 3, rx: 1 }));
+    }
+
+    const qrTop = headHeight + 2;
+    card.append(svgEl('rect', 'd-card', { x: 0, y: qrTop, width: 30, height: 26, rx: 2 }));
+    // Three finders and a scatter: enough to read as a code at 30 units
+    // wide, never enough to scan. The real one is drawn by `qrSvg`.
+    for (const [fx, fy] of [
+        [6, 4],
+        [18, 4],
+        [6, 16],
+    ] as const) {
+        card.append(svgEl('rect', 'd-qr-ink', { x: fx, y: qrTop + fy, width: 6, height: 6 }));
+        card.append(
+            svgEl('rect', 'd-qr-hole', { x: fx + 1, y: qrTop + fy + 1, width: 4, height: 4 }),
+        );
+        card.append(
+            svgEl('rect', 'd-qr-ink', { x: fx + 2, y: qrTop + fy + 2, width: 2, height: 2 }),
+        );
+    }
+    for (const [dx, dy] of [
+        [15, 13],
+        [19, 16],
+        [22, 19],
+        [17, 19],
+        [15, 22],
+    ] as const) {
+        card.append(svgEl('rect', 'd-qr-ink', { x: dx, y: qrTop + dy, width: 2, height: 2 }));
+    }
+    root.append(card);
+    return root;
+}
+
 function presetPicker(onChange: () => void): HTMLElement {
-    const label = el('label', 'paste-label', OBS_PRESET_LABEL);
+    const label = el('label', 'paste-label obs-field', OBS_PRESET_LABEL);
     const select = el('select', 'paste-in');
     select.setAttribute('data-role', 'obs-preset-picker');
     select.setAttribute('data-focus-key', 'obs-preset-picker');
@@ -152,7 +259,7 @@ function presetPicker(onChange: () => void): HTMLElement {
  * for that preset (PROPOSAL.md C1), so a control that visibly does nothing
  * is worse than one that is simply not there. */
 function modePicker(onChange: () => void): HTMLElement {
-    const label = el('label', 'paste-label', OBS_MODE_LABEL);
+    const label = el('label', 'paste-label obs-field', OBS_MODE_LABEL);
     const select = el('select', 'paste-in');
     select.setAttribute('data-role', 'obs-mode-picker');
     select.setAttribute('data-focus-key', 'obs-mode-picker');
@@ -191,7 +298,7 @@ function copyControl(url: string): HTMLElement {
     field.readOnly = true;
     field.value = url;
     field.setAttribute('aria-label', OBS_COPY_LINK);
-    const btn = el('button', 'mini', OBS_COPY_LINK);
+    const btn = el('button', 'mini obs-copy', OBS_COPY_LINK);
     btn.type = 'button';
     const fallback = (): void => {
         field.focus();
@@ -218,21 +325,78 @@ function copyControl(url: string): HTMLElement {
     return wrap;
 }
 
+const RECIPE_STEPS = [
+    OBS_RECIPE_SOURCE,
+    OBS_RECIPE_URL,
+    OBS_RECIPE_SIZE,
+    OBS_RECIPE_STICKER,
+    OBS_RECIPE_CSS,
+    OBS_RECIPE_TOGGLES,
+    OBS_RECIPE_POSITION,
+];
+
+/**
+ * The toggles line, with each quoted OBS control bolded — built by SLICING
+ * the constant at its quote characters, so `textContent` stays byte-identical
+ * to `OBS_RECIPE_TOGGLES`. Retyping either name would put a second copy of
+ * pinned copy in this file, and the two would drift with the test still
+ * green. Test: `the-toggle-line-names-both-toggles-in-strong`.
+ */
+function togglesLine(into: HTMLElement): void {
+    let at = 0;
+    for (const quoted of OBS_RECIPE_TOGGLES.matchAll(/“[^”]*”/g)) {
+        const start = quoted.index ?? 0;
+        if (start > at) {
+            into.append(OBS_RECIPE_TOGGLES.slice(at, start));
+        }
+        into.append(el('strong', undefined, quoted[0]));
+        at = start + quoted[0].length;
+    }
+    into.append(OBS_RECIPE_TOGGLES.slice(at));
+}
+
+/**
+ * The Browser Source recipe. Each line's number is a REAL `<span>`, never a
+ * `::before` counter: the layout probe refuses a positioned pseudo-element
+ * outright, because it is not in the DOM and neither the box check nor the
+ * hit test can see one. The line's own text sits in a second span so the
+ * `<li>`'s two-column grid holds exactly two items — the bolded names inside
+ * the toggles line would otherwise each become a grid item of their own.
+ */
 function recipeList(): HTMLElement {
     const list = el('ol', 'obs-recipe');
     list.setAttribute('data-role', 'obs-recipe');
-    for (const step of [
-        OBS_RECIPE_SOURCE,
-        OBS_RECIPE_URL,
-        OBS_RECIPE_SIZE,
-        OBS_RECIPE_STICKER,
-        OBS_RECIPE_CSS,
-        OBS_RECIPE_TOGGLES,
-        OBS_RECIPE_POSITION,
-    ]) {
-        list.append(el('li', undefined, step));
-    }
+    RECIPE_STEPS.forEach((step, index) => {
+        const warns = step === OBS_RECIPE_TOGGLES;
+        const item = el('li', warns ? 'obs-warn' : undefined);
+        item.append(el('span', 'obs-n', String(index + 1).padStart(2, '0')));
+        const line = el('span', 'obs-t');
+        if (warns) {
+            togglesLine(line);
+        } else {
+            line.textContent = step;
+        }
+        item.append(line);
+        list.append(item);
+    });
     return list;
+}
+
+/** Where a truth's lead phrase ends. Every truth carries one. */
+const LEAD_END = ' — ';
+
+/** One truth on its own plate, led by its first phrase in bold — sliced, for
+ *  the same reason the toggle names are. */
+function truthPlate(truth: string): HTMLElement {
+    const plate = el('p', 'fine');
+    const cut = truth.indexOf(LEAD_END);
+    if (cut === -1) {
+        plate.textContent = truth;
+        return plate;
+    }
+    plate.append(el('strong', undefined, truth.slice(0, cut)));
+    plate.append(truth.slice(cut));
+    return plate;
 }
 
 function truthsList(): HTMLElement {
@@ -253,8 +417,26 @@ function truthsList(): HTMLElement {
                   OBS_TRUTH_STALE_OVERLAY,
               ];
     for (const truth of truths) {
-        wrap.append(el('p', 'fine', truth));
+        wrap.append(truthPlate(truth));
     }
+    return wrap;
+}
+
+/**
+ * A step's box and its heading. `<h3 class="obs-h">`, never `.section-head`
+ * — that class is the studio section's own h2 and stays data-role-free
+ * (`the-studio-groups-its-tools`). The badge is `.obs-sn` so `.obs-n` names
+ * the recipe's numbers alone. The truths carry a title and no badge: they
+ * are not a step a streamer performs.
+ */
+function stepBox(badge: number | undefined, heading: string, area: string): HTMLElement {
+    const wrap = el('div', `obs-step ${area}`);
+    const head = el('div', 'obs-sh');
+    if (badge !== undefined) {
+        head.append(el('span', 'obs-sn', String(badge)));
+    }
+    head.append(el('h3', 'obs-h', heading));
+    wrap.append(head);
     return wrap;
 }
 
@@ -280,26 +462,47 @@ export function paintObsGuide(
 
     const raw = identityOf(view);
     if (raw === undefined) {
-        mount.append(el('p', 'fine', OBS_GUIDE_LEDE));
+        mount.append(el('p', 'fine obs-lead', OBS_GUIDE_LEDE));
         return;
     }
 
+    /*
+     * DOM order is the phone's reading order: the three steps, then the
+     * truths. The desktop block in `obsGuide.css` re-places the same four
+     * children into two columns — a grid area moves paint, never reading
+     * order, which is why the truths are last here and second-from-bottom
+     * on a wide screen.
+     */
     const renderBody = (): void => {
         mount.replaceChildren();
-        mount.append(el('p', 'fine', OBS_GUIDE_LEDE));
+        mount.append(el('p', 'fine obs-lead', OBS_GUIDE_LEDE));
+        const grid = el('div', 'obs-grid');
 
-        const choices = el('div', 'obs-choices');
-        choices.append(presetPicker(renderBody));
+        const where = stepBox(1, OBS_STEP_CHOOSE, 'obs-step-where');
+        const choose = el('div', 'obs-choose');
+        choose.append(diagram(selectedPreset, selectedMode));
+        const fields = el('div', 'obs-fields');
+        fields.append(presetPicker(renderBody));
         if (selectedPreset !== 'rail') {
-            choices.append(modePicker(renderBody));
+            fields.append(modePicker(renderBody));
         }
-        mount.append(choices);
+        choose.append(fields);
+        where.append(choose);
+        grid.append(where);
 
-        const url = urlFor(raw, selectedPreset, selectedMode);
-        mount.append(copyControl(url));
+        const copyStep = stepBox(2, OBS_STEP_COPY, 'obs-step-copy');
+        copyStep.append(copyControl(urlFor(raw, selectedPreset, selectedMode)));
+        grid.append(copyStep);
 
-        mount.append(recipeList());
-        mount.append(truthsList());
+        const source = stepBox(3, OBS_STEP_SOURCE, 'obs-step-source');
+        source.append(recipeList());
+        grid.append(source);
+
+        const truths = stepBox(undefined, OBS_TRUTHS_TITLE, 'obs-step-truths');
+        truths.append(truthsList());
+        grid.append(truths);
+
+        mount.append(grid);
     };
     renderBody();
 }

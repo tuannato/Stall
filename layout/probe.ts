@@ -1026,6 +1026,11 @@ const CONTRAST_TEXT = [
     // is not a money figure, and on a transparent wire it sits on the
     // streamer's video with nothing but the plate between them.
     '[data-role="stall-name"]',
+    // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
+    // a theme file, so nothing else measures the ink it declares — and the
+    // studio section is the one place a seller reads instructions rather than
+    // a figure.
+    '.obs-h',
 ].join(', ');
 
 declare global {

@@ -25,12 +25,21 @@ import {
 } from '../domain/theme';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
+/**
+ * Every sheet this app serves. The tail (everything after `stall.css`) is
+ * also what the ink-over-ground rule is measured on: the three looks, and
+ * the two screen-owned sheets that carry their own palette decisions —
+ * `broadcast.css` for the stream overlay and `obsGuide.css` for the studio
+ * section that explains it. A sheet missing from this list is a sheet no
+ * guard here can see.
+ */
 const SHEETS = [
     'stall.css',
     'theme-modern.css',
     'theme-neo.css',
     'theme-rural.css',
     'broadcast.css',
+    'obsGuide.css',
 ];
 
 const stripped = (file: string): string =>
