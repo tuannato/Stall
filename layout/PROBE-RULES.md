@@ -193,6 +193,66 @@ somebody else's video.
   the head plate that is not a money figure, and on a transparent wire it sits
   on the stream with one plate between them.
 
+### The sticker source holds the card
+
+`src/ui/obsSizes.ts` exports the numbers the studio's recipe tells a streamer
+to type into OBS's Width and Height boxes, and nothing else in this guard can
+see one go wrong. A Browser Source cut too short **clips** the card — from the
+top on the bottom-anchored corner, from both ends on the centred rail — and
+the first thing to go is the QR plate at the bottom of the stack, which is the
+only way anybody watching reaches the stall. A clipped source scrolls nowhere,
+covers nothing and stays inside the page it was cut to, so every other rule
+here calls it healthy.
+
+- **`the-sticker-height-fits-the-tallest-card`.** On every `NO_DECOR_SCREENS`
+  screen and every look, `.bc`'s box height plus both insets must be
+  ≤ `OBS_STICKER_HEIGHT` for a corner preset and ≤ `OBS_RAIL_STICKER_HEIGHT`
+  for the rail. The height is ceiled: a Browser Source is typed in whole
+  pixels, and the plates stack on a 1.15 line-height that lands on fractions.
+- **`the-sticker-width-is-the-plate-plus-both-insets`.** The same box's width
+  plus both insets must **equal** `OBS_STICKER_WIDTH`. 252 + 60 + 60 = 372 is
+  the one number the stylesheet implies; an inequality would let the plate
+  shrink under a recipe nobody re-derived.
+- **Both insets count on both presets.** The corner is anchored
+  `bottom: 60px` and keeps the same clearance above it; the rail is `top: 50%`
+  with a `translateY(-50%)`, so a source's spare height is split above and
+  below and half of it is not enough. The inset is **read**, not retyped:
+  computed `right` is the one edge that is a length on both presets, `bottom`
+  being `auto` on the centred rail.
+- **The worst card is a fixture, not an argument.** `broadcast-long-name` and
+  `broadcast-rail-long-name` carry a 32-byte name (§5's ceiling) with no break
+  opportunity. Neo clamps `.bc-name` at three lines where Modern and Rural
+  stop at two, so Neo is where both presets peak. Both are geometry-only and
+  stay out of `__contrastScreens` — measured, the contrast pass sampled the
+  same 1978 boxes before and after them.
+
+Measured 2026-09-02 at the 1920 canvas, `.bc` box in px with the height
+ceiled. Add 120 for the source the recipe asks for:
+
+| screen | Modern | Neo city | Rural |
+|---|---|---|---|
+| `broadcast`, `broadcast-clear` | 252x604 | 252x604 | 252x571 |
+| `broadcast-rest` | 252x424 | 252x424 | 252x391 |
+| `broadcast-empty` | 252x457 | 252x485 | 252x424 |
+| `broadcast-long-name` | 252x604 | **252x638** | 252x604 |
+| `broadcast-rail` | 252x424 | 252x424 | 252x391 |
+| `broadcast-rail-long-name` | 252x424 | **252x457** | 252x424 |
+
+Corner peak 638 + 120 = **758**, inside the shipped `OBS_STICKER_HEIGHT = 800`
+— left alone. Rail peak 457 + 120 = **577**, and
+`OBS_RAIL_STICKER_HEIGHT` shipped at 560: the incident. 560 was taken from the
+rail wearing the friendly fixture name, one line shorter than a manifest is
+allowed to publish, and CRITIC-3 item 4 had said in words that a three-line
+Neo rail was the one that could clip. Raised to **580**, the smallest multiple
+of 20 that holds 577. That is 3px of headroom, which is the point of a rule
+measured to the pixel: the next line of chrome on the rail goes red instead of
+shipping a recipe that cuts the QR in half.
+
+Proved red by planting `OBS_STICKER_HEIGHT = 600`: 31 failures across the
+canvas and reduced-motion passes, each naming its look and its own measured
+height (`.bc is 252x638 … needs 372x758 — OBS_STICKER_HEIGHT is 600`), and no
+other rule moved.
+
 ### `bg=transparent`, in declarations and in pixels
 
 Two halves, because either alone is a lie a reader would believe.
@@ -289,10 +349,12 @@ hour.
   frames were identical to the first. Nothing repaints between them, so the
   first prepare's tree is the tree that gets shot.
 - **The contrast driver has its own screen list** (`__contrastScreens`), not
-  `screensToRun()`. The overlay's five screens share one head plate and one
-  card: `broadcast` carries every figure the other four do, and an ordinary
-  shot of `broadcast-clear` is a shot flattened onto white — which pass 5
-  measures properly, over black and white, instead of paying for it twice.
+  `screensToRun()`. The overlay's screens share one head plate and one card:
+  `broadcast` carries every figure the others do, an ordinary shot of
+  `broadcast-clear` is a shot flattened onto white — which pass 5 measures
+  properly, over black and white, instead of paying for it twice — and the two
+  long-name screens are geometry for the sticker rule, on grounds this list
+  already holds. Measured: 1978 boxes before them and 1978 after.
 
 **The number moves ±15% between runs on the same tree** (98.9s and 113.2s for
 the same contrast pass, an hour apart). A run near the ceiling is not by

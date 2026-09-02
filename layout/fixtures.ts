@@ -366,6 +366,46 @@ export const SCREENS: Record<string, StallView> = {
         broadcast: bc('corner', 'fixed'),
         broadcastState: 'live',
     }),
+    /*
+     * The tallest head any look can paint, which is the whole reason this
+     * screen exists. Neo clamps `.bc-name` at three lines where Modern and
+     * Rural stop at two (`.t-neo.broadcast .bc-name`), and 32 bytes with no
+     * break opportunity fill all three in a 216px column at 29px. Everything
+     * else is `broadcast`'s — the corner preset, the fixed mode, the same
+     * stress cursor — so the card under the name is still the longest asked
+     * figure this book holds.
+     *
+     * `OBS_STICKER_HEIGHT` is a promise about the tallest card this app
+     * paints, so `the-sticker-height-fits-the-tallest-card` has to measure it
+     * against the worst name a manifest can carry (§5: 1-32 bytes) and not
+     * against the friendly fixture one.
+     *
+     * **Geometry only.** It stays out of `__contrastScreens`: the plate, the
+     * ink and every figure on it are `broadcast`'s, already sampled there,
+     * and the contrast pass is most of this guard's runtime.
+     */
+    'broadcast-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 3,
+        stallName: 'W'.repeat(32),
+    }),
+    /*
+     * The same name on the rail, because the rail has its OWN ceiling and a
+     * ceiling derived from the other preset's card is a number nobody
+     * measured. Measured 2026-09-02: the rail with the friendly fixture name
+     * is 424px under Neo and 544 with both insets — sixteen under the 560 it
+     * was shipped with — and this name, one line taller, measures 457 and
+     * needs 577. The rail mounts no card, so the name is the only thing that
+     * can grow, and a 32-byte one is what §5 lets a seller publish.
+     */
+    'broadcast-rail-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('rail', 'rail'),
+        broadcastState: 'live',
+        stallName: 'W'.repeat(32),
+    }),
 };
 
 /**
@@ -423,4 +463,6 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-rest',
     'broadcast-rail',
     'broadcast-empty',
+    'broadcast-long-name',
+    'broadcast-rail-long-name',
 ]);

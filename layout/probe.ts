@@ -19,6 +19,11 @@ import {
     wornAttachments,
     type ShippedAttachment,
 } from '../src/domain/attachments';
+import {
+    OBS_RAIL_STICKER_HEIGHT,
+    OBS_STICKER_HEIGHT,
+    OBS_STICKER_WIDTH,
+} from '../src/ui/obsSizes';
 import { NO_DECOR_SCREENS, SCREENS, STATE_SCREENS, handlers } from './fixtures';
 
 /**
@@ -568,6 +573,64 @@ function measure(screen: string, themeLabel: string): Failure[] {
         );
     }
 
+    /*
+     * The sticker source holds the card.
+     *
+     * `OBS_STICKER_WIDTH` / `OBS_STICKER_HEIGHT` / `OBS_RAIL_STICKER_HEIGHT`
+     * are the numbers the studio's recipe tells a streamer to type into OBS's
+     * Width and Height boxes, and a source shorter than the card clips it —
+     * from the top on a bottom-anchored corner, from both ends on the centred
+     * rail. Nothing else in this guard can see that: a clipped Browser Source
+     * scrolls nowhere, covers nothing and stays inside the page it was cut to.
+     * So the constants are asserted against the painted box, and the fixtures
+     * that carry the worst case are `broadcast-long-name` and
+     * `broadcast-rail-long-name` — one per preset, because each preset has its
+     * own constant and a ceiling derived from the other one is a number nobody
+     * measured.
+     *
+     * **Both insets count on both presets.** The corner is anchored
+     * `bottom: 60px` and keeps the same clearance above it; the rail is
+     * `top: 50%` with a `translateY(-50%)`, so the source's spare height is
+     * split above and below and half of it is not enough.
+     *
+     * **The inset is read, not retyped.** `right` is the one edge that is a
+     * length on both presets — `bottom` computes to `auto` on the centred
+     * rail — and `broadcast.css` uses the same 60px on every edge it sets.
+     * Ceil the height: a Browser Source is typed in whole pixels, and the
+     * plates stack on a 1.15 line-height that lands on fractions.
+     */
+    if (overlay) {
+        const bc = root.querySelector('[data-role="broadcast"]');
+        if (bc === null) {
+            fail('an overlay screen painted no card', 'nothing to size a sticker to');
+        } else {
+            const box = bc.getBoundingClientRect();
+            const inset = Number.parseFloat(getComputedStyle(bc).right) || 0;
+            const rail = bc.getAttribute('data-preset') === 'rail';
+            const ceiling = rail ? OBS_RAIL_STICKER_HEIGHT : OBS_STICKER_HEIGHT;
+            const named = rail ? 'OBS_RAIL_STICKER_HEIGHT' : 'OBS_STICKER_HEIGHT';
+            const w = Math.round(box.width) + 2 * inset;
+            const h = Math.ceil(box.height) + 2 * inset;
+            const seen =
+                `.bc is ${Math.round(box.width)}x${Math.ceil(box.height)} ` +
+                `at inset ${inset}`;
+            if (h > ceiling) {
+                fail(
+                    'the-sticker-height-fits-the-tallest-card',
+                    `${seen}, so the ${rail ? 'rail' : 'corner'} sticker needs ` +
+                        `${w}x${h} — ${named} is ${ceiling}`,
+                );
+            }
+            if (w !== OBS_STICKER_WIDTH) {
+                fail(
+                    'the-sticker-width-is-the-plate-plus-both-insets',
+                    `${seen}, so the sticker needs ${w} wide — ` +
+                        `OBS_STICKER_WIDTH is ${OBS_STICKER_WIDTH}`,
+                );
+            }
+        }
+    }
+
     // The theme must reach the edges. Measured once at 375x812 as an 8px border
     // and 42% of the screen left unthemed, and invisible for two months because
     // the shipped default is white on a white canvas.
@@ -996,11 +1059,13 @@ declare global {
  * guard's runtime, so a screen belongs here only if it puts a figure on a
  * ground no other screen does.
  *
- * The overlay's five screens share one head plate and one card between them.
- * `broadcast` carries every figure the other four carry, on the same plate;
+ * The overlay's screens share one head plate and one card between them.
+ * `broadcast` carries every figure the others carry, on the same plate;
  * `broadcast-clear` paints no ground at all, so an ordinary shot of it is a
  * shot flattened onto white — which the transparency pass measures properly,
- * over black AND white, rather than paying for it twice here.
+ * over black AND white, rather than paying for it twice here. The two
+ * long-name screens are geometry for the sticker rule and put no figure on a
+ * ground this list does not already hold.
  */
 window.__contrastScreens = screensForViewport().filter(
     (name) => !NO_DECOR_SCREENS.has(name) || name === 'broadcast',

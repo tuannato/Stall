@@ -13,4 +13,4 @@ export const OBS_STICKER_WIDTH = 372;
 /** Corner card (bottom-right anchored): the card's box plus both insets. */
 export const OBS_STICKER_HEIGHT = 800;
 /** Side rail (mid-right, centred): the rail's box plus both insets. */
-export const OBS_RAIL_STICKER_HEIGHT = 560;
+export const OBS_RAIL_STICKER_HEIGHT = 580;
