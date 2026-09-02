@@ -6,12 +6,15 @@ import { fitsQr } from '../domain/qr';
 import { formatAtoms, formatXec, isUnbuyable } from '../domain/money';
 import { stallPath } from '../domain/route';
 import type { StallView } from '../domain/state';
+import { overlayTierCharCeilings } from '../domain/theme';
 import * as copy from './copy';
 import {
     cheapestOf,
     identityOf,
     knownDecimals,
     listingsInShopOrder,
+    paintedThemeId,
+    priceTier,
     qrSvg,
     tokenName,
     tokenTicker,
@@ -66,7 +69,7 @@ export function renderBroadcastView(view: StallView): HTMLElement {
         head.append(el('div', 'bc-empty', copy.BROADCAST_EMPTY));
     }
 
-    if (params.preset !== 'rail' && fetch?.kind === 'offers') {
+    if (params.preset !== 'rail' && state !== 'rest' && fetch?.kind === 'offers') {
         const listings = listingsInShopOrder(view);
         if (listings.length > 0) {
             const n = listings.length;
@@ -105,16 +108,26 @@ export function renderBroadcastView(view: StallView): HTMLElement {
                 priceRow.append(figure);
                 priceRow.append(el('span', 'bc-why', copy.UNBUYABLE_BADGE));
             } else {
-                if (offer.askedAtoms < offer.atoms) {
+                const hasFrom = offer.askedAtoms < offer.atoms;
+                if (hasFrom) {
                     priceRow.append(el('span', 'bc-from', copy.PRICE_FROM));
                 }
-                const figure = el('span', undefined, formatXec(offer.askedSats));
+                const amount = formatXec(offer.askedSats);
+                const figure = el('span', undefined, amount);
                 figure.setAttribute('data-role', 'price');
                 if (view.broadcastPulse === true) {
                     figure.classList.add('pulse');
                 }
                 priceRow.append(figure);
                 priceRow.append(el('span', 'bc-u', copy.XEC));
+                const tier = priceTier(
+                    amount,
+                    hasFrom,
+                    overlayTierCharCeilings(paintedThemeId(view)),
+                );
+                if (tier > 0) {
+                    priceRow.setAttribute('data-tier', String(tier));
+                }
             }
             item.append(priceRow);
             ext.append(item);

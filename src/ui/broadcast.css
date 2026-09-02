@@ -104,10 +104,6 @@
     border-top: 1px solid color-mix(in srgb, var(--s-muted) 28%, transparent);
 }
 
-.stall.broadcast .bc[data-state='rest'] .bc-ext {
-    display: none;
-}
-
 .stall.broadcast .bc-item {
     display: flex;
     flex-direction: column;
@@ -157,6 +153,33 @@
     line-height: 1.1;
     display: inline-block;
     transform-origin: left center;
+    white-space: nowrap;
+}
+
+.stall.broadcast .bc-p[data-tier='1'] [data-role='price'] {
+    font-size: 31px;
+}
+
+.stall.broadcast .bc-p[data-tier='2'] [data-role='price'],
+.stall.broadcast .bc-p[data-tier='3'] [data-role='price'] {
+    font-size: 24px;
+}
+
+/*
+ * Tier 3: `from` + `XEC` stay on the small line; the figure takes the
+ * next line alone. The figure keeps nowrap — the digits never wrap or
+ * clip (§8 / §6). Flex order, not a DOM shuffle: the painted order is
+ * still from, figure, unit.
+ */
+.stall.broadcast .bc-p[data-tier='3'] {
+    flex-wrap: wrap;
+    white-space: normal;
+}
+
+.stall.broadcast .bc-p[data-tier='3'] [data-role='price'] {
+    order: 2;
+    flex-basis: 100%;
+    white-space: nowrap;
 }
 
 .stall.broadcast .bc-u {

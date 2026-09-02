@@ -15,6 +15,7 @@ import {
     decodeTheme,
     themeVars,
     tierCharCeilings,
+    overlayTierCharCeilings,
 } from '../domain/theme';
 import { stallPath } from '../domain/route';
 import { qrMatrix } from '../domain/qr';
@@ -4619,6 +4620,7 @@ function broadcastView(over: Partial<StallView> = {}): StallView {
         fetch: { kind: 'offers', offers: [OFFER] },
         tokens: new Map([[TOKEN_ID, BEANS]]),
         broadcast: BROADCAST,
+        broadcastState: 'live',
         ...over,
     });
 }
@@ -4896,7 +4898,7 @@ describe('a-broadcast-shows-the-shops-first-card', () => {
         const shopFirst = shop.root.querySelector('.item-n')?.textContent;
         expect(shopFirst).toBe('Roasted Beans');
 
-        const { root } = paint(two({ broadcast: BROADCAST }));
+        const { root } = paint(two({ broadcast: BROADCAST, broadcastState: 'live' }));
         expect(root.querySelector('.bc-nm')?.textContent).toBe(shopFirst);
         expect(root.querySelector('.bc-more')?.textContent).toBe(copy.broadcastMore(1));
     });
@@ -4913,6 +4915,7 @@ describe('broadcast-stock-is-omitted-without-decimals', () => {
         const { root } = paint(
             idlePubkey({
                 broadcast: BROADCAST,
+                broadcastState: 'live',
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map(),
             }),
@@ -5050,6 +5053,143 @@ describe('a-carousel-step-is-not-a-price-change', () => {
             true,
         );
         expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+    });
+});
+
+describe('a-resting-card-mounts-no-price', () => {
+    /**
+     * Rail mode shows the name alone for three seconds of every eight.
+     * Mounting the card and hiding it with `display: none` left a
+     * `[data-role="price"]` with no box — the shape the covered-amount
+     * rule exists to refuse. Rest does not mount `.bc-ext` at all, as the
+     * rail preset already does.
+     */
+    it('mounts no card and no price on rest, and still mounts both when live', () => {
+        const rest = paint(broadcastView({ broadcastState: 'rest' })).root;
+        expect(rest.querySelector('[data-role="broadcast"]')?.getAttribute('data-state')).toBe(
+            'rest',
+        );
+        expect(rest.querySelector('.bc-ext'), 'rest mounts no card').toBeNull();
+        expect(rest.querySelector('[data-role="price"]'), 'rest mounts no price').toBeNull();
+
+        const live = paint(broadcastView({ broadcastState: 'live' })).root;
+        expect(live.querySelector('.bc-ext'), 'live still mounts the card').not.toBeNull();
+        expect(
+            live.querySelector('[data-role="price"]'),
+            'live still mounts the price',
+        ).not.toBeNull();
+    });
+});
+
+describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
+    /**
+     * Overlay plate is 216px of content (252 − 2×18). The figure is 39px
+     * tabular bold in the look's `--s-font`, and `from` + `XEC` ride the
+     * same nowrap row at 22px. Cut points were measured in Chrome at
+     * 1920×1080 against that row, not guessed; Neo's mono is the widest.
+     * `from` still counts as two characters (`priceTier`'s shape); the
+     * overlay's own ceilings absorb that `from` is 22px here, not the
+     * shop's 10.5px tag. `100,000,000` with `from` is past every look.
+     */
+    const MODERN = overlayTierCharCeilings(DEFAULT_THEME_ID);
+    const NEO = overlayTierCharCeilings(NEO_CITY_THEME_ID);
+    const RURAL = overlayTierCharCeilings(RURAL_THEME_ID);
+    const longOffer = (over: Partial<StallOffer> = {}): StallOffer => ({
+        ...OFFER,
+        askedSats: 10_000_000_000n,
+        ...over,
+    });
+
+    it('walks the overlay ladder per look, and from 100,000,000 is tier 3 on every look', () => {
+        // Everyday partial: 39px + from + XEC is 222px on Modern/Neo, 216px
+        // on the plate — one step down. Rural's serif still seats it.
+        expect(priceTier('1,200', true, MODERN)).toBe(1);
+        expect(priceTier('1,200', true, NEO)).toBe(1);
+        expect(priceTier('1,200', true, RURAL)).toBe(0);
+        expect(priceTier('1,200', false, MODERN)).toBe(0);
+        expect(priceTier('1,200', false, NEO)).toBe(0);
+        expect(priceTier('1,200', false, RURAL)).toBe(0);
+        expect(priceTier('100,000,000', true, MODERN)).toBe(3);
+        expect(priceTier('100,000,000', true, NEO)).toBe(3);
+        expect(priceTier('100,000,000', true, RURAL)).toBe(3);
+        expect(priceTier('100,000,000', false, RURAL)).toBe(2);
+    });
+
+    it('stamps data-tier on the price row, and only when earned', () => {
+        // Everyday 1,200 with from: Modern/Neo earn a step; Rural does not.
+        const everyday = (theme: ReturnType<typeof decodeTheme>) =>
+            paint(
+                broadcastView({
+                    theme,
+                    broadcastState: 'live',
+                }),
+            ).root.querySelector('.bc-p');
+        expect(everyday(decodeTheme(DEFAULT_THEME_ID))?.getAttribute('data-tier')).toBe('1');
+        expect(everyday(decodeTheme(NEO_CITY_THEME_ID))?.getAttribute('data-tier')).toBe('1');
+        expect(everyday(decodeTheme(RURAL_THEME_ID))?.hasAttribute('data-tier')).toBe(false);
+
+        const wholeLot = paint(
+            broadcastView({
+                broadcastState: 'live',
+                fetch: { kind: 'offers', offers: [{ ...OFFER, askedAtoms: OFFER.atoms }] },
+            }),
+        ).root.querySelector('.bc-p');
+        expect(wholeLot?.hasAttribute('data-tier')).toBe(false);
+
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const { root } = paint(
+                broadcastView({
+                    theme: decodeTheme(id),
+                    broadcastState: 'live',
+                    fetch: { kind: 'offers', offers: [longOffer()] },
+                }),
+            );
+            expect(
+                root.querySelector('.bc-p')?.getAttribute('data-tier'),
+                `look ${id} stamps tier 3 on from 100,000,000`,
+            ).toBe('3');
+        }
+
+        const noFromLong = paint(
+            broadcastView({
+                theme: decodeTheme(RURAL_THEME_ID),
+                broadcastState: 'live',
+                fetch: { kind: 'offers', offers: [longOffer({ askedAtoms: OFFER.atoms })] },
+            }),
+        ).root.querySelector('.bc-p');
+        expect(noFromLong?.getAttribute('data-tier')).toBe('2');
+    });
+
+    it('broadcast.css sizes the three steps and the figure at tier 3 does not wrap', () => {
+        const css = readFileSync(join(UI_DIR, 'broadcast.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+        const sized = (tier: string, px: string): boolean =>
+            rules.some(
+                ([, selector, body]) =>
+                    selector!.includes(`[data-tier='${tier}']`) &&
+                    selector!.includes("[data-role='price']") &&
+                    body!.includes(`font-size: ${px}`),
+            );
+        expect(sized('1', '31px'), 'tier 1 is 31px').toBe(true);
+        expect(sized('2', '24px'), 'tier 2 is 24px').toBe(true);
+        expect(sized('3', '24px'), 'tier 3 is 24px').toBe(true);
+        const figureNowrap = rules.some(
+            ([, selector, body]) =>
+                selector!.includes("[data-tier='3']") &&
+                selector!.includes("[data-role='price']") &&
+                /white-space:\s*nowrap/.test(body!),
+        );
+        expect(figureNowrap, 'the figure at tier 3 keeps nowrap').toBe(true);
+        const rowWraps = rules.some(
+            ([, selector, body]) =>
+                selector!.includes("[data-tier='3']") &&
+                selector!.includes('.bc-p') &&
+                /flex-wrap:\s*wrap/.test(body!),
+        );
+        expect(rowWraps, 'tier 3 splits from+XEC onto their own line').toBe(true);
     });
 });
 

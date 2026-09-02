@@ -220,7 +220,7 @@ function activePreview(view: StallView): { themeId: number; attachmentFlags: num
         : undefined;
 }
 
-function paintedThemeId(view: StallView): number {
+export function paintedThemeId(view: StallView): number {
     return activePreview(view)?.themeId ?? (view.theme ?? DEFAULT_THEME).id;
 }
 

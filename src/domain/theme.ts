@@ -282,6 +282,33 @@ const TIER_CHAR_CEILINGS: ReadonlyMap<number, readonly [number, number, number]>
 export function tierCharCeilings(themeId: number): readonly [number, number, number] {
     return TIER_CHAR_CEILINGS.get(themeId) ?? TIER_CHAR_CEILINGS.get(DEFAULT_THEME_ID)!;
 }
+
+/**
+ * Overlay plate — 216px of content (252 − 2×18), figure 39→31→24px tabular
+ * bold, `from`/`XEC` at 22px, flex gap 8. Same `priceTier` shape as the
+ * shop (`from` counts as two characters); these cuts are not the shop's,
+ * because the overlay's `from` is 22px on a 216px plate rather than a
+ * 10.5px tag on a phone grid. Measured in Chrome at 1920×1080 against a
+ * row matching `broadcast.css`, in each look's `--s-font` (Neo's mono is
+ * the widest). Each ceiling is min(bare-fit, with-from-fit + 2) at that
+ * size so the +2 never spills. Past the last ceiling the row becomes two
+ * lines: `from` + `XEC` small, the figure alone (still nowrap).
+ * `from 100,000,000` is past every look.
+ */
+const OVERLAY_TIER_CHAR_CEILINGS: ReadonlyMap<number, readonly [number, number, number]> =
+    new Map([
+        [0x01, [5, 7, 9]],
+        [0x02, [5, 7, 9]],
+        [0x03, [8, 10, 12]],
+    ]);
+
+/** Unknown ids wear the shipped default look, so they tier like it too. */
+export function overlayTierCharCeilings(themeId: number): readonly [number, number, number] {
+    return (
+        OVERLAY_TIER_CHAR_CEILINGS.get(themeId) ??
+        OVERLAY_TIER_CHAR_CEILINGS.get(DEFAULT_THEME_ID)!
+    );
+}
 export const NEO_CITY_THEME_ID = 0x02;
 export const RURAL_THEME_ID = 0x03;
 
