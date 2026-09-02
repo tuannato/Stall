@@ -467,7 +467,8 @@ describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
         const section = document.createElement('section');
         paintObsGuide(
             section,
-            view({ route: { kind: 'opening', raw: 'x' } as StallView['route'], address: undefined, stallName: undefined }),
+            // The door route carries no identity, so `identityOf` is undefined here.
+            view({ route: { kind: 'home' }, address: undefined, stallName: undefined }),
             handlers(),
         );
         const withoutId = section.querySelector('[data-role="obs-guide-link"]');
