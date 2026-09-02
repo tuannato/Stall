@@ -4369,6 +4369,55 @@ describe('the-print-poster-stays-black-on-white', () => {
     });
 });
 
+describe('the-print-page-is-rule-brand-name-tagline-qr-caption-url', () => {
+    /**
+     * The printed sheet is exactly this subtree in exactly this order — the
+     * print stylesheet shows `.poster-page` and hides everything else, so the
+     * node order *is* the page. The accent rule and the brand line lead: a
+     * sheet on a wall says what it is before it says whose it is.
+     */
+    it('paints the accent rule and the brand line above the name', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            drivePoster(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    stallName: 'Riverside Goods',
+                    tagline: 'Fresh weekly',
+                }),
+                h,
+            );
+            (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+            const page = root.querySelector('.poster-page') as HTMLElement;
+            expect(page).not.toBeNull();
+            expect([...page.children].map((n) => n.getAttribute('class'))).toEqual([
+                'poster-rule',
+                'poster-brand',
+                'poster-name',
+                'poster-tagline',
+                'qr poster-qr',
+                'poster-scan',
+                'poster-url',
+            ]);
+            expect(page.querySelector('.poster-brand')?.textContent).toBe(BROADCAST_BRAND);
+            // The rule is a node now, so the page's own border is not the look.
+            const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+                /\/\*[\s\S]*?\*\//g,
+                '',
+            );
+            const ruleBody = css.match(/\.poster-rule\s*\{([^}]+)\}/);
+            expect(ruleBody, '.poster-rule rule').not.toBeNull();
+            expect(ruleBody![1]!).toMatch(/background:\s*var\(--s-accent\)/);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
 describe('the-stream-card-is-the-rest-state', () => {
     it('is a 2× rest sticker: brand, name, QR, caption — no price, no card, no URL', () => {
         const h = handlers();
@@ -4416,16 +4465,36 @@ describe('the-stream-card-is-the-rest-state', () => {
 
             const spec = lastDrawnPosterSpec();
             expect(spec, 'drawPoster was handed a stream spec').toBeDefined();
+            /*
+             * The whole key set, so a field cannot reach the sticker without
+             * somebody widening this list on purpose. Widened once, in the
+             * poster port: a border and a ground are not a price, and each of
+             * these is dress the card already wore in CSS.
+             *   bg          the sheet formats' ground; the card ignores it
+             *   accent2     the second rule under the head, when the look has one
+             *   border      the plate's 1px edge, a colour or absent
+             *   radius      the plate's corners, in pixels, off --s-radius
+             *   nameCase    --s-sign-case, applied before the name is wrapped
+             *   nameWeight  the poster name's weight, 800 or Rural's 700
+             *   qrSide      the QR's reserved square, floored at a third
+             */
             const allowed = [
                 'kind',
                 'width',
                 'height',
+                'qrSide',
+                'bg',
                 'surface',
                 'text',
                 'muted',
                 'accent',
+                'accent2',
+                'border',
+                'radius',
                 'font',
                 'name',
+                'nameCase',
+                'nameWeight',
                 'matrix',
                 'nameLines',
                 'brand',

@@ -2734,7 +2734,6 @@ textarea.paste-in {
     background: #ffffff;
     color: #000000;
     border: 1px solid color-mix(in srgb, #000 20%, transparent);
-    border-top: 10px solid var(--s-accent);
     border-radius: 8px;
     padding: 30px 24px;
     display: flex;
@@ -2742,6 +2741,27 @@ textarea.paste-in {
     align-items: center;
     gap: 14px;
     text-align: center;
+}
+
+/*
+ * The rule is a node, not the page's own border-top: the design seats it
+ * inside the margin with the brand line beneath, and a border cannot sit
+ * between two children. It stays the one themed mark on a black-on-white
+ * sheet — the brand and everything under it inherit the page's ink.
+ */
+.poster-rule {
+    align-self: stretch;
+    flex: none;
+    height: 12px;
+    background: var(--s-accent);
+}
+
+.poster-brand {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }
 
 .poster-name {
@@ -3045,22 +3065,45 @@ textarea.paste-in {
         box-shadow: none;
     }
 
+    /*
+     * A4, and the design's own numbers: a CSS pixel is 1/96in in print, so
+     * 794 x 1123 of the design card is exactly 210 x 297mm and every size
+     * below is the card's, untranslated.
+     */
     body:has(.poster-scrim) .poster-page {
         position: fixed;
         inset: 0;
         border-radius: 0;
         border-width: 0;
-        border-top-width: 12mm;
+        padding: 72px 64px;
         justify-content: center;
-        gap: 8mm;
+        gap: 30px;
+    }
+
+    body:has(.poster-scrim) .poster-brand {
+        font-size: 20px;
     }
 
     body:has(.poster-scrim) .poster-qr {
-        max-width: 110mm;
+        max-width: 348px;
     }
 
     body:has(.poster-scrim) .poster-name {
-        font-size: 34pt;
+        font-size: 84px;
+    }
+
+    body:has(.poster-scrim) .poster-tagline {
+        font-size: 30px;
+    }
+
+    body:has(.poster-scrim) .poster-scan {
+        font-size: 40px;
+    }
+
+    /* The link is read off paper character by character: its own mono face. */
+    body:has(.poster-scrim) .poster-url {
+        font-size: 26px;
+        font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
     }
 
     body:has(.poster-scrim) .poster-controls {

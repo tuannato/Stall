@@ -3292,25 +3292,54 @@ function posterControl(body: HTMLElement, view: StallView, handlers: StallHandle
     body.append(wrap);
 }
 
+/**
+ * The look, resolved for a canvas. Everything crosses as a number or a plain
+ * colour: `--s-radius` is parsed here rather than handed over as `14px`, and
+ * the plate's edge is a colour or nothing, never a CSS shorthand — a canvas
+ * has no cascade to fall back on when a string does not parse.
+ *
+ * The edge and the name's weight are keyed off the painted look's class, the
+ * way `nameLines` already is. Radius follows the shipped table (14 / 0 / 8),
+ * not the design cards' 24 / 0 / 12: the table is what every other corner in
+ * the app is cut to.
+ *
+ * `--s-name-weight` is emitted but is the stall sign's weight at 30px
+ * (650 / 700 / 600); the poster's name is 108px and the design cuts it at 800,
+ * Rural 700. Two jobs, two numbers.
+ */
 function posterPaintFromStall(stall: HTMLElement, view: StallView, url: string): PosterPaint {
     const fallbackFont = FONT_STACKS[0] ?? 'sans-serif';
+    const bg = stall.style.getPropertyValue('--s-bg');
     const surface = stall.style.getPropertyValue('--s-surface');
     const text = stall.style.getPropertyValue('--s-text');
     const muted = stall.style.getPropertyValue('--s-muted');
     const accent = stall.style.getPropertyValue('--s-accent');
+    const accentTwo = stall.style.getPropertyValue('--s-accent-2');
     const font = stall.style.getPropertyValue('--s-font');
+    const radius = Number.parseFloat(stall.style.getPropertyValue('--s-radius'));
+    const signCase = stall.style.getPropertyValue('--s-sign-case').trim();
     const tagline = view.tagline !== undefined && view.tagline !== '' ? view.tagline : undefined;
+    const neo = stall.classList.contains('t-neo');
+    const rural = stall.classList.contains('t-rural');
+    const ink = accent === '' ? '#000000' : accent;
+    const quiet = muted === '' ? '#555555' : muted;
     return {
+        bg: bg === '' ? '#ffffff' : bg,
         surface: surface === '' ? '#ffffff' : surface,
         text: text === '' ? '#000000' : text,
-        muted: muted === '' ? '#555555' : muted,
-        accent: accent === '' ? '#000000' : accent,
+        muted: quiet,
+        accent: ink,
+        accent2: accentTwo === '' ? ink : accentTwo,
+        border: neo ? ink : rural ? quiet : undefined,
+        radius: Number.isFinite(radius) ? radius : 0,
         font: font === '' ? fallbackFont : font,
         name: displayName(view) ?? url,
+        nameCase: signCase === 'uppercase' ? 'uppercase' : 'none',
+        nameWeight: rural ? '700' : '800',
         tagline,
         url,
         matrix: qrMatrix(url),
-        nameLines: stall.classList.contains('t-neo') ? 3 : 2,
+        nameLines: neo ? 3 : 2,
     };
 }
 
@@ -3351,8 +3380,13 @@ function posterSheet(
     chooser.append(select);
     box.append(chooser);
 
-    // The page itself — the print stylesheet shows exactly this subtree.
+    // The page itself — the print stylesheet shows exactly this subtree. Node
+    // order is the printed order: rule, brand, name, tagline, QR, caption,
+    // link. The rule is the one themed mark on a black-on-white sheet, and the
+    // brand line says whose window this is before the name says whose stall.
     const page = el('div', 'poster-page');
+    page.append(el('div', 'poster-rule'));
+    page.append(el('p', 'poster-brand', copy.BROADCAST_BRAND));
     const name = displayName(view);
     if (name !== undefined) {
         page.append(el('div', 'poster-name', name));
