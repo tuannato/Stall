@@ -282,12 +282,8 @@
 }
 
 /*
- * Desktop: the recipe takes the right column whole, the two steps and the
- * truths stack down the left. The left column is the taller of the two on
- * every look, so the spanning right column sits at the top of its area
- * rather than stretching the rows underneath the left one — which is the
- * round-4 review's "left column ends early", fixed by moving the truths
- * out of the right column instead of padding the left one.
+ * Desktop: the recipe takes the right column, the two steps the left, and
+ * the truths run under both — see the rule inside the query below.
  */
 @media (min-width: 680px) {
     .obs-grid {
@@ -295,9 +291,27 @@
         grid-template-areas:
             'where source'
             'copy source'
-            'truths source';
+            'truths truths';
         align-items: start;
         gap: 22px 28px;
+    }
+
+    /*
+     * The truths span both columns under the steps, two plates to a row, so
+     * the section ends at the same height on both sides instead of the left
+     * column trailing four stacked plates (owner, 2026-09-02). The rule above
+     * them is what says "this is a different kind of thing" — the steps are
+     * a sequence, the truths are a list.
+     */
+    .obs-step-truths {
+        padding-top: 18px;
+        border-top: 1px solid color-mix(in srgb, var(--s-muted) 24%, transparent);
+    }
+
+    .obs-truths {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 12px;
     }
 
     .obs-step-where {
