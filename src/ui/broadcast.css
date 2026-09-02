@@ -166,20 +166,29 @@
 }
 
 /*
- * Tier 3: `from` + `XEC` stay on the small line; the figure takes the
- * next line alone. The figure keeps nowrap — the digits never wrap or
- * clip (§8 / §6). Flex order, not a DOM shuffle: the painted order is
- * still from, figure, unit.
+ * Tier 3: `from` takes the small line alone; the figure and its unit share
+ * the next line, so the row reads "from / 100,000,000 XEC" and never
+ * "from XEC / 100,000,000". The figure keeps nowrap — the digits never wrap
+ * or clip (§8 / §6) — and the probe's canvas pass is what proves the
+ * figure-plus-unit line still fits 216px on every look. Flex order, not a
+ * DOM shuffle: the painted order is still from, figure, unit.
  */
 .stall.broadcast .bc-p[data-tier='3'] {
     flex-wrap: wrap;
     white-space: normal;
 }
 
+.stall.broadcast .bc-p[data-tier='3'] .bc-from {
+    flex-basis: 100%;
+}
+
 .stall.broadcast .bc-p[data-tier='3'] [data-role='price'] {
     order: 2;
-    flex-basis: 100%;
     white-space: nowrap;
+}
+
+.stall.broadcast .bc-p[data-tier='3'] .bc-u {
+    order: 3;
 }
 
 .stall.broadcast .bc-u {
