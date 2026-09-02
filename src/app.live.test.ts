@@ -628,6 +628,59 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
     });
 });
 
+describe('the-poster-survives-a-live-repaint', () => {
+    /**
+     * `renderStall` begins with `replaceChildren()`, and the poster used to
+     * live in the DOM only. A socket message, a fiat answer or a carousel
+     * tick then closed it mid-choice — the same hole the publish sheet had,
+     * now that the poster has a format chooser and a canvas.
+     */
+    it('holds the sheet and its format while the book is read, and flushes on close', async () => {
+        const { root } = bootStall(
+            stallEmpty({ tokens: new Map([[TOKEN, TOKEN_META]]) }),
+        );
+        await flush();
+
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+        const chooser = root.querySelector(
+            '[data-role="poster-format"]',
+        ) as HTMLSelectElement;
+        chooser.value = 'story';
+        chooser.dispatchEvent(new Event('change'));
+        expect(
+            root.querySelector('[role="dialog"]')?.getAttribute('data-format'),
+        ).toBe('story');
+
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+
+        const still = root.querySelector('[data-role="poster"]') as HTMLElement;
+        expect(still, 'the sheet is still mounted').not.toBeNull();
+        expect(
+            still.querySelector('[role="dialog"]')?.getAttribute('data-format'),
+            'and the format the seller chose is still the one on it',
+        ).toBe('story');
+        expect(
+            (still.querySelector('[data-role="poster-format"]') as HTMLSelectElement).value,
+        ).toBe('story');
+        expect(
+            painted.view?.fetch?.kind,
+            'the paint waited; the last frame is still the empty stall',
+        ).toBe('empty');
+
+        (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="poster"]')).toBeNull();
+        expect(
+            painted.view?.fetch?.kind,
+            'the deferred paint arrives with the close',
+        ).toBe('offers');
+        (root.querySelector('[data-role="tab-shop"]') as HTMLButtonElement).click();
+        expect(root.textContent, 'and the new book is on the shop').toContain('Ripe Beans');
+    });
+});
+
 describe('waiting-address-resolves-on-its-own', () => {
     /**
      * An address that has never spent is the first screen many sellers see:

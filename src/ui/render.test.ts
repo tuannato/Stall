@@ -19,7 +19,14 @@ import {
 } from '../domain/theme';
 import { stallPath } from '../domain/route';
 import { qrMatrix } from '../domain/qr';
-import type { BroadcastParams, Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
+import type {
+    BroadcastParams,
+    Outpoint,
+    PosterFormat,
+    StallOffer,
+    StallView,
+    TokenMeta,
+} from '../domain/state';
 import { MAX_STALL_EVENTS } from '../domain/state';
 import { OBS_GUIDE_TITLE } from './obsGuide';
 import {
@@ -120,6 +127,9 @@ function handlers() {
         onPreviewLook: vi.fn(),
         onOpenPublish: vi.fn(),
         onClosePublish: vi.fn(),
+        onOpenPoster: vi.fn(),
+        onClosePoster: vi.fn(),
+        onChoosePosterFormat: vi.fn(),
         onSwitchPanel: vi.fn(),
         onTogglePin: vi.fn(),
         onChangeSort: vi.fn(),
@@ -4114,6 +4124,31 @@ describe('the-sign-pin-says-which-way-it-goes', () => {
     });
 });
 
+/**
+ * The poster is overlay state now, the same shape as publish: a click names
+ * the handler, and the sheet appears on the paint that follows. Render-only
+ * tests drive that loop themselves.
+ */
+function drivePoster(root: HTMLElement, view: StallView, h: ReturnType<typeof handlers>): void {
+    let current = view;
+    const paintNow = (): void => {
+        renderStall(root, current, h);
+    };
+    h.onOpenPoster.mockImplementation(() => {
+        current = { ...current, overlay: { kind: 'poster', format: 'print' } };
+        paintNow();
+    });
+    h.onClosePoster.mockImplementation(() => {
+        current = { ...current, overlay: { kind: 'idle' } };
+        paintNow();
+    });
+    h.onChoosePosterFormat.mockImplementation((format: PosterFormat) => {
+        current = { ...current, overlay: { kind: 'poster', format } };
+        paintNow();
+    });
+    paintNow();
+}
+
 describe('the-poster-is-the-share-link-made-printable', () => {
     it('opens from the studio with the name, the QR and the untouched link', () => {
         const h = handlers();
@@ -4121,7 +4156,7 @@ describe('the-poster-is-the-share-link-made-printable', () => {
         document.body.append(root);
         window.history.pushState({}, '', `/s/${ADDR}`);
         try {
-            renderStall(
+            drivePoster(
                 root,
                 offersView([OFFER], undefined, {
                     panel: 'studio',
@@ -4154,15 +4189,16 @@ describe('the-poster-is-the-share-link-made-printable', () => {
     });
 
     it('printing is a dialog the seller opened, never a repaint', () => {
-        // The poster manages its own removal like the leave-confirm: nothing
-        // in the app state changes, so closing it cannot lose panel or sheet.
+        // Opening names onOpenPoster, never a panel switch or the publish
+        // sheet. The paint that follows is the one the seller asked for.
         const h = handlers();
         const root = document.createElement('div');
         document.body.append(root);
         try {
-            renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
+            drivePoster(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
             (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
             expect(root.querySelector('[data-role="poster"]')).not.toBeNull();
+            expect(h.onOpenPoster).toHaveBeenCalled();
             expect(h.onSwitchPanel).not.toHaveBeenCalled();
             expect(h.onOpenPublish).not.toHaveBeenCalled();
         } finally {
@@ -4306,7 +4342,7 @@ describe('the-stream-card-is-the-rest-state', () => {
         document.body.append(root);
         window.history.pushState({}, '', `/s/${ADDR}`);
         try {
-            renderStall(
+            drivePoster(
                 root,
                 offersView([OFFER], undefined, {
                     panel: 'studio',
@@ -4329,7 +4365,7 @@ describe('the-stream-card-is-the-rest-state', () => {
             format.value = 'stream';
             format.dispatchEvent(new Event('change'));
 
-            const png = sheet.querySelector('[data-role="poster-png"]') as HTMLElement;
+            const png = root.querySelector('[data-role="poster-png"]') as HTMLElement;
             expect(png).not.toBeNull();
             expect(png.querySelector('[data-role="price"]')).toBeNull();
             expect(png.querySelector('.bc-ext')).toBeNull();
@@ -4377,7 +4413,7 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
         document.body.append(root);
         window.history.pushState({}, '', `/s/${ADDR}`);
         try {
-            renderStall(
+            drivePoster(
                 root,
                 offersView([OFFER], undefined, {
                     panel: 'studio',
@@ -4387,11 +4423,10 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 h,
             );
             (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-            const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
-            const format = sheet.querySelector(
+            const chooser = root.querySelector(
                 '[data-role="poster-format"]',
             ) as HTMLSelectElement;
-            expect([...format.options].map((o) => o.value)).toEqual([
+            expect([...chooser.options].map((o) => o.value)).toEqual([
                 'print',
                 'square',
                 'story',
@@ -4411,9 +4446,12 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 nameLines: 2 as const,
             };
             for (const kind of ['square', 'story', 'stream'] as const) {
+                const format = root.querySelector(
+                    '[data-role="poster-format"]',
+                ) as HTMLSelectElement;
                 format.value = kind;
                 format.dispatchEvent(new Event('change'));
-                const png = sheet.querySelector('[data-role="poster-png"]') as HTMLElement;
+                const png = root.querySelector('[data-role="poster-png"]') as HTMLElement;
                 expect(png.querySelector('canvas'), kind).not.toBeNull();
                 expect(png.querySelector('[data-role="poster-save"]')?.textContent, kind).toBe(
                     'Save PNG',
@@ -4422,6 +4460,40 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 expect(spec.matrix.length, kind).toBeGreaterThan(0);
                 expect(spec.caption, kind).toMatch(/scan/i);
             }
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('the-poster-is-painted-from-the-overlay-state', () => {
+    it('a view with overlay poster story paints the sheet on Story with no click', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            renderStall(
+                root,
+                offersView([OFFER], undefined, {
+                    panel: 'studio',
+                    stallName: 'Riverside Goods',
+                    tagline: 'Fresh weekly',
+                    overlay: { kind: 'poster', format: 'story' },
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
+            expect(sheet, 'the sheet mounts from the view, not from a click').not.toBeNull();
+            const format = sheet.querySelector(
+                '[data-role="poster-format"]',
+            ) as HTMLSelectElement;
+            expect(format.value).toBe('story');
+            expect(sheet.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe(
+                'story',
+            );
+            expect(sheet.querySelector('[data-role="poster-png"] canvas')).not.toBeNull();
+            expect(h.onOpenPoster).not.toHaveBeenCalled();
         } finally {
             root.remove();
         }

@@ -42,6 +42,7 @@ import type {
     HostAttempt,
     Outpoint,
     PanelKind,
+    PosterFormat,
     RouteWhy,
     ShopSort,
     StallEvent,
@@ -94,6 +95,9 @@ export type StallHandlers = {
     /** Change the currency the fiat line is read in. */
     onChangeFiat?: (code: string) => void;
     onClosePublish?: () => void;
+    onOpenPoster?: () => void;
+    onClosePoster?: () => void;
+    onChoosePosterFormat?: (format: PosterFormat) => void;
     /** Switch the shell's panel. UI state only: no navigation, no load. */
     onSwitchPanel?: (panel: PanelKind) => void;
     /** Pin or unpin this stall on the browser's front door. */
@@ -349,6 +353,17 @@ export function renderStall(
         view.address !== ''
     ) {
         stall.append(publishOverlay(view, handlers));
+    }
+    if (
+        view.route.kind === 'pubkey' &&
+        view.overlay.kind === 'poster' &&
+        view.address !== undefined &&
+        view.address !== ''
+    ) {
+        const url = shareUrl();
+        if (fitsQr(url)) {
+            stall.append(posterSheet(view, url, stall, handlers));
+        }
     }
 
     // After the screen, because a `yard` needs the footer to sit above and a
@@ -3211,7 +3226,7 @@ function paintStudio(
 
     const share = studioSection('share', copy.STUDIO_SEC_SHARE);
     share.append(shareControl());
-    posterControl(share, view);
+    posterControl(share, handlers);
     body.append(share);
 
     // The stream overlay's recipe. Its strings live in the module itself,
@@ -3249,7 +3264,7 @@ function paintStudio(
  * stall.css shows the poster page alone. The QR stays black on white with its
  * quiet zone (§9); the sheet previews exactly what the printer gets.
  */
-function posterControl(body: HTMLElement, view: StallView): void {
+function posterControl(body: HTMLElement, handlers: StallHandlers): void {
     const url = shareUrl();
     // No QR, no poster: past the library's ceiling the poster would be a
     // sheet of text, and the share control already explains the long link.
@@ -3262,14 +3277,10 @@ function posterControl(body: HTMLElement, view: StallView): void {
     open.type = 'button';
     open.setAttribute('data-role', 'open-poster');
     open.setAttribute('data-focus-key', 'open-poster');
-    open.addEventListener('click', () => {
-        // Self-managed like confirmLeaving: the sheet owns its own removal,
-        // so no app state and no repaint — printing is not a view change.
-        const stall = body.closest('.stall');
-        if (stall instanceof HTMLElement) {
-            stall.append(posterSheet(view, url, stall));
-        }
-    });
+    const go = handlers.onOpenPoster;
+    if (go !== undefined) {
+        open.addEventListener('click', () => go());
+    }
     wrap.append(open);
     body.append(wrap);
 }
@@ -3296,7 +3307,14 @@ function posterPaintFromStall(stall: HTMLElement, view: StallView, url: string):
     };
 }
 
-function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElement {
+function posterSheet(
+    view: StallView,
+    url: string,
+    stall: HTMLElement,
+    handlers: StallHandlers,
+): HTMLElement {
+    const format: PosterFormat =
+        view.overlay.kind === 'poster' ? view.overlay.format : 'print';
     const paint = posterPaintFromStall(stall, view, url);
     const scrim = el('div', 'sheet-scrim poster-scrim');
     scrim.setAttribute('data-role', 'poster');
@@ -3304,14 +3322,14 @@ function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElem
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-modal', 'true');
     box.setAttribute('aria-label', copy.POSTER_TITLE);
-    box.setAttribute('data-format', 'print');
+    box.setAttribute('data-format', format);
     box.tabIndex = -1;
 
     const chooser = el('div', 'poster-chooser');
     const select = el('select', 'paste-in');
     select.setAttribute('data-role', 'poster-format');
     select.setAttribute('aria-label', copy.POSTER_TITLE);
-    const formats: Array<['print' | PosterKind, string]> = [
+    const formats: Array<[PosterFormat, string]> = [
         ['print', copy.POSTER_FORMAT_PRINT],
         ['square', copy.POSTER_FORMAT_SQUARE],
         ['story', copy.POSTER_FORMAT_STORY],
@@ -3322,6 +3340,7 @@ function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElem
         opt.value = value;
         select.append(opt);
     }
+    select.value = format;
     chooser.append(select);
     box.append(chooser);
 
@@ -3353,25 +3372,29 @@ function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElem
     png.append(save);
     box.append(png);
 
-    let pngKind: PosterKind = 'square';
+    const pngKind: PosterKind = format === 'print' ? 'square' : format;
     save.addEventListener('click', () => {
         savePng(canvas, `stall-${pngKind}.png`);
     });
-
-    const applyFormat = (format: 'print' | PosterKind): void => {
-        box.setAttribute('data-format', format);
-        if (format === 'print') {
-            return;
-        }
-        pngKind = format;
+    // PNG formats draw on every mount — the canvas is cheap. Print keeps
+    // the page DOM and does not touch the canvas.
+    if (format !== 'print') {
         drawPoster(canvas, posterSpec(format, paint));
-    };
-    select.addEventListener('change', () => {
-        const value = select.value;
-        if (value === 'print' || value === 'square' || value === 'story' || value === 'stream') {
-            applyFormat(value);
-        }
-    });
+    }
+    const choose = handlers.onChoosePosterFormat;
+    if (choose !== undefined) {
+        select.addEventListener('change', () => {
+            const value = select.value;
+            if (
+                value === 'print' ||
+                value === 'square' ||
+                value === 'story' ||
+                value === 'stream'
+            ) {
+                choose(value);
+            }
+        });
+    }
 
     const controls = el('div', 'poster-controls');
     const print = el('button', 'buy', copy.POSTER_PRINT);
@@ -3383,19 +3406,21 @@ function posterSheet(view: StallView, url: string, stall: HTMLElement): HTMLElem
     const close = el('button', 'mini', copy.POSTER_CLOSE);
     close.type = 'button';
     close.setAttribute('data-role', 'poster-close');
-    const done = (): void => scrim.remove();
-    close.addEventListener('click', done);
-    scrim.addEventListener('click', (ev) => {
-        if (ev.target === scrim) {
-            done();
-        }
-    });
-    scrim.addEventListener('keydown', (ev) => {
-        if ((ev as KeyboardEvent).key === 'Escape') {
-            ev.preventDefault();
-            done();
-        }
-    });
+    const done = handlers.onClosePoster;
+    if (done !== undefined) {
+        close.addEventListener('click', done);
+        scrim.addEventListener('click', (ev) => {
+            if (ev.target === scrim) {
+                done();
+            }
+        });
+        scrim.addEventListener('keydown', (ev) => {
+            if ((ev as KeyboardEvent).key === 'Escape') {
+                ev.preventDefault();
+                done();
+            }
+        });
+    }
     controls.append(print, close);
     box.append(controls);
     scrim.append(box);

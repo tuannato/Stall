@@ -329,6 +329,24 @@ export function boot(
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
+            onOpenPoster: () => {
+                state = {
+                    ...state,
+                    view: { ...state.view, overlay: { kind: 'poster', format: 'print' } },
+                };
+                paint();
+            },
+            onClosePoster: () => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
+                paint();
+            },
+            onChoosePosterFormat: (format) => {
+                state = {
+                    ...state,
+                    view: { ...state.view, overlay: { kind: 'poster', format } },
+                };
+                paint();
+            },
             onPreviewLook: (preview) => {
                 // No paint: the sheet already patched the DOM, and painting
                 // would rebuild it under the seller's hands. The remembered
@@ -396,8 +414,9 @@ export function boot(
      *
      * `renderStall` begins with `replaceChildren()`, and the publish sheet keeps
      * the seller's typed name, their picked look and their chosen decorations in
-     * the DOM and nowhere else. So a paint while that sheet is open throws away
-     * a record they are half way through composing — and with a script
+     * the DOM and nowhere else. The poster is the same shape: a format chooser
+     * and a canvas preview a streamer is in the middle of. So a paint while
+     * either sheet is open throws that work away — and with a script
      * subscription watching the stall address, a stranger can now cause that
      * from outside for the price of dust.
      *
@@ -409,7 +428,10 @@ export function boot(
      * whose whole answer is the sheet closing onto a re-read stall.
      */
     const livePaint = (): void => {
-        if (state.view.overlay.kind === 'publish') {
+        if (
+            state.view.overlay.kind === 'publish' ||
+            state.view.overlay.kind === 'poster'
+        ) {
             return;
         }
         paint();

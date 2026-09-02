@@ -119,11 +119,15 @@ export type FetchStatus =
     | { kind: 'unreachable'; triedAtMs: number; hosts: HostAttempt[] }
     | { kind: 'plugin-missing'; triedAtMs: number; hosts: HostAttempt[] };
 
+export type PosterFormat = 'print' | 'square' | 'story' | 'stream';
+
 export type Overlay =
     | { kind: 'idle' }
     | { kind: 'buy'; outpoint: Outpoint }
     /** Composing the settings transaction. Disclosure, not a wallet. */
-    | { kind: 'publish' };
+    | { kind: 'publish' }
+    /** Printable poster and PNG formats. Same live-paint wait as publish. */
+    | { kind: 'poster'; format: PosterFormat };
 
 /**
  * Query that selects the stream overlay. Parsed by `parseBroadcastParams`.
