@@ -1,6 +1,6 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { describe, expect, it } from 'vitest';
-import { parseSellerParam, sellerFromPath, stallPath } from './route';
+import { parseBroadcastParams, parseSellerParam, sellerFromPath, stallPath } from './route';
 
 const SAMPLE_P2PKH = encodeCashAddress(
     'ecash',
@@ -103,5 +103,115 @@ describe('p2sh-is-not-a-stall-address', () => {
     it('leaves a p2pkh address alone', () => {
         const parsed = parseSellerParam(SAMPLE_P2PKH);
         expect(parsed.kind).toBe('address');
+    });
+});
+
+describe('a-misspelled-view-param-is-the-ordinary-stall', () => {
+    /**
+     * `view=broadcast` is the gate. Absent, empty, or any other value is the
+     * shop — including a near-miss, because a stream overlay that appeared
+     * from a typo is as wrong as one that vanished from one.
+     */
+    it('absent or empty view is the ordinary stall', () => {
+        expect(parseBroadcastParams('')).toBeUndefined();
+        expect(parseBroadcastParams('?')).toBeUndefined();
+        expect(parseBroadcastParams('?preset=corner&mode=fixed')).toBeUndefined();
+        expect(parseBroadcastParams('?m=abc&bg=transparent')).toBeUndefined();
+        expect(parseBroadcastParams('?view=')).toBeUndefined();
+    });
+
+    it('any other view value is the ordinary stall', () => {
+        expect(parseBroadcastParams('?view=shop')).toBeUndefined();
+        expect(parseBroadcastParams('?view=Broadcast')).toBeUndefined();
+        expect(parseBroadcastParams('?view=broadcas')).toBeUndefined();
+        expect(parseBroadcastParams('?view=broadcastt')).toBeUndefined();
+        expect(parseBroadcastParams('?view=overlay')).toBeUndefined();
+    });
+
+    it('a long view value is not compared as broadcast', () => {
+        expect(parseBroadcastParams(`?view=${'broadcast'.padEnd(64, 'x')}`)).toBeUndefined();
+    });
+});
+
+describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
+    /**
+     * Once the gate is open, a bad option becomes that param's default and
+     * the page stays a broadcast. Dropping to the shop from a typo in
+     * `preset` or `mode` is the failure C1 named.
+     */
+    const defaults = {
+        preset: 'corner',
+        mode: 'rail',
+        transparent: false,
+    } as const;
+
+    it('view=broadcast with no options is the defaults', () => {
+        expect(parseBroadcastParams('?view=broadcast')).toEqual(defaults);
+        expect(parseBroadcastParams('view=broadcast')).toEqual(defaults);
+    });
+
+    it('unknown and reserved presets fall back to corner', () => {
+        expect(parseBroadcastParams('?view=broadcast&preset=lower-third')).toEqual(
+            defaults,
+        );
+        expect(parseBroadcastParams('?view=broadcast&preset=foo')).toEqual(defaults);
+        expect(parseBroadcastParams('?view=broadcast&preset=')).toEqual(defaults);
+        expect(parseBroadcastParams(`?view=broadcast&preset=${'rail'.padEnd(64, 'x')}`)).toEqual(
+            defaults,
+        );
+    });
+
+    it('unknown mode falls back to rail', () => {
+        expect(parseBroadcastParams('?view=broadcast&mode=cycle')).toEqual(defaults);
+        expect(parseBroadcastParams('?view=broadcast&mode=')).toEqual(defaults);
+        expect(parseBroadcastParams('?view=broadcast&mode=Rail')).toEqual(defaults);
+    });
+
+    it('unknown bg is the theme ground, not transparent', () => {
+        expect(parseBroadcastParams('?view=broadcast&bg=black')).toEqual(defaults);
+        expect(parseBroadcastParams('?view=broadcast&bg=')).toEqual(defaults);
+        expect(parseBroadcastParams('?view=broadcast&bg=Transparent')).toEqual(
+            defaults,
+        );
+    });
+
+    it('accepted values are kept', () => {
+        expect(
+            parseBroadcastParams('?view=broadcast&preset=corner&mode=fixed&bg=transparent'),
+        ).toEqual({ preset: 'corner', mode: 'fixed', transparent: true });
+        expect(parseBroadcastParams('?view=broadcast&preset=rail')).toEqual({
+            preset: 'rail',
+            mode: 'rail',
+            transparent: false,
+        });
+        expect(parseBroadcastParams('?view=broadcast&mode=fixed')).toEqual({
+            preset: 'corner',
+            mode: 'fixed',
+            transparent: false,
+        });
+        expect(parseBroadcastParams('?view=broadcast&bg=transparent')).toEqual({
+            preset: 'corner',
+            mode: 'rail',
+            transparent: true,
+        });
+    });
+
+    it('ignores mode when the preset is the rail', () => {
+        expect(
+            parseBroadcastParams('?view=broadcast&preset=rail&mode=fixed'),
+        ).toEqual({ preset: 'rail', mode: 'rail', transparent: false });
+    });
+
+    it('other search keys do not drop the overlay', () => {
+        expect(
+            parseBroadcastParams('?view=broadcast&m=ab&rows=8&fiat=usd&theme=2'),
+        ).toEqual(defaults);
+    });
+
+    it('does not throw on garbage', () => {
+        expect(() => parseBroadcastParams('%')).not.toThrow();
+        expect(() => parseBroadcastParams('?view=broadcast&preset=%')).not.toThrow();
+        expect(parseBroadcastParams('%')).toBeUndefined();
+        expect(parseBroadcastParams('?view=broadcast&preset=%')).toEqual(defaults);
     });
 });

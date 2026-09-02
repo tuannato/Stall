@@ -126,6 +126,18 @@ export type Overlay =
     | { kind: 'publish' };
 
 /**
+ * Query that selects the stream overlay. Parsed by `parseBroadcastParams`.
+ * A new name on purpose: `overlay` is CLAUDE.md §4's third layer.
+ */
+export type BroadcastParams = {
+    preset: 'corner' | 'rail';
+    /** Rest/live cycle. Ignored when `preset` is `rail`. */
+    mode: 'fixed' | 'rail';
+    /** `bg=transparent` on the wire. Absent is the theme ground. */
+    transparent: boolean;
+};
+
+/**
  * Which panel of a resolved stall is on screen. **App state, never
  * `history.state`**: the only popstate listener runs `refresh()`, which
  * closes the socket, empties the event ring and re-runs the whole load — a
@@ -320,4 +332,23 @@ export type StallView = {
      * activity may be missing rather than letting the list read as complete.
      */
     activityGaps?: number;
+    /**
+     * Stream overlay from the URL, when `parseBroadcastParams` answered.
+     * Absent is the ordinary stall. Not `overlay`.
+     */
+    broadcast?: BroadcastParams;
+    /** Which listing the carousel is showing. App-owned; modulo after a book apply. */
+    broadcastCursor?: number;
+    /** `stale` is a last-good card after a failed re-read — a dim, never copy. */
+    broadcastState?: 'live' | 'rest' | 'stale';
+    /**
+     * One-shot: the carousel moved. Set for the paint that shows the fade,
+     * cleared after — same shape as `justChanged`.
+     */
+    broadcastStepped?: true;
+    /**
+     * One-shot: the shown card's asked price moved. Set for the paint that
+     * shows the pulse, cleared after.
+     */
+    broadcastPulse?: true;
 };

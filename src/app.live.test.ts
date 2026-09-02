@@ -1097,6 +1097,182 @@ describe('storefront-effects-are-gated-on-proof', () => {
     });
 });
 
+const TOKEN_B = 'bb'.repeat(32);
+const OFFER_B = {
+    outpoint: { txid: 'ef'.repeat(32), outIdx: 2 },
+    tokenId: TOKEN_B,
+    atoms: 12n,
+    variant: 'PARTIAL' as const,
+    askedSats: 200_000n,
+    askedAtoms: 1n,
+};
+const OFFER_A_DEARER = {
+    ...OFFER,
+    outpoint: { txid: 'cd'.repeat(32), outIdx: 3 },
+    askedSats: 500_000n,
+};
+const BROADCAST_FIXED = {
+    preset: 'corner' as const,
+    mode: 'fixed' as const,
+    transparent: false,
+};
+
+function stallOffers(
+    offers: State['offers'],
+    over: Partial<State['view']> = {},
+): State {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'offers', offers },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+            broadcast: BROADCAST_FIXED,
+            ...over,
+        },
+        offers,
+        pubkeyHex: PK,
+    };
+}
+
+function bootOverlay(state: State): { root: HTMLElement } {
+    window.history.replaceState(
+        null,
+        '',
+        `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed`,
+    );
+    return bootStall(state);
+}
+
+/** A take-shaped transaction: a grouped agora entry on the spent input. */
+function consumedTx(txid: string): ChainTx {
+    return {
+        txid,
+        inputs: [
+            {
+                inputScript: p2pkhScriptSig(PK_BYTES),
+                outputScript: STALL_SCRIPT,
+                plugins: { agora: { groups: ['50aa'], data: [] } },
+            },
+        ],
+        outputs: [{ outputScript: STALL_SCRIPT }],
+    };
+}
+
+describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
+    /**
+     * C3's second half: `loadCurrent` itself must copy the params onto the
+     * view. The injected-loader tests cannot see that path.
+     */
+    it('loadCurrent copies the search params onto the view', async () => {
+        window.history.replaceState(
+            null,
+            '',
+            `${stallPath(PK)}?view=broadcast&bg=transparent`,
+        );
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+        expect(painted.view?.broadcast).toEqual({
+            preset: 'corner',
+            mode: 'rail',
+            transparent: true,
+        });
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        expect(root.querySelector('.tabs')).toBeNull();
+        expect(root.querySelector('.stall')?.classList.contains('bc-clear')).toBe(true);
+    });
+});
+
+describe('a-broadcast-cursor-survives-a-live-repaint', () => {
+    /**
+     * The cursor is app state. A live book apply rebuilds `fetch` and
+     * `justChanged`; it must not reset the carousel to card 0.
+     */
+    it('keeps the cursor the book apply did not shrink', async () => {
+        bootOverlay(stallOffers([OFFER, OFFER_B], { broadcastCursor: 1 }));
+        await flush();
+        expect(painted.view?.broadcastCursor).toBe(1);
+
+        chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(painted.view?.broadcastCursor, 'a same-size book leaves the cursor').toBe(
+            1,
+        );
+        expect(painted.view?.broadcast).toEqual(BROADCAST_FIXED);
+    });
+});
+
+describe('a-broadcast-cursor-is-clamped-when-the-book-shrinks', () => {
+    /**
+     * A take can shrink the list under the cursor. C7: reduced modulo the
+     * listing count after every book apply. The renderer also modulo's at
+     * paint time, so this asserts the *stored* cursor, not the painted card.
+     */
+    it('stores the cursor modulo the new listing count', async () => {
+        const third = {
+            ...OFFER_B,
+            tokenId: 'cc'.repeat(32),
+            outpoint: { txid: 'ab'.repeat(32), outIdx: 4 },
+        };
+        bootOverlay(stallOffers([OFFER, OFFER_B, third], { broadcastCursor: 2 }));
+        await flush();
+        expect(painted.view?.broadcastCursor).toBe(2);
+
+        chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(painted.view?.broadcastCursor, '2 mod 2 is 0').toBe(0);
+    });
+});
+
+describe('a-sibling-fill-is-not-this-cards-price-change', () => {
+    /**
+     * `justChanged` is a set of token ids. A dearer row of the shown token
+     * stamps the token and does not move `cheapestOf(...).askedSats`. The
+     * pulse is that figure, compared in `boot` before and after the apply,
+     * never `justChanged`.
+     */
+    it('a dearer row of the shown token does not pulse the figure', async () => {
+        const { root } = bootOverlay(stallOffers([OFFER]));
+        await flush();
+        const proof = publish(consumedTx('c1'.repeat(32)));
+        watches[0]!.hooks.onBurst?.([proof]);
+        await flush();
+        chain.book = { kind: 'offers', offers: [OFFER, OFFER_A_DEARER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+        expect(
+            painted.view?.justChanged?.has(TOKEN),
+            'the shop flourish still names the token',
+        ).toBe(true);
+        expect(painted.view?.broadcastPulse, 'the overlay does not borrow it').toBeUndefined();
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            false,
+        );
+    });
+
+    it('this card\'s askedSats moving pulses the figure even on a recheck', async () => {
+        const { root } = bootOverlay(stallOffers([OFFER]));
+        await flush();
+        const moved = { ...OFFER, askedSats: 180_000n };
+        chain.book = { kind: 'offers', offers: [moved] };
+        watches[0]!.hooks.onChanged?.('recheck');
+        await flush();
+        expect(
+            painted.view?.justChanged,
+            'a recheck does not stage the shop flourish',
+        ).toBeUndefined();
+        expect(painted.view?.broadcastPulse).toBe(true);
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            true,
+        );
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+    });
+});
+
 describe('fiat-hint-is-a-hint', () => {
     /**
      * The seller's suggestion (manifest tag 0x04) fills silence and nothing

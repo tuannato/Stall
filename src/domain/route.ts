@@ -1,5 +1,5 @@
 import { decodeCashAddress, isValidCashAddress } from 'ecashaddrjs';
-import type { PubKeyHex, RouteParse } from './state';
+import type { BroadcastParams, PubKeyHex, RouteParse } from './state';
 
 const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 
@@ -68,4 +68,48 @@ export function stallPath(raw: string): string {
               ? parsed.address
               : raw.trim();
     return `/s/${encodeURIComponent(token)}`;
+}
+
+/** No accepted value is longer than `lower-third` / `transparent`. */
+const MAX_BROADCAST_PARAM = 16;
+
+function broadcastParam(params: URLSearchParams, key: string): string | undefined {
+    const raw = params.get(key);
+    if (raw === null || raw.length > MAX_BROADCAST_PARAM) {
+        return undefined;
+    }
+    return raw;
+}
+
+/**
+ * Query params that turn `/s/<seller>` into the stream overlay.
+ *
+ * `view=broadcast` is the gate: anything else is the ordinary stall. A bad
+ * option falls back to its default rather than dropping the overlay — a
+ * stream that silently became a shop is the failure. Each raw value is
+ * length-clamped before comparison so an unbounded search string never
+ * becomes the lookup.
+ */
+export function parseBroadcastParams(search: string): BroadcastParams | undefined {
+    let params: URLSearchParams;
+    try {
+        params = new URLSearchParams(search);
+    } catch {
+        return undefined;
+    }
+    if (broadcastParam(params, 'view') !== 'broadcast') {
+        return undefined;
+    }
+    const preset = broadcastParam(params, 'preset') === 'rail' ? 'rail' : 'corner';
+    const mode =
+        preset === 'rail'
+            ? 'rail'
+            : broadcastParam(params, 'mode') === 'fixed'
+              ? 'fixed'
+              : 'rail';
+    return {
+        preset,
+        mode,
+        transparent: broadcastParam(params, 'bg') === 'transparent',
+    };
 }

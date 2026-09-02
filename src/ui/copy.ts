@@ -681,3 +681,14 @@ export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
 /** Bytes, never characters: an accented character costs two or three. */
 export const descBytesLeft = (used: number, max: number): string =>
     `${used} of ${max} bytes`;
+
+/** The overlay's brand line. Ours, never the seller's. */
+export const BROADCAST_BRAND = 'stall.cash';
+/** Under the QR. The payload is the shop. */
+export const BROADCAST_CAPTION = 'Scan to open';
+/** Empty shop on the overlay. Muted; not a failure. */
+export const BROADCAST_EMPTY = 'nothing listed yet';
+/** Listings beyond the shown card. `n` is listings − 1. */
+export function broadcastMore(n: number): string {
+    return `+${n} more`;
+}

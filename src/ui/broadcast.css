@@ -1,0 +1,249 @@
+/*
+ * Stream overlay. Scoped under `.stall.broadcast` only. Plate ground and
+ * ink are both tokens so a published mood moves them together. Per-look
+ * chrome that is neither (radius, shadow, border) may be literal.
+ *
+ * Sizes are for a 1080p canvas (the design cards are 1280×720 ×1.5).
+ */
+
+.stall.broadcast {
+    position: relative;
+}
+
+.stall.broadcast .bc {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 252px;
+    background-color: transparent;
+    color: var(--s-text);
+    font-family: var(--s-font);
+}
+
+.stall.broadcast .bc[data-preset='corner'] {
+    right: 60px;
+    bottom: 60px;
+}
+
+.stall.broadcast .bc[data-preset='rail'] {
+    right: 60px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.stall.broadcast .plate {
+    background-color: color-mix(in srgb, var(--s-surface) 92%, transparent);
+    color: var(--s-text);
+}
+
+.stall.t-modern.broadcast .plate {
+    border: 1px solid rgba(95, 105, 117, 0.18);
+    box-shadow: 0 6px 20px rgba(20, 23, 26, 0.18);
+    border-radius: 14px;
+}
+
+.stall.t-neo.broadcast .plate {
+    border: 1px solid rgba(44, 233, 224, 0.45);
+    box-shadow:
+        0 0 0 1px rgba(44, 233, 224, 0.12),
+        0 0 24px rgba(44, 233, 224, 0.18);
+    border-radius: 0;
+}
+
+.stall.t-rural.broadcast .plate {
+    border: 1px solid rgba(107, 89, 66, 0.45);
+    box-shadow:
+        0 3px 0 rgba(107, 89, 66, 0.25),
+        0 8px 18px rgba(58, 42, 24, 0.18);
+    border-radius: 10px;
+}
+
+.stall.broadcast .bc-head {
+    width: 252px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stall.broadcast .bc-brand {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-accent);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.stall.broadcast .bc-name {
+    font-size: 29px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.stall.t-neo.broadcast .bc-name {
+    -webkit-line-clamp: 3;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.stall.broadcast .bc-ext {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 28%, transparent);
+}
+
+.stall.broadcast .bc[data-state='rest'] .bc-ext {
+    display: none;
+}
+
+.stall.broadcast .bc-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.stall.broadcast .bc-nm {
+    font-size: 27px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stall.broadcast .bc-tk,
+.stall.broadcast .bc-more,
+.stall.broadcast .bc-cap,
+.stall.broadcast .bc-from,
+.stall.broadcast .bc-u,
+.stall.broadcast .bc-empty {
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--s-muted);
+}
+
+.stall.broadcast .bc-tk,
+.stall.broadcast .bc-nm {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stall.broadcast .bc-p {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
+    margin-top: 3px;
+}
+
+.stall.broadcast .bc-p [data-role='price'] {
+    font-size: 39px;
+    font-weight: 800;
+    color: var(--s-accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    display: inline-block;
+    transform-origin: left center;
+}
+
+.stall.broadcast .bc-u {
+    font-weight: 800;
+    color: var(--s-accent);
+}
+
+.stall.broadcast .bc-qrp {
+    width: 252px;
+    padding: 18px 18px 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+}
+
+.stall.broadcast .qr {
+    width: 204px;
+    height: 204px;
+    background-color: #ffffff;
+    border-radius: 4px;
+}
+
+.stall.broadcast .bc-cap {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.stall.broadcast .bc[data-state='stale'] .plate {
+    opacity: 0.72;
+}
+
+/*
+ * Transparency. `applyTheme` writes an inline colour on <html> every
+ * paint; the broadcast-clear path clears that, and these longhands beat
+ * `.stall.att-*` background stacks (two attachment classes = 0,3,0;
+ * `html.bc-clear .stall.broadcast` is 0,3,1).
+ */
+html.bc-clear,
+html.bc-clear body,
+html.bc-clear #app,
+html.bc-clear .frame,
+html.bc-clear .stall.broadcast {
+    background-color: transparent;
+    background-image: none;
+}
+
+@keyframes bc-in {
+    from {
+        opacity: 0;
+        transform: translateY(9px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes bc-pulse {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.06);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.stall.broadcast .bc-ext.in {
+    animation: bc-in 0.24s ease-out 1;
+}
+
+.stall.broadcast [data-role='price'].pulse {
+    animation: bc-pulse 0.4s ease-out 1;
+}
+
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE. It names every animation and
+ * transition the sheet declares so reduced motion actually stills them.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .stall.broadcast .bc-ext.in,
+    .stall.broadcast [data-role='price'].pulse {
+        animation: none;
+    }
+}

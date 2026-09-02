@@ -63,11 +63,14 @@ import {
 } from '../domain/theme';
 import { stallMark } from './brand';
 import * as copy from './copy';
+import { renderBroadcastView } from './broadcast';
+import { OBS_GUIDE_TITLE, paintObsGuide } from './obsGuide';
 import mingoIcon from './mingo-icon.png';
 import './stall.css';
 import './theme-modern.css';
 import './theme-neo.css';
 import './theme-rural.css';
+import './broadcast.css';
 
 export type StallHandlers = {
     onBuy: (outpoint: Outpoint) => void;
@@ -244,6 +247,39 @@ export function renderStall(
     const stall = el('div', 'stall');
     const previewed = activePreview(view);
     const theme = previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+
+    /*
+     * The overlay is a second render path on every route except `invalid`
+     * (a streamer who typed a wrong seller needs to read that) and `home`
+     * (the param cannot land there). Early return: no tabs, no publish
+     * mount, no ornament, no footer. Moods still reach the palette.
+     */
+    if (
+        view.broadcast !== undefined &&
+        view.route.kind !== 'invalid' &&
+        view.route.kind !== 'home'
+    ) {
+        const moods = (view.worn ?? []).filter((row) => row.slot === 'mood');
+        applyTheme(stall, theme, moods, { ornament: false });
+        stall.classList.add('broadcast');
+        if (view.broadcast.transparent) {
+            stall.classList.add('bc-clear');
+            document.documentElement.classList.add('bc-clear');
+            document.documentElement.style.backgroundColor = '';
+            document
+                .querySelector('meta[name="theme-color"]')
+                ?.setAttribute('content', '');
+        } else {
+            document.documentElement.classList.remove('bc-clear');
+        }
+        stall.append(renderBroadcastView(view));
+        frame.append(stall);
+        root.append(frame);
+        overlayWasOpen = overlayOpen;
+        return;
+    }
+
+    document.documentElement.classList.remove('bc-clear');
     applyTheme(
         stall,
         theme,
@@ -350,6 +386,7 @@ function applyTheme(
     stall: HTMLElement,
     theme: DecodedTheme,
     worn: readonly ShippedAttachment[] = [],
+    opts: { ornament?: boolean } = {},
 ): void {
     // A mood is merged before `themeVars`, never as a stylesheet block: every
     // `--s-*` is written inline on this element, and an inline custom property
@@ -391,9 +428,11 @@ function applyTheme(
      */
     stall.classList.add(THEME_CLASS[theme.id] ?? 't-modern');
     stall.classList.add(...attachmentClasses(worn));
-    const next = ornamentStrip(theme);
-    if (next !== null) {
-        stall.prepend(next);
+    if (opts.ornament !== false) {
+        const next = ornamentStrip(theme);
+        if (next !== null) {
+            stall.prepend(next);
+        }
     }
 }
 
@@ -621,7 +660,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * white with a quiet zone: a QR that inherits a theme colour or loses its margin
  * does not scan. `title` is what a screen reader announces.
  */
-function qrSvg(text: string, title: string): SVGSVGElement {
+export function qrSvg(text: string, title: string): SVGSVGElement {
     const matrix = qrMatrix(text);
     const n = matrix.length;
     const quiet = 4;
@@ -1379,7 +1418,7 @@ function offersOf(view: StallView): readonly StallOffer[] {
  * pointing at one Cashtab page. The offers keep their identity underneath:
  * the expander and the live diff still speak outpoints.
  */
-type TokenListing = {
+export type TokenListing = {
     tokenId: string;
     offers: readonly StallOffer[];
 };
@@ -1388,7 +1427,7 @@ type TokenListing = {
  * Buckets in first-appearance order. `compareOffers` sorts a category's
  * offers by token id already, so buckets come out contiguous either way.
  */
-function listingsOf(offers: readonly StallOffer[]): TokenListing[] {
+export function listingsOf(offers: readonly StallOffer[]): TokenListing[] {
     const byToken = new Map<string, StallOffer[]>();
     for (const offer of offers) {
         const bucket = byToken.get(offer.tokenId);
@@ -1408,10 +1447,50 @@ function listingsOf(offers: readonly StallOffer[]): TokenListing[] {
  * claim this app cannot prove; "lowest at this stall" it can). All-unbuyable
  * falls back to the first row so the card can still say why nothing sells.
  */
-function cheapestOf(listing: TokenListing): StallOffer {
+export function cheapestOf(listing: TokenListing): StallOffer {
     const buyable = listing.offers.filter((offer) => !isUnbuyable(offer));
     const pool = buyable.length > 0 ? buyable : listing.offers;
     return pool.reduce((best, offer) => (offer.askedSats < best.askedSats ? offer : best));
+}
+
+/**
+ * The shop's card order: seller shelves first, then `sectionsOf`, with
+ * `compareOffers` only inside a run. The overlay's carousel walks this
+ * rather than token-id order, so the first card is the shop's first card.
+ */
+export function listingsInShopOrder(view: StallView): TokenListing[] {
+    const offers = offersOf(view);
+    const ordered = [...offers].sort(compareOffers);
+    const out: TokenListing[] = [];
+    const named = view.shelves;
+    let unshelved = ordered;
+    if (named !== undefined && named.size > 0) {
+        const runs = new Map<string, StallOffer[]>();
+        unshelved = [];
+        for (const offer of ordered) {
+            const shelfName = named.get(offer.tokenId);
+            if (shelfName === undefined) {
+                unshelved.push(offer);
+                continue;
+            }
+            const run = runs.get(shelfName);
+            if (run === undefined) {
+                runs.set(shelfName, [offer]);
+            } else {
+                run.push(offer);
+            }
+        }
+        for (const run of runs.values()) {
+            out.push(...listingsOf(run));
+        }
+    }
+    const sections = sectionsOf(unshelved, view.tokens, (id) => view.nftGroups?.get(id));
+    for (const section of sections) {
+        for (const group of section.groups) {
+            out.push(...listingsOf(group.offers));
+        }
+    }
+    return out;
 }
 
 /**
@@ -3127,6 +3206,12 @@ function paintStudio(
     posterControl(share, view);
     body.append(share);
 
+    // The stream overlay's recipe. Its strings live in the module itself,
+    // and it never navigates or stores: a section, the view, the handlers.
+    const broadcast = studioSection('broadcast', OBS_GUIDE_TITLE);
+    paintObsGuide(broadcast, view, handlers);
+    body.append(broadcast);
+
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
     if (raw !== undefined && onToggle !== undefined) {
@@ -3514,7 +3599,7 @@ function tokenMeta(
     return tokens.get(tokenId);
 }
 
-function tokenName(tokens: StallView['tokens'], tokenId: string): string {
+export function tokenName(tokens: StallView['tokens'], tokenId: string): string {
     const meta = tokenMeta(tokens, tokenId);
     if (!meta) {
         return tokenId;
@@ -3529,7 +3614,7 @@ function tokenName(tokens: StallView['tokens'], tokenId: string): string {
 }
 
 /** Genesis ticker, omitted when missing or when it would duplicate the name. */
-function tokenTicker(tokens: StallView['tokens'], tokenId: string): string | undefined {
+export function tokenTicker(tokens: StallView['tokens'], tokenId: string): string | undefined {
     const ticker = tokenMeta(tokens, tokenId)?.ticker;
     if (ticker === undefined || ticker === '') {
         return undefined;
@@ -3548,7 +3633,7 @@ function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {
  * Genesis decimals, or undefined when metadata did not load. Distinct from
  * `decimalsOf`, which defaults to 0 and would throw a rate off by 10^decimals.
  */
-function knownDecimals(tokens: StallView['tokens'], tokenId: string): number | undefined {
+export function knownDecimals(tokens: StallView['tokens'], tokenId: string): number | undefined {
     const decimals = tokenMeta(tokens, tokenId)?.decimals;
     if (decimals === undefined || !Number.isInteger(decimals) || decimals < 0) {
         return undefined;

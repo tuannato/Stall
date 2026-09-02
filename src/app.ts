@@ -1,6 +1,12 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
-import { isHomePath, parseSellerParam, sellerFromPath, stallPath } from './domain/route';
+import {
+    isHomePath,
+    parseBroadcastParams,
+    parseSellerParam,
+    sellerFromPath,
+    stallPath,
+} from './domain/route';
 import {
     ATTACHMENT_FLAGS_TAG,
     decodeAttachmentFlags,
@@ -95,7 +101,46 @@ function changedTokens(
 import { p2pkhOutputScript } from './net/script';
 import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
-import { identityOf, renderStall } from './ui';
+import { cheapestOf, identityOf, listingsInShopOrder, renderStall } from './ui';
+
+/** Retry `refresh` while the overlay has no socket and no retry control. */
+const BROADCAST_RETRY_MS = 30_000;
+/** `mode=fixed` advances the cursor on this interval. */
+const BROADCAST_FIXED_MS = 8_000;
+/** Rail mode rests this long, then lives `BROADCAST_RAIL_LIVE_MS`. */
+const BROADCAST_RAIL_REST_MS = 3_000;
+const BROADCAST_RAIL_LIVE_MS = 5_000;
+
+/**
+ * Copy the overlay params from the URL onto a view. Used by both
+ * `loadCurrent` and `openingFromLocation`: `refresh` paints the latter
+ * first, and a first frame without `view.broadcast` is the shop.
+ */
+function withBroadcast(state: AppState): AppState {
+    const broadcast = parseBroadcastParams(location.search);
+    if (broadcast === undefined) {
+        return state;
+    }
+    return { ...state, view: { ...state.view, broadcast } };
+}
+
+/** The card the overlay is showing: shop order, then the cursor. */
+function shownCard(
+    view: StallView,
+): { tokenId: string; askedSats: bigint } | undefined {
+    const listings = listingsInShopOrder(view);
+    if (listings.length === 0) {
+        return undefined;
+    }
+    const n = listings.length;
+    const cursor = (((view.broadcastCursor ?? 0) % n) + n) % n;
+    const listing = listings[cursor]!;
+    return { tokenId: listing.tokenId, askedSats: cheapestOf(listing).askedSats };
+}
+
+function isBroadcastFailure(kind: FetchStatus['kind'] | undefined): boolean {
+    return kind === 'unreachable' || kind === 'plugin-missing' || kind === 'unreadable';
+}
 
 const sessionTokens = new Map<string, TokenMeta>();
 const sessionNames = new Map<string, string>();
@@ -138,6 +183,23 @@ export function boot(
     let generation = 0;
     /** One socket per painted stall. Closed before the next one opens. */
     let live: LiveHandle | undefined;
+    /**
+     * Overlay timers. One carousel per painted stall; one retry while the
+     * overlay has no socket. Cleared wherever `live` is closed (`refresh`).
+     */
+    let carousel: ReturnType<typeof setTimeout> | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    const clearBroadcastTimers = (): void => {
+        if (carousel !== undefined) {
+            clearTimeout(carousel);
+            carousel = undefined;
+        }
+        if (retry !== undefined) {
+            clearTimeout(retry);
+            retry = undefined;
+        }
+    };
     /**
      * The fiat rate for this page load. Absent until the feed answers, and
      * absent again the moment it fails — never a last-known value, because a
@@ -302,6 +364,22 @@ export function boot(
                 paint();
             },
         });
+        // One-shots: the paint that showed them consumes them, same
+        // discipline as `justChanged`. A later fiat answer or live
+        // re-read must not replay the fade or the pulse.
+        if (
+            state.view.broadcastStepped !== undefined ||
+            state.view.broadcastPulse !== undefined
+        ) {
+            state = {
+                ...state,
+                view: {
+                    ...state.view,
+                    broadcastStepped: undefined,
+                    broadcastPulse: undefined,
+                },
+            };
+        }
     };
 
     /**
@@ -326,6 +404,107 @@ export function boot(
             return;
         }
         paint();
+    };
+
+    const carouselTick = (): void => {
+        carousel = undefined;
+        const params = state.view.broadcast;
+        if (params === undefined || params.preset !== 'corner') {
+            return;
+        }
+        const n = listingsInShopOrder(state.view).length;
+        if (n < 2) {
+            return;
+        }
+        if (params.mode === 'fixed') {
+            state = {
+                ...state,
+                view: {
+                    ...state.view,
+                    broadcastCursor: ((state.view.broadcastCursor ?? 0) + 1) % n,
+                    broadcastState: 'live',
+                    broadcastStepped: true,
+                },
+            };
+            paint();
+            carousel = setTimeout(carouselTick, BROADCAST_FIXED_MS);
+            return;
+        }
+        if (state.view.broadcastState === 'live') {
+            state = {
+                ...state,
+                view: {
+                    ...state.view,
+                    broadcastCursor: ((state.view.broadcastCursor ?? 0) + 1) % n,
+                    broadcastState: 'rest',
+                },
+            };
+            paint();
+            carousel = setTimeout(carouselTick, BROADCAST_RAIL_REST_MS);
+            return;
+        }
+        state = {
+            ...state,
+            view: {
+                ...state.view,
+                broadcastState: 'live',
+                broadcastStepped: true,
+            },
+        };
+        paint();
+        carousel = setTimeout(carouselTick, BROADCAST_RAIL_LIVE_MS);
+    };
+
+    const syncCarousel = (): void => {
+        const params = state.view.broadcast;
+        const n = listingsInShopOrder(state.view).length;
+        const want = params !== undefined && params.preset === 'corner' && n >= 2;
+        if (!want) {
+            if (carousel !== undefined) {
+                clearTimeout(carousel);
+                carousel = undefined;
+            }
+            return;
+        }
+        if (carousel !== undefined) {
+            return;
+        }
+        const delay = params.mode === 'fixed' ? BROADCAST_FIXED_MS : BROADCAST_RAIL_REST_MS;
+        carousel = setTimeout(carouselTick, delay);
+    };
+
+    const syncBroadcastTimers = (): void => {
+        if (state.view.broadcast === undefined) {
+            return;
+        }
+        if (isBroadcastFailure(state.view.fetch?.kind)) {
+            if (retry === undefined) {
+                retry = setTimeout(() => {
+                    retry = undefined;
+                    void refresh();
+                }, BROADCAST_RETRY_MS);
+            }
+            return;
+        }
+        syncCarousel();
+    };
+
+    const markBroadcastStale = (): void => {
+        if (state.view.broadcast === undefined) {
+            return;
+        }
+        if (state.view.fetch?.kind !== 'offers') {
+            return;
+        }
+        if (state.view.broadcastState === 'stale') {
+            return;
+        }
+        if (carousel !== undefined) {
+            clearTimeout(carousel);
+            carousel = undefined;
+        }
+        state = { ...state, view: { ...state.view, broadcastState: 'stale' } };
+        livePaint();
     };
 
     const onBuy = async (outpoint: Outpoint): Promise<void> => {
@@ -399,6 +578,7 @@ export function boot(
         const claimed = ++generation;
         live?.close();
         live = undefined;
+        clearBroadcastTimers();
         // A new stall is a new ring. These are transactions at one address, and
         // carrying them across a route change would attribute one seller's
         // traffic to another.
@@ -419,6 +599,7 @@ export function boot(
         adoptFiatHint();
         paint();
         watch(claimed);
+        syncBroadcastTimers();
     };
 
     /**
@@ -772,9 +953,16 @@ export function boot(
                             // page that is otherwise fine. The painted book
                             // stands, exactly as it does for an answer that is
                             // not definite.
+                            markBroadcastStale();
                             return;
                         }
-                        if (claimed !== generation || !isDefiniteResult(status)) {
+                        if (claimed !== generation) {
+                            return;
+                        }
+                        if (!isDefiniteResult(status)) {
+                            if (isBroadcastFailure(status.kind)) {
+                                markBroadcastStale();
+                            }
                             return;
                         }
                         // The flourish, strictly gated: a message-triggered
@@ -789,17 +977,42 @@ export function boot(
                         const changed = proven
                             ? changedTokens(state.offers, status)
                             : undefined;
+                        const prevCard =
+                            state.view.broadcast !== undefined
+                                ? shownCard(state.view)
+                                : undefined;
+                        const nextFetch: StallView = {
+                            ...state.view,
+                            fetch: status,
+                            justChanged:
+                                changed !== undefined && changed.size > 0
+                                    ? changed
+                                    : undefined,
+                        };
+                        if (state.view.broadcast !== undefined) {
+                            const n = listingsInShopOrder(nextFetch).length;
+                            nextFetch.broadcastCursor =
+                                n === 0
+                                    ? 0
+                                    : (((state.view.broadcastCursor ?? 0) % n) + n) % n;
+                            if (state.view.broadcastState === 'stale') {
+                                nextFetch.broadcastState =
+                                    state.view.broadcast.mode === 'fixed' ? 'live' : 'rest';
+                            }
+                            const nextCard = shownCard(nextFetch);
+                            if (
+                                prevCard !== undefined &&
+                                nextCard !== undefined &&
+                                prevCard.tokenId === nextCard.tokenId &&
+                                prevCard.askedSats !== nextCard.askedSats
+                            ) {
+                                nextFetch.broadcastPulse = true;
+                            }
+                        }
                         state = {
                             ...state,
                             offers: status.kind === 'offers' ? status.offers : [],
-                            view: {
-                                ...state.view,
-                                fetch: status,
-                                justChanged:
-                                    changed !== undefined && changed.size > 0
-                                        ? changed
-                                        : undefined,
-                            },
+                            view: nextFetch,
                         };
                         livePaint();
                         // One shot: the paint above showed it; nothing may
@@ -809,6 +1022,9 @@ export function boot(
                                 ...state,
                                 view: { ...state.view, justChanged: undefined },
                             };
+                        }
+                        if (state.view.broadcast !== undefined) {
+                            syncCarousel();
                         }
                         await fillNewTokens(claimed, pubkeyHex, status);
                     })();
@@ -932,22 +1148,22 @@ export function boot(
 
 async function loadCurrent(): Promise<AppState> {
     if (isHomePath(location.pathname)) {
-        return {
+        return withBroadcast({
             view: { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
             offers: [],
-        };
+        });
     }
 
     const raw = sellerFromPath(location.pathname);
     if (raw === undefined) {
-        return {
+        return withBroadcast({
             view: {
                 route: { kind: 'invalid', raw: location.pathname },
                 overlay: { kind: 'idle' },
                 tokens: new Map(),
             },
             offers: [],
-        };
+        });
     }
 
     const parsed = parseSellerParam(raw);
@@ -959,17 +1175,17 @@ async function loadCurrent(): Promise<AppState> {
         route = await resolveSeller(parsed, chronik);
     } catch {
         if (parsed.kind === 'invalid') {
-            return {
+            return withBroadcast({
                 view: {
                     route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                     overlay: { kind: 'idle' },
                     tokens: new Map(),
                 },
                 offers: [],
-            };
+            });
         }
         if (parsed.kind === 'pubkey') {
-            return {
+            return withBroadcast({
                 view: {
                     route: {
                         kind: 'pubkey',
@@ -982,9 +1198,9 @@ async function loadCurrent(): Promise<AppState> {
                     tokens: new Map(),
                 },
                 offers: [],
-            };
+            });
         }
-        return {
+        return withBroadcast({
             view: {
                 route: { kind: 'unresolved', address: parsed.address },
                 fetch: unreachableNow(),
@@ -993,14 +1209,14 @@ async function loadCurrent(): Promise<AppState> {
                 tokens: new Map(),
             },
             offers: [],
-        };
+        });
     }
 
     if (route.kind !== 'pubkey') {
-        return {
+        return withBroadcast({
             view: { route, overlay: { kind: 'idle' }, tokens: new Map(), address: addressOf(route) },
             offers: [],
-        };
+        });
     }
 
     const reader = agoraOfferReader(chronik);
@@ -1063,7 +1279,7 @@ async function loadCurrent(): Promise<AppState> {
         // load left behind, and improving it is a separate change with its own
         // reasoning, not a side effect of running two reads at once.
         const later = Boolean(cachedName) || cachedTokens.size > 0;
-        return {
+        return withBroadcast({
             view: {
                 route,
                 fetch,
@@ -1075,7 +1291,7 @@ async function loadCurrent(): Promise<AppState> {
             },
             offers: [],
             pubkeyHex: route.pubkeyHex,
-        };
+        });
     }
 
     const offers = fetch.kind === 'offers' ? fetch.offers : [];
@@ -1196,7 +1412,7 @@ async function loadCurrent(): Promise<AppState> {
         }
     }
 
-    return {
+    return withBroadcast({
         view: {
             route,
             fetch,
@@ -1229,44 +1445,44 @@ async function loadCurrent(): Promise<AppState> {
         },
         offers,
         pubkeyHex: route.pubkeyHex,
-    };
+    });
 }
 
 function openingFromLocation(): AppState {
     const idle = { kind: 'idle' as const };
     const emptyTokens = new Map();
     if (isHomePath(location.pathname)) {
-        return {
+        return withBroadcast({
             view: { route: { kind: 'home' }, overlay: idle, tokens: emptyTokens },
             offers: [],
-        };
+        });
     }
     const raw = sellerFromPath(location.pathname);
     if (raw === undefined) {
-        return {
+        return withBroadcast({
             view: {
                 route: { kind: 'invalid', raw: location.pathname },
                 overlay: idle,
                 tokens: emptyTokens,
             },
             offers: [],
-        };
+        });
     }
     const parsed = parseSellerParam(raw);
     if (parsed.kind === 'invalid') {
-        return {
+        return withBroadcast({
             view: {
                 route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                 overlay: idle,
                 tokens: emptyTokens,
             },
             offers: [],
-        };
+        });
     }
     if (parsed.kind === 'pubkey') {
         const address = p2pkhAddress(parsed.pubkeyHex);
         const cachedName = sessionNames.get(parsed.pubkeyHex);
-        return {
+        return withBroadcast({
             view: {
                 route: {
                     kind: 'pubkey',
@@ -1281,9 +1497,9 @@ function openingFromLocation(): AppState {
             },
             offers: [],
             pubkeyHex: parsed.pubkeyHex,
-        };
+        });
     }
-    return {
+    return withBroadcast({
         view: {
             route: { kind: 'unresolved', address: parsed.address },
             fetch: { kind: 'opening' },
@@ -1292,7 +1508,7 @@ function openingFromLocation(): AppState {
             tokens: emptyTokens,
         },
         offers: [],
-    };
+    });
 }
 
 function unreachableNow(): FetchStatus {

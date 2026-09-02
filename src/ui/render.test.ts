@@ -16,8 +16,11 @@ import {
     themeVars,
     tierCharCeilings,
 } from '../domain/theme';
-import type { Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
+import { stallPath } from '../domain/route';
+import { qrMatrix } from '../domain/qr';
+import type { BroadcastParams, Outpoint, StallOffer, StallView, TokenMeta } from '../domain/state';
 import { MAX_STALL_EVENTS } from '../domain/state';
+import { OBS_GUIDE_TITLE } from './obsGuide';
 import {
     COPY_LINK,
     COPY_LINK_FALLBACK,
@@ -724,13 +727,14 @@ describe('copy-link', () => {
 
 describe('the-studio-groups-its-tools', () => {
     /**
-     * Two titled sections — the record, then the share tools — and the browser
-     * preference trailing with no heading: it is a preference of this browser,
-     * not a seller tool, so it comes last and its fine line says where it
-     * lives. The heads carry their own data-role so a query for the shop's
-     * `section-<category>` heads can never collect a studio head.
+     * Three titled sections — the record, the share tools, then the stream
+     * overlay's recipe — and the browser preference trailing with no heading:
+     * it is a preference of this browser, not a seller tool, so it comes last
+     * and its fine line says where it lives. The heads carry their own
+     * data-role so a query for the shop's `section-<category>` heads can
+     * never collect a studio head.
      */
-    it('paints the record, then the share tools, then the browser preference', () => {
+    it('paints the record, the share tools, the OBS guide, then the browser preference', () => {
         const { root } = paint(
             idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }),
         );
@@ -738,6 +742,7 @@ describe('the-studio-groups-its-tools', () => {
         expect(secs.map((s) => s.getAttribute('data-role'))).toEqual([
             'studio-sec-record',
             'studio-sec-share',
+            'studio-sec-broadcast',
         ]);
         expect(secs[0]!.querySelector('.section-title')?.textContent).toBe(
             STUDIO_SEC_RECORD,
@@ -745,6 +750,12 @@ describe('the-studio-groups-its-tools', () => {
         expect(secs[1]!.querySelector('.section-title')?.textContent).toBe(
             STUDIO_SEC_SHARE,
         );
+        expect(secs[2]!.querySelector('.section-title')?.textContent).toBe(
+            OBS_GUIDE_TITLE,
+        );
+        // The guide paints into its own section, never into share.
+        expect(secs[2]!.querySelector('[data-role="obs-guide"]')).not.toBeNull();
+        expect(secs[1]!.querySelector('[data-role="obs-guide"]')).toBeNull();
         // Each tool sits in its group: the publish launcher in the record,
         // the copy-link and the poster in share, the toggle in neither.
         expect(
@@ -4596,3 +4607,382 @@ describe('a-full-door-scrolls-its-pins-not-the-page', () => {
         expect(rule![1]).toMatch(/overflow-y:\s*auto/);
     });
 });
+
+const BROADCAST: BroadcastParams = {
+    preset: 'corner',
+    mode: 'rail',
+    transparent: false,
+};
+
+function broadcastView(over: Partial<StallView> = {}): StallView {
+    return idlePubkey({
+        fetch: { kind: 'offers', offers: [OFFER] },
+        tokens: new Map([[TOKEN_ID, BEANS]]),
+        broadcast: BROADCAST,
+        ...over,
+    });
+}
+
+function qrPathOf(text: string): string {
+    const matrix = qrMatrix(text);
+    const quiet = 4;
+    let d = '';
+    for (let r = 0; r < matrix.length; r += 1) {
+        for (let c = 0; c < matrix.length; c += 1) {
+            if (matrix[r]![c]) {
+                d += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+            }
+        }
+    }
+    return d;
+}
+
+function shopQrHref(identity: string): string {
+    return `${location.origin}${stallPath(identity)}`;
+}
+
+function assertNoShopChrome(root: HTMLElement): void {
+    expect(root.querySelector('.tabs'), 'no tab bar').toBeNull();
+    expect(root.querySelector('.orn'), 'no ornament strip').toBeNull();
+    expect(root.querySelector('[data-role="sheet-scrim"]'), 'no sheet scrim').toBeNull();
+    expect(root.querySelector('.stall-foot'), 'no footer').toBeNull();
+    expect(root.querySelector('[data-role="publish"]'), 'no publish mount').toBeNull();
+}
+
+describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
+    /**
+     * The overlay is a second render path on the same route. Tabs, the
+     * ornament, the publish sheet and the footer are shop chrome: a
+     * streamer who pointed OBS at this URL must never capture them, on
+     * the opening frame or after the book lands.
+     */
+    const hosts = [{ host: 'chronik-native1.fabien.cash', result: 'timeout' as const }];
+
+    const screens: { name: string; view: StallView }[] = [
+        {
+            name: 'opening',
+            view: idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'opening' } }),
+        },
+        {
+            name: 'unresolvable',
+            view: {
+                route: { kind: 'unresolvable', address: ADDR },
+                overlay: { kind: 'idle' },
+                tokens: new Map(),
+                address: ADDR,
+                broadcast: BROADCAST,
+            },
+        },
+        {
+            name: 'unresolved',
+            view: {
+                route: { kind: 'unresolved', address: ADDR },
+                overlay: { kind: 'idle' },
+                tokens: new Map(),
+                address: ADDR,
+                broadcast: BROADCAST,
+            },
+        },
+        { name: 'pubkey/offers', view: broadcastView() },
+        {
+            name: 'pubkey/empty',
+            view: idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'empty' } }),
+        },
+        {
+            name: 'pubkey/unreadable',
+            view: idlePubkey({
+                broadcast: BROADCAST,
+                fetch: { kind: 'unreadable', triedAtMs: 0, returned: 1 },
+            }),
+        },
+        {
+            name: 'pubkey/unreachable',
+            view: idlePubkey({
+                broadcast: BROADCAST,
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts },
+            }),
+        },
+        {
+            name: 'pubkey/plugin-missing',
+            view: idlePubkey({
+                broadcast: BROADCAST,
+                fetch: {
+                    kind: 'plugin-missing',
+                    triedAtMs: 0,
+                    hosts: [{ host: 'chronik-native1.fabien.cash', result: 'plugin-missing' }],
+                },
+            }),
+        },
+    ];
+
+    it.each(screens)('$name has no shop chrome', ({ view }) => {
+        const { root } = paint(view);
+        expect(root.querySelector('.stall')?.classList.contains('broadcast')).toBe(true);
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        assertNoShopChrome(root);
+    });
+
+    it('a publish overlay still does not mount', () => {
+        const { root } = paint(broadcastView({ overlay: { kind: 'publish' } }));
+        assertNoShopChrome(root);
+    });
+
+    it('Neo ships no ornament strip on the overlay', () => {
+        const { root } = paint(
+            broadcastView({ theme: decodeTheme(NEO_CITY_THEME_ID) }),
+        );
+        expect(root.querySelector('.orn')).toBeNull();
+        expect(root.querySelector('.stall')?.classList.contains('t-neo')).toBe(true);
+    });
+
+    it('a transparent overlay clears the inline html colour and the meta', () => {
+        const meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.append(meta);
+        try {
+            const painted = paint(
+                broadcastView({
+                    broadcast: { ...BROADCAST, transparent: true },
+                }),
+            );
+            const html = document.documentElement;
+            expect(html.classList.contains('bc-clear')).toBe(true);
+            expect(html.style.backgroundColor, 'inline colour cannot beat the sheet').toBe(
+                '',
+            );
+            expect(meta.getAttribute('content')).toBe('');
+            expect(painted.root.querySelector('.stall')?.classList.contains('bc-clear')).toBe(
+                true,
+            );
+
+            paint(offersView([OFFER]));
+            expect(html.classList.contains('bc-clear')).toBe(false);
+            expect(html.style.backgroundColor).not.toBe('');
+            expect(meta.getAttribute('content')).not.toBe('');
+        } finally {
+            meta.remove();
+            document.documentElement.classList.remove('bc-clear');
+            document.documentElement.style.backgroundColor = '';
+        }
+    });
+});
+
+describe('a-broadcast-url-with-an-unreadable-seller-still-says-so', () => {
+    /**
+     * A streamer who typed a wrong seller needs to read that in the OBS
+     * preview. There is no stall to overlay, so `invalid` keeps its
+     * ordinary screen.
+     */
+    it('paints the unreadable screen, not the overlay', () => {
+        const { root } = paint({
+            route: { kind: 'invalid', raw: 'not-a-seller' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            broadcast: BROADCAST,
+        });
+        expect(root.querySelector('[data-role="broadcast"]')).toBeNull();
+        expect(root.querySelector('.stall')?.classList.contains('broadcast')).toBe(
+            false,
+        );
+        expect(root.textContent).toContain(LINK_UNREADABLE_TITLE);
+        expect(root.textContent).toContain('not-a-seller');
+    });
+
+    it('a script address still says it cannot be a stall', () => {
+        const { root } = paint({
+            route: { kind: 'invalid', raw: 'ecash:p...', why: 'script-address' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            broadcast: BROADCAST,
+        });
+        expect(root.querySelector('[data-role="broadcast"]')).toBeNull();
+        expect(root.textContent).toContain(copy.SCRIPT_ADDRESS_TITLE);
+    });
+});
+
+describe('a-broadcast-carries-no-controls', () => {
+    /**
+     * The overlay is watched, never used. A button, a link or a field is
+     * a control a viewer cannot click, and the QR is the only path off
+     * the frame — to the shop, never back into the overlay.
+     */
+    it('has no interactive element, and the QR is the shop without a query', () => {
+        const before = window.location.href;
+        window.history.replaceState(
+            {},
+            '',
+            `${stallPath(ADDR)}?view=broadcast&bg=transparent`,
+        );
+        try {
+            const { root } = paint(
+                broadcastView({
+                    broadcast: { ...BROADCAST, transparent: true },
+                }),
+            );
+            expect(root.querySelectorAll('button, a, input, select, textarea'))
+                .toHaveLength(0);
+            expect(root.querySelector('[data-role="retry"]')).toBeNull();
+            const qr = root.querySelector('svg.qr');
+            expect(qr, 'the code is a qr node').not.toBeNull();
+            expect(qr!.getAttribute('data-role')).toBe('qr');
+            const shop = shopQrHref(ADDR);
+            expect(shop).not.toContain('?');
+            expect(qr!.querySelector('path')?.getAttribute('d')).toBe(qrPathOf(shop));
+            const overlayUrl = `${location.origin}${location.pathname}${location.search}`;
+            expect(overlayUrl).toContain('view=broadcast');
+            expect(qr!.querySelector('path')?.getAttribute('d')).not.toBe(
+                qrPathOf(overlayUrl),
+            );
+        } finally {
+            window.history.replaceState({}, '', before);
+        }
+    });
+
+    it('the broadcast module never reaches the parser', () => {
+        const src = readFileSync(join(UI_DIR, 'broadcast.ts'), 'utf8');
+        expect(src).not.toMatch(/\binnerHTML\b/);
+        expect(src).not.toMatch(/\binsertAdjacentHTML\b/);
+        expect(src).not.toMatch(/\bcssText\b/);
+        expect(src).not.toMatch(/url\s*\(/);
+    });
+});
+
+describe('a-broadcast-shows-the-shops-first-card', () => {
+    /**
+     * The card is the shop's own first card: shelves first, then the
+     * same section order `paintOffers` walks. Token-id order alone would
+     * show Tea here.
+     */
+    const teaOffer: StallOffer = {
+        ...OFFER,
+        outpoint: { txid: 'ef'.repeat(32), outIdx: 9 },
+        tokenId: OTHER_TOKEN,
+    };
+    const two = (
+        over: Partial<StallView> = {},
+    ): StallView =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER, teaOffer] },
+            tokens: new Map([
+                [TOKEN_ID, BEANS],
+                [OTHER_TOKEN, TEA],
+            ]),
+            shelves: new Map([[TOKEN_ID, 'Morning roast']]),
+            ...over,
+        });
+
+    it('the overlay names the same first card the shop does', () => {
+        const shop = paint(two());
+        const shopFirst = shop.root.querySelector('.item-n')?.textContent;
+        expect(shopFirst).toBe('Roasted Beans');
+
+        const { root } = paint(two({ broadcast: BROADCAST }));
+        expect(root.querySelector('.bc-nm')?.textContent).toBe(shopFirst);
+        expect(root.querySelector('.bc-more')?.textContent).toBe(copy.broadcastMore(1));
+    });
+});
+
+describe('broadcast-stock-is-omitted-without-decimals', () => {
+    /**
+     * `decimalsOf` defaults to 0 and `formatAtoms` at 0 prints atoms
+     * verbatim. A token whose genesis has not landed must not say
+     * "12 left" for one token. Same footgun as
+     * `unknown-decimals-is-not-a-stock-count`.
+     */
+    it('prints no stock count when genesis decimals did not load', () => {
+        const { root } = paint(
+            idlePubkey({
+                broadcast: BROADCAST,
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map(),
+            }),
+        );
+        expect(root.querySelector('[data-role="broadcast"]'), 'the overlay is up').not.toBeNull();
+        expect(root.querySelector('.bc-item'), 'the card is shown').not.toBeNull();
+        expect(root.textContent ?? '').not.toMatch(/\d[\d,]* left/);
+        expect(root.querySelector('.bc-tk')?.textContent ?? '').not.toContain('left');
+    });
+});
+
+describe('a-partial-on-the-overlay-still-says-from', () => {
+    it('keeps PRICE_FROM when the take is smaller than the lot', () => {
+        const { root } = paint(broadcastView());
+        const from = root.querySelector('.bc-from');
+        expect(from, 'a partial still says from').not.toBeNull();
+        expect(from!.textContent).toBe(PRICE_FROM);
+        expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+    });
+});
+
+describe('a-broadcast-never-prints-our-failure', () => {
+    /**
+     * Our failure is never the seller's shop, in the one place a viewer
+     * cannot click retry. Empty is the seller's fact and may speak;
+     * unreachable is ours and must not.
+     */
+    it('the unreachable copy is absent on unreachable, and the empty line is only on empty', () => {
+        const unreachable = paint(
+            idlePubkey({
+                broadcast: BROADCAST,
+                fetch: {
+                    kind: 'unreachable',
+                    triedAtMs: 0,
+                    hosts: [{ host: 'chronik-native1.fabien.cash', result: 'timeout' }],
+                },
+            }),
+        );
+        const uText = unreachable.root.textContent ?? '';
+        expect(uText).not.toContain(UNREACHABLE_BODY);
+        expect(uText).not.toContain(copy.BROADCAST_EMPTY);
+        expect(unreachable.root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+
+        const empty = paint(idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'empty' } }));
+        expect(empty.root.textContent).toContain(copy.BROADCAST_EMPTY);
+        expect(empty.root.textContent).not.toContain(UNREACHABLE_BODY);
+
+        const plugin = paint(
+            idlePubkey({
+                broadcast: BROADCAST,
+                fetch: {
+                    kind: 'plugin-missing',
+                    triedAtMs: 0,
+                    hosts: [{ host: 'chronik-native1.fabien.cash', result: 'plugin-missing' }],
+                },
+            }),
+        );
+        expect(plugin.root.textContent).not.toContain(UNREACHABLE_BODY);
+        expect(plugin.root.textContent).not.toContain(copy.BROADCAST_EMPTY);
+
+        const unreadable = paint(
+            idlePubkey({
+                broadcast: BROADCAST,
+                fetch: { kind: 'unreadable', triedAtMs: 0, returned: 3 },
+            }),
+        );
+        expect(unreadable.root.textContent).not.toContain(UNREADABLE_BODY);
+        expect(unreadable.root.textContent).not.toContain(copy.BROADCAST_EMPTY);
+    });
+});
+
+describe('a-carousel-step-is-not-a-price-change', () => {
+    /**
+     * Two motions, two meanings. A carousel step fades the card in.
+     * A price pulse fires only when the shown asked amount moved.
+     */
+    it('a step fades the card and does not pulse the price', () => {
+        const { root } = paint(broadcastView({ broadcastStepped: true }));
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            false,
+        );
+    });
+
+    it('a price move pulses the figure and does not fade the card', () => {
+        const { root } = paint(broadcastView({ broadcastPulse: true }));
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            true,
+        );
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+    });
+});
+

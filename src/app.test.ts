@@ -16,6 +16,7 @@ vi.mock('./net/price', () => ({
     fetchXecPrice: async () => undefined,
 }));
 import { sellerFromPath, stallPath } from './domain/route';
+import type { StallOffer } from './domain/state';
 import { HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
 import { DEFAULT_THEME } from './domain/theme';
 
@@ -347,5 +348,199 @@ describe('a-full-load-wears-nothing-it-cannot-prove', () => {
         const worn = body.slice(body.indexOf('worn: wornAttachments('));
         expect(worn.length, 'loadCurrent no longer computes worn').toBeGreaterThan(0);
         expect(worn.slice(0, 200)).toMatch(/heldTokens \?\? NOTHING_HELD/);
+    });
+});
+
+const TOKEN_A = 'aa'.repeat(32);
+const TOKEN_B = 'bb'.repeat(32);
+const BROADCAST_CORNER_FIXED = {
+    preset: 'corner' as const,
+    mode: 'fixed' as const,
+    transparent: false,
+};
+const BROADCAST_RAIL = {
+    preset: 'rail' as const,
+    mode: 'rail' as const,
+    transparent: false,
+};
+const BROADCAST_RETRY_MS = 30_000;
+const BROADCAST_FIXED_MS = 8_000;
+const BROADCAST_RAIL_REST_MS = 3_000;
+const BROADCAST_RAIL_LIVE_MS = 5_000;
+
+function offerAt(tokenId: string, askedSats: bigint, outIdx: number): StallOffer {
+    return {
+        outpoint: { txid: 'de'.repeat(32), outIdx },
+        tokenId,
+        atoms: 12n,
+        variant: 'PARTIAL',
+        askedSats,
+        askedAtoms: 1n,
+    };
+}
+
+const TWO_OFFERS = [offerAt(TOKEN_A, 120_000n, 1), offerAt(TOKEN_B, 200_000n, 2)];
+
+function overlayState(
+    over: Partial<AppState['view']> = {},
+    offers: StallOffer[] = TWO_OFFERS,
+): AppState {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: offers.length > 0 ? { kind: 'offers', offers } : { kind: 'empty' },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+            broadcast: BROADCAST_CORNER_FIXED,
+            ...over,
+        },
+        offers,
+        pubkeyHex: PK,
+    };
+}
+
+describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
+    /**
+     * `refresh` paints `openingFromLocation` first. If that helper ignores
+     * `location.search`, the first frame OBS captures is the shop — tabs,
+     * footer, opening copy — which is the C1 failure arriving through the
+     * route layer. C3 reads the params in both that helper and `loadCurrent`.
+     */
+    it('the opening frame of a broadcast url is the overlay, not the shop', () => {
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast`);
+        const root = document.createElement('div');
+        boot(
+            root,
+            () =>
+                new Promise<AppState>(() => {
+                    /* never resolves — this is the first frame */
+                }),
+        );
+        expect(root.querySelector('.stall')?.classList.contains('broadcast')).toBe(true);
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        expect(root.querySelector('.tabs'), 'no tab bar on the first frame').toBeNull();
+        expect(root.querySelector('.stall-foot'), 'no footer on the first frame').toBeNull();
+        expect(root.textContent).not.toContain(OPENING_BODY);
+        expect(root.textContent).not.toContain(HOME_LEDE);
+    });
+});
+
+describe('a-broadcast-retries-our-failure-on-its-own', () => {
+    /**
+     * `watch()` does not open a socket on unreachable / plugin-missing /
+     * unreadable, and the overlay has no retry control. An index that is
+     * down at source-start must heal without the streamer restarting the
+     * Browser Source.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const hosts = [{ host: 'chronik-native1.fabien.cash', result: 'timeout' as const }];
+
+    it.each(['unreachable', 'plugin-missing', 'unreadable'] as const)(
+        'retries on its own when the overlay loaded %s',
+        async (kind) => {
+            vi.useFakeTimers();
+            window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast`);
+            let loads = 0;
+            const root = document.createElement('div');
+            const fetch =
+                kind === 'unreadable'
+                    ? { kind, triedAtMs: 0, returned: 1 }
+                    : { kind, triedAtMs: 0, hosts };
+            boot(root, async () => {
+                loads += 1;
+                return overlayState({ fetch, broadcast: { preset: 'corner', mode: 'rail', transparent: false } }, []);
+            });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(loads).toBe(1);
+            expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+            await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS - 1);
+            expect(loads, 'does not retry early').toBe(1);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(loads, 'retries refresh after BROADCAST_RETRY_MS').toBe(2);
+        },
+    );
+
+    it('an ordinary stall does not retry our failure on a timer', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', stallPath(PK));
+        let loads = 0;
+        boot(document.createElement('div'), async () => {
+            loads += 1;
+            return {
+                view: {
+                    route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+                    fetch: { kind: 'unreachable', triedAtMs: 0, hosts },
+                    overlay: { kind: 'idle' },
+                    address: ADDR,
+                    tokens: new Map(),
+                },
+                offers: [],
+                pubkeyHex: PK,
+            };
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(loads).toBe(1);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS);
+        expect(loads, 'the shop has a retry control; it does not poll').toBe(1);
+    });
+});
+
+describe('the-rail-preset-starts-no-timer', () => {
+    /**
+     * `preset=rail` never opens (C1: mode is ignored). The carousel timer
+     * is for `preset=corner` with at least two listings. This describe
+     * also pins that the corner timer actually advances — otherwise the
+     * rail assertion is true of a tree that starts no timer at all.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('preset=rail with two listings never leaves rest', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(
+            null,
+            '',
+            `${stallPath(PK)}?view=broadcast&preset=rail`,
+        );
+        const root = document.createElement('div');
+        boot(root, async () => overlayState({ broadcast: BROADCAST_RAIL }));
+        await vi.advanceTimersByTimeAsync(0);
+        const overlay = root.querySelector('[data-role="broadcast"]');
+        expect(overlay).not.toBeNull();
+        expect(overlay!.getAttribute('data-preset')).toBe('rail');
+        expect(overlay!.getAttribute('data-state')).toBe('rest');
+        await vi.advanceTimersByTimeAsync(
+            BROADCAST_FIXED_MS + BROADCAST_RAIL_REST_MS + BROADCAST_RAIL_LIVE_MS,
+        );
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+            'the rail preset does not run the rest/live cycle',
+        ).toBe('rest');
+        expect(root.querySelector('.bc-ext')).toBeNull();
+    });
+
+    it('preset=corner mode=fixed advances the cursor and fades the card, not the price', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(
+            null,
+            '',
+            `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed`,
+        );
+        const root = document.createElement('div');
+        boot(root, async () => overlayState());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS - 1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
+        expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
+            false,
+        );
     });
 });

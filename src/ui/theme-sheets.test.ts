@@ -25,7 +25,13 @@ import {
 } from '../domain/theme';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
-const SHEETS = ['stall.css', 'theme-modern.css', 'theme-neo.css', 'theme-rural.css'];
+const SHEETS = [
+    'stall.css',
+    'theme-modern.css',
+    'theme-neo.css',
+    'theme-rural.css',
+    'broadcast.css',
+];
 
 const stripped = (file: string): string =>
     readFileSync(join(UI_DIR, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -47,7 +53,7 @@ describe('every-theme-var-reaches-the-stylesheet', () => {
      * `--s-accent-2` was emitted on every paint and read by no rule, so
      * `accentTwo` in the shipped table painted nothing: a seller publishing a
      * two-colour look got one colour and no way to tell why. Widened by the
-     * 2026-08-30 review from stall.css alone to all four sheets — the pivot
+     * 2026-08-30 review from stall.css alone to every sheet in SHEETS — the pivot
      * moved some consumers into the theme files (`--s-card-sheen` lives in
      * theme-neo.css's background stack), and the one-file version would have
      * called every such var dead.
