@@ -38,6 +38,7 @@ import {
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     HOME_LEDE,
     HOME_SELLER,
+    HOME_STREAM_LINK,
     DEMO_STALL_ADDRESS,
     HOME_DEMO_SOON,
     UNRESOLVABLE_NEXT,
@@ -5577,3 +5578,14 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
     });
 });
 
+describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
+    it('the door carries one plain link to /stream, named for what it opens', () => {
+        const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        const link = root.querySelector('[data-role="door-stream-link"]');
+        expect(link?.tagName).toBe('A');
+        expect(link?.getAttribute('href')).toBe('/stream');
+        expect(link?.textContent).toBe(HOME_STREAM_LINK);
+        // One link, not a control: nothing about the door's paste path changed.
+        expect(root.querySelectorAll('a[href="/stream"]')).toHaveLength(1);
+    });
+});

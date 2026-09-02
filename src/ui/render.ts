@@ -488,6 +488,16 @@ function paintHome(
     }
     body.append(chips);
     body.append(el('p', 'fine door-chips-fine', copy.HOME_CHIPS_FINE));
+    // One quiet line for streamers. A plain link to a document path: the
+    // guide is static and outside the app's router (§9), so this is a real
+    // navigation, not a pushState.
+    const stream = el('p', 'fine door-stream');
+    stream.append(copy.HOME_STREAM_LEAD, ' ');
+    const streamLink = el('a', undefined, copy.HOME_STREAM_LINK);
+    streamLink.setAttribute('href', '/stream');
+    streamLink.setAttribute('data-role', 'door-stream-link');
+    stream.append(streamLink);
+    body.append(stream);
     const pinned = pinnedDoor(view, handlers);
     if (pinned !== null) {
         body.append(pinned);

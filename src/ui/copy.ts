@@ -523,6 +523,10 @@ export const HOME_SELLER =
  * A placeholder for the live demo stall, which needs the owner to list from a
  * real maker first. Copy only — no fetch, no fake shop. The apex stays a door.
  */
+/** The door's one line for streamers: the guide is a page of its own (§9). */
+export const HOME_STREAM_LEAD = 'Streaming?';
+export const HOME_STREAM_LINK = 'Put your stall on stream';
+
 export const HOME_DEMO_TITLE = 'See a real stall';
 /**
  * The promise is the page, not the inventory. Stall cannot watch this stall any

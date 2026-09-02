@@ -43,6 +43,9 @@ export const OBS_STEP_CHOOSE = 'Where it sits, how the price shows';
 export const OBS_STEP_COPY = 'Copy link';
 export const OBS_STEP_SOURCE = 'Browser Source';
 export const OBS_TRUTHS_TITLE = 'Before you go live';
+/** The static guide at /stream — pictures, the same figures, nothing more. */
+export const OBS_GUIDE_MORE = 'The full guide, with pictures:';
+export const OBS_GUIDE_MORE_LINK = 'stall.cash/stream';
 
 export const OBS_PRESET_LABEL = 'Where it sits';
 export const OBS_PRESET_CORNER = 'Corner card';
@@ -363,6 +366,22 @@ function togglesLine(into: HTMLElement): void {
  * `<li>`'s two-column grid holds exactly two items — the bolded names inside
  * the toggles line would otherwise each become a grid item of their own.
  */
+/**
+ * The last line of the section, and the only link out of it: the guide is a
+ * document path served beside the app (CLAUDE.md §9), so this is a plain
+ * anchor, never a handler. Painted with or without an identity — a seller
+ * on a waiting screen can still read how the overlay works.
+ */
+function guideLink(): HTMLElement {
+    const p = el('p', 'fine obs-more');
+    p.append(OBS_GUIDE_MORE, ' ');
+    const a = el('a', undefined, OBS_GUIDE_MORE_LINK);
+    a.setAttribute('href', '/stream');
+    a.setAttribute('data-role', 'obs-guide-link');
+    p.append(a);
+    return p;
+}
+
 function recipeList(): HTMLElement {
     const list = el('ol', 'obs-recipe');
     list.setAttribute('data-role', 'obs-recipe');
@@ -463,6 +482,7 @@ export function paintObsGuide(
     const raw = identityOf(view);
     if (raw === undefined) {
         mount.append(el('p', 'fine obs-lead', OBS_GUIDE_LEDE));
+        mount.append(guideLink());
         return;
     }
 
@@ -503,6 +523,7 @@ export function paintObsGuide(
         grid.append(truths);
 
         mount.append(grid);
+        mount.append(guideLink());
     };
     renderBody();
 }

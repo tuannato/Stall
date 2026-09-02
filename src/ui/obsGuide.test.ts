@@ -17,6 +17,7 @@ import {
     paintObsGuide,
     resetObsGuideForTests,
     OBS_GUIDE_LEDE,
+    OBS_GUIDE_MORE_LINK,
     OBS_GUIDE_TITLE,
     OBS_LINK_COPIED,
     OBS_RECIPE_CSS,
@@ -447,5 +448,29 @@ describe('the-diagram-has-no-transition', () => {
         expect(css).not.toMatch(/transition/);
         expect(css).not.toMatch(/animation\s*:/);
         expect(css).not.toMatch(/@keyframes/);
+    });
+});
+
+describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
+    /**
+     * The guide is a static page beside the app (CLAUDE.md §9). The studio
+     * section is where a seller looks for it, so the section ends in a plain
+     * anchor to `/stream` — with an identity and without one, because the
+     * waiting screens paint this section too.
+     */
+    it('ends the section with a plain link to /stream, with or without an identity', () => {
+        const withId = painted().querySelector('[data-role="obs-guide-link"]');
+        expect(withId?.getAttribute('href')).toBe('/stream');
+        expect(withId?.textContent).toBe(OBS_GUIDE_MORE_LINK);
+        expect(withId?.tagName).toBe('A');
+
+        const section = document.createElement('section');
+        paintObsGuide(
+            section,
+            view({ route: { kind: 'opening', raw: 'x' } as StallView['route'], address: undefined, stallName: undefined }),
+            handlers(),
+        );
+        const withoutId = section.querySelector('[data-role="obs-guide-link"]');
+        expect(withoutId?.getAttribute('href')).toBe('/stream');
     });
 });

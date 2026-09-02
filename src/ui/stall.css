@@ -3393,6 +3393,16 @@ textarea.paste-in {
     margin: 18px 2px 0;
 }
 
+/* The streamers' line under the chips: the guide is its own page. */
+.door-stream {
+    margin: 10px 2px 0;
+}
+
+.door-stream a {
+    color: var(--s-accent);
+    font-weight: 600;
+}
+
 .door .demo-soon {
     margin-top: 26px;
     padding: 18px;

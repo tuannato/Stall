@@ -316,3 +316,13 @@
         grid-area: truths;
     }
 }
+
+/* The section's one link out, under everything else. */
+.obs-more {
+    margin: 0;
+}
+
+.obs-more a {
+    color: var(--s-accent);
+    font-weight: 600;
+}
