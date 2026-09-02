@@ -18,8 +18,7 @@ import type { FetchStatus } from '../domain/state';
  *
  * One socket rather than two: a second endpoint would buy attribution (this
  * message came from the group, that one from the script) at the price of a
- * second TCP and TLS connection per tab, a second reconnect machine, and the
- * duplicate-subscription guard below on both of them anyway.
+ * second TCP and TLS connection per tab and a second reconnect machine.
  */
 
 /** `toHex(strToBytes('P'))`, the prefix the agora plugin groups under. */
@@ -42,8 +41,7 @@ export type LiveSocket = {
     /**
      * Subscribe to a script. `payload` for `'p2pkh'` is the 20-byte hash as
      * lowercase hex, and the library **throws** on anything else, so the call
-     * site guards it. Unlike a plugin subscription this one is replayed by the
-     * library on every open — see `dedupeScriptSubs`.
+     * site guards it. Sent once; the library replays it on every open.
      */
     subscribeToScript(scriptType: string, payload: string): void;
     close(): void;
@@ -201,19 +199,14 @@ export function isDefiniteResult(status: FetchStatus): boolean {
 }
 
 /**
- * Subscribing once was not enough, and the socket did not say so.
+ * One socket, two subscriptions, each sent once.
  *
- * chronik-client re-sends the subscriptions it remembers whenever a socket
- * opens — scripts, lokad ids, token ids, txids, blocks, txs — and **not
- * plugins**, which is the only kind Stall uses. So a subscribe sent after the
- * first open was the only one ever sent: after the first drop the socket
- * reconnected, looked alive, and never carried another agora message. A phone
- * changing network is enough.
- *
- * `onConnect` fires on every establish, so it is the one place this belongs.
- * It must also be the **only** place: `subscribeToPlugin` appends to the list
- * it remembers without checking for a duplicate, so subscribing here *and*
- * after the first open would send twice, and grow by one on every reconnect.
+ * chronik-client 4.3.1's `ws.onopen` calls `_resubscribeAll`, which re-sends
+ * every remembered subscription — scripts **and** plugins — through the
+ * private senders, without pushing back onto `this.subs`. Public
+ * `subscribeTo*` still push-then-send, so a second site in `onConnect` would
+ * grow the list by one on every reconnect. `onConnect` keeps the fact
+ * catch-up, skipping the first establish, which is the page load.
  */
 export function watchStall(
     chronik: LiveChronik,
@@ -308,16 +301,10 @@ export function watchStall(
         }, BURST_MS);
     };
 
-    const subscribe = (): void => {
-        if (closed || socket === undefined) {
+    const onEstablished = (): void => {
+        if (closed) {
             return;
         }
-        if (group !== undefined) {
-            socket.subscribeToPlugin(AGORA_PLUGIN, group);
-        }
-        // After the library's own replay, which has already run by the time
-        // `onConnect` fires. See `dedupeScriptSubs`.
-        dedupeScriptSubs(socket);
         establishes += 1;
         // Not the first: that one is the page load, and the facts were read by
         // the load itself. Every establish after it is a gap of unknown length.
@@ -338,18 +325,20 @@ export function watchStall(
             seen.add(seen.size >= MAX_BURST_TXIDS && !seen.has(txid) ? UNKNOWN_TXID : txid);
             rereadCoalesced();
         },
-        onConnect: subscribe,
+        onConnect: onEstablished,
         // A dropped socket only stops updates; it never means the shop emptied.
         // Re-read on reconnect, because anything missed while down is unknown —
         // but throttled, because the library reconnects without any backoff.
         onReconnect: rereadThrottled,
     });
 
-    // Sent once, and only from here. Unlike a plugin subscription the library
-    // remembers this one and re-sends it on every open, so subscribing from
-    // `onConnect` as well would be one more copy per establish on top of the
-    // copies it makes on its own.
-    //
+    // Both subscriptions are sent once, and only from here. The library
+    // remembers them and re-sends them on every open through `_resubscribeAll`,
+    // so a second site in `onConnect` would grow each list by one per
+    // establish.
+    if (group !== undefined) {
+        socket.subscribeToPlugin(AGORA_PLUGIN, group);
+    }
     // Guarded because `subscribeToScript` **throws** on a payload that is not
     // 20 bytes of lowercase hex, and a stall whose hash we cannot subscribe to
     // still has a book worth watching.
@@ -365,11 +354,11 @@ export function watchStall(
     // reaches `connectWs` from exactly three places — `waitForOpen`, `resume`,
     // and the auto-reconnect of a socket that is already established — so
     // without this call a freshly loaded stall holds a socket that never opens:
-    // `onConnect` never fires, neither subscription is ever sent, and no
-    // message ever arrives. The one accidental way back was a visibility cycle,
-    // because `pause` no-ops on an undefined socket and `resume` connects when
-    // it finds none — live updates for a visitor who left the tab and came
-    // back, and for nobody else.
+    // `onConnect` never fires, the remembered subscriptions are never put on
+    // the wire, and no message ever arrives. The one accidental way back was a
+    // visibility cycle, because `pause` no-ops on an undefined socket and
+    // `resume` connects when it finds none — live updates for a visitor who
+    // left the tab and came back, and for nobody else.
     //
     // Not awaited, because the stall is painted from the HTTP read and must not
     // wait on a socket. Caught, because `connectWs` **throws** when no host
@@ -423,55 +412,4 @@ export function watchStall(
             rereadThrottled();
         },
     };
-}
-
-/** The one shape this module reads out of the library, named so the cast is small. */
-type ScriptSub = { scriptType?: unknown; payload?: unknown };
-
-/**
- * Undo the duplicate the library makes of our script subscription.
- *
- * chronik-client replays remembered subscriptions when a socket opens, and for
- * scripts it does so by calling its own **public** `subscribeToScript` — which
- * pushes the subscription back onto `subs.scripts`. So the list doubles on
- * every open: one entry becomes two, two become four, and by open N the wire
- * carries 2^(N-1) copies of one subscribe frame. The trigger is not only a
- * network drop. `pause()` closes the socket and `resume()` opens it, so every
- * visibility change a visitor makes is another doubling.
- *
- * **What it costs is bytes and memory, not correctness.** chronik's own
- * subscribe handler removes before it inserts, so a duplicate is idempotent at
- * the far end. That is why a guard here is enough and the pinned vendored
- * tarball is not patched.
- *
- * This reaches into a library internal, so it checks the shape before touching
- * anything and does nothing at all if the shape is not what it expects — and
- * `script-sub-dedupe-notices-when-the-library-changes-shape` asserts the
- * property exists on a real endpoint, so a tarball that renames it fails the
- * suite instead of quietly turning this into a no-op.
- *
- * The array is emptied and refilled rather than replaced: `subs` is built once
- * in the constructor and the library holds the same reference for the life of
- * the endpoint.
- */
-function dedupeScriptSubs(socket: LiveSocket): void {
-    const scripts = (socket as unknown as { subs?: { scripts?: unknown } }).subs?.scripts;
-    if (!Array.isArray(scripts)) {
-        return;
-    }
-    const seen = new Set<string>();
-    const unique: ScriptSub[] = [];
-    for (const sub of scripts as ScriptSub[]) {
-        const key = `${String(sub?.scriptType)}:${String(sub?.payload)}`;
-        if (seen.has(key)) {
-            continue;
-        }
-        seen.add(key);
-        unique.push(sub);
-    }
-    if (unique.length === scripts.length) {
-        return;
-    }
-    scripts.length = 0;
-    scripts.push(...unique);
 }

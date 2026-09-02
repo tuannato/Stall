@@ -1,7 +1,7 @@
 import { ChronikClient } from 'chronik-client';
+import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import type { FetchStatus } from '../domain/state';
-import { CHRONIK_HOSTS } from './hosts';
 import {
     BURST_MS,
     AGORA_PLUGIN,
@@ -13,6 +13,8 @@ import {
     watchStall,
 } from './live';
 
+const require = createRequire(import.meta.url);
+
 /** 20 bytes of lowercase hex, which is all `subscribeToScript` accepts. */
 const HASH = 'ab'.repeat(20);
 const TXID_A = 'a1'.repeat(32);
@@ -23,8 +25,8 @@ const TXID_B = 'b2'.repeat(32);
  *
  * **A socket that opens, drops, and opens again.** `openNow` is a fresh
  * establish, which is what chronik reports through `onConnect` every time —
- * including after a reconnect, when it re-sends the subscriptions it remembers
- * and plugin subscriptions are not among them.
+ * including after a reconnect, when `_resubscribeAll` re-sends every
+ * remembered subscription through the private senders.
  *
  * **Nothing here connects itself**, because the library does not. `ws()`
  * returns an endpoint that has dialled nothing; `waitForOpen` is what reaches
@@ -32,38 +34,49 @@ const TXID_B = 'b2'.repeat(32);
  * own was the camouflage over a stall whose socket never connected on a fresh
  * load — every test stayed green because each one called `openNow` by hand.
  *
- * **And a replay that pushes back into the list it replayed from.** Script
- * subscriptions *are* re-sent on every open, by calling the endpoint's own
- * public `subscribeToScript` — which appends. So the remembered list doubles
- * per open unless something trims it. `subs` here is the same object the guard
- * reaches into, and `scriptFrames` is what the wire would have carried.
+ * **Replay is send-only.** chronik-client 4.3.1's `ws.onopen` calls
+ * `_resubscribeAll`, which walks `this.subs` and sends — scripts, plugins,
+ * and the rest — without pushing back onto the list. Public `subscribeTo*`
+ * still push-then-send. Counting those public calls therefore counts what
+ * Stall asked for, not what the library replayed.
  */
 function fakeChronik() {
-    /**
-     * Plugin subscribes, in order. Kept apart from the script ones so the
-     * exact-equality assertions in `plugin-sub-is-restored-on-reconnect` keep
-     * pinning exactly what they pinned.
-     */
+    /** Public `subscribeToPlugin` calls, in order — Stall's, not the replay. */
     const calls: Array<[string, string]> = [];
+    /** Public `subscribeToScript` calls, in order — Stall's, not the replay. */
+    const scriptCalls: Array<[string, string]> = [];
+    /** Plugin subscribe frames that would have gone out on an open socket. */
+    const pluginFrames: Array<[string, string]> = [];
     /** Script subscribe frames that would have gone out on an open socket. */
     const scriptFrames: Array<[string, string]> = [];
     /** The library's own memory of what to replay. */
-    const subs = { scripts: [] as Array<{ scriptType: string; payload: string }> };
+    const subs = {
+        scripts: [] as Array<{ scriptType: string; payload: string }>,
+        plugins: [] as Array<{ pluginName: string; group: string }>,
+    };
     let opened = false;
     let waits = 0;
+    let connects = 0;
     let onMessage: ((m: { type: string; txid?: string }) => void) | undefined;
     let onConnect: (() => void) | undefined;
     let onReconnect: (() => void) | undefined;
 
     const socket = {
         subs,
-        subscribeToPlugin: (p: string, g: string) => calls.push([p, g]),
+        subscribeToPlugin: (p: string, g: string) => {
+            calls.push([p, g]);
+            subs.plugins.push({ pluginName: p, group: g });
+            if (opened) {
+                pluginFrames.push([p, g]);
+            }
+        },
         subscribeToScript: (scriptType: string, payload: string) => {
             // As `isValidWsSubscription` does: the library throws rather than
             // remembering a subscription it cannot send.
             if (scriptType === 'p2pkh' && !/^[0-9a-f]{40}$/.test(payload)) {
                 throw new Error('Invalid length');
             }
+            scriptCalls.push([scriptType, payload]);
             subs.scripts.push({ scriptType, payload });
             if (opened) {
                 scriptFrames.push([scriptType, payload]);
@@ -80,20 +93,25 @@ function fakeChronik() {
 
     const openNow = (): void => {
         opened = true;
-        // `ws.onopen` replays the remembered scripts through the public method,
-        // which pushes each one back onto the list being read. Copied first,
-        // because `forEach` visits the length the array had when it started.
-        for (const sub of [...subs.scripts]) {
-            socket.subscribeToScript(sub.scriptType, sub.payload);
+        // `_resubscribeAll`: send every remembered sub without pushing.
+        for (const sub of subs.plugins) {
+            pluginFrames.push([sub.pluginName, sub.group]);
         }
-        // After the replay, which is where the guard has to sit.
+        for (const sub of subs.scripts) {
+            scriptFrames.push([sub.scriptType, sub.payload]);
+        }
+        connects += 1;
         onConnect?.();
     };
 
     return {
         calls,
+        scriptCalls,
+        pluginFrames,
         scriptFrames,
         subs,
+        /** How many times `onConnect` fired, including the first establish. */
+        connects: () => connects,
         /** How many times the watch asked the library to dial. */
         waits: () => waits,
         fire: (type: string, txid?: string) => onMessage?.({ type, txid }),
@@ -173,84 +191,71 @@ describe('live-group-is-the-maker-prefix', () => {
     });
 });
 
-describe('plugin-sub-is-restored-on-reconnect', () => {
+describe('subscriptions-are-sent-once-and-the-library-replays-them', () => {
     /**
-     * chronik-client re-sends the subscriptions it remembers when a socket
-     * opens — scripts, lokad ids, token ids, txids, blocks, txs — and not
-     * plugins, the only kind this app uses. Subscribing once after the first
-     * open therefore bought exactly one connection's worth of updates: after
-     * a drop the socket reconnected, looked alive, and carried nothing.
+     * chronik-client 4.3.1 replays every remembered subscription on open
+     * through `_resubscribeAll` — private senders, no push onto `this.subs`.
+     * Stall therefore sends each kind once, when the watch starts, and
+     * `onConnect` does not subscribe again. Three reconnects fire `onConnect`
+     * three more times; the public methods stay at one call each.
      */
-    it('re-subscribes on every establish, and never twice for one', async () => {
+    it('calls each public subscribe once across three reconnects', async () => {
         const f = fakeChronik();
         const pk = '03'.repeat(33);
         const group = `50${pk}`;
-        watchStall(f.chronik as never, { pubkeyHex: pk });
-
+        watchStall(f.chronik as never, { pubkeyHex: pk, hash: HASH });
         await f.settle();
-        expect(f.calls, 'first connect').toEqual([[AGORA_PLUGIN, group]]);
 
-        // A phone changing network. The socket comes back; the subscription
-        // must come back with it.
-        f.reconnect();
-        expect(f.calls, 'after a reconnect').toEqual([
-            [AGORA_PLUGIN, group],
+        expect(f.connects(), 'first establish').toBe(1);
+        expect(f.calls, 'plugin, once').toEqual([[AGORA_PLUGIN, group]]);
+        expect(f.scriptCalls, 'script, once').toEqual([['p2pkh', HASH]]);
+        expect(f.pluginFrames, 'library put the plugin on the wire at open').toEqual([
             [AGORA_PLUGIN, group],
         ]);
+        expect(f.scriptFrames, 'library put the script on the wire at open').toEqual([
+            ['p2pkh', HASH],
+        ]);
 
-        // One send per establish, not two: `subscribeToPlugin` appends to the
-        // list chronik remembers without checking for a duplicate, so a second
-        // subscribe site would grow that list on every drop.
         f.reconnect();
-        expect(f.calls, 'one send per establish').toHaveLength(3);
+        f.reconnect();
+        f.reconnect();
+
+        expect(f.connects(), 'onConnect fired three reconnects plus the first').toBe(4);
+        expect(f.calls, 'Stall asked once; the library replayed').toEqual([
+            [AGORA_PLUGIN, group],
+        ]);
+        expect(f.scriptCalls, 'Stall asked once; the library replayed').toEqual([
+            ['p2pkh', HASH],
+        ]);
+        expect(f.pluginFrames, 'one plugin frame per open').toHaveLength(4);
+        expect(f.scriptFrames, 'one script frame per open').toHaveLength(4);
+        expect(f.subs.plugins, 'replay does not grow the plugin list').toHaveLength(1);
+        expect(f.subs.scripts, 'replay does not grow the script list').toHaveLength(1);
     });
 
-    it('says nothing once the visitor has left the stall', async () => {
+    it('does not subscribe again after the visitor has left', async () => {
         const f = fakeChronik();
-        const handle = watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33) });
+        const handle = watchStall(f.chronik as never, {
+            pubkeyHex: '02'.repeat(33),
+            hash: HASH,
+        });
         handle.close();
         // The establish the watch started arrives after the visitor left, which
         // is the ordinary case: it is queued before `close` and lands after.
         await f.settle();
         f.openNow();
         f.reconnect();
-        expect(f.calls).toEqual([]);
-    });
-});
-
-describe('script-sub-does-not-double-on-reconnect', () => {
-    /**
-     * The library replays script subscriptions on every open by calling its own
-     * **public** `subscribeToScript`, which pushes the subscription back onto
-     * the list it was just read from. One entry becomes two, two become four,
-     * and by open N the wire carries 2^(N-1) copies of one subscribe frame. The
-     * trigger is not only a network drop: `pause()` closes the socket and
-     * `resume()` opens it, so every visibility change doubles it again.
-     *
-     * Idempotent at the far end — chronik removes before it inserts — so what
-     * this costs is wire bytes and client memory. That is why the guard trims
-     * the list rather than the vendored tarball being patched.
-     */
-    it('sends one frame per establish, and the remembered list stays at one', async () => {
-        const f = fakeChronik();
-        watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33), hash: HASH });
-        await f.settle();
-        expect(f.scriptFrames, 'sent once the socket was open').toEqual([['p2pkh', HASH]]);
-        expect(f.subs.scripts, 'trimmed back after the replay').toHaveLength(1);
-
-        f.reconnect();
-        f.reconnect();
-        f.reconnect();
-        expect(f.scriptFrames, 'one per open, never 1 + 2 + 4').toHaveLength(4);
-        expect(f.subs.scripts, "the library's own list does not grow").toHaveLength(1);
-        expect(f.subs.scripts[0]).toEqual({ scriptType: 'p2pkh', payload: HASH });
+        expect(f.calls, 'subscribed at watch start, not on later establishes').toHaveLength(
+            1,
+        );
+        expect(f.scriptCalls).toHaveLength(1);
     });
 
     it('subscribes to no script when there is no address to watch', async () => {
-        // The waiting screens are the other way round — a hash and no pubkey.
         const f = fakeChronik();
         watchStall(f.chronik as never, { pubkeyHex: '02'.repeat(33) });
         await f.settle();
+        expect(f.scriptCalls).toEqual([]);
         expect(f.scriptFrames).toEqual([]);
         expect(f.subs.scripts).toEqual([]);
     });
@@ -260,6 +265,7 @@ describe('script-sub-does-not-double-on-reconnect', () => {
         watchStall(f.chronik as never, { hash: HASH });
         await f.settle();
         expect(f.calls, 'no pubkey means no agora group to ask for').toEqual([]);
+        expect(f.scriptCalls).toEqual([['p2pkh', HASH]]);
         expect(f.scriptFrames).toEqual([['p2pkh', HASH]]);
     });
 
@@ -272,37 +278,49 @@ describe('script-sub-does-not-double-on-reconnect', () => {
         watchStall(f.chronik as never, { pubkeyHex: pk, hash: 'NOT-A-HASH' });
         await f.settle();
         expect(f.calls).toEqual([[AGORA_PLUGIN, `50${pk}`]]);
+        expect(f.scriptCalls).toEqual([]);
         expect(f.scriptFrames).toEqual([]);
     });
 });
 
-describe('script-sub-dedupe-notices-when-the-library-changes-shape', () => {
+describe('the-vendored-client-carries-d20536', () => {
     /**
-     * The guard reaches into a library internal, and it fails **open**: a shape
-     * it does not recognise is left alone, because trimming a list this module
-     * does not understand would be worse than the duplicates. That safety is
-     * also how a vendored upgrade could turn the guard into a silent no-op, so
-     * the shape itself is asserted here against a real endpoint rather than
-     * against the fake above.
+     * A contract against the real library, not the fake. `_resubscribeAll`
+     * re-sends a plugin subscription through the private sender and does not
+     * push onto `subs.plugins`. A tarball that drops plugin replay, or that
+     * starts pushing again, fails here rather than as a silent live-update hole.
      *
-     * No connection is made: `new ChronikClient(...)` is documented as creating
-     * an object and nothing else, and `ws()` returns an endpoint that has
-     * dialled nothing.
+     * The version pin moves with every deliberate bump.
      */
-    it('finds subs.scripts on a real endpoint, with the two fields the guard keys on', () => {
-        const endpoint = new ChronikClient([...CHRONIK_HOSTS]).ws({
+    it('replays a plugin sub without growing the list, and the pin is 4.3.1', () => {
+        expect(require('chronik-client/package.json').version).toBe('4.3.1');
+
+        const endpoint = new ChronikClient(['https://chronik.example.com']).ws({
             onMessage: () => undefined,
         });
-        const subs = (endpoint as unknown as { subs?: { scripts?: unknown } }).subs;
-        expect(subs, 'WsEndpoint no longer exposes `subs`').toBeDefined();
-        expect(Array.isArray(subs?.scripts), '`subs.scripts` is no longer an array').toBe(
-            true,
-        );
+        const sent: unknown[] = [];
+        // isomorphic-ws / browser WebSocket.OPEN. No connection is made:
+        // `ws()` returns an endpoint that has dialled nothing, and this stub
+        // stands in for an already-open socket so `send` is the only I/O.
+        endpoint.ws = {
+            readyState: 1,
+            send: (frame: unknown) => {
+                sent.push(frame);
+            },
+        } as never;
 
-        endpoint.subscribeToScript('p2pkh', HASH);
-        expect(subs?.scripts, 'a remembered subscription changed shape').toEqual([
-            { scriptType: 'p2pkh', payload: HASH },
-        ]);
+        const group = stallGroup('02'.repeat(33));
+        endpoint.subscribeToPlugin(AGORA_PLUGIN, group);
+        expect(sent, 'the public method sent a frame').toHaveLength(1);
+        expect(endpoint.subs.plugins).toHaveLength(1);
+
+        endpoint._resubscribeAll();
+        expect(sent, 'a plugin subscribe frame was sent again').toHaveLength(2);
+        expect(endpoint.subs.plugins, 'replay does not push').toHaveLength(1);
+        expect(endpoint.subs.plugins[0]).toEqual({
+            pluginName: AGORA_PLUGIN,
+            group,
+        });
     });
 });
 
