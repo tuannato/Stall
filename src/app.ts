@@ -111,8 +111,8 @@ const BROADCAST_RETRY_MS = 30_000;
 /** `mode=fixed` advances the cursor on this interval. */
 const BROADCAST_FIXED_MS = 8_000;
 /** Rail mode rests this long, then lives `BROADCAST_RAIL_LIVE_MS`. */
-const BROADCAST_RAIL_REST_MS = 3_000;
-const BROADCAST_RAIL_LIVE_MS = 5_000;
+export const BROADCAST_RAIL_REST_MS = 3_000;
+export const BROADCAST_RAIL_LIVE_MS = 5_000;
 
 /**
  * Copy the overlay params from the URL onto a view. Used by both

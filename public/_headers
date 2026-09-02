@@ -41,6 +41,17 @@
 /404.css
   Cache-Control: no-store
 
+# The streamer guide is a second document path. Never cached: a cached
+# guide would keep a stale recipe after a measured figure moves. The hero
+# and logo ride the default (no Cache-Control on /*) — they are content,
+# not a document, and are not hashed; a change of bytes at the same URL
+# is the rare edit, so prefer renaming if they ever change.
+/stream
+  Cache-Control: no-store
+
+/stream.css
+  Cache-Control: no-store
+
 # Hashed filenames, so the bytes at a URL never change. Safe to cache hard only
 # because the document above is never cached.
 /assets/*

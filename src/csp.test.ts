@@ -209,6 +209,14 @@ describe('deploy-spec-matches-the-app', () => {
         expect(nginx).not.toContain('error_page 404');
         expect(nginx).toContain('try_files $uri =404');
         expect(nginx).toContain('Cache-Control "no-store"');
+
+        // Critic finding 8: a missing location is invisible to the
+        // try_files assertions above — `/stream` would fall through to
+        // index.html. Name the exact location and its no-store.
+        const stream = nginx.match(/location\s+=\s+\/stream\s*\{[^}]*\}/);
+        expect(stream, 'location = /stream').not.toBeNull();
+        expect(stream![0]).toContain('Cache-Control "no-store"');
+        expect(stream![0]).toContain('try_files /stream.html =404');
     });
 });
 
@@ -355,8 +363,49 @@ describe('unhashed-path-is-not-cacheable', () => {
             .filter((line) => line !== '' && !line.startsWith('#'))
             .map((line) => line.split(/\s+/)[0]!);
 
-        for (const path of ['/', '/404.css', '/404.html', ...stallSource]) {
+        for (const path of [
+            '/',
+            '/404.css',
+            '/404.html',
+            '/stream',
+            '/stream.css',
+            ...stallSource,
+        ]) {
             expect(declared.get(path)?.get('cache-control'), path).toBe('no-store');
         }
+    });
+});
+
+describe('the-stream-guide-is-a-document-path-with-no-store', () => {
+    /**
+     * `/stream` is a second document, not a hashed asset. Pages merges
+     * matching `_headers` rules, so no-store cannot live on `/*`; it has
+     * to be named, the same way `/` and `/404.css` already are.
+     */
+    it('names /stream and /stream.css as no-store, and ships the document', () => {
+        const headers = read('public/_headers');
+        expect(headers).toMatch(/^\/stream$/m);
+        expect(headers).toMatch(/^\/stream\.css$/m);
+        const declared = (() => {
+            const out = new Map<string, Map<string, string>>();
+            let current: Map<string, string> | undefined;
+            for (const raw of headers.split('\n')) {
+                if (raw.trim() === '' || raw.trimStart().startsWith('#')) {
+                    continue;
+                }
+                if (!raw.startsWith(' ') && !raw.startsWith('\t')) {
+                    current = new Map();
+                    out.set(raw.trim(), current);
+                    continue;
+                }
+                const [name, ...rest] = raw.trim().split(':');
+                current?.set(name!.trim().toLowerCase(), rest.join(':').trim());
+            }
+            return out;
+        })();
+        expect(declared.get('/stream')?.get('cache-control')).toBe('no-store');
+        expect(declared.get('/stream.css')?.get('cache-control')).toBe('no-store');
+        expect(read('public', 'stream.html')).toContain('<!doctype html>');
+        expect(read('public', 'stream.css').length).toBeGreaterThan(0);
     });
 });

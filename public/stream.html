@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Put your stall on stream · Stall</title>
+    <link rel="stylesheet" href="/stream.css" />
+  </head>
+  <body>
+    <div class="canopy" aria-hidden="true"></div>
+    <main class="wrap">
+      <div class="brand">
+        <a class="brand-home" href="/">
+          <img
+            class="brand-mark"
+            src="/stream-logo.png"
+            width="30"
+            height="36"
+            alt=""
+          />
+          <span class="brand-word">Stall</span>
+        </a>
+        <p class="brand-kicker">stream overlay</p>
+      </div>
+
+      <div class="lede-block">
+        <h1 class="display">Put your stall on stream.</h1>
+        <p class="lede">
+          A card with one item and a QR, on your live video. Viewers scan, the
+          shop opens, Cashtab signs. Nothing to click on the stream — a stream
+          can’t be clicked.
+        </p>
+      </div>
+
+      <div class="hero">
+        <img
+          src="/stream-hero.png"
+          width="1220"
+          height="686"
+          alt="An example overlay on a sample stream: the shop's name and one listing on a card, and a QR that opens the stall"
+        />
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <p class="step-n mono">01</p>
+          <p class="step-body">
+            <span class="step-title">Open your stall → Studio → Stream overlay</span>
+            <span class="step-copy">Pick where it sits and how the price shows.</span>
+          </p>
+        </li>
+        <li class="step">
+          <p class="step-n mono">02</p>
+          <p class="step-body">
+            <span class="step-title">Copy the link</span>
+            <span class="step-copy">It carries your address and the settings. Nothing else.</span>
+          </p>
+        </li>
+        <li class="step">
+          <p class="step-n mono">03</p>
+          <p class="step-body">
+            <span class="step-title">Paste it into OBS as a Browser Source</span>
+            <span class="step-copy">Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active”.</span>
+          </p>
+        </li>
+      </ol>
+
+      <section class="block">
+        <h2 class="section-title">Two ways to add the source</h2>
+        <div class="sizes">
+          <div class="unit">
+            <p class="unit-label">Drop-in</p>
+            <p class="unit-fig mono">1920 × 1080</p>
+            <p class="unit-copy">The overlay sits in its own corner of the canvas.</p>
+          </div>
+          <div class="unit">
+            <p class="unit-label">Sticker</p>
+            <p class="unit-fig mono">372 × 800 corner · 372 × 580 rail</p>
+            <p class="unit-copy">Drag it, scale it — the QR scales with it. A vertical stream uses this.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2 class="section-title">Four things to know before you go live</h2>
+        <div class="truths">
+          <div class="truth">
+            <p class="truth-title">Phone viewers can’t read any overlay.</p>
+            <p class="truth-copy">A 1080p frame on a phone is a fifth of its size. Put the same stall link in your stream description or a pinned comment.</p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">The QR scans from a monitor at 1080p.</p>
+            <p class="truth-copy">Whether it scans for viewers watching at 720p is not measured. Scale the source up if your viewers are on phones.</p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">“Rest, then show a price” goes quiet 3 seconds of every 8.</p>
+            <p class="truth-copy">Pick “Always show a price” for a shop that should never rest.</p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Overlay stopped updating?</p>
+            <p class="truth-copy">OBS shut the source down. Toggle the source’s visibility to bring it back.</p>
+          </div>
+        </div>
+      </section>
+
+      <p class="cta-row">
+        <a class="cta" href="/">
+          <span class="cta-pref mono">ecash:</span>
+          <span>Open your stall</span>
+        </a>
+      </p>
+    </main>
+  </body>
+</html>
