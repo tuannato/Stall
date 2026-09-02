@@ -13,6 +13,16 @@
          any browser-tab background. -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <!-- Google draws a site's icon in results only from a square PNG whose
+         side is a multiple of 48, or an SVG; 16 and 32 alone leave the
+         generic globe (measured on the live result 2026-09-02). The three
+         below are downscales of the 180px touch icon, never an upscale.
+         favicon.ico at the root answers crawlers that ask for it blindly
+         (it was a 404). Test: the-home-ships-a-favicon-google-can-show. -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="icon" type="image/png" sizes="144x144" href="/favicon-144.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Warm the data path while the script downloads: the first chronik
          request otherwise pays DNS+TLS *after* boot, inside the one stage
