@@ -17,7 +17,6 @@ import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
 import {
     clearSavedStall,
-    hasSavedFiat,
     isPinnedStall,
     isSavedStall,
     pinnedDoorIsFull,
@@ -54,9 +53,9 @@ import {
     resolveSeller,
 } from './net';
 import { isNftChild } from './domain/category';
-import { isSupportedFiat } from './domain/fiat';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions } from './net/descriptions';
+import type { TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
     NO_FACTS,
@@ -210,6 +209,13 @@ export function boot(
         }
     };
     /**
+     * One currency above the table (CLAUDE §8). `readSavedFiat` answers `usd`
+     * and clears a code an earlier build stored, so this is `usd` on every
+     * load — written through the reader rather than as a literal, because the
+     * clearing is the point and a literal would leave the stale key behind.
+     */
+    let fiatCode = readSavedFiat();
+    /**
      * The fiat rate for this page load. Absent until the feed answers, and
      * absent again the moment it fails — never a last-known value, because a
      * stale rate renders a two-dollar item at two cents and nobody would find
@@ -217,8 +223,6 @@ export function boot(
      * watches, and a fiat figure that quietly rewrites itself is worse than one
      * that is honestly a few minutes old at a glance.
      */
-    const visitorChoseFiat = hasSavedFiat();
-    let fiatCode = readSavedFiat();
     let fiatRate: bigint | undefined;
     /**
      * The transactions this page has watched arrive, newest first.
@@ -263,22 +267,22 @@ export function boot(
     };
 
     /**
-     * The seller's currency suggestion fills silence and nothing else: a
-     * buyer who ever chose a currency keeps it forever, and an unsupported
-     * code is nothing rather than an error — it is a hint, not a setting.
+     * The seller's currency suggestion (manifest tag 0x04) is **read and not
+     * obeyed**. One currency above the table (CLAUDE §8), so there is nothing
+     * for a hint to fill: the glance is `usd` for every visitor and no control
+     * paints beside it.
+     *
+     * Silently, on purpose — an unhonoured suggestion is not an error, and a
+     * note about it would be this page explaining its own policy on somebody
+     * else's shop. The tag keeps being decoded and the publish sheet carries an
+     * existing one forward untouched: a field this app no longer edits is never
+     * dropped from a record that already carries it.
+     *
+     * Kept as a named no-op rather than deleted at both call sites, so the
+     * decision is legible where the hint would otherwise have been adopted.
+     * Test: `a-fiat-hint-is-read-and-ignored`.
      */
-    const adoptFiatHint = (): void => {
-        if (visitorChoseFiat) {
-            return;
-        }
-        const hint = state.view.fiatHint;
-        if (hint === undefined || !isSupportedFiat(hint) || fiatCode === hint) {
-            return;
-        }
-        fiatCode = hint;
-        fiatRate = undefined;
-        void refreshFiat();
-    };
+    const adoptFiatHint = (): void => {};
 
     const paint = (): void => {
         // Read at paint time, not at load: the toggle changes it without a
@@ -826,12 +830,20 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
-        // The shelves ride the same records, so the same guard covers both:
-        // a wholly empty answer never erases either map already on screen.
-        const gotNothing = lookup.descriptions.size === 0 && lookup.shelves.size === 0;
+        // The shelves and the prices ride the same records, so the same guard
+        // covers all three: a wholly empty answer never erases any map already
+        // on screen. Counting only two of them was not a smaller version of
+        // this rule — a stall whose seller published prices and no words had
+        // nothing on either counted side, so our own failed walk wiped every
+        // figure and the guard saw nothing to protect.
+        const gotNothing =
+            lookup.descriptions.size === 0 &&
+            lookup.shelves.size === 0 &&
+            lookup.prices.size === 0;
         const hadSomething =
             (state.view.descriptions?.size ?? 0) > 0 ||
-            (state.view.shelves?.size ?? 0) > 0;
+            (state.view.shelves?.size ?? 0) > 0 ||
+            (state.view.prices?.size ?? 0) > 0;
         if (gotNothing && hadSomething) {
             return;
         }
@@ -841,6 +853,7 @@ export function boot(
                 ...state.view,
                 descriptions: lookup.descriptions,
                 shelves: lookup.shelves,
+                prices: lookup.prices,
             },
         };
         livePaint();
@@ -1369,6 +1382,7 @@ async function loadCurrent(): Promise<AppState> {
     const descriptionLookup = (await descriptionsSoon) ?? {
         descriptions: new Map<string, string>(),
         shelves: new Map<string, string>(),
+        prices: new Map<string, TokenPrice>(),
         unreadable: new Set<string>(),
         truncated: false,
     };
@@ -1459,6 +1473,7 @@ async function loadCurrent(): Promise<AppState> {
             tokens,
             descriptions: descriptionLookup.descriptions,
             shelves: descriptionLookup.shelves,
+            prices: descriptionLookup.prices,
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,

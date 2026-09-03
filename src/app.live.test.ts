@@ -1602,22 +1602,116 @@ describe('a-broadcast-definite-apply-clears-stale', () => {
     });
 });
 
-describe('fiat-hint-is-a-hint', () => {
+describe('a-fiat-hint-is-read-and-ignored', () => {
     /**
-     * The seller's suggestion (manifest tag 0x04) fills silence and nothing
-     * else: a visitor who ever chose a currency keeps it, and painting is
-     * always from the visitor's side of that line.
+     * Was `fiat-hint-is-a-hint`, and the hint is now unhonoured: one currency
+     * above the table (CLAUDE §8), so the glance is `usd` for everybody and
+     * nothing paints a control that could change it.
+     *
+     * The tag is still **read** — `0x04` is permanent, records carrying it
+     * exist, and a reader that dropped it could not carry it forward when the
+     * seller republishes. It is simply not obeyed, and nothing on screen says
+     * a word about it: an unhonoured suggestion is not an error.
      */
-    it('adopts the hint only when the visitor never chose', async () => {
-        bootStall(stallEmpty({ fiatHint: 'vnd' }));
+    it('reads the tag, paints usd, and says nothing about it', async () => {
+        const { root } = bootStall(stallEmpty({ fiatHint: 'vnd' }));
         await flush();
-        expect(painted.view?.fiatCode).toBe('vnd');
+        expect(painted.view?.fiatHint, 'the record still reads').toBe('vnd');
+        expect(painted.view?.fiatCode).toBe('usd');
+        expect(root.textContent).not.toContain('VND');
     });
 
-    it('never overrides a saved choice', async () => {
+    it('a stale saved code cannot pin a browser to another currency', async () => {
         localStorage.setItem('stall.fiat', 'eur');
         bootStall(stallEmpty({ fiatHint: 'vnd' }));
         await flush();
-        expect(painted.view?.fiatCode).toBe('eur');
+        expect(painted.view?.fiatCode).toBe('usd');
+        expect(localStorage.getItem('stall.fiat')).toBeNull();
+    });
+});
+
+describe('a-failed-facts-walk-does-not-erase-a-price', () => {
+    /**
+     * `loadDescriptions` swallows its own failure and answers an empty lookup,
+     * which on the live path cannot be told from a seller who published
+     * nothing. The guard is `gotNothing && hadSomething` — kept, not replaced
+     * by an `ok` flag, because that flag would repeal "an empty answer never
+     * erases words". The price map is simply counted on both sides of it.
+     *
+     * Without that, a stall whose seller published prices and no words lost
+     * every figure the moment one walk failed: `descriptions` and `shelves`
+     * were both empty before and after, so the guard saw nothing to protect.
+     */
+    const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
+
+    it('keeps a priced stall’s figures when the walk throws', async () => {
+        bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                prices: new Map([[TOKEN, PRICE]]),
+            }),
+        );
+        await flush();
+        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+
+        chain.historyThrows = true;
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['0a'.repeat(32)]);
+        await flush();
+
+        expect(chain.calls.stld, 'it did try').toBe(1);
+        expect(
+            painted.view?.prices?.get(TOKEN),
+            'our own failure is not a seller who unpriced their stock',
+        ).toEqual(PRICE);
+    });
+
+    it('an-empty-facts-answer-does-not-erase-a-price', async () => {
+        // The walk answers, and finds nothing — indistinguishable on this path
+        // from the walk that failed, so it is treated the same way.
+        bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                prices: new Map([[TOKEN, PRICE]]),
+            }),
+        );
+        await flush();
+
+        watches[0]!.hooks.onBurst?.(['0b'.repeat(32)]);
+        await flush();
+
+        expect(chain.calls.stld, 'it did walk, and the index was empty').toBe(1);
+        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+    });
+
+    it('applies a walk that did find something', async () => {
+        // The guard must not become "never replace anything": a real answer
+        // still lands, which is what makes the empty case a decision.
+        bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                prices: new Map([[TOKEN, PRICE]]),
+            }),
+        );
+        await flush();
+
+        const hex = encodeDescriptionHex(TOKEN, 'Sun dried', {
+            price: { code: 'xec', exponent: 2, amount: 900n },
+        });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        publish(signedTx({ txid: '0c'.repeat(32), outputs: [`6a${hex}`], height: 5 }));
+        watches[0]!.hooks.onBurst?.(['0c'.repeat(32)]);
+        await flush();
+
+        expect(painted.view?.prices?.get(TOKEN)).toEqual({
+            code: 'xec',
+            exponent: 2,
+            amount: 900n,
+        });
     });
 });

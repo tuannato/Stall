@@ -1,4 +1,5 @@
 import type { ShippedAttachment } from './attachments';
+import type { TokenPrice } from './description';
 import type { DecodedTheme } from './theme';
 
 /** Three-layer stall state. Mixing layers is how empty and unreachable collapse. */
@@ -294,6 +295,18 @@ export type StallView = {
      * not "none published".
      */
     shelves?: ReadonlyMap<string, string>;
+    /**
+     * tokenId → what the seller asks for one whole token (STLD tag 0x02).
+     * Same record, same trust and the same absence rule as `descriptions`:
+     * absent is "none found", never "none published".
+     *
+     * **Nothing public paints it in this round.** The editor reads it back to
+     * the seller who signed it; the shop, the overlay and the poster paint the
+     * covenant's asked amount and nothing else, because a second money figure
+     * on an Agora row would be two prices for one thing. Test:
+     * `the-shop-paints-no-price-in-round-one`.
+     */
+    prices?: ReadonlyMap<string, TokenPrice>;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

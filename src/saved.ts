@@ -173,6 +173,11 @@ const MAX_FIAT_CODE = 8;
  * default for "never chose", which is right for painting and wrong for the
  * seller's fiat hint — a hint may fill silence and must never override a
  * choice, so the two questions need two answers.
+ *
+ * **Nobody asks it today**: the hint is unhonoured and no picker paints, so
+ * "never chose" is the only answer there is. Kept with `saveFiat` as the seam
+ * the picker comes back through, and as the place the storage screen the
+ * simplified read no longer needs is still written down.
  */
 export function hasSavedFiat(): boolean {
     try {
@@ -183,6 +188,19 @@ export function hasSavedFiat(): boolean {
     }
 }
 
+/**
+ * The currency this browser reads prices in.
+ *
+ * **One currency above the table** (CLAUDE §8): nothing paints a picker, so
+ * `usd` is the only code this build can arrive at, and a stored code from a
+ * build that had one is a value no control can change back. Ignoring it would
+ * pin a browser to that currency for as long as the key survives, so the read
+ * that finds it also removes it.
+ *
+ * `FIAT_CURRENCIES` and `isSupportedFiat` are untouched — the table is display
+ * data with its own pinned assertions, and this gate has to keep working the
+ * day the picker comes back.
+ */
 export function readSavedFiat(): string {
     let raw: string | null;
     try {
@@ -190,7 +208,21 @@ export function readSavedFiat(): string {
     } catch {
         return DEFAULT_FIAT_CODE;
     }
-    if (raw === null || raw.length > MAX_FIAT_CODE || !isSupportedFiat(raw)) {
+    if (raw === null) {
+        return DEFAULT_FIAT_CODE;
+    }
+    // One comparison, because it subsumes the two this used to make: the only
+    // code this build can arrive at is the default, so a longer string, a code
+    // we never shipped and a shipped code that is simply not this one are all
+    // the same leftover. Widening this again means restoring the length and
+    // `isSupportedFiat` gates `hasSavedFiat` still makes — storage is
+    // user-writable and this value is concatenated into a request path.
+    if (raw !== DEFAULT_FIAT_CODE) {
+        try {
+            localStorage.removeItem(FIAT_KEY);
+        } catch {
+            // Nothing to do: the stale code simply stays, unread.
+        }
         return DEFAULT_FIAT_CODE;
     }
     return raw;

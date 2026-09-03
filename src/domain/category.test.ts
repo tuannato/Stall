@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORY_ORDER, categoryOf, sectionsOf } from './category';
+import { CATEGORY_ORDER, categoryOf, isPriceable, sectionsOf } from './category';
+import { SHIPPED_ATTACHMENTS } from './attachments';
 import type { StallOffer, TokenMeta } from './state';
 
 const meta = (tokenId: string, type?: string): TokenMeta => ({
@@ -222,3 +223,45 @@ describe('a-decoration-is-known-by-its-token-id-not-its-ticker', () => {
     });
 });
 
+
+describe('only-a-fungible-token-can-be-priced', () => {
+    /**
+     * An affirmative predicate, never a suppression list. `categoryOf` answers
+     * `unsorted` for metadata that has not arrived or whose read failed, so
+     * "not an NFT" would have let the editor price a row this page knows
+     * nothing about — and a price is a permanent record about a token.
+     *
+     * A decoration is excluded for the reason `sectionsOf` files it apart: the
+     * shipped catalogue is asked by token id and its answer overrides genesis,
+     * so a decor row that is fungible on chain is still not the seller's stock.
+     * One helper, so the editor and the painter cannot disagree.
+     */
+    const DECOR_ID = SHIPPED_ATTACHMENTS.find((a) => a.tokenId !== undefined)!.tokenId!;
+
+    it('says yes to a fungible token and no to everything else', () => {
+        expect(isPriceable('a', meta('a', 'SLP_TOKEN_TYPE_FUNGIBLE'))).toBe(true);
+        expect(isPriceable('a', meta('a', 'ALP_TOKEN_TYPE_STANDARD'))).toBe(true);
+        expect(isPriceable('a', meta('a', 'SLP_TOKEN_TYPE_MINT_VAULT'))).toBe(true);
+        expect(isPriceable('a', meta('a', 'SLP_TOKEN_TYPE_NFT1_CHILD'))).toBe(false);
+        expect(isPriceable('a', meta('a', 'SLP_TOKEN_TYPE_NFT1_GROUP'))).toBe(false);
+        // Unknown and unloaded are our own gaps, not a fact about the token.
+        expect(isPriceable('a', undefined)).toBe(false);
+        expect(isPriceable('a', meta('a'))).toBe(false);
+        expect(isPriceable('a', meta('a', 'SLP_TOKEN_TYPE_UNKNOWN'))).toBe(false);
+    });
+
+    it('follows the catalogue override the sections already use', () => {
+        // Fungible on chain, a decoration in the catalogue: filed as decor by
+        // `sectionsOf`, and not priceable here for the same reason.
+        expect(categoryOf(meta(DECOR_ID, 'SLP_TOKEN_TYPE_FUNGIBLE'))).toBe('etoken');
+        expect(isPriceable(DECOR_ID, meta(DECOR_ID, 'SLP_TOKEN_TYPE_FUNGIBLE'))).toBe(
+            false,
+        );
+        // And it is one decision, shared: the row lands in the decor section.
+        const sections = sectionsOf(
+            [offer(DECOR_ID)],
+            new Map([[DECOR_ID, meta(DECOR_ID, 'SLP_TOKEN_TYPE_FUNGIBLE')]]),
+        );
+        expect(sections[0]?.category).toBe('decor');
+    });
+});

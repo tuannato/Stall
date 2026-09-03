@@ -65,8 +65,87 @@ export const SHELF_TAG = 0x01;
  */
 export const MAX_SHELF_BYTES = 32;
 
+/**
+ * Tag 0x02: what the seller asks for **one whole token**, in a unit they name.
+ *
+ * Frozen shape, and every part of it is load-bearing on a wire nobody can
+ * amend: **one push of exactly thirteen bytes** — the tag, three ASCII letters
+ * of code, one exponent byte, then eight bytes of unsigned big-endian amount.
+ * Twelve bytes of payload under the tag, which is what `decodeTaggedExtras`
+ * hands the reader. Any other length, an exponent above 8, or an amount of
+ * zero voids **this field alone**, never the record.
+ *
+ * **The exponent is in the record, not in a table.** `fiatFractionDigits` is a
+ * display convention this app may change on any deploy — it already prints
+ * `bhd` at two digits where the currency has three — and a record whose meaning
+ * moved with it would be a different price after an unrelated release.
+ *
+ * **The amount is a `bigint`, always.** Eight bytes overflow a double at 2^53,
+ * and §8's rule about never running `Number()` over satoshis is the same rule.
+ *
+ * **Zero is not a price.** It is the absence of one; painting it would say a
+ * seller gives a token away.
+ *
+ * `xec` is reserved: the chain's own unit, `amount × 10^-exponent` XEC, with no
+ * rate anywhere in it. Everything else is a currency code. This app writes
+ * `usd` and `xec`; any other code is decoded — a record is permanent and a
+ * later version will paint more of them — but never painted and never
+ * mentioned, and the editor carries it forward untouched rather than dropping a
+ * field it cannot read back.
+ */
+export const PRICE_TAG = 0x02;
+
+/** Tag + three code bytes + one exponent byte + eight amount bytes. */
+export const PRICE_FIELD_BYTES = 13;
+
+/** A bound on the fractional digits a reader prints, not on the range. */
+export const MAX_PRICE_EXPONENT = 8;
+
+/** Eight unsigned bytes. */
+const MAX_PRICE_AMOUNT = (1n << 64n) - 1n;
+
+/** The chain's own unit. Not a currency, and never converted. */
+export const XEC_PRICE_CODE = 'xec';
+
+const PRICE_CODE_BYTES = 3;
+
+/**
+ * What the seller asks for one whole token. Quantity is whole tokens: a
+ * fractional quantity has no price here, and nothing pretends otherwise.
+ */
+export type TokenPrice = {
+    /** Three lowercase ASCII letters. `xec` is the chain's own unit. */
+    readonly code: string;
+    /** 0–8. `amount × 10^-exponent` is the figure. */
+    readonly exponent: number;
+    /** Minor units, `>= 1`. Never a `Number`. */
+    readonly amount: bigint;
+};
+
 const TOKEN_ID_BYTES = 32;
 const REQUIRED_PUSHES = 3;
+
+/*
+ * The maxima the editor's ladder names, and the arithmetic behind them, so a
+ * number in a sentence on screen has a derivation somebody can check.
+ *
+ * The record is `push("STLD")` 5 + `push(tokenId)` 33 = 38 bytes before the
+ * text, against `OP_RETURN_BUDGET` 222. The price field costs
+ * `PRICE_FIELD_BYTES + 1` = 14 with its push byte; a full 32-byte shelf costs
+ * 34. Above 75 bytes a text push costs its length plus two.
+ */
+const RECORD_HEAD_BYTES = 38;
+const PRICE_PUSH_BYTES = PRICE_FIELD_BYTES + 1;
+const FULL_SHELF_PUSH_BYTES = 1 + 1 + MAX_SHELF_BYTES;
+const LONG_TEXT_PUSH_OVERHEAD = 2;
+
+/** Words that still fit beside a price: 222 − 38 − 14 − 2. */
+export const MAX_PRICED_DESCRIPTION_BYTES =
+    OP_RETURN_BUDGET - RECORD_HEAD_BYTES - PRICE_PUSH_BYTES - LONG_TEXT_PUSH_OVERHEAD;
+
+/** Words that still fit beside a price and a full shelf: that, minus 34. */
+export const MAX_PRICED_SHELVED_DESCRIPTION_BYTES =
+    MAX_PRICED_DESCRIPTION_BYTES - FULL_SHELF_PUSH_BYTES;
 
 /**
  * A record says one of two things: here are the words, or take them away.
@@ -83,8 +162,14 @@ export type TokenDescription =
           readonly tokenId: string;
           readonly text: string;
           readonly shelf?: string;
+          readonly price?: TokenPrice;
       }
-    | { readonly kind: 'tombstone'; readonly tokenId: string; readonly shelf?: string };
+    | {
+          readonly kind: 'tombstone';
+          readonly tokenId: string;
+          readonly shelf?: string;
+          readonly price?: TokenPrice;
+      };
 
 export function isStld(pushes: Uint8Array[]): boolean {
     const first = pushes[0];
@@ -121,7 +206,12 @@ export function decodeDescriptionPushes(
     // The tagged extras, same grammar and same rules as STL1's (§5): first
     // byte is the tag, empty pushes are skipped, a repeated tag keeps the
     // first, a malformed payload under a known tag voids that field alone.
-    const shelf = readShelf(decodeTaggedExtras(pushes, REQUIRED_PUSHES).get(SHELF_TAG));
+    const extras = decodeTaggedExtras(pushes, REQUIRED_PUSHES);
+    const shelf = readShelf(extras.get(SHELF_TAG));
+    // A price rides the same grammar and voids the same way: a payload that is
+    // not twelve bytes under the tag, an exponent out of range or an amount of
+    // zero costs this field and nothing else.
+    const price = readPrice(extras.get(PRICE_TAG));
     // A zero-length third push is the removal instruction, not a short record.
     // A shelf rides it unchanged: each record is the whole truth about one
     // token, so "no words, shelved" is one record, not a removal plus a
@@ -131,6 +221,7 @@ export function decodeDescriptionPushes(
             kind: 'tombstone',
             tokenId: toHex(idBytes),
             ...(shelf === undefined ? {} : { shelf }),
+            ...(price === undefined ? {} : { price }),
         };
     }
     if (textBytes.length > MAX_DESCRIPTION_BYTES) {
@@ -155,6 +246,7 @@ export function decodeDescriptionPushes(
         tokenId: toHex(idBytes),
         text,
         ...(shelf === undefined ? {} : { shelf }),
+        ...(price === undefined ? {} : { price }),
     };
 }
 
@@ -171,6 +263,123 @@ function readShelf(payload: Uint8Array | undefined): string | undefined {
     return text;
 }
 
+/**
+ * Tag 0x02, the reading half. Twelve bytes under the tag or nothing: length,
+ * exponent range and a non-zero amount are all checked before anything is
+ * believed, because every one of them is a way to paint a figure nobody signed.
+ *
+ * The code is lowercased the way `readFiatHint` lowercases the STL1 hint, so
+ * `USD` and `usd` are one code rather than two records that disagree.
+ */
+function readPrice(payload: Uint8Array | undefined): TokenPrice | undefined {
+    if (payload === undefined || payload.length !== PRICE_FIELD_BYTES - 1) {
+        return undefined;
+    }
+    let code = '';
+    for (let i = 0; i < PRICE_CODE_BYTES; i += 1) {
+        const lower = payload[i]! | 0x20;
+        if (lower < 0x61 || lower > 0x7a) {
+            return undefined;
+        }
+        code += String.fromCharCode(lower);
+    }
+    const exponent = payload[PRICE_CODE_BYTES]!;
+    if (exponent > MAX_PRICE_EXPONENT) {
+        return undefined;
+    }
+    // Big-endian, assembled as a bigint. Eight bytes overflow a double.
+    let amount = 0n;
+    for (let i = PRICE_CODE_BYTES + 1; i < payload.length; i += 1) {
+        amount = (amount << 8n) | BigInt(payload[i]!);
+    }
+    if (amount < 1n) {
+        return undefined;
+    }
+    return { code, exponent, amount };
+}
+
+/** The same thirteen bytes, written. `undefined` when they cannot be. */
+function priceField(price: TokenPrice): Uint8Array | undefined {
+    if (!/^[a-z]{3}$/.test(price.code)) {
+        return undefined;
+    }
+    if (
+        !Number.isInteger(price.exponent) ||
+        price.exponent < 0 ||
+        price.exponent > MAX_PRICE_EXPONENT
+    ) {
+        return undefined;
+    }
+    // `typeof`, not a comparison: a `Number` here would compare fine and then
+    // lose the low bits of an eight-byte amount on the way to the wire.
+    if (typeof price.amount !== 'bigint' || price.amount < 1n || price.amount > MAX_PRICE_AMOUNT) {
+        return undefined;
+    }
+    const out = new Uint8Array(PRICE_FIELD_BYTES);
+    out[0] = PRICE_TAG;
+    for (let i = 0; i < PRICE_CODE_BYTES; i += 1) {
+        out[1 + i] = price.code.charCodeAt(i);
+    }
+    out[1 + PRICE_CODE_BYTES] = price.exponent;
+    let rest = price.amount;
+    for (let i = PRICE_FIELD_BYTES - 1; i > PRICE_CODE_BYTES + 1; i -= 1) {
+        out[i] = Number(rest & 0xffn);
+        rest >>= 8n;
+    }
+    return out;
+}
+
+/**
+ * The figure a seller reads and types, from the record's own exponent. Plain
+ * digits and no grouping: what this prints must go straight back into the
+ * field it came from, and a thousands separator does not.
+ */
+export function formatPriceFigure(price: TokenPrice): string {
+    const digits = price.amount.toString().padStart(price.exponent + 1, '0');
+    if (price.exponent === 0) {
+        return digits;
+    }
+    const cut = digits.length - price.exponent;
+    return `${digits.slice(0, cut)}.${digits.slice(cut)}`;
+}
+
+/**
+ * A typed figure into minor units, through the decimal text and never through
+ * a float — the same reason `scaleRate` goes via `toFixed`. `undefined` for
+ * anything the record cannot hold, including a figure that rounds to nothing:
+ * below one minor unit there is no price, only a zero, and zero is not one.
+ */
+export function parsePriceFigure(
+    figure: string,
+    code: string,
+    exponent: number,
+): TokenPrice | undefined {
+    if (typeof figure !== 'string' || !/^[a-z]{3}$/.test(code)) {
+        return undefined;
+    }
+    if (!Number.isInteger(exponent) || exponent < 0 || exponent > MAX_PRICE_EXPONENT) {
+        return undefined;
+    }
+    const text = figure.trim();
+    if (!/^\d{1,20}(\.\d{0,8})?$/.test(text)) {
+        return undefined;
+    }
+    const [whole = '', frac = ''] = text.split('.');
+    if (frac.length > exponent) {
+        return undefined;
+    }
+    let amount: bigint;
+    try {
+        amount = BigInt(`${whole}${frac.padEnd(exponent, '0')}`);
+    } catch {
+        return undefined;
+    }
+    if (amount < 1n || amount > MAX_PRICE_AMOUNT) {
+        return undefined;
+    }
+    return { code, exponent, amount };
+}
+
 /*
  * The legibility screen lives in `./text` now — the stall name goes through
  * the same set, and two copies of what "legible" means is how they drift.
@@ -179,6 +388,8 @@ function readShelf(payload: Uint8Array | undefined): string | undefined {
 export type DescriptionExtras = {
     /** Tag 0x01: the seller's own heading over this token's card. */
     shelf?: string;
+    /** Tag 0x02: what one whole token costs, in the unit the record names. */
+    price?: TokenPrice;
 };
 
 /**
@@ -207,19 +418,16 @@ export function encodeDescriptionHex(
         return undefined;
     }
     const shelf = extras.shelf === undefined || extras.shelf === '' ? undefined : extras.shelf;
-    if (textBytes.length < 1 && shelf === undefined) {
+    const price = extras.price;
+    // A price with no words is a record — the tombstone shape plus the tag,
+    // the same way "no words, shelved" is one. Nothing at all is still the
+    // refusal: a removal is an instruction and keeps its own encoder below.
+    if (textBytes.length < 1 && shelf === undefined && price === undefined) {
         return undefined;
     }
-    const pushes = [lokadBytes(), idBytes(tokenId), textBytes];
-    if (shelf !== undefined) {
-        const shelfBytes = new TextEncoder().encode(shelf);
-        if (shelfBytes.length < 1 || shelfBytes.length > MAX_SHELF_BYTES) {
-            return undefined;
-        }
-        const tagged = new Uint8Array(1 + shelfBytes.length);
-        tagged[0] = SHELF_TAG;
-        tagged.set(shelfBytes, 1);
-        pushes.push(tagged);
+    const pushes = taggedPushes(tokenId, textBytes, shelf, price);
+    if (pushes === undefined) {
+        return undefined;
     }
     // Encode only what decode would accept back — field for field. A record
     // this app writes and cannot read is the failure §5 calls the worst one,
@@ -231,7 +439,7 @@ export function encodeDescriptionHex(
     if (textBytes.length >= 1 && back.kind !== 'text') {
         return undefined;
     }
-    if (back.shelf !== shelf) {
+    if (back.shelf !== shelf || !samePrice(back.price, price)) {
         return undefined;
     }
     const record = concat(pushes.map((push) => encodePush(push)));
@@ -248,7 +456,11 @@ export function encodeDescriptionHex(
  * same arithmetic `encodeDescriptionHex` enforces, so the meter and the
  * refusal cannot disagree.
  */
-export function descriptionRecordBytes(text: string, shelf = ''): number {
+export function descriptionRecordBytes(
+    text: string,
+    shelf = '',
+    price?: TokenPrice,
+): number {
     const textBytes = new TextEncoder().encode(text);
     let total =
         encodePush(lokadBytes()).length +
@@ -257,6 +469,9 @@ export function descriptionRecordBytes(text: string, shelf = ''): number {
     if (shelf !== '') {
         total += encodePush(new Uint8Array(1 + new TextEncoder().encode(shelf).length))
             .length;
+    }
+    if (price !== undefined) {
+        total += encodePush(new Uint8Array(PRICE_FIELD_BYTES)).length;
     }
     return total;
 }
@@ -270,18 +485,75 @@ export function descriptionRecordBytes(text: string, shelf = ''): number {
  * which `opReturnPushes` refuses, taking the whole record with it. `encodePush`
  * handles that.
  */
-export function encodeRemovalHex(tokenId: string): string | undefined {
+export function encodeRemovalHex(
+    tokenId: string,
+    extras: DescriptionExtras = {},
+): string | undefined {
     if (typeof tokenId !== 'string' || !/^[0-9a-f]{64}$/.test(tokenId)) {
         return undefined;
     }
-    const empty = new Uint8Array(0);
-    const back = decodeDescriptionPushes([lokadBytes(), idBytes(tokenId), empty]);
+    const shelf = extras.shelf === undefined || extras.shelf === '' ? undefined : extras.shelf;
+    const price = extras.price;
+    const pushes = taggedPushes(tokenId, new Uint8Array(0), shelf, price);
+    if (pushes === undefined) {
+        return undefined;
+    }
+    const back = decodeDescriptionPushes(pushes);
     if (back === undefined || back.kind !== 'tombstone') {
         return undefined;
     }
-    return toHex(
-        concat([encodePush(lokadBytes()), encodePush(idBytes(tokenId)), encodePush(empty)]),
-    );
+    // Every other field, restated. One record is the whole truth about one
+    // token, so a removal that carried only the empty push would erase the
+    // shelf and the price along with the words — which is what it did to the
+    // shelf until this took them.
+    if (back.shelf !== shelf || !samePrice(back.price, price)) {
+        return undefined;
+    }
+    const record = concat(pushes.map((push) => encodePush(push)));
+    if (record.length > OP_RETURN_BUDGET) {
+        return undefined;
+    }
+    return toHex(record);
+}
+
+/**
+ * The three required pushes and the tagged fields after them, ascending by
+ * tag. One builder for both encoders: a removal that assembled its own would
+ * be a second place the grammar is written down.
+ */
+function taggedPushes(
+    tokenId: string,
+    textBytes: Uint8Array,
+    shelf: string | undefined,
+    price: TokenPrice | undefined,
+): Uint8Array[] | undefined {
+    const pushes = [lokadBytes(), idBytes(tokenId), textBytes];
+    if (shelf !== undefined) {
+        const shelfBytes = new TextEncoder().encode(shelf);
+        if (shelfBytes.length < 1 || shelfBytes.length > MAX_SHELF_BYTES) {
+            return undefined;
+        }
+        const tagged = new Uint8Array(1 + shelfBytes.length);
+        tagged[0] = SHELF_TAG;
+        tagged.set(shelfBytes, 1);
+        pushes.push(tagged);
+    }
+    if (price !== undefined) {
+        const field = priceField(price);
+        if (field === undefined) {
+            return undefined;
+        }
+        pushes.push(field);
+    }
+    return pushes;
+}
+
+/** Field by field, because a `toEqual` here would be an object identity check. */
+function samePrice(a: TokenPrice | undefined, b: TokenPrice | undefined): boolean {
+    if (a === undefined || b === undefined) {
+        return a === b;
+    }
+    return a.code === b.code && a.exponent === b.exponent && a.amount === b.amount;
 }
 
 /** How many bytes a description costs on the wire, for a live counter. */

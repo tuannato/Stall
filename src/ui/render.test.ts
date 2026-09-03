@@ -82,7 +82,13 @@ import {
     tokenRate,
     tokenRateBound,
 } from './copy';
-import { MAX_DESCRIPTION_BYTES, encodeDescriptionHex } from '../domain/description';
+import {
+    MAX_DESCRIPTION_BYTES,
+    MAX_PRICED_DESCRIPTION_BYTES,
+    MAX_PRICED_SHELVED_DESCRIPTION_BYTES,
+    encodeDescriptionHex,
+    encodeRemovalHex,
+} from '../domain/description';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
@@ -5587,5 +5593,417 @@ describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
         expect(link?.textContent).toBe(HOME_STREAM_LINK);
         // One link, not a control: nothing about the door's paste path changed.
         expect(root.querySelectorAll('a[href="/stream"]')).toHaveLength(1);
+    });
+});
+
+describe('the-visitor-has-no-currency-control-and-the-glance-is-usd', () => {
+    /**
+     * One currency above the table (CLAUDE §8). `FIAT_CURRENCIES` is untouched
+     * — six assertions rest on it and the `symbolAfter` rule has to survive a
+     * re-widening — but nothing paints a picker, so a visitor cannot put the
+     * glance into a currency the seller's own figure was never written in.
+     *
+     * The handler is still passed in here on purpose: "not painted" has to mean
+     * the footer declines to paint it, not that the test forgot to wire it.
+     */
+    it('paints no picker even when a change handler is supplied', () => {
+        const root = document.createElement('div');
+        renderStall(root, offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            fiatCode: 'usd',
+            fiatRate: scaleRate(0.00003),
+        }), { ...handlers(), onChangeFiat: vi.fn() });
+        expect(root.querySelector('[data-role="fiat-picker"]')).toBeNull();
+        expect(root.textContent).not.toContain(copy.FIAT_LABEL);
+        // The glance itself stays: it is the covenant's own asked amount,
+        // converted for a look, and it is not the seller's figure.
+        expect(root.querySelector('[data-role="fiat"]')?.textContent).toBe('$0.04');
+    });
+
+    it('paints no picker on the waiting screens either', () => {
+        for (const route of [
+            { kind: 'unresolvable' as const, address: ADDR },
+            { kind: 'unresolved' as const, address: ADDR },
+            { kind: 'home' as const },
+        ]) {
+            const root = document.createElement('div');
+            renderStall(
+                root,
+                { route, overlay: { kind: 'idle' }, tokens: new Map() },
+                { ...handlers(), onChangeFiat: vi.fn() },
+            );
+            expect(root.querySelector('[data-role="fiat-picker"]'), route.kind).toBeNull();
+        }
+    });
+});
+
+describe('the-shop-paints-no-price-in-round-one', () => {
+    /**
+     * The record is written and read; nothing public shows it. Every priced row
+     * on an Agora stall already carries the covenant's asked amount and a
+     * converted glance beside it, so a third money figure would be two prices
+     * for one thing with no screen saying which one binds. Public painting
+     * arrives with the Pay surface, under this same role and labelled a quote.
+     */
+    const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
+    const priced = (over: Partial<StallView> = {}) =>
+        offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            prices: new Map([[TOKEN_ID, PRICE]]),
+            descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]),
+            ...over,
+        });
+
+    it('shows no seller price on the shop, the expander or the empty screen', () => {
+        for (const [label, view] of [
+            ['shop', priced()],
+            ['expander', priced({ overlay: { kind: 'buy', outpoint: OUTPOINT } })],
+            ['empty', priced({ fetch: { kind: 'empty' } })],
+            ['activity', priced({ panel: 'activity' })],
+        ] as const) {
+            const { root } = paint(view);
+            expect(root.querySelector('[data-role="seller-price"]'), label).toBeNull();
+            expect(root.textContent, label).not.toContain('12.50');
+        }
+    });
+
+    it('shows none on the broadcast overlay', () => {
+        const { root } = paint(
+            priced({ broadcast: { preset: 'corner', mode: 'fixed', transparent: false } }),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(root.textContent).not.toContain('12.50');
+    });
+
+    it('leaves the covenant’s own asked amount exactly where it was', () => {
+        const { root } = paint(priced());
+        expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+    });
+});
+
+describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
+    /**
+     * Its own role, never `fiat`. The fiat node is a conversion of the
+     * covenant's asked amount; this is a figure the seller wrote and signed,
+     * and nothing converts it (CLAUDE §8). Two different things must not share
+     * a selector, least of all one the probe measures for contrast.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('reads a published price back into the field and the line', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 1250n }]]),
+        });
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        const code = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
+        expect(amount.value).toBe('12.50');
+        expect(code.value).toBe('usd');
+        const back = root.querySelector('[data-role="seller-price"]') as HTMLElement;
+        expect(back.hidden).toBe(false);
+        expect(back.textContent).toBe(copy.sellerPrice('12.50', 'USD'));
+        // Never the fiat node, which is the converted glance beside a covenant.
+        expect(back.getAttribute('data-role')).not.toBe('fiat');
+    });
+
+    it('says nothing at all when the seller has published no price', () => {
+        const { root } = sheet();
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        expect(amount.value).toBe('');
+        expect((root.querySelector('[data-role="seller-price"]') as HTMLElement).hidden).toBe(
+            true,
+        );
+    });
+
+    it('only-a-fungible-token-can-be-priced', () => {
+        // An NFT gets no field at all, and one line saying why — rather than a
+        // field that silently refuses, or a record about a token whose kind
+        // this page never read.
+        const NFT: TokenMeta = {
+            ...BEANS,
+            tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' },
+        };
+        const { root } = sheet({ tokens: new Map([[TOKEN_ID, NFT]]) });
+        expect(
+            (root.querySelector('[data-role="describe-price-field"]') as HTMLElement).hidden,
+        ).toBe(true);
+        const why = root.querySelector('[data-role="describe-price-why"]') as HTMLElement;
+        expect(why.hidden).toBe(false);
+        expect(why.textContent).toBe(copy.DESC_PRICE_NOT_PRICEABLE);
+        // And the record it would sign carries no price field.
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.'));
+    });
+});
+
+describe('the-app-writes-usd-cents-and-nothing-else', () => {
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    const typePrice = (root: HTMLElement, figure: string, code = 'usd') => {
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        const select = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
+        select.value = code;
+        amount.value = figure;
+        amount.dispatchEvent(new Event('input'));
+        return root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+    };
+
+    it('offers exactly two units, and writes each at two decimal places', () => {
+        const { root } = sheet();
+        const select = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
+        expect([...select.querySelectorAll('option')].map((o) => o.value)).toEqual([
+            'usd',
+            'xec',
+        ]);
+
+        const hex = typePrice(root, '12.50');
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 1250n },
+            }),
+        );
+        // `xec` is the chain's own unit and takes the same two decimals, so a
+        // stream QR can carry a figure that never goes stale.
+        const inXec = typePrice(root, '450.00', 'xec');
+        expect(inXec.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'xec', exponent: 2, amount: 45_000n },
+            }),
+        );
+    });
+
+    it('refuses a figure the record cannot hold, and hands over nothing', () => {
+        const { root } = sheet();
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement;
+        for (const bad of ['0', '0.001', '-1', 'free', '1,200']) {
+            const hex = typePrice(root, bad);
+            expect(hex.hidden, bad).toBe(true);
+            expect(err.hidden, bad).toBe(false);
+            expect(err.textContent, bad).toBe(copy.DESC_PRICE_REFUSED);
+            expect(link.hidden, bad).toBe(true);
+        }
+    });
+
+    it('names the price when the shared record overflows', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        field.value = 'D'.repeat(MAX_PRICED_DESCRIPTION_BYTES + 1);
+        field.dispatchEvent(new Event('input'));
+        typePrice(root, '12.50');
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_PRICED);
+        // The maxima are stated, not implied.
+        expect(copy.DESC_OVER_BUDGET_PRICED).toContain(
+            String(MAX_PRICED_DESCRIPTION_BYTES),
+        );
+        expect(copy.DESC_OVER_BUDGET_PRICED).toContain(
+            String(MAX_PRICED_SHELVED_DESCRIPTION_BYTES),
+        );
+        // And one meter still, counting the price into the same record.
+        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        expect(counter.textContent).toContain(`of ${OP_RETURN_BUDGET} bytes`);
+    });
+});
+
+describe('editing-words-does-not-drop-the-price', () => {
+    /**
+     * One record is the whole truth about one token, so every publish restates
+     * every field. A sheet that loaded the words and not the figure would take
+     * a seller's price off the chain the next time they fixed a typo.
+     */
+    const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
+    const sheet = () =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                descriptions: new Map([[TOKEN_ID, 'Old words']]),
+                shelves: new Map([[TOKEN_ID, 'Coffee']]),
+                prices: new Map([[TOKEN_ID, PRICE]]),
+            }),
+        );
+
+    it('carries the price and the shelf through a change of words', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'New words';
+        field.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'New words', { shelf: 'Coffee', price: PRICE }),
+        );
+    });
+
+    it('removing-words-does-not-remove-the-price', () => {
+        const { root } = sheet();
+        const remove = root.querySelector('[data-role="describe-remove"]') as HTMLAnchorElement;
+        expect(remove.hidden).toBe(false);
+        const removal = encodeRemovalHex(TOKEN_ID, { shelf: 'Coffee', price: PRICE });
+        expect(removal).toBeDefined();
+        expect(remove.getAttribute('href')).toContain(encodeURIComponent(removal!));
+    });
+
+    it('offers removal over a price alone', () => {
+        // A record with only a figure in it is still something to remove, so
+        // the gate counts prices the way it counts words and shelves.
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                prices: new Map([[TOKEN_ID, PRICE]]),
+            }),
+        );
+        expect(
+            (root.querySelector('[data-role="describe-remove"]') as HTMLElement).hidden,
+        ).toBe(false);
+    });
+});
+
+describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
+    /**
+     * Void on screen, never on the wire. The editor writes two units and paints
+     * two; a record carrying anything else is read, shown nowhere and mentioned
+     * nowhere. What it is **not** is forgotten: a publish from this sheet
+     * restates every field, so an unwritable code is carried forward untouched
+     * until the seller types a figure of their own over it. A field this app no
+     * longer edits is never dropped — the same rule the STL1 fiat hint gets.
+     */
+    const EUR = { code: 'eur', exponent: 2, amount: 900n } as const;
+    const sheet = () =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                prices: new Map([[TOKEN_ID, EUR]]),
+            }),
+        );
+
+    it('paints nothing about it and raises no error', () => {
+        const { root } = sheet();
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        expect(amount.value, 'no figure this editor could write').toBe('');
+        expect((root.querySelector('[data-role="seller-price"]') as HTMLElement).hidden).toBe(
+            true,
+        );
+        expect(root.textContent).not.toContain('9.00');
+        expect(root.textContent).not.toContain('EUR');
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        expect(err.hidden, 'an unwritable code is not an error').toBe(true);
+    });
+
+    it('carries it forward rather than erasing it on the next publish', () => {
+        const { root } = sheet();
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'New words';
+        field.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'New words', { price: EUR }),
+        );
+    });
+
+    it('carries it forward when our own genesis read is what hid the field', () => {
+        // `isPriceable` says no when the metadata never arrived, which is our
+        // gap and not a fact about the token. Dropping the figure there would
+        // destroy a record because one unrelated read failed.
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map(),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 1250n }]]),
+            }),
+        );
+        expect(
+            (root.querySelector('[data-role="describe-price-field"]') as HTMLElement).hidden,
+            'no field, because we could not read the kind',
+        ).toBe(true);
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'New words';
+        field.dispatchEvent(new Event('input'));
+        expect(
+            (root.querySelector('[data-role="describe-hex"]') as HTMLElement).textContent,
+        ).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'New words', {
+                price: { code: 'usd', exponent: 2, amount: 1250n },
+            }),
+        );
+    });
+
+    it('a figure the seller types wins over the carried one', () => {
+        const { root } = sheet();
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = '12.50';
+        amount.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 1250n },
+            }),
+        );
+    });
+});
+
+describe('republish-carries-an-existing-fiat-hint-forward', () => {
+    /**
+     * STL1 tag `0x04` is read and unhonoured (CLAUDE §8), so the publish sheet
+     * no longer offers a control for it. Dropping the field from the record
+     * would be a different thing entirely: a republish is one transaction that
+     * restates the whole document, and a field this app stopped editing must
+     * not be erased by an unrelated change to the stall's name.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('offers no control and still writes the hint the record carries', () => {
+        const { root } = sheet({ fiatHint: 'vnd' });
+        expect(root.querySelector('[data-role="publish-fiat"]')).toBeNull();
+        expect(root.textContent).not.toContain(copy.PUBLISH_FIAT_LABEL);
+        const hex = root.querySelector('[data-role="publish-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeManifestHex('Riverside Goods', DEFAULT_THEME_ID, 0, { fiatHint: 'vnd' }),
+        );
+    });
+
+    it('writes no hint into a record that never had one', () => {
+        const { root } = sheet();
+        const hex = root.querySelector('[data-role="publish-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeManifestHex('Riverside Goods', DEFAULT_THEME_ID, 0),
+        );
     });
 });

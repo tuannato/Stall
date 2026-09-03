@@ -1483,6 +1483,34 @@ textarea.paste-in {
 }
 
 /*
+ * The price field: the figure and the unit it is written in, side by side,
+ * because they are one answer. The unit track is `auto` so a three-letter
+ * select takes exactly its own width and the figure keeps the rest — and it
+ * wraps to two rows below 320px rather than squeezing the figure to nothing.
+ *
+ * `.paste-label` inside is already a column, so each half keeps its own label
+ * above its own control; this only decides where the two halves sit.
+ */
+.desc-price {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.desc-price > .paste-label:first-child {
+    flex: 1 1 9rem;
+}
+
+.desc-price > .paste-label + .paste-label {
+    flex: 0 0 auto;
+}
+
+.desc-price > .paste-label + .paste-label .paste-in {
+    width: auto;
+}
+
+/*
  * The seller's own words. Labelled as theirs, because a signature proves who
  * wrote a sentence and not that it is true — a description can claim a price
  * the covenant does not ask. So it never borrows the price cell's typography,

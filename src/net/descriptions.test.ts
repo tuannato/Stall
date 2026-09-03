@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
-import { encodeDescriptionHex, encodeRemovalHex } from '../domain/description';
+import {
+    encodeDescriptionHex,
+    encodeRemovalHex,
+    type TokenPrice,
+} from '../domain/description';
 import type { ChainTx, HistoryPage, ManifestChronik } from './chain';
 import { loadDescriptions } from './descriptions';
 
@@ -551,6 +555,70 @@ describe('a-shelf-arrives-with-the-record-that-won', () => {
             // One record is the whole truth about one token: the winner has
             // no shelf, so this token is on no shelf.
             expect(got.shelves.has(TOKEN_A)).toBe(false);
+        });
+    });
+});
+
+describe('price-rides-the-record-that-won', () => {
+    /**
+     * The price map is read from the same winning record as the text and the
+     * shelf — a tombstone included, which is how "priced, no words" travels.
+     * One record is the whole truth about one token, so the figure and the
+     * words can never come from two different records.
+     */
+    const USD = { code: 'usd', exponent: 2, amount: 1250n } as const;
+    const XEC = { code: 'xec', exponent: 2, amount: 45_000n } as const;
+
+    function priced(tokenId: string, text: string, price: TokenPrice): string {
+        const hex = encodeDescriptionHex(tokenId, text, { price });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return `6a${hex}`;
+    }
+
+    it('maps the winner’s price, and a priced tombstone prices without words', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({ txid: 'a1', outputs: [priced(TOKEN_A, 'Roasted.', USD)], height: 10 }),
+                    tx({ txid: 'b2', outputs: [priced(TOKEN_B, '', XEC)], height: 11 }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.descriptions.get(TOKEN_A)).toBe('Roasted.');
+            expect(got.prices.get(TOKEN_A)).toEqual(USD);
+            // Priced with no words: absent from descriptions, present here.
+            expect(got.descriptions.has(TOKEN_B)).toBe(false);
+            expect(got.prices.get(TOKEN_B)).toEqual(XEC);
+        });
+    });
+
+    it('a newer record without a price takes the price down with it', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({ txid: 'a1', outputs: [priced(TOKEN_A, 'Old.', USD)], height: 10 }),
+                    tx({ txid: 'b2', outputs: [stld(TOKEN_A, 'New.')], height: 11 }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.descriptions.get(TOKEN_A)).toBe('New.');
+            expect(got.prices.has(TOKEN_A)).toBe(false);
+        });
+    });
+
+    it('keeps a code this build does not paint, rather than forgetting it', () => {
+        // A record is permanent. The reader is not the painter: a later version
+        // paints more codes, and an editor that never saw this field would
+        // destroy it on the seller's next publish.
+        const eur = { code: 'eur', exponent: 2, amount: 900n } as const;
+        return load(
+            chronikWith({
+                lokadTxs: [tx({ txid: 'a1', outputs: [priced(TOKEN_A, 'Fine.', eur)], height: 3 })],
+            }),
+        ).then((got) => {
+            expect(got.prices.get(TOKEN_A)).toEqual(eur);
         });
     });
 });

@@ -116,6 +116,11 @@ export const PUBLISH_NAME_TOO_LONG =
 export const PUBLISH_TAGLINE_LABEL = 'Tagline (optional)';
 export const PUBLISH_TAGLINE_INVALID =
     'A tagline is one legible line, up to 64 bytes. Accents and emoji cost more than one byte each.';
+/**
+ * **Not painted.** Tag `0x04` is read and unhonoured (CLAUDE §8), so the sheet
+ * offers no control for it — while a record that already carries one keeps it
+ * on republish. Test: `republish-carries-an-existing-fiat-hint-forward`.
+ */
 export const PUBLISH_FIAT_LABEL = 'Suggest a display currency (optional)';
 /**
  * The announcement (tag 0x05). A dated sentence, not a status: "back on the
@@ -583,7 +588,14 @@ export const COPY_LINK = 'Copy link';
 export const LINK_COPIED = 'Link copied';
 export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';
 
-/** The currency the supplementary fiat figure is read in. */
+/**
+ * The currency the supplementary fiat figure is read in.
+ *
+ * **Not painted.** One currency above the table (CLAUDE §8), so no control
+ * offers a choice — kept here because `FIAT_CURRENCIES` is untouched and this
+ * is the label the picker wears the day it comes back. Test:
+ * `the-visitor-has-no-currency-control-and-the-glance-is-usd`.
+ */
 export const FIAT_LABEL = 'Show prices in';
 
 /**
@@ -666,6 +678,15 @@ export const DESC_SHELF_REFUSED =
     'A shelf is one short legible heading, up to 32 bytes. Accents and emoji cost more than one byte each.';
 export const DESC_OVER_BUDGET =
     'The description and the shelf share one record, and together they are over its size. Shorten either until the meter is not over.';
+/**
+ * The same ceiling with a price in it. The maxima are stated because a meter
+ * that only says "over" leaves a seller trimming a byte at a time:
+ * `MAX_PRICED_DESCRIPTION_BYTES` and `MAX_PRICED_SHELVED_DESCRIPTION_BYTES`
+ * are where they come from, and `tag-budget-is-enforced-across-the-record`
+ * pins both to the encoder.
+ */
+export const DESC_OVER_BUDGET_PRICED =
+    'The description, the shelf and the price share one record, and together they are over its size. With a price the words go up to 168 bytes — 134 with a full shelf as well.';
 export const DESC_TOO_LONG =
     'That is longer than one record holds. Shorten it until the counter is not over.';
 export const DESC_REFUSED =
@@ -689,6 +710,32 @@ export const DESC_REMOVE_PAY = 'Remove with another wallet app';
 export const DESC_REMOVE_LEDE =
     'This publishes a record that erases what you wrote. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
 export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
+
+/**
+ * The price (STLD tag 0x02): what the seller asks for **one whole token**, in
+ * a unit they name. Two units and no more — US dollars, or XEC, the chain's
+ * own unit, which is the only figure that cannot go stale behind a printed QR.
+ *
+ * Nothing on this page converts it. §8 keeps the covenant's asked amount as
+ * the only price on an Agora row; this is the seller's own figure, published
+ * as they wrote it and read back to them the same way.
+ */
+export const DESC_PRICE_LABEL = 'Price for one whole token (optional)';
+export const DESC_PRICE_CODE_LABEL = 'Unit';
+export const DESC_PRICE_LEDE =
+    'Your own asking figure, published as you write it. Nothing here converts it, and this round does not show it to buyers — the price on a listing is still what its covenant asks.';
+export const DESC_PRICE_REFUSED =
+    'A price is a figure above zero, with up to two decimal places and no separators — “12.50”, not “1,200” or “0”.';
+/**
+ * A price is per whole token, so a token whose kind this page has not read is
+ * not one it may write a permanent record about. Affirmative, never a
+ * suppression list — `isPriceable`.
+ */
+export const DESC_PRICE_NOT_PRICEABLE =
+    'Only a fungible token takes a price here. A price is per whole token, and this row is an NFT, a decoration, or a token whose kind this page could not read.';
+/** The seller's own figure, read back from the record they signed. */
+export const sellerPrice = (figure: string, code: string): string =>
+    `Published price: ${figure} ${code}`;
 /** Bytes, never characters: an accented character costs two or three. */
 export const descBytesLeft = (used: number, max: number): string =>
     `${used} of ${max} bytes`;

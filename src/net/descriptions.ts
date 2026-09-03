@@ -2,6 +2,7 @@ import {
     decodeDescriptionPushes,
     STLD_HEX,
     type TokenDescription,
+    type TokenPrice,
 } from '../domain/description';
 import { pickManifestWinner, type ManifestRank } from '../domain/manifest';
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGES, type ChainTx, type HistoryPage } from './chain';
@@ -42,6 +43,16 @@ export type DescriptionLookup = {
      */
     readonly shelves: ReadonlyMap<string, string>;
     /**
+     * tokenId → what the seller asks for one whole token (STLD tag 0x02).
+     * Same winning record as the text and the shelf, tombstones included —
+     * "priced, no words" is one record, not two documents.
+     *
+     * **Every code the wire carries**, not only the ones this build paints:
+     * a record is permanent, and a reader that forgot a field would hand the
+     * editor a record it silently destroys on the next publish.
+     */
+    readonly prices: ReadonlyMap<string, TokenPrice>;
+    /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
      * first when it holds the second.
@@ -58,6 +69,7 @@ export type DescriptionLookup = {
 const EMPTY: DescriptionLookup = {
     descriptions: new Map(),
     shelves: new Map(),
+    prices: new Map(),
     unreadable: new Set(),
     truncated: false,
 };
@@ -110,6 +122,7 @@ async function walk(
 
     const descriptions = new Map<string, string>();
     const shelves = new Map<string, string>();
+    const prices = new Map<string, TokenPrice>();
     for (const [tokenId, records] of found) {
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
@@ -129,12 +142,17 @@ async function walk(
         if (winner.shelf !== undefined) {
             shelves.set(tokenId, winner.shelf);
         }
+        // The price rides the winner too, tombstone included: that is how
+        // "priced, no words" travels as one record.
+        if (winner.price !== undefined) {
+            prices.set(tokenId, winner.price);
+        }
         if (winner.kind === 'tombstone') {
             continue;
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, shelves, unreadable, truncated: total > pages };
+    return { descriptions, shelves, prices, unreadable, truncated: total > pages };
 }
 
 function collectPage(

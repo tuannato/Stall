@@ -6,18 +6,21 @@ import {
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
-import { FIAT_CURRENCIES, formatFiat, isSupportedFiat } from '../domain/fiat';
-import { sectionsOf, type Category } from '../domain/category';
+import { formatFiat } from '../domain/fiat';
+import { isPriceable, sectionsOf, type Category } from '../domain/category';
 import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import {
     MAX_DESCRIPTION_BYTES,
+    XEC_PRICE_CODE,
     descriptionBytes,
     descriptionRecordBytes,
     encodeDescriptionHex,
     encodeRemovalHex,
+    formatPriceFigure,
+    parsePriceFigure,
 } from '../domain/description';
 import {
     compareOffers,
@@ -1655,6 +1658,22 @@ function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
 }
 
 /**
+ * The units this editor writes, and the only ones it reads back to a seller.
+ * `usd` is what most sellers think in; `xec` is the chain's own unit, which is
+ * the one figure a printed QR cannot make stale. Every other code the wire
+ * carries is decoded, never painted, and carried forward untouched.
+ */
+const EDITABLE_PRICE_CODES = ['usd', XEC_PRICE_CODE] as const;
+
+/**
+ * Two decimal places for both, which is what the record's exponent byte says.
+ * Never `fiatFractionDigits`: that table is a display convention this app may
+ * change on any deploy, and a published record whose meaning moved with it
+ * would be a different price after an unrelated release.
+ */
+const EDITOR_PRICE_EXPONENT = 2;
+
+/**
  * The description editor, inside the settings sheet rather than on every card.
  *
  * One entry point: a control per offer row would put a second "publish" button
@@ -1721,6 +1740,62 @@ function describeSection(
     shelfLabel.append(shelfField);
     wrap.append(shelfLabel);
 
+    /*
+     * The price (STLD tag 0x02): what the seller asks for one whole token.
+     *
+     * Two units, and no more. `usd` is what most sellers think in; `xec` is
+     * the chain's own unit, and it is the only figure that does not go stale
+     * behind a printed QR. Both at two decimal places, which is what the
+     * record's exponent byte carries — never `fiatFractionDigits`, a display
+     * table this app may change on any deploy.
+     *
+     * Offered only for a fungible token (`isPriceable`), because the figure is
+     * per whole token and because a permanent record must not be written about
+     * a row whose kind this page could not read.
+     */
+    const priceWrap = el('div', 'desc-price');
+    priceWrap.setAttribute('data-role', 'describe-price-field');
+    const priceAmountLabel = el('label', 'paste-label', copy.DESC_PRICE_LABEL);
+    const priceAmount = el('input', 'paste-in');
+    priceAmount.type = 'text';
+    priceAmount.name = 'describe-price';
+    priceAmount.inputMode = 'decimal';
+    priceAmount.autocomplete = 'off';
+    priceAmount.spellcheck = false;
+    priceAmount.maxLength = 24;
+    priceAmount.setAttribute('data-role', 'describe-price');
+    priceAmount.setAttribute('data-focus-key', 'describe-price');
+    priceAmountLabel.append(priceAmount);
+    const priceCodeLabel = el('label', 'paste-label', copy.DESC_PRICE_CODE_LABEL);
+    const priceCode = el('select', 'paste-in');
+    priceCode.name = 'describe-price-code';
+    priceCode.setAttribute('data-role', 'describe-price-code');
+    priceCode.setAttribute('data-focus-key', 'describe-price-code');
+    for (const code of EDITABLE_PRICE_CODES) {
+        const opt = el('option', undefined, code.toUpperCase());
+        opt.value = code;
+        priceCode.append(opt);
+    }
+    priceCodeLabel.append(priceCode);
+    priceWrap.append(priceAmountLabel, priceCodeLabel);
+    wrap.append(priceWrap);
+    const priceLede = el('p', 'fine', copy.DESC_PRICE_LEDE);
+    wrap.append(priceLede);
+    const priceWhy = el('p', 'fine', copy.DESC_PRICE_NOT_PRICEABLE);
+    priceWhy.setAttribute('data-role', 'describe-price-why');
+    priceWhy.hidden = true;
+    wrap.append(priceWhy);
+    /*
+     * The seller's own figure, read back from the record they signed — its own
+     * role, never `fiat`. That node is a conversion of the covenant's asked
+     * amount; this is a number the seller wrote, and nothing on this page
+     * converts it (CLAUDE §8).
+     */
+    const sellerPriceLine = el('p', 'fine', '');
+    sellerPriceLine.setAttribute('data-role', 'seller-price');
+    sellerPriceLine.hidden = true;
+    wrap.append(sellerPriceLine);
+
     const counter = el('p', 'fine', '');
     counter.setAttribute('data-role', 'describe-bytes');
     wrap.append(counter);
@@ -1782,34 +1857,88 @@ function describeSection(
         const text = field.value;
         const shelf = shelfField.value;
         const used = descriptionBytes(text);
-        // One meter for both fields, in record bytes against the shared
-        // ceiling — two meters would promise two budgets where there is one,
-        // and the 180-byte text cap alone cannot say why a shelf was refused.
+
+        // Per whole token, and only for a fungible one: no field at all
+        // otherwise, with the line saying why in its place.
+        const priceable = isPriceable(tokenId, view.tokens.get(tokenId));
+        priceWrap.hidden = !priceable;
+        priceLede.hidden = !priceable;
+        priceWhy.hidden = priceable;
+
+        const published = view.prices?.get(tokenId);
+        // Whether the field on screen can express what the chain already says.
+        const editable =
+            priceable &&
+            published !== undefined &&
+            (EDITABLE_PRICE_CODES as readonly string[]).includes(published.code);
+        /*
+         * A published price this field cannot express is carried forward
+         * untouched, not dropped — whichever reason it cannot: a unit this
+         * editor does not write, or a token `isPriceable` refuses because its
+         * genesis read failed, which is our gap and not a fact about the
+         * seller. A publish restates the whole document, so erasing a field
+         * this app merely could not show would destroy a permanent record as a
+         * side effect of fixing a typo. The seller's own figure, once typed,
+         * wins over it — so there is no record this sheet can reach but never
+         * change.
+         */
+        const carriedPrice = editable ? undefined : published;
+        const figure = priceable ? priceAmount.value.trim() : '';
+        const typedPrice =
+            figure === ''
+                ? undefined
+                : parsePriceFigure(figure, priceCode.value, EDITOR_PRICE_EXPONENT);
+        const priceRefused = figure !== '' && typedPrice === undefined;
+        const price = typedPrice ?? carriedPrice;
+
+        // Read back what the chain says, in the unit it says it — never a
+        // conversion, and never for a code this editor could not have written.
+        sellerPriceLine.hidden = !editable;
+        sellerPriceLine.textContent =
+            published === undefined || !editable
+                ? ''
+                : copy.sellerPrice(formatPriceFigure(published), published.code.toUpperCase());
+
+        // One meter for every field, in record bytes against the shared
+        // ceiling — three meters would promise three budgets where there is
+        // one, and the 180-byte text cap alone cannot say why a shelf or a
+        // price was refused.
         counter.textContent = copy.descBytesLeft(
-            descriptionRecordBytes(text, shelf),
+            descriptionRecordBytes(text, shelf, price),
             OP_RETURN_BUDGET,
         );
 
-        const empty = text === '' && shelf === '';
-        const hex = empty
-            ? undefined
-            : encodeDescriptionHex(tokenId, text, {
-                  shelf: shelf === '' ? undefined : shelf,
-              });
+        // Nothing asked of the record yet, which is not a refusal and gets no
+        // error. A figure that was typed and cannot be written **is** asked of
+        // it, so it does not count as untouched — otherwise the one refusal a
+        // seller can reach with the other fields blank would print nothing.
+        const empty = text === '' && shelf === '' && price === undefined && !priceRefused;
+        const hex =
+            empty || priceRefused
+                ? undefined
+                : encodeDescriptionHex(tokenId, text, {
+                      shelf: shelf === '' ? undefined : shelf,
+                      price,
+                  });
         const ready = hex !== undefined;
         err.hidden = ready || empty;
         // Which rule bit, most specific first: the text's own caps, then the
-        // shared record budget, then the text's screen, then the shelf's.
+        // price's own shape, then the shared record budget, then the text's
+        // screen, then the shelf's.
         err.textContent =
             used > MAX_DESCRIPTION_BYTES
                 ? copy.DESC_TOO_LONG
                 : /[\r\n]/.test(text)
                   ? copy.DESC_ONE_LINE
-                  : descriptionRecordBytes(text, shelf) > OP_RETURN_BUDGET
-                    ? copy.DESC_OVER_BUDGET
-                    : text !== '' && encodeDescriptionHex(tokenId, text) === undefined
-                      ? copy.DESC_REFUSED
-                      : copy.DESC_SHELF_REFUSED;
+                  : priceRefused
+                    ? copy.DESC_PRICE_REFUSED
+                    : descriptionRecordBytes(text, shelf, price) > OP_RETURN_BUDGET
+                      ? price === undefined
+                          ? copy.DESC_OVER_BUDGET
+                          : copy.DESC_OVER_BUDGET_PRICED
+                      : text !== '' && encodeDescriptionHex(tokenId, text) === undefined
+                        ? copy.DESC_REFUSED
+                        : copy.DESC_SHELF_REFUSED;
 
         bytes.hidden = !ready;
         bytes.textContent = ready ? hex : '';
@@ -1835,12 +1964,24 @@ function describeSection(
             qrBox.hidden = true;
         }
 
-        // Only offered when this page found something to remove — words or a
-        // shelf, since one removal record erases the whole document for this
-        // token. Publishing a removal over nothing costs a fee and changes
-        // nothing.
-        const existing = view.descriptions?.get(tokenId) ?? view.shelves?.get(tokenId);
-        const removalHex = existing === undefined ? undefined : encodeRemovalHex(tokenId);
+        // Only offered when this page found something to remove — words, a
+        // shelf or a price, since one removal record erases the whole document
+        // for this token. Publishing a removal over nothing costs a fee and
+        // changes nothing.
+        //
+        // And it carries every field that is not the words: a removal says
+        // "take the words away", and one that restated nothing else would take
+        // the shelf and the figure off the chain with them.
+        const publishedShelf = view.shelves?.get(tokenId);
+        const existing =
+            view.descriptions?.get(tokenId) ?? publishedShelf ?? published;
+        const removalHex =
+            existing === undefined
+                ? undefined
+                : encodeRemovalHex(tokenId, {
+                      shelf: publishedShelf,
+                      price: published,
+                  });
         const canRemove = removalHex !== undefined;
         remove.hidden = !canRemove;
         removeLede.hidden = !canRemove;
@@ -1893,14 +2034,34 @@ function describeSection(
         }
     });
     shelfField.addEventListener('input', refresh);
+    priceAmount.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
+    priceAmount.addEventListener('input', refresh);
+    priceCode.addEventListener('change', refresh);
+    /**
+     * Every field belongs to the token, so switching tokens loads that token's
+     * record — words, shelf and figure together. Loading two of the three is
+     * how a publish quietly drops the one it did not load.
+     */
+    const loadToken = (): void => {
+        const tokenId = picker.value;
+        field.value = view.descriptions?.get(tokenId) ?? '';
+        shelfField.value = view.shelves?.get(tokenId) ?? '';
+        const price = view.prices?.get(tokenId);
+        const editable =
+            price !== undefined &&
+            (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code);
+        priceAmount.value = editable ? formatPriceFigure(price) : '';
+        priceCode.value = editable ? price.code : EDITABLE_PRICE_CODES[0];
+    };
     picker.addEventListener('change', () => {
-        // The words belong to the token, so switching tokens loads theirs.
-        field.value = view.descriptions?.get(picker.value) ?? '';
-        shelfField.value = view.shelves?.get(picker.value) ?? '';
+        loadToken();
         refresh();
     });
-    field.value = view.descriptions?.get(picker.value) ?? '';
-    shelfField.value = view.shelves?.get(picker.value) ?? '';
+    loadToken();
     refresh();
     return wrap;
 }
@@ -2057,28 +2218,20 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     announceInput.value = view.announcement ?? '';
     announceLabel.append(announceInput);
 
-    const fiatLabel = el('label', 'paste-label', copy.PUBLISH_FIAT_LABEL);
-    fiatLabel.setAttribute('data-role', 'theme-picker');
-    const fiatSelect = el('select', 'paste-in');
-    fiatSelect.name = 'fiat-hint';
-    fiatSelect.setAttribute('data-role', 'publish-fiat');
-    fiatSelect.setAttribute('data-focus-key', 'publish-fiat');
-    fiatSelect.setAttribute('aria-label', copy.PUBLISH_FIAT_LABEL);
-    {
-        const none = el('option', undefined, copy.DECOR_NONE);
-        none.value = '';
-        fiatSelect.append(none);
-        for (const currency of FIAT_CURRENCIES) {
-            const opt = el('option', undefined, currency.code.toUpperCase());
-            opt.value = currency.code;
-            fiatSelect.append(opt);
-        }
-        fiatSelect.value =
-            view.fiatHint !== undefined && isSupportedFiat(view.fiatHint)
-                ? view.fiatHint
-                : '';
-    }
-    fiatLabel.append(fiatSelect);
+    /*
+     * Tag 0x04, the seller's display-currency suggestion, has **no control
+     * here**: one currency above the table (CLAUDE §8), so a suggestion has
+     * nothing to suggest. It is still carried forward untouched — a republish
+     * restates the whole document, and erasing a field this app merely stopped
+     * editing would take it off the chain as a side effect of renaming a stall.
+     * Any three lowercase letters, not only a code this build's display table
+     * knows: the record's field is wider than the table, and narrowing it here
+     * would drop a code somebody signed.
+     */
+    const carriedFiatHint =
+        view.fiatHint !== undefined && /^[a-z]{3}$/.test(view.fiatHint)
+            ? view.fiatHint
+            : undefined;
 
     const budget = el('p', 'fine', '');
     budget.setAttribute('data-role', 'publish-budget');
@@ -2110,7 +2263,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const refresh = (): void => {
         const extras = {
             tagline: taglineInput.value === '' ? undefined : taglineInput.value,
-            fiatHint: fiatSelect.value === '' ? undefined : fiatSelect.value,
+            fiatHint: carriedFiatHint,
             announcement: announceInput.value === '' ? undefined : announceInput.value,
         };
         // The record never names an unminted row's bit — previewing one is
@@ -2180,7 +2333,6 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     input.addEventListener('input', refresh);
     taglineInput.addEventListener('input', refresh);
     announceInput.addEventListener('input', refresh);
-    fiatSelect.addEventListener('change', refresh);
 
     const reportPreview = (themeId: number, chosenFlags: number): void => {
         const recordTheme = view.theme?.id ?? DEFAULT_THEME.id;
@@ -2299,7 +2451,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
 
     renderDecor(painted);
-    form.append(label, taglineLabel, announceLabel, themeLabel, fiatLabel, budget, err, sameLook, decorWrap);
+    form.append(label, taglineLabel, announceLabel, themeLabel, budget, err, sameLook, decorWrap);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
@@ -3619,8 +3771,6 @@ function stallFooter(
         // there. Everywhere else the link belongs to the studio's share block.
         share: hasStudio ? false : (opts.share ?? true),
         goHome: handlers.onGoHome,
-        fiatCode: view.fiatCode,
-        onChangeFiat: handlers.onChangeFiat,
         defaultStall:
             !hasStudio && raw !== undefined && onToggle !== undefined
                 ? { raw, isDefault: view.isDefaultStall === true, onToggle }
@@ -3647,8 +3797,6 @@ function footer(
         share?: boolean;
         goHome?: () => void;
         defaultStall?: { raw: string; isDefault: boolean; onToggle: (raw: string) => void };
-        fiatCode?: string;
-        onChangeFiat?: (code: string) => void;
     },
 ): HTMLElement {
     // The address is the sign's now, not the footer's: it names the shop, so it
@@ -3678,10 +3826,14 @@ function footer(
     if (extra?.share === true) {
         ft.append(shareControl());
     }
-    const onFiat = extra?.onChangeFiat;
-    if (onFiat !== undefined) {
-        ft.append(fiatPicker(extra?.fiatCode ?? '', onFiat));
-    }
+    /*
+     * No currency control. One currency above the table (CLAUDE §8): the
+     * glance beside a covenant is `usd` for every visitor, and a picker here
+     * would let one browser read a seller's shop in a unit nothing on it was
+     * written in. `FIAT_CURRENCIES` and `onChangeFiat` both stay for the day
+     * that changes. Test:
+     * `the-visitor-has-no-currency-control-and-the-glance-is-usd`.
+     */
     return ft;
 }
 
@@ -3935,31 +4087,6 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
 
 function shareUrl(): string {
     return `${location.origin}${location.pathname}${location.search}`;
-}
-
-/**
- * Which currency the fiat line is read in. A display preference, kept in
- * `localStorage` like the default stall — never anything that grows, never a
- * key. The list is the one the feed answers for, so a choice here cannot ask
- * for a code that silently returns nothing.
- */
-function fiatPicker(code: string, onChange: (code: string) => void): HTMLElement {
-    const label = el('label', 'paste-label', copy.FIAT_LABEL);
-    const select = el('select', 'paste-in');
-    select.name = 'fiat';
-    select.setAttribute('data-role', 'fiat-picker');
-    select.setAttribute('data-focus-key', 'fiat-picker');
-    for (const c of FIAT_CURRENCIES) {
-        const opt = el('option', undefined, `${c.name} (${c.symbol})`);
-        opt.value = c.code;
-        if (c.code === code) {
-            opt.selected = true;
-        }
-        select.append(opt);
-    }
-    select.addEventListener('change', () => onChange(select.value));
-    label.append(select);
-    return label;
 }
 
 function shareControl(): HTMLElement {

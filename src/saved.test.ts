@@ -8,6 +8,8 @@ import {
     pinnedDoorIsFull,
     pinStall,
     readPinnedStalls,
+    hasSavedFiat,
+    readSavedFiat,
     readSavedStall,
     saveStall,
     unpinStall,
@@ -147,5 +149,33 @@ describe('storage-failure-is-not-a-broken-stall', () => {
         expect(() => pinStall(ADDRESS)).not.toThrow();
         expect(() => unpinStall(ADDRESS)).not.toThrow();
         expect(() => pinnedDoorIsFull()).not.toThrow();
+    });
+});
+
+describe('a-saved-currency-that-is-not-usd-is-cleared', () => {
+    /**
+     * One currency above the table (CLAUDE §8). `FIAT_CURRENCIES` is untouched
+     * — six assertions rest on it and the `symbolAfter` rule must survive a
+     * re-widening — but nothing paints a picker any more, so a code stored by
+     * an earlier build has no control that could change it back. Left in place
+     * it would silently pin one browser to a currency forever. It is removed on
+     * the read that finds it, not merely ignored.
+     */
+    it('answers usd and takes the stale key out of storage', () => {
+        localStorage.setItem('stall.fiat', 'vnd');
+        expect(readSavedFiat()).toBe('usd');
+        expect(localStorage.getItem('stall.fiat'), 'and it is gone').toBeNull();
+        expect(hasSavedFiat()).toBe(false);
+    });
+
+    it('leaves a usd key alone, and survives storage being unavailable', () => {
+        localStorage.setItem('stall.fiat', 'usd');
+        expect(readSavedFiat()).toBe('usd');
+        expect(localStorage.getItem('stall.fiat')).toBe('usd');
+
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('denied');
+        });
+        expect(readSavedFiat()).toBe('usd');
     });
 });

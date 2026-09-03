@@ -74,6 +74,41 @@ export function categoryOf(meta: TokenMeta | undefined): Category {
     return 'unsorted';
 }
 
+/**
+ * The category one row is filed under — the catalogue's override included.
+ *
+ * Factored out of `sectionsOf` so the editor and, later, the painter ask
+ * exactly the question the sections answer. The catalogue is asked first and
+ * by token id, so a decoration that is fungible on chain is still a
+ * decoration; a token that merely shares a ticker with one is not.
+ */
+export function rowCategoryOf(
+    tokenId: string,
+    meta: TokenMeta | undefined,
+    lookOf: (tokenId: string) => DecorPlace | undefined = defaultLookOf,
+): Category {
+    return lookOf(tokenId) === undefined ? categoryOf(meta) : 'decor';
+}
+
+/**
+ * Whether a seller may put a price on this row (STLD tag 0x02).
+ *
+ * **Affirmative, never a suppression list.** `categoryOf` answers `unsorted`
+ * whenever the metadata has not arrived or its read failed, so a predicate
+ * shaped as "not an NFT" would let a permanent record be written about a token
+ * this page knows nothing about. Fungible, or no field at all.
+ *
+ * Price is per **whole token**, and quantity is whole tokens — which is the
+ * other half of why an NFT is excluded rather than merely awkward.
+ */
+export function isPriceable(
+    tokenId: string,
+    meta: TokenMeta | undefined,
+    lookOf: (tokenId: string) => DecorPlace | undefined = defaultLookOf,
+): boolean {
+    return rowCategoryOf(tokenId, meta, lookOf) === 'etoken';
+}
+
 /** True when this row is an NFT that was minted from a group. */
 export function isNftChild(meta: TokenMeta | undefined): boolean {
     return meta?.tokenType?.type === 'SLP_TOKEN_TYPE_NFT1_CHILD';
@@ -136,13 +171,9 @@ export function sectionsOf(
 ): CategorySection[] {
     const buckets = new Map<Category, StallOffer[]>();
     for (const offer of offers) {
-        // The catalogue is asked first, and it is asked by token id. A row in
-        // it is a decoration whatever its genesis says it is called — and a
-        // token that merely shares a ticker with one is not.
-        const category =
-            lookOf(offer.tokenId) === undefined
-                ? categoryOf(tokens.get(offer.tokenId))
-                : 'decor';
+        // One decision, shared with `isPriceable`: the catalogue is asked
+        // first, and it is asked by token id.
+        const category = rowCategoryOf(offer.tokenId, tokens.get(offer.tokenId), lookOf);
         const list = buckets.get(category);
         if (list === undefined) {
             buckets.set(category, [offer]);
