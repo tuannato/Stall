@@ -748,7 +748,8 @@
     background-image: linear-gradient(rgba(44, 233, 224, 0.3) 0 0);
 }
 
-.t-neo .event::before {
+/* The dot moved onto the summary when the row became a disclosure. */
+.t-neo .event-sum::before {
     border-radius: 0;
     box-shadow: 0 0 10px rgba(44, 233, 224, 0.6);
 }

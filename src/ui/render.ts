@@ -41,6 +41,7 @@ import {
     type ShippedAttachment,
 } from '../domain/attachments';
 import type {
+    EventStatus,
     FetchStatus,
     HostAttempt,
     Outpoint,
@@ -49,11 +50,13 @@ import type {
     RouteWhy,
     ShopSort,
     StallEvent,
+    StallHistory,
     StallOffer,
     StallView,
     TokenMeta,
 } from '../domain/state';
-import { MAX_STALL_EVENTS } from '../domain/state';
+import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
+import { EXPLORER_TX_URL } from '../domain/explorer';
 import {
     DEFAULT_THEME,
     DEFAULT_THEME_ID,
@@ -114,6 +117,17 @@ export type StallHandlers = {
      * record's own look back is how a preview ends.
      */
     onPreviewLook?: (preview: { themeId: number; attachmentFlags: number } | undefined) => void;
+    /**
+     * Read one more page of this address's history.
+     *
+     * **A plain handler, called by whatever asks.** The panel's control calls
+     * it, and so does an `IntersectionObserver` on the sentinel when the
+     * reader scrolls to the foot of the list — the observer is an
+     * accelerator, never the mechanism, because happy-dom's is a no-op and a
+     * paging path only a real browser can reach is a paging path no test can
+     * drive. The app decides which page that is; the panel never counts.
+     */
+    onReadHistoryPage?: () => void;
 };
 
 /**
@@ -3643,20 +3657,44 @@ function posterSheet(
 }
 
 /**
- * The activity panel: what this page watched arrive, said honestly.
+ * Where the reader was in the Activity panel, per stall, for this page load.
  *
- * The list never stands in for coverage it does not have: screens with no
- * live socket say "not watching" instead of showing an empty feed (an empty
- * list there would be a statement about us painted as one about the seller —
- * the §4 collapse); a known gap says activity may be missing; the caption
- * dates from the last full load, because `refresh()` empties the ring.
+ * `renderStall` starts with `replaceChildren()`, so every unsolicited paint —
+ * a stranger's dust on the script subscription is enough — used to throw a
+ * reader halfway down the history straight back to the top. Module state
+ * rather than view state on purpose: a scroll offset is not a fact about the
+ * stall, and routing it through the app would repaint on every scroll event,
+ * which is the thing this exists to survive. Keyed by identity so switching
+ * stalls does not restore somebody else's place, and never persisted.
+ */
+let activityScroll: { key: string; top: number } | undefined;
+
+/**
+ * The activity panel: what this page watched arrive, and what a reader asked
+ * the address's history for.
+ *
+ * **Two lists, two clocks, two caps** — mixing them is the same collapse §4
+ * warns about wearing a clock. "Watching" is the live ring on the page clock,
+ * capped at `MAX_STALL_EVENTS`; "History" is a walk on the chain's clock,
+ * capped at `MAX_ACTIVITY_PAGES` round trips. One list holding both would
+ * truncate the walk to fifty rows and date them from a clock that never saw
+ * them.
+ *
+ * Neither list stands in for coverage it does not have: screens with no live
+ * socket say "not watching" instead of showing an empty feed (an empty list
+ * there would be a statement about us painted as one about the seller); a
+ * known gap says activity may be missing; the caption dates from the last full
+ * load, because `refresh()` empties the ring; and the history is walked only
+ * when a reader asks, because it is round trips against somebody's index.
  */
 function paintActivity(
-    stall: HTMLElement,
+    // The shell's scroll region, which is what a reader's place is measured
+    // in: the panel paints into it and `historyControl` observes it.
+    scroller: HTMLElement,
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(
+    scroller.append(
         header(
             displayName(view),
             copy.ACTIVITY_SUB,
@@ -3669,76 +3707,384 @@ function paintActivity(
     const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
     if (!watching) {
         body.append(el('p', 'note', copy.ACTIVITY_NOT_WATCHING));
-        stall.append(body);
+        scroller.append(body);
         return;
     }
+    // Said once, before the rows: this tab is public, and a panel that read
+    // like the seller's own ledger would invite somebody to treat it as one.
+    body.append(el('p', 'fine', copy.ACTIVITY_PUBLIC));
+    body.append(watchingSection(view));
+    body.append(historySection(view, handlers, scroller));
+    scroller.append(body);
+
+    const key = identityOf(view) ?? '';
+    scroller.addEventListener(
+        'scroll',
+        () => {
+            activityScroll = { key, top: scroller.scrollTop };
+        },
+        { passive: true },
+    );
+    // After the tree is built, and after it is connected: a browser does not
+    // keep `scrollTop` on a detached node, so this rides a microtask the way
+    // the sheets' focus hand-off does.
+    const saved = activityScroll?.key === key ? activityScroll.top : 0;
+    if (saved > 0) {
+        queueMicrotask(() => {
+            if (scroller.isConnected) {
+                scroller.scrollTop = saved;
+            }
+        });
+    }
+}
+
+/** The heading shape the studio's sections already use. */
+function sectionTitle(text: string): HTMLElement {
+    const head = el('div', 'section-head');
+    head.append(el('h2', 'section-title', text));
+    return head;
+}
+
+/** The live ring: what this page watched arrive, on this page's clock. */
+function watchingSection(view: StallView): HTMLElement {
+    const wrap = el('section', 'activity-sec');
+    wrap.setAttribute('data-role', 'activity-watching');
+    wrap.append(sectionTitle(copy.ACTIVITY_WATCHING_TITLE));
     if (view.watchedSinceMs !== undefined) {
         // Its own class, never `:first-child`: the design's live chip must not
         // leak onto whatever paragraph happens to lead another screen's body.
-        body.append(
+        wrap.append(
             el('p', 'fine activity-lede', copy.activitySince(formatTriedAt(view.watchedSinceMs))),
         );
     }
     if ((view.activityGaps ?? 0) > 0) {
-        body.append(el('p', 'note', copy.ACTIVITY_GAPS));
+        wrap.append(el('p', 'note', copy.ACTIVITY_GAPS));
     }
     const events = view.events ?? [];
     if (events.length === 0) {
-        body.append(el('p', 'mid-p', copy.ACTIVITY_QUIET));
-    } else {
-        // An <ol>, because the feed IS an ordered list — a reader hears
-        // "list, N items" instead of a run of unrelated lines.
-        const list = el('ol', 'events');
-        list.setAttribute('data-role', 'events');
-        for (const event of events) {
-            list.append(eventRow(event));
-        }
-        body.append(list);
-        if (events.length >= MAX_STALL_EVENTS) {
-            // A full ring has already dropped its oldest rows in silence.
-            // The lede promises "what this page has seen arrive", and a
-            // rolled ring has seen more than it shows — say so.
-            body.append(el('p', 'fine', copy.activityCapped(MAX_STALL_EVENTS)));
-        }
+        wrap.append(el('p', 'mid-p', copy.ACTIVITY_QUIET));
+        return wrap;
     }
-    stall.append(body);
+    // An <ol>, because the feed IS an ordered list — a reader hears
+    // "list, N items" instead of a run of unrelated lines.
+    const list = el('ol', 'events');
+    list.setAttribute('data-role', 'events');
+    for (const event of events) {
+        list.append(eventRow(event));
+    }
+    wrap.append(list);
+    if (events.length >= MAX_STALL_EVENTS) {
+        // A full ring has already dropped its oldest rows in silence.
+        // The lede promises "what this page has seen arrive", and a
+        // rolled ring has seen more than it shows — say so.
+        wrap.append(el('p', 'fine', copy.activityCapped(MAX_STALL_EVENTS)));
+    }
+    return wrap;
 }
 
 /**
- * One watched transaction. The kind label says only what the classifier
- * proves — `book` never says "sold": a cancel and a fully-taken offer are the
- * same shape on the wire. The txid is shortened for a glance; it is data,
- * not a link — this page links out to a market, not to an explorer, and a
- * row must not grow a control the visitor did not ask for.
+ * The walk: what a reader asked this address's history for.
+ *
+ * Every state it can be in says which it is, because they are four different
+ * things and three of them are about us: a page in flight, a page that did not
+ * answer, the end of the address's history, and our own page ceiling. Only the
+ * third is a fact about the seller, and it is the only one worded as one.
+ */
+function historySection(
+    view: StallView,
+    handlers: StallHandlers,
+    scroller: HTMLElement,
+): HTMLElement {
+    const wrap = el('section', 'activity-sec');
+    wrap.setAttribute('data-role', 'activity-history');
+    wrap.append(sectionTitle(copy.ACTIVITY_HISTORY_TITLE));
+    wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_LEDE));
+    const history: StallHistory = view.history ?? { rows: [], pagesRead: 0 };
+    if (history.rows.length > 0) {
+        const list = el('ol', 'events');
+        list.setAttribute('data-role', 'history');
+        for (const row of history.rows) {
+            list.append(eventRow(row));
+        }
+        wrap.append(list);
+        // Only where a row could carry the label: a note about decorations on
+        // a list holding none is chrome explaining a case that is not there.
+        if (history.rows.some((row) => row.kind === 'token-move')) {
+            wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_DECOR_NOTE));
+        }
+    }
+    if (history.failed === true) {
+        wrap.append(el('p', 'note', copy.ACTIVITY_HISTORY_FAILED));
+    }
+    if (history.loading === true) {
+        wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_LOADING));
+    }
+    if (history.done === true) {
+        wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_END));
+    } else if (history.capped === true) {
+        wrap.append(el('p', 'note', copy.activityHistoryCapped(MAX_ACTIVITY_PAGES)));
+    } else {
+        wrap.append(historyControl(history, handlers, scroller));
+    }
+    return wrap;
+}
+
+/**
+ * The one control that reads a page, and the sentinel that also calls it.
+ *
+ * A control rather than an automatic walk: this is up to ten round trips
+ * against somebody's chronik index, any visitor can start one, and the cost is
+ * theirs to spend. It is also the keyboard path — an observer-only trigger is
+ * unreachable without a pointer, which would be a paging list nobody using a
+ * keyboard could page.
+ *
+ * The observer **only calls the same handler**, and only after a scroll that
+ * followed the last paint: a repaint rebuilds this subtree, so a sentinel that
+ * armed itself on mount would fire a page read for every stranger's dust that
+ * landed while the panel was open.
+ */
+function historyControl(
+    history: StallHistory,
+    handlers: StallHandlers,
+    scroller: HTMLElement,
+): HTMLElement {
+    const wrap = el('div', 'history-foot');
+    const retry = history.failed === true;
+    const button = el(
+        'button',
+        'mini',
+        retry
+            ? copy.ACTIVITY_HISTORY_RETRY
+            : history.loading === true
+              ? copy.ACTIVITY_HISTORY_LOADING
+              : history.pagesRead === 0
+                ? copy.ACTIVITY_HISTORY_READ
+                : copy.ACTIVITY_HISTORY_MORE,
+    );
+    button.type = 'button';
+    button.setAttribute('data-role', retry ? 'history-retry' : 'history-more');
+    button.setAttribute('data-focus-key', 'history-page');
+    // One page in flight. A fast reader pressing four times would otherwise
+    // spend four round trips to be told the same page four times.
+    button.disabled = history.loading === true;
+    const ask = (): void => {
+        if (history.loading === true) {
+            return;
+        }
+        handlers.onReadHistoryPage?.();
+    };
+    button.addEventListener('click', ask);
+    wrap.append(button);
+
+    // In flow and empty: a sentinel the probe can measure, never a positioned
+    // pseudo-element.
+    const sentinel = el('div', 'history-sentinel');
+    sentinel.setAttribute('data-role', 'history-sentinel');
+    sentinel.setAttribute('aria-hidden', 'true');
+    wrap.append(sentinel);
+
+    if (typeof IntersectionObserver === 'function') {
+        let armed = false;
+        const onScroll = (): void => {
+            armed = true;
+        };
+        scroller.addEventListener('scroll', onScroll, { passive: true });
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (!armed || !entries.some((entry) => entry.isIntersecting)) {
+                    return;
+                }
+                // Disarmed before the ask, so one gesture buys one page even
+                // if the observer fires again before the paint lands.
+                armed = false;
+                ask();
+            },
+            { root: scroller },
+        );
+        observer.observe(sentinel);
+    }
+    return wrap;
+}
+
+/**
+ * One transaction at this stall: a glance line that is data, and a fold that
+ * is the record.
+ *
+ * The kind label says only what the classifier proves — `book` never says
+ * "sold": a cancel and a fully-taken offer are the same shape on the wire.
+ *
+ * **The glance line carries no control, and the fold carries all of them.**
+ * The txid used to be shortened text and nothing else, with a standing comment
+ * saying this page links out to a market rather than to an explorer. That
+ * sentence was about `action=BUY` (§2), which takes the cheapest affordable
+ * offer and can quietly sell a competitor's tokens from a seller's own stall.
+ * A link to the public record of *this* transaction is the opposite kind of
+ * thing: a citation of a fact the row already states, on a page anyone can
+ * read, that cannot transact. What the old comment was really defending is
+ * kept and made stricter — a row must not grow a control the visitor did not
+ * ask for, so every control lives behind the disclosure they opened.
  */
 function eventRow(event: StallEvent): HTMLElement {
     const row = el('li', 'event');
-    row.append(el('span', 'event-time', formatTriedAt(event.seenAtMs)));
-    row.append(el('span', 'event-kind', eventLabel(event.kind, event.book)));
-    row.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
+    const fold = el('details', 'event-fold');
+    fold.setAttribute('data-role', 'event-detail');
+    const glance = el('summary', 'event-sum');
+    const at = eventTime(event);
+    if (at !== undefined) {
+        glance.append(el('span', 'event-time', at.text));
+    }
+    glance.append(el('span', 'event-kind', eventLabel(event)));
+    glance.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
+    // A real node, because `summary { display: grid }` drops the browser's own
+    // marker and a fold with nothing saying it opens is a fold nobody opens.
+    const caret = el('span', 'event-caret', '›');
+    caret.setAttribute('aria-hidden', 'true');
+    glance.append(caret);
+    fold.append(glance);
+
+    const body = el('div', 'event-body');
+    body.setAttribute('data-role', 'event-body');
+    const dl = el('dl', 'event-fields');
+    // The txid takes a row of its own: 64 characters beside a label at 390px
+    // is exactly the incident the probe's label rule was written for, and this
+    // one is longer than the token id that caused it.
+    const txidKey = el('dt', 'event-dt wide', copy.EVENT_TXID_LABEL);
+    const txidValue = el('dd', 'event-dd wide');
+    const full = el('code', 'event-txid-full', event.txid);
+    full.setAttribute('data-role', 'event-txid-full');
+    txidValue.append(full);
+    txidValue.append(copyTxidControl(event.txid));
+    dl.append(txidKey, txidValue);
+
+    if (at !== undefined) {
+        const key = el('dt', 'event-dt', at.label);
+        key.setAttribute('data-role', 'event-time-label');
+        dl.append(key, el('dd', 'event-dd', at.text));
+    }
+    dl.append(el('dt', 'event-dt', copy.EVENT_KIND_LABEL));
+    dl.append(el('dd', 'event-dd', eventLabel(event)));
+
+    // Only when every output to the stall carried a figure and the stall was
+    // not on the input side. Absent is absent: a zero here would be a number,
+    // and a wrong one.
+    if (event.sats !== undefined) {
+        dl.append(el('dt', 'event-dt', copy.EVENT_AMOUNT_LABEL));
+        const amount = el('dd', 'event-dd', copy.eventReceived(formatXec(event.sats)));
+        amount.setAttribute('data-role', 'receipt-amount');
+        dl.append(amount);
+    }
+
+    dl.append(el('dt', 'event-dt', copy.EVENT_STATUS_LABEL));
+    const status = el('dd', 'event-dd', eventStatusLabel(event.status));
+    status.setAttribute('data-role', 'event-status');
+    dl.append(status);
+
+    // Gated at 64 lowercase hex, so the burst's `UNKNOWN_TXID` stand-in — a
+    // message that named no transaction — never becomes an href.
+    body.append(dl);
+    const url = EXPLORER_TX_URL(event.txid);
+    if (url !== undefined) {
+        const link = el('a', 'mini another event-out', copy.EVENT_OPEN_EXPLORER);
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.setAttribute('data-role', 'event-explorer');
+        body.append(link);
+    }
+    fold.append(body);
+    row.append(fold);
     return row;
 }
 
-function eventLabel(kind: StallEvent['kind'], book?: StallEvent['book']): string {
-    switch (kind) {
+/** Copy one txid, with the same clipboard-then-select fallback the link uses. */
+function copyTxidControl(txid: string): HTMLElement {
+    const btn = el('button', 'mini event-copy', copy.EVENT_COPY_TXID);
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'event-copy');
+    btn.addEventListener('click', () => {
+        const clipboard = navigator.clipboard;
+        if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
+            void clipboard.writeText(txid).then(
+                () => {
+                    btn.textContent = copy.EVENT_TXID_COPIED;
+                },
+                () => {
+                    btn.textContent = copy.EVENT_TXID_SELECT;
+                },
+            );
+            return;
+        }
+        btn.textContent = copy.EVENT_TXID_SELECT;
+    });
+    return btn;
+}
+
+/**
+ * Which clock a row is entitled to print, and what to call it.
+ *
+ * The page clock when this page watched it arrive; the chain's when it did
+ * not. **Never a fallback to `Date.now()`** — a walked row dated "just now"
+ * would be the panel claiming to have seen something it read out of history
+ * long afterwards. A row with neither clock prints no time at all.
+ */
+function eventTime(event: StallEvent): { label: string; text: string } | undefined {
+    if (event.seenAtMs !== undefined) {
+        return {
+            label: copy.EVENT_TIME_PAGE_LABEL,
+            text: formatTriedAt(event.seenAtMs),
+        };
+    }
+    if (event.chainTimeS !== undefined) {
+        return {
+            label: copy.EVENT_TIME_CHAIN_LABEL,
+            text: formatTriedAt(event.chainTimeS * 1000),
+        };
+    }
+    return undefined;
+}
+
+function eventStatusLabel(status: EventStatus | undefined): string {
+    // Absent and `unknown` are the same sentence, and it is the honest one: a
+    // missing flag is this page not knowing, never a mempool sighting.
+    if (status === undefined || status.kind === 'unknown') {
+        return copy.EVENT_STATUS_UNKNOWN;
+    }
+    if (status.kind === 'finalized') {
+        return status.avalanche
+            ? copy.EVENT_STATUS_FINALIZED_AVALANCHE
+            : copy.EVENT_STATUS_FINALIZED;
+    }
+    return status.height === undefined
+        ? copy.EVENT_STATUS_IN_BLOCK
+        : copy.eventStatusInBlock(status.height);
+}
+
+function eventLabel(event: StallEvent): string {
+    switch (event.kind) {
         case 'book':
             // Only what the plugin entries proved. `consumed` covers a take
             // and a cancel alike — the wire cannot tell them apart, so the
             // row never says "sold".
-            if (book === 'consumed') {
+            if (event.book === 'consumed') {
                 return copy.EVENT_BOOK_CONSUMED;
             }
-            if (book === 'appeared') {
+            if (event.book === 'appeared') {
                 return copy.EVENT_BOOK_APPEARED;
             }
-            if (book === 'both') {
+            if (event.book === 'both') {
                 return copy.EVENT_BOOK_BOTH;
             }
             return copy.EVENT_BOOK;
         case 'settings':
-            return copy.EVENT_SETTINGS;
+            // `false` only where the walk actually checked. The live path
+            // leaves it absent, and absent must not read as a stranger's.
+            return event.signedByStall === false
+                ? copy.EVENT_SETTINGS_STRANGER
+                : copy.EVENT_SETTINGS;
         case 'description':
-            return copy.EVENT_DESCRIPTION;
+            return event.signedByStall === false
+                ? copy.EVENT_DESCRIPTION_STRANGER
+                : copy.EVENT_DESCRIPTION;
         case 'token-move':
             return copy.EVENT_TOKEN_MOVE;
         case 'other':

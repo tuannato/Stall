@@ -5,8 +5,10 @@ import type { FetchStatus } from '../domain/state';
 import {
     BURST_MS,
     AGORA_PLUGIN,
+    FINALIZATION_PRE_CONSENSUS,
     MAX_BURST_TXIDS,
     MIN_REREAD_MS,
+    TX_FINALIZED,
     UNKNOWN_TXID,
     isDefiniteResult,
     stallGroup,
@@ -57,7 +59,14 @@ function fakeChronik() {
     let opened = false;
     let waits = 0;
     let connects = 0;
-    let onMessage: ((m: { type: string; txid?: string }) => void) | undefined;
+    let onMessage:
+        | ((m: {
+              type: string;
+              txid?: string;
+              msgType?: string;
+              finalizationReasonType?: string;
+          }) => void)
+        | undefined;
     let onConnect: (() => void) | undefined;
     let onReconnect: (() => void) | undefined;
 
@@ -115,6 +124,13 @@ function fakeChronik() {
         /** How many times the watch asked the library to dial. */
         waits: () => waits,
         fire: (type: string, txid?: string) => onMessage?.({ type, txid }),
+        /** A message with the fields chronik actually sends beside the txid. */
+        fireFull: (m: {
+            type: string;
+            txid?: string;
+            msgType?: string;
+            finalizationReasonType?: string;
+        }) => onMessage?.(m),
         /** The socket went away. chronik reports this at the drop, not at the return. */
         drop: () => {
             opened = false;
@@ -138,7 +154,12 @@ function fakeChronik() {
         },
         chronik: {
             ws(config: {
-                onMessage: (m: { type: string; txid?: string }) => void;
+                onMessage: (m: {
+                    type: string;
+                    txid?: string;
+                    msgType?: string;
+                    finalizationReasonType?: string;
+                }) => void;
                 onConnect?: () => void;
                 onReconnect?: () => void;
             }) {
@@ -524,6 +545,105 @@ describe('a-txid-arriving-mid-read-starts-the-next-burst-not-this-one', () => {
         await vi.advanceTimersByTimeAsync(BURST_MS);
         expect(bursts[1], 'and the newcomer is not lost').toEqual([TXID_B]);
         expect(reads, 'two bursts, two reads').toBe(2);
+
+        handle.close();
+        vi.useRealTimers();
+    });
+});
+
+describe('the-live-hook-carries-the-message-type', () => {
+    /**
+     * chronik types every transaction event as `Tx` and says in the same frame
+     * what happened to it — `msgType`, and `finalizationReasonType` when it is
+     * finalized. Both were read off and thrown away here: `onMessage` took
+     * `type` and `txid` and nothing else, so the one place the chain tells this
+     * page a transaction is settled never reached app code, and a row's status
+     * could only ever come from re-fetching a transaction we had just been told
+     * about.
+     *
+     * The txid channel is unchanged — same set, same cap, same `UNKNOWN_TXID`
+     * stand-in — and the status rides beside it as a map, because a burst
+     * carries names the chain said nothing about (the flood stand-in has no
+     * status, and neither does a message whose `msgType` we could not read).
+     */
+    it('hands the burst what chronik said about each txid', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const bursts: Array<{
+            txids: readonly string[];
+            status?: ReadonlyMap<string, { msgType?: string; finalizationReasonType?: string }>;
+        }> = [];
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            {
+                onChanged: () => undefined,
+                onBurst: (txids, status) => bursts.push({ txids: [...txids], status }),
+            },
+        );
+        await f.settle();
+
+        f.fireFull({ type: 'Tx', txid: TXID_A, msgType: 'TX_ADDED_TO_MEMPOOL' });
+        f.fireFull({
+            type: 'Tx',
+            txid: TXID_B,
+            msgType: 'TX_FINALIZED',
+            finalizationReasonType: FINALIZATION_PRE_CONSENSUS,
+        });
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+
+        expect(bursts).toHaveLength(1);
+        expect(bursts[0]!.txids, 'the txid channel is untouched').toEqual([TXID_A, TXID_B]);
+        expect(bursts[0]!.status?.get(TXID_A)).toEqual({ msgType: 'TX_ADDED_TO_MEMPOOL' });
+        expect(bursts[0]!.status?.get(TXID_B)).toEqual({
+            msgType: TX_FINALIZED,
+            finalizationReasonType: FINALIZATION_PRE_CONSENSUS,
+        });
+
+        handle.close();
+        vi.useRealTimers();
+    });
+
+    it('keeps what chronik said last, and says nothing it was not told', async () => {
+        vi.useFakeTimers();
+        const f = fakeChronik();
+        const bursts: Array<
+            ReadonlyMap<string, { msgType?: string; finalizationReasonType?: string }> | undefined
+        > = [];
+        const handle = watchStall(
+            f.chronik as never,
+            { pubkeyHex: '03'.repeat(33), hash: HASH },
+            { onChanged: () => undefined, onBurst: (_ids, status) => bursts.push(status) },
+        );
+        await f.settle();
+
+        // One sale, three frames: the burst reports the last thing the chain
+        // said about it, not the first. A dedupe that kept the mempool frame
+        // would report a settled transaction as unsettled.
+        f.fireFull({ type: 'Tx', txid: TXID_A, msgType: 'TX_ADDED_TO_MEMPOOL' });
+        f.fireFull({ type: 'Tx', txid: TXID_A, msgType: 'TX_CONFIRMED' });
+        f.fireFull({
+            type: 'Tx',
+            txid: TXID_A,
+            msgType: TX_FINALIZED,
+            finalizationReasonType: 'TX_FINALIZATION_REASON_POST_CONSENSUS',
+        });
+        // A frame with no `msgType` at all: a node that sent one we cannot
+        // read, and a status this page must not invent.
+        f.fireFull({ type: 'Tx', txid: TXID_B });
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+
+        expect(bursts[0]?.get(TXID_A)).toEqual({
+            msgType: TX_FINALIZED,
+            finalizationReasonType: 'TX_FINALIZATION_REASON_POST_CONSENSUS',
+        });
+        expect(bursts[0]?.has(TXID_B), 'nothing said is nothing recorded').toBe(false);
+
+        // And the message with no txid takes the stand-in, which has no status
+        // for the same reason: it names no transaction to have one.
+        f.fireFull({ type: 'Tx', msgType: TX_FINALIZED });
+        await vi.advanceTimersByTimeAsync(BURST_MS);
+        expect(bursts[1]?.has(UNKNOWN_TXID)).toBe(false);
 
         handle.close();
         vi.useRealTimers();

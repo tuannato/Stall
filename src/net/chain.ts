@@ -40,12 +40,32 @@ export type ChainTxInput = {
 
 export type ChainTxOutput = {
     outputScript: string;
+    /**
+     * Satoshis on this output. Optional twice over: this type is structural,
+     * so nothing here may assume chronik filled what it did not promise, and
+     * every fixture written before an amount was ever read still typechecks.
+     *
+     * `bigint`, never `Number` — §8's rule, and the reason a sum this app
+     * cannot complete is omitted rather than coerced.
+     */
+    sats?: bigint;
     plugins?: ChainPluginEntries;
 };
 
 export type ChainTx = {
     txid: string;
-    block?: { height: number };
+    /**
+     * `timestamp` is the block's own clock, which chronik documents as the
+     * fallback for a transaction whose `timeFirstSeen` is unknown. Optional
+     * for the same structural reason as everything else here.
+     */
+    block?: { height: number; timestamp?: number };
+    /**
+     * UNIX seconds when a node first saw this transaction. chronik sends `0`
+     * for "unknown -> make sure to check", so a reader treats zero as absent:
+     * a row dated 1970 is worse than an undated one.
+     */
+    timeFirstSeen?: number;
     /** Avalanche pre-consensus finality. Absent from a fixture reads as false. */
     isFinal?: boolean;
     inputs: readonly ChainTxInput[];

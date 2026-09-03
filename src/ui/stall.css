@@ -1895,21 +1895,46 @@ textarea.paste-in {
     background-size: 2px calc(100% - 32px);
 }
 
+/*
+ * A row is a disclosure: the glance line is the summary, the record is the
+ * fold. Every control lives in the fold, so nothing on the timeline answers a
+ * stray tap.
+ */
 .event {
+    font-size: 13px;
+}
+
+.event-fold {
+    /* The rail behind the dots is the LIST's background; a ground here would
+       paint over it. */
+    background: none;
+}
+
+/*
+ * `display: grid` on a <summary> removes the browser's own disclosure marker
+ * (it draws with `display: list-item`), so the caret below is a real node —
+ * which is what this guard wants anyway.
+ */
+.event-sum {
     display: grid;
-    grid-template-columns: 15px minmax(0, 1fr) auto;
+    grid-template-columns: 15px minmax(0, 1fr) auto auto;
     grid-template-areas:
-        'dot kind txid'
-        'dot time txid';
+        'dot kind txid caret'
+        'dot time txid caret';
     column-gap: 10px;
     row-gap: 2px;
     align-items: center;
     padding: 10px 2px;
-    font-size: 13px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.event-sum::-webkit-details-marker {
+    display: none;
 }
 
 /* The dot: in flow on its grid area, so the probe has a real box to see. */
-.event::before {
+.event-sum::before {
     content: '';
     grid-area: dot;
     width: 9px;
@@ -1919,6 +1944,93 @@ textarea.paste-in {
     border: 2px solid var(--s-bg);
     box-sizing: content-box;
     justify-self: center;
+}
+
+.event-caret {
+    grid-area: caret;
+    color: var(--s-muted);
+    font-size: 13px;
+}
+
+.event-fold[open] > .event-sum > .event-caret {
+    /* No transition: `renderStall` rebuilds the tree on every paint, so one
+       could only ever sit armed — which the reduced-motion pass calls a leak
+       (PROBE-RULES, "A waiting transition is a leak too"). */
+    rotate: 90deg;
+}
+
+/*
+ * The fold's fields. Label and value share a row, EXCEPT the txid: 64
+ * characters beside a label at 390px is the incident the probe's
+ * label-never-wraps rule was written for, and this string is longer than the
+ * token id that caused it. It takes both tracks and breaks anywhere.
+ */
+.event-body {
+    padding: 2px 2px 12px 27px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.event-fields {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 4px;
+    margin: 0;
+    width: 100%;
+}
+
+.event-dt {
+    color: var(--s-muted);
+    font-size: 11.5px;
+}
+
+.event-dd {
+    margin: 0;
+    min-width: 0;
+    color: var(--s-text);
+    font-size: 12.5px;
+}
+
+.event-dt.wide,
+.event-dd.wide {
+    grid-column: 1 / -1;
+}
+
+.event-txid-full {
+    /* The whole string, wrapped wherever it has to be: a machine value is
+       compared character by character, so it is shown in full or not at all. */
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+.event-copy {
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* The foot of the walk: the control, then the sentinel the observer watches. */
+.history-foot {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.history-sentinel {
+    /* In flow and empty — a real box the probe can measure, never a positioned
+       pseudo-element. */
+    width: 100%;
+    height: 1px;
+}
+
+.activity-sec + .activity-sec {
+    margin-top: 18px;
 }
 
 .event-time {

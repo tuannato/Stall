@@ -72,6 +72,19 @@ nothing.
   (`align-items: flex-start`) and reads 26px on "Tea" with 140px of room —
   a false red on short names. Cut points are tuned at this runner's 390px
   mobile viewport; 375 is ~15px tighter and extrapolated, not measured.
+- **The Activity fold's amount is a protected box and a contrast target**
+  (`[data-role="receipt-amount"]`). It is the one money figure on that panel
+  a reader can check against a wallet, and it sits on the fold's own ground,
+  which no other screen puts a figure on. The `activity` fixture therefore
+  carries one event **with** `sats` and one without: a selector matching
+  nothing in a fixture is a guard that measures nothing, which is how
+  `receipt-amount` would otherwise have been added and stayed vacuous. The
+  same fixture carries a walked row so the 64-character txid is measured
+  where it actually lives — inside an open `<details>` at 390px, wrapping on
+  `overflow-wrap: anywhere` in a grid area of its own. That is the same
+  incident as the "Token ID" label wrap, one string longer, and the fix is
+  the same shape: the value takes both tracks so no label shares a row with
+  it.
 
 ## Rendered-pixel contrast (pass 4)
 
@@ -118,6 +131,14 @@ Sampling amendments, each measured:
   corner arc, and sampling one reported a pill's terracotta ink against
   its own terracotta top border at 1.04:1. The control is measured in
   full wherever it stands clear of the edge.
+- **Every `<details>` is opened before targets are collected**, exactly as
+  the geometry pass already does and for the mirror image of its reason. A
+  closed fold still hands back boxes for its contents, so its controls WERE
+  sampled — against whatever the panel paints at those coordinates, which is
+  not their ground and is often their own ink. Measured 2026-09-03 when the
+  Activity rows became disclosures: 54 figures reported between 1.00:1 and
+  2.9:1 across all three looks and both widths, every one of them a control
+  nobody could see. A false red costs as much as a false green.
 - **Boxes are re-read at the last moment before every shot**, after
   `document.fonts.ready`: the self-hosted face swaps metrics when it lands
   and the fit-content dock re-centres with it.

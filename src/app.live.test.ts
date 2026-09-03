@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
 import { STLD_HEX, encodeDescriptionHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
-import { MAX_STALL_EVENTS, type StallView } from './domain/state';
+import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS, type StallView } from './domain/state';
 import type { ChainTx, HistoryPage } from './net/chain';
 import { UNKNOWN_TXID } from './net/live';
 import { p2pkhOutputScript } from './net/script';
@@ -82,6 +82,12 @@ const chain = {
     txThrows: false,
     utxosThrow: false,
     calls: { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 },
+    /** Paged address history, when a test drives the activity walk. */
+    historyPages: undefined as ChainTx[][] | undefined,
+    /** Page numbers whose read throws once asked for. */
+    historyPageThrows: new Set<number>(),
+    /** Every page number the walk asked for, in order. */
+    historyPageCalls: [] as number[],
     /** What the next live offer re-read answers. Empty when unset. */
     book: undefined as import('./domain/state').FetchStatus | undefined,
     /** A live re-read that throws rather than answering. */
@@ -96,6 +102,9 @@ function resetChain(): void {
     chain.txThrows = false;
     chain.utxosThrow = false;
     chain.calls = { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 };
+    chain.historyPages = undefined;
+    chain.historyPageThrows = new Set();
+    chain.historyPageCalls = [];
     chain.book = undefined;
     chain.bookThrows = false;
 }
@@ -115,10 +124,21 @@ const lokadPage = (): HistoryPage => ({ txs: [], numPages: 1, numTxs: 1_000_000 
 const fakeChronik = {
     address(_address: string) {
         return {
-            history: async (): Promise<HistoryPage> => {
+            history: async (page = 0): Promise<HistoryPage> => {
                 chain.calls.addressHistory += 1;
                 if (chain.historyThrows) {
                     throw new Error('no index answered');
+                }
+                if (chain.historyPages !== undefined) {
+                    chain.historyPageCalls.push(page);
+                    if (chain.historyPageThrows.has(page)) {
+                        throw new Error('that page did not answer');
+                    }
+                    return {
+                        txs: chain.historyPages[page] ?? [],
+                        numPages: chain.historyPages.length,
+                        numTxs: chain.historyPages.reduce((n, p) => n + p.length, 0),
+                    };
                 }
                 return addressPage();
             },
@@ -164,7 +184,10 @@ type OpenedWatch = {
     stall: { pubkeyHex?: string; hash?: string };
     hooks: {
         onChanged?: (trigger: import('./net/live').LiveTrigger) => void;
-        onBurst?: (txids: readonly string[]) => void;
+        onBurst?: (
+            txids: readonly string[],
+            status?: ReadonlyMap<string, import('./net/live').LiveTxStatus>,
+        ) => void;
         onReestablished?: () => void;
     };
     closed: boolean;
@@ -1713,5 +1736,376 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
             exponent: 2,
             amount: 900n,
         });
+    });
+});
+
+describe('a-finalized-message-updates-the-row-in-place', () => {
+    /**
+     * chronik names one transaction at least twice, and the later frame says
+     * what happened to it — `TX_CONFIRMED`, then `TX_FINALIZED` with the
+     * reason. The ring keeps the first sighting so rows do not rearrange
+     * under a reader, and the status is what changes: same row, same
+     * position, a new state.
+     *
+     * The status comes from the **message**, not from a second fetch: the
+     * chain has just told this page the answer, and asking again would be a
+     * round trip to learn what arrived in the frame we already have.
+     */
+    const payment = (txid: string): ChainTx => ({
+        txid,
+        inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+        outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
+    });
+
+    it('keeps the row where it was and moves only its state', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        const first = '31'.repeat(32);
+        const second = '32'.repeat(32);
+        chain.txs.set(first, payment(first));
+        chain.txs.set(second, payment(second));
+
+        watches[0]!.hooks.onBurst?.(
+            [first, second],
+            new Map([[first, { msgType: 'TX_ADDED_TO_MEMPOOL' }]]),
+        );
+        await flush(20);
+
+        let events = painted.view?.events ?? [];
+        expect(events.map((e) => e.txid), 'newest first').toEqual([second, first]);
+        expect(
+            events[1]?.status,
+            'a mempool frame is one node’s opinion, not a state this page states',
+        ).toEqual({ kind: 'unknown' });
+
+        watches[0]!.hooks.onBurst?.(
+            [first],
+            new Map([
+                [
+                    first,
+                    {
+                        msgType: 'TX_FINALIZED',
+                        finalizationReasonType: 'TX_FINALIZATION_REASON_PRE_CONSENSUS',
+                    },
+                ],
+            ]),
+        );
+        await flush(20);
+
+        events = painted.view?.events ?? [];
+        expect(events, 'a confirmation is not a second row').toHaveLength(2);
+        expect(events.map((e) => e.txid), 'and it did not jump the queue').toEqual([
+            second,
+            first,
+        ]);
+        expect(events[1]?.status).toEqual({ kind: 'finalized', avalanche: true });
+        expect(events[1]?.seenAtMs, 'the first sighting is kept').toBe(
+            painted.view?.events?.[1]?.seenAtMs,
+        );
+    });
+
+    it('never walks a state backwards', async () => {
+        bootStall(stallEmpty());
+        await flush();
+        const txid = '33'.repeat(32);
+        chain.txs.set(txid, payment(txid));
+        watches[0]!.hooks.onBurst?.(
+            [txid],
+            new Map([[txid, { msgType: 'TX_FINALIZED' }]]),
+        );
+        await flush(20);
+        expect(painted.view?.events?.[0]?.status).toEqual({
+            kind: 'finalized',
+            avalanche: false,
+        });
+
+        // A block reorg re-announces a finalized transaction as a mempool
+        // arrival on some node. Painting "not known to this page" over a
+        // state the chain already proved would be the feed unlearning.
+        watches[0]!.hooks.onBurst?.(
+            [txid],
+            new Map([[txid, { msgType: 'TX_ADDED_TO_MEMPOOL' }]]),
+        );
+        await flush(20);
+        expect(painted.view?.events?.[0]?.status).toEqual({
+            kind: 'finalized',
+            avalanche: false,
+        });
+    });
+});
+
+describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
+    /**
+     * The ring and the walk answer two different questions on two different
+     * clocks: "what has this page watched arrive" (page clock, capped at
+     * `MAX_STALL_EVENTS`) and "what does this address's history hold" (chain
+     * clock, capped at `MAX_ACTIVITY_PAGES` round trips). One list holding
+     * both would truncate the walk to fifty rows and date them from a clock
+     * that never saw them.
+     */
+    const walkedTx = (txid: string, over: Partial<ChainTx> = {}): ChainTx => ({
+        txid,
+        inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+        outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
+        timeFirstSeen: 1_756_400_000,
+        block: { height: 800_100, timestamp: 1_756_400_600 },
+        isFinal: true,
+        ...over,
+    });
+
+    /** Open the Activity tab and press the control that reads one page. */
+    async function readPage(root: HTMLElement): Promise<void> {
+        const more = root.querySelector<HTMLButtonElement>('[data-role="history-more"]');
+        expect(more, 'the panel offers a page to read').not.toBeNull();
+        more!.click();
+        await flush(20);
+    }
+
+    function openActivity(root: HTMLElement): void {
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+    }
+
+    it('keeps two lists, two clocks, and its own page cap', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.historyPages = Array.from({ length: MAX_ACTIVITY_PAGES + 2 }, (_, i) => [
+            walkedTx(`${(i + 0x50).toString(16)}`.repeat(32)),
+        ]);
+        openActivity(root);
+        await flush();
+
+        for (let i = 0; i < MAX_ACTIVITY_PAGES; i += 1) {
+            await readPage(root);
+        }
+
+        const history = painted.view?.history;
+        expect(history?.rows).toHaveLength(MAX_ACTIVITY_PAGES);
+        expect(history?.pagesRead).toBe(MAX_ACTIVITY_PAGES);
+        expect(history?.capped, 'our own ceiling, said rather than hidden').toBe(true);
+        expect(
+            chain.historyPageCalls,
+            'from page zero, one page per gesture, in order',
+        ).toEqual(Array.from({ length: MAX_ACTIVITY_PAGES }, (_, i) => i));
+
+        // The chain's clock, and never this page's.
+        for (const row of history?.rows ?? []) {
+            expect(row.chainTimeS).toBe(1_756_400_000);
+            expect(row.seenAtMs).toBeUndefined();
+            expect(row.status).toEqual({ kind: 'finalized', avalanche: false });
+        }
+        // Two lists: the ring is untouched by a walk.
+        expect(painted.view?.events ?? [], 'the walk is not the ring').toHaveLength(0);
+        expect(
+            root.querySelector('[data-role="history-more"]'),
+            'at the cap the control is gone',
+        ).toBeNull();
+    });
+
+    it('stops at the end of the address’s history without hitting the cap', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.historyPages = [[walkedTx('5a'.repeat(32))], [walkedTx('5b'.repeat(32))]];
+        openActivity(root);
+        await flush();
+        await readPage(root);
+        expect(painted.view?.history?.done).toBeFalsy();
+        await readPage(root);
+        expect(painted.view?.history?.done).toBe(true);
+        expect(painted.view?.history?.capped).toBeFalsy();
+        expect(painted.view?.history?.rows).toHaveLength(2);
+    });
+
+    it('carries the ring’s book shape onto the row the walk found again', async () => {
+        // A walked page need not carry plugin entries — an older node, a
+        // replica without the plugin — and the ring saw the entries live. The
+        // overlap is normal; the stronger fact wins.
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const txid = '5c'.repeat(32);
+        chain.txs.set(txid, {
+            txid,
+            inputs: [
+                {
+                    inputScript: '00',
+                    outputScript: STRANGER_SCRIPT,
+                    plugins: { agora: { groups: ['50aa'], data: [] } },
+                },
+            ],
+            outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
+        });
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush(20);
+        expect(painted.view?.events?.[0]?.book).toBe('consumed');
+
+        chain.historyPages = [
+            [
+                {
+                    txid,
+                    inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+                    outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
+                    timeFirstSeen: 1_756_400_000,
+                },
+            ],
+        ];
+        openActivity(root);
+        await flush();
+        await readPage(root);
+        expect(painted.view?.history?.rows[0]?.book).toBe('consumed');
+    });
+
+    it('a new stall is a new list', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.historyPages = [[walkedTx('5d'.repeat(32))]];
+        openActivity(root);
+        await flush();
+        await readPage(root);
+        expect(painted.view?.history?.rows).toHaveLength(1);
+
+        window.history.pushState(null, '', stallPath('02' + 'cc'.repeat(32)));
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush(20);
+        expect(
+            painted.view?.history,
+            'one seller’s history must not be attributed to another',
+        ).toBeUndefined();
+    });
+});
+
+describe('a-walked-history-memo-is-capped-like-every-other-buffer', () => {
+    /**
+     * §2 caps every buffer. A visitor can open stalls all afternoon and each
+     * entry here can hold `MAX_ACTIVITY_PAGES` pages of rows, so the memo that
+     * saves a reader from re-walking a stall they came back to is bounded and
+     * evicts the least recently walked one.
+     */
+    const walkedTx = (txid: string): ChainTx => ({
+        txid,
+        inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+        outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }],
+        timeFirstSeen: 1_756_400_000,
+    });
+
+    it('gives a stall its pages back on a refresh of the same stall', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.historyPages = [[walkedTx('80'.repeat(32))], [walkedTx('81'.repeat(32))]];
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+        await flush();
+        root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
+        await flush(20);
+        expect(painted.view?.history?.rows).toHaveLength(1);
+
+        // The same stall again, through the retry control, which is a full
+        // `refresh()`. Asserted on **this app's own DOM**, not the shared
+        // `painted` capture: `boot` never removes its popstate listener, so a
+        // navigation-driven refresh repaints every app booted earlier in this
+        // file too and the last view captured need not be ours.
+        (root.querySelector('[data-role="tab-shop"]') as HTMLButtonElement).click();
+        await flush();
+        (root.querySelector('[data-role="retry"]') as HTMLButtonElement).click();
+        await flush(20);
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+        await flush();
+        expect(
+            root.querySelectorAll('[data-role="history"] li.event'),
+            'the walk came back',
+        ).toHaveLength(1);
+        expect(chain.historyPageCalls, 'and nothing was re-read').toEqual([0]);
+    });
+});
+
+describe('the-first-scroll-reads-page-zero', () => {
+    /**
+     * Paging from the newest transaction the ring happens to hold would
+     * start at page N+1 and never read page 0, so everything between the
+     * page load and the first scroll would be missing from both lists. The
+     * walk always starts at zero; overlap with the ring is normal and cheap.
+     */
+    it('asks for page zero first, and reads one page per gesture', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.historyPages = [
+            [
+                {
+                    txid: '60'.repeat(32),
+                    inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+                    outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }],
+                    timeFirstSeen: 1_756_400_000,
+                },
+            ],
+            [
+                {
+                    txid: '61'.repeat(32),
+                    inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+                    outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }],
+                    timeFirstSeen: 1_756_300_000,
+                },
+            ],
+        ];
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+        await flush();
+        expect(chain.historyPageCalls, 'nothing is walked until it is asked for').toEqual(
+            [],
+        );
+
+        const more = () =>
+            root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!;
+        more().click();
+        // A second press while the first page is in flight buys nothing: one
+        // page at a time, or a fast reader spends ten round trips at once.
+        more().click();
+        await flush(20);
+        expect(chain.historyPageCalls).toEqual([0]);
+        expect(painted.view?.history?.rows.map((r) => r.txid)).toEqual(['60'.repeat(32)]);
+
+        more().click();
+        await flush(20);
+        expect(chain.historyPageCalls).toEqual([0, 1]);
+        expect(painted.view?.history?.rows).toHaveLength(2);
+    });
+});
+
+describe('a-failed-page-does-not-poison-the-list', () => {
+    /**
+     * A page that did not answer is a hole in what this page read, not a
+     * statement about the seller — the rule §4 already holds for the book.
+     * What was read stays on screen, the panel says the page failed, and the
+     * same control asks for that page again.
+     */
+    it('keeps what it read, says so, and retries the same page', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const good = (txid: string): ChainTx => ({
+            txid,
+            inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+            outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }],
+            timeFirstSeen: 1_756_400_000,
+        });
+        chain.historyPages = [[good('70'.repeat(32))], [good('71'.repeat(32))]];
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+        await flush();
+        root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
+        await flush(20);
+        expect(painted.view?.history?.rows).toHaveLength(1);
+
+        chain.historyPageThrows = new Set([1]);
+        root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
+        await flush(20);
+        expect(painted.view?.history?.failed).toBe(true);
+        expect(painted.view?.history?.rows, 'nothing already read was lost').toHaveLength(
+            1,
+        );
+        expect(painted.view?.history?.pagesRead, 'the failed page was not counted').toBe(
+            1,
+        );
+        expect(painted.view?.history?.done, 'a failure is not an ending').toBeFalsy();
+
+        chain.historyPageThrows = new Set();
+        root.querySelector<HTMLButtonElement>('[data-role="history-retry"]')!.click();
+        await flush(20);
+        expect(chain.historyPageCalls, 'the same page, asked again').toEqual([0, 1, 1]);
+        expect(painted.view?.history?.rows).toHaveLength(2);
+        expect(painted.view?.history?.failed).toBeFalsy();
     });
 });

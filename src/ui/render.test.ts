@@ -27,7 +27,8 @@ import type {
     StallView,
     TokenMeta,
 } from '../domain/state';
-import { MAX_STALL_EVENTS } from '../domain/state';
+import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
+import { EXPLORER_TX_URL } from '../domain/explorer';
 import { OBS_GUIDE_TITLE } from './obsGuide';
 import {
     COPY_LINK,
@@ -6005,5 +6006,314 @@ describe('republish-carries-an-existing-fiat-hint-forward', () => {
         expect(hex.textContent).toBe(
             encodeManifestHex('Riverside Goods', DEFAULT_THEME_ID, 0),
         );
+    });
+});
+
+describe('the activity panel’s two lists and the row detail', () => {
+    const TXID_A = 'ab'.repeat(32);
+    const TXID_B = 'cd'.repeat(32);
+    const TXID_C = 'ef'.repeat(32);
+    const AT = 1_756_400_000_000;
+
+    const activity = (over: Partial<StallView> = {}) =>
+        offersView([OFFER], undefined, { panel: 'activity', ...over });
+
+    it('a-receipt-does-not-call-an-unknown-finality-a-mempool-transaction', () => {
+        /**
+         * Three states, and the third is about this page, not about the
+         * chain. `isFinal` absent is one node's silence and a missing block
+         * is not a mempool sighting — printing "in the mempool" from either
+         * would be a claim nothing checked, which is the §4 collapse wearing
+         * a money word.
+         */
+        const { root } = paint(
+            activity({
+                events: [
+                    {
+                        txid: TXID_A,
+                        kind: 'other',
+                        seenAtMs: AT,
+                        status: { kind: 'finalized', avalanche: true },
+                    },
+                    {
+                        txid: TXID_B,
+                        kind: 'other',
+                        seenAtMs: AT - 1000,
+                        status: { kind: 'finalized', avalanche: false },
+                    },
+                    {
+                        txid: TXID_C,
+                        kind: 'other',
+                        seenAtMs: AT - 2000,
+                        status: { kind: 'in-block', height: 800_123 },
+                    },
+                    // chronik's `TX_CONFIRMED` frame names no height, so the
+                    // state it proves has none and the line says the weaker
+                    // thing rather than inventing a number.
+                    {
+                        txid: '02'.repeat(32),
+                        kind: 'other',
+                        seenAtMs: AT - 2500,
+                        status: { kind: 'in-block' },
+                    },
+                    { txid: '01'.repeat(32), kind: 'other', seenAtMs: AT - 3000 },
+                ],
+            }),
+        );
+        const states = [...root.querySelectorAll('[data-role="event-status"]')].map(
+            (n) => n.textContent,
+        );
+        expect(states).toEqual([
+            copy.EVENT_STATUS_FINALIZED_AVALANCHE,
+            copy.EVENT_STATUS_FINALIZED,
+            copy.eventStatusInBlock(800_123),
+            copy.EVENT_STATUS_IN_BLOCK,
+            copy.EVENT_STATUS_UNKNOWN,
+        ]);
+        const text = (root.textContent ?? '').toLowerCase();
+        expect(text, 'a state we do not know is not a mempool sighting').not.toContain(
+            'mempool',
+        );
+    });
+
+    it('a-walked-row-does-not-claim-this-page-saw-it-arrive', () => {
+        /**
+         * "Watching since" promises a page clock, and a walked row was never
+         * watched — it was read out of the address's history long after it
+         * happened. So a walked row prints the chain's own clock, labelled as
+         * such, and a row with neither clock prints no time at all rather
+         * than borrowing `Date.now()`.
+         */
+        const { root } = paint(
+            activity({
+                events: [{ txid: TXID_A, kind: 'other', seenAtMs: AT }],
+                history: {
+                    rows: [
+                        { txid: TXID_B, kind: 'other', chainTimeS: Math.floor(AT / 1000) },
+                        { txid: TXID_C, kind: 'other' },
+                    ],
+                    pagesRead: 1,
+                },
+            }),
+        );
+        const watching = root.querySelector('[data-role="activity-watching"]')!;
+        const history = root.querySelector('[data-role="activity-history"]')!;
+        expect(watching.querySelectorAll('li.event')).toHaveLength(1);
+        expect(history.querySelectorAll('li.event')).toHaveLength(2);
+
+        const labels = [...history.querySelectorAll('[data-role="event-time-label"]')].map(
+            (n) => n.textContent,
+        );
+        expect(labels, 'the chain’s clock, named as the chain’s').toEqual([
+            copy.EVENT_TIME_CHAIN_LABEL,
+        ]);
+        expect(
+            [...watching.querySelectorAll('[data-role="event-time-label"]')].map(
+                (n) => n.textContent,
+            ),
+        ).toEqual([copy.EVENT_TIME_PAGE_LABEL]);
+
+        // The undated row has no glance time and no detail time: an undated
+        // row is honest, a row dated from this page's clock is not.
+        const rows = [...history.querySelectorAll('li.event')];
+        expect(rows[1]!.querySelector('.event-time')).toBeNull();
+    });
+
+    it('activity-rows-carry-no-control-outside-the-detail', () => {
+        const { root } = paint(
+            activity({
+                events: [
+                    { txid: TXID_A, kind: 'book', seenAtMs: AT, book: 'consumed' },
+                    { txid: TXID_B, kind: 'other', seenAtMs: AT - 1, sats: 5_460n },
+                ],
+            }),
+        );
+        const rows = [...root.querySelectorAll('li.event')];
+        expect(rows).toHaveLength(2);
+        for (const row of rows) {
+            const fold = row.querySelector('[data-role="event-detail"]');
+            expect(fold, 'every row is a disclosure').not.toBeNull();
+            const body = row.querySelector('[data-role="event-body"]')!;
+            for (const control of row.querySelectorAll('button, a, input, select')) {
+                expect(
+                    body.contains(control),
+                    `${control.tagName} outside the detail body`,
+                ).toBe(true);
+            }
+            // The glance line is data. A row that grew a control the visitor
+            // did not ask for is a row that can be clicked by accident.
+            expect(row.querySelector('summary')!.querySelector('button, a')).toBeNull();
+        }
+    });
+
+    it('a-receipt-opens-the-explorer-with-a-gated-txid', () => {
+        const { root } = paint(
+            activity({
+                events: [
+                    { txid: TXID_A, kind: 'other', seenAtMs: AT },
+                    // Not a txid: the flood stand-in, which names no
+                    // transaction and must not become an href.
+                    { txid: 'unknown', kind: 'other', seenAtMs: AT - 1 },
+                ],
+            }),
+        );
+        const rows = [...root.querySelectorAll('li.event')];
+        const link = rows[0]!.querySelector<HTMLAnchorElement>(
+            '[data-role="event-explorer"]',
+        )!;
+        expect(link).not.toBeNull();
+        expect(link.getAttribute('href')).toBe(EXPLORER_TX_URL(TXID_A));
+        expect(link.target).toBe('_blank');
+        expect(link.rel).toBe('noopener noreferrer');
+        expect(rows[1]!.querySelector('[data-role="event-explorer"]')).toBeNull();
+        expect(root.textContent).toContain(copy.ACTIVITY_PUBLIC);
+    });
+
+    it('a-receipt-never-says-sold', () => {
+        const { root } = paint(
+            activity({
+                events: [
+                    { txid: TXID_A, kind: 'book', seenAtMs: AT, book: 'consumed' },
+                    { txid: TXID_B, kind: 'book', seenAtMs: AT - 1, book: 'both' },
+                    { txid: TXID_C, kind: 'other', seenAtMs: AT - 2, sats: 100_000n },
+                ],
+            }),
+        );
+        expect((root.textContent ?? '').toLowerCase()).not.toContain('sold');
+        // The amount is what was received, under its own role, and never
+        // dressed as a sale: a payment to this address is money arriving,
+        // not proof that anything was bought.
+        const amounts = [...root.querySelectorAll('[data-role="receipt-amount"]')].map(
+            (n) => n.textContent,
+        );
+        expect(amounts).toEqual([copy.eventReceived('1,000')]);
+    });
+
+    it('a-receipt-with-no-amount-omits-the-row-rather-than-showing-zero', () => {
+        const { root } = paint(
+            activity({
+                events: [{ txid: TXID_A, kind: 'other', seenAtMs: AT }],
+            }),
+        );
+        expect(root.querySelector('[data-role="receipt-amount"]')).toBeNull();
+        expect(root.textContent).not.toContain(copy.EVENT_AMOUNT_LABEL);
+    });
+
+    it('labels a record another wallet signed as another wallet’s', () => {
+        const { root } = paint(
+            activity({
+                history: {
+                    rows: [
+                        { txid: TXID_A, kind: 'settings', signedByStall: true },
+                        { txid: TXID_B, kind: 'settings', signedByStall: false },
+                        { txid: TXID_C, kind: 'description', signedByStall: false },
+                    ],
+                    pagesRead: 1,
+                },
+            }),
+        );
+        const kinds = [...root.querySelectorAll('.event-kind')].map((n) => n.textContent);
+        expect(kinds).toEqual([
+            copy.EVENT_SETTINGS,
+            copy.EVENT_SETTINGS_STRANGER,
+            copy.EVENT_DESCRIPTION_STRANGER,
+        ]);
+    });
+
+    it('history-says-its-own-state: reading, ended, capped, failed', () => {
+        const more = paint(
+            activity({ history: { rows: [], pagesRead: 1 } }),
+        );
+        expect(
+            more.root.querySelector('[data-role="history-more"]'),
+            'a page to read is a control, never an automatic walk',
+        ).not.toBeNull();
+
+        const loading = paint(
+            activity({ history: { rows: [], pagesRead: 1, loading: true } }),
+        );
+        expect(loading.root.textContent).toContain(copy.ACTIVITY_HISTORY_LOADING);
+        expect(
+            loading.root.querySelector<HTMLButtonElement>('[data-role="history-more"]')
+                ?.disabled,
+            'one page in flight',
+        ).toBe(true);
+
+        const done = paint(
+            activity({ history: { rows: [], pagesRead: 2, done: true } }),
+        );
+        expect(done.root.textContent).toContain(copy.ACTIVITY_HISTORY_END);
+        expect(done.root.querySelector('[data-role="history-more"]')).toBeNull();
+
+        const capped = paint(
+            activity({
+                history: { rows: [], pagesRead: MAX_ACTIVITY_PAGES, capped: true },
+            }),
+        );
+        expect(capped.root.textContent).toContain(
+            copy.activityHistoryCapped(MAX_ACTIVITY_PAGES),
+        );
+        expect(capped.root.querySelector('[data-role="history-more"]')).toBeNull();
+
+        const failed = paint(
+            activity({
+                history: {
+                    rows: [{ txid: TXID_A, kind: 'other', chainTimeS: 1_756_400_000 }],
+                    pagesRead: 1,
+                    failed: true,
+                },
+            }),
+        );
+        expect(failed.root.textContent).toContain(copy.ACTIVITY_HISTORY_FAILED);
+        expect(
+            failed.root.querySelector('[data-role="history-retry"]'),
+            'a failed page is a retry, not a dead end',
+        ).not.toBeNull();
+        expect(
+            failed.root.querySelectorAll('li.event'),
+            'and what was already read stays on screen',
+        ).toHaveLength(1);
+    });
+
+    it('the-paging-trigger-is-a-plain-handler-the-observer-only-calls', () => {
+        const root = document.createElement('div');
+        const h = { ...handlers(), onReadHistoryPage: vi.fn() };
+        renderStall(root, activity({ history: { rows: [], pagesRead: 0 } }), h);
+        expect(root.querySelector('[data-role="history-sentinel"]')).not.toBeNull();
+        (
+            root.querySelector('[data-role="history-more"]') as HTMLButtonElement
+        ).click();
+        expect(h.onReadHistoryPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('a-live-update-keeps-the-readers-place-in-history', async () => {
+        /**
+         * `renderStall` starts with `replaceChildren()`, so a stranger's dust
+         * used to throw the reader back to the top of a list they were
+         * halfway down. The offset is remembered per stall and restored once
+         * the new tree is connected.
+         */
+        const root = document.createElement('div');
+        document.body.append(root);
+        const view = activity({
+            events: [{ txid: TXID_A, kind: 'other', seenAtMs: AT }],
+            history: {
+                rows: Array.from({ length: 30 }, (_, i) => ({
+                    txid: i.toString(16).padStart(2, '0').repeat(32),
+                    kind: 'other' as const,
+                    chainTimeS: 1_756_400_000 - i,
+                })),
+                pagesRead: 1,
+            },
+        });
+        renderStall(root, view, handlers());
+        const scroller = root.querySelector<HTMLElement>('.stall-scroll')!;
+        scroller.scrollTop = 420;
+        scroller.dispatchEvent(new Event('scroll'));
+
+        renderStall(root, view, handlers());
+        await Promise.resolve();
+        expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop).toBe(420);
+        root.remove();
     });
 });

@@ -26,9 +26,52 @@ const PUBKEY_GROUP_PREFIX = '50';
 
 export const AGORA_PLUGIN = 'agora';
 
+/**
+ * chronik's own `TxMsgType` for a transaction avalanche has finalized, the one
+ * for a transaction that reached a block, and the `TxFinalizationReasonType`
+ * that says finality arrived before any block did.
+ *
+ * Plain strings rather than a union of the node's enum: this app reads three
+ * values out of a set the node owns and grows, and a case it does not
+ * recognise has to land as "nothing this page can state" — not as a type error
+ * that stops a build the next time chronik adds one.
+ */
+export const TX_FINALIZED = 'TX_FINALIZED';
+export const TX_CONFIRMED = 'TX_CONFIRMED';
+export const FINALIZATION_PRE_CONSENSUS = 'TX_FINALIZATION_REASON_PRE_CONSENSUS';
+
+/**
+ * What the socket said about one transaction, as the last frame of a burst
+ * left it.
+ *
+ * Both fields are optional and both are the node's words, never ours: a frame
+ * carrying a `msgType` this app does not read leaves the caller nothing to
+ * state, and a frame with none is recorded not at all.
+ */
+export type LiveTxStatus = {
+    /** `TX_ADDED_TO_MEMPOOL`, `TX_CONFIRMED`, `TX_FINALIZED`, … */
+    msgType?: string;
+    /** Present only on a finalization, saying whether it was pre-consensus. */
+    finalizationReasonType?: string;
+};
+
 export type LiveChronik = {
     ws(config: {
-        onMessage: (msg: { type: string; txid?: string }) => void;
+        /**
+         * chronik hands over more than the type and the txid: `msgType` says
+         * what happened to the transaction, and `finalizationReasonType` says
+         * why it is final. Both used to be dropped right here — the hook read
+         * `type` and `txid` and nothing else — so the one place the chain tells
+         * this page a transaction is settled never reached app code, and a
+         * row's state could only have come from re-fetching a transaction the
+         * frame had already described.
+         */
+        onMessage: (msg: {
+            type: string;
+            txid?: string;
+            msgType?: string;
+            finalizationReasonType?: string;
+        }) => void;
         /** Fired on every establish, including each reconnect. See `watchStall`. */
         onConnect?: () => void;
         onReconnect?: () => void;
@@ -157,8 +200,19 @@ export type WatchHooks = {
      * Handed over so the caller can ask what each one was and wake only the
      * readers that could be affected. `UNKNOWN_TXID` appears for a message that
      * carried no txid.
+     *
+     * `status` is what chronik said about **some** of those names, and it is a
+     * second structure rather than a field on each entry for exactly that
+     * reason: the flood stand-in names no transaction and can have no status,
+     * and a frame that carried no `msgType` leaves nothing to record. A name
+     * missing from the map is a name the chain said nothing about — which the
+     * caller must not read as "unfinalized". Optional so a caller that only
+     * wants the names, and a test that only sends them, need not carry it.
      */
-    onBurst?: (txids: readonly string[]) => void;
+    onBurst?: (
+        txids: readonly string[],
+        status?: ReadonlyMap<string, LiveTxStatus>,
+    ) => void;
     /**
      * The socket was established again after having been established before.
      *
@@ -222,6 +276,17 @@ export function watchStall(
     let establishes = 0;
     /** Collected between bursts, drained at the fire. */
     const seen = new Set<string>();
+    /**
+     * What the chain said about the names in `seen`, drained with them.
+     *
+     * Keyed by txid and **last write wins**: one transaction arrives as a
+     * mempool frame and then as a confirmation and then as a finalization, and
+     * the burst reports the last thing the chain said about it. Keeping the
+     * first would report a settled transaction as unsettled — the opposite of
+     * why the ring keeps the first *sighting*, which is a fact about when this
+     * page saw it and does not change.
+     */
+    const said = new Map<string, LiveTxStatus>();
     const { pubkeyHex, hash } = stall;
     const group = pubkeyHex === undefined ? undefined : stallGroup(pubkeyHex);
 
@@ -275,7 +340,9 @@ export function watchStall(
             // flight belongs to the next burst, not to this one, and a set
             // emptied after the first await would swallow it.
             const txids = [...seen];
+            const status = new Map(said);
             seen.clear();
+            said.clear();
             // Deliberately does not stamp `lastReread`: the floor guards a
             // reconnect spin, and a read caused by a message must not
             // suppress the one caused by a drop. What was missed while the
@@ -283,7 +350,7 @@ export function watchStall(
             // was read.
             hooks.onChanged?.('message');
             if (txids.length > 0) {
-                hooks.onBurst?.(txids);
+                hooks.onBurst?.(txids, status);
             }
         }, BURST_MS);
     };
@@ -322,7 +389,21 @@ export function watchStall(
             // Set semantics first, cap second: the same txid arriving as
             // mempool and then confirmed is one entry, not two toward the cap.
             const txid = typeof msg.txid === 'string' ? msg.txid : UNKNOWN_TXID;
-            seen.add(seen.size >= MAX_BURST_TXIDS && !seen.has(txid) ? UNKNOWN_TXID : txid);
+            const kept =
+                seen.size >= MAX_BURST_TXIDS && !seen.has(txid) ? UNKNOWN_TXID : txid;
+            seen.add(kept);
+            // Only for a name that survived, and only when the frame carried
+            // something. The stand-in names no transaction, so a status filed
+            // under it would belong to whichever message happened to overflow
+            // the cap.
+            if (kept !== UNKNOWN_TXID && typeof msg.msgType === 'string') {
+                said.set(kept, {
+                    msgType: msg.msgType,
+                    ...(typeof msg.finalizationReasonType === 'string'
+                        ? { finalizationReasonType: msg.finalizationReasonType }
+                        : {}),
+                });
+            }
             rereadCoalesced();
         },
         onConnect: onEstablished,
@@ -382,6 +463,7 @@ export function watchStall(
                 facts = undefined;
             }
             seen.clear();
+            said.clear();
             try {
                 socket?.close();
             } catch {

@@ -160,6 +160,11 @@ export const SCREENS: Record<string, StallView> = {
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         overlay: { kind: 'publish' },
         descriptions: new Map([[T1, 'Existing words']]),
+        // A published price, so the editor's read-back line
+        // (`[data-role="seller-price"]`) is a node the probe can see. Without
+        // one it stays `hidden` and the only screen carrying that figure was
+        // never measured.
+        prices: new Map([[T1, { code: 'usd', exponent: 2, amount: 1250n }]]),
     }),
     /*
      * The shop that sells decorations, which is the one page where the
@@ -213,16 +218,68 @@ export const SCREENS: Record<string, StallView> = {
     }),
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
+    /*
+     * Both lists at once, because they are two different surfaces: the ring on
+     * the page clock and the walk on the chain's, each with a row whose detail
+     * the probe opens (a closed `<details>` lays out nothing, so every rule
+     * below it would pass vacuously on exactly the content it guards).
+     *
+     * One event carries `sats` and one does not: `[data-role="receipt-amount"]`
+     * is in `PROTECTED` and `CONTRAST_TEXT`, and a selector matching nothing in
+     * the fixture is a guard that measures nothing. The walked rows carry the
+     * 64-character txid in an open fold at 390px, which is the width the
+     * label-wrap incident was measured at.
+     */
     activity: base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         panel: 'activity',
         watchedSinceMs: TRIED_AT_MS,
         activityGaps: 1,
         events: [
-            { txid: 'ab'.repeat(32), kind: 'book', seenAtMs: TRIED_AT_MS },
-            { txid: 'cd'.repeat(32), kind: 'settings', seenAtMs: TRIED_AT_MS - 60_000 },
-            { txid: 'ee'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 120_000 },
+            {
+                txid: 'ab'.repeat(32),
+                kind: 'book',
+                seenAtMs: TRIED_AT_MS,
+                book: 'consumed',
+                status: { kind: 'finalized', avalanche: true },
+            },
+            {
+                txid: 'cd'.repeat(32),
+                kind: 'settings',
+                seenAtMs: TRIED_AT_MS - 60_000,
+                status: { kind: 'in-block', height: 800_123 },
+            },
+            // The receipt: an amount big enough to be a real figure on a
+            // narrow screen, beside a row that has none.
+            {
+                txid: 'ee'.repeat(32),
+                kind: 'other',
+                seenAtMs: TRIED_AT_MS - 120_000,
+                sats: 10_000_000_000n,
+            },
+            { txid: '77'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 180_000 },
         ],
+        history: {
+            rows: [
+                // A walked row: the chain's clock, never this page's, and a
+                // record another wallet signed, which is its own label.
+                {
+                    txid: '88'.repeat(32),
+                    kind: 'token-move',
+                    chainTimeS: Math.floor(TRIED_AT_MS / 1000) - 90_000,
+                    status: { kind: 'finalized', avalanche: false },
+                    sats: 5_460n,
+                },
+                {
+                    txid: '99'.repeat(32),
+                    kind: 'settings',
+                    chainTimeS: Math.floor(TRIED_AT_MS / 1000) - 200_000,
+                    signedByStall: false,
+                    status: { kind: 'in-block', height: 799_002 },
+                },
+            ],
+            pagesRead: 1,
+        },
     }),
     /*
      * A shop big enough for the tools row: seven distinct tokens is the

@@ -180,18 +180,74 @@ export type StallEventKind = 'book' | 'settings' | 'description' | 'token-move' 
 export type BookShape = 'consumed' | 'appeared' | 'both';
 
 /**
- * One transaction the live socket named, once it had been read.
+ * How settled a transaction is, as far as **this page** can tell. Three
+ * states, and the third is about us rather than about the chain.
  *
- * `seenAtMs` is when **this page** saw it, not when the chain did: a message
- * arrives for the mempool and again for the block, and a first-seen stamp is
- * the honest thing a reader can say without a timestamp from the node.
+ * `finalized` is avalanche's answer — a `TX_FINALIZED` frame on the socket, or
+ * `isFinal` on a fetched transaction. `avalanche` separates pre-consensus
+ * (finalized before any block) from a finality that arrived with one, which is
+ * the only thing `finalizationReasonType` is read for.
+ *
+ * `in-block` is a transaction with a block and no finality this page has seen.
+ * `height` is absent when the frame that said so carried none — chronik's
+ * `TX_CONFIRMED` names no height.
+ *
+ * `unknown` is neither, and **never "in the mempool"**. A missing `isFinal` is
+ * one node's silence; even a `TX_ADDED_TO_MEMPOOL` frame is one node's opinion,
+ * and two nodes hold two mempools — the same reason §5 refuses an unfinalized,
+ * unmined record as a manifest winner. So the copy says the true thing: this
+ * page does not know.
+ */
+export type EventStatus =
+    | { kind: 'finalized'; avalanche: boolean }
+    | { kind: 'in-block'; height?: number }
+    | { kind: 'unknown' };
+
+/**
+ * One transaction at this stall, as either list holds it.
+ *
+ * `seenAtMs` is when **this page** saw it arrive, not when the chain did: a
+ * message arrives for the mempool and again for the block, and a first-seen
+ * stamp is the honest thing a reader can say without a timestamp from the node.
+ * It is **absent on a walked row**, which this page never watched arrive —
+ * `chainTimeS` carries that row's own clock instead, and a row with neither
+ * prints no time at all rather than borrowing `Date.now()`.
  */
 export type StallEvent = {
     txid: string;
     kind: StallEventKind;
-    seenAtMs: number;
+    /** The page clock: when this page watched it arrive. Absent on a walk. */
+    seenAtMs?: number;
+    /**
+     * The chain's clock, in seconds — `timeFirstSeen`, or the block's timestamp
+     * when the node reported no first sighting. Absent when neither is known:
+     * chronik documents `timeFirstSeen: 0` as unknown, and a row dated 1970 is
+     * worse than an undated one.
+     */
+    chainTimeS?: number;
+    /** How settled it is. Absent reads exactly as `unknown`. */
+    status?: EventStatus;
+    /**
+     * Satoshis this transaction paid **to the stall's own script**, when every
+     * such output carried a figure and the stall was not on the input side.
+     * Absent is "not a receipt, or not one this page can add up" — never zero,
+     * which would be a figure, and a wrong one (§8: omit rather than guess).
+     */
+    sats?: bigint;
     /** For a `book` event: what the plugin entries prove it did. */
     book?: BookShape;
+    /**
+     * For a `settings` or `description` row: did the stall's own key sign it.
+     *
+     * Absent for every other kind, because the question does not arise — a
+     * `false` on an ordinary payment would read as "somebody else's payment".
+     * The live path leaves it absent too: `loadManifest` and `loadDescriptions`
+     * verify authorship themselves, and a stranger's record-shaped dust costs
+     * one walk that finds nothing. A **row** is different — it is a sentence on
+     * screen about what happened here — so the walk verifies it with the same
+     * `txSignedByStall` the readers use and labels what it found.
+     */
+    signedByStall?: boolean;
 };
 
 /**
@@ -200,6 +256,47 @@ export type StallEvent = {
  * as fast as the socket delivers them.
  */
 export const MAX_STALL_EVENTS = 50;
+
+/**
+ * How many history pages one visitor may walk, per stall, per page load.
+ *
+ * **Its own cap, denominated in round trips**, and deliberately not
+ * `MAX_HISTORY_PAGES`: that one bounds a reader looking for one record and
+ * stopping the moment it has it, while this one is a person scrolling a list
+ * for as long as they like. Ten pages of `HISTORY_PAGE_SIZE` is 2,000
+ * transactions — enough to reach past a busy month, bounded so a visitor
+ * cannot pull the whole of a long address out of somebody's index by holding
+ * the scrollbar.
+ *
+ * One cap name per meaning: the number is said on screen when it is reached,
+ * because our own ceiling reported as the end of the history would be a claim
+ * about the seller made from a guess (§5's rule, in a new place).
+ */
+export const MAX_ACTIVITY_PAGES = 10;
+
+/**
+ * What a walk of this address's history has read, and what it knows about
+ * its own gaps.
+ *
+ * Its own list, its own cap and its own clock — see `StallEvent`. Absent means
+ * nothing has been asked for, which is the state every stall opens in: the
+ * walk is round trips against somebody's index and any visitor can start one,
+ * so it happens when a reader asks and never on load.
+ */
+export type StallHistory = {
+    /** Newest first, as chronik answers. */
+    rows: readonly StallEvent[];
+    /** Pages already read, counting from page 0. A failed page is not one. */
+    pagesRead: number;
+    /** A page is in flight. One at a time, or a fast reader spends ten at once. */
+    loading?: boolean;
+    /** The last page asked for did not answer. What was read is still on screen. */
+    failed?: boolean;
+    /** The address's history ended. Not the same claim as `capped`. */
+    done?: boolean;
+    /** Our own ceiling, `MAX_ACTIVITY_PAGES`, reached. Never called an ending. */
+    capped?: boolean;
+};
 
 export type StallView = {
     route: RouteResolution;
@@ -276,6 +373,11 @@ export type StallView = {
      * the ordinary case — it is not a claim that nothing happened.
      */
     events?: readonly StallEvent[];
+    /**
+     * What a walk of this address's history has read, when a reader asked for
+     * one. Absent is "nothing asked for", never "this address is quiet".
+     */
+    history?: StallHistory;
     /** The seller's line under their name — manifest tag 0x02, screened. */
     tagline?: string;
     /** The token whose card leads the shop — manifest tag 0x03. */

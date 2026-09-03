@@ -28,16 +28,16 @@ import {
     saveStall,
     unpinStall,
 } from './saved';
-import { MAX_STALL_EVENTS } from './domain/state';
+import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from './domain/state';
 import type {
-    BookShape,
+    EventStatus,
     FetchStatus,
     Overlay,
     Outpoint,
     RouteParse,
     SessionTokenCache,
     StallEvent,
-    StallEventKind,
+    StallHistory,
     StallOffer,
     StallView,
     TokenMeta,
@@ -60,10 +60,12 @@ import {
     ALL_FACTS,
     NO_FACTS,
     anyFact,
-    bookShapeOf,
     classifyTx,
-    eventKindOf,
+    historyEventOf,
+    statusFromMessage,
+    strongerStatus,
     unionFacts,
+    type EventContext,
 } from './net/classify';
 
 /**
@@ -98,7 +100,12 @@ function changedTokens(
     return out;
 }
 import { p2pkhOutputScript } from './net/script';
-import { isDefiniteResult, watchStall, type LiveHandle } from './net/live';
+import {
+    isDefiniteResult,
+    watchStall,
+    type LiveHandle,
+    type LiveTxStatus,
+} from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import { cheapestOf, identityOf, listingsInShopOrder, renderStall } from './ui';
 
@@ -227,11 +234,9 @@ export function boot(
     /**
      * The transactions this page has watched arrive, newest first.
      *
-     * **Nothing renders it.** It is the substrate for a live activity feed, and
-     * it is laid down now so that feed is one render rather than a second pass
-     * over the socket. Kept here rather than only on the view because a paint is
-     * not guaranteed: a burst of ordinary payments changes no fact and paints
-     * nothing, and the ring still has to remember them.
+     * Kept here as well as on the view because a paint is not guaranteed: a
+     * burst that reaches the ring while a sheet is open is deferred by
+     * `livePaint`, and the ring still has to remember it.
      */
     let events: readonly StallEvent[] = [];
     /**
@@ -240,6 +245,32 @@ export function boot(
      * read as complete while this is above zero.
      */
     let activityGaps = 0;
+    /**
+     * What a reader has walked out of this stall's own history.
+     *
+     * Its own list beside the ring, with its own cap and its own clock (§4).
+     * Absent until somebody asks: a walk is up to `MAX_ACTIVITY_PAGES` round
+     * trips against a public index and any visitor can start one, so it is a
+     * cost a reader chooses rather than one every page load spends.
+     */
+    let walked: StallHistory | undefined;
+    /**
+     * Walked pages, per stall, **for this page load only**, and capped.
+     *
+     * `refresh()` empties the live list because a new stall is a new ring, and
+     * it empties this one for the same reason. But a refresh of the *same*
+     * stall — a retry, a Back to a stall already read — should not make a
+     * reader pay ten round trips again for pages this page already holds.
+     *
+     * Capped because a visitor can open stalls all afternoon and each entry
+     * can hold `MAX_ACTIVITY_PAGES` pages of rows: §2 caps every buffer, and
+     * an unbounded one keyed on somebody's browsing is exactly the shape that
+     * rule names. Oldest key evicted first, so going back and forth between a
+     * couple of stalls stays free and the twentieth costs a walk. Never
+     * persisted.
+     */
+    const MAX_WALKED_STALLS = 4;
+    const walkedByStall = new Map<string, StallHistory>();
     let state: AppState = {
         view: {
             route: { kind: 'invalid', raw: '' },
@@ -393,6 +424,9 @@ export function boot(
                     view: { ...state.view, shopFilter: text.slice(0, 64) },
                 };
                 paint();
+            },
+            onReadHistoryPage: () => {
+                void readHistoryPage();
             },
         });
         // One-shots: the paint that showed them consumes them, same
@@ -569,28 +603,66 @@ export function boot(
     };
 
     /**
-     * Remember one transaction, once.
+     * Remember one transaction, once — and let its **state** move afterwards.
      *
-     * **Deduped by txid, first sighting kept.** chronik names one transaction at
-     * least twice — added to the mempool, then confirmed — and a feed that
-     * listed a sale twice would be wrong about the shop. Keeping the first
-     * sighting rather than re-fronting the later one also keeps the order
-     * stable: a confirmation is not a new event, and a reader watching the list
-     * must not see rows rearrange under them.
+     * **Deduped by txid, first sighting kept, position kept.** chronik names one
+     * transaction at least twice — added to the mempool, then confirmed, then
+     * finalized — and a feed that listed a sale twice would be wrong about the
+     * shop. A confirmation is not a new event, so the row does not re-front:
+     * a reader watching the list must not see rows rearrange under them.
      *
-     * No paint. Nothing on screen reads this, so painting for it would be a
-     * repaint the visitor did not ask for — and `renderStall` throws the tree
-     * away, which is what `livePaint` exists to be careful about.
+     * What a later frame *does* change is how settled the row is. That update
+     * happens in place, and only forwards (`strongerStatus`): a reorg
+     * re-announced as a mempool arrival, or a replica that has not caught up,
+     * would otherwise paint "not known to this page" over a state the chain
+     * already proved.
+     *
+     * The Activity panel reads this, so the caller decides when to paint —
+     * `readFacts` paints once per burst rather than once per transaction.
      */
-    const recordEvent = (txid: string, kind: StallEventKind, book?: BookShape): void => {
-        if (events.some((event) => event.txid === txid)) {
+    const recordEvent = (txid: string, row: StallEvent): void => {
+        const at = events.findIndex((event) => event.txid === txid);
+        if (at >= 0) {
+            const prev = events[at]!;
+            const status = strongerStatus(prev.status, row.status);
+            // Structural, not by reference: `strongerStatus` mints a fresh
+            // object when it merges two finalizations, and rebuilding the ring
+            // for a state that did not actually move is churn nothing asked
+            // for.
+            if (sameStatus(status, prev.status)) {
+                return;
+            }
+            const next = [...events];
+            next[at] = { ...prev, ...(status === undefined ? {} : { status }) };
+            events = next;
+            state = { ...state, view: { ...state.view, events } };
             return;
         }
-        events = [
-            { txid, kind, seenAtMs: Date.now(), ...(book === undefined ? {} : { book }) },
-            ...events,
-        ].slice(0, MAX_STALL_EVENTS);
+        events = [{ ...row, txid, seenAtMs: Date.now() }, ...events].slice(
+            0,
+            MAX_STALL_EVENTS,
+        );
         state = { ...state, view: { ...state.view, events } };
+    };
+
+    /** Two answers a reader could not tell apart. */
+    const sameStatus = (
+        a: EventStatus | undefined,
+        b: EventStatus | undefined,
+    ): boolean => {
+        if (a === undefined || b === undefined) {
+            return a === b;
+        }
+        if (a.kind !== b.kind) {
+            return false;
+        }
+        if (a.kind === 'finalized' && b.kind === 'finalized') {
+            return a.avalanche === b.avalanche;
+        }
+        if (a.kind === 'in-block' && b.kind === 'in-block') {
+            return a.height === b.height;
+        }
+        return true;
     };
 
     /**
@@ -616,11 +688,12 @@ export function boot(
         live?.close();
         live = undefined;
         clearBroadcastTimers();
-        // A new stall is a new ring. These are transactions at one address, and
-        // carrying them across a route change would attribute one seller's
-        // traffic to another.
+        // A new stall is a new ring, and a new walk. These are transactions at
+        // one address, and carrying either list across a route change would
+        // attribute one seller's traffic to another.
         events = [];
         activityGaps = 0;
+        walked = undefined;
         // Paint the parsed route before the index is asked, so a paste is not
         // a no-op while Chronik is in flight. Home is local; still cheap.
         state = openingFromLocation();
@@ -629,14 +702,165 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
+        // Pages already walked for **this** stall in this page load come back:
+        // a retry, or a Back to a stall already read, must not charge a reader
+        // ten round trips for what this page is still holding. A different
+        // stall finds nothing here, which is the clearing above.
+        walked = walkedByStall.get(next.pubkeyHex ?? '');
         // The activity caption dates from here — the last full load — because
         // this function just emptied the ring; "since the page opened" would
         // claim coverage across a gap it cannot see.
-        state = { ...next, view: { ...next.view, watchedSinceMs: Date.now() } };
+        state = {
+            ...next,
+            view: {
+                ...next.view,
+                watchedSinceMs: Date.now(),
+                ...(walked === undefined ? {} : { history: walked }),
+            },
+        };
         adoptFiatHint();
         paint();
         watch(claimed);
         syncBroadcastTimers();
+    };
+
+    /**
+     * Everything one row needs to be named, from the stall this page is on.
+     *
+     * `wantedAttachmentTokens` reads the settings **currently** painted, which
+     * is why a walked token move is labelled against today's decorations and
+     * the panel says so: a row cannot know what the stall wore a year ago, and
+     * inventing that is worse than naming the comparison.
+     */
+    const eventContext = (hash: string): EventContext => ({
+        script: p2pkhOutputScript(hash),
+        hash,
+        wantedTokenIds: wantedAttachmentTokens(),
+    });
+
+    /** Hand the current walk to the view and paint it. */
+    const applyHistory = (next: StallHistory): void => {
+        walked = next;
+        const key = state.pubkeyHex;
+        // The in-flight state is never memoized. A refresh that lands while a
+        // page is in the air abandons that read (the generation check below),
+        // and a remembered `loading: true` would come back on the next visit
+        // to this stall as a disabled control with nothing behind it.
+        if (key !== undefined && next.loading !== true) {
+            // Re-inserted, so the most recently walked stall is the last key
+            // and the eviction below takes the least recently walked one.
+            walkedByStall.delete(key);
+            walkedByStall.set(key, next);
+            while (walkedByStall.size > MAX_WALKED_STALLS) {
+                const oldest = walkedByStall.keys().next().value;
+                if (oldest === undefined) {
+                    break;
+                }
+                walkedByStall.delete(oldest);
+            }
+        }
+        state = { ...state, view: { ...state.view, history: next } };
+        livePaint();
+    };
+
+    /**
+     * Read one page of this stall's own history, from page zero.
+     *
+     * **Always from zero, never from "after the newest row the ring holds".**
+     * Paging from N+1 would skip everything between the page load and the
+     * first ask, so the overlap with the ring is deliberate: it is one page of
+     * duplication against a hole nobody could see.
+     *
+     * One page in flight, so a reader pressing four times spends one round
+     * trip rather than four. A page that throws is a hole in what **this page**
+     * read — the rows already on screen stand, `failed` says so, and the same
+     * control asks for the same page again. That is §4's rule about a failed
+     * refetch, in a new place: our failure is never painted as a fact about
+     * the seller.
+     */
+    const readHistoryPage = async (): Promise<void> => {
+        const claimed = generation;
+        const hash = state.view.route.kind === 'pubkey' ? hashOfStall() : undefined;
+        const address = state.view.address;
+        if (hash === undefined || address === undefined) {
+            return;
+        }
+        const at: StallHistory = walked ?? { rows: [], pagesRead: 0 };
+        if (at.loading === true || at.done === true || at.pagesRead >= MAX_ACTIVITY_PAGES) {
+            return;
+        }
+        const page = at.pagesRead;
+        applyHistory({ ...at, loading: true, failed: false });
+        let answer;
+        try {
+            answer = await createChronik().address(address).history(page, HISTORY_PAGE_SIZE);
+        } catch {
+            if (claimed !== generation) {
+                return;
+            }
+            // The page is not counted as read, so the retry asks for the same
+            // one — and `done` is never set from a failure, because a page that
+            // did not answer said nothing about where the history ends.
+            applyHistory({ ...at, loading: false, failed: true });
+            return;
+        }
+        if (claimed !== generation) {
+            return;
+        }
+        const ctx = eventContext(hash);
+        const rows = [...at.rows];
+        const already = new Set(rows.map((row) => row.txid));
+        for (const tx of answer.txs) {
+            if (already.has(tx.txid)) {
+                continue;
+            }
+            already.add(tx.txid);
+            rows.push(mergeWithRing(historyEventOf(tx, ctx)));
+        }
+        const pagesRead = page + 1;
+        applyHistory({
+            rows,
+            pagesRead,
+            loading: false,
+            failed: false,
+            // Two different sentences, and only one of them is about the
+            // seller: `done` is the end of their history, `capped` is our own
+            // ceiling. Reporting the second as the first would be a claim made
+            // from a guess (§5's rule about a truncated walk).
+            done: pagesRead >= Math.max(answer.numPages, 1),
+            capped: pagesRead >= MAX_ACTIVITY_PAGES,
+        });
+    };
+
+    /**
+     * A walked row, carrying anything the ring already proved about the same
+     * transaction.
+     *
+     * Overlap between the two lists is normal — the walk starts at page zero —
+     * and the ring can know things a walked page does not: plugin entries come
+     * from the node that answered, and a `TX_FINALIZED` frame the socket
+     * delivered is not in the history payload at all. The stronger fact wins;
+     * neither list loses a row to the other.
+     */
+    const mergeWithRing = (row: StallEvent): StallEvent => {
+        const seen = events.find((event) => event.txid === row.txid);
+        if (seen === undefined) {
+            return row;
+        }
+        const status = strongerStatus(row.status, seen.status);
+        return {
+            ...row,
+            ...(row.book === undefined && seen.book !== undefined ? { book: seen.book } : {}),
+            ...(status === undefined ? {} : { status }),
+        };
+    };
+
+    /** The stall's hash160, from the key the route resolved to. */
+    const hashOfStall = (): string | undefined => {
+        const pubkeyHex = state.pubkeyHex;
+        return pubkeyHex === undefined
+            ? undefined
+            : toHex(shaRmd160(fromHex(pubkeyHex)));
     };
 
     /**
@@ -891,9 +1115,9 @@ export function boot(
         claimed: number,
         stall: { address: string; hash: string },
         txids: readonly string[],
+        said?: ReadonlyMap<string, LiveTxStatus>,
     ): Promise<void> => {
-        const wanted = wantedAttachmentTokens();
-        const script = p2pkhOutputScript(stall.hash);
+        const ctx = eventContext(stall.hash);
         const chronik = createChronik();
         let facts = NO_FACTS;
         let ringMoved = false;
@@ -919,16 +1143,25 @@ export function boot(
             if (claimed !== generation) {
                 return;
             }
-            const classified = classifyTx(tx, script, wanted);
-            const kind = eventKindOf(tx, classified);
-            const book = kind === 'book' ? bookShapeOf(tx) : undefined;
-            if (book !== undefined) {
+            const classified = classifyTx(tx, ctx.script, ctx.wantedTokenIds);
+            const row = historyEventOf(tx, ctx);
+            if (row.book !== undefined) {
                 bookProofAtMs = Date.now();
             }
             // One event per transaction that was actually read. A txid that was
             // never fetched has no kind to give it, and inventing `other` for
             // one would put a claim in the ring that nothing checked.
-            recordEvent(txid, kind, book);
+            //
+            // The state comes from the **frame** as well as the fetch: chronik
+            // has just told this page a transaction is finalized, and the
+            // stronger of the two answers is the one that stands.
+            // Authorship is the walk's question, not the live path's:
+            // `loadManifest` and `loadDescriptions` verify it themselves, so a
+            // label in the ring would decide in a second place what counts as
+            // the seller's signature (`classifyTx`'s own note).
+            delete row.signedByStall;
+            row.status = strongerStatus(row.status, statusFromMessage(said?.get(txid)));
+            recordEvent(txid, row);
             ringMoved = true;
             facts = unionFacts(facts, classified);
         }
@@ -1076,8 +1309,8 @@ export function boot(
                         await fillNewTokens(claimed, pubkeyHex, status);
                     })();
                 },
-                onBurst: (txids) => {
-                    void readFacts(claimed, stall, txids);
+                onBurst: (txids, said) => {
+                    void readFacts(claimed, stall, txids, said);
                 },
                 onReestablished: () => {
                     // What happened while the socket was down is unknown, and

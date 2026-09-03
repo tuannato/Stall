@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { encodeDescriptionHex } from '../domain/description';
 import { encodeManifestHex } from '../domain/manifest';
 import { DEFAULT_THEME_ID } from '../domain/theme';
-import type { ChainTx } from './chain';
+import type { ChainTx, ChainTxInput, ChainTxOutput } from './chain';
 import {
     ALL_FACTS,
     NO_FACTS,
     anyFact,
     classifyTx,
     eventKindOf,
+    historyEventOf,
     touchesAgora,
     unionFacts,
     bookShapeOf,
@@ -309,5 +310,296 @@ describe('a-cancel-is-not-named-a-sale', () => {
         };
         const shapes = [adSetup, offerHalf].map(bookShapeOf);
         expect(shapes.filter((s) => s !== undefined)).toEqual(['appeared']);
+    });
+});
+
+/**
+ * The signature the walks verify. Copied in shape from `loadManifest`'s own
+ * fixtures: a 71-byte push standing in for the DER signature, then the
+ * compressed pubkey, which is what `extractP2pkhPubKey` reads back.
+ */
+function p2pkhScriptSig(pk: Uint8Array): string {
+    const sig = new Uint8Array(71).fill(0x30);
+    const script = new Uint8Array(1 + sig.length + 1 + pk.length);
+    script[0] = sig.length;
+    script.set(sig, 1);
+    script[1 + sig.length] = pk.length;
+    script.set(pk, 2 + sig.length);
+    return toHex(script);
+}
+
+const SELLER_PK = compressedPk(0x11);
+const STRANGER_PK = compressedPk(0xff);
+const CTX = { script: STALL, hash: HASH, wantedTokenIds: WANTED };
+
+/** A walked transaction, with the fields a history page actually carries. */
+function walked(opts: {
+    txid?: string;
+    signedBy?: Uint8Array;
+    from?: string;
+    outputs: readonly (string | { script: string; sats?: bigint })[];
+    height?: number;
+    timestamp?: number;
+    timeFirstSeen?: number;
+    isFinal?: boolean;
+    tokens?: readonly string[];
+    inputPlugins?: ChainTxInput['plugins'];
+    outputPlugins?: ChainTxOutput['plugins'];
+}): ChainTx {
+    const pk = opts.signedBy;
+    return {
+        txid: opts.txid ?? '11'.repeat(32),
+        block:
+            opts.height === undefined
+                ? undefined
+                : { height: opts.height, timestamp: opts.timestamp },
+        isFinal: opts.isFinal,
+        timeFirstSeen: opts.timeFirstSeen,
+        inputs: [
+            {
+                inputScript: pk === undefined ? '00' : p2pkhScriptSig(pk),
+                outputScript: opts.from ?? (pk === SELLER_PK ? STALL : STRANGER),
+                plugins: opts.inputPlugins,
+            },
+        ],
+        outputs: opts.outputs.map((out, i) =>
+            typeof out === 'string'
+                ? {
+                      outputScript: out,
+                      plugins: i === 0 ? opts.outputPlugins : undefined,
+                  }
+                : { outputScript: out.script, sats: out.sats },
+        ),
+        tokenEntries: opts.tokens?.map((tokenId) => ({ tokenId })),
+    };
+}
+
+describe('history-verifies-authorship-of-a-settings-row', () => {
+    /**
+     * The live path deliberately does not check authorship — `loadManifest`
+     * and `loadDescriptions` do it themselves, and a stranger's `STL1`-shaped
+     * dust there costs one walk that finds nothing. A history **row** is
+     * different: it is a sentence on screen about what happened at this
+     * stall, and "Stall settings published" over a stranger's dust is a claim
+     * nothing checked. So the walk verifies the input script with the same
+     * `txSignedByStall` the readers use, and labels what it finds.
+     */
+    it('names the seller’s own record, and labels a stranger’s copy', () => {
+        const mine = historyEventOf(
+            walked({ signedBy: SELLER_PK, outputs: [STALL, stl1()] }),
+            CTX,
+        );
+        expect(mine.kind).toBe('settings');
+        expect(mine.signedByStall).toBe(true);
+
+        const theirs = historyEventOf(
+            walked({
+                txid: '22'.repeat(32),
+                signedBy: STRANGER_PK,
+                from: STRANGER,
+                outputs: [STALL, stl1()],
+            }),
+            CTX,
+        );
+        expect(theirs.kind, 'still the shape it is').toBe('settings');
+        expect(theirs.signedByStall, 'but not this seller’s').toBe(false);
+    });
+
+    it('holds the same line for a description record', () => {
+        const theirs = historyEventOf(
+            walked({
+                signedBy: STRANGER_PK,
+                from: STRANGER,
+                outputs: [STALL, stld(TOKEN_OTHER, 'Grown on the hill')],
+            }),
+            CTX,
+        );
+        expect(theirs.kind).toBe('description');
+        expect(theirs.signedByStall).toBe(false);
+    });
+
+    it('says nothing about authorship for a row that is not a record', () => {
+        // A payment has no author to verify: the question does not arise, and
+        // `false` there would read as "somebody else's payment".
+        const payment = historyEventOf(walked({ outputs: [STALL] }), CTX);
+        expect(payment.kind).toBe('other');
+        expect(payment.signedByStall).toBeUndefined();
+    });
+});
+
+describe('history-classifies-agora-from-plugin-entries', () => {
+    /**
+     * Measured 2026-09-03 on the fabien hosts: the owner's own address page 0
+     * carries `plugins.agora` on the transactions that touched the book, so a
+     * walked row can be named from the same entries the live path reads.
+     *
+     * The `false` half stays weak on purpose (`touchesAgora`): a node without
+     * the plugin sends no entries at all, so absence is never evidence.
+     */
+    it('names a walked book row and its shape', () => {
+        const take = historyEventOf(
+            walked({
+                outputs: ['6a'],
+                inputPlugins: { agora: { groups: ['50aa'], data: [] } },
+            }),
+            CTX,
+        );
+        expect(take.kind).toBe('book');
+        expect(take.book).toBe('consumed');
+
+        const listing = historyEventOf(
+            walked({
+                outputs: ['a9'],
+                outputPlugins: { agora: { groups: ['50aa'], data: [] } },
+            }),
+            CTX,
+        );
+        expect(listing.kind).toBe('book');
+        expect(listing.book).toBe('appeared');
+    });
+
+    it('a transaction with no entries at all is ordinary traffic, not a denial', () => {
+        const plain = historyEventOf(walked({ outputs: [STALL] }), CTX);
+        expect(plain.kind).toBe('other');
+        expect(plain.book).toBeUndefined();
+    });
+});
+
+describe('a-sellers-own-publish-is-not-money-received', () => {
+    /**
+     * A publish pays its own change back to the stall address, and summing
+     * outputs to that script would print the seller's float as money in. The
+     * stall being on the input side is the whole question, so both the
+     * signature and the funding script answer it — either one is enough, and
+     * omitting is the safe direction.
+     */
+    it('omits the amount when the stall signed the transaction', () => {
+        const publishTx = historyEventOf(
+            walked({
+                signedBy: SELLER_PK,
+                outputs: [
+                    { script: STALL, sats: 900_000n },
+                    { script: stl1(), sats: 0n },
+                ],
+            }),
+            CTX,
+        );
+        expect(publishTx.kind).toBe('settings');
+        expect(publishTx.sats, 'the seller’s own change is not a receipt').toBeUndefined();
+    });
+
+    it('counts a stranger’s payment to the stall script, and only that', () => {
+        const paid = historyEventOf(
+            walked({
+                outputs: [
+                    { script: STALL, sats: 5_460n },
+                    { script: STRANGER, sats: 1_000_000n },
+                    { script: STALL, sats: 1_000n },
+                ],
+            }),
+            CTX,
+        );
+        expect(paid.sats).toBe(6_460n);
+    });
+
+    it('omits it when the stall funded the transaction without a readable signature', () => {
+        // `txSignedByStall` reads the input script and can fail to parse one;
+        // coins spent FROM the stall script answer the same question, and a
+        // receipt printed from our own float is worse than no receipt.
+        const ownCoins = historyEventOf(
+            walked({ from: STALL, outputs: [{ script: STALL, sats: 4_000n }] }),
+            CTX,
+        );
+        expect(ownCoins.sats).toBeUndefined();
+    });
+});
+
+describe('a-receipt-with-no-amount-omits-it-rather-than-showing-zero', () => {
+    /**
+     * `ChainTxOutput.sats` is optional because the type is structural — a
+     * fixture written for a manifest walk never invented one, and a node need
+     * not have filled what it did not promise. `0` there would be a figure,
+     * and a wrong one: §8's rule is omit rather than guess.
+     */
+    it('omits the amount when any output to the stall has no sats', () => {
+        const partial = historyEventOf(
+            walked({
+                outputs: [{ script: STALL, sats: 5_460n }, STALL],
+            }),
+            CTX,
+        );
+        expect(partial.sats, 'half a sum is not a receipt').toBeUndefined();
+    });
+
+    it('omits it rather than reporting zero', () => {
+        const nothing = historyEventOf(
+            walked({ outputs: [{ script: STRANGER, sats: 1_000n }] }),
+            CTX,
+        );
+        expect(nothing.sats).toBeUndefined();
+
+        const zero = historyEventOf(
+            walked({ outputs: [{ script: STALL, sats: 0n }] }),
+            CTX,
+        );
+        expect(zero.sats).toBeUndefined();
+    });
+});
+
+describe('a-walked-row-carries-the-chain-clock-and-a-finality-state', () => {
+    /**
+     * Three states, exactly. `isFinal` absent is not "unfinalized" and a
+     * missing block is not "in the mempool" — both are things this page does
+     * not know, and the copy says so.
+     */
+    it('reads finalized, in a block, and not known', () => {
+        expect(
+            historyEventOf(walked({ outputs: [STALL], height: 800_100, isFinal: true }), CTX)
+                .status,
+        ).toEqual({ kind: 'finalized', avalanche: false });
+
+        expect(
+            historyEventOf(walked({ outputs: [STALL], isFinal: true }), CTX).status,
+            'finalized before a block is still finalized',
+        ).toEqual({ kind: 'finalized', avalanche: true });
+
+        expect(
+            historyEventOf(walked({ outputs: [STALL], height: 800_100 }), CTX).status,
+        ).toEqual({ kind: 'in-block', height: 800_100 });
+
+        expect(historyEventOf(walked({ outputs: [STALL] }), CTX).status).toEqual({
+            kind: 'unknown',
+        });
+    });
+
+    it('takes timeFirstSeen, then the block timestamp, and never this page’s clock', () => {
+        expect(
+            historyEventOf(
+                walked({
+                    outputs: [STALL],
+                    timeFirstSeen: 1_756_400_000,
+                    height: 800_100,
+                    timestamp: 1_756_400_600,
+                }),
+                CTX,
+            ).chainTimeS,
+        ).toBe(1_756_400_000);
+
+        expect(
+            historyEventOf(
+                walked({ outputs: [STALL], height: 800_100, timestamp: 1_756_400_600 }),
+                CTX,
+            ).chainTimeS,
+        ).toBe(1_756_400_600);
+
+        // chronik documents `timeFirstSeen: 0` as "unknown -> make sure to
+        // check". Zero is 1970, and a row dated 1970 is worse than an undated
+        // one.
+        const unknown = historyEventOf(
+            walked({ outputs: [STALL], timeFirstSeen: 0 }),
+            CTX,
+        );
+        expect(unknown.chainTimeS).toBeUndefined();
+        expect(unknown.seenAtMs, 'a walk never stamps the page clock').toBeUndefined();
     });
 });

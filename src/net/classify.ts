@@ -1,8 +1,15 @@
 import { STLD_HEX } from '../domain/description';
 import { isStl1 } from '../domain/manifest';
-import type { BookShape, StallEventKind } from '../domain/state';
+import type { BookShape, EventStatus, StallEvent, StallEventKind } from '../domain/state';
 import type { ChainPluginEntries, ChainTx } from './chain';
-import { AGORA_PLUGIN } from './live';
+import {
+    AGORA_PLUGIN,
+    FINALIZATION_PRE_CONSENSUS,
+    TX_CONFIRMED,
+    TX_FINALIZED,
+    type LiveTxStatus,
+} from './live';
+import { txSignedByStall } from './manifest';
 import { opReturnPushes } from './script';
 
 /**
@@ -259,4 +266,198 @@ function isStld(pushes: Uint8Array[]): boolean {
         hex += b.toString(16).padStart(2, '0');
     }
     return hex === STLD_HEX;
+}
+
+/**
+ * Everything one row needs to be named without asking the chain twice.
+ *
+ * `script` and `hash` are two views of the same address and both are needed:
+ * money is compared against the output script, authorship against the hash the
+ * pubkey must hash back to. `wantedTokenIds` is what the settings **currently**
+ * on screen depend on, which is why a walked token move is labelled against
+ * today's decorations and the screen says so — a row cannot know what the
+ * stall was wearing a year ago, and inventing that is worse than naming the
+ * comparison.
+ */
+export type EventContext = {
+    /** The stall's p2pkh output script, lowercase hex. */
+    script: string;
+    /** The stall's hash160, lowercase hex, for the authorship check. */
+    hash: string;
+    /** The attachment tokens the painted settings depend on. */
+    wantedTokenIds: ReadonlySet<string>;
+};
+
+/**
+ * How settled a **fetched** transaction is. Three states, and the third is
+ * about this page rather than about the chain (see `EventStatus`).
+ *
+ * `isFinal` with no block can only be pre-consensus: avalanche finalized it
+ * before anything mined it. With a block, this says nothing about which came
+ * first — a caller that was told pre-consensus on the wire keeps that, because
+ * `strongerStatus` never drops the stronger claim.
+ */
+export function eventStatusOf(tx: ChainTx): EventStatus {
+    if (tx.isFinal === true) {
+        return { kind: 'finalized', avalanche: tx.block === undefined };
+    }
+    if (tx.block !== undefined) {
+        return { kind: 'in-block', height: tx.block.height };
+    }
+    return { kind: 'unknown' };
+}
+
+/**
+ * What a socket frame proves, and nothing more.
+ *
+ * `TX_ADDED_TO_MEMPOOL` is deliberately **not** a state. It is one node's
+ * opinion and two nodes hold two mempools — the same reason §5 refuses an
+ * unfinalized, unmined record as a manifest winner — so a page that printed
+ * "in the mempool" from it would be stating a stranger's node as a fact. It
+ * lands as `undefined`, which reads as "not known to this page".
+ *
+ * `TX_CONFIRMED` carries no height on the wire, so the state it proves has
+ * none; the re-read of the transaction supplies one, and `strongerStatus`
+ * prefers the answer that has it.
+ */
+export function statusFromMessage(said: LiveTxStatus | undefined): EventStatus | undefined {
+    if (said?.msgType === TX_FINALIZED) {
+        return {
+            kind: 'finalized',
+            avalanche: said.finalizationReasonType === FINALIZATION_PRE_CONSENSUS,
+        };
+    }
+    if (said?.msgType === TX_CONFIRMED) {
+        return { kind: 'in-block' };
+    }
+    return undefined;
+}
+
+const RANK: Record<EventStatus['kind'], number> = {
+    finalized: 3,
+    'in-block': 2,
+    unknown: 1,
+};
+
+/**
+ * The more settled of two answers about the same transaction.
+ *
+ * **A row never walks its state backwards.** A reorg re-announces a finalized
+ * transaction as a mempool arrival on some node, a failover client answers
+ * from a replica that has not caught up, and either would otherwise paint
+ * "not known to this page" over a state the chain already proved. Going
+ * forward is news; going backward is our own read being behind, and §4 already
+ * refuses to paint that as a fact about the seller.
+ *
+ * Within one rank the richer answer wins: a height beats no height, and a
+ * finality known to be pre-consensus beats one that did not say.
+ */
+export function strongerStatus(
+    a: EventStatus | undefined,
+    b: EventStatus | undefined,
+): EventStatus | undefined {
+    if (a === undefined) {
+        return b;
+    }
+    if (b === undefined) {
+        return a;
+    }
+    if (RANK[a.kind] !== RANK[b.kind]) {
+        return RANK[a.kind] > RANK[b.kind] ? a : b;
+    }
+    if (a.kind === 'finalized' && b.kind === 'finalized') {
+        return a.avalanche === b.avalanche ? a : { kind: 'finalized', avalanche: true };
+    }
+    if (a.kind === 'in-block' && b.kind === 'in-block') {
+        return a.height !== undefined ? a : b;
+    }
+    return a;
+}
+
+/**
+ * The chain's own clock for this transaction, in seconds, or nothing.
+ *
+ * `timeFirstSeen` first, the block's timestamp second — chronik documents the
+ * block's as the fallback. Zero is **not** a time: the library says
+ * `timeFirstSeen: 0` means unknown, and a row dated 1970 is worse than an
+ * undated one.
+ */
+export function chainTimeOf(tx: ChainTx): number | undefined {
+    const seen = tx.timeFirstSeen;
+    if (typeof seen === 'number' && seen > 0) {
+        return seen;
+    }
+    const mined = tx.block?.timestamp;
+    return typeof mined === 'number' && mined > 0 ? mined : undefined;
+}
+
+/**
+ * What this transaction paid **to the stall's own script**, or nothing.
+ *
+ * Three ways to answer nothing, and every one of them is deliberate:
+ *
+ * - **The stall is on the input side.** A publish pays its own change back to
+ *   the stall address, and summing outputs there would print the seller's
+ *   float as money coming in. Both the signature and the funding script answer
+ *   "were these our coins already" — either is enough, and omitting is the
+ *   safe direction, because a receipt invented from a float is worse than a
+ *   receipt this page did not print.
+ * - **An output to the stall carried no figure.** `sats` is optional because
+ *   the type is structural; half a sum is not a receipt.
+ * - **The sum is zero.** Zero is a figure, and a wrong one: §8 says omit
+ *   rather than guess.
+ *
+ * Nothing here says a sale happened. A payment to an address is money
+ * arriving, which is all the chain proves.
+ */
+export function receivedSats(tx: ChainTx, ctx: EventContext): bigint | undefined {
+    const script = ctx.script.toLowerCase();
+    for (const input of tx.inputs) {
+        if (input.outputScript?.toLowerCase() === script) {
+            return undefined;
+        }
+    }
+    if (txSignedByStall(tx, ctx.hash)) {
+        return undefined;
+    }
+    let total = 0n;
+    for (const output of tx.outputs) {
+        if (output.outputScript.toLowerCase() !== script) {
+            continue;
+        }
+        if (typeof output.sats !== 'bigint') {
+            return undefined;
+        }
+        total += output.sats;
+    }
+    return total > 0n ? total : undefined;
+}
+
+/**
+ * One row, from one transaction, for either list.
+ *
+ * Pure, and it never stamps a clock: the page clock belongs to the caller that
+ * watched the transaction arrive, and a walked row was never watched. Every
+ * field it does set is something the transaction itself proves.
+ *
+ * Authorship is answered only for the stall's own record kinds. A `false` on
+ * an ordinary payment would read as "somebody else's payment", which is true
+ * of almost every payment and says nothing.
+ */
+export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
+    const facts = classifyTx(tx, ctx.script, ctx.wantedTokenIds);
+    const kind = eventKindOf(tx, facts);
+    const book = kind === 'book' ? bookShapeOf(tx) : undefined;
+    const chainTimeS = chainTimeOf(tx);
+    const sats = receivedSats(tx, ctx);
+    const isRecord = kind === 'settings' || kind === 'description';
+    return {
+        txid: tx.txid,
+        kind,
+        status: eventStatusOf(tx),
+        ...(chainTimeS === undefined ? {} : { chainTimeS }),
+        ...(sats === undefined ? {} : { sats }),
+        ...(book === undefined ? {} : { book }),
+        ...(isRecord ? { signedByStall: txSignedByStall(tx, ctx.hash) } : {}),
+    };
 }

@@ -48,6 +48,10 @@ const PROTECTED = [
     '[data-role="describe-hex"]',
     '[data-role="fiat"]',
     '[data-role="rate"]',
+    // What a payment actually brought in, in the Activity fold. A money
+    // figure like any other here: covered, it reads as nothing — and this one
+    // is the only figure on the panel a reader could check against a wallet.
+    '[data-role="receipt-amount"]',
 ].join(', ');
 
 /**
@@ -1017,6 +1021,9 @@ const CONTRAST_TEXT = [
     '[data-role="describe-hex"]',
     '[data-role="fiat"]',
     '[data-role="rate"]',
+    // The Activity fold's amount, on the fold's own ground, which no other
+    // screen puts a figure on.
+    '[data-role="receipt-amount"]',
     // Every control on the publish/handoff path, and the dock: a theme file
     // pairing a literal ink with a token ground shipped these at 2.31:1
     // under the After-hours mood while this list looked elsewhere.
@@ -1205,6 +1212,19 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
     // reported the address behind the publish sheet at 1.00:1.
     const scrim = document.querySelector('[data-role="sheet-scrim"]');
     const scope: ParentNode = scrim ?? document;
+    // Open every fold first, exactly as `measure()` does, and for the mirror
+    // image of its reason. A closed `<details>` still hands back boxes for its
+    // contents, so its controls WERE sampled — against whatever the panel
+    // paints at those coordinates, which is not their ground and is often
+    // their own ink. Measured 2026-09-03 when the Activity rows became
+    // disclosures: 54 figures reported between 1.00:1 and 2.9:1 across all
+    // three looks and both widths, every one of them a control nobody could
+    // see. A guard that reads a false red is as useless as one that reads a
+    // false green, and the fix is the same in both directions — sample what is
+    // painted.
+    for (const details of scope.querySelectorAll('details')) {
+        details.open = true;
+    }
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
     const targets: ContrastTarget[] = [];
     for (const node of preparedNodes) {

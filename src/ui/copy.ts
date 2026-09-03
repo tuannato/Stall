@@ -356,8 +356,102 @@ export const activityCapped = (kept: number): string =>
     `Only the newest ${kept} arrivals are kept — older ones have rolled off this page.`;
 export const EVENT_SETTINGS = 'Stall settings published';
 export const EVENT_DESCRIPTION = 'A token description published';
+/**
+ * A record shaped like this stall's, signed by another wallet.
+ *
+ * Anyone can publish an `STL1`- or `STLD`-shaped output paying this address,
+ * and the readers refuse it — but a **row** is a sentence on screen, and
+ * "Stall settings published" over a stranger's dust is a claim nothing
+ * checked. The walk verifies the input script and says which it found.
+ */
+export const EVENT_SETTINGS_STRANGER = 'A settings record from another wallet';
+export const EVENT_DESCRIPTION_STRANGER = 'A description record from another wallet';
 export const EVENT_TOKEN_MOVE = 'A decoration token moved';
 export const EVENT_OTHER = 'A transaction at this address';
+
+/**
+ * The two lists, named for what each of them actually is.
+ *
+ * "Watching" is this page's own ring, on this page's clock. "History" is a
+ * walk of the address, on the chain's. One heading each, because a reader
+ * looking at a time needs to know whose clock it came from.
+ */
+export const ACTIVITY_WATCHING_TITLE = 'Watching';
+export const ACTIVITY_HISTORY_TITLE = 'History';
+/**
+ * The Activity tab is public — anyone can open it — so it says so once,
+ * before the rows. Nothing here is private to the seller, and a panel that
+ * looked like a seller's own ledger would invite someone to treat it as one.
+ */
+export const ACTIVITY_PUBLIC =
+    'Everything here is public chain data. Anyone opening this stall sees the same rows.';
+export const ACTIVITY_HISTORY_LEDE =
+    'Read from this address’s history when you ask for it, newest first, on the chain’s clock.';
+/**
+ * A row naming a decoration is named against what the stall wears **today**.
+ * A walk cannot know what it wore a year ago, and inventing that is worse
+ * than naming the comparison.
+ */
+export const ACTIVITY_HISTORY_DECOR_NOTE =
+    'Token moves are named against the decorations this stall wears today.';
+/** Nothing has been asked for yet: a walk is round trips, so it is a choice. */
+export const ACTIVITY_HISTORY_READ = 'Read this address’s history';
+export const ACTIVITY_HISTORY_MORE = 'Read more';
+export const ACTIVITY_HISTORY_LOADING = 'Reading a page…';
+export const ACTIVITY_HISTORY_END = 'That is the end of this address’s history.';
+/**
+ * Our own ceiling, never called an ending: `MAX_ACTIVITY_PAGES` is a bound
+ * this page chose, and reporting it as the end of the history would be a
+ * claim about the seller made from a guess (§5's rule, in a new place).
+ */
+export const activityHistoryCapped = (pages: number): string =>
+    `Stopped after ${pages} pages. Older transactions are not read here.`;
+export const ACTIVITY_HISTORY_FAILED =
+    'That page did not answer. Nothing already read was lost.';
+export const ACTIVITY_HISTORY_RETRY = 'Try that page again';
+
+/**
+ * The row detail. Short labels on purpose: they share a grid track with the
+ * value beside them, and the txid takes a row of its own because 64
+ * characters beside a label is the incident the probe's label rule was
+ * written for.
+ */
+export const EVENT_TXID_LABEL = 'Transaction';
+export const EVENT_TIME_PAGE_LABEL = 'Seen by this page';
+export const EVENT_TIME_CHAIN_LABEL = 'Chain time';
+export const EVENT_KIND_LABEL = 'What it was';
+export const EVENT_AMOUNT_LABEL = 'Received here';
+export const EVENT_STATUS_LABEL = 'Status';
+export const EVENT_OPEN_EXPLORER = 'Open in a block explorer';
+export const EVENT_COPY_TXID = 'Copy';
+export const EVENT_TXID_COPIED = 'Copied';
+export const EVENT_TXID_SELECT = 'Select it';
+/**
+ * The amount is what arrived at this address, and it is never dressed as a
+ * sale: a payment proves money moved, not that anything was bought. XEC, from
+ * the covenant's own unit through `formatXec` — never a fiat conversion,
+ * which would put a second figure on a fact.
+ */
+export const eventReceived = (formattedXec: string): string => `${formattedXec} ${XEC}`;
+
+/**
+ * The three finality states, and only three. **Never "in the mempool"**: a
+ * missing `isFinal` is one node's silence, and even a mempool frame is one
+ * node's opinion while two nodes hold two mempools — the same reason §5
+ * refuses an unfinalized, unmined record as a winner. The third line says
+ * what is true, which is that this page does not know.
+ */
+export const EVENT_STATUS_FINALIZED_AVALANCHE = 'Finalized by avalanche';
+export const EVENT_STATUS_FINALIZED = 'Finalized in a block';
+export const EVENT_STATUS_IN_BLOCK = 'In a block';
+export const eventStatusInBlock = (height: number): string =>
+    `In block ${group(height)}`;
+export const EVENT_STATUS_UNKNOWN = 'Not known to this page';
+
+/** Thousands separators, the way `formatXec` writes them. */
+function group(n: number): string {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
 
 /**
  * Says what the control does, not what it feels like. "Save" would suggest the
