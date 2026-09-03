@@ -802,7 +802,14 @@ export const DESC_REMOVE = 'Remove this description';
  */
 export const DESC_REMOVE_PAY = 'Remove with another wallet app';
 export const DESC_REMOVE_LEDE =
-    'This publishes a record that erases what you wrote. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
+    'This publishes a record that erases what you wrote; the shelf and the price stay. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
+/**
+ * Every field empty over a record that exists is a request, not silence: the
+ * bare tombstone. Said before signing, because the remove control beside it
+ * keeps the shelf and the price and this one does not.
+ */
+export const DESC_CLEAR_ALL_LEDE =
+    'Every field is empty: publishing this removes the words, the shelf and the price for this token.';
 export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
 
 /**

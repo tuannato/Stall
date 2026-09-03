@@ -5884,6 +5884,78 @@ describe('editing-words-does-not-drop-the-price', () => {
     });
 });
 
+describe('clearing-every-field-removes-everything', () => {
+    /**
+     * One record is the whole truth, so a shelf or a price comes off the chain
+     * by publishing without it. But with every field empty the sheet used to
+     * call that "nothing asked" and disable the control, while the remove road
+     * restated the published shelf and price — so a token with no words and a
+     * shelf had no road to a bare record at all. Every field empty over a
+     * published record is a request: the bare tombstone, and a line that says
+     * what it takes away.
+     */
+    const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
+    const clearAll = (root: HTMLElement) => {
+        for (const role of ['describe-text', 'describe-shelf', 'describe-price']) {
+            const f = root.querySelector(`[data-role="${role}"]`) as HTMLInputElement;
+            f.value = '';
+            f.dispatchEvent(new Event('input'));
+        }
+    };
+
+    it('publishes the bare tombstone when words, shelf and price are all cleared', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                descriptions: new Map([[TOKEN_ID, 'Old words']]),
+                shelves: new Map([[TOKEN_ID, 'Coffee']]),
+                prices: new Map([[TOKEN_ID, PRICE]]),
+            }),
+        );
+        clearAll(root);
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.hidden).toBe(false);
+        expect(hex.textContent).toBe(encodeRemovalHex(TOKEN_ID, {}));
+        const lede = root.querySelector('[data-role="describe-clear-lede"]') as HTMLElement;
+        expect(lede.hidden).toBe(false);
+        expect(lede.textContent).toBe(copy.DESC_CLEAR_ALL_LEDE);
+    });
+
+    it('no-words-shelved-can-drop-its-shelf', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+                shelves: new Map([[TOKEN_ID, 'Coffee']]),
+            }),
+        );
+        clearAll(root);
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(encodeRemovalHex(TOKEN_ID, {}));
+    });
+
+    it('still asks nothing when nothing is published and every field is empty', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'publish' },
+                stallName: 'Riverside Goods',
+            }),
+        );
+        clearAll(root);
+        expect((root.querySelector('[data-role="describe-hex"]') as HTMLElement).hidden).toBe(true);
+        expect(
+            (root.querySelector('[data-role="describe-clear-lede"]') as HTMLElement).hidden,
+        ).toBe(true);
+    });
+});
+
 describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
     /**
      * Void on screen, never on the wire. The editor writes two units and paints

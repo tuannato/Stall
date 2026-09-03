@@ -1860,6 +1860,10 @@ function describeSection(
     const removeQr = el('div', 'publish-qr');
     removeQr.setAttribute('data-role', 'describe-remove-qr');
     removeQr.hidden = true;
+    const clearLede = el('p', 'fine', copy.DESC_CLEAR_ALL_LEDE);
+    clearLede.setAttribute('data-role', 'describe-clear-lede');
+    clearLede.hidden = true;
+    wrap.append(clearLede);
     const removeLede = el('p', 'fine', copy.DESC_REMOVE_LEDE);
     wrap.append(removeLede);
     wrap.append(remove);
@@ -1926,14 +1930,25 @@ function describeSection(
         // error. A figure that was typed and cannot be written **is** asked of
         // it, so it does not count as untouched — otherwise the one refusal a
         // seller can reach with the other fields blank would print nothing.
-        const empty = text === '' && shelf === '' && price === undefined && !priceRefused;
+        const publishedShelf = view.shelves?.get(tokenId);
+        const existing =
+            view.descriptions?.get(tokenId) ?? publishedShelf ?? published;
+        const blank = text === '' && shelf === '' && price === undefined && !priceRefused;
+        // Every field empty over a record that exists is a request — the bare
+        // tombstone, which takes the words, the shelf and the price off this
+        // page in one record. Over nothing it is still nothing asked.
+        const clearing = blank && existing !== undefined;
+        const empty = blank && existing === undefined;
+        clearLede.hidden = !clearing;
         const hex =
             empty || priceRefused
                 ? undefined
-                : encodeDescriptionHex(tokenId, text, {
-                      shelf: shelf === '' ? undefined : shelf,
-                      price,
-                  });
+                : clearing
+                  ? encodeRemovalHex(tokenId, {})
+                  : encodeDescriptionHex(tokenId, text, {
+                        shelf: shelf === '' ? undefined : shelf,
+                        price,
+                    });
         const ready = hex !== undefined;
         err.hidden = ready || empty;
         // Which rule bit, most specific first: the text's own caps, then the
@@ -1986,9 +2001,6 @@ function describeSection(
         // And it carries every field that is not the words: a removal says
         // "take the words away", and one that restated nothing else would take
         // the shelf and the figure off the chain with them.
-        const publishedShelf = view.shelves?.get(tokenId);
-        const existing =
-            view.descriptions?.get(tokenId) ?? publishedShelf ?? published;
         const removalHex =
             existing === undefined
                 ? undefined
