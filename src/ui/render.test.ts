@@ -111,6 +111,7 @@ import { formatXec } from '../domain/money';
 import { cashtabPayUrl, payBip21, payECashPayUrl } from '../domain/cashtab';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
+import { itemTitle } from '../domain/text';
 import {
     lastDrawnPosterSpec,
     SQUARE_SIZE,
@@ -8005,5 +8006,546 @@ describe('a-pay-hint-that-opened-nothing-says-which-kind-of-nothing', () => {
             expect(root.textContent).toContain(copy.PAY_HINT_UNREAD);
             expect(root.textContent).not.toContain(copy.PAY_HINT_UNKNOWN);
         }
+    });
+});
+
+/*
+ * Whose token a quote is written on (R3), the item's name coming from the
+ * seller's own words (R4), and genesis strings going through the same screen
+ * as every other chain string (R5).
+ */
+
+const MINTER_KEY = `02${'cc'.repeat(32)}`;
+/** An unterminated right-to-left override, the vector the decoders refuse. */
+const BIDI = '\u202e';
+
+function quoteView(over: Partial<StallView> = {}): StallView {
+    return idlePubkey({
+        fetch: { kind: 'offers', offers: [OFFER] },
+        tokens: new Map([[TOKEN_ID, BEANS]]),
+        prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        stallName: 'Riverside Goods',
+        ...over,
+    });
+}
+
+function describeSheetOf(over: Partial<StallView> = {}) {
+    return paint(quoteView({ overlay: { kind: 'describe' }, ...over }));
+}
+
+const describeField = (root: HTMLElement, role: string) =>
+    root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
+
+describe('a-quote-on-someone-elses-token-is-refused-at-write', () => {
+    /**
+     * A quote on a token this stall did not mint borrows that token's id, its
+     * picture and whatever it stands for off-chain. The editor refuses to
+     * write a new one; the wire is untouched and every quote a seller already
+     * signed still paints.
+     */
+    it('takes the price field away and says why', () => {
+        const { root } = describeSheetOf({
+            genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+        });
+        expect(describeField(root, 'describe-price-field').hidden).toBe(true);
+        const why = describeField(root, 'describe-price-why');
+        expect(why.hidden).toBe(false);
+        expect(why.textContent).toBe(copy.DESC_QUOTE_NOT_YOURS);
+    });
+
+    it('still writes the words, which borrow nothing from anyone', () => {
+        const { root } = describeSheetOf({
+            prices: undefined,
+            genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+        });
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-hex').textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.'),
+        );
+    });
+
+    it('a token this stall minted keeps its price field', () => {
+        const { root } = describeSheetOf({
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+        });
+        expect(describeField(root, 'describe-price-field').hidden).toBe(false);
+        expect(describeField(root, 'describe-price-why').hidden).toBe(true);
+    });
+});
+
+describe('an-unknown-genesis-warns-and-writes', () => {
+    /**
+     * A genesis this page could not read is our own gap, not a fact about the
+     * seller — so it warns and the field stays. Refusing on it would take the
+     * quote control away from a seller whose walk merely stopped early.
+     */
+    it('keeps the field, warns, and writes the price', () => {
+        const { root } = describeSheetOf({ prices: undefined, genesis: new Map() });
+        expect(describeField(root, 'describe-price-field').hidden).toBe(false);
+        const warn = describeField(root, 'describe-warn-unattributed');
+        expect(warn.hidden).toBe(false);
+        expect(warn.textContent).toBe(copy.DESC_QUOTE_UNATTRIBUTED);
+        const amount = describeField(root, 'describe-price') as HTMLInputElement;
+        amount.value = '5.00';
+        amount.dispatchEvent(new Event('input'));
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-hex').textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.', {
+                price: { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 },
+            }),
+        );
+    });
+
+    it('says nothing of the kind once the genesis is attributed', () => {
+        const { root } = describeSheetOf({
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+        });
+        expect(describeField(root, 'describe-warn-unattributed').hidden).toBe(true);
+    });
+});
+
+describe('a-listed-token-warns-about-two-prices', () => {
+    /**
+     * One token, two rails: the covenant asks what it asks and this figure is
+     * what the seller wrote. A warning, never a refusal — neither Agora group
+     * is under the seller's sole control, so a reader-side rule would let a
+     * stranger with one unit take a quote off its own stall.
+     */
+    it('warns when the quoted token is also listed here', () => {
+        const { root } = describeSheetOf({
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+        });
+        const warn = describeField(root, 'describe-warn-listed');
+        expect(warn.hidden).toBe(false);
+        expect(warn.textContent).toBe(copy.DESC_QUOTE_LISTED_TOO);
+    });
+
+    it('says nothing about a quoted token this stall does not list', () => {
+        const { root } = describeSheetOf({
+            fetch: { kind: 'empty' },
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+            descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]),
+        });
+        expect(describeField(root, 'describe-warn-listed').hidden).toBe(true);
+    });
+});
+
+describe('a-quote-with-no-words-warns', () => {
+    it('warns when a figure is written over an empty description', () => {
+        const { root } = describeSheetOf({
+            prices: undefined,
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+        });
+        const warn = describeField(root, 'describe-warn-no-words');
+        expect(warn.hidden).toBe(true);
+        const amount = describeField(root, 'describe-price') as HTMLInputElement;
+        amount.value = '5.00';
+        amount.dispatchEvent(new Event('input'));
+        expect(warn.hidden).toBe(false);
+        expect(warn.textContent).toBe(copy.DESC_QUOTE_NO_WORDS);
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        expect(warn.hidden).toBe(true);
+    });
+});
+
+describe('an-unattributed-genesis-does-not-erase-its-quote-on-republish', () => {
+    /**
+     * A publish restates the whole document, so a sheet that dropped a field
+     * it merely may not edit would destroy a permanent record as a side effect
+     * of fixing a typo — the same rule that carries a foreign currency code
+     * and a tolerance byte forward.
+     */
+    it('carries a published quote forward on a token now attributed elsewhere', () => {
+        const published = { code: 'usd', exponent: 2, amount: 1250n } as const;
+        const { root } = describeSheetOf({
+            prices: new Map([[TOKEN_ID, published]]),
+            genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+        });
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-hex').textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.', { price: published }),
+        );
+    });
+});
+
+describe('a-sold-out-tokens-record-is-still-editable', () => {
+    /**
+     * The picker's set was the shop's, so a listing that sold out took its own
+     * record out of reach — words, shelf and quote alike, on a record that is
+     * permanent and republishable.
+     */
+    it('offers a described and a quoted token with nothing listed', () => {
+        const { root } = describeSheetOf({
+            fetch: { kind: 'empty' },
+            tokens: new Map([
+                [TOKEN_ID, BEANS],
+                [TOKEN_UNLISTED, PAY_TEA],
+            ]),
+            descriptions: new Map([[TOKEN_UNLISTED, 'Loose leaf.']]),
+            prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        });
+        const picker = describeField(root, 'describe-token') as HTMLSelectElement;
+        expect([...picker.options].map((o) => o.value).sort()).toEqual(
+            [TOKEN_ID, TOKEN_UNLISTED].sort(),
+        );
+        expect(describeField(root, 'describe-no-tokens').hidden).toBe(true);
+    });
+
+    it('mounts the form and the paste field on a stall with nothing at all', () => {
+        const { root } = describeSheetOf({
+            fetch: { kind: 'empty' },
+            tokens: new Map(),
+            prices: undefined,
+        });
+        expect(root.querySelector('[data-role="describe-paste"]')).not.toBeNull();
+        expect(describeField(root, 'describe-no-tokens').hidden).toBe(false);
+        expect(describeField(root, 'describe-no-tokens').textContent).toBe(
+            copy.DESC_NO_TOKENS,
+        );
+    });
+});
+
+describe('a-pasted-token-id-joins-the-picker', () => {
+    const PASTED = 'ab'.repeat(32);
+    const PASTED_META: TokenMeta = {
+        tokenId: PASTED,
+        name: 'Sticker pack',
+        ticker: 'STK',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    function withLookup(over: Partial<StallView> = {}) {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onLookupToken: vi.fn(async () => ({
+                meta: PASTED_META,
+                attribution: 'attributed' as const,
+            })),
+        };
+        renderStall(root, quoteView({ overlay: { kind: 'describe' }, ...over }), h);
+        return { root, h };
+    }
+
+    const pasteAndAdd = async (root: HTMLElement, value: string) => {
+        const paste = describeField(root, 'describe-paste') as HTMLInputElement;
+        paste.value = value;
+        paste.dispatchEvent(new Event('input'));
+        (describeField(root, 'describe-paste-add') as HTMLButtonElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true }),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    };
+
+    it('asks for the token and adds it to the picker', async () => {
+        const { root, h } = withLookup();
+        await pasteAndAdd(root, PASTED);
+        expect(h.onLookupToken).toHaveBeenCalledWith(PASTED);
+        const picker = describeField(root, 'describe-token') as HTMLSelectElement;
+        expect([...picker.options].map((o) => o.value)).toContain(PASTED);
+        expect(picker.value).toBe(PASTED);
+        expect([...picker.options].find((o) => o.value === PASTED)?.textContent).toBe(
+            'Sticker pack',
+        );
+    });
+
+    it('never asks for anything that is not a token id', async () => {
+        const { root, h } = withLookup();
+        await pasteAndAdd(root, 'not-a-token-id');
+        expect(h.onLookupToken).not.toHaveBeenCalledWith('not-a-token-id');
+        expect(describeField(root, 'describe-paste-why').hidden).toBe(false);
+        expect(describeField(root, 'describe-paste-why').textContent).toBe(
+            copy.DESC_PASTE_INVALID,
+        );
+    });
+});
+
+describe('a-pasted-token-id-does-not-clear-the-half-written-record', () => {
+    /**
+     * The sheet holds a half-written record in the DOM and nowhere else, so a
+     * lookup answered by `paint()` would take it. The answer lands in the
+     * sheet's own closure and the sheet refreshes itself in place.
+     */
+    it('lands the answer in place, with the half-written record still there', async () => {
+        let answer: ((a: { attribution: 'not-attributed' }) => void) | undefined;
+        const root = document.createElement('div');
+        renderStall(root, quoteView({ overlay: { kind: 'describe' } }), {
+            ...handlers(),
+            onLookupToken: () =>
+                new Promise((resolve) => {
+                    answer = resolve;
+                }),
+        });
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Half a sentence';
+        field.dispatchEvent(new Event('input'));
+        // The answer arrives after the seller has started typing.
+        answer!({ attribution: 'not-attributed' });
+        await Promise.resolve();
+        await Promise.resolve();
+        // It landed: the sheet refreshed itself and now refuses a new quote.
+        expect(describeField(root, 'describe-price-field').hidden).toBe(true);
+        expect(describeField(root, 'describe-price-why').textContent).toBe(
+            copy.DESC_QUOTE_NOT_YOURS,
+        );
+        // And it took nothing with it.
+        expect((describeField(root, 'describe-text') as HTMLTextAreaElement).value).toBe(
+            'Half a sentence',
+        );
+        expect(describeField(root, 'describe-hex').textContent).toContain(
+            encodeDescriptionHex(TOKEN_ID, 'Half a sentence')!.slice(0, 80),
+        );
+    });
+
+    it('paints a pasted answer without touching the words either', async () => {
+        const PASTED = 'ab'.repeat(32);
+        const root = document.createElement('div');
+        renderStall(root, quoteView({ overlay: { kind: 'describe' } }), {
+            ...handlers(),
+            onLookupToken: async () => ({ attribution: 'unknown' as const }),
+        });
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Half a sentence';
+        field.dispatchEvent(new Event('input'));
+        const paste = describeField(root, 'describe-paste') as HTMLInputElement;
+        paste.value = PASTED;
+        paste.dispatchEvent(new Event('input'));
+        (describeField(root, 'describe-paste-add') as HTMLButtonElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true }),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        // The read answered no genesis facts, so nothing joined the picker and
+        // the record being written is untouched.
+        expect(describeField(root, 'describe-paste-why').textContent).toBe(
+            copy.DESC_PASTE_UNREAD,
+        );
+        expect((describeField(root, 'describe-text') as HTMLTextAreaElement).value).toBe(
+            'Half a sentence',
+        );
+    });
+});
+
+describe('a-not-attributed-token-borrows-no-icon-and-says-so', () => {
+    /**
+     * The icon source is keyed on the token id, so a quote on somebody else's
+     * token would paint their logo on this stall. Initials instead, and one
+     * line under the row: the id and the off-chain product are borrowed too,
+     * not only the picture.
+     */
+    it('paints initials and the line on the pay row', () => {
+        const { root } = paint(
+            quoteView({ genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]) }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        const cell = row.querySelector('.item-ic') as HTMLElement;
+        expect(cell.getAttribute('data-token-id')).toBeNull();
+        expect(cell.querySelector('img')).toBeNull();
+        expect(row.textContent).toContain(copy.QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('says it in the pay sheet as well', () => {
+        const { root } = paint(
+            quoteView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).toContain(copy.QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('an unknown genesis keeps the icon and says nothing', () => {
+        const { root } = paint(quoteView({ genesis: new Map() }));
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        expect(
+            (row.querySelector('.item-ic') as HTMLElement).getAttribute('data-token-id'),
+        ).toBe(TOKEN_ID);
+        expect(row.textContent).not.toContain(copy.QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('the Agora row keeps its icon whatever the genesis says', () => {
+        const { root } = paint(
+            quoteView({ genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]) }),
+        );
+        const head = root.querySelector('.item-head') as HTMLElement;
+        expect(
+            (head.querySelector('.item-ic') as HTMLElement).getAttribute('data-token-id'),
+        ).toBe(TOKEN_ID);
+    });
+});
+
+describe('auth-pubkey-is-never-painted', () => {
+    /**
+     * It is the minter's own claim — unauthenticated bytes chosen by whoever
+     * minted the token, and chronik's own fixture carries ASCII there. It is
+     * read for one shape-gated comparison and reaches no screen.
+     */
+    it('appears on no surface that paints the token', () => {
+        const claimed: TokenMeta = { ...BEANS, authPubkey: MINTER_KEY };
+        for (const overlay of [
+            { kind: 'idle' } as const,
+            { kind: 'buy', outpoint: OUTPOINT } as const,
+            { kind: 'pay', tokenId: TOKEN_ID } as const,
+            { kind: 'describe' } as const,
+        ]) {
+            const { root } = paint(
+                quoteView({ overlay, tokens: new Map([[TOKEN_ID, claimed]]) }),
+            );
+            expect(root.textContent ?? '', overlay.kind).not.toContain(MINTER_KEY);
+        }
+    });
+});
+
+describe('an-item-is-titled-by-its-words-on-the-pay-surfaces', () => {
+    /**
+     * A quote is for an item, and the seller's own words are what say what the
+     * item is. The genesis name is a token's name — true, and rarely the thing
+     * a buyer is paying for — so it takes the small second line.
+     */
+    it('titles the pay row with the words and keeps the token name beside it', () => {
+        const { root } = paint(
+            quoteView({ descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]) }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        expect(row.querySelector('.item-n')?.textContent).toBe('Half kilo of beans');
+        expect(row.querySelector('[data-role="quote-token-name"]')?.textContent).toBe(
+            'Roasted Beans',
+        );
+    });
+
+    it('titles the pay sheet head the same way and paints the whole words', () => {
+        const words = 'Half kilo of beans, roasted on the day it ships';
+        const { root } = paint(
+            quoteView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                descriptions: new Map([[TOKEN_ID, words]]),
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.querySelector('.sheet-head .item-n')?.textContent).toBe(itemTitle(words));
+        expect(sheet.textContent).toContain(copy.PAY_WORDS_LABEL);
+        // The head's cut is a title; the sheet is where the whole record shows.
+        expect(sheet.querySelector('[data-role="pay-words"]')?.textContent).toBe(words);
+    });
+});
+
+describe('no-words-names-the-token-and-says-so', () => {
+    it('falls back to the genesis name and says the seller wrote nothing', () => {
+        const { root } = paint(quoteView());
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        expect(row.querySelector('.item-n')?.textContent).toBe('Roasted Beans');
+        expect(row.textContent).toContain(copy.QUOTE_NO_WORDS_LINE);
+        expect(row.querySelector('[data-role="quote-token-name"]')).toBeNull();
+    });
+});
+
+describe('the-stream-card-keeps-the-genesis-name', () => {
+    /**
+     * The overlay plate is 216px and `.bc-nm` is nowrap with an ellipsis — a
+     * cut no probe rule can see. The genesis name is the short, stable string
+     * on that plate; words-first naming binds the pay row and the pay sheet.
+     */
+    it('titles a quote card with the token name, not the words', () => {
+        const { root } = paint(
+            quoteView({
+                broadcast: {
+                    preset: 'corner',
+                    mode: 'fixed',
+                    transparent: false,
+                    cards: 'quotes',
+                },
+                broadcastState: 'live',
+                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
+            }),
+        );
+        const card = root.querySelector('.bc-q-item') as HTMLElement;
+        expect(card.querySelector('.bc-nm')?.textContent).toBe('Roasted Beans');
+        expect(card.textContent).not.toContain('Half kilo of beans');
+    });
+});
+
+describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
+    /**
+     * A genesis name is chain-supplied free text on the paint path, exactly
+     * like a stall name or a description — and it never went through
+     * `isLegibleText` at all. Name, then ticker, then the token id: `initials`
+     * stays an icon treatment, because a two-letter title is wrong.
+     */
+    const hostile = (name: string, ticker: string): TokenMeta => ({
+        ...BEANS,
+        name,
+        ticker,
+    });
+
+    const VECTORS = [
+        `a${BIDI}b`,
+        `x${'\u0300'.repeat(5)}`,
+        'a\u200bb',
+        '   ',
+    ];
+
+    it('falls back to the ticker, then to the token id', () => {
+        for (const bad of VECTORS) {
+            const toTicker = paint(
+                quoteView({ tokens: new Map([[TOKEN_ID, hostile(bad, 'BEAN')]]) }),
+            ).root;
+            expect(toTicker.querySelector('.item-head .item-n')?.textContent, bad).toBe('BEAN');
+            const toId = paint(
+                quoteView({ tokens: new Map([[TOKEN_ID, hostile(bad, bad)]]) }),
+            ).root;
+            expect(toId.querySelector('.item-head .item-n')?.textContent, bad).toBe(TOKEN_ID);
+        }
+    });
+
+    it('screens the name on every surface that paints one', () => {
+        const bad = `a${BIDI}b`;
+        for (const overlay of [
+            { kind: 'idle' } as const,
+            { kind: 'buy', outpoint: OUTPOINT } as const,
+            { kind: 'pay', tokenId: TOKEN_ID } as const,
+            { kind: 'describe' } as const,
+        ]) {
+            const painted = paint(
+                quoteView({ overlay, tokens: new Map([[TOKEN_ID, hostile(bad, bad)]]) }),
+            ).root;
+            expect(painted.textContent ?? '', overlay.kind).not.toContain(BIDI);
+        }
+        const stream = paint(
+            quoteView({
+                tokens: new Map([[TOKEN_ID, hostile(bad, bad)]]),
+                broadcast: {
+                    preset: 'corner',
+                    mode: 'fixed',
+                    transparent: false,
+                    cards: 'quotes',
+                },
+                broadcastState: 'live',
+            }),
+        ).root;
+        expect(stream.textContent ?? '').not.toContain(BIDI);
+    });
+
+    it('screens the ticker on its own, so a clean name keeps a dirty ticker off', () => {
+        const { root } = paint(
+            quoteView({
+                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                tokens: new Map([[TOKEN_ID, hostile('Roasted Beans', `a${BIDI}b`)]]),
+            }),
+        );
+        expect(root.textContent ?? '').not.toContain(BIDI);
+        expect(root.querySelector('.item-head .item-n')?.textContent).toBe('Roasted Beans');
     });
 });

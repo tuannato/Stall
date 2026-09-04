@@ -675,3 +675,80 @@ describe('price-rides-the-record-that-won', () => {
         });
     });
 });
+
+describe('a-genesis-on-the-address-branch-costs-no-extra-read', () => {
+    /**
+     * The walk already fetches every transaction at the stall's address, and a
+     * token's genesis txid **is** its token id — so when the address branch is
+     * the one being walked, a genesis it passes over is attributed for free.
+     *
+     * Nothing on the lokad branch: that index holds `STLD` records and no
+     * genesis at all, which is why the read path has its own capped lookup and
+     * why an undecided token stays `unknown` rather than becoming a claim.
+     */
+    const GENESIS_SIGNED = 'a1'.repeat(32);
+    const GENESIS_HD = 'a2'.repeat(32);
+    const GENESIS_STRANGER = 'a3'.repeat(32);
+
+    /** A transaction that is the genesis of its own txid, as chronik reports it. */
+    function genesisTx(tokenId: string, over: Partial<ChainTx> = {}): ChainTx {
+        return {
+            ...tx({ txid: tokenId, height: 5, outputs: [] }),
+            tokenEntries: [{ tokenId }],
+            ...over,
+        };
+    }
+
+    it('attributes a signed genesis and an HD wallet’s mint output', async () => {
+        const strangerHash = toHex(shaRmd160(compressedPk(0xff)));
+        const out = await load(
+            chronikWith({
+                addressNumTxs: 3,
+                lokadNumTxs: 9000,
+                addressTxs: [
+                    // Signed by the stall.
+                    genesisTx(GENESIS_SIGNED),
+                    // Funded from another index; the mint output pays the stall.
+                    genesisTx(GENESIS_HD, {
+                        inputs: [
+                            {
+                                inputScript: p2pkhScriptSig(compressedPk(0xff)),
+                                outputScript: p2pkhOutputScript(strangerHash),
+                            },
+                        ],
+                        outputs: [
+                            {
+                                outputScript: p2pkhOutputScript(HASH),
+                                token: { tokenId: GENESIS_HD },
+                            },
+                        ],
+                    }),
+                    // Somebody else's genesis that merely paid this address.
+                    genesisTx(GENESIS_STRANGER, {
+                        inputs: [
+                            {
+                                inputScript: p2pkhScriptSig(compressedPk(0xff)),
+                                outputScript: p2pkhOutputScript(strangerHash),
+                            },
+                        ],
+                        outputs: [{ outputScript: p2pkhOutputScript(HASH) }],
+                    }),
+                ],
+            }),
+        );
+        expect(out.genesis.get(GENESIS_SIGNED)).toBe('attributed');
+        expect(out.genesis.get(GENESIS_HD)).toBe('attributed');
+        expect(out.genesis.get(GENESIS_STRANGER)).toBe('not-attributed');
+    });
+
+    it('decides nothing on the lokad branch', async () => {
+        const out = await load(
+            chronikWith({
+                addressNumTxs: 400,
+                lokadNumTxs: 0,
+                lokadTxs: [genesisTx(GENESIS_SIGNED)],
+            }),
+        );
+        expect(out.genesis.size).toBe(0);
+    });
+});

@@ -4,7 +4,9 @@ import {
     type TokenDescription,
     type TokenPrice,
 } from '../domain/description';
+import type { GenesisAttribution } from '../domain/genesis';
 import { pickManifestWinner, type ManifestRank } from '../domain/manifest';
+import { attributionFromGenesisTx } from './genesis';
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGES, type ChainTx, type HistoryPage } from './chain';
 import type { ManifestChronik } from './chain';
 import { txSignedByStall } from './manifest';
@@ -75,6 +77,16 @@ export type DescriptionLookup = {
      * how our own failure gets printed as a fact about the stall.
      */
     readonly failed: boolean;
+    /**
+     * tokenId → whose wallet minted it, for every genesis this walk passed
+     * over. **Only on the address branch**, and free there: the walk already
+     * fetched those transactions, and a token's genesis txid is its token id.
+     *
+     * The lokad branch contributes nothing — that index holds `STLD` records
+     * and no genesis — so a token missing here is undecided, never denied. The
+     * read path's own capped lookup is what covers the rest.
+     */
+    readonly genesis: ReadonlyMap<string, GenesisAttribution>;
 };
 
 export async function loadDescriptions(
@@ -88,16 +100,25 @@ export async function loadDescriptions(
     // did, and a partial set of the seller's own words beats none.
     const found = new Map<string, LoadedDescription[]>();
     const unreadable = new Set<string>();
+    const genesis = new Map<string, GenesisAttribution>();
     let truncated = false;
     let failed = false;
     try {
-        truncated = await walk(chronik, seller.address, seller.hash, found, unreadable, addrFirstPage);
+        truncated = await walk(
+            chronik,
+            seller.address,
+            seller.hash,
+            found,
+            unreadable,
+            genesis,
+            addrFirstPage,
+        );
     } catch {
         // The offers are the shop. A failed description read is a shop with the
         // descriptions we managed to read, never a shop that did not paint.
         failed = true;
     }
-    return { ...collate(found, unreadable), truncated, failed };
+    return { ...collate(found, unreadable), genesis, truncated, failed };
 }
 
 /** True when the walk stopped at `MAX_HISTORY_PAGES` before the index ended. */
@@ -107,6 +128,7 @@ async function walk(
     hash: string,
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
+    genesis: Map<string, GenesisAttribution>,
     addrFirstPage?: Promise<HistoryPage>,
 ): Promise<boolean> {
     const addrEp = chronik.address(address);
@@ -127,9 +149,20 @@ async function walk(
     const total = Math.max(first.numPages, 1);
     const pages = Math.min(total, MAX_HISTORY_PAGES);
 
-    collectPage(first, hash, found, unreadable);
+    // The genesis derivation rides the address branch alone: those are the
+    // transactions at the stall's own address, and a genesis among them is one
+    // this walk was going to fetch anyway. The lokad index holds records, not
+    // mints, so nothing there can be read this way.
+    const forGenesis = useAddr ? genesis : undefined;
+    collectPage(first, hash, found, unreadable, forGenesis);
     for (let page = 1; page < pages; page += 1) {
-        collectPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, found, unreadable);
+        collectPage(
+            await rest.history(page, HISTORY_PAGE_SIZE),
+            hash,
+            found,
+            unreadable,
+            forGenesis,
+        );
     }
     return total > pages;
 }
@@ -138,7 +171,7 @@ async function walk(
 function collate(
     found: ReadonlyMap<string, LoadedDescription[]>,
     unreadable: ReadonlySet<string>,
-): Omit<DescriptionLookup, 'truncated' | 'failed'> {
+): Omit<DescriptionLookup, 'truncated' | 'failed' | 'genesis'> {
     const descriptions = new Map<string, string>();
     const shelves = new Map<string, string>();
     const prices = new Map<string, TokenPrice>();
@@ -179,9 +212,10 @@ function collectPage(
     hash: string,
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
+    genesis?: Map<string, GenesisAttribution>,
 ): void {
     for (const tx of page.txs) {
-        collectTx(tx, hash, found, unreadable);
+        collectTx(tx, hash, found, unreadable, genesis);
     }
 }
 
@@ -212,7 +246,23 @@ function collectTx(
     hash: string,
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
+    genesis?: Map<string, GenesisAttribution>,
 ): void {
+    /*
+     * Whose token this is, decided **before** the authorship return below and
+     * for that exact reason: a Cashtab HD wallet funds a genesis from another
+     * index, so the stall's own key never signed it while the mint output
+     * still landed on the stall's script. Skipping such a transaction as
+     * "not ours" would be a permanent false negative on a token the seller
+     * really did mint.
+     *
+     * A transaction is a token's genesis when it carries an entry for a token
+     * whose id is this transaction's own txid — true of SLP, ALP and NFT1
+     * children alike.
+     */
+    if (genesis !== undefined && tx.tokenEntries?.some((e) => e.tokenId === tx.txid)) {
+        genesis.set(tx.txid, attributionFromGenesisTx(tx, tx.txid, hash));
+    }
     if (!txSignedByStall(tx, hash)) {
         // Anyone can put an STLD output on chain naming anyone's token. Without
         // this, anyone can write a description *for* a seller.

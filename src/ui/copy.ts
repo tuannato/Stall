@@ -349,6 +349,14 @@ export const STUDIO_DESCRIBE_HINT =
  */
 export const STUDIO_SEC_RECORD = 'The stall record';
 export const STUDIO_SEC_SHARE = 'Share this stall';
+/**
+ * What the Activity panel is, said where a seller reads their own tools. It
+ * is a feed of what this page happened to read — a ring on the page clock and
+ * a capped walk on the chain's — and calling it a ledger is exactly the claim
+ * neither list can back.
+ */
+export const STUDIO_ACTIVITY_NOTE =
+    'Activity is what this page read, not a ledger — keep your own records.';
 /*
  * The browser preference carries no heading — one toggle is not a section —
  * and this line says where the preference lives, in the register of the
@@ -893,7 +901,39 @@ export const DESC_REMOVE_LEDE =
  */
 export const DESC_CLEAR_ALL_LEDE =
     'Every field is empty: publishing this removes the words, the shelf and the price for this token.';
-export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
+/**
+ * The picker's set is what the seller has published or listed, so a stall with
+ * neither has nothing to select — and the paste field below it is the way in.
+ * Never an early return any more: a seller with an unlisted token they want to
+ * quote met this sentence and no field at all.
+ */
+export const DESC_NO_TOKENS =
+    'Nothing listed or described yet — paste a token id below to describe one.';
+/** The way in for a token this stall neither lists nor has written about. */
+export const DESC_PASTE_LABEL = 'Or paste a token id';
+export const DESC_PASTE_ADD = 'Add';
+export const DESC_PASTE_INVALID =
+    'A token id is 64 characters of hex. Copy it from the token’s page in your wallet.';
+/** The read answered nothing: no name, no kind, and nothing to select. */
+export const DESC_PASTE_UNREAD =
+    'That token could not be read. Check the id, or try again in a moment.';
+
+/*
+ * Whose token a quote is written on.
+ *
+ * A quote borrows the token's id, its picture and whatever it stands for
+ * off-chain, so the editor refuses to write a **new** one on a token another
+ * wallet minted, and warns — never blocks — everywhere else. Nothing on the
+ * wire changed, and every quote a seller already signed still paints.
+ */
+export const DESC_QUOTE_NOT_YOURS =
+    'This token was minted by another wallet. A quote on it would borrow its id, its picture and whatever it stands for — mint your own token for this item.';
+export const DESC_QUOTE_UNATTRIBUTED =
+    'This page could not tell which wallet minted this token.';
+export const DESC_QUOTE_LISTED_TOO =
+    'Buyers will see two prices for this token: the Agora row and this quote.';
+export const DESC_QUOTE_NO_WORDS =
+    'Buyers will see the token’s name — describe the item so they know what they pay for.';
 
 /**
  * The price (STLD tag 0x02): what the seller asks for **one whole token**, in
@@ -989,8 +1029,27 @@ export const SUMMARY_NOTHING = 'Nothing to publish yet.';
  * **item**; the control is **Pay**.
  */
 export const PAY_SEC_TITLE = 'Pay the seller directly';
+/**
+ * One lede on the section, and one sentence in it about where the trust sits.
+ * There is no escrow and no reputation system here, so the honest thing to say
+ * is the thing that is true of any seller reached through a chat window.
+ */
 export const PAY_SEC_LEDE =
-    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote; they deliver off-chain.';
+    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote; they deliver off-chain. You are trusting the seller, as with any seller you reach through a chat.';
+/**
+ * The item's name is the seller's own words; the token's genesis name takes
+ * the small line beside it. A token name is true and is rarely the thing a
+ * buyer is paying for.
+ */
+export const QUOTE_NO_WORDS_LINE = 'The seller wrote nothing about this item';
+/**
+ * A quote on a token this stall did not mint. Said under the row and in the
+ * sheet, because the borrowed part is the id and the off-chain product, not
+ * only the picture the row already withholds.
+ */
+export const QUOTE_NOT_MINTED_HERE = 'Token minted by another wallet';
+/** Over the seller's whole description, inside the sheet. */
+export const PAY_WORDS_LABEL = 'The seller’s words';
 /** The chip that says whose figure a row carries. Never beside an Agora price. */
 export const SELLER_QUOTE_CHIP = 'Seller\u2019s quote';
 export const PAY_OPEN = 'Pay';
@@ -1062,9 +1121,17 @@ export const PAY_QR_LEDE = 'Opens the same payment in the phone\u2019s wallet.';
  */
 export const PAY_QR_STALE = 'Get a fresh price to scan';
 
-/** The fine print. Every sentence is a limit of this rail, said before the press. */
+/**
+ * The fine print. Every sentence is a limit of this rail, said before the
+ * press \u2014 and this one sits **under the figure**, inside the amount card,
+ * because that is where a buyer is looking when they decide.
+ *
+ * "No token is sent to you" in place of "no token changes hands": the second
+ * is an idiom, and this sentence has to survive a reader whose first language
+ * is not English.
+ */
 export const PAY_NOTE_DIRECT =
-    'You pay the seller directly. No escrow, no token changes hands \u2014 the seller delivers off-chain.';
+    'You pay the seller directly. No escrow. No token is sent to you \u2014 the seller delivers off-chain.';
 export const PAY_FINE_MEMO =
     'The memo names the item and quantity \u2014 both are public parts of the transaction.';
 export const PAY_FINE_SOME_WALLETS = 'Some wallets pay without the memo.';

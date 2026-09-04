@@ -37,6 +37,8 @@ import {
     RATE_TOO_SMALL,
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
+import { isLegibleText, itemTitle } from '../domain/text';
+import type { GenesisAttribution } from '../domain/genesis';
 import {
     attachmentClasses,
     attachmentNodesWanted,
@@ -54,6 +56,7 @@ import type {
     PanelKind,
     PosterFormat,
     RouteWhy,
+    SessionTokenCache,
     ShopSort,
     StallEvent,
     StallHistory,
@@ -129,6 +132,19 @@ export type StallHandlers = {
     onPayRate?: (
         timeoutMs?: number,
     ) => Promise<{ rate: bigint; atMs: number } | undefined>;
+    /**
+     * One token, on the seller's own ask: its genesis facts, and whether this
+     * stall's own wallet minted it.
+     *
+     * **Answered, never painted.** The describe sheet holds a half-written
+     * record in the DOM and nowhere else, so an answer that triggered a repaint
+     * would take it — this hands the answer back and the sheet refreshes in
+     * place. The read itself stays on the app's side of the wall; `src/ui`
+     * never imports chronik.
+     */
+    onLookupToken?: (
+        tokenId: string,
+    ) => Promise<{ meta?: TokenMeta; attribution: GenesisAttribution }>;
     /** Close whichever sheet is open. They all wear the same way out. */
     onClosePublish?: () => void;
     onOpenPoster?: () => void;
@@ -1359,9 +1375,10 @@ function shelfHead(name: string, count: number): HTMLElement {
 function collectionHead(groupTokenId: string, count: number, view: StallView): HTMLElement {
     const wrap = el('div', 'collection-head');
     wrap.setAttribute('data-role', 'collection');
-    const meta = view.tokens.get(groupTokenId);
-    const name = meta?.name ?? meta?.ticker ?? groupTokenId;
-    wrap.append(el('div', 'collection-name', copy.collectionOf(name)));
+    // Through the same screen as every other genesis string: a collection's
+    // own name is a minter's free text, and this heading paints it over a run
+    // of cards.
+    wrap.append(el('div', 'collection-name', copy.collectionOf(tokenName(view.tokens, groupTokenId))));
     wrap.append(el('div', 'collection-count', copy.itemsForSale(count)));
     return wrap;
 }
@@ -1501,17 +1518,26 @@ function revealLoadedIcon(
     }
 }
 
+/**
+ * `attributed` is false only on a quote surface, and only for a token this
+ * stall did not mint: `iconUrl` keys on the token id, so painting it there
+ * would put somebody else's logo on this seller's own row. Initials instead —
+ * the same treatment a pending or failed load already gets. Every Agora row
+ * keeps its icon whatever the genesis says: there the token *is* the thing
+ * being sold, and its picture is its own.
+ */
 function itemIcon(
     tokenId: string,
     name: string,
     extraClass?: string,
     size: IconSize = ICON_ROW_SIZE,
+    attributed = true,
 ): HTMLElement {
     const cell = el('div', 'item-ic');
     if (extraClass !== undefined) {
         cell.classList.add(extraClass);
     }
-    const ref = iconRef(tokenId, size);
+    const ref = attributed ? iconRef(tokenId, size) : undefined;
     if (ref !== undefined) {
         cell.setAttribute('data-token-id', ref.id);
         let cells = paintedIconCells.get(ref.key);
@@ -1753,6 +1779,34 @@ function paySection(
 }
 
 /**
+ * What a quoted item is called on the two pay surfaces, and what is said
+ * beside it.
+ *
+ * **The seller's own words name the item.** A genesis name names a *token*,
+ * which is true and is rarely the thing a buyer is paying for — a stall
+ * selling half-kilo bags through one fungible token would put the token's name
+ * on every row. So the words take the title, cut at `ITEM_NAME_MAX_CHARS`, and
+ * the token's name takes a small line under it.
+ *
+ * With no words the token's name is the title, and the row says the seller
+ * wrote nothing rather than letting a token name read as a description. The
+ * stream overlay is deliberately not on this rule: its plate is 216px of
+ * nowrap with an ellipsis, a cut no probe rule can see, so it keeps the short
+ * stable string.
+ */
+function quoteNaming(
+    view: StallView,
+    tokenId: string,
+): { title: string; tokenName?: string; note?: string } {
+    const genesisName = tokenName(view.tokens, tokenId);
+    const words = view.descriptions?.get(tokenId);
+    if (words === undefined || words === '') {
+        return { title: genesisName, note: copy.QUOTE_NO_WORDS_LINE };
+    }
+    return { title: itemTitle(words), tokenName: genesisName };
+}
+
+/**
  * One quoted item: the seller's figure and the way to pay it.
  *
  * No "from", no stock, no rate, no converted glance — every one of those
@@ -1767,11 +1821,30 @@ function payRow(
 ): HTMLElement {
     const row = el('div', 'item pay-row');
     row.setAttribute('data-role', 'pay-row');
-    const name = tokenName(view.tokens, item.tokenId);
-    row.append(itemIcon(item.tokenId, name));
+    const named = quoteNaming(view, item.tokenId);
+    const minted = view.genesis?.get(item.tokenId);
+    row.append(itemIcon(item.tokenId, named.title, undefined, ICON_ROW_SIZE, minted !== 'not-attributed'));
     const words = el('div', 'pay-b');
-    words.append(el('span', 'item-n', name));
+    words.append(el('span', 'item-n', named.title));
     words.append(el('span', 'chip', copy.SELLER_QUOTE_CHIP));
+    // The token's own name, small, under the item's: a genesis name is true
+    // and is rarely the thing a buyer is paying for. Absent when it is already
+    // the title, which is what a quote with no words falls back to.
+    if (named.tokenName !== undefined) {
+        const under = el('span', 'pay-sub', named.tokenName);
+        under.setAttribute('data-role', 'quote-token-name');
+        words.append(under);
+    }
+    if (named.note !== undefined) {
+        const note = el('span', 'pay-sub', named.note);
+        note.setAttribute('data-role', 'quote-no-words');
+        words.append(note);
+    }
+    if (minted === 'not-attributed') {
+        const borrowed = el('span', 'pay-sub', copy.QUOTE_NOT_MINTED_HERE);
+        borrowed.setAttribute('data-role', 'quote-not-minted');
+        words.append(borrowed);
+    }
     row.append(words);
     const right = el('div', 'pay-r');
     const figure = el('span', 'pay-q', quoteFigure(item.price));
@@ -2101,35 +2174,98 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         return wrap;
     }
 
-    const offers = offersOf(view);
-    const tokenIds = [...new Set(offers.map((o) => o.tokenId))];
-    if (tokenIds.length === 0) {
-        wrap.append(el('p', 'fine', copy.DESC_NO_TOKENS));
-        wrap.append(sheetFoot(handlers));
-        return wrap;
-    }
+    const listed = new Set(offersOf(view).map((o) => o.tokenId));
+    /*
+     * Every token this sheet may write a record about: what the stall lists,
+     * what the seller has already described or quoted, and anything they paste
+     * below.
+     *
+     * The set used to be the shop's alone, so a listing that sold out took its
+     * own record out of reach — words, shelf and figure together, on a record
+     * that is permanent and republishable. And a seller with an unlisted token
+     * to quote met one sentence and no field at all.
+     */
+    const tokenIds = [
+        ...new Set([
+            ...listed,
+            ...(view.descriptions?.keys() ?? []),
+            ...(view.prices?.keys() ?? []),
+        ]),
+    ];
+    /**
+     * Genesis facts and attributions this sheet asked for itself, held in its
+     * own closure. A lookup answered by a repaint would take a half-written
+     * record with it — `renderStall` opens with `replaceChildren()` — so the
+     * handler answers and the sheet refreshes itself in place.
+     */
+    const known: SessionTokenCache = new Map(view.tokens);
+    const learned = new Map<string, GenesisAttribution>();
+    const asked = new Set<string>();
+    const attributionOf = (tokenId: string): GenesisAttribution =>
+        learned.get(tokenId) ?? view.genesis?.get(tokenId) ?? 'unknown';
 
-    const form = el('form', 'paste');
-
+    const pick = el('div', 'paste');
     const tokenLabel = el('label', 'paste-label', copy.DESC_TOKEN_LABEL);
     const picker = el('select', 'paste-in');
     picker.name = 'describe-token';
     picker.setAttribute('data-role', 'describe-token');
     picker.setAttribute('data-focus-key', 'describe-token');
-    for (const id of tokenIds) {
-        const meta = view.tokens.get(id);
-        const option = el('option', '', meta?.name ?? meta?.ticker ?? id);
+    const addOption = (id: string): void => {
+        if ([...picker.options].some((option) => option.value === id)) {
+            return;
+        }
+        // Screened like every other genesis string: this label is a minter's
+        // free text in a control the seller reads before signing.
+        const option = el('option', '', tokenName(known, id));
         option.value = id;
         picker.append(option);
+    };
+    for (const id of tokenIds) {
+        addOption(id);
     }
-    // The launcher may name a token — the row a seller pressed. An id that is
-    // not listed here is simply not selected: the picker's set is the shop's.
-    const asked = view.overlay.kind === 'describe' ? view.overlay.tokenId : undefined;
-    if (asked !== undefined && tokenIds.includes(asked)) {
-        picker.value = asked;
+    // The launcher may name a token — the row a seller pressed. An id the
+    // picker does not hold is simply not selected.
+    const preselect = view.overlay.kind === 'describe' ? view.overlay.tokenId : undefined;
+    if (preselect !== undefined && tokenIds.includes(preselect)) {
+        picker.value = preselect;
     }
     tokenLabel.append(picker);
-    form.append(tokenLabel);
+    pick.append(tokenLabel);
+
+    // Nothing listed, described or quoted. A note now, never an early return:
+    // the paste field below it is the way in, and returning here is what put a
+    // seller with one unlisted token in front of a dead end.
+    const noTokens = el('p', 'fine', copy.DESC_NO_TOKENS);
+    noTokens.setAttribute('data-role', 'describe-no-tokens');
+    pick.append(noTokens);
+
+    /*
+     * The way in for a token this stall neither lists nor has written about.
+     * The seller reads the id off their own wallet; nothing here enumerates
+     * what the address holds, because the sheet is visible to any visitor and
+     * a holdings walk is round trips any of them could start.
+     */
+    const pasteLabel = el('label', 'paste-label', copy.DESC_PASTE_LABEL);
+    const pasteField = el('input', 'paste-in');
+    pasteField.type = 'text';
+    pasteField.name = 'describe-paste';
+    pasteField.autocomplete = 'off';
+    pasteField.spellcheck = false;
+    pasteField.maxLength = 64;
+    pasteField.setAttribute('data-role', 'describe-paste');
+    pasteField.setAttribute('data-focus-key', 'describe-paste');
+    pasteLabel.append(pasteField);
+    const pasteAdd = el('button', 'mini another', copy.DESC_PASTE_ADD);
+    pasteAdd.type = 'button';
+    pasteAdd.setAttribute('data-role', 'describe-paste-add');
+    pasteAdd.setAttribute('data-focus-key', 'describe-paste-add');
+    const pasteWhy = el('p', 'ctx', '');
+    pasteWhy.hidden = true;
+    pasteWhy.setAttribute('data-role', 'describe-paste-why');
+    pick.append(pasteLabel, pasteAdd, pasteWhy);
+    wrap.append(pick);
+
+    const form = el('form', 'paste');
 
     const textLabel = el('label', 'paste-label', copy.DESC_TEXT_LABEL);
     const field = el('textarea', 'paste-in');
@@ -2310,6 +2446,26 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     priceWhy.hidden = true;
     form.append(priceWhy);
     /*
+     * Three warnings, and not one of them blocks a publish.
+     *
+     * A genesis this page could not read is **our** gap; a token listed here
+     * as well is a choice the seller is allowed to make; a figure with no
+     * words is a record that will paint under a token's name. Each is a thing
+     * the seller has a right to know before signing and none is a thing this
+     * app may decide for them. The one refusal is above: a **new** quote on a
+     * token another wallet minted.
+     */
+    const warnUnattributed = el('p', 'fine', copy.DESC_QUOTE_UNATTRIBUTED);
+    warnUnattributed.setAttribute('data-role', 'describe-warn-unattributed');
+    warnUnattributed.hidden = true;
+    const warnListed = el('p', 'fine', copy.DESC_QUOTE_LISTED_TOO);
+    warnListed.setAttribute('data-role', 'describe-warn-listed');
+    warnListed.hidden = true;
+    const warnNoWords = el('p', 'fine', copy.DESC_QUOTE_NO_WORDS);
+    warnNoWords.setAttribute('data-role', 'describe-warn-no-words');
+    warnNoWords.hidden = true;
+    form.append(warnUnattributed, warnListed, warnNoWords);
+    /*
      * The seller's own figure, read back from the record they signed — its own
      * role, never `fiat`. That node is a conversion of the covenant's asked
      * amount; this is a number the seller wrote, and nothing on this page
@@ -2391,17 +2547,40 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const shelf = shelfField.value;
         const used = descriptionBytes(text);
 
+        // Nothing to write a record about yet. The picker and its note stay;
+        // the record itself has no subject, so it is not on screen.
+        const noToken = tokenId === '';
+        noTokens.hidden = !noToken;
+        tokenLabel.hidden = noToken;
+        form.hidden = noToken;
+
         // Per whole token, and only for a fungible one: no field at all
         // otherwise, with the line saying why in its place.
-        const priceable = isPriceable(tokenId, view.tokens.get(tokenId));
-        priceWrap.hidden = !priceable;
-        priceLede.hidden = !priceable;
-        priceWhy.hidden = priceable;
+        const priceable = isPriceable(tokenId, known.get(tokenId));
+        const attribution = attributionOf(tokenId);
+        /*
+         * The one refusal on this sheet. A quote on a token another wallet
+         * minted borrows that token's id, its picture and whatever it stands
+         * for off-chain, so the field goes and the reason takes its place —
+         * the shape `priceWhy` already had for a token that is not fungible.
+         * Words and shelf stay editable: those are the seller's own sentences
+         * about a row they are selling, and nothing is borrowed by writing one.
+         */
+        const notOurs = attribution === 'not-attributed';
+        const quotable = priceable && !notOurs;
+        priceWrap.hidden = !quotable;
+        priceLede.hidden = !quotable;
+        priceWhy.hidden = quotable;
+        // Most fundamental first: a token whose kind this page never read is
+        // not a token it may write a per-whole-token figure about at all.
+        priceWhy.textContent = priceable
+            ? copy.DESC_QUOTE_NOT_YOURS
+            : copy.DESC_PRICE_NOT_PRICEABLE;
 
         const published = view.prices?.get(tokenId);
         // Whether the field on screen can express what the chain already says.
         const editable =
-            priceable &&
+            quotable &&
             published !== undefined &&
             (EDITABLE_PRICE_CODES as readonly string[]).includes(published.code);
         /*
@@ -2416,7 +2595,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * change.
          */
         const carriedPrice = editable ? undefined : published;
-        const figure = priceable ? priceAmount.value.trim() : '';
+        const figure = quotable ? priceAmount.value.trim() : '';
         const typedPrice =
             figure === ''
                 ? undefined
@@ -2444,7 +2623,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // sheet is only carrying forward: pressing a margin onto a record it
         // cannot otherwise edit would be an edit disguised as a restatement.
         const toleranceEditable =
-            priceable && priceCode !== XEC_PRICE_CODE && carriedPrice === undefined;
+            quotable && priceCode !== XEC_PRICE_CODE && carriedPrice === undefined;
         toleranceGroup.hidden = !toleranceEditable;
         for (const button of toleranceButtons) {
             button.disabled = removing || (carriedTolerance !== undefined && !carriedIsPreset);
@@ -2479,6 +2658,16 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 ? typedPrice
                 : { ...typedPrice, tolerancePct };
         const price = typedWithMargin ?? carriedPrice;
+
+        /*
+         * The three warnings, each shown where it is true and none of them
+         * blocking. The unattributed one rides the field's presence — there is
+         * nothing to warn about on a row that takes no quote at all — and the
+         * other two ride the quote itself.
+         */
+        warnUnattributed.hidden = noToken || !quotable || attribution !== 'unknown';
+        warnListed.hidden = noToken || price === undefined || !listed.has(tokenId);
+        warnNoWords.hidden = noToken || price === undefined || text !== '';
 
         // Read back what the chain says, in the unit it says it — never a
         // conversion, and never for a code this editor could not have written.
@@ -2572,7 +2761,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * named is a field that same call was handed. Nothing here counts
          * anything twice.
          */
-        const name = tokenName(view.tokens, tokenId);
+        const name = tokenName(known, tokenId);
         const parts: copy.SummaryPart[] = [];
         let size: number;
         if (removing) {
@@ -2644,6 +2833,81 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
     };
 
+    /**
+     * Whose token the selected one is, asked once per token.
+     *
+     * The answer comes back to this closure and the sheet refreshes itself;
+     * the app never repaints for it. Skipped when the view already carries an
+     * answer — the load path decides every quoted token, so this is for the
+     * ones only the seller looks at: a listed row not yet quoted, and a pasted
+     * id.
+     */
+    const askAbout = (tokenId: string): void => {
+        const lookup = handlers.onLookupToken;
+        if (lookup === undefined || tokenId === '' || asked.has(tokenId)) {
+            return;
+        }
+        if (learned.has(tokenId) || view.genesis?.get(tokenId) !== undefined) {
+            return;
+        }
+        asked.add(tokenId);
+        void lookup(tokenId)
+            .then((answer) => {
+                if (answer.meta !== undefined) {
+                    known.set(tokenId, answer.meta);
+                }
+                learned.set(tokenId, answer.attribution);
+                refresh();
+            })
+            .catch(() => {
+                // Undecided warns and never refuses, which is what an absent
+                // answer already reads as.
+            });
+    };
+
+    /** `chronik.tx()` concatenates its argument into a request path unchecked. */
+    const TOKEN_ID_HEX = /^[0-9a-f]{64}$/;
+    pasteAdd.addEventListener('click', () => {
+        const typed = pasteField.value.trim().toLowerCase();
+        const lookup = handlers.onLookupToken;
+        if (!TOKEN_ID_HEX.test(typed) || lookup === undefined) {
+            pasteWhy.hidden = false;
+            pasteWhy.textContent = copy.DESC_PASTE_INVALID;
+            return;
+        }
+        pasteWhy.hidden = true;
+        asked.add(typed);
+        void lookup(typed)
+            .then((answer) => {
+                learned.set(typed, answer.attribution);
+                if (answer.meta === undefined) {
+                    // No genesis facts is no row: the sheet would offer a
+                    // picker entry named by a 64-character id, over a record
+                    // whose kind it could not check.
+                    pasteWhy.hidden = false;
+                    pasteWhy.textContent = copy.DESC_PASTE_UNREAD;
+                    refresh();
+                    return;
+                }
+                known.set(typed, answer.meta);
+                addOption(typed);
+                picker.value = typed;
+                pasteField.value = '';
+                removing = false;
+                loadToken();
+                refresh();
+            })
+            .catch(() => {
+                pasteWhy.hidden = false;
+                pasteWhy.textContent = copy.DESC_PASTE_UNREAD;
+            });
+    });
+    pasteField.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
+
     removeToggle.addEventListener('click', () => {
         removing = !removing;
         refresh();
@@ -2681,6 +2945,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      */
     const loadToken = (): void => {
         const tokenId = picker.value;
+        askAbout(tokenId);
         field.value = view.descriptions?.get(tokenId) ?? '';
         shelfField.value = view.shelves?.get(tokenId) ?? '';
         const price = view.prices?.get(tokenId);
@@ -2778,15 +3043,20 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const tokenId = view.overlay.kind === 'pay' ? view.overlay.tokenId : '';
     const item = quotedItems(view).find((row) => row.tokenId === tokenId);
     const address = view.address ?? '';
-    const name = tokenName(view.tokens, tokenId);
-    wrap.append(sheetHead(copy.PAY_TITLE, name, handlers));
     if (item === undefined) {
         // A scanned link, or a re-read, can name a token this stall does not
-        // quote. Say that rather than painting a sheet with no figure on it.
+        // quote. Say that rather than painting a sheet with no figure on it —
+        // and keep the sheet's own title, because there is no item to name
+        // here and a bare token id in a head is not one.
+        wrap.append(sheetHead(copy.PAY_TITLE, copy.PAY_HINT_UNKNOWN, handlers));
         wrap.append(el('p', 'ctx', copy.PAY_HINT_UNKNOWN));
         wrap.append(payFoot(handlers));
         return wrap;
     }
+    // The item is named by the seller's words, with the token's own name — or
+    // the fact that they wrote none — on the head's second line.
+    const named = quoteNaming(view, tokenId);
+    wrap.append(sheetHead(named.title, named.tokenName ?? named.note ?? '', handlers));
     const price = item.price;
     const usesRate = price.code !== XEC_PRICE_CODE;
 
@@ -2820,7 +3090,34 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const why = el('p', 'fine', '');
     why.hidden = true;
     card.append(why);
+    // The rail's own limits, under the figure and inside the card: this is
+    // where a buyer is looking when they decide, and a note further down the
+    // sheet is a note read after the decision.
+    card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
+    if (view.genesis?.get(tokenId) === 'not-attributed') {
+        // The id, the picture and whatever the token stands for off-chain are
+        // all borrowed. Said here as well as on the row: a scanned link opens
+        // this sheet without the row ever being on screen.
+        const borrowed = el('p', 'fine', copy.QUOTE_NOT_MINTED_HERE);
+        borrowed.setAttribute('data-role', 'quote-not-minted');
+        card.append(borrowed);
+    }
     wrap.append(card);
+
+    /*
+     * The seller's whole description, under its own label. The head carries a
+     * cut of it as a title; this is the sheet where "describe the item so they
+     * know what they pay for" pays off, so nothing here is shortened.
+     */
+    const words = view.descriptions?.get(tokenId);
+    if (words !== undefined && words !== '') {
+        const said = el('dl', 'row pay-words');
+        said.append(el('dt', undefined, copy.PAY_WORDS_LABEL));
+        const value = el('dd', undefined, words);
+        value.setAttribute('data-role', 'pay-words');
+        said.append(value);
+        wrap.append(said);
+    }
 
     const valve = el('p', 'note', '');
     valve.setAttribute('data-role', 'pay-valve');
@@ -2870,7 +3167,6 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         refresh();
     });
 
-    wrap.append(el('p', 'note', copy.PAY_NOTE_DIRECT));
     wrap.append(el('p', 'fine', copy.PAY_FINE_MEMO));
     wrap.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
     /*
@@ -3869,7 +4165,7 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
     // The token's own image, large, at the top of the opened card. Same source
     // and cache as the row icon (our Worker); initials stay until it loads and
     // a failed load keeps them, exactly as the small one does.
-    const name = meta?.name ?? meta?.ticker ?? offer.tokenId;
+    const name = tokenName(view.tokens, offer.tokenId);
     panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg', ICON_HERO_SIZE));
     // Every fact lives in its own column beside the hero image. A wrapper,
     // not grid placement: the desktop grid once made the icon span 99
@@ -4589,6 +4885,12 @@ function paintStudio(
     if (!hasAddress || (openPublish === undefined && openDescribe === undefined)) {
         record.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
     }
+    // What the Activity panel is, said where a seller reads their own tools:
+    // a ring on the page clock and a capped walk on the chain's, neither of
+    // which can back the word "ledger".
+    const activityNote = el('p', 'fine', copy.STUDIO_ACTIVITY_NOTE);
+    activityNote.setAttribute('data-role', 'studio-activity-note');
+    record.append(activityNote);
     body.append(record);
 
     const share = studioSection('share', copy.STUDIO_SEC_SHARE);
@@ -5471,24 +5773,41 @@ function tokenMeta(
     return tokens.get(tokenId);
 }
 
+/**
+ * A token's name, screened.
+ *
+ * **A genesis string is chain-supplied free text on the paint path**, exactly
+ * like a stall name or a description, and for a long time it was the only one
+ * `isLegibleText` never saw: a minter could put an unterminated bidi override
+ * or a stack of combining marks in a token name and this app painted it beside
+ * an asked amount on every surface it has.
+ *
+ * Name, then ticker, then the **token id** — 64 hex, which needs no screen.
+ * Never `initials`: that is an icon treatment, and a two-letter title is
+ * wrong where a name goes.
+ */
 export function tokenName(tokens: StallView['tokens'], tokenId: string): string {
     const meta = tokenMeta(tokens, tokenId);
     if (!meta) {
         return tokenId;
     }
-    if (meta.name !== '') {
+    if (isLegibleText(meta.name)) {
         return meta.name;
     }
-    if (meta.ticker !== '') {
+    if (isLegibleText(meta.ticker)) {
         return meta.ticker;
     }
     return tokenId;
 }
 
-/** Genesis ticker, omitted when missing or when it would duplicate the name. */
+/**
+ * Genesis ticker, screened on its own, omitted when missing, unreadable, or
+ * when it would duplicate the name. Its own screen rather than a fall-through
+ * from the name: a token with a clean name and a hostile ticker painted both.
+ */
 export function tokenTicker(tokens: StallView['tokens'], tokenId: string): string | undefined {
     const ticker = tokenMeta(tokens, tokenId)?.ticker;
-    if (ticker === undefined || ticker === '') {
+    if (ticker === undefined || !isLegibleText(ticker)) {
         return undefined;
     }
     if (ticker === tokenName(tokens, tokenId)) {

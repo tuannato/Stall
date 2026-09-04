@@ -605,13 +605,20 @@ describe('the-rail-preset-starts-no-timer', () => {
 const QUOTED = 'cd'.repeat(32);
 const QUOTED_TWIN = `${QUOTED.slice(0, 20)}${'ef'.repeat(22)}`;
 
+/**
+ * A quoted token as a seller's own wallet mints one today: ALP, with the
+ * minter's key in genesis. Two things follow, and both are the point — the
+ * stall's attribution is decided from metadata this page already holds, and
+ * these tests make no genesis request at all.
+ */
 function quotedMeta(tokenId: string, name: string) {
     return {
         tokenId,
         name,
         ticker: name.slice(0, 4).toUpperCase(),
         decimals: 0,
-        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+        tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+        authPubkey: PK,
     };
 }
 
@@ -864,6 +871,7 @@ function noRecords(over: Partial<DescriptionLookup> = {}): DescriptionLookup {
         shelves: new Map(),
         prices: new Map(),
         unreadable: new Set(),
+        genesis: new Map(),
         truncated: false,
         failed: false,
         ...over,

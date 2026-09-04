@@ -1,5 +1,6 @@
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
+import type { GenesisAttribution } from './genesis';
 import type { PaymentMemo } from './payment';
 import type { DecodedTheme } from './theme';
 
@@ -81,6 +82,13 @@ export type TokenMeta = {
      * nobody — see `domain/tokenlink.ts` before it reaches an href.
      */
     url?: string;
+    /**
+     * The key the minter claims minted this token (ALP genesis; SLP carries no
+     * such field). **Never painted** — it is unauthenticated bytes a minter
+     * chose, and the only thing it is read for is a shape-gated comparison
+     * against the stall's own key (`attributionFromAuthPubkey`).
+     */
+    authPubkey?: string;
 };
 
 export type FetchStatus =
@@ -502,6 +510,16 @@ export type StallView = {
      * about what the seller published.
      */
     descriptionsFailed?: boolean;
+    /**
+     * tokenId → whether this stall's own wallet minted that token.
+     *
+     * Built for the tokens the seller quoted and merged monotonically
+     * (`mergeAttribution`), because a genesis is permanent: a live re-read that
+     * learned nothing must not downgrade what an earlier read decided. Absent
+     * for a token, like `unknown`, is this page not knowing — which warns in
+     * the editor and says nothing at all to a visitor.
+     */
+    genesis?: ReadonlyMap<string, GenesisAttribution>;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

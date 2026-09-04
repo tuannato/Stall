@@ -13,6 +13,7 @@
 import { SHIPPED_ATTACHMENTS } from '../src/domain/attachments';
 import { scaleRate } from '../src/domain/fiat';
 import type { TokenPrice } from '../src/domain/description';
+import type { GenesisAttribution } from '../src/domain/genesis';
 import type {
     BroadcastParams,
     Outpoint,
@@ -89,6 +90,29 @@ export const tokens = new Map<string, TokenMeta>([
 export const QUOTES = new Map<string, TokenPrice>([
     [T1, { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 }],
     [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+]);
+
+/**
+ * Whose wallet minted each quoted token.
+ *
+ * One of each, deliberately. `T1` is this stall's own, so its row paints an
+ * icon and no extra line; `QUOTED` is another wallet's, so that row paints
+ * initials plus `QUOTE_NOT_MINTED_HERE` under the item's name — a taller row
+ * with one more string on it, which is the geometry no other fixture stages.
+ */
+export const GENESIS = new Map<string, GenesisAttribution>([
+    [T1, 'attributed'],
+    [QUOTED, 'not-attributed'],
+]);
+
+/**
+ * The seller's own words about one quoted item, which is what names it on the
+ * pay row and in the pay sheet. `QUOTED` deliberately has none: the row falls
+ * back to the token's name and says the seller wrote nothing, and both shapes
+ * are measured on the same screen.
+ */
+export const QUOTE_WORDS = new Map<string, string>([
+    [T1, 'Half kilo of beans, roasted on the day it ships'],
 ]);
 
 /** The rate the pay sheet froze, at the fixture's own frozen instant. */
@@ -174,6 +198,12 @@ export const SCREENS: Record<string, StallView> = {
         // and one on a token this stall does not list — the case the rail
         // exists for, and the one a listing-gated set would have hidden.
         prices: QUOTES,
+        // Both naming shapes on one screen: an item titled by the seller's
+        // own words with the token's name under it, and one with no words at
+        // all that falls back to the token's name and says so. `QUOTED` is
+        // another wallet's mint, so that row is initials plus one more line.
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
     }),
     expanded: base({
         fetch: {
@@ -204,6 +234,11 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'describe' },
         descriptions: new Map([[T1, 'Existing words']]),
         shelves: new Map([[T1, 'Morning roast']]),
+        // The selected token is this stall's own and is listed here, so the
+        // two-prices warning is on screen — one warning line, painted, rather
+        // than three selectors matching nothing. The paste field below the
+        // picker mounts on every describe sheet.
+        genesis: GENESIS,
         // A published price, so the editor's read-back line
         // (`[data-role="seller-price"]`) is a node the probe can see. Without
         // one it stays `hidden` and the only screen carrying that figure was
@@ -223,12 +258,19 @@ export const SCREENS: Record<string, StallView> = {
     pay: base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
         overlay: { kind: 'pay', tokenId: T1 },
         payRate: PAY_RATE,
     }),
     'pay-xec': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        // The other half of the pair: no words, another wallet's mint. The
+        // head falls back to the token's name and the card carries the line
+        // saying the token was not minted here.
+        genesis: GENESIS,
         overlay: { kind: 'pay', tokenId: QUOTED },
     }),
     /*

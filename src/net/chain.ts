@@ -49,6 +49,17 @@ export type ChainTxOutput = {
      * cannot complete is omitted rather than coerced.
      */
     sats?: bigint;
+    /**
+     * The token this output carries, as chronik reports it.
+     *
+     * Read by the genesis check and by nothing else. Without it "a mint output
+     * pays the stall script" degrades to "any output pays the stall script",
+     * and a stranger's genesis that happened to send the stall a dust output
+     * would read as a token the seller minted. Optional for the same
+     * structural reason as everything else here: a fixture written for a
+     * manifest walk has no business inventing one.
+     */
+    token?: { tokenId: string };
     plugins?: ChainPluginEntries;
 };
 
@@ -102,6 +113,14 @@ export type TokenChronik = {
             decimals: number;
             /** A homepage the minter wrote. Optional: plenty of tokens set none. */
             url?: string;
+            /**
+             * The minter's own claim about which key minted this token — ALP
+             * writes it, SLP has no such field. Unauthenticated: these are
+             * bytes a minter chose, and chronik's own fixture carries the
+             * ASCII "Token Pubkey" here. Screened before it is compared and
+             * never painted.
+             */
+            authPubkey?: string;
         };
         tokenType?: {
             protocol: string;

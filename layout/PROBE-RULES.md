@@ -112,6 +112,26 @@ nothing.
   under two blocks of our own bad news, so it is measured rather than
   reasoned about, contrast pass included — it cost 173 of the 2,831 boxes.
 
+- **The rail's buyer note moved inside the amount card**, under the figure —
+  which re-measures `.pay-amt`, a certified box. It is a `.note` on the card's
+  own `--s-surface` ground, adding a block between the figure and the quantity
+  row on `pay` and `pay-xec` at every width and every look, and nothing above
+  it may be covered by it. Re-measured with this change: no rule moved.
+
+- **Both quote-naming shapes are on the fixtures, and so is a borrowed
+  token.** `offers`, `pay` and `pay-xec` carry `genesis` and `descriptions`:
+  `T1` is this stall's own mint with the seller's words (an item title with the
+  token's name on a small line under it), and `QUOTED` is another wallet's mint
+  with no words (the token's name as the title, the line saying the seller
+  wrote nothing, and `QUOTE_NOT_MINTED_HERE` under it). The second is the
+  taller row and the one that paints initials where an icon would go, so a
+  fixture carrying only the first would measure the shorter shape and call the
+  section certified. `describe` carries `genesis` for the same reason on the
+  editor's side: one warning line visible, over a picker that now also mounts
+  the paste field. **None of these lines joins `CONTRAST_TEXT`** — they are
+  `.pay-sub` and `.fine` muted ink on grounds that list already samples, and
+  the contrast pass is most of this guard's runtime, which is at its ceiling.
+
 - **Every screen named for the pay rail must mount a figure, or the run
   fails.** A screen whose name starts with `pay` or contains `quotes` and that
   mounted no `[data-role="seller-price"]` while it was measured fails the pass
@@ -621,6 +641,29 @@ metadata; 69 of the 173 are the section itself, measured by removing its
 `prices` and watching the boxes fall to 2762). That is under 4s of headroom on
 a number that moves ±15% between runs, so the next screen added to
 `__contrastScreens` has to be paid for by pruning one, not by the ceiling.
+
+And again 2026-09-04 with the quote rules — `genesis` and `descriptions` on
+`offers`, `pay`, `pay-xec` and `describe`, the paste field on the describe
+sheet, and the buyer note moved inside `.pay-amt`: **145.6s and 148.2s** on two
+runs, contrast 114.8s / 116.9s over **2829 boxes** — two *fewer* than before.
+The spread between those two runs is the same box measured twice, which is what
+"±15% between runs" means and why the second reading is not a matrix that grew.
+No screen was added: the new
+lines are muted ink on grounds `CONTRAST_TEXT` already samples, and the two
+boxes went when a quote row's name stopped being the token's name on the
+`QUOTED` row. The ceiling is untouched and the debt stands.
+
+**On a second box the same tree read 152.7s and failed, then 144.7s and passed
+minutes later** — the hot-box effect again, this time from the run that
+followed `pnpm test` in §11's own order. Owner's ruling, 2026-09-04: **that box
+is the slow one and the reading is its own, not the matrix's.** So nothing was
+pruned and nothing was redesigned, and the settled figure to compare against
+stays the 144–148s band this tree measures across boxes. Two things to carry
+anyway: run this guard **alone** when a reading matters, and know what the
+options are if a cold run ever crosses 150 — prune a screen out of the contrast
+pass (coverage, so a decision rather than a cleanup) or measure something
+steadier than wall clock (a redesign of what the ceiling means, which is not
+the same as raising it). Raising it is still not one of them.
 
 ## What this guard still cannot see
 

@@ -58,6 +58,12 @@ import {
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions, type DescriptionLookup } from './net/descriptions';
+import {
+    attributionFromAuthPubkey,
+    mergeAttribution,
+    type GenesisAttribution,
+} from './domain/genesis';
+import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
 import type { TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
@@ -185,6 +191,14 @@ function isBroadcastFailure(kind: FetchStatus['kind'] | undefined): boolean {
 const sessionTokens = new Map<string, TokenMeta>();
 const sessionNames = new Map<string, string>();
 const sessionThemes = new Map<string, DecodedTheme>();
+/**
+ * Whose wallet minted each token, per stall, for this session.
+ *
+ * Beside `sessionTokens` and remembered for the same reason: a genesis is
+ * permanent, so an answer about one cannot go stale. The merge is monotonic,
+ * so a later read that learned nothing leaves what an earlier one decided.
+ */
+const sessionGenesis = new Map<string, GenesisAttribution>();
 
 /**
  * `chronik.tx()` concatenates whatever it is handed into a request path and
@@ -422,6 +436,7 @@ export function boot(
                 onOpenPay(tokenId);
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onLookupToken: (tokenId) => lookupToken(tokenId),
             onOpenPublish: () => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'publish-name' } } };
                 paint();
@@ -1014,6 +1029,17 @@ export function boot(
                 }
             }
             answerPayHint();
+            /*
+             * Whose token each quote is, after the link has been answered and
+             * never in front of it. A scanned code names an item this stall
+             * either quotes or does not, and that answer is in the records
+             * already read — putting a capped round of genesis reads before it
+             * would leave a buyer looking at a spinner for a question nobody
+             * asked. It repaints when it lands.
+             */
+            if (lookup !== undefined) {
+                await fillQuotedGenesis(claimed, pending.pubkeyHex, pending.stall.hash);
+            }
         })();
     };
 
@@ -1048,6 +1074,44 @@ export function boot(
             tokens.set(meta.tokenId, meta);
         }
         state = { ...state, view: { ...state.view, tokens } };
+        livePaint();
+    };
+
+    /**
+     * Whose token each quoted item is, on the screen where the book failed.
+     *
+     * The walk's own free answers were folded in by `applyDescriptions`; this
+     * is the `authPubkey` compare and the capped read that follow it, in the
+     * same place `loadCurrent` runs them. A read that answers nothing leaves
+     * those quotes undecided, which paints their icon and says nothing.
+     */
+    const fillQuotedGenesis = async (
+        claimed: number,
+        pubkeyHex: string,
+        hash: string,
+    ): Promise<void> => {
+        const quoted = [...(state.view.prices?.keys() ?? [])];
+        if (quoted.length === 0) {
+            return;
+        }
+        try {
+            await decideGenesis(
+                createChronik(),
+                pubkeyHex,
+                hash,
+                quoted,
+                (tokenId) => state.view.tokens.get(tokenId),
+            );
+        } catch {
+            return;
+        }
+        if (claimed !== generation) {
+            return;
+        }
+        state = {
+            ...state,
+            view: { ...state.view, genesis: genesisFor(pubkeyHex, quoted) },
+        };
         livePaint();
     };
 
@@ -1196,6 +1260,48 @@ export function boot(
             ...(row.book === undefined && seen.book !== undefined ? { book: seen.book } : {}),
             ...(status === undefined ? {} : { status }),
         };
+    };
+
+    /**
+     * One token, on the seller's own ask: its genesis facts and whose mint it
+     * was.
+     *
+     * **Answered, never painted.** The describe sheet is a half-written record
+     * in the DOM and a `paint()` would throw it away, so the answer goes back
+     * to the caller and the sheet refreshes itself in place. Memoized in the
+     * session caches, so a seller flicking between two tokens asks once.
+     */
+    const lookupToken = async (
+        tokenId: string,
+    ): Promise<{ meta?: TokenMeta; attribution: GenesisAttribution }> => {
+        const pubkeyHex = state.pubkeyHex;
+        const hash = hashOfStall();
+        // Gated as 64 hex before it reaches a request path: this one is typed
+        // into a field, which is exactly where `loadManifest`'s hint comes from.
+        if (pubkeyHex === undefined || hash === undefined || !TXID.test(tokenId)) {
+            return { attribution: 'unknown' };
+        }
+        const key = cacheKey(pubkeyHex, tokenId);
+        let meta = sessionTokens.get(key);
+        if (meta === undefined) {
+            try {
+                const [read] = await loadTokenMeta(createChronik(), [tokenId]);
+                if (read !== undefined) {
+                    sessionTokens.set(key, read);
+                    meta = read;
+                }
+            } catch {
+                // No name is a smaller loss than a sheet that stops answering.
+            }
+        }
+        try {
+            await decideGenesis(createChronik(), pubkeyHex, hash, [tokenId], () =>
+                sessionTokens.get(key),
+            );
+        } catch {
+            // Undecided warns; it never refuses.
+        }
+        return { meta, attribution: sessionGenesis.get(key) ?? 'unknown' };
     };
 
     /** The stall's hash160, from the key the route resolved to. */
@@ -1450,6 +1556,20 @@ export function boot(
         }
         const prevCard =
             state.view.broadcast !== undefined ? shownCard(state.view) : undefined;
+        /*
+         * The walk's free genesis answers, folded in rather than replaced.
+         * `refreshDescriptions` builds its maps from scratch every time, and a
+         * re-read that took the lokad branch sees no genesis at all — so
+         * assigning this map wholesale would downgrade every token an earlier
+         * read decided, and the editor would start refusing quotes on the
+         * seller's own tokens seconds after the page opened.
+         */
+        const pubkeyHex = state.pubkeyHex;
+        if (pubkeyHex !== undefined) {
+            for (const [tokenId, attribution] of lookup.genesis) {
+                rememberGenesis(pubkeyHex, tokenId, attribution);
+            }
+        }
         const nextFacts: StallView = {
             ...state.view,
             descriptions: lookup.descriptions,
@@ -1460,6 +1580,10 @@ export function boot(
             // actually got rather than the one the load made.
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
+            genesis:
+                pubkeyHex === undefined
+                    ? state.view.genesis
+                    : genesisFor(pubkeyHex, lookup.prices.keys()),
         };
         // The quotes are a card list too, and the shelves reorder the
         // listings, so a facts apply moves the carousel exactly as a book
@@ -1993,11 +2117,12 @@ async function loadCurrent(): Promise<AppState> {
      * beats no shop — so an `undefined` here is the rejection guard above
      * firing, and reads the same as a walk that found nothing.
      */
-    const descriptionLookup = (await descriptionsSoon) ?? {
+    const descriptionLookup: DescriptionLookup = (await descriptionsSoon) ?? {
         descriptions: new Map<string, string>(),
         shelves: new Map<string, string>(),
         prices: new Map<string, TokenPrice>(),
         unreadable: new Set<string>(),
+        genesis: new Map<string, GenesisAttribution>(),
         truncated: false,
         failed: true,
     };
@@ -2085,6 +2210,23 @@ async function loadCurrent(): Promise<AppState> {
         }
     }
 
+    /*
+     * Whose token each quoted item is. It runs here, after the metadata the
+     * ALP answer is read from, and it is bounded: the walk's answers are free,
+     * the `authPubkey` compare is free, and only what is left costs a capped
+     * read. A quote on a token this stall did not mint borrows that token's
+     * id, its picture and whatever it stands for off-chain — so the reader
+     * says so under the row and the editor refuses to write a new one.
+     */
+    await decideGenesis(
+        chronik,
+        route.pubkeyHex,
+        hash,
+        [...descriptionLookup.prices.keys()],
+        (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)),
+        descriptionLookup.genesis,
+    );
+
     const tokens: SessionTokenCache = new Map();
     for (const offer of offers) {
         const meta = sessionTokens.get(cacheKey(route.pubkeyHex, offer.tokenId));
@@ -2128,6 +2270,7 @@ async function loadCurrent(): Promise<AppState> {
             // stopped early, nor after one that threw.
             descriptionsTruncated: descriptionLookup.truncated,
             descriptionsFailed: descriptionLookup.failed,
+            genesis: genesisFor(route.pubkeyHex, descriptionLookup.prices.keys()),
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,
@@ -2238,4 +2381,90 @@ function addressOf(route: StallView['route']): string | undefined {
 
 function cacheKey(pubkeyHex: string, tokenId: string): string {
     return `${pubkeyHex}:${tokenId}`;
+}
+
+/**
+ * One token's attribution, folded into the session cache and handed back.
+ *
+ * The fold is `mergeAttribution`, which never lets `unknown` overwrite a
+ * decided state: a walk that took the lokad branch, or a lookup past its cap,
+ * learns nothing and must not un-learn what an earlier read decided.
+ */
+function rememberGenesis(
+    pubkeyHex: string,
+    tokenId: string,
+    next: GenesisAttribution,
+): GenesisAttribution {
+    const key = cacheKey(pubkeyHex, tokenId);
+    const merged = mergeAttribution(sessionGenesis.get(key), next);
+    sessionGenesis.set(key, merged);
+    return merged;
+}
+
+/** What this session knows about these tokens, for the view. */
+function genesisFor(
+    pubkeyHex: string,
+    tokenIds: Iterable<string>,
+): Map<string, GenesisAttribution> {
+    const out = new Map<string, GenesisAttribution>();
+    for (const tokenId of tokenIds) {
+        const state = sessionGenesis.get(cacheKey(pubkeyHex, tokenId));
+        if (state !== undefined) {
+            out.set(tokenId, state);
+        }
+    }
+    return out;
+}
+
+/**
+ * Whose token each of these is, learned in the order the answers get cheaper
+ * to the visitor.
+ *
+ * 1. Whatever the descriptions walk saw for free — genesis transactions at the
+ *    stall's own address, which it fetched anyway.
+ * 2. ALP's `authPubkey`, on metadata this page already holds. No request at
+ *    all, and shape-gated before it is compared.
+ * 3. One `chronik.tx(tokenId)` for each token still undecided, capped by
+ *    `MAX_GENESIS_LOOKUPS`. SLP names its minter nowhere else, and without
+ *    this the rule would bind ALP tokens alone.
+ *
+ * Never throws: an undecided token warns in the editor and says nothing at all
+ * to a visitor, which is what our own gap is allowed to do.
+ */
+async function decideGenesis(
+    chronik: GenesisChronik,
+    pubkeyHex: string,
+    hash: string,
+    tokenIds: readonly string[],
+    /**
+     * Where the ALP field is read from. The load path keeps its metadata in
+     * the session cache; the screen that painted before its facts arrived
+     * keeps it on the view — and asking the wrong one turns a free comparison
+     * into a round trip for every quoted token.
+     */
+    metaOf: (tokenId: string) => TokenMeta | undefined,
+    walked?: ReadonlyMap<string, GenesisAttribution>,
+): Promise<void> {
+    for (const [tokenId, state] of walked ?? []) {
+        rememberGenesis(pubkeyHex, tokenId, state);
+    }
+    const undecided: string[] = [];
+    for (const tokenId of tokenIds) {
+        const meta = metaOf(tokenId);
+        const state = rememberGenesis(
+            pubkeyHex,
+            tokenId,
+            attributionFromAuthPubkey(meta?.authPubkey, pubkeyHex),
+        );
+        if (state === 'unknown') {
+            undecided.push(tokenId);
+        }
+    }
+    if (undecided.length === 0) {
+        return;
+    }
+    const lookup = await loadGenesisAttribution(chronik, undecided, hash);
+    for (const [tokenId, state] of lookup.attributions) {
+        rememberGenesis(pubkeyHex, tokenId, state);
+    }
 }

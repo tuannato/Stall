@@ -27,6 +27,10 @@ export async function loadTokenMeta(
                 // is allowed to become is `domain/tokenlink.ts`'s decision, and
                 // it is never an image source (`genesis-url-is-not-an-image-source`).
                 url: info.genesisInfo.url,
+                // The minter's own claim about who minted this, kept raw: what
+                // it is allowed to mean is `domain/genesis.ts`'s decision, and
+                // it never reaches a screen (`auth-pubkey-is-never-painted`).
+                authPubkey: info.genesisInfo.authPubkey,
             };
             const tokenType = info.tokenType;
             if (

@@ -37,3 +37,30 @@ export function isLegibleText(text: string): boolean {
     }
     return true;
 }
+
+/**
+ * How much of a seller's words may stand in as an item's name.
+ *
+ * A description is up to 180 bytes — a sentence, not a title — and the pay row
+ * and the pay sheet head each have one line for it. Forty code points is a
+ * phrase a person reads at a glance and the longest thing either surface has
+ * room for; the whole description is still painted inside the sheet, under its
+ * own label, so nothing is hidden by the cut.
+ */
+export const ITEM_NAME_MAX_CHARS = 40;
+
+/**
+ * The item's name, from the seller's own words.
+ *
+ * **Code points, never UTF-16 units.** `slice` on a string of astral
+ * characters ends on half a surrogate pair, which paints as a replacement
+ * glyph — the same scar `initials` carries.
+ *
+ * No newline clause: a stored description cannot hold one. `isLegibleText`
+ * refuses C0 and both line separators, and every description on the view came
+ * through it, so a first-line rule here would be a second decoder's opinion
+ * about a record the first one already screened.
+ */
+export function itemTitle(words: string): string {
+    return [...words].slice(0, ITEM_NAME_MAX_CHARS).join('');
+}
