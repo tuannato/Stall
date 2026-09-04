@@ -388,6 +388,23 @@ export const SCREENS: Record<string, StallView> = {
                 seenAtMs: TRIED_AT_MS - 120_000,
                 sats: 10_000_000_000n,
             },
+            /*
+             * A direct payment with the one thing a seller cannot otherwise
+             * read: the address it was spent from. Its own row in the fold,
+             * both grid tracks wide like the txid above it, because an address
+             * beside a label at 390px is the wrap the label rule was written
+             * for. It carries a copy control and no link — this panel is
+             * public, and nothing on it may compose a payment.
+             */
+            {
+                txid: '99'.repeat(32),
+                kind: 'payment',
+                seenAtMs: TRIED_AT_MS - 150_000,
+                sats: 25_000_000n,
+                payment: { tokenId: T1, quantity: 2n },
+                payerAddress: 'ecash:qq9h6d0a5q65fgywv4ry64x04ur9wm2sxgx4vh8vqx',
+                status: { kind: 'finalized', avalanche: true },
+            },
             { txid: '77'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 180_000 },
         ],
         history: {

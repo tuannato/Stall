@@ -294,6 +294,16 @@ export type StallEvent = {
     /** For a `book` event: what the plugin entries prove it did. */
     book?: BookShape;
     /**
+     * For a `payment` event: the address the money was spent from, when the
+     * inputs name exactly one.
+     *
+     * A citation and never a destination — this panel is public, so nothing
+     * composes a payment to it. It is also only where the money *came from*:
+     * a payer spending through a custodial wallet spends from a key they do
+     * not hold, and the screen beside it says so.
+     */
+    payerAddress?: string;
+    /**
      * For a `payment` event: the `STLP` memo, exactly as the payer wrote it.
      *
      * Held apart from every other field on this row because it is the one part

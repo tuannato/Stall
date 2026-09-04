@@ -13,12 +13,14 @@ import {
     classifyTx,
     eventKindOf,
     historyEventOf,
+    payerAddressOf,
     paymentMemoOf,
     touchesAgora,
     unionFacts,
     bookShapeOf,
 } from './classify';
 import { p2pkhOutputScript } from './script';
+import { encodeCashAddress } from 'ecashaddrjs';
 
 const TOKEN_WORN = 'aa'.repeat(32);
 const TOKEN_OTHER = 'bb'.repeat(32);
@@ -674,5 +676,54 @@ describe('a-payment-outranks-a-token-move', () => {
         const row = historyEventOf(paid, CTX);
         expect(row.kind).toBe('payment');
         expect(row.payment).toEqual({ tokenId: TOKEN_OTHER, quantity: 4n });
+    });
+});
+
+describe('the-payers-address-is-a-citation-not-a-payment', () => {
+    /**
+     * The address a payment was spent from, handed to whoever is reading —
+     * and nothing else. There is no seller-only surface on this page: the
+     * Activity panel says so itself, so a control here is a control every
+     * visitor gets, and one that composed a payment to an address read off
+     * the chain would pay whoever last sent this stall dust. A citation
+     * cannot.
+     */
+    const PAYER = '11'.repeat(20);
+    const OTHER = '22'.repeat(20);
+    const paid = (inputs: readonly string[]) =>
+        tx({ inputs, outputs: [STALL] });
+
+    it('names the one address a payment was spent from', () => {
+        expect(payerAddressOf(paid([p2pkhOutputScript(PAYER)]))).toBe(
+            encodeCashAddress('ecash', 'p2pkh', PAYER),
+        );
+    });
+
+    it('a-multi-address-payment-offers-no-address-to-copy', () => {
+        // An ordinary HD wallet spends from several addresses at once, and
+        // picking one of them would be this page guessing where money should
+        // go back to.
+        expect(
+            payerAddressOf(paid([p2pkhOutputScript(PAYER), p2pkhOutputScript(OTHER)])),
+        ).toBeUndefined();
+    });
+
+    it('one wallet spending twice is still one address', () => {
+        expect(
+            payerAddressOf(paid([p2pkhOutputScript(PAYER), p2pkhOutputScript(PAYER)])),
+        ).toBe(encodeCashAddress('ecash', 'p2pkh', PAYER));
+    });
+
+    it('a-payment-whose-inputs-we-cannot-read-offers-nothing', () => {
+        // A p2sh spend is not an address this page may turn into one, and an
+        // input the walk carried no script for is nothing at all.
+        expect(payerAddressOf(paid([`a914${'33'.repeat(20)}87`]))).toBeUndefined();
+        expect(
+            payerAddressOf({
+                txid: '11'.repeat(32),
+                inputs: [{ inputScript: '00' }],
+                outputs: [{ outputScript: STALL }],
+            }),
+        ).toBeUndefined();
     });
 });

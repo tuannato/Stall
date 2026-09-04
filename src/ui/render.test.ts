@@ -23,6 +23,7 @@ import type {
     BroadcastParams,
     Outpoint,
     PosterFormat,
+    StallEvent,
     StallOffer,
     StallView,
     TokenMeta,
@@ -9147,5 +9148,119 @@ describe('a-shop-row-pointer-switches-tabs', () => {
     it('a listed token with no quote gets no pointer at all', () => {
         const { root } = paint(offersView([OFFER]));
         expect(root.querySelector('[data-role="pay-pointer"]')).toBeNull();
+    });
+});
+
+describe('every-composed-bip21-pays-the-stall-address', () => {
+    /**
+     * The one value on a money control a visitor can check for themselves.
+     *
+     * `CLAUDE.md` §2 says it twice, in bold — a composed BIP21 pays the
+     * seller's **own address** — and until this test nothing held it: the
+     * composers were proved against a fixture address and the call sites
+     * against nothing at all. That is the invariant that makes every hand-off
+     * on this origin fail safely for a stranger who presses the wrong thing:
+     * the payee is the route, and the route is in the footer.
+     *
+     * Read out of the **painted DOM** rather than from the call sites,
+     * deliberately. A source-level check proves the argument named at the
+     * three sheets that exist today and is blind to the fourth; this one asks
+     * every link a screen actually mounted, so a composer added later is
+     * covered on the day it paints.
+     */
+    const payeeOf = (href: string): string | undefined => {
+        let text = href;
+        try {
+            text = decodeURIComponent(href);
+        } catch {
+            // A malformed escape is not a link this test can read, and
+            // pretending otherwise would drop it from the sweep silently.
+            return undefined;
+        }
+        const at = text.indexOf('ecash:');
+        if (at < 0) {
+            return undefined;
+        }
+        const rest = text.slice(at);
+        const end = rest.indexOf('?');
+        return end < 0 ? rest : rest.slice(0, end);
+    };
+
+    /** Every screen this app composes a payment URI on. */
+    const screens: { name: string; view: StallView }[] = [
+        {
+            name: 'name sheet',
+            view: idlePubkey({
+                overlay: { kind: 'publish-name' },
+                stallName: 'Riverside Goods',
+            }),
+        },
+        {
+            name: 'describe sheet',
+            view: idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+            }),
+        },
+        {
+            name: 'pay sheet',
+            view: payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
+        },
+    ];
+
+    it('names the stall in every payment link on every screen that composes one', () => {
+        for (const screen of screens) {
+            const { root } = paint(screen.view);
+            const payees = [...root.querySelectorAll('a[href]')]
+                .map((node) => payeeOf((node as HTMLAnchorElement).href))
+                .filter((payee): payee is string => payee !== undefined);
+            // A screen that composed nothing is a screen this sweep did not
+            // measure — said out loud, because a silent zero here is the
+            // vacuous green this guard exists to refuse.
+            expect(payees.length, `${screen.name} composed no payment link`).toBeGreaterThan(0);
+            for (const payee of payees) {
+                expect(payee, `${screen.name} pays somebody else`).toBe(ADDR);
+            }
+        }
+    });
+});
+
+describe('the-payers-address-is-offered-as-a-citation', () => {
+    /**
+     * The Activity panel is public and this app has no seller session, so a
+     * control on a row is a control every visitor gets. This one copies twenty
+     * bytes and does nothing else: no href, no amount, no wallet.
+     */
+    const payment = (over: Partial<StallEvent> = {}): StallEvent => ({
+        txid: 'ef'.repeat(32),
+        kind: 'payment',
+        status: { kind: 'finalized', avalanche: false },
+        sats: 25_000_000n,
+        payment: { tokenId: TOKEN_ID, quantity: 1n },
+        ...over,
+    });
+    const panel = (event: StallEvent) =>
+        paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'activity', events: [event] }));
+
+    it('copies the address and links nowhere', () => {
+        const { root } = panel(payment({ payerAddress: ADDR }));
+        const value = root.querySelector('[data-role="payer-address"]');
+        expect(value?.textContent).toBe(ADDR);
+        const control = root.querySelector('[data-role="payer-copy"]') as HTMLElement;
+        expect(control, 'the citation is offered').not.toBeNull();
+        expect(control.tagName).toBe('BUTTON');
+        expect(control.getAttribute('href'), 'a citation opens nothing').toBeNull();
+        // Nothing on this row may read as a destination the payer chose.
+        expect(root.textContent).toContain(copy.EVENT_PAYER_NOTE);
+        expect(root.textContent?.toLowerCase()).not.toContain('refund');
+    });
+
+    it('offers nothing when the payment named no single address', () => {
+        const { root } = panel(payment());
+        expect(root.querySelector('[data-role="payer-address"]')).toBeNull();
+        expect(root.querySelector('[data-role="payer-copy"]')).toBeNull();
+        expect(root.textContent).not.toContain(copy.EVENT_PAYER_NOTE);
     });
 });

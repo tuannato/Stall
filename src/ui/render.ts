@@ -5619,7 +5619,7 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     const full = el('code', 'event-txid-full', event.txid);
     full.setAttribute('data-role', 'event-txid-full');
     txidValue.append(full);
-    txidValue.append(copyTxidControl(event.txid));
+    txidValue.append(copyControl(event.txid, 'event-copy'));
     dl.append(txidKey, txidValue);
 
     if (at !== undefined) {
@@ -5662,6 +5662,27 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
         );
         claim.setAttribute('data-role', 'payment-claim');
         dl.append(claim);
+        /*
+         * Where the money came from, for a seller who wants to send some of it
+         * back by hand. **A citation and nothing else**: this panel is public
+         * (the line at its head says so) and this app has no seller session at
+         * all, so a control here is a control every visitor gets — one that
+         * composed a payment to an address read off the chain would pay
+         * whoever last sent this stall money. Absent, rather than empty or
+         * disabled, whenever the inputs do not name exactly one address.
+         */
+        if (event.payerAddress !== undefined) {
+            // The same shape the txid takes, and for the same measured
+            // reason: an address beside a label at 390px is the wrap the
+            // probe's label rule exists to refuse, so the value gets both
+            // tracks and the copy sits under it.
+            const fromKey = el('dt', 'event-dt wide', copy.EVENT_PAYER_LABEL);
+            const fromValue = el('dd', 'event-dd wide');
+            const payer = el('code', 'event-txid-full', event.payerAddress);
+            payer.setAttribute('data-role', 'payer-address');
+            fromValue.append(payer, copyControl(event.payerAddress, 'payer-copy'));
+            dl.append(fromKey, fromValue);
+        }
     }
 
     dl.append(el('dt', 'event-dt', copy.EVENT_STATUS_LABEL));
@@ -5674,6 +5695,9 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     body.append(dl);
     if (event.payment !== undefined) {
         body.append(el('p', 'fine', copy.EVENT_PAYMENT_NOT_PROOF));
+        if (event.payerAddress !== undefined) {
+            body.append(el('p', 'fine', copy.EVENT_PAYER_NOTE));
+        }
     }
     const url = EXPLORER_TX_URL(event.txid);
     if (url !== undefined) {
@@ -5690,14 +5714,21 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
 }
 
 /** Copy one txid, with the same clipboard-then-select fallback the link uses. */
-function copyTxidControl(txid: string): HTMLElement {
+/**
+ * Put one value on the clipboard, and say what happened.
+ *
+ * Shared by the two things a row hands over — the transaction's own id and the
+ * address a payment came from — because both are the same gesture: a string
+ * this page already painted, copied. Neither opens anything.
+ */
+function copyControl(value: string, role: string): HTMLElement {
     const btn = el('button', 'mini event-copy', copy.EVENT_COPY_TXID);
     btn.type = 'button';
-    btn.setAttribute('data-role', 'event-copy');
+    btn.setAttribute('data-role', role);
     btn.addEventListener('click', () => {
         const clipboard = navigator.clipboard;
         if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
-            void clipboard.writeText(txid).then(
+            void clipboard.writeText(value).then(
                 () => {
                     btn.textContent = copy.EVENT_TXID_COPIED;
                 },

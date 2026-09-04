@@ -1,4 +1,5 @@
 import { STLD_HEX } from '../domain/description';
+import { encodeCashAddress } from 'ecashaddrjs';
 import { isStl1 } from '../domain/manifest';
 import { decodePaymentPushes, isStlp, type PaymentMemo } from '../domain/payment';
 import type { BookShape, EventStatus, StallEvent, StallEventKind } from '../domain/state';
@@ -11,7 +12,7 @@ import {
     type LiveTxStatus,
 } from './live';
 import { txSignedByStall } from './manifest';
-import { opReturnPushes } from './script';
+import { opReturnPushes, p2pkhHashFromOutputScript } from './script';
 
 /**
  * Which of the stall's facts a transaction could have changed.
@@ -266,6 +267,53 @@ function touchesScript(tx: ChainTx, stallOutputScript: string): boolean {
 }
 
 /**
+ * The address a payment was spent from, when there is exactly one.
+ *
+ * **A citation, never a destination.** Nothing on this page composes a payment
+ * to it: the Activity panel is public — `ACTIVITY_PUBLIC` says every visitor
+ * sees the same rows, and there is no seller session anywhere in this app — so
+ * a control that turned this into a payment would be a control every visitor
+ * could press, aimed at whoever last sent the stall money. What a seller gets
+ * is the twenty bytes they cannot otherwise read, to use in their own wallet.
+ *
+ * **Exactly one, or nothing.** An ordinary HD wallet spends from several of its
+ * own addresses at once, and choosing one of them would be this page guessing
+ * where money should go back to. A p2sh input is not an address, and an input
+ * the walk carried no script for is not a fact — both answer nothing rather
+ * than narrowing the set they are in.
+ *
+ * And even the single answer is only where the money *came from*: a payer
+ * spending through an exchange or any other custodial wallet spends from a key
+ * they do not hold, so nothing here may be read as an address they asked to be
+ * refunded at. The copy beside it says so.
+ */
+export function payerAddressOf(tx: ChainTx): string | undefined {
+    let hash: string | undefined;
+    for (const input of tx.inputs) {
+        const script = input.outputScript;
+        if (script === undefined) {
+            return undefined;
+        }
+        const spent = p2pkhHashFromOutputScript(script);
+        if (spent === undefined) {
+            return undefined;
+        }
+        if (hash !== undefined && hash !== spent) {
+            return undefined;
+        }
+        hash = spent;
+    }
+    if (hash === undefined) {
+        return undefined;
+    }
+    try {
+        return encodeCashAddress('ecash', 'p2pkh', hash);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
  * The `STLP` memo on a transaction that paid this stall, or nothing.
  *
  * **Two conditions, and the first one is the point.** Money has to have
@@ -493,6 +541,12 @@ export function receivedSats(tx: ChainTx, ctx: EventContext): bigint | undefined
  * an ordinary payment would read as "somebody else's payment", which is true
  * of almost every payment and says nothing.
  */
+/** The payer's address as a row field, or no field at all. */
+function payerAddressField(tx: ChainTx): { payerAddress?: string } {
+    const payerAddress = payerAddressOf(tx);
+    return payerAddress === undefined ? {} : { payerAddress };
+}
+
 export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
     const facts = classifyTx(tx, ctx.script, ctx.wantedTokenIds);
     const memo = paymentMemoOf(tx, ctx.script);
@@ -509,6 +563,7 @@ export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
         ...(sats === undefined ? {} : { sats }),
         ...(book === undefined ? {} : { book }),
         ...(kind === 'payment' && memo !== undefined ? { payment: memo } : {}),
+        ...(kind === 'payment' ? payerAddressField(tx) : {}),
         ...(isRecord ? { signedByStall: txSignedByStall(tx, ctx.hash) } : {}),
     };
 }

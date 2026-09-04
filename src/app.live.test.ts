@@ -2571,7 +2571,7 @@ describe('a-plugin-failure-still-paints-the-quotes', () => {
     });
 });
 
-describe('an-unreachable-book-paints-no-quote-count-it-cannot-explain', () => {
+describe('a-failed-book-paints-no-quote-count-it-cannot-explain', () => {
     /**
      * The genesis read is how a quote becomes a row: without it the item could
      * be an NFT, and a figure per whole token means nothing about one. That gap

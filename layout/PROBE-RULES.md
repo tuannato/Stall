@@ -180,6 +180,16 @@ nothing.
   under `node --test`), because a page must not be the judge of whether the
   page painted.
 
+- **The `activity` fixture carries a payment with a payer address.** The fold's
+  two hand-over controls — the txid and, on a payment row, the address it was
+  spent from — are `.mini` on the fold's own ground, and the address takes both
+  grid tracks the way the txid does: 42 characters beside a label at 390px is
+  the wrap the label rule was written for, one string shorter than the txid
+  that earned it. Both are copies and neither is a link, which is the point: the
+  panel is public, so a control that composed a payment would be one a stranger
+  could press. Measured with the row added: **2,600 boxes and 143.8s**, +48 on
+  2,552 and no screen added.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels

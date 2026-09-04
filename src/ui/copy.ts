@@ -513,6 +513,25 @@ export const EVENT_KIND_LABEL = 'What it was';
 export const EVENT_AMOUNT_LABEL = 'Received here';
 export const EVENT_STATUS_LABEL = 'Status';
 export const EVENT_OPEN_EXPLORER = 'Open in a block explorer';
+/**
+ * The address a payment was spent from, offered as twenty bytes to copy and
+ * nothing else.
+ *
+ * **A citation, not a destination.** This panel is public — the line above
+ * says so — and there is no seller session anywhere in this app, so a control
+ * here is a control every visitor gets. One that composed a payment to an
+ * address read off the chain would pay whoever last sent this stall money;
+ * this one puts it on a clipboard and stops.
+ *
+ * The note is the honest half: a payer spending through an exchange or any
+ * other custodial wallet spends from a key they do not hold, so this is where
+ * the money came from and not somewhere they asked to be paid back at. No
+ * sentence here uses the word refund, because the page cannot promise one
+ * would arrive.
+ */
+export const EVENT_PAYER_LABEL = 'Paid from';
+export const EVENT_PAYER_NOTE =
+    'The address this payment was sent from. Money sent through an exchange or another custodial wallet comes from a key the payer does not hold, so this is not necessarily an address they can be paid at.';
 export const EVENT_COPY_TXID = 'Copy';
 export const EVENT_TXID_COPIED = 'Copied';
 export const EVENT_TXID_SELECT = 'Select it';
