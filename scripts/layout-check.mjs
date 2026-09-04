@@ -541,6 +541,11 @@ try {
      * only viewport its screens run at. The fixture carries `broadcastStepped`
      * and `broadcastPulse` so both classes are on the tree; without them this
      * pass would still print a tick while stilling nothing.
+     *
+     * `broadcast-quotes` is the second card the sheet animates: the pulse sits
+     * on `[data-role="seller-price"]` there, a different selector in the same
+     * reduce block, and a block that stilled only the other role would pass
+     * this pass while a stream kept moving.
      */
     const REDUCED = [
         // Renamed with the fixture 2026-09-04: the one publish screen became
@@ -548,7 +553,7 @@ try {
         // transition but not their contents, and a still page is only proved
         // still for the tree that was actually painted.
         { vp: VIEWPORTS[0], screens: 'offers,publish-name,describe,pay' },
-        { vp: CANVAS, screens: 'broadcast' },
+        { vp: CANVAS, screens: 'broadcast,broadcast-quotes' },
     ];
     for (const pass of REDUCED) {
         await cdp.send(
@@ -761,7 +766,13 @@ try {
      * before the shot returns colour type 6 with alpha 0 outside the plates,
      * `fromSurface: true` included, and PNG alpha is unpremultiplied
      * (`255,255,255,235` for a 92% white plate).
+     *
+     * **Every clear screen, not one.** Each carries a different figure over
+     * the stream — the covenant's asked amount on one, the seller's own quote
+     * on the other — and a card this pass never shot is a card nobody proved
+     * legible over video.
      */
+    const CLEAR_SCREENS = ['broadcast-clear', 'broadcast-quotes-clear'];
     try {
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
@@ -774,88 +785,95 @@ try {
         const dim = [];
         let boxes = 0;
         let alpha;
-        for (const theme of themes) {
-            for (const wornAll of [false, true]) {
-                const prep = await contrastPrepare(cdp, sessionId, 'broadcast-clear', theme, wornAll);
-                if (prep.targets.length === 0) {
-                    throw new Error('broadcast-clear prepared no figure boxes — vacuous green.');
-                }
-                const clearShot = async () => {
-                    await cdp.send(
-                        'Emulation.setDefaultBackgroundColorOverride',
-                        { color: { r: 0, g: 0, b: 0, a: 0 } },
-                        sessionId,
-                    );
-                    try {
-                        return await captureShot(cdp, sessionId);
-                    } finally {
-                        await cdp.send('Emulation.setDefaultBackgroundColorOverride', {}, sessionId);
+        // The line prints the LEAST clear frame of the set: an average would
+        // let one screen that painted a ground hide behind another that did
+        // not.
+        let clearRatio = 1;
+        for (const screen of CLEAR_SCREENS) {
+            for (const theme of themes) {
+                for (const wornAll of [false, true]) {
+                    const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll);
+                    if (prep.targets.length === 0) {
+                        throw new Error(`${screen} prepared no figure boxes — vacuous green.`);
                     }
-                };
-                let img = await clearShot();
-                if (img.bpp !== 4) {
-                    // Measured with the transparency longhands removed: an
-                    // overlay that paints a ground over the whole frame comes
-                    // back as colour type 2 as well, so this message names both
-                    // causes rather than blaming the override.
-                    throw new Error(
-                        `the capture came back flattened (colour type ${img.bpp === 3 ? 2 : '?'}): ` +
-                            'either the overlay painted an opaque ground over the frame, or the ' +
-                            'background override did not apply. Both make every "over black" line a lie.',
-                    );
-                }
-                const opaque = await evalJson(cdp, sessionId, 'window.__opaqueBoxes()');
-                alpha = alphaOutside(img, opaque);
-                if (alpha.total === 0) {
-                    throw new Error('the plates cover the whole frame — nothing outside them to sample.');
-                }
-                if (alpha.min === 255) {
-                    throw new Error(
-                        'every pixel outside the plates is fully opaque — the overlay painted a ground.',
-                    );
-                }
-                let targets = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                const sample = (shot) => {
-                    const found = [];
-                    let counted = 0;
-                    for (const [ground, level] of [
-                        ['black', 0],
-                        ['white', 255],
-                    ]) {
-                        const flat = compositeOver(shot, level);
-                        for (const t of targets) {
-                            const worst = worstContrastInBox(flat, t, t.color);
-                            if (worst === undefined) continue;
-                            counted += 1;
-                            if (worst < PIXEL_CONTRAST_FLOOR) {
-                                found.push(
-                                    `broadcast-clear @canvas / theme ${theme}${wornAll ? ' + worn' : ''} ` +
-                                        `over ${ground}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
-                                        `sits on paint at ${worst.toFixed(2)}:1`,
-                                );
+                    const clearShot = async () => {
+                        await cdp.send(
+                            'Emulation.setDefaultBackgroundColorOverride',
+                            { color: { r: 0, g: 0, b: 0, a: 0 } },
+                            sessionId,
+                        );
+                        try {
+                            return await captureShot(cdp, sessionId);
+                        } finally {
+                            await cdp.send('Emulation.setDefaultBackgroundColorOverride', {}, sessionId);
+                        }
+                    };
+                    let img = await clearShot();
+                    if (img.bpp !== 4) {
+                        // Measured with the transparency longhands removed: an
+                        // overlay that paints a ground over the whole frame comes
+                        // back as colour type 2 as well, so this message names both
+                        // causes rather than blaming the override.
+                        throw new Error(
+                            `the capture came back flattened (colour type ${img.bpp === 3 ? 2 : '?'}): ` +
+                                'either the overlay painted an opaque ground over the frame, or the ' +
+                                'background override did not apply. Both make every "over black" line a lie.',
+                        );
+                    }
+                    const opaque = await evalJson(cdp, sessionId, 'window.__opaqueBoxes()');
+                    alpha = alphaOutside(img, opaque);
+                    if (alpha.total === 0) {
+                        throw new Error('the plates cover the whole frame — nothing outside them to sample.');
+                    }
+                    clearRatio = Math.min(clearRatio, alpha.clear / alpha.total);
+                    if (alpha.min === 255) {
+                        throw new Error(
+                            'every pixel outside the plates is fully opaque — the overlay painted a ground.',
+                        );
+                    }
+                    let targets = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                    const sample = (shot) => {
+                        const found = [];
+                        let counted = 0;
+                        for (const [ground, level] of [
+                            ['black', 0],
+                            ['white', 255],
+                        ]) {
+                            const flat = compositeOver(shot, level);
+                            for (const t of targets) {
+                                const worst = worstContrastInBox(flat, t, t.color);
+                                if (worst === undefined) continue;
+                                counted += 1;
+                                if (worst < PIXEL_CONTRAST_FLOOR) {
+                                    found.push(
+                                        `${screen} @canvas / theme ${theme}${wornAll ? ' + worn' : ''} ` +
+                                            `over ${ground}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                            `sits on paint at ${worst.toFixed(2)}:1`,
+                                    );
+                                }
                             }
                         }
+                        return { found, counted };
+                    };
+                    let { found, counted } = sample(img);
+                    // A failing box is re-shot once before it is believed — the same
+                    // rule pass 4 learned: a real defect is steady state.
+                    if (found.length > 0) {
+                        await sleep(250);
+                        img = await clearShot();
+                        const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                        if (again.length === targets.length) targets = again;
+                        ({ found } = sample(img));
                     }
-                    return { found, counted };
-                };
-                let { found, counted } = sample(img);
-                // A failing box is re-shot once before it is believed — the same
-                // rule pass 4 learned: a real defect is steady state.
-                if (found.length > 0) {
-                    await sleep(250);
-                    img = await clearShot();
-                    const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                    if (again.length === targets.length) targets = again;
-                    ({ found } = sample(img));
+                    boxes += counted;
+                    dim.push(...found);
                 }
-                boxes += counted;
-                dim.push(...found);
             }
         }
-        const clearPct = ((alpha.clear / alpha.total) * 100).toFixed(0);
+        const clearPct = (clearRatio * 100).toFixed(0);
         if (dim.length === 0) {
             console.log(
-                `✓ transparency (broadcast-clear @canvas): RGBA capture, ${clearPct}% of the frame ` +
+                `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
                     `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,
             );
         } else {

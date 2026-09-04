@@ -364,11 +364,15 @@ const BROADCAST_CORNER_FIXED = {
     preset: 'corner' as const,
     mode: 'fixed' as const,
     transparent: false,
+    // The carousel's list: the shop's own listings unless the link asks
+    // for the seller's quotes.
+    cards: 'listings' as const,
 };
 const BROADCAST_RAIL = {
     preset: 'rail' as const,
     mode: 'rail' as const,
     transparent: false,
+    cards: 'listings' as const,
 };
 const BROADCAST_RETRY_MS = 30_000;
 const BROADCAST_FIXED_MS = 8_000;
@@ -460,7 +464,18 @@ describe('a-broadcast-retries-our-failure-on-its-own', () => {
                     : { kind, triedAtMs: 0, hosts };
             boot(root, async () => {
                 loads += 1;
-                return overlayState({ fetch, broadcast: { preset: 'corner', mode: 'rail', transparent: false } }, []);
+                return overlayState(
+                    {
+                        fetch,
+                        broadcast: {
+                            preset: 'corner',
+                            mode: 'rail',
+                            transparent: false,
+                            cards: 'listings',
+                        },
+                    },
+                    [],
+                );
             });
             await vi.advanceTimersByTimeAsync(0);
             expect(loads).toBe(1);
@@ -509,7 +524,12 @@ describe('a-broadcast-retries-our-failure-on-its-own', () => {
                     overlay: { kind: 'idle' as const },
                     address: ADDR,
                     tokens: new Map(),
-                    broadcast: { preset: 'corner' as const, mode: 'rail' as const, transparent: false },
+                    broadcast: {
+                        preset: 'corner' as const,
+                        mode: 'rail' as const,
+                        transparent: false,
+                        cards: 'listings' as const,
+                    },
                 },
                 offers: [],
             };

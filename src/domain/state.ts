@@ -158,6 +158,15 @@ export type BroadcastParams = {
     mode: 'fixed' | 'rail';
     /** `bg=transparent` on the wire. Absent is the theme ground. */
     transparent: boolean;
+    /**
+     * Which rail the carousel shows: the shop's Agora listings, or the
+     * seller's own quotes. `cards=quotes` on the wire, opt-in.
+     *
+     * One card, one kind. A card never carries both figures — the covenant's
+     * asked amount and a seller's quote are two different transactions, and a
+     * viewer scanning a code has no way to ask which one they are looking at.
+     */
+    cards: 'listings' | 'quotes';
 };
 
 /**

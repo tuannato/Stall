@@ -83,6 +83,17 @@ export const OBS_TRUTH_RAIL_RESTS =
     `“${OBS_MODE_RAIL}” rests without a price for 3 seconds of every 8 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
 export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
     'Side rail never shows a price — it is the name and the QR only.';
+/**
+ * The one place a streamer meets `cards=quotes`: it is a link option, not a
+ * picker, so nothing else on this page would ever say it exists.
+ *
+ * The XEC advice is the honest half. The page a viewer lands on converts a USD
+ * quote at the moment of the scan, so nothing on the stream goes stale — but
+ * the seller reconciling what arrived against what they quoted still needs a
+ * rate for a day they were not watching, and an XEC quote needs none.
+ */
+export const OBS_TRUTH_QUOTE_CARDS =
+    'Quote cards are opt-in — add “cards=quotes” to the link and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.';
 export const OBS_TRUTH_STALE_OVERLAY =
     'If the overlay stops updating, OBS shut the source down — toggle the source’s visibility to bring it back.';
 
@@ -339,23 +350,24 @@ const RECIPE_STEPS = [
 ];
 
 /**
- * The toggles line, with each quoted OBS control bolded — built by SLICING
- * the constant at its quote characters, so `textContent` stays byte-identical
- * to `OBS_RECIPE_TOGGLES`. Retyping either name would put a second copy of
- * pinned copy in this file, and the two would drift with the test still
- * green. Test: `the-toggle-line-names-both-toggles-in-strong`.
+ * Every quoted name in `text`, bolded — built by SLICING the constant at its
+ * quote characters, so `textContent` stays byte-identical to it. Retyping a
+ * name would put a second copy of pinned copy in this file, and the two would
+ * drift with the test still green. Tests:
+ * `the-toggle-line-names-both-toggles-in-strong` (the two OBS toggles),
+ * `the-studio-names-the-quotes-toggle` (the link's own switch).
  */
-function togglesLine(into: HTMLElement): void {
+function boldQuoted(into: Node, text: string): void {
     let at = 0;
-    for (const quoted of OBS_RECIPE_TOGGLES.matchAll(/“[^”]*”/g)) {
+    for (const quoted of text.matchAll(/“[^”]*”/g)) {
         const start = quoted.index ?? 0;
         if (start > at) {
-            into.append(OBS_RECIPE_TOGGLES.slice(at, start));
+            into.appendChild(document.createTextNode(text.slice(at, start)));
         }
-        into.append(el('strong', undefined, quoted[0]));
+        into.appendChild(el('strong', undefined, quoted[0]));
         at = start + quoted[0].length;
     }
-    into.append(OBS_RECIPE_TOGGLES.slice(at));
+    into.appendChild(document.createTextNode(text.slice(at)));
 }
 
 /**
@@ -391,7 +403,7 @@ function recipeList(): HTMLElement {
         item.append(el('span', 'obs-n', String(index + 1).padStart(2, '0')));
         const line = el('span', 'obs-t');
         if (warns) {
-            togglesLine(line);
+            boldQuoted(line, OBS_RECIPE_TOGGLES);
         } else {
             line.textContent = step;
         }
@@ -405,7 +417,8 @@ function recipeList(): HTMLElement {
 const LEAD_END = ' — ';
 
 /** One truth on its own plate, led by its first phrase in bold — sliced, for
- *  the same reason the toggle names are. */
+ *  the same reason the toggle names are. A quoted name in the rest of the
+ *  sentence is bolded too, by the same slicing. */
 function truthPlate(truth: string): HTMLElement {
     const plate = el('p', 'fine');
     const cut = truth.indexOf(LEAD_END);
@@ -414,7 +427,7 @@ function truthPlate(truth: string): HTMLElement {
         return plate;
     }
     plate.append(el('strong', undefined, truth.slice(0, cut)));
-    plate.append(truth.slice(cut));
+    boldQuoted(plate, truth.slice(cut));
     return plate;
 }
 
@@ -433,6 +446,9 @@ function truthsList(): HTMLElement {
                   OBS_TRUTH_PHONE_VIEWERS,
                   OBS_TRUTH_QR_SCAN,
                   OBS_TRUTH_RAIL_RESTS,
+                  // The corner preset is the only one that mounts a card, so
+                  // it is the only one the quote switch can change.
+                  OBS_TRUTH_QUOTE_CARDS,
                   OBS_TRUTH_STALE_OVERLAY,
               ];
     for (const truth of truths) {

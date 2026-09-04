@@ -1341,6 +1341,7 @@ const BROADCAST_FIXED = {
     preset: 'corner' as const,
     mode: 'fixed' as const,
     transparent: false,
+    cards: 'listings' as const,
 };
 const BROADCAST_RETRY_MS = 30_000;
 const BROADCAST_FIXED_MS = 8_000;
@@ -1409,6 +1410,9 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
             preset: 'corner',
             mode: 'rail',
             transparent: true,
+            // The switch the parser now answers with, off unless it is asked
+            // for: this URL names no `cards`, so the carousel is the shop's.
+            cards: 'listings',
         });
         expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
         expect(root.querySelector('.tabs')).toBeNull();
@@ -2276,5 +2280,169 @@ describe('the-door-and-a-broadcast-drop-the-pay-hint', () => {
         boot(document.createElement('div'));
         await flush();
         expect(painted.view?.payHint).toBe('cd'.repeat(6));
+    });
+});
+
+/*
+ * The overlay's other rail: the seller's own quotes, which come from the
+ * descriptions walk and not from the book. Everything the listings carousel
+ * does on a book apply, this one has to do on a facts apply — one selector,
+ * or the cursor and the card drift apart.
+ */
+const BROADCAST_QUOTES = {
+    preset: 'corner' as const,
+    mode: 'fixed' as const,
+    transparent: false,
+    cards: 'quotes' as const,
+};
+
+const fungible = (tokenId: string, name: string) => ({
+    tokenId,
+    name,
+    ticker: name.slice(0, 4).toUpperCase(),
+    decimals: 0,
+    tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+});
+
+const USD = (amount: bigint) => ({ code: 'usd', exponent: 2, amount });
+
+function quotesOverlay(
+    prices: Map<string, { code: string; exponent: number; amount: bigint }>,
+    over: Partial<State['view']> = {},
+): State {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'offers', offers: [OFFER] },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map([
+                [TOKEN, fungible(TOKEN, 'Ripe Beans')],
+                [TOKEN_B, fungible(TOKEN_B, 'Green Tea')],
+            ]),
+            prices,
+            broadcast: BROADCAST_QUOTES,
+            ...over,
+        },
+        offers: [OFFER],
+        pubkeyHex: PK,
+    };
+}
+
+function bootQuotesOverlay(state: State): { root: HTMLElement } {
+    window.history.replaceState(
+        null,
+        '',
+        `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed&cards=quotes`,
+    );
+    return bootStall(state);
+}
+
+/** One STLD record the stall's own key signed, with a figure on it. */
+function pricedRecord(
+    txid: string,
+    tokenId: string,
+    price: { code: string; exponent: number; amount: bigint },
+): string {
+    const hex = encodeDescriptionHex(tokenId, 'Sun dried', { price });
+    if (hex === undefined) {
+        throw new Error('fixture is not encodable');
+    }
+    return publish(signedTx({ txid, outputs: [`6a${hex}`], height: 5 }));
+}
+
+describe('a-pay-cursor-is-clamped-when-the-quotes-shrink', () => {
+    /**
+     * The carousel indexes one list, and on this rail that list is the pay
+     * set — which moves when the descriptions walk answers, not when the book
+     * does. A cursor clamped only on a book apply would point past the end of
+     * a shrunken quote set and show nothing at all.
+     */
+    it('stores the cursor modulo the new quote count', async () => {
+        bootQuotesOverlay(
+            quotesOverlay(
+                new Map([
+                    [TOKEN, USD(500n)],
+                    [TOKEN_B, USD(900n)],
+                ]),
+                { broadcastCursor: 1 },
+            ),
+        );
+        await flush();
+        expect(painted.view?.broadcastCursor).toBe(1);
+
+        // One record on chain, so the walk answers with one quote.
+        const txid = pricedRecord('0d'.repeat(32), TOKEN, USD(500n));
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(painted.view?.prices?.size, 'the walk found one quote').toBe(1);
+        expect(painted.view?.broadcastCursor, '1 mod 1 is 0').toBe(0);
+    });
+});
+
+describe('a-quote-change-pulses-and-a-replaced-quote-fades', () => {
+    /**
+     * The same two motions the listings card has, over the figure this card
+     * actually shows: a new token at the cursor is a new card and fades, and
+     * the seller republishing a figure on the shown token pulses.
+     */
+    it('pulses when the shown token’s own quote moves', async () => {
+        const { root } = bootQuotesOverlay(quotesOverlay(new Map([[TOKEN, USD(500n)]])));
+        await flush();
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+
+        const txid = pricedRecord('0e'.repeat(32), TOKEN, USD(700n));
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(painted.view?.broadcastPulse).toBe(true);
+        expect(painted.view?.broadcastStepped, 'the same card did not fade').toBeUndefined();
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$7.00');
+        expect(
+            root.querySelector('[data-role="seller-price"]')?.classList.contains('pulse'),
+        ).toBe(true);
+    });
+
+    it('fades when a different token lands at the cursor', async () => {
+        const { root } = bootQuotesOverlay(quotesOverlay(new Map([[TOKEN, USD(500n)]])));
+        await flush();
+
+        const txid = pricedRecord('0f'.repeat(32), TOKEN_B, USD(500n));
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+
+        expect(painted.view?.broadcastStepped, 'a new card fades').toBe(true);
+        expect(painted.view?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
+        expect(root.querySelector('.bc-nm')?.textContent).toBe('Green Tea');
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
+    });
+});
+
+describe('a-failed-facts-reread-leaves-the-quote-card-stale', () => {
+    /**
+     * `loadDescriptions` cannot tell its own failed walk from a seller who
+     * published nothing, so an empty answer never erases the quotes already on
+     * screen. On the overlay that leaves a card nobody could re-confirm: it
+     * stays, dimmed, exactly as a failed book re-read leaves the listing card
+     * — never blank, and never a word of our own failure.
+     */
+    it('keeps the card and marks it stale', async () => {
+        const { root } = bootQuotesOverlay(quotesOverlay(new Map([[TOKEN, USD(500n)]])));
+        await flush();
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).not.toBe('stale');
+
+        chain.historyThrows = true;
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['1a'.repeat(32)]);
+        await flush();
+
+        expect(
+            root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
+        ).toBe('stale');
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
     });
 });

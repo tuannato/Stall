@@ -153,6 +153,7 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
         preset: 'corner',
         mode: 'rail',
         transparent: false,
+        cards: 'listings',
     } as const;
 
     it('view=broadcast with no options is the defaults', () => {
@@ -188,20 +189,18 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
     it('accepted values are kept', () => {
         expect(
             parseBroadcastParams('?view=broadcast&preset=corner&mode=fixed&bg=transparent'),
-        ).toEqual({ preset: 'corner', mode: 'fixed', transparent: true });
+        ).toEqual({ ...defaults, mode: 'fixed', transparent: true });
         expect(parseBroadcastParams('?view=broadcast&preset=rail')).toEqual({
+            ...defaults,
             preset: 'rail',
             mode: 'rail',
-            transparent: false,
         });
         expect(parseBroadcastParams('?view=broadcast&mode=fixed')).toEqual({
-            preset: 'corner',
+            ...defaults,
             mode: 'fixed',
-            transparent: false,
         });
         expect(parseBroadcastParams('?view=broadcast&bg=transparent')).toEqual({
-            preset: 'corner',
-            mode: 'rail',
+            ...defaults,
             transparent: true,
         });
     });
@@ -209,7 +208,7 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
     it('ignores mode when the preset is the rail', () => {
         expect(
             parseBroadcastParams('?view=broadcast&preset=rail&mode=fixed'),
-        ).toEqual({ preset: 'rail', mode: 'rail', transparent: false });
+        ).toEqual({ ...defaults, preset: 'rail', mode: 'rail' });
     });
 
     it('other search keys do not drop the overlay', () => {
@@ -223,6 +222,42 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
         expect(() => parseBroadcastParams('?view=broadcast&preset=%')).not.toThrow();
         expect(parseBroadcastParams('%')).toBeUndefined();
         expect(parseBroadcastParams('?view=broadcast&preset=%')).toEqual(defaults);
+    });
+});
+
+describe('the-quote-cards-switch-is-opt-in-and-bounded', () => {
+    /**
+     * `cards=quotes` is the one switch that changes what the carousel indexes:
+     * the seller's own quotes instead of the shop's listings. Absent is the
+     * listings, and so is anything else — the same fallback every other
+     * broadcast option has, because a stream that silently became a different
+     * shop window is the failure C1 named.
+     */
+    it('is off unless the value is exactly quotes', () => {
+        expect(parseBroadcastParams('?view=broadcast')?.cards).toBe('listings');
+        expect(parseBroadcastParams('?view=broadcast&cards=quotes')?.cards).toBe(
+            'quotes',
+        );
+        for (const raw of [
+            'listings',
+            'Quotes',
+            'QUOTES',
+            'quote',
+            'quotess',
+            '',
+            '1',
+            'quotes'.padEnd(64, 'x'),
+        ]) {
+            expect(
+                parseBroadcastParams(`?view=broadcast&cards=${raw}`)?.cards,
+                raw,
+            ).toBe('listings');
+        }
+    });
+
+    it('opens no overlay on its own', () => {
+        expect(parseBroadcastParams('?cards=quotes')).toBeUndefined();
+        expect(parseBroadcastParams('?view=shop&cards=quotes')).toBeUndefined();
     });
 });
 

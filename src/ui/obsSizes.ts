@@ -10,7 +10,15 @@
  * with a measurement, never by hand. The studio's recipe quotes these.
  */
 export const OBS_STICKER_WIDTH = 372;
-/** Corner card (bottom-right anchored): the card's box plus both insets. */
-export const OBS_STICKER_HEIGHT = 800;
+/**
+ * Corner card (bottom-right anchored): the card's box plus both insets.
+ *
+ * 810 measured on the tallest card there is — a quote card under a 32-byte
+ * name on Neo, which clamps the name at three lines where the other looks
+ * stop at two. A quote card is a line taller than a listing card (the chip,
+ * and the line under its rule), and the two stresses stack: neither alone
+ * reaches this, which is why the fixture carries both.
+ */
+export const OBS_STICKER_HEIGHT = 820;
 /** Side rail (mid-right, centred): the rail's box plus both insets. */
 export const OBS_RAIL_STICKER_HEIGHT = 580;

@@ -110,9 +110,9 @@ import {
 } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
 import {
-    cheapestOf,
+    broadcastCards,
+    broadcastFigure,
     identityOf,
-    listingsInShopOrder,
     quotedItems,
     renderStall,
     sheetMounts,
@@ -159,18 +159,22 @@ function withUrlParams(state: AppState): AppState {
     };
 }
 
-/** The card the overlay is showing: shop order, then the cursor. */
-function shownCard(
-    view: StallView,
-): { tokenId: string; askedSats: bigint } | undefined {
-    const listings = listingsInShopOrder(view);
-    if (listings.length === 0) {
+/**
+ * The card the overlay is showing: `broadcastCards`, then the cursor.
+ *
+ * The list is whichever rail the link asked for, and it is derived in that one
+ * place — the renderer indexes the same function, so the cursor and the card
+ * cannot mean two different rows.
+ */
+function shownCard(view: StallView): { tokenId: string; figure: string } | undefined {
+    const cards = broadcastCards(view);
+    if (cards.length === 0) {
         return undefined;
     }
-    const n = listings.length;
+    const n = cards.length;
     const cursor = (((view.broadcastCursor ?? 0) % n) + n) % n;
-    const listing = listings[cursor]!;
-    return { tokenId: listing.tokenId, askedSats: cheapestOf(listing).askedSats };
+    const card = cards[cursor]!;
+    return { tokenId: card.tokenId, figure: broadcastFigure(card) };
 }
 
 function isBroadcastFailure(kind: FetchStatus['kind'] | undefined): boolean {
@@ -537,7 +541,7 @@ export function boot(
         if (params === undefined || params.preset !== 'corner') {
             return;
         }
-        const n = listingsInShopOrder(state.view).length;
+        const n = broadcastCards(state.view).length;
         if (n < 2) {
             return;
         }
@@ -582,7 +586,7 @@ export function boot(
 
     const syncCarousel = (): void => {
         const params = state.view.broadcast;
-        const n = listingsInShopOrder(state.view).length;
+        const n = broadcastCards(state.view).length;
         const want = params !== undefined && params.preset === 'corner' && n >= 2;
         if (!want) {
             if (carousel !== undefined) {
@@ -616,11 +620,17 @@ export function boot(
         syncCarousel();
     };
 
+    /**
+     * A re-read that could not be believed leaves what is on screen there,
+     * dimmed. The condition is that there IS a card to keep — asking the card
+     * list rather than the fetch kind, because a quote card is painted from
+     * the seller's records and stands over an empty book too.
+     */
     const markBroadcastStale = (): void => {
         if (state.view.broadcast === undefined) {
             return;
         }
-        if (state.view.fetch?.kind !== 'offers') {
+        if (broadcastCards(state.view).length === 0) {
             return;
         }
         if (state.view.broadcastState === 'stale') {
@@ -632,6 +642,43 @@ export function boot(
         }
         state = { ...state, view: { ...state.view, broadcastState: 'stale' } };
         livePaint();
+    };
+
+    /**
+     * The overlay's cursor and its two one-shots, after a re-read that moved
+     * what the carousel indexes.
+     *
+     * One function because there is one list: a book apply moves the listings
+     * and a facts apply moves the quotes, and a cursor clamped on one path
+     * only points past the end of the other. A different token at the cursor
+     * is a new card and fades; the same card showing a different figure
+     * pulses, a drop included.
+     *
+     * Mutates `next` in place, the way the apply that calls it builds it.
+     */
+    const carryBroadcastCursor = (
+        prevCard: { tokenId: string; figure: string } | undefined,
+        next: StallView,
+    ): void => {
+        const params = next.broadcast;
+        if (params === undefined) {
+            return;
+        }
+        const n = broadcastCards(next).length;
+        next.broadcastCursor =
+            n === 0 ? 0 : (((state.view.broadcastCursor ?? 0) % n) + n) % n;
+        if (state.view.broadcastState === 'stale') {
+            next.broadcastState = params.mode === 'fixed' ? 'live' : 'rest';
+        }
+        const nextCard = shownCard(next);
+        if (prevCard === undefined || nextCard === undefined) {
+            return;
+        }
+        if (prevCard.tokenId !== nextCard.tokenId) {
+            next.broadcastStepped = true;
+        } else if (prevCard.figure !== nextCard.figure) {
+            next.broadcastPulse = true;
+        }
     };
 
     /**
@@ -1239,18 +1286,32 @@ export function boot(
             (state.view.shelves?.size ?? 0) > 0 ||
             (state.view.prices?.size ?? 0) > 0;
         if (gotNothing && hadSomething) {
+            // On an overlay showing quotes those figures came from this walk,
+            // and this answer cannot be told from a seller who published
+            // nothing — so the card already on screen stays, dimmed, exactly
+            // as a failed book re-read leaves the listing card.
+            if (state.view.broadcast?.cards === 'quotes') {
+                markBroadcastStale();
+            }
             return;
         }
-        state = {
-            ...state,
-            view: {
-                ...state.view,
-                descriptions: lookup.descriptions,
-                shelves: lookup.shelves,
-                prices: lookup.prices,
-            },
+        const prevCard =
+            state.view.broadcast !== undefined ? shownCard(state.view) : undefined;
+        const nextFacts: StallView = {
+            ...state.view,
+            descriptions: lookup.descriptions,
+            shelves: lookup.shelves,
+            prices: lookup.prices,
         };
+        // The quotes are a card list too, and the shelves reorder the
+        // listings, so a facts apply moves the carousel exactly as a book
+        // apply does.
+        carryBroadcastCursor(prevCard, nextFacts);
+        state = { ...state, view: nextFacts };
         livePaint();
+        if (state.view.broadcast !== undefined) {
+            syncCarousel();
+        }
     };
 
     /**
@@ -1438,27 +1499,7 @@ export function boot(
                                     ? changed
                                     : undefined,
                         };
-                        if (state.view.broadcast !== undefined) {
-                            const n = listingsInShopOrder(nextFetch).length;
-                            nextFetch.broadcastCursor =
-                                n === 0
-                                    ? 0
-                                    : (((state.view.broadcastCursor ?? 0) % n) + n) % n;
-                            if (state.view.broadcastState === 'stale') {
-                                nextFetch.broadcastState =
-                                    state.view.broadcast.mode === 'fixed' ? 'live' : 'rest';
-                            }
-                            const nextCard = shownCard(nextFetch);
-                            if (prevCard !== undefined && nextCard !== undefined) {
-                                if (prevCard.tokenId !== nextCard.tokenId) {
-                                    // A different token at this cursor is a
-                                    // new card — fade it, never pulse.
-                                    nextFetch.broadcastStepped = true;
-                                } else if (prevCard.askedSats !== nextCard.askedSats) {
-                                    nextFetch.broadcastPulse = true;
-                                }
-                            }
-                        }
+                        carryBroadcastCursor(prevCard, nextFetch);
                         state = {
                             ...state,
                             offers: status.kind === 'offers' ? status.offers : [],

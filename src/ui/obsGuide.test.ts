@@ -35,6 +35,7 @@ import {
     OBS_TRUTHS_TITLE,
     OBS_TRUTH_PHONE_VIEWERS,
     OBS_TRUTH_QR_SCAN,
+    OBS_TRUTH_QUOTE_CARDS,
     OBS_TRUTH_RAIL_RESTS,
     OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
     OBS_TRUTH_STALE_OVERLAY,
@@ -230,6 +231,9 @@ describe('the-obs-guide-paints-the-recipe-and-every-truth', () => {
             OBS_TRUTH_PHONE_VIEWERS,
             OBS_TRUTH_QR_SCAN,
             OBS_TRUTH_RAIL_RESTS,
+            // The corner preset gained a fifth truth with the quote cards:
+            // the switch is a link option a streamer can only learn here.
+            OBS_TRUTH_QUOTE_CARDS,
             OBS_TRUTH_STALE_OVERLAY,
         ]) {
             expect(text).toContain(truth);
@@ -421,6 +425,7 @@ describe('the-truths-lead-with-their-first-phrase', () => {
             OBS_TRUTH_PHONE_VIEWERS,
             OBS_TRUTH_QR_SCAN,
             OBS_TRUTH_RAIL_RESTS,
+            OBS_TRUTH_QUOTE_CARDS,
             OBS_TRUTH_STALE_OVERLAY,
         ];
         expect(plates.length).toBe(truths.length);
@@ -431,6 +436,41 @@ describe('the-truths-lead-with-their-first-phrase', () => {
             expect(lead, truth).not.toBeNull();
             expect(lead!.textContent).toBe(truth.slice(0, truth.indexOf(' — ')));
         });
+    });
+});
+
+describe('the-studio-names-the-quotes-toggle', () => {
+    /**
+     * `cards=quotes` is a link option, not a picker, so the studio is the one
+     * place a streamer meets it — named the way the OBS toggles are, by
+     * SLICING the constant at its quote characters. And it carries the reason
+     * to price in XEC for a stream nobody is watching: the page converts a USD
+     * quote at the moment of the scan, but the seller's own reconciliation
+     * still needs a rate.
+     */
+    it('bolds the switch inside the truth without retyping a byte', () => {
+        const section = painted();
+        const plate = [...section.querySelectorAll('[data-role="obs-truths"] p')].find(
+            (p) => p.textContent === OBS_TRUTH_QUOTE_CARDS,
+        );
+        expect(plate, 'the corner preset carries the quote-cards truth').toBeDefined();
+        const quoted = [...OBS_TRUTH_QUOTE_CARDS.matchAll(/“[^”]*”/g)].map((m) => m[0]);
+        expect(quoted, 'the constant names the switch in quotes').toEqual([
+            '“cards=quotes”',
+        ]);
+        const bolded = [...plate!.querySelectorAll('strong')].map((s) => s.textContent);
+        // The lead phrase, as every truth has, and the switch itself.
+        expect(bolded).toEqual([
+            OBS_TRUTH_QUOTE_CARDS.slice(0, OBS_TRUTH_QUOTE_CARDS.indexOf(' — ')),
+            '“cards=quotes”',
+        ]);
+        expect(OBS_TRUTH_QUOTE_CARDS).toContain('XEC');
+    });
+
+    it('is the same sentence the static guide carries', () => {
+        const html = readFileSync(join(UI_DIR, '..', '..', 'public', 'stream.html'), 'utf8');
+        expect(html).toContain('cards=quotes');
+        expect(html).toMatch(/XEC/);
     });
 });
 

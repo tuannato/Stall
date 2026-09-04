@@ -145,7 +145,14 @@
     margin-top: 3px;
 }
 
-.stall.broadcast .bc-p [data-role='price'] {
+/*
+ * The two figures a card can wear, one at a time: the covenant's asked amount
+ * and the seller's own quote. Same type, same ladder, same 216px of plate —
+ * they are never on one card, so they share the rules rather than each
+ * growing a set that can drift.
+ */
+.stall.broadcast .bc-p [data-role='price'],
+.stall.broadcast .bc-p [data-role='seller-price'] {
     font-size: 39px;
     font-weight: 800;
     color: var(--s-accent);
@@ -156,13 +163,36 @@
     white-space: nowrap;
 }
 
-.stall.broadcast .bc-p[data-tier='1'] [data-role='price'] {
+.stall.broadcast .bc-p[data-tier='1'] [data-role='price'],
+.stall.broadcast .bc-p[data-tier='1'] [data-role='seller-price'] {
     font-size: 31px;
 }
 
 .stall.broadcast .bc-p[data-tier='2'] [data-role='price'],
-.stall.broadcast .bc-p[data-tier='3'] [data-role='price'] {
+.stall.broadcast .bc-p[data-tier='3'] [data-role='price'],
+.stall.broadcast .bc-p[data-tier='2'] [data-role='seller-price'],
+.stall.broadcast .bc-p[data-tier='3'] [data-role='seller-price'] {
     font-size: 24px;
+}
+
+/*
+ * The quote card: the chip that says whose figure it is, and the one line
+ * that says what paying it does. The line sits under a rule, the way the
+ * card sits under the head plate's.
+ */
+.stall.broadcast .bc-chip {
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--s-muted);
+}
+
+.stall.broadcast .bc-l {
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--s-muted);
+    margin-top: 6px;
+    padding-top: 9px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 28%, transparent);
 }
 
 /*
@@ -266,7 +296,8 @@ html.bc-clear .stall.broadcast {
     animation: bc-in 0.24s ease-out 1;
 }
 
-.stall.broadcast [data-role='price'].pulse {
+.stall.broadcast [data-role='price'].pulse,
+.stall.broadcast [data-role='seller-price'].pulse {
     animation: bc-pulse 0.4s ease-out 1;
 }
 
@@ -276,7 +307,8 @@ html.bc-clear .stall.broadcast {
  */
 @media (prefers-reduced-motion: reduce) {
     .stall.broadcast .bc-ext.in,
-    .stall.broadcast [data-role='price'].pulse {
+    .stall.broadcast [data-role='price'].pulse,
+    .stall.broadcast [data-role='seller-price'].pulse {
         animation: none;
     }
 }

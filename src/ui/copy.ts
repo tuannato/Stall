@@ -1122,6 +1122,15 @@ export const BROADCAST_BRAND = 'stall.cash';
 export const BROADCAST_CAPTION = 'Scan to open';
 /** Empty shop on the overlay. Muted; not a failure. */
 export const BROADCAST_EMPTY = 'nothing listed yet';
+/**
+ * The one line under a quote card, and every limit of that rail in it: money
+ * reaches the seller, nothing is held, and no token changes hands. It is the
+ * only sentence a viewer gets before they scan, so it says what the payment
+ * is rather than what the shop hopes for.
+ */
+export const BROADCAST_QUOTE_LINE = 'Pays the seller \u00b7 no escrow';
+/** The code on a quote card opens this page at that item — never a wallet. */
+export const BROADCAST_QUOTE_QR_ALT = 'QR code for this item at this stall';
 /** Listings beyond the shown card. `n` is listings − 1. */
 export function broadcastMore(n: number): string {
     return `+${n} more`;

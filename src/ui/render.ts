@@ -1661,7 +1661,7 @@ export function unreadableQuotes(view: StallView): number {
  * XEC with its own two places rather than being rounded, trimmed or run
  * through a rate (§8).
  */
-function quoteFigure(price: TokenPrice): string {
+export function quoteFigure(price: TokenPrice): string {
     const figure = groupWholePart(formatPriceFigure(price));
     if (price.code === XEC_PRICE_CODE) {
         return `${figure} ${copy.XEC}`;

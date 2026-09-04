@@ -135,7 +135,7 @@ export function payLandingUrl(base: string, tokenId: string): string | undefined
     return `${base}?pay=${id.slice(0, PAY_PARAM_PREFIX)}`;
 }
 
-/** No accepted value is longer than `lower-third` / `transparent`. */
+/** No accepted value is longer than `lower-third` / `transparent` / `listings`. */
 const MAX_BROADCAST_PARAM = 16;
 
 function broadcastParam(params: URLSearchParams, key: string): string | undefined {
@@ -176,5 +176,9 @@ export function parseBroadcastParams(search: string): BroadcastParams | undefine
         preset,
         mode,
         transparent: broadcastParam(params, 'bg') === 'transparent',
+        // Opt-in, and off for anything but the one word: a streamer who
+        // mistyped it gets the shop they already had rather than a screen
+        // showing money from a different rail.
+        cards: broadcastParam(params, 'cards') === 'quotes' ? 'quotes' : 'listings',
     };
 }

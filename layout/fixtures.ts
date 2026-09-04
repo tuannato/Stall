@@ -159,7 +159,8 @@ const bc = (
     preset: BroadcastParams['preset'],
     mode: BroadcastParams['mode'],
     transparent = false,
-): BroadcastParams => ({ preset, mode, transparent });
+    cards: BroadcastParams['cards'] = 'listings',
+): BroadcastParams => ({ preset, mode, transparent, cards });
 
 export const SCREENS: Record<string, StallView> = {
     offers: base({
@@ -471,6 +472,54 @@ export const SCREENS: Record<string, StallView> = {
         broadcastState: 'live',
         broadcastCursor: 3,
     }),
+    /*
+     * The other rail's card, on the same plate: `cards=quotes`.
+     *
+     * `broadcastCursor: 0` lands on the USD quote (`QUOTES` is insertion
+     * ordered and T1 is first), which is the one that carries a currency
+     * symbol and the tolerance byte — the XEC one is the same shape with a
+     * longer figure and no symbol. The figure is `[data-role="seller-price"]`,
+     * already in `PROTECTED` and `CONTRAST_TEXT`, and the QR plate carries the
+     * item's own landing link rather than the stall's.
+     *
+     * The two one-shots ride along so `bc-in` and `bc-pulse` are on this
+     * tree as well: the pulse class sits on a different role here, and a
+     * reduce block that stilled only the other one would be invisible.
+     */
+    'broadcast-quotes': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        broadcast: bc('corner', 'fixed', false, 'quotes'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+        broadcastStepped: true,
+        broadcastPulse: true,
+    }),
+    /*
+     * The tallest corner card there is: a quote card under a 32-byte name.
+     *
+     * The quote card is a line taller than a listing card (the chip and the
+     * line under the rule), and Neo clamps `.bc-name` at three lines where the
+     * others stop at two — so the sticker ceiling has to be measured against
+     * both at once, not against each alone. Geometry only, like the other
+     * long-name screens: every figure on it is `broadcast-quotes`'.
+     */
+    'broadcast-quotes-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        broadcast: bc('corner', 'fixed', false, 'quotes'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+        stallName: 'W'.repeat(32),
+    }),
+    /* The same card on the OBS wire, which is where pass 5 reads it. */
+    'broadcast-quotes-clear': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        broadcast: bc('corner', 'fixed', true, 'quotes'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    }),
     /* Rail mode's rest half: the head plate alone, no card, for 3s of every 8. */
     'broadcast-rest': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
@@ -591,6 +640,9 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-clear',
+    'broadcast-quotes',
+    'broadcast-quotes-clear',
+    'broadcast-quotes-long-name',
     'broadcast-rest',
     'broadcast-rail',
     'broadcast-empty',

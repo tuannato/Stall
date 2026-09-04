@@ -302,10 +302,21 @@ somebody else's video.
   three seconds of every eight, and `renderBroadcastView` does not mount
   `.bc-ext` at `data-state='rest'` — same as the rail preset. A hidden
   `[data-role="price"]` is what the covered-amount rule exists to refuse, so
-  rest does not leave one in the tree.
+  rest does not leave one in the tree. **The quote card is the same slot**, so
+  the rule reads the same way for `[data-role="seller-price"]`: rest mounts no
+  money of either kind.
 - **`[data-role="stall-name"]` is a contrast target.** It is the only line on
   the head plate that is not a money figure, and on a transparent wire it sits
   on the stream with one plate between them.
+- **The quote card's own three screens.** `broadcast-quotes`,
+  `broadcast-quotes-clear` (`cards=quotes`, cursor on the USD quote) and the
+  stress `broadcast-quotes-long-name` are in `NO_DECOR_SCREENS` with the rest. Its figure is `[data-role="seller-price"]`
+  — already in `PROTECTED` and `CONTRAST_TEXT` by selector, so the fixture is
+  what makes those rules see it at all. It stays out of `__contrastScreens`
+  for the budget reason the other overlay screens do, and **pass 5 is its
+  contrast reader instead**: that pass now runs on both clear screens, over
+  black and white, which is the harder question for a card composited onto
+  somebody's video.
 
 ### The sticker source holds the card
 
@@ -333,43 +344,103 @@ here calls it healthy.
   below and half of it is not enough. The inset is **read**, not retyped:
   computed `right` is the one edge that is a length on both presets, `bottom`
   being `auto` on the centred rail.
-- **The worst card is a fixture, not an argument.** `broadcast-long-name` and
-  `broadcast-rail-long-name` carry a 32-byte name (§5's ceiling) with no break
-  opportunity. Neo clamps `.bc-name` at three lines where Modern and Rural
-  stop at two, so Neo is where both presets peak. Both are geometry-only and
-  stay out of `__contrastScreens` — measured, the contrast pass sampled the
-  same 1978 boxes before and after them.
+- **The worst card is a fixture, not an argument.** `broadcast-long-name`,
+  `broadcast-rail-long-name` and `broadcast-quotes-long-name` carry a 32-byte
+  name (§5's ceiling) with no break opportunity. Neo clamps `.bc-name` at
+  three lines where Modern and Rural stop at two, so Neo is where every preset
+  peaks. All three are geometry-only and stay out of `__contrastScreens` —
+  measured, the contrast pass sampled the same 1978 boxes before and after the
+  first two, and 2658 before and after the third.
+- **Two stresses stack, and a fixture that carries one carries neither.** The
+  quote card (`cards=quotes`) is a line taller than a listing card — the chip
+  above the figure, the line under its rule — and a long name is three lines
+  on Neo. Each alone fits the shipped corner sticker; **together they measured
+  810 against a ceiling of 800**, which clips the QR plate off the bottom of a
+  source built to the studio's own recipe. Caught 2026-09-04 by adding
+  `broadcast-quotes-long-name`, and it is the whole argument for keeping a
+  fixture per combination rather than per feature.
 
-Measured 2026-09-02 at the 1920 canvas, `.bc` box in px with the height
-ceiled. Add 120 for the source the recipe asks for:
+Measured at the 1920 canvas, `.bc` box in px with the height ceiled. Add 120
+for the source the recipe asks for. The listings rows are 2026-09-02; the
+quote rows and the re-reads beside them are 2026-09-04, read on this box by
+planting `OBS_STICKER_HEIGHT = 1` and reading the failure lines — the whole
+table moved by 1px that day (605 where it said 604), which is a browser or a
+font, not a layout, and is left as measured rather than smoothed.
 
 | screen | Modern | Neo city | Rural |
 |---|---|---|---|
-| `broadcast`, `broadcast-clear` | 252x604 | 252x604 | 252x571 |
+| `broadcast`, `broadcast-clear` | 252x605 | 252x605 | 252x572 |
 | `broadcast-rest` | 252x424 | 252x424 | 252x391 |
 | `broadcast-empty` | 252x457 | 252x485 | 252x424 |
 | `broadcast-long-name` | 252x604 | **252x638** | 252x604 |
 | `broadcast-rail` | 252x424 | 252x424 | 252x391 |
 | `broadcast-rail-long-name` | 252x424 | **252x457** | 252x424 |
+| `broadcast-quotes`, `-clear` | 252x656 | 252x656 | 252x623 |
+| `broadcast-quotes-long-name` | — | **252x690** | — |
 
-Corner peak 638 + 120 = **758**, inside the shipped `OBS_STICKER_HEIGHT = 800`
-— left alone. Rail peak 457 + 120 = **577**, and
-`OBS_RAIL_STICKER_HEIGHT` shipped at 560: the incident. The rail's first number, 560, was arithmetic off the corner's card; the
-  review had already said in words that a three-line Neo name on the rail
-  was the one that could clip, and the measurement proved it. Raised to **580**, the smallest multiple
-of 20 that holds 577. That is 3px of headroom, which is the point of a rule
-measured to the pixel: the next line of chrome on the rail goes red instead of
-shipping a recipe that cuts the QR in half.
+Rail peak 457 + 120 = **577**, and `OBS_RAIL_STICKER_HEIGHT` shipped at 560:
+the first incident. That number was arithmetic off the corner's card; the
+review had already said in words that a three-line Neo name on the rail was
+the one that could clip, and the measurement proved it. Raised to **580**, the
+smallest multiple of 20 that holds 577.
+
+Corner peak was 638 + 120 = **758** while the only card was a listing, inside
+the shipped 800. The quote card is a line taller, and under a 32-byte Neo name
+it measures 690 + 120 = **810**: ten over, and the ten that go are the bottom
+of the QR plate. `OBS_STICKER_HEIGHT` raised to **820**, the smallest multiple
+of 20 that holds it, and `public/stream.html` restates the pair by hand
+(`the-stream-guide-figures-are-the-apps-own` reads them from `obsSizes.ts`, so
+the page cannot drift from the constant in silence).
+
+Both raises leave single-digit headroom, which is the point of a rule measured
+to the pixel: the next line of chrome goes red instead of shipping a recipe
+that cuts the QR in half.
 
 Proved red by planting `OBS_STICKER_HEIGHT = 600`: 31 failures across the
 canvas and reduced-motion passes, each naming its look and its own measured
 height (`.bc is 252x638 … needs 372x758 — OBS_STICKER_HEIGHT is 600`), and no
 other rule moved.
 
+### The QR's density, per link and per route form
+
+Measured 2026-09-04 through the app's own `qrMatrix` (ECC `M`, version chosen
+by the library) at the shipped 204px box, with `qrSvg`'s four-module quiet zone
+on each side — px/module is `204 / (data + 8)`, which is where "4.53 today"
+came from. The links are built by `stallPath` / `payLandingUrl` over a dummy
+identity nobody holds, at the production origin.
+
+| link | route form | chars | data modules | px/module |
+|---|---|---|---|---|
+| share (`/s/<seller>`) | pubkey | 87 | 41 | 4.16 |
+| share | address (`%3A`) | 71 | 37 | 4.53 |
+| share | address (bare `:`) | 69 | 37 | 4.53 |
+| landing (`?pay=<12 hex>`) | pubkey | 104 | 41 | 4.16 |
+| landing | address (`%3A`) | 88 | 41 | 4.16 |
+| landing | address (bare `:`) | 86 | 41 | 4.16 |
+
+**The landing link is 41 modules in every form, which is parity with the
+pubkey share link and one version above the address one.** The proposal
+expected 37 for the address form; the measurement says otherwise, because
+byte-mode capacity at ECC `M` version 5 is 84 characters and the address
+landing link is 86–88 — the `%3A` a path encoder writes for the `:` costs two
+of those. So an address-route stall's overlay code is denser than its share
+code, at a density this app already ships on every pubkey-route stall. It is
+nowhere near the BIP21-plus-memo shape this rail refused (156 chars, 53
+modules, 3.34 px/module).
+
+Not enforced by a test: it is a property of the vendored encoder and the link
+shapes, and both are pinned elsewhere. Re-measure when either moves.
+
 ### `bg=transparent`, in declarations and in pixels
 
 Two halves, because either alone is a lie a reader would believe.
 
+- **Every clear screen, not one.** The pixel half runs over
+  `CLEAR_SCREENS` — `broadcast-clear` and `broadcast-quotes-clear` — because
+  each carries a different figure over the stream, and a card this pass never
+  shot is a card nobody proved legible over video. The line prints the least
+  clear frame of the set; an average would let one screen that painted a
+  ground hide behind one that did not.
 - **The declarations.** On a screen whose `broadcast.transparent` is set,
   `html`, `body`, `#app`, `.frame`, `.stall` and `.bc` must have a
   `background-color` with zero alpha and `background-image: none` —
@@ -416,6 +487,11 @@ read at the canvas width, and the fixture carries `broadcastStepped` and
 `broadcastPulse` so both classes are on the tree: a runtime-only class is an
 animation this guard can never see. Proved by deleting the reduce block — 27
 failures naming `bc-in on div.bc-ext.in` and `bc-pulse on span.pulse`.
+
+`broadcast-quotes` runs beside it, because the pulse sits on
+`[data-role="seller-price"]` there — a second selector in the same reduce
+block, and one that stilled only the other role would print this pass's tick
+while a stream kept moving.
 
 ## Clip-path text containment
 
@@ -500,6 +576,15 @@ hour.
 **The number moves ±15% between runs on the same tree** (98.9s and 113.2s for
 the same contrast pass, an hour apart). A run near the ceiling is not by
 itself a matrix that grew.
+
+Measured again 2026-09-04, with the quote card's three canvas screens, a
+second reduced-motion screen and a second transparency screen added: **142.7s
+settled**, against 136.6s for the tree before them — the contrast pass is
+unmoved at 2658 boxes, because none of the new screens is in
+`__contrastScreens`. The same tree, run **immediately after `pnpm test`**,
+measured **185.5s** with every rule green and the same 2658 boxes: the vitest
+suite's vite builds leave the box hot, which is the reading to throw away, not
+the ceiling to raise.
 
 ## What this guard still cannot see
 

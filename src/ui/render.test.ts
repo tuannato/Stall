@@ -5151,6 +5151,7 @@ const BROADCAST: BroadcastParams = {
     preset: 'corner',
     mode: 'rail',
     transparent: false,
+    cards: 'listings',
 };
 
 function broadcastView(over: Partial<StallView> = {}): StallView {
@@ -5617,6 +5618,251 @@ describe('a-resting-card-mounts-no-price', () => {
             'live still mounts the price',
         ).not.toBeNull();
     });
+
+    // The quote card is the same slot wearing the other rail's figure, so the
+    // rule is the same one: a resting overlay mounts no money at all.
+    it('mounts no quote figure on rest either', () => {
+        const rest = paint(quoteCardView({ broadcastState: 'rest' })).root;
+        expect(rest.querySelector('.bc-ext'), 'rest mounts no card').toBeNull();
+        expect(
+            rest.querySelector('[data-role="seller-price"]'),
+            'rest mounts no quote',
+        ).toBeNull();
+
+        const live = paint(quoteCardView()).root;
+        expect(
+            live.querySelector('[data-role="seller-price"]'),
+            'live still mounts the quote',
+        ).not.toBeNull();
+    });
+});
+
+/** A USD quote on the listed token, and the overlay switched to the quotes. */
+const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n } as const;
+
+function quoteCardView(over: Partial<StallView> = {}): StallView {
+    return broadcastView({
+        broadcast: { ...BROADCAST, mode: 'fixed', cards: 'quotes' },
+        prices: new Map([[TOKEN_ID, USD_QUOTE]]),
+        ...over,
+    });
+}
+
+describe('a-quote-card-carries-the-landing-link-not-a-wallet-uri', () => {
+    /**
+     * The code on a quote card opens **this page at that item**, never a
+     * wallet. A raw BIP21 would drop whoever scanned it into a wallet holding
+     * an amount and a hex memo nobody explained to them; the landing link
+     * opens the page that explains it, with the Pay control on it, and carries
+     * no amount to go stale.
+     *
+     * Read from a location that carries the broadcast params, because the base
+     * is origin + pathname with the **search dropped**: the share link keeps
+     * the search, and keeping it here would encode `…&cards=quotes?pay=…` —
+     * a code that opens the overlay it was scanned from.
+     */
+    it('encodes this page at the item, with no ecash: and no amount', () => {
+        const before = window.location.href;
+        window.history.replaceState(
+            {},
+            '',
+            `${stallPath(ADDR)}?view=broadcast&cards=quotes&mode=fixed`,
+        );
+        try {
+            const { root } = paint(quoteCardView());
+            const landing = payLandingUrl(stallBaseUrl(), TOKEN_ID);
+            expect(landing).toBeDefined();
+            expect(landing!.startsWith(`${location.origin}${stallPath(ADDR)}?pay=`)).toBe(
+                true,
+            );
+            expect(landing).not.toContain('ecash:');
+            expect(landing).not.toContain('amount=');
+            expect(landing).not.toContain('view=broadcast');
+            expect(landing).not.toContain('cards=quotes');
+
+            const qr = root.querySelector('svg.qr');
+            expect(qr, 'the card still carries one code').not.toBeNull();
+            expect(qr!.getAttribute('data-role')).toBe('qr');
+            expect(qr!.querySelector('path')?.getAttribute('d')).toBe(qrPathOf(landing!));
+            // One code, not two: the landing link replaces the stall link
+            // while the card is up.
+            expect(root.querySelectorAll('svg.qr')).toHaveLength(1);
+            expect(qr!.querySelector('path')?.getAttribute('d')).not.toBe(
+                qrPathOf(shopQrHref(ADDR)),
+            );
+        } finally {
+            window.history.replaceState({}, '', before);
+        }
+    });
+
+    it('a listings card still QRs the stall itself', () => {
+        const { root } = paint(broadcastView());
+        const qr = root.querySelector('svg.qr');
+        expect(qr!.querySelector('path')?.getAttribute('d')).toBe(
+            qrPathOf(shopQrHref(ADDR)),
+        );
+    });
+});
+
+describe('a-quote-card-mounts-no-price-node', () => {
+    /**
+     * `[data-role="price"]` is the covenant's own asked amount everywhere but
+     * the pay sheet, and a quote is not that money. One card, one kind: the
+     * figure sits under `seller-price`, in the seller's own unit, and nothing
+     * on the card is the Agora figure.
+     */
+    it('paints the quote under seller-price and no price node at all', () => {
+        const { root } = paint(quoteCardView());
+        const card = root.querySelector('.bc-ext') as HTMLElement;
+        expect(card, 'the card is up').not.toBeNull();
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+        const figure = root.querySelector('[data-role="seller-price"]');
+        expect(figure?.textContent).toBe('$5.00');
+        expect(card.textContent).toContain(copy.SELLER_QUOTE_CHIP);
+        expect(card.textContent).toContain(copy.BROADCAST_QUOTE_LINE);
+        expect(root.querySelector('.bc-nm')?.textContent).toBe(BEANS.name);
+        // The covenant's figure is on the same book and must not ride along.
+        expect(card.textContent).not.toContain('1,200');
+        expect(card.textContent).not.toContain(PRICE_FROM);
+    });
+
+    it('an xec quote is the seller’s own unit, ungrouped by no rate', () => {
+        const { root } = paint(
+            quoteCardView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            }),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe(
+            `5,000.00 ${copy.XEC}`,
+        );
+    });
+});
+
+describe('a-quote-card-never-carries-a-rate', () => {
+    /**
+     * No rate, no converted figure, no "as of": a permanent record read
+     * through a live feed would print a different price every hour under a
+     * number nobody signed, and a stream has nobody to press refresh. The page
+     * the code opens does the conversion, at the moment of the scan.
+     */
+    it('shows no rate, no fiat glance and no derived XEC, even holding a rate', () => {
+        const { root } = paint(
+            quoteCardView({ fiatCode: 'usd', fiatRate: scaleRate(0.00002) }),
+        );
+        const card = root.querySelector('.bc-ext') as HTMLElement;
+        expect(root.querySelector('[data-role="rate"]')).toBeNull();
+        expect(root.querySelector('[data-role="fiat"]')).toBeNull();
+        expect(card.textContent).not.toContain('≈');
+        expect(card.textContent).not.toMatch(/as of/i);
+        expect(card.textContent).not.toContain(copy.XEC);
+        expect(card.textContent).toBe(
+            `${BEANS.name}${copy.SELLER_QUOTE_CHIP}$5.00${copy.BROADCAST_QUOTE_LINE}`,
+        );
+    });
+});
+
+describe('an-nft-never-gets-a-quote-card', () => {
+    /**
+     * A quote is per whole token and an NFT is one of one, so the pay set is
+     * `isPriceable` and affirmative: metadata that never arrived answers
+     * `unsorted`, and a card built from that would print a figure about a row
+     * this page could not read.
+     */
+    it('drops an NFT quote and falls back to the listing card', () => {
+        const nft: TokenMeta = {
+            tokenId: OTHER_TOKEN,
+            name: 'Pixel #1',
+            ticker: 'PIX',
+            decimals: 0,
+            tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' },
+        };
+        const { root } = paint(
+            quoteCardView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER_TOKEN, nft],
+                ]),
+                prices: new Map([[OTHER_TOKEN, USD_QUOTE]]),
+            }),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(root.querySelector('[data-role="price"]')).not.toBeNull();
+    });
+
+    it('drops a quote whose genesis never arrived', () => {
+        const { root } = paint(
+            quoteCardView({
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                prices: new Map([[OTHER_TOKEN, USD_QUOTE]]),
+            }),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+    });
+});
+
+describe('a-sub-dust-xec-quote-is-not-a-card', () => {
+    /**
+     * Under `DUST_SATS` the network will not relay the output, so the code on
+     * that card opens a page that can compose nothing. An XEC quote is decided
+     * here — no rate is involved — while a USD one cannot be, so it is shown
+     * and the landing page says what it finds.
+     */
+    it('drops an xec quote under the floor and keeps one at it', () => {
+        const under = paint(
+            quoteCardView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500n }]]),
+            }),
+        ).root;
+        expect(satsForQuote({ code: 'xec', exponent: 2, amount: 500n }, 1n, undefined)).toBe(
+            500n,
+        );
+        expect(under.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(under.querySelector('[data-role="price"]'), 'the listings stand in').not.toBeNull();
+
+        const at = paint(
+            quoteCardView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 546n }]]),
+            }),
+        ).root;
+        expect(at.querySelector('[data-role="seller-price"]')?.textContent).toBe(
+            `5.46 ${copy.XEC}`,
+        );
+    });
+});
+
+describe('an-empty-quote-set-shows-the-listings', () => {
+    /**
+     * `cards=quotes` over a stall with nothing this page can quote is the shop
+     * it already was — the head plate unchanged and not one word about it. A
+     * failure printed on a stream reads as the seller's own shop being down,
+     * and this is not even our failure.
+     */
+    it('paints the listing card and prints nothing about the switch', () => {
+        const { root } = paint(quoteCardView({ prices: new Map() }));
+        expect(root.querySelector('[data-role="price"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(root.querySelector('.bc-nm')?.textContent).toBe(BEANS.name);
+        expect(root.textContent).not.toMatch(/quote/i);
+    });
+
+    it('an unpriced stall with no listings is still the empty screen', () => {
+        const { root } = paint(
+            quoteCardView({ fetch: { kind: 'empty' }, prices: new Map() }),
+        );
+        expect(root.querySelector('.bc-ext')).toBeNull();
+        expect(root.textContent).toContain(copy.BROADCAST_EMPTY);
+    });
+
+    // A quote needs no covenant: a stall with nothing listed and one quote is
+    // the price-tag case this rail exists for, and the overlay follows the pay
+    // surface rather than hiding it behind a listing. The book's own empty
+    // line goes away with the card up — "nothing listed yet" over something a
+    // viewer can pay for reads as a contradiction.
+    it('paints a quote card over a stall with nothing listed', () => {
+        const { root } = paint(quoteCardView({ fetch: { kind: 'empty' } }));
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(root.textContent).not.toContain(copy.BROADCAST_EMPTY);
+    });
 });
 
 describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
@@ -5829,9 +6075,19 @@ describe('an-agora-row-never-carries-the-sellers-quote', () => {
         expect(activity.textContent).not.toContain('12.50');
     });
 
+    // The overlay's own default: `cards=listings` is what a link with no
+    // switch parses to, and a listings card carries the covenant's figure
+    // alone however many quotes the stall has published.
     it('shows none on the broadcast overlay', () => {
         const { root } = paint(
-            priced({ broadcast: { preset: 'corner', mode: 'fixed', transparent: false } }),
+            priced({
+                broadcast: {
+                    preset: 'corner',
+                    mode: 'fixed',
+                    transparent: false,
+                    cards: 'listings',
+                },
+            }),
         );
         expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
         expect(root.textContent).not.toContain('12.50');
