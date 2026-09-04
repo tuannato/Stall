@@ -6,6 +6,7 @@ import {
 } from '../domain/description';
 import type { GenesisAttribution } from '../domain/genesis';
 import { pickManifestWinner, type ManifestRank } from '../domain/manifest';
+import { chainTimeOf } from './classify';
 import { attributionFromGenesisTx } from './genesis';
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGES, type ChainTx, type HistoryPage } from './chain';
 import type { ManifestChronik } from './chain';
@@ -32,7 +33,20 @@ import { opReturnPushes } from './script';
  *
  * Never throws. A description is worth much less than a shop that paints.
  */
-export type LoadedDescription = TokenDescription & ManifestRank;
+export type LoadedDescription = TokenDescription &
+    ManifestRank & {
+        /**
+         * The chain's own clock for the transaction that carried this record,
+         * in seconds, or nothing — `chainTimeOf`'s rule, which is the rule
+         * every dated row on this page already keeps.
+         *
+         * **Beside the rank, never inside it.** `compareManifestRank` orders
+         * records by finality, height and txid, and a clock in that type would
+         * invite a reader — or a later edit — to sort by a number two nodes can
+         * disagree about. This is read only after a winner exists.
+         */
+        readonly timeS?: number;
+    };
 
 export type DescriptionLookup = {
     /** tokenId → the winning text. A token whose winner is a removal is absent. */
@@ -54,6 +68,20 @@ export type DescriptionLookup = {
      * editor a record it silently destroys on the next publish.
      */
     readonly prices: ReadonlyMap<string, TokenPrice>;
+    /**
+     * tokenId → when the winning record was written, in the chain's own
+     * seconds. A token whose winner carries no time is **absent**, never zero:
+     * chronik's `0` means unknown, and a record dated 1970 is worse than an
+     * undated one.
+     *
+     * Its own map rather than a field on the price entry, which is a decode of
+     * what the wire says — this is what the chain says *about* the record that
+     * carried it, and a reader that found it inside `TokenPrice` would take it
+     * for a signed field. Keyed for every token whose record won, priced or
+     * not, because one record is the whole truth about one token: the time of
+     * the quote is the time of the record the words and the figure came from.
+     */
+    readonly quoteTimes: ReadonlyMap<string, number>;
     /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
@@ -175,6 +203,7 @@ function collate(
     const descriptions = new Map<string, string>();
     const shelves = new Map<string, string>();
     const prices = new Map<string, TokenPrice>();
+    const quoteTimes = new Map<string, number>();
     for (const [tokenId, records] of found) {
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
@@ -188,6 +217,13 @@ function collate(
         // unfinalised — one node's opinion, which §5 says never wins.
         if (winner === undefined) {
             continue;
+        }
+        // The winner's own clock, and only the winner's: a losing record's
+        // stamp would date a document nobody is reading. A tombstone carries
+        // it too — "when did the seller last say something about this token"
+        // is one question, and one record answers it.
+        if (winner.timeS !== undefined) {
+            quoteTimes.set(tokenId, winner.timeS);
         }
         // The shelf rides whichever record won — a tombstone included, which
         // is how "no words, shelved" travels as one record.
@@ -204,7 +240,7 @@ function collate(
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, shelves, prices, unreadable };
+    return { descriptions, shelves, prices, quoteTimes, unreadable };
 }
 
 function collectPage(
@@ -309,11 +345,16 @@ function collectTx(
         }
         seenHere.add(record.tokenId);
         const list = found.get(record.tokenId);
+        const timeS = chainTimeOf(tx);
         const loaded: LoadedDescription = {
             ...record,
             height: tx.block?.height,
             isFinal: tx.isFinal === true,
             txid: tx.txid,
+            // Carried per record and read only off the winner. The one reader
+            // of the chain's clock, so a record whose stamp is unknown stays
+            // undated rather than borrowing another record's.
+            ...(timeS === undefined ? {} : { timeS }),
         };
         if (list === undefined) {
             found.set(record.tokenId, [loaded]);

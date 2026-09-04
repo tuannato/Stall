@@ -1,5 +1,7 @@
 /** Load-bearing stall copy. Screens quote these; do not paraphrase at the call site. */
 
+import type { RecordAge } from '../domain/age';
+
 export const LINK_UNREADABLE_TITLE = 'This link is unreadable';
 
 /**
@@ -212,6 +214,23 @@ export const UNREADABLE_BODY =
 
 export const UNREACHABLE_SUB = 'Prices unavailable';
 export const UNREACHABLE_BODY = "We can't read prices right now. No index answered.";
+
+/**
+ * A node that answered, which is not a network that did not.
+ *
+ * `plugin-missing` is a protocol-level 404 from a chronik that replied and
+ * simply does not run `agora.py`. Serving it "No index answered" described our
+ * own situation as the network's — the same error the `unresolved` screen
+ * carried until it earned its own sentence.
+ *
+ * The second half is structural rather than a report of this load: the
+ * seller's records are a different index on a different walk, so a missing
+ * offer plugin says nothing about them either way. What that walk actually
+ * found is the Quotes side's own to say — a count on its label, or one of its
+ * three sentences — and this screen must not answer for it.
+ */
+export const PLUGIN_MISSING_BODY =
+    'This node answered, and it does not run the index that lists offers — so there are no listings to show here. The seller’s own records are read separately, on the Quotes side.';
 
 /**
  * We stopped reading, and the index did not fail.
@@ -1081,6 +1100,47 @@ export const QUOTE_NO_WORDS_LINE = 'The seller wrote nothing about this item';
  * only the picture the row already withholds.
  */
 export const QUOTE_NOT_MINTED_HERE = 'Token minted by another wallet';
+/**
+ * The positive half, so absence stops being ambiguous.
+ *
+ * With only the negative line and silence, a row that said nothing meant
+ * either "this stall minted it" or "this page could not tell" — two different
+ * facts wearing one shape, which is the empty-versus-unreachable collapse on
+ * the quote rail.
+ *
+ * **It says who minted, and vouches for nothing else.** The rule proves the
+ * provenance of the mint; it cannot prove a name is not somebody else's brand,
+ * and no reader of a chain can. A seller who mints their own token and calls
+ * it after a well-known one is attributed, and these two sentences are still
+ * exactly true of it — they name the minter and say nothing about the word on
+ * the label. A chip on the row, where the space is a name column's; the whole
+ * sentence in the sheet, which a scanned link can open with no row on screen.
+ */
+export const QUOTE_MINTED_CHIP = 'Minted here';
+export const QUOTE_MINTED_HERE = 'Token minted by this stall';
+/** The units `recordAge` counts in, as a reader says them. */
+const AGE_NOUNS = {
+    minute: 'minute',
+    hour: 'hour',
+    day: 'day',
+    month: 'month',
+    year: 'year',
+} as const;
+/**
+ * When the seller **wrote** the quote, and nothing else.
+ *
+ * A stall that sold out and never published the removal leaves Pay lit for
+ * ever, and nothing else on the row lets a buyer price that. Stock cannot be
+ * the answer — the item is off-chain and only the seller knows it — so this
+ * says the one thing the chain does prove: the age of the record. It must not
+ * be heard as "still available", which is why it names the quote and never the
+ * item, and why there is no threshold, no colour and no verdict anywhere near
+ * it. A record this page cannot date prints nothing at all.
+ */
+export const quotedAgo = (age: RecordAge): string =>
+    age.unit === 'under-a-minute'
+        ? 'Quoted under a minute ago'
+        : `Quoted ${age.count} ${AGE_NOUNS[age.unit]}${age.count === 1 ? '' : 's'} ago`;
 /** Over the seller's whole description, inside the sheet. */
 export const PAY_WORDS_LABEL = 'The seller’s words';
 /** The chip that says whose figure a row carries. Never beside an Agora price. */

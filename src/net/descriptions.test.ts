@@ -64,6 +64,9 @@ function tx(opts: {
     height?: number;
     isFinal?: boolean;
     foreign?: boolean;
+    /** The chain's own clock, in the two places chronik reports it. */
+    timeFirstSeen?: number;
+    blockTimeS?: number;
 }): ChainTx {
     const input = opts.foreign
         ? {
@@ -73,7 +76,11 @@ function tx(opts: {
         : { inputScript: p2pkhScriptSig(PK), outputScript: p2pkhOutputScript(HASH) };
     return {
         txid: opts.txid,
-        block: opts.height === undefined ? undefined : { height: opts.height },
+        block:
+            opts.height === undefined
+                ? undefined
+                : { height: opts.height, timestamp: opts.blockTimeS },
+        timeFirstSeen: opts.timeFirstSeen,
         isFinal: opts.isFinal,
         inputs: [input],
         outputs: opts.outputs.map((outputScript) => ({ outputScript })),
@@ -672,6 +679,59 @@ describe('price-rides-the-record-that-won', () => {
             }),
         ).then((got) => {
             expect(got.prices.get(TOKEN_A)).toEqual(eur);
+        });
+    });
+});
+
+describe('a-quotes-age-comes-from-the-record-that-won', () => {
+    /**
+     * The walk already ranks the records and threw the winner's time away. It
+     * is the only honest clock for "when did the seller write this": a losing
+     * record's stamp would date a document nobody is reading, and the page's
+     * own clock never saw either of them.
+     */
+    it('carries the winner’s time, not the loser’s', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: 'a1',
+                        outputs: [stld(TOKEN_A, 'Old.')],
+                        height: 10,
+                        timeFirstSeen: 1_700_000_000,
+                    }),
+                    tx({
+                        txid: 'b2',
+                        outputs: [stld(TOKEN_A, 'New.')],
+                        height: 11,
+                        timeFirstSeen: 1_755_000_000,
+                    }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.descriptions.get(TOKEN_A)).toBe('New.');
+            expect(got.quoteTimes.get(TOKEN_A)).toBe(1_755_000_000);
+        });
+    });
+
+    it('falls back to the block’s clock, and treats chronik’s zero as unknown', () => {
+        return load(
+            chronikWith({
+                lokadTxs: [
+                    tx({
+                        txid: 'a1',
+                        outputs: [stld(TOKEN_A, 'Mined.')],
+                        height: 10,
+                        timeFirstSeen: 0,
+                        blockTimeS: 1_740_000_000,
+                    }),
+                    // Neither clock: an entry here would date it to 1970.
+                    tx({ txid: 'b2', outputs: [stld(TOKEN_B, 'Undated.')], height: 11 }),
+                ],
+            }),
+        ).then((got) => {
+            expect(got.quoteTimes.get(TOKEN_A)).toBe(1_740_000_000);
+            expect(got.quoteTimes.has(TOKEN_B)).toBe(false);
         });
     });
 });

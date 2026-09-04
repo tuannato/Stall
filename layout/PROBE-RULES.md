@@ -154,6 +154,19 @@ nothing.
   `.pay-sub` and `.fine` muted ink on grounds that list already samples, and
   the contrast pass is most of this guard's runtime, which is at its ceiling.
 
+- **The positive mint state and the quote's age ride those same fixtures.**
+  `T1` being `attributed` now puts a **second** `.chip` in the row's name
+  column beside the quote chip, and `QUOTE_TIMES` dates `T1` and not `QUOTED`
+  — so `plugin-missing-quotes`, `pay` and `pay-xec` measure the dated row and
+  card against the undated ones, and a two-chip name column against a track
+  `minmax(0, 1fr)` is free to shrink. That is why the row's chip is the short
+  `QUOTE_MINTED_CHIP` and the sentence stays in the sheet: a `.chip` is
+  uppercase and `white-space: nowrap`, and the whole sentence at that size is
+  wider than the name column is on a phone. No screen was added and no selector
+  joined `CONTRAST_TEXT` — `.chip` was already in it for the quote chip, so the
+  second one is sampled wherever the first is, and the age line is `.pay-sub`
+  and `.fine` like the two lines above it.
+
 - **Every screen named for the pay rail must mount a figure, or the run
   fails.** A screen whose name starts with `pay` or contains `quotes` and that
   mounted no `[data-role="seller-price"]` while it was measured fails the pass
@@ -703,6 +716,16 @@ options are if a cold run ever crosses 150 — prune a screen out of the contras
 pass (coverage, so a decision rather than a cleanup) or measure something
 steadier than wall clock (a redesign of what the ceiling means, which is not
 the same as raising it). Raising it is still not one of them.
+
+**And again 2026-09-04 with the quote's age, the positive mint chip and the
+plugin-missing sentence: 134.3s and 130.7s** on two runs of the same tree,
+contrast 104.5s / 102.1s over **2,552 boxes** (+11 on 2,541), every rule green,
+each run started alone and cold. No screen was
+added: the chip is a second `.chip` on rows that already had one, and the age
+is muted ink on the same grounds. The eleven boxes are the whole cost of the
+change, which is what "pay for a screen by pruning one" was protecting — and
+the reading being a full ten seconds under the band above is the box, not the
+matrix, exactly as the paragraph before this one says.
 
 ## What this guard still cannot see
 

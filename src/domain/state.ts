@@ -507,6 +507,17 @@ export type StallView = {
      */
     prices?: ReadonlyMap<string, TokenPrice>;
     /**
+     * tokenId → when the winning record was written, in the chain's own
+     * seconds, from the same record as the words and the figure.
+     *
+     * A token is **absent** here whenever its record carries no time this page
+     * can trust, and the pay surfaces print an age only where there is one: no
+     * fallback to a height, no "just now", nothing at all. What it says is
+     * when the seller wrote the quote — never that the item is still there,
+     * which nothing on chain says either way.
+     */
+    quoteTimes?: ReadonlyMap<string, number>;
+    /**
      * The descriptions walk hit its cap, so a quote this page holds no record
      * of may still exist. Said on screen only where it changes an answer — a
      * `?pay=` link that matched nothing cannot be called unknown after a walk

@@ -24,6 +24,7 @@ import {
     OPENING_BODY,
     PAY_HINT_UNKNOWN,
     PAY_HINT_UNREAD,
+    PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
 } from './ui/copy';
 import { DEFAULT_THEME } from './domain/theme';
@@ -870,6 +871,7 @@ function noRecords(over: Partial<DescriptionLookup> = {}): DescriptionLookup {
         descriptions: new Map(),
         shelves: new Map(),
         prices: new Map(),
+        quoteTimes: new Map(),
         unreadable: new Set(),
         genesis: new Map(),
         truncated: false,
@@ -974,14 +976,18 @@ describe('the-failure-screen-paints-before-the-facts-land', () => {
             bookFailed({ manifest, descriptions: Promise.resolve(noRecords()) }),
         );
         await flush();
-        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        // `bookFailed` is a `plugin-missing` fetch — a node that answered
+        // without the offer plugin — which now says so in its own words rather
+        // than borrowing the unreachable screen's. What this test is about is
+        // unchanged: the failure paints before the walks land.
+        expect(root.textContent).toContain(PLUGIN_MISSING_BODY);
         expect(root.textContent).not.toContain('Riverside Goods');
 
         answer(settingsNaming('Riverside Goods'));
         await flush();
         expect(root.textContent).toContain('Riverside Goods');
         expect(root.textContent, 'the failure is still what happened').toContain(
-            UNREACHABLE_BODY,
+            PLUGIN_MISSING_BODY,
         );
     });
 });

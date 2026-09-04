@@ -1626,6 +1626,10 @@ export function boot(
             descriptions: lookup.descriptions,
             shelves: lookup.shelves,
             prices: lookup.prices,
+            // The winning record's own clock, replaced with the maps it came
+            // from: a time held over from an earlier walk would date this
+            // walk's record from a record it never saw.
+            quoteTimes: lookup.quoteTimes,
             // Both are about this page and neither is about the seller, and a
             // screen that reads them (the `?pay=` note) must read the walk it
             // actually got rather than the one the load made.
@@ -2172,6 +2176,7 @@ async function loadCurrent(): Promise<AppState> {
         descriptions: new Map<string, string>(),
         shelves: new Map<string, string>(),
         prices: new Map<string, TokenPrice>(),
+        quoteTimes: new Map<string, number>(),
         unreadable: new Set<string>(),
         genesis: new Map<string, GenesisAttribution>(),
         truncated: false,
@@ -2316,6 +2321,7 @@ async function loadCurrent(): Promise<AppState> {
             descriptions: descriptionLookup.descriptions,
             shelves: descriptionLookup.shelves,
             prices: descriptionLookup.prices,
+            quoteTimes: descriptionLookup.quoteTimes,
             // Said on screen only where it changes an answer: a `?pay=` link
             // that matched nothing cannot be called unknown after a walk that
             // stopped early, nor after one that threw.

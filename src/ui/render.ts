@@ -39,6 +39,7 @@ import {
 import { parseSellerParam, stallPath } from '../domain/route';
 import { isLegibleText, itemTitle } from '../domain/text';
 import type { GenesisAttribution } from '../domain/genesis';
+import { recordAge } from '../domain/age';
 import {
     attachmentClasses,
     attachmentNodesWanted,
@@ -1124,7 +1125,20 @@ function paintUnreachable(
     if (shopTabOf(view) === 'quotes') {
         body.append(quotesPanel(view, handlers));
     } else {
-        body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
+        // Two failures, two sentences. `plugin-missing` is a node that
+        // answered — a protocol-level 404 from a chronik without `agora.py` —
+        // and telling a reader no index answered describes our own situation
+        // as the network's. The hosts box already names which of the two this
+        // was, and the retry is a way forward from either.
+        body.append(
+            el(
+                'p',
+                'mid-p',
+                fetch.kind === 'plugin-missing'
+                    ? copy.PLUGIN_MISSING_BODY
+                    : copy.UNREACHABLE_BODY,
+            ),
+        );
         body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
         body.append(retryControl(handlers));
     }
@@ -1910,6 +1924,39 @@ function quoteNaming(
 }
 
 /**
+ * How old the seller's quote is, or **nothing at all**.
+ *
+ * A stall that sold out and never published the removal leaves Pay lit for
+ * ever, and nothing else on these two surfaces lets a buyer price that. Stock
+ * cannot say it — the item is off-chain and only the seller knows — so this
+ * says the one thing the chain proves: when the record was written.
+ *
+ * A record this page cannot date gets no node, not a dash and not a height:
+ * both callers ask for the node and mount it only if there is one, so an
+ * undated quote is one line shorter rather than one line wrong.
+ *
+ * A relative age rather than the absolute date `formatTriedAt` would give,
+ * because what a reader is judging is a length of time — "written three months
+ * ago" prices the staleness by itself, where a date has first to be compared
+ * against today, in whatever timezone the reader is in and on a stream overlay
+ * nobody can ask.
+ */
+function quoteAgeNode(
+    view: StallView,
+    tokenId: string,
+    tag: 'span' | 'p',
+    className: string,
+): HTMLElement | null {
+    const age = recordAge(view.quoteTimes?.get(tokenId), Date.now());
+    if (age === undefined) {
+        return null;
+    }
+    const node = el(tag, className, copy.quotedAgo(age));
+    node.setAttribute('data-role', 'quote-age');
+    return node;
+}
+
+/**
  * One quoted item: the seller's figure and the way to pay it.
  *
  * No "from", no stock, no rate, no converted glance — every one of those
@@ -1947,6 +1994,17 @@ function payRow(
         const borrowed = el('span', 'pay-sub', copy.QUOTE_NOT_MINTED_HERE);
         borrowed.setAttribute('data-role', 'quote-not-minted');
         words.append(borrowed);
+    } else if (minted === 'attributed') {
+        // The positive half. Without it, silence meant either "this stall
+        // minted it" or "this page could not tell", and the reader had no way
+        // to know which — `unknown` is the one that still says nothing.
+        const here = el('span', 'chip', copy.QUOTE_MINTED_CHIP);
+        here.setAttribute('data-role', 'quote-minted');
+        words.append(here);
+    }
+    const age = quoteAgeNode(view, item.tokenId, 'span', 'pay-sub');
+    if (age !== null) {
+        words.append(age);
     }
     row.append(words);
     const right = el('div', 'pay-r');
@@ -3196,13 +3254,26 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // where a buyer is looking when they decide, and a note further down the
     // sheet is a note read after the decision.
     card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
-    if (view.genesis?.get(tokenId) === 'not-attributed') {
+    const mintedBy = view.genesis?.get(tokenId);
+    if (mintedBy === 'not-attributed') {
         // The id, the picture and whatever the token stands for off-chain are
         // all borrowed. Said here as well as on the row: a scanned link opens
         // this sheet without the row ever being on screen.
         const borrowed = el('p', 'fine', copy.QUOTE_NOT_MINTED_HERE);
         borrowed.setAttribute('data-role', 'quote-not-minted');
         card.append(borrowed);
+    } else if (mintedBy === 'attributed') {
+        // Its positive half, on the same surface for the same reason. It names
+        // the minter and vouches for nothing about the name, which is the only
+        // half of this a chain can prove.
+        const here = el('p', 'fine', copy.QUOTE_MINTED_HERE);
+        here.setAttribute('data-role', 'quote-minted');
+        card.append(here);
+    }
+    // Beside the quote it is about, on the surface a scanned link opens first.
+    const age = quoteAgeNode(view, tokenId, 'p', 'fine');
+    if (age !== null) {
+        card.append(age);
     }
     wrap.append(card);
 

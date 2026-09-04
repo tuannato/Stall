@@ -314,7 +314,13 @@ describe('empty vs unreachable', () => {
 });
 
 describe('plugin-missing-is-not-empty', () => {
-    it('plugin-missing uses unreachable copy, not empty', () => {
+    /**
+     * The rule this name carries is unchanged: a node without the offer plugin
+     * is our failure and never a stall with nothing in it. What it may not
+     * borrow any more is `UNREACHABLE_BODY` — that node answered, and saying
+     * no index did was our own situation described as the network's.
+     */
+    it('says our own failure, and never that the stall is empty', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: {
@@ -330,7 +336,7 @@ describe('plugin-missing-is-not-empty', () => {
             }),
         );
         const text = root.textContent ?? '';
-        expect(text).toContain(UNREACHABLE_BODY);
+        expect(text).toContain(copy.PLUGIN_MISSING_BODY);
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).toContain('plugin-missing');
         expect(root.querySelector('button.buy')).toBeNull();
@@ -8392,6 +8398,255 @@ describe('a-not-attributed-token-borrows-no-icon-and-says-so', () => {
         expect(
             (head.querySelector('.item-ic') as HTMLElement).getAttribute('data-token-id'),
         ).toBe(TOKEN_ID);
+    });
+});
+
+/**
+ * A record written exactly `days` ago on the chain's own clock.
+ *
+ * Floored to the second **before** the subtraction, so the elapsed time at
+ * paint is that many days plus the millisecond remainder — never a hair under,
+ * which would floor to a day fewer and make this depend on when it ran.
+ */
+const quotedDaysAgo = (days: number): number =>
+    Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
+
+const ageNode = (root: HTMLElement, within: string) =>
+    root.querySelector<HTMLElement>(`[data-role="${within}"] [data-role="quote-age"]`);
+
+describe('a-quote-says-how-old-its-record-is', () => {
+    /**
+     * A seller who sells out and forgets to publish the removal leaves Pay lit
+     * for ever. Stock is not the answer — the item is off-chain and only the
+     * seller knows it — but freshness is, and the walk that ranks the records
+     * already holds the winner's own time.
+     */
+    it('paints the age on the pay row', () => {
+        const { root } = paint(
+            payView({ quoteTimes: new Map([[TOKEN_ID, quotedDaysAgo(3)]]) }),
+        );
+        expect(ageNode(root, 'pay-row')?.textContent).toBe(
+            copy.quotedAgo({ unit: 'day', count: 3 }),
+        );
+    });
+
+    it('says it in the pay sheet as well', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                quoteTimes: new Map([[TOKEN_ID, quotedDaysAgo(95)]]),
+            }),
+        );
+        expect(ageNode(root, 'pay')?.textContent).toBe(
+            copy.quotedAgo({ unit: 'month', count: 3 }),
+        );
+    });
+});
+
+describe('a-record-with-no-time-prints-no-age', () => {
+    /**
+     * Not "just now", not the block height, not an em dash where a figure
+     * goes. A record this page cannot date is a record it says nothing about —
+     * the same rule the Activity walk's undated rows already keep.
+     */
+    it('mounts no age node at all when the walk carried no time', () => {
+        // The control: with a time there is a node, so the absences below are
+        // this rule and not a surface that paints no age at all.
+        const dated = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                quoteTimes: new Map([[TOKEN_ID, quotedDaysAgo(1)]]),
+            }),
+        ).root;
+        expect(ageNode(dated, 'pay-row')).not.toBeNull();
+        expect(ageNode(dated, 'pay')).not.toBeNull();
+
+        for (const times of [
+            undefined,
+            new Map<string, number>(),
+            // chronik's `0` means unknown. A reader that trusted it would
+            // print a quote written in 1970.
+            new Map([[TOKEN_ID, 0]]),
+        ]) {
+            const { root } = paint(
+                payView({
+                    overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                    quoteTimes: times,
+                }),
+            );
+            expect(ageNode(root, 'pay-row')).toBeNull();
+            expect(ageNode(root, 'pay')).toBeNull();
+            expect(root.textContent).not.toContain('Quoted');
+        }
+    });
+});
+
+describe('an-age-is-not-a-claim-about-stock', () => {
+    /**
+     * The copy names the **record**, and nothing on the chain says whether the
+     * item is still there. A sentence that let a reader hear "still available"
+     * out of a date would be exactly the stock claim this rail refuses to make.
+     */
+    it('says when the seller wrote it and nothing about the item', () => {
+        const line = copy.quotedAgo({ unit: 'day', count: 3 });
+        expect(line.startsWith('Quoted ')).toBe(true);
+        for (const claim of ['stock', 'available', 'left', 'still', 'in stock']) {
+            expect(line.toLowerCase(), claim).not.toContain(claim);
+        }
+        const { root } = paint(
+            payView({ quoteTimes: new Map([[TOKEN_ID, quotedDaysAgo(3)]]) }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        expect(row.textContent).toContain(line);
+        expect(row.textContent).not.toContain(copy.THIS_STALLS_STOCK);
+    });
+});
+
+describe('an-attributed-token-says-this-stall-minted-it', () => {
+    /**
+     * The negative line and silence were the only two shapes, so absence meant
+     * either "this stall minted it" or "this page could not tell". The
+     * positive is what makes the three states three.
+     */
+    it('carries the chip on the pay row', () => {
+        const { root } = paint(
+            payView({ genesis: new Map([[TOKEN_ID, 'attributed' as const]]) }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        const chip = row.querySelector('[data-role="quote-minted"]');
+        expect(chip).not.toBeNull();
+        expect(chip!.textContent).toBe(copy.QUOTE_MINTED_CHIP);
+        expect(row.textContent).not.toContain(copy.QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('carries the line in the pay sheet', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        const line = sheet.querySelector('[data-role="quote-minted"]');
+        expect(line).not.toBeNull();
+        expect(line!.textContent).toBe(copy.QUOTE_MINTED_HERE);
+    });
+});
+
+describe('the-three-attribution-states-read-as-three', () => {
+    /**
+     * One view, three quoted tokens, three row shapes: minted here, minted by
+     * somebody else, and a genesis this page never read. The third keeps its
+     * icon and says nothing, which is only honest once the first says
+     * something.
+     */
+    it('gives each state its own row', () => {
+        const third = '22'.repeat(32);
+        const { root } = paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, PAY_TEA],
+                    [third, { ...BEANS, tokenId: third, name: 'Third Thing' }],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, QUOTE_USD],
+                    [third, QUOTE_USD],
+                ]),
+                genesis: new Map([
+                    [TOKEN_ID, 'attributed' as const],
+                    [TOKEN_UNLISTED, 'not-attributed' as const],
+                    // `third` is absent: unknown, which is about this page.
+                ]),
+            }),
+        );
+        const rows = [...root.querySelectorAll<HTMLElement>('[data-role="pay-row"]')];
+        expect(rows).toHaveLength(3);
+        const shapeOf = (row: HTMLElement) => ({
+            minted: row.querySelector('[data-role="quote-minted"]') !== null,
+            borrowed: row.querySelector('[data-role="quote-not-minted"]') !== null,
+            icon:
+                (row.querySelector('.item-ic') as HTMLElement).getAttribute(
+                    'data-token-id',
+                ) !== null,
+        });
+        expect(shapeOf(rows[0]!)).toEqual({ minted: true, borrowed: false, icon: true });
+        expect(shapeOf(rows[1]!)).toEqual({ minted: false, borrowed: true, icon: false });
+        expect(shapeOf(rows[2]!)).toEqual({ minted: false, borrowed: false, icon: true });
+    });
+});
+
+describe('a-mint-claim-is-not-a-claim-about-the-name', () => {
+    /**
+     * The rule proves who minted, never that the words are honest: a seller
+     * who mints their own token and calls it `USDC` is `attributed`, and no
+     * reader of a chain can say otherwise. So the copy names the minter and
+     * carries no verdict on the name — and a token called `USDC` gets exactly
+     * the sentence every other attributed token gets.
+     */
+    it('says who minted and vouches for nothing', () => {
+        for (const line of [copy.QUOTE_MINTED_CHIP, copy.QUOTE_MINTED_HERE]) {
+            for (const vouch of [
+                'verified',
+                'genuine',
+                'official',
+                'authentic',
+                'real',
+                'trusted',
+                'safe',
+            ]) {
+                expect(line.toLowerCase(), vouch).not.toContain(vouch);
+            }
+        }
+    });
+
+    it('treats a token named after somebody else’s brand like any other', () => {
+        const impostor: TokenMeta = { ...BEANS, name: 'USDC', ticker: 'USDC' };
+        const { root } = paint(
+            payView({
+                tokens: new Map([[TOKEN_ID, impostor]]),
+                genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+            }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        const chip = row.querySelector('[data-role="quote-minted"]');
+        expect(chip).not.toBeNull();
+        expect(chip!.textContent).toBe(copy.QUOTE_MINTED_CHIP);
+    });
+});
+
+describe('a-node-that-answered-is-not-a-network-that-did-not', () => {
+    /**
+     * `plugin-missing` is a protocol-level 404 from a chronik that replied and
+     * has no `agora.py`. "No index answered" is our own situation described as
+     * the network's — the §4 collapse, one screen over — and the `unresolved`
+     * screen already earned its own sentence for exactly this error.
+     */
+    it('gives the plugin-missing screen its own sentence', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'plugin-missing', triedAtMs: 0, hosts: HOSTS_NO_PLUGIN },
+            }),
+        );
+        expect(root.textContent).toContain(copy.PLUGIN_MISSING_BODY);
+        expect(root.textContent).not.toContain(UNREACHABLE_BODY);
+        // The hosts row already says which failure this was, and the retry is
+        // still a way forward: neither moves.
+        expect(root.querySelector('.hosts')?.textContent).toContain('plugin-missing');
+        expect(root.querySelector('[data-role="retry"]')).not.toBeNull();
+    });
+
+    it('leaves a real unreachable saying exactly what it said', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: HOSTS_TIMED_OUT },
+            }),
+        );
+        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        expect(root.textContent).not.toContain(copy.PLUGIN_MISSING_BODY);
     });
 });
 

@@ -13,6 +13,7 @@ import { stallPath } from './domain/route';
 import {
     HOME_LEDE,
     OPENING_BODY,
+    PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
     UNRESOLVABLE_TITLE,
 } from './ui/copy';
@@ -2548,7 +2549,11 @@ describe('a-plugin-failure-still-paints-the-quotes', () => {
         boot(root);
         await flush();
 
-        expect(root.textContent, 'the book failed and says so').toContain(UNREACHABLE_BODY);
+        // In its own words: this node answered and has no offer plugin, which
+        // is why the rail beside it read anything at all.
+        expect(root.textContent, 'the book failed and says so').toContain(
+            PLUGIN_MISSING_BODY,
+        );
         expect(root.querySelector('.hosts')).not.toBeNull();
         expect(root.textContent, 'a name this load read').toContain('Riverside Goods');
         // The quotes are the panel's other rail now. A failed book is not a
@@ -2591,7 +2596,10 @@ describe('an-unreachable-book-paints-no-quote-count-it-cannot-explain', () => {
         expect(painted.view?.prices?.size, 'the walk did find the record').toBe(1);
         expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
         expect(root.querySelector('[data-role="pay-section"]')).toBeNull();
-        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        // The book failure this fixture stages is `plugin-missing`, whose
+        // screen names itself; the point here is that the message is on it
+        // once and the count is not.
+        expect(root.textContent).toContain(PLUGIN_MISSING_BODY);
         // Not a zero either: this page knows of a quote it could not read.
         expect(
             root.querySelector('[data-role="shop-tab-quotes"]')?.textContent,
@@ -2634,7 +2642,9 @@ describe('a-first-load-failure-paints-no-name-it-did-not-read', () => {
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
 
-        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        // The failure this stages is `plugin-missing`, which says so itself
+        // now. What is pinned here is the name, not the sentence.
+        expect(root.textContent).toContain(PLUGIN_MISSING_BODY);
         expect(root.textContent, 'nothing this load read says this').not.toContain(
             'Riverside Goods',
         );

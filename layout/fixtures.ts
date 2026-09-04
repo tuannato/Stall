@@ -96,14 +96,26 @@ export const QUOTES = new Map<string, TokenPrice>([
  * Whose wallet minted each quoted token.
  *
  * One of each, deliberately. `T1` is this stall's own, so its row paints an
- * icon and no extra line; `QUOTED` is another wallet's, so that row paints
- * initials plus `QUOTE_NOT_MINTED_HERE` under the item's name — a taller row
- * with one more string on it, which is the geometry no other fixture stages.
+ * icon and the short `QUOTE_MINTED_CHIP` beside the quote chip; `QUOTED` is
+ * another wallet's, so that row paints initials plus `QUOTE_NOT_MINTED_HERE`
+ * under the item's name — a taller row with one more string on it, which is
+ * the geometry no other fixture stages. Two chips in a name column that
+ * `minmax(0, 1fr)` lets shrink is the width this pairing is here to measure.
  */
 export const GENESIS = new Map<string, GenesisAttribution>([
     [T1, 'attributed'],
     [QUOTED, 'not-attributed'],
 ]);
+
+/**
+ * When each quoted record was written, on the chain's clock.
+ *
+ * Fixed instants, not an offset from the clock the probe runs on: the phrase
+ * grows a unit as the years pass and the geometry does not, which is the point
+ * of measuring it here. `QUOTED` carries none, so the undated shape — one line
+ * shorter, never a dash — is on the same screen as the dated one.
+ */
+export const QUOTE_TIMES = new Map<string, number>([[T1, 1_748_000_000]]);
 
 /**
  * The seller's own words about one quoted item, which is what names it on the
@@ -260,6 +272,9 @@ export const SCREENS: Record<string, StallView> = {
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
+        // The dated half of the pair: this card carries the age line and the
+        // line saying the stall minted the token.
+        quoteTimes: QUOTE_TIMES,
         overlay: { kind: 'pay', tokenId: T1 },
         payRate: PAY_RATE,
     }),
@@ -271,6 +286,9 @@ export const SCREENS: Record<string, StallView> = {
         // head falls back to the token's name and the card carries the line
         // saying the token was not minted here.
         genesis: GENESIS,
+        // The same map, which holds no entry for this token: the undated card
+        // is a card one line shorter, measured beside the dated one.
+        quoteTimes: QUOTE_TIMES,
         overlay: { kind: 'pay', tokenId: QUOTED },
     }),
     /*
@@ -521,6 +539,9 @@ export const SCREENS: Record<string, StallView> = {
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
+        // One dated row and one undated, so the age line's own ink and the row
+        // one line shorter without it are both on the rail's contrast screen.
+        quoteTimes: QUOTE_TIMES,
         shopTab: 'quotes',
     }),
     /*
