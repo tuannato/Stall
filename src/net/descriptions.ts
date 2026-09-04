@@ -64,14 +64,17 @@ export type DescriptionLookup = {
      * any token while this is true.
      */
     readonly truncated: boolean;
-};
-
-const EMPTY: DescriptionLookup = {
-    descriptions: new Map(),
-    shelves: new Map(),
-    prices: new Map(),
-    unreadable: new Set(),
-    truncated: false,
+    /**
+     * A page read threw, so the walk never finished. What is above is whatever
+     * it had already collected — a floor, never the whole of what the seller
+     * published.
+     *
+     * Its own flag rather than a caller's inference from three empty maps: a
+     * seller who wrote nothing and a walk that never answered leave the same
+     * maps, and telling them apart from the outside is impossible. Guessing is
+     * how our own failure gets printed as a fact about the stall.
+     */
+    readonly failed: boolean;
 };
 
 export async function loadDescriptions(
@@ -80,21 +83,32 @@ export async function loadDescriptions(
     /** Same contract as `loadManifest`'s: the address head request only. */
     addrFirstPage?: Promise<HistoryPage>,
 ): Promise<DescriptionLookup> {
+    // Held out here so a throw mid-walk still answers with the pages that did
+    // come back: a page that did not answer says nothing about the ones that
+    // did, and a partial set of the seller's own words beats none.
+    const found = new Map<string, LoadedDescription[]>();
+    const unreadable = new Set<string>();
+    let truncated = false;
+    let failed = false;
     try {
-        return await walk(chronik, seller.address, seller.hash, addrFirstPage);
+        truncated = await walk(chronik, seller.address, seller.hash, found, unreadable, addrFirstPage);
     } catch {
-        // The offers are the shop. A failed description read is a shop with no
-        // descriptions, never a shop that did not paint.
-        return EMPTY;
+        // The offers are the shop. A failed description read is a shop with the
+        // descriptions we managed to read, never a shop that did not paint.
+        failed = true;
     }
+    return { ...collate(found, unreadable), truncated, failed };
 }
 
+/** True when the walk stopped at `MAX_HISTORY_PAGES` before the index ended. */
 async function walk(
     chronik: ManifestChronik,
     address: string,
     hash: string,
+    found: Map<string, LoadedDescription[]>,
+    unreadable: Set<string>,
     addrFirstPage?: Promise<HistoryPage>,
-): Promise<DescriptionLookup> {
+): Promise<boolean> {
     const addrEp = chronik.address(address);
     const lokadEp = chronik.lokadId(STLD_HEX);
     const [addrPage, lokadPage] = await Promise.all([
@@ -112,14 +126,19 @@ async function walk(
 
     const total = Math.max(first.numPages, 1);
     const pages = Math.min(total, MAX_HISTORY_PAGES);
-    const found = new Map<string, LoadedDescription[]>();
-    const unreadable = new Set<string>();
 
     collectPage(first, hash, found, unreadable);
     for (let page = 1; page < pages; page += 1) {
         collectPage(await rest.history(page, HISTORY_PAGE_SIZE), hash, found, unreadable);
     }
+    return total > pages;
+}
 
+/** The winning record per token, as the three maps a caller reads. */
+function collate(
+    found: ReadonlyMap<string, LoadedDescription[]>,
+    unreadable: ReadonlySet<string>,
+): Omit<DescriptionLookup, 'truncated' | 'failed'> {
     const descriptions = new Map<string, string>();
     const shelves = new Map<string, string>();
     const prices = new Map<string, TokenPrice>();
@@ -152,7 +171,7 @@ async function walk(
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, shelves, prices, unreadable, truncated: total > pages };
+    return { descriptions, shelves, prices, unreadable };
 }
 
 function collectPage(

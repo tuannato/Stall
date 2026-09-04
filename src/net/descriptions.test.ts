@@ -463,6 +463,59 @@ describe('a-failed-description-read-never-takes-the-shop-down', () => {
     });
 });
 
+describe('a-failed-walk-is-not-an-empty-one', () => {
+    /**
+     * A seller who published nothing and a walk that never answered leave the
+     * same three empty maps, and a caller holding only those two must guess.
+     * Guessing is how our own failure gets painted as a fact about the stall
+     * — the empty-versus-unreachable mistake, one layer down.
+     */
+    it('says the walk failed, where a quiet stall says it did not', async () => {
+        const offline: ManifestChronik = {
+            address: () => ({ history: () => Promise.reject(new Error('offline')) }),
+            lokadId: () => ({ history: () => Promise.reject(new Error('offline')) }),
+            tx: () => Promise.reject(new Error('not used')),
+        };
+        const threw = await load(offline);
+        expect(threw.failed).toBe(true);
+        expect(threw.truncated, 'nothing was capped: nothing answered').toBe(false);
+
+        const quiet = await load(chronikWith({ addressTxs: [] }));
+        expect(quiet.failed, 'a seller who wrote nothing is not our failure').toBe(false);
+        expect(quiet.descriptions.size).toBe(0);
+    });
+});
+
+describe('a-walk-that-threw-keeps-what-it-read', () => {
+    /**
+     * A page that did not answer says nothing about the pages that did. The
+     * records already collected are a floor — worth painting, and never worth
+     * reading as the whole of what the seller published, which is what
+     * `failed` is on the answer for.
+     */
+    it('returns the records from the pages that answered', async () => {
+        // Mined, so `pickManifestWinner` has a winner to pick: an unmined,
+        // unfinalised record is one node's opinion and never wins (§5).
+        const first = page(
+            [tx({ txid: 'a'.repeat(64), outputs: [stld(TOKEN_A, 'Beans')], height: 800_000 })],
+            3,
+        );
+        const chronik: ManifestChronik = {
+            address: () => ({
+                history: (p = 0) =>
+                    p === 0
+                        ? Promise.resolve({ ...first, numTxs: 3 })
+                        : Promise.reject(new Error('that page did not answer')),
+            }),
+            lokadId: () => ({ history: () => Promise.resolve({ ...page([]), numTxs: 9999 }) }),
+            tx: () => Promise.reject(new Error('not used')),
+        };
+        const out = await load(chronik);
+        expect(out.failed).toBe(true);
+        expect(out.descriptions.get(TOKEN_A)).toBe('Beans');
+    });
+});
+
 describe('description-does-not-cross-stalls', () => {
     /**
      * Two sellers can each list the same token and each describe it. The words

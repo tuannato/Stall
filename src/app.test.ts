@@ -24,8 +24,11 @@ import {
     OPENING_BODY,
     PAY_HINT_UNKNOWN,
     PAY_HINT_UNREAD,
+    UNREACHABLE_BODY,
 } from './ui/copy';
 import { DEFAULT_THEME } from './domain/theme';
+import type { DescriptionLookup } from './net/descriptions';
+import type { ManifestLookup } from './net/manifest';
 
 const EMPTY_TITLE = DEFAULT_THEME.sparse.emptyTitle;
 
@@ -727,8 +730,14 @@ describe('a-pay-hint-on-an-unreachable-stall-says-so', () => {
      * "No such item" and "this page could not read the records" are two
      * different claims, and only the first one is about the seller. Collapsing
      * them is §4's empty-versus-unreachable mistake on a new surface.
+     *
+     * The three fetch kinds used to be the whole of it — the offer book
+     * failing was taken as the records failing, because the load threw the
+     * records away on those screens. They are read now, so the sentence
+     * belongs to the walk that actually failed and the screens below carry it
+     * alongside a failed book rather than because of one.
      */
-    it('says it could not read, on every screen that failed', async () => {
+    it('says it could not read, on every screen whose walk failed', async () => {
         for (const view of [
             { fetch: { kind: 'unreachable' as const, triedAtMs: 1, hosts: [] }, prices: new Map() },
             { fetch: { kind: 'unreadable' as const, triedAtMs: 1, returned: 2 }, prices: new Map() },
@@ -742,7 +751,13 @@ describe('a-pay-hint-on-an-unreachable-stall-says-so', () => {
             },
         ]) {
             const root = document.createElement('div');
-            boot(root, async () => quotedStall({ payHint: QUOTED.slice(0, 12), ...view }));
+            boot(root, async () =>
+                quotedStall({
+                    payHint: QUOTED.slice(0, 12),
+                    descriptionsFailed: true,
+                    ...view,
+                }),
+            );
             await flush();
             expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
                 PAY_HINT_UNREAD,
@@ -773,19 +788,223 @@ describe('a-pay-hint-on-a-truncated-walk-says-so', () => {
     /**
      * A descriptions walk that hit its cap says nothing about whether the
      * quote exists — our own ceiling reported as the seller's inventory is the
-     * claim §5 refuses everywhere else.
+     * claim §5 refuses everywhere else. A walk that threw is the same claim
+     * with a different cause, and the reader is owed the same sentence: the
+     * two are the only ways this page can hold less than the seller wrote.
      */
     it('never calls a quote unknown after a walk that stopped early', async () => {
+        for (const walk of [{ descriptionsTruncated: true }, { descriptionsFailed: true }]) {
+            const root = document.createElement('div');
+            boot(root, async () => quotedStall({ payHint: 'ab'.repeat(6), ...walk }));
+            await flush();
+            expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+                PAY_HINT_UNREAD,
+            );
+        }
+    });
+});
+
+describe('unread-means-the-walk-failed-not-the-book', () => {
+    /**
+     * The offer index and the seller's own records are two different reads of
+     * two different indexes: the quotes need only the address history, which
+     * every chronik node carries, and the agora plugin refusing to answer says
+     * nothing about them. A book that failed over a walk that succeeded is a
+     * complete read of the records, so the link named an item this stall does
+     * not quote — which is a sentence about the stall, and true.
+     */
+    it('calls a hint unknown when only the book failed', async () => {
         const root = document.createElement('div');
         boot(root, async () =>
             quotedStall({
                 payHint: 'ab'.repeat(6),
-                descriptionsTruncated: true,
+                fetch: { kind: 'plugin-missing', triedAtMs: 1, hosts: [] },
             }),
         );
         await flush();
         expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNKNOWN,
+        );
+    });
+});
+
+describe('a-hint-whose-genesis-we-could-not-read-is-not-unknown', () => {
+    /**
+     * The record is there and the prefix names it; what is missing is the
+     * token's genesis, so `quotedItems` refuses the row (it could be an NFT,
+     * and a quote per whole token means nothing about one). "This stall does
+     * not quote that item" would be a claim about the seller made out of our
+     * own missing read.
+     */
+    it('says it could not read when the quote is on the view but not paintable', async () => {
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({ payHint: QUOTED.slice(0, 12), tokens: new Map() }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
             PAY_HINT_UNREAD,
         );
+    });
+});
+
+/*
+ * The failure screens, which are now waiting for two walks the book's own
+ * failure says nothing about.
+ */
+
+const FAILED_HOSTS = [
+    { host: 'chronik-native1.fabien.cash', result: 'plugin-missing' as const },
+];
+
+function noRecords(over: Partial<DescriptionLookup> = {}): DescriptionLookup {
+    return {
+        descriptions: new Map(),
+        shelves: new Map(),
+        prices: new Map(),
+        unreadable: new Set(),
+        truncated: false,
+        failed: false,
+        ...over,
+    };
+}
+
+function settingsNaming(name: string): ManifestLookup {
+    return {
+        manifest: {
+            name,
+            theme: DEFAULT_THEME,
+            extras: new Map(),
+            height: 800_000,
+            isFinal: true,
+            txid: 'ab'.repeat(32),
+        },
+        truncated: false,
+        unreadable: false,
+    };
+}
+
+/** What `loadCurrent` answers with when the book failed: the two walks, unawaited. */
+function bookFailed(
+    facts: {
+        manifest: Promise<ManifestLookup | undefined>;
+        descriptions: Promise<DescriptionLookup | undefined>;
+    },
+    over: Partial<AppState['view']> = {},
+): AppState {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'plugin-missing', triedAtMs: 0, hosts: FAILED_HOSTS },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+            ...over,
+        },
+        offers: [],
+        pubkeyHex: PK,
+        pendingFacts: {
+            stall: { address: ADDR, hash: 'aa'.repeat(20) },
+            pubkeyHex: PK,
+            ...facts,
+        },
+    };
+}
+
+describe('a-pay-hint-resolves-when-only-the-book-failed', () => {
+    /**
+     * A scanned code lands on whatever screen the stall is in, and the quote
+     * it names was never the offer index's to give. The records arrive after
+     * this screen paints, so the link is answered from them and not from the
+     * empty state the failure returned — judging it early is how a stall's own
+     * item gets called unknown.
+     */
+    it('opens the sheet once the walk that carries the quote has answered', async () => {
+        const root = document.createElement('div');
+        // The genesis facts are already on the view here: what this pins is
+        // the moment the hint is judged, and `a-plugin-failure-still-paints-
+        // the-quotes` covers the read that fetches them.
+        boot(root, async () =>
+            bookFailed(
+                {
+                    manifest: Promise.resolve(undefined),
+                    descriptions: Promise.resolve(
+                        noRecords({
+                            prices: new Map([
+                                [QUOTED, { code: 'usd', exponent: 2, amount: 500n }],
+                            ]),
+                        }),
+                    ),
+                },
+                {
+                    payHint: QUOTED.slice(0, 12),
+                    tokens: new Map([[QUOTED, quotedMeta(QUOTED, 'Roasted Beans')]]),
+                },
+            ),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')).toBeNull();
+    });
+});
+
+describe('the-failure-screen-paints-before-the-facts-land', () => {
+    /**
+     * Awaiting the two walks here would put ten timeouts across three hosts in
+     * front of a screen whose whole job is to say quickly that we failed. So
+     * the screen paints from the route alone and the answers are applied when
+     * they arrive — the same shape a live re-read has.
+     */
+    it('paints the failure first and the name the walk read afterwards', async () => {
+        let answer: (lookup: ManifestLookup) => void = () => {};
+        const manifest = new Promise<ManifestLookup>((resolve) => {
+            answer = resolve;
+        });
+        const root = document.createElement('div');
+        boot(root, async () =>
+            bookFailed({ manifest, descriptions: Promise.resolve(noRecords()) }),
+        );
+        await flush();
+        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        expect(root.textContent).not.toContain('Riverside Goods');
+
+        answer(settingsNaming('Riverside Goods'));
+        await flush();
+        expect(root.textContent).toContain('Riverside Goods');
+        expect(root.textContent, 'the failure is still what happened').toContain(
+            UNREACHABLE_BODY,
+        );
+    });
+});
+
+describe('a-superseded-facts-answer-is-dropped', () => {
+    /**
+     * The walks outlive the page that started them. An answer for a stall the
+     * visitor has already left is the same stale paint `stale-refresh-does-not-paint`
+     * refuses, arriving down a slower road.
+     */
+    it('never paints a walk that answered for a page already left', async () => {
+        let answer: (lookup: ManifestLookup) => void = () => {};
+        const manifest = new Promise<ManifestLookup>((resolve) => {
+            answer = resolve;
+        });
+        let loads = 0;
+        const root = document.createElement('div');
+        boot(root, async () => {
+            loads += 1;
+            return loads === 1
+                ? bookFailed({ manifest, descriptions: Promise.resolve(noRecords()) })
+                : stallNamed('Second Stall');
+        });
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.textContent).toContain('Second Stall');
+
+        answer(settingsNaming('First Stall'));
+        await flush();
+        expect(root.textContent).toContain('Second Stall');
+        expect(root.textContent).not.toContain('First Stall');
     });
 });

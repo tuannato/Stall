@@ -2,7 +2,7 @@ export { createChronik } from './client';
 export { isPluginMissing, isTimeout, isUnreachable } from './errors';
 export { CHRONIK_HOSTS } from './hosts';
 export { loadManifest } from './manifest';
-export type { LoadedManifest } from './manifest';
+export type { LoadedManifest, ManifestLookup } from './manifest';
 export { agoraOfferReader, loadOffers } from './offers';
 export type { AgoraOfferReader, AgoraOfferView } from './offers';
 export { resolveSeller } from './resolve';

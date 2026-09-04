@@ -2173,38 +2173,6 @@ textarea.paste-in {
     align-self: center;
 }
 
-.sk {
-    background: var(--s-surface);
-    border-radius: var(--s-radius);
-    padding: 12px;
-    display: grid;
-    grid-template-columns: 32px 1fr auto;
-    gap: 10px;
-    align-items: center;
-}
-
-.sk-ic {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--s-muted);
-}
-
-.sk-n {
-    height: 9px;
-    width: 74px;
-    border-radius: 3px;
-    background: var(--s-muted);
-    margin-bottom: 6px;
-}
-
-.sk-q {
-    height: 8px;
-    width: 44px;
-    border-radius: 3px;
-    background: var(--s-muted);
-}
-
 .dash {
     display: block;
     font-family: var(--s-font);

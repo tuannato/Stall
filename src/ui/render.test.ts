@@ -273,7 +273,14 @@ describe('empty vs unreachable', () => {
         expect(root.querySelector('button.buy')).toBeNull();
     });
 
-    it('later-visit unreachable keeps cached names, dashed prices, and no buy control', () => {
+    /*
+     * Amended with the load path: the failure screen used to be handed a
+     * session-cached name and token list, and painted the remembered shop as
+     * placeholder rows behind the message. It is handed neither now — a shop
+     * an earlier visit saw may have closed since — so the name is a settings
+     * record this load walked to, and there are no item names at all.
+     */
+    it('unreachable keeps the name this load read, and names no item it did not', () => {
         const { root, h } = paint(
             idlePubkey({
                 fetch: {
@@ -289,8 +296,10 @@ describe('empty vs unreachable', () => {
         expect(text).toContain(UNREACHABLE_BODY);
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).toContain("Nato's Corner");
-        expect(text).toContain('Roasted Beans');
-        expect(text).toContain(DASHED_PRICE);
+        expect(text, 'no listing was read, so no listing is named').not.toContain(
+            'Roasted Beans',
+        );
+        expect(text).not.toContain(DASHED_PRICE);
         expect(root.querySelector('.stall button.buy')).toBeNull();
         expect(text).not.toContain(OPEN_IN_CASHTAB);
         const retry = [...root.querySelectorAll('button')].find(
@@ -695,8 +704,15 @@ describe('empty-unnamed-is-still-this-seller', () => {
     });
 });
 
-describe('cached-unreachable-without-manifest-name', () => {
-    it('keeps the address in the header, dashed prices, and no buy control', () => {
+describe('unreachable-without-a-manifest-name', () => {
+    /*
+     * Amended with the load path (was `cached-unreachable-without-manifest-name`):
+     * a failure screen is no longer handed the token metadata an earlier visit
+     * cached, so there are no remembered item names to paint. What is asserted
+     * is what survives — the stall is titled by its own route, and nothing on
+     * the screen claims to know its stock.
+     */
+    it('keeps the address in the header and claims no stock', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: {
@@ -710,8 +726,8 @@ describe('cached-unreachable-without-manifest-name', () => {
         const name = root.querySelector('.stall-name') as HTMLElement | null;
         expect(name).not.toBeNull();
         expect(name!.textContent).toBe(ADDR);
-        expect(root.textContent).toContain('Roasted Beans');
-        expect(root.textContent).toContain(DASHED_PRICE);
+        expect(root.textContent).not.toContain('Roasted Beans');
+        expect(root.textContent).not.toContain(DASHED_PRICE);
         expect(root.textContent).toContain(UNREACHABLE_BODY);
         expect(root.querySelector('.stall button.buy')).toBeNull();
         expect(root.textContent).not.toContain(OPEN_IN_CASHTAB);

@@ -78,6 +78,12 @@ const chain = {
     addressTxs: [] as ChainTx[],
     txs: new Map<string, ChainTx>(),
     utxos: [] as { token?: { tokenId?: string } }[],
+    /**
+     * Genesis facts this chain will answer for, keyed by token id. Empty by
+     * default, so `chronik.token()` throws exactly as it always did here — a
+     * quote whose metadata never arrived is its own case.
+     */
+    genesis: new Map<string, unknown>(),
     historyThrows: false,
     txThrows: false,
     utxosThrow: false,
@@ -98,6 +104,7 @@ function resetChain(): void {
     chain.addressTxs = [];
     chain.txs = new Map();
     chain.utxos = [];
+    chain.genesis = new Map();
     chain.historyThrows = false;
     chain.txThrows = false;
     chain.utxosThrow = false;
@@ -174,8 +181,12 @@ const fakeChronik = {
         }
         return found;
     },
-    async token(): Promise<never> {
-        throw new Error('no genesis here');
+    async token(tokenId: string): Promise<unknown> {
+        const info = chain.genesis.get(tokenId);
+        if (info === undefined) {
+            throw new Error('no genesis here');
+        }
+        return info;
     },
 };
 
@@ -1740,15 +1751,18 @@ describe('a-fiat-hint-is-read-and-ignored', () => {
 
 describe('a-failed-facts-walk-does-not-erase-a-price', () => {
     /**
-     * `loadDescriptions` swallows its own failure and answers an empty lookup,
-     * which on the live path cannot be told from a seller who published
-     * nothing. The guard is `gotNothing && hadSomething` — kept, not replaced
-     * by an `ok` flag, because that flag would repeal "an empty answer never
-     * erases words". The price map is simply counted on both sides of it.
+     * A walk that answers nothing cannot be told, from the answer alone, from
+     * a seller who published nothing — so `gotNothing && hadSomething` stays,
+     * and the price map is counted on both sides of it. Without that, a stall
+     * whose seller published prices and no words lost every figure the moment
+     * one walk failed: `descriptions` and `shelves` were both empty before and
+     * after, so the guard saw nothing to protect.
      *
-     * Without that, a stall whose seller published prices and no words lost
-     * every figure the moment one walk failed: `descriptions` and `shelves`
-     * were both empty before and after, so the guard saw nothing to protect.
+     * `failed` joins that guard rather than replacing it. It covers a case the
+     * empty test cannot see — a walk that threw part way and came back with
+     * *some* records — while replacing the guard with it would repeal "an
+     * empty answer never erases words", which is a different rule about a walk
+     * that finished.
      */
     const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
 
@@ -1792,6 +1806,41 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
 
         expect(chain.calls.stld, 'it did walk, and the index was empty').toBe(1);
         expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+    });
+
+    it('a-partial-answer-from-a-walk-that-threw-does-not-replace-the-map', async () => {
+        // The half the empty test cannot reach: page 0 answered with a record
+        // and page 1 threw, so the lookup carries one token and is `failed`.
+        // Applied, it would take this stall's own figure off the screen and
+        // put a stranger's in its place, from a read that never finished.
+        bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                prices: new Map([[TOKEN, PRICE]]),
+            }),
+        );
+        await flush();
+
+        const hex = encodeDescriptionHex(TOKEN_B, 'Sun dried', {
+            price: { code: 'xec', exponent: 2, amount: 900n },
+        });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const record = signedTx({ txid: '0e'.repeat(32), outputs: [`6a${hex}`], height: 5 });
+        chain.txs.set(record.txid, record);
+        chain.historyPages = [[record], []];
+        chain.historyPageThrows = new Set([1]);
+        watches[0]!.hooks.onBurst?.([record.txid]);
+        await flush();
+
+        expect(chain.historyPageCalls, 'it did try the second page').toContain(1);
+        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+        expect(
+            painted.view?.prices?.has(TOKEN_B),
+            'a floor is not the record, and may not stand in for it',
+        ).toBe(false);
     });
 
     it('applies a walk that did find something', async () => {
@@ -2445,4 +2494,128 @@ describe('a-failed-facts-reread-leaves-the-quote-card-stale', () => {
         expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
         expect(root.textContent).not.toContain(UNREACHABLE_BODY);
     });
+});
+
+/*
+ * The failure screens, against the real `loadCurrent`.
+ *
+ * The offer book and the seller's own records are two reads of two indexes,
+ * and only one of them needs the agora plugin. What these pin is that the
+ * other one still happens, still lands, and still says nothing it did not
+ * read.
+ */
+
+/** What `chronik.token()` answers with for a token whose genesis this chain has. */
+const genesisOf = (name: string) => ({
+    genesisInfo: { tokenName: name, tokenTicker: name.slice(0, 4).toUpperCase(), decimals: 0, url: '' },
+    tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+});
+
+/** Quoted, and never given a genesis by any test here. */
+const UNREAD_TOKEN = '77'.repeat(32);
+
+const PLUGIN_MISSING = {
+    kind: 'plugin-missing' as const,
+    triedAtMs: 0,
+    hosts: [{ host: 'chronik-native1.fabien.cash', result: 'plugin-missing' as const }],
+};
+
+/**
+ * A stall that published a name and one quote.
+ *
+ * The quoted token is given per call: genesis facts are cached per session by
+ * design (§4), so a token another test in this file already read would arrive
+ * with a name here and make "the metas never came" untestable.
+ */
+function publishNameAndQuote(tokenId: string, txids: readonly [string, string]): void {
+    publish(signedTx({ txid: txids[0], outputs: [stl1Output('Riverside Goods')], height: 5 }));
+    pricedRecord(txids[1], tokenId, USD(500n));
+}
+
+describe('a-plugin-failure-still-paints-the-quotes', () => {
+    /**
+     * `plugin-missing` is a node that answered — a protocol-level 404 from a
+     * chronik without `agora.py`. The address history it also serves carries
+     * the settings and the seller's own records, and a quote needs no covenant
+     * at all, so gating the rail on the plugin was the wrong coupling.
+     */
+    it('paints the name and the quote this load read, under the failure', async () => {
+        chain.book = PLUGIN_MISSING;
+        publishNameAndQuote(TOKEN, ['3a'.repeat(32), '3b'.repeat(32)]);
+        chain.genesis.set(TOKEN, genesisOf('Ripe Beans'));
+
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+
+        expect(root.textContent, 'the book failed and says so').toContain(UNREACHABLE_BODY);
+        expect(root.querySelector('.hosts')).not.toBeNull();
+        expect(root.textContent, 'a name this load read').toContain('Riverside Goods');
+        expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(root.textContent).toContain('Ripe Beans');
+    });
+});
+
+describe('an-unreachable-book-paints-no-quote-count-it-cannot-explain', () => {
+    /**
+     * The genesis read is how a quote becomes a row: without it the item could
+     * be an NFT, and a figure per whole token means nothing about one. On the
+     * shop that gap is counted out loud. Under a failure message it is not —
+     * our failure is already on this screen once, and printing "N quoted items
+     * this page could not read" beneath a hosts box says it twice.
+     */
+    it('says nothing about quotes whose genesis it could not read', async () => {
+        chain.book = PLUGIN_MISSING;
+        publishNameAndQuote(UNREAD_TOKEN, ['3c'.repeat(32), '3d'.repeat(32)]);
+        // No genesis on this chain: `chronik.token()` throws for every id.
+
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+
+        expect(painted.view?.prices?.size, 'the walk did find the record').toBe(1);
+        expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-section"]')).toBeNull();
+        expect(root.textContent).toContain(UNREACHABLE_BODY);
+    });
+
+    it('still counts it on a screen that is not our failure', async () => {
+        publishNameAndQuote(UNREAD_TOKEN, ['3e'.repeat(32), '3f'.repeat(32)]);
+
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+
+        expect(root.querySelector('[data-role="pay-unreadable"]')).not.toBeNull();
+    });
+});
+
+describe('a-first-load-failure-paints-no-name-it-did-not-read', () => {
+    /**
+     * A name this session remembered is a shop that may have closed since, and
+     * a failure screen cannot tell. So the name on one is a settings record
+     * **this load** walked to, never one carried forward from an earlier visit
+     * — which is what the session cache would otherwise supply.
+     */
+    it('drops the session name when this load could read nothing', async () => {
+        publish(signedTx({ txid: '4a'.repeat(32), outputs: [stl1Output('Riverside Goods')], height: 5 }));
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+        expect(root.textContent, 'the good load reads it').toContain('Riverside Goods');
+
+        chain.book = PLUGIN_MISSING;
+        chain.historyThrows = true;
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+
+        expect(root.textContent).toContain(UNREACHABLE_BODY);
+        expect(root.textContent, 'nothing this load read says this').not.toContain(
+            'Riverside Goods',
+        );
+        // Two whole loads through the real loader, each painting the stall
+        // twice: measured at ~2.9s alone here and over five under the parallel
+        // suite, which is the runner's default budget rather than a hang.
+    }, 20_000);
 });

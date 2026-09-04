@@ -833,6 +833,15 @@ function themesFor(screen: string): readonly (typeof SHIPPED_THEMES)[number][] {
 
 const failures: Failure[] = [];
 const measured = screensToRun();
+/**
+ * Screens that actually mounted a seller's figure while they were measured.
+ *
+ * Raw material for the runner, which is where the rule lives: a fixture that
+ * quietly stops mounting the thing its name promises leaves every rule about
+ * it green while measuring nothing, and this guard has shipped that twice. The
+ * page reports what it saw; the runner decides which names owed a figure.
+ */
+const withQuote = new Set<string>();
 for (const screen of measured) {
     for (const theme of themesFor(screen)) {
         for (const worn of variantsFor(screen, theme.id)) {
@@ -841,6 +850,11 @@ for (const screen of measured) {
                     ? theme.label
                     : `${theme.label} + ${worn.map((a) => a.label).join(' + ')}`;
             failures.push(...checkOverTime(screen, theme.id, label, worn));
+            // The tree `checkOverTime` measured is still mounted: it seeks the
+            // animations it painted rather than repainting.
+            if (document.querySelector('[data-role="seller-price"]') !== null) {
+                withQuote.add(screen);
+            }
         }
     }
 }
@@ -1300,6 +1314,7 @@ result.textContent = JSON.stringify(
         viewport: window.innerWidth,
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         screensMeasured: measured,
+        screensWithQuote: [...withQuote],
         failures,
     },
     null,

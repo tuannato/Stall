@@ -53,10 +53,11 @@ import {
     loadOffers,
     loadTokenMeta,
     resolveSeller,
+    type ManifestLookup,
 } from './net';
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
-import { loadDescriptions } from './net/descriptions';
+import { loadDescriptions, type DescriptionLookup } from './net/descriptions';
 import type { TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
@@ -203,10 +204,27 @@ const TXID = /^[0-9a-f]{64}$/;
  */
 const NOTHING_HELD: ReadonlySet<string> = new Set();
 
+/**
+ * The two walks a failure screen is still owed.
+ *
+ * They ask the address history, which every chronik node serves, and the offer
+ * book's failure says nothing about them — so they are started with the offer
+ * read and neither is awaited before the failure paints. `boot` applies
+ * whatever they answer afterwards.
+ */
+export type PendingFacts = {
+    readonly stall: { address: string; hash: string };
+    readonly pubkeyHex: string;
+    readonly manifest: Promise<ManifestLookup | undefined>;
+    readonly descriptions: Promise<DescriptionLookup | undefined>;
+};
+
 export type AppState = {
     view: StallView;
     offers: StallOffer[];
     pubkeyHex?: string;
+    /** Present only on the screens that painted before their facts arrived. */
+    pendingFacts?: PendingFacts;
 };
 
 export function boot(
@@ -879,15 +897,27 @@ export function boot(
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },
             };
         }
-        const fetchKind = next.view.fetch?.kind;
         const routeKind = next.view.route.kind;
+        /*
+         * "Could not read" is about the records this link names, and the offer
+         * book is not one of them — a quote needs no covenant, and the walk
+         * that carries it runs whatever the agora plugin answered. So the
+         * three fetch kinds do not appear here: what does is a walk that
+         * failed or stopped at its cap, a route that never resolved (no
+         * pubkey, so no walk was made at all), and a record whose token this
+         * page holds no genesis for — `quotedItems` refuses that row because
+         * it could be an NFT, and calling it "not quoted" would report our own
+         * missing read as a fact about the seller.
+         */
+        const named = [...(next.view.prices?.keys() ?? [])].some((tokenId) =>
+            tokenId.startsWith(hint),
+        );
         const couldNotRead =
-            fetchKind === 'unreachable' ||
-            fetchKind === 'plugin-missing' ||
-            fetchKind === 'unreadable' ||
             routeKind === 'unresolved' ||
             routeKind === 'unresolvable' ||
-            next.view.descriptionsTruncated === true;
+            next.view.descriptionsTruncated === true ||
+            next.view.descriptionsFailed === true ||
+            (named && matches.length === 0);
         return {
             ...next,
             view: {
@@ -927,18 +957,114 @@ export function boot(
         // The activity caption dates from here — the last full load — because
         // this function just emptied the ring; "since the page opened" would
         // claim coverage across a gap it cannot see.
-        state = applyPayHint({
+        const loaded: AppState = {
             ...next,
             view: {
                 ...next.view,
                 watchedSinceMs: Date.now(),
                 ...(walked === undefined ? {} : { history: walked }),
             },
-        });
+        };
+        // A scanned link is answered from the records, and on a failure screen
+        // those arrive after this paint — judging the hint against the state
+        // the failure returned would call the seller's own item unknown. The
+        // pending apply asks instead, once it has them.
+        state = next.pendingFacts === undefined ? applyPayHint(loaded) : loaded;
         adoptFiatHint();
         paint();
         watch(claimed);
         syncBroadcastTimers();
+        if (next.pendingFacts !== undefined) {
+            applyPendingFacts(claimed, next.pendingFacts);
+        }
+    };
+
+    /**
+     * The facts a failure screen is still owed.
+     *
+     * `loadCurrent` returns the moment the book fails, with both walks still in
+     * flight (`PendingFacts`), so this is where their answers land: the same
+     * applies a live re-read uses, the same generation guard, and the same
+     * `livePaint` gate that holds a paint back while a sheet is open. Nothing
+     * is re-requested here — these are the reads the load already started.
+     */
+    const applyPendingFacts = (claimed: number, pending: PendingFacts): void => {
+        void (async () => {
+            const lookup = await pending.manifest;
+            if (claimed !== generation || lookup === undefined) {
+                return;
+            }
+            applyManifest(lookup);
+        })();
+        void (async () => {
+            const lookup = await pending.descriptions;
+            if (claimed !== generation) {
+                return;
+            }
+            if (lookup === undefined) {
+                // The walk answered nothing at all. Said on the view, because
+                // a scanned link must not be told this stall quotes no such
+                // item on the strength of a read that never happened.
+                state = { ...state, view: { ...state.view, descriptionsFailed: true } };
+            } else {
+                applyDescriptions(lookup);
+                await fillQuotedTokens(claimed, pending.pubkeyHex);
+                if (claimed !== generation) {
+                    return;
+                }
+            }
+            answerPayHint();
+        })();
+    };
+
+    /**
+     * Genesis facts for the tokens the seller's quotes name, on the screen
+     * where the book failed.
+     *
+     * `loadCurrent` makes this read after its own walk; here the walk answers
+     * later, so the read follows it in the same place. A read that answers
+     * nothing leaves those quotes off the page and unmentioned: our failure is
+     * already on this screen once, and a count under a hosts box says it twice.
+     */
+    const fillQuotedTokens = async (claimed: number, pubkeyHex: string): Promise<void> => {
+        const missing = [...(state.view.prices?.keys() ?? [])].filter(
+            (tokenId) => !state.view.tokens.has(tokenId),
+        );
+        if (missing.length === 0) {
+            return;
+        }
+        let metas: TokenMeta[];
+        try {
+            metas = await loadTokenMeta(createChronik(), missing);
+        } catch {
+            return;
+        }
+        if (claimed !== generation || metas.length === 0) {
+            return;
+        }
+        const tokens: SessionTokenCache = new Map(state.view.tokens);
+        for (const meta of metas) {
+            sessionTokens.set(cacheKey(pubkeyHex, meta.tokenId), meta);
+            tokens.set(meta.tokenId, meta);
+        }
+        state = { ...state, view: { ...state.view, tokens } };
+        livePaint();
+    };
+
+    /**
+     * What the scanned link opens, once the records it is resolved against are
+     * on the view. A sheet the visitor asked for by scanning is painted at
+     * once; a note about a link that opened nothing waits like any other paint
+     * they did not ask for.
+     */
+    const answerPayHint = (): void => {
+        const before = state.view.overlay.kind;
+        state = applyPayHint(state);
+        if (state.view.overlay.kind === before) {
+            livePaint();
+        } else {
+            paint();
+        }
     };
 
     /**
@@ -1170,6 +1296,20 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
+        applyManifest(lookup);
+        // Always, even when no token moved in this burst: a flag switched on is
+        // a decoration that needs an entitlement nothing else asked for.
+        await refreshHoldings(claimed, stall.address);
+    };
+
+    /**
+     * A settings answer, onto the view.
+     *
+     * Its own function because two roads reach it: a live re-read, and a walk
+     * the failure screen started before it painted. The generation check
+     * belongs to the caller — it is the one that knows when it awaited.
+     */
+    const applyManifest = (lookup: ManifestLookup): void => {
         const view: StallView = {
             ...state.view,
             // As the walk reports them: a capped walk and an undecodable record
@@ -1201,9 +1341,6 @@ export function boot(
         state = { ...state, view };
         adoptFiatHint();
         livePaint();
-        // Always, even when no token moved in this burst: a flag switched on is
-        // a decoration that needs an entitlement nothing else asked for.
-        await refreshHoldings(claimed, stall.address);
     };
 
     /**
@@ -1255,13 +1392,10 @@ export function boot(
     /**
      * The seller's words about their tokens.
      *
-     * `loadDescriptions` never throws — a shop with no descriptions beats no
-     * shop — so it answers an empty lookup both when the seller wrote nothing
-     * and when its own walk failed. On this path those cannot be told apart, so
-     * an empty answer never replaces words already on screen: the same rule
-     * `isDefiniteResult` applies to an empty book, for the same reason. The cost
-     * is chosen and small — a description a seller removes stays until the next
-     * full load, which the retry control and any reload both are.
+     * A shop with no descriptions beats no shop, so `loadDescriptions` answers
+     * rather than throwing — and it says which of the two it is answering with
+     * (`failed`), because a walk that broke and a seller who wrote nothing
+     * leave the same three empty maps.
      */
     const refreshDescriptions = async (
         claimed: number,
@@ -1271,6 +1405,25 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
+        applyDescriptions(lookup);
+    };
+
+    /**
+     * A records answer, onto the view — from a live re-read, or from the walk
+     * a failure screen started before it painted. The generation check belongs
+     * to the caller, which is the one that knows when it awaited.
+     *
+     * **What is on screen is never replaced by an answer we cannot believe.**
+     * A walk that threw carries what it managed to read, which is a floor and
+     * not the seller's record, so it may add to an empty view and may not
+     * overwrite a full one. An empty answer from a walk that finished is held
+     * back for a different reason and only where there is something to lose:
+     * `loadDescriptions` cannot see the difference between a seller who
+     * removed their words and a walk that found none of them, so a removed
+     * description survives until the next full load — the retry control and
+     * any reload both are one.
+     */
+    const applyDescriptions = (lookup: DescriptionLookup): void => {
         // The shelves and the prices ride the same records, so the same guard
         // covers all three: a wholly empty answer never erases any map already
         // on screen. Counting only two of them was not a smaller version of
@@ -1285,7 +1438,7 @@ export function boot(
             (state.view.descriptions?.size ?? 0) > 0 ||
             (state.view.shelves?.size ?? 0) > 0 ||
             (state.view.prices?.size ?? 0) > 0;
-        if (gotNothing && hadSomething) {
+        if ((lookup.failed || gotNothing) && hadSomething) {
             // On an overlay showing quotes those figures came from this walk,
             // and this answer cannot be told from a seller who published
             // nothing — so the card already on screen stays, dimmed, exactly
@@ -1302,6 +1455,11 @@ export function boot(
             descriptions: lookup.descriptions,
             shelves: lookup.shelves,
             prices: lookup.prices,
+            // Both are about this page and neither is about the seller, and a
+            // screen that reads them (the `?pay=` note) must read the walk it
+            // actually got rather than the one the load made.
+            descriptionsTruncated: lookup.truncated,
+            descriptionsFailed: lookup.failed,
         };
         // The quotes are a card list too, and the shelves reorder the
         // listings, so a facts apply moves the carousel exactly as a book
@@ -1715,7 +1873,6 @@ async function loadCurrent(): Promise<AppState> {
     const hash = toHex(shaRmd160(fromHex(route.pubkeyHex)));
     const cachedName = sessionNames.get(route.pubkeyHex);
     const cachedTheme = sessionThemes.get(route.pubkeyHex);
-    const cachedTokens = tokensFor(route.pubkeyHex);
 
     /**
      * The two reads that need only an address and a hash, started here rather
@@ -1765,23 +1922,36 @@ async function loadCurrent(): Promise<AppState> {
         fetch.kind === 'plugin-missing' ||
         fetch.kind === 'unreadable'
     ) {
-        // The settings read is already in flight and may well answer. It is
-        // deliberately not used here: this screen shows what a previous good
-        // load left behind, and improving it is a separate change with its own
-        // reasoning, not a side effect of running two reads at once.
-        const later = Boolean(cachedName) || cachedTokens.size > 0;
+        /*
+         * The failure paints now, and the facts land when they land.
+         *
+         * Both walks are in flight and neither is awaited here: they are capped
+         * page walks over three hosts, and putting them in front of a screen
+         * whose whole job is to say quickly that we failed would cost a visitor
+         * every one of those timeouts before anything appeared. `boot` applies
+         * their answers afterwards, through the paths a live re-read uses.
+         *
+         * Nothing remembered from an earlier visit travels onto this screen —
+         * no name, no look, no token metadata. A shop this session cached may
+         * have closed since, and a failure screen has no way to tell; what it
+         * may show is what this load itself read.
+         */
         return withUrlParams({
             view: {
                 route,
                 fetch,
                 overlay: { kind: 'idle' },
-                stallName: later ? cachedName : undefined,
                 address,
-                tokens: later ? cachedTokens : new Map(),
-                theme: later ? cachedTheme : undefined,
+                tokens: new Map(),
             },
             offers: [],
             pubkeyHex: route.pubkeyHex,
+            pendingFacts: {
+                stall: { address, hash },
+                pubkeyHex: route.pubkeyHex,
+                manifest: manifestSoon,
+                descriptions: descriptionsSoon,
+            },
         });
     }
 
@@ -1829,6 +1999,7 @@ async function loadCurrent(): Promise<AppState> {
         prices: new Map<string, TokenPrice>(),
         unreadable: new Set<string>(),
         truncated: false,
+        failed: true,
     };
 
     let stallName = cachedName;
@@ -1954,8 +2125,9 @@ async function loadCurrent(): Promise<AppState> {
             prices: descriptionLookup.prices,
             // Said on screen only where it changes an answer: a `?pay=` link
             // that matched nothing cannot be called unknown after a walk that
-            // stopped early.
+            // stopped early, nor after one that threw.
             descriptionsTruncated: descriptionLookup.truncated,
+            descriptionsFailed: descriptionLookup.failed,
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,
@@ -2066,15 +2238,4 @@ function addressOf(route: StallView['route']): string | undefined {
 
 function cacheKey(pubkeyHex: string, tokenId: string): string {
     return `${pubkeyHex}:${tokenId}`;
-}
-
-function tokensFor(pubkeyHex: string): SessionTokenCache {
-    const out: SessionTokenCache = new Map();
-    const prefix = `${pubkeyHex}:`;
-    for (const [key, meta] of sessionTokens) {
-        if (key.startsWith(prefix)) {
-            out.set(meta.tokenId, meta);
-        }
-    }
-    return out;
 }

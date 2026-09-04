@@ -1062,13 +1062,19 @@ function paintUnreadable(
     view: StallView,
     handlers: StallHandlers,
 ): void {
-    stall.append(header(displayName(view), copy.UNREADABLE_SUB, view.address));
+    const identity = identityOf(view);
+    stall.append(
+        readName(view) === undefined
+            ? header(identity)
+            : header(displayName(view), copy.UNREADABLE_SUB, view.address),
+    );
     const body = el('main', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
     appendPayHintNote(body, view);
     body.append(retryControl(handlers));
+    appendQuotesUnderFailure(body, view, handlers);
     stall.append(body);
-    stall.append(stallFooter(identityOf(view), view, handlers));
+    stall.append(stallFooter(identity, view, handlers));
 }
 
 function paintUnreachable(
@@ -1078,32 +1084,54 @@ function paintUnreachable(
     handlers: StallHandlers,
 ): void {
     const identity = identityOf(view);
-    const cached = hasCachedShop(view);
-    if (cached) {
+    const named = readName(view) !== undefined;
+    if (named) {
         stall.append(header(displayName(view), copy.UNREACHABLE_SUB, view.address));
     } else {
         stall.append(header(identity));
     }
 
     const body = el('main', 'stall-body');
-    if (cached) {
-        if (view.tokens.size > 0) {
-            for (const meta of view.tokens.values()) {
-                body.append(skeletonRow(meta.name || meta.ticker || meta.tokenId));
-            }
-        } else {
-            body.append(skeletonRow());
-            body.append(skeletonRow());
-        }
-    }
     body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
     appendPayHintNote(body, view);
     body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
     body.append(retryControl(handlers));
+    appendQuotesUnderFailure(body, view, handlers);
     stall.append(body);
 
-    if (cached || identity !== undefined) {
+    if (named || identity !== undefined) {
         stall.append(stallFooter(identity, view, handlers));
+    }
+}
+
+/**
+ * The stall's name, when **this load** read it.
+ *
+ * The two failure screens key their chrome on this rather than on anything
+ * remembered: the load path carries no session name, look or token metadata
+ * onto a failed book, so a name here came off a settings record walked to
+ * while the offer index was failing. A shop this session cached may have
+ * closed since, and neither screen has any way to tell.
+ */
+function readName(view: StallView): string | undefined {
+    const name = view.stallName;
+    return name === undefined || name === '' ? undefined : name;
+}
+
+/**
+ * The pay rail under a failure message. A quote is the seller's own record and
+ * needs no offer book, so it belongs on these screens exactly as it belongs on
+ * the empty one — but the quotes this page could not read the genesis for are
+ * **not** counted here: this screen is already saying we failed.
+ */
+function appendQuotesUnderFailure(
+    body: HTMLElement,
+    view: StallView,
+    handlers: StallHandlers,
+): void {
+    const quotes = paySection(view, handlers, { countUnread: false });
+    if (quotes !== null) {
+        body.append(quotes);
     }
 }
 
@@ -1682,16 +1710,26 @@ function groupWholePart(figure: string): string {
 }
 
 /**
- * The direct-payment rail's own surface, under the shop list and under the
- * empty screen's message alike.
+ * The direct-payment rail's own surface, under the shop list, under the empty
+ * screen's message, and under a failure message alike.
  *
  * Painted only when something is quoted: an empty section is a heading over
  * nothing, and this rail is opt-in for the seller — a stall that published no
  * quotes has not chosen to be on it.
+ *
+ * `countUnread` is off on the screens that are already saying we failed. The
+ * count is our own gap said out loud, which is right on a working shop and
+ * doubled under a hosts box: a reader would be told twice, in two wordings,
+ * about one failure — and the second telling reads as being about the seller's
+ * items rather than about this page.
  */
-function paySection(view: StallView, handlers: StallHandlers): HTMLElement | null {
+function paySection(
+    view: StallView,
+    handlers: StallHandlers,
+    opts: { countUnread?: boolean } = {},
+): HTMLElement | null {
     const items = quotedItems(view);
-    const unreadable = unreadableQuotes(view);
+    const unreadable = opts.countUnread === false ? 0 : unreadableQuotes(view);
     if (items.length === 0 && unreadable === 0) {
         return null;
     }
@@ -5384,21 +5422,6 @@ function mid(title: string, paragraphs: string[]): HTMLElement {
     return wrap;
 }
 
-function skeletonRow(name?: string): HTMLElement {
-    const row = el('div', 'sk');
-    row.append(el('div', 'sk-ic'));
-    const info = el('div');
-    if (name !== undefined && name !== '') {
-        info.append(el('div', 'item-n', name));
-    } else {
-        info.append(el('div', 'sk-n'));
-        info.append(el('div', 'sk-q'));
-    }
-    row.append(info);
-    row.append(el('div', 'dash', copy.DASHED_PRICE));
-    return row;
-}
-
 function hostsBox(triedAtMs: number, hosts: HostAttempt[]): HTMLElement {
     const box = el('div', 'hosts');
     const line = el('div');
@@ -5439,10 +5462,6 @@ export function identityOf(view: StallView): string | undefined {
         case 'pubkey':
             return view.route.address ?? view.route.pubkeyHex;
     }
-}
-
-function hasCachedShop(view: StallView): boolean {
-    return Boolean(view.stallName) || view.tokens.size > 0;
 }
 
 function tokenMeta(

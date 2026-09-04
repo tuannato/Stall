@@ -426,11 +426,27 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'idle' },
         tokens: new Map(),
     },
+    /*
+     * The three failure screens, as the load path can actually reach them.
+     *
+     * The book failed and the two record walks did not, so each carries a name
+     * this load read and the seller's own quotes — and **no token metadata for
+     * the tokens those quotes name**, because that read goes to the same
+     * index that just failed and usually fails with it. A fixture that
+     * supplied metadata the real path could not get would certify a section
+     * nobody can reach. So the quotes here are the case where nothing paints
+     * and nothing is counted; `plugin-missing-quotes` below is the one where
+     * the metas did arrive.
+     */
     unreachable: base({
         fetch: { kind: 'unreachable', triedAtMs: TRIED_AT_MS, hosts: HOSTS_DOWN },
+        tokens: new Map(),
+        prices: QUOTES,
     }),
     unreadable: base({
         fetch: { kind: 'unreadable', triedAtMs: TRIED_AT_MS, returned: 3 },
+        tokens: new Map(),
+        prices: QUOTES,
     }),
     'plugin-missing': base({
         fetch: {
@@ -438,6 +454,24 @@ export const SCREENS: Record<string, StallView> = {
             triedAtMs: TRIED_AT_MS,
             hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
         },
+        tokens: new Map(),
+        prices: QUOTES,
+    }),
+    /*
+     * The win this rail was decoupled for: a node that answered without the
+     * agora plugin, whose address history still carried the settings, the
+     * records and the genesis of every token they name. The pay section paints
+     * under the failure message and the hosts box — a protected figure below
+     * two blocks of our own bad news, which is a ground no other screen puts
+     * a `[data-role="seller-price"]` on.
+     */
+    'plugin-missing-quotes': base({
+        fetch: {
+            kind: 'plugin-missing',
+            triedAtMs: TRIED_AT_MS,
+            hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
+        },
+        prices: QUOTES,
     }),
     /*
      * The stream overlay, at the four states it spends its time in plus the
@@ -601,6 +635,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'unreachable',
     'unreadable',
     'plugin-missing',
+    'plugin-missing-quotes',
     // Not state screens, but the same budget rule: the studio and activity
     // panels paint no offer cards, and the name-stress screens exist for the
     // sign and the bar, not for decoration interactions.

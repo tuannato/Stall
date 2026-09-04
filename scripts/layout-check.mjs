@@ -24,6 +24,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { payScreensMissingQuote } from './pay-screens.mjs';
 
 const VIEWPORTS = [
     { name: 'mobile', width: 390, height: 844 },
@@ -510,6 +511,24 @@ try {
             );
             continue;
         }
+        /*
+         * And the subject, audited the same way. Every rule about the seller's
+         * own figure runs over whatever the fixture mounted, so a screen named
+         * for the pay rail that mounts no `[data-role="seller-price"]` leaves
+         * all of them green while measuring nothing. The names are the
+         * convention (`pay-screens.mjs`, tested on its own); the page reports
+         * only what it saw.
+         */
+        const noQuote = payScreensMissingQuote(ran, report.screensWithQuote ?? []);
+        if (noQuote.length > 0) {
+            failed = true;
+            console.error(
+                `✗ ${vp.name} (${measured}): ${noQuote.join(', ')} mounted no` +
+                    ' [data-role="seller-price"] — a pay screen that measured no figure' +
+                    ' is a green pass over nothing.',
+            );
+            continue;
+        }
         const spent = took();
         if (report.failures.length === 0) {
             console.log(`✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}`);
@@ -579,6 +598,20 @@ try {
             } else if ((rm.screensMeasured ?? []).length !== wanted) {
                 failed = true;
                 console.error(`✗ ${label}: the pass measured nothing — vacuous green.`);
+            } else if (
+                payScreensMissingQuote(rm.screensMeasured ?? [], rm.screensWithQuote ?? [])
+                    .length > 0
+            ) {
+                // This pass names a pay screen on each side (the sheet, and the
+                // overlay's quote card), and stilling a figure that was never
+                // mounted is the same vacuous green one line up.
+                failed = true;
+                console.error(
+                    `✗ ${label}: ${payScreensMissingQuote(
+                        rm.screensMeasured ?? [],
+                        rm.screensWithQuote ?? [],
+                    ).join(', ')} mounted no [data-role="seller-price"].`,
+                );
             } else if (rm.failures.length === 0) {
                 console.log(`✓ ${label}: every look — ${took()}`);
             } else {

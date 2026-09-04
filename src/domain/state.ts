@@ -494,6 +494,14 @@ export type StallView = {
      * that stopped early.
      */
     descriptionsTruncated?: boolean;
+    /**
+     * The descriptions walk threw before it finished, so what is on the view
+     * is a floor rather than the seller's whole record. Distinct from
+     * `descriptionsTruncated`, which is our own page cap on a walk that
+     * answered — both are our failure, and neither may be printed as a fact
+     * about what the seller published.
+     */
+    descriptionsFailed?: boolean;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

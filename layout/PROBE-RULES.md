@@ -98,6 +98,33 @@ nothing.
   is in `STATE_SCREENS` because its decoration variants would be `pay`'s
   painted twice.
 
+- **A quote paints under a failure message, and its fixture may not carry
+  metadata the real path could not get.** The offer book and the seller's own
+  records are two reads of two indexes, so `unreachable`, `unreadable` and
+  `plugin-missing` now carry a name this load read and the seller's `prices` —
+  and **no `tokens` entries for the tokens those quotes name**, because that
+  genesis read goes to the index that just failed and usually fails with it.
+  Those three are the case where nothing paints and nothing is counted (the
+  count is our own gap said out loud, and under a hosts box it would say one
+  failure twice). `plugin-missing-quotes` is the case that does paint: a node
+  that answered without `agora.py` while its address history carried
+  everything. It is the only screen that puts `[data-role="seller-price"]`
+  under two blocks of our own bad news, so it is measured rather than
+  reasoned about, contrast pass included — it cost 173 of the 2,831 boxes.
+
+- **Every screen named for the pay rail must mount a figure, or the run
+  fails.** A screen whose name starts with `pay` or contains `quotes` and that
+  mounted no `[data-role="seller-price"]` while it was measured fails the pass
+  it ran in. The failure mode this guards is not a red rule but a green one: a
+  fixture that loses its `prices` map, or a section that stops painting, leaves
+  every rule about the seller's figure passing over a screen that no longer has
+  one — the same vacuous green the viewport split and the reduced-motion pass
+  each grew an audit for. The page reports only what it saw
+  (`screensWithQuote`); the rule lives in the runner
+  (`scripts/pay-screens.mjs`, tested by `every-pay-screen-mounts-a-quote-or-the-run-fails`
+  under `node --test`), because a page must not be the judge of whether the
+  page painted.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels
@@ -585,6 +612,15 @@ unmoved at 2658 boxes, because none of the new screens is in
 measured **185.5s** with every rule green and the same 2658 boxes: the vitest
 suite's vite builds leave the box hot, which is the reading to throw away, not
 the ceiling to raise.
+
+And again with `plugin-missing-quotes`, the one screen that measures the pay
+rail under a failure message: **147.3s and 146.3s** on two runs, contrast
+116.7s / 115.7s over **2831 boxes** (+173, all of them that screen's — the
+other three failure fixtures paint no section, because their quotes have no
+metadata; 69 of the 173 are the section itself, measured by removing its
+`prices` and watching the boxes fall to 2762). That is under 4s of headroom on
+a number that moves ±15% between runs, so the next screen added to
+`__contrastScreens` has to be paid for by pruning one, not by the ceiling.
 
 ## What this guard still cannot see
 
