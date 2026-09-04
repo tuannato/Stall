@@ -101,6 +101,13 @@ theme file, so `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground`
 never reads it and the pixels are the only judge its ink has. The studio is
 also the one screen a seller reads instructions on rather than a figure.
 
+Joined 2026-09-04 with the two record sheets: `publish-summary` and
+`describe-summary` (the "Publishes:" line — the only sentence that says what
+a permanent record carries and how big it is), and `.seg-b` and `.dec-chip`,
+the pressed-state controls the sheets are made of. A pressed segment inks
+itself on `--s-accent` and a pressed chip on a wash of it; no other screen
+puts a label on either ground.
+
 Sampling amendments, each measured:
 
 - **Descendants are blanked too.** A child with its own ink does not
@@ -113,7 +120,30 @@ Sampling amendments, each measured:
   tabs whose real ground cleared 5.8.
 - **Corner radius narrows the horizontal range** — outside the radius the
   pixels are the page behind the control (Modern's white page behind a white
-  pill sampled 1.00:1).
+  pill sampled 1.00:1). **The radius the sampler can see is the element's
+  own**, so a control rounded by an `overflow: hidden` parent is measured
+  square and its clipped corners are sampled as ground: the name sheet's
+  pressed look segment, white ink on accent to every reader, reported 1.12:1
+  on Modern at both widths (2026-09-04). The segments carry their own radius
+  now — a shape written so the guard can measure it, not a waiver.
+- **The radius is clamped against the element's own box, never the clipped
+  one.** A pill's arc belongs to the control; halving it to fit a box the
+  scroll clamp cut down understates the inset by exactly the amount the clip
+  moved the sample band into the arc. Measured 2026-09-04: the describe
+  sheet's 51px `border-radius: 999px` sign control, clipped to its top 20px
+  by the sheet's own bottom edge, took r=10 where its arc is 25 and sampled
+  ten pixels of the sheet's cream ground inside the curve — 1.00:1 against
+  its own cream ink, on a control every reader sees at 4:1. A vertical inset
+  by `r` was tried first and reverted: it dropped 400 of 2,267 boxes, and
+  inside `[x+r, x+w−r]` every y of a rounded rect is box paint anyway. The
+  fix costs three boxes.
+- **A neighbour's fill inside your box is your ground.** With the divider
+  gone and `--s-radius: 0`, Neo's segments had neither a border nor an arc
+  for the sampler to inset by, and an unpressed segment's muted ink was read
+  against the pressed one's cyan at 1.65:1 at desktop width (2026-09-04).
+  `.seg` keeps a gap wide enough that no segment's box holds a neighbour's
+  paint. Two adjacent fills with nothing between them is the general shape;
+  a border or a radius is what has always hidden it.
 - **Text inside a transformed ancestor gets an 8px pad** — an axis-aligned
   box around rotated content smears border and ground pixels past every
   edge (the swinging wood sign).
@@ -184,7 +214,8 @@ Sampling amendments, each measured:
   kill at all. Every theme file's reduce block now sits LAST in its own
   file (stall.css's rule, same measured reason) and names its
   transitions alongside its animations.
-- **The pass runs `offers,publish` and `broadcast`, and never the studio —
+- **The pass runs `offers,publish-name,describe` and `broadcast`, and never
+  the studio —
   so the studio's own sheet declares no motion at all.** `obsGuide.css`
   carries no transition, no animation and no `@keyframes`, and a vitest
   grep (`the-diagram-has-no-transition`) is what holds it, because nothing
@@ -336,7 +367,7 @@ Two halves, because either alone is a lie a reader would believe.
 ### Reduced motion, on the fifth sheet
 
 `broadcast.css` ships two keyframes (`bc-in`, `bc-pulse`) and its own reduce
-block, and the reduced-motion pass was hard-coded to `offers,publish` — so
+block, and the reduced-motion pass was hard-coded to the page screens — so
 nothing had ever executed it. `broadcast` now runs as a second reduced-motion
 read at the canvas width, and the fixture carries `broadcastStepped` and
 `broadcastPulse` so both classes are on the tree: a runtime-only class is an

@@ -1006,6 +1006,12 @@ type ContrastTarget = {
      * is the same white as the control's label — sampled as 1.00:1. Inside a
      * rounded rect, every x in [x+r, right−r] is box paint at any y, so the
      * sampler narrows its horizontal range by exactly this.
+     *
+     * **The element's own, which is the part a stylesheet has to respect.** A
+     * control rounded by an `overflow: hidden` parent reports 0 here and is
+     * measured square, so its clipped corners are sampled as ground — the name
+     * sheet's pressed look segment, white ink on accent to every reader, read
+     * 1.12:1 until the segments took their own radius.
      */
     r: number;
     /** What was measured, for a failure a person can find. */
@@ -1029,6 +1035,17 @@ const CONTRAST_TEXT = [
     // under the After-hours mood while this list looked elsewhere.
     '.mini',
     '.tab',
+    // The "Publishes:" line on both record sheets. It is the only sentence
+    // that says what a permanent record carries and how big it is, and it
+    // sits on `.pub`'s own muted ink over whatever ground the sheet has —
+    // a ground no other measured node puts a sentence on.
+    '[data-role="publish-summary"]',
+    '[data-role="describe-summary"]',
+    // The controls the two sheets are made of, which no other screen paints:
+    // a pressed segment inks itself on `--s-accent`, a pressed chip on a
+    // wash of it, and both are how a seller reads their own choice.
+    '.seg-b',
+    '.dec-chip',
     // The overlay's name plate. It is the only line on a broadcast head that
     // is not a money figure, and on a transparent wire it sits on the
     // streamer's video with nothing but the plate between them.
@@ -1154,7 +1171,16 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         w: box.width,
         h: box.height,
         color: ink,
-        r: Math.min(radius, box.width / 2, box.height / 2),
+        // Clamped against the element's OWN box, never the clipped one. A
+        // pill's arc is a property of the control; halving it to fit a box
+        // the scroll clamp cut down understates the inset by exactly the
+        // amount the clip moved the sample band into the arc. Measured
+        // 2026-09-04: the describe sheet's 51px `border-radius: 999px` sign
+        // control, clipped to its top 20px by the sheet's edge, took r=10
+        // instead of 25 and sampled ten pixels of the sheet's cream ground
+        // inside the curve — 1.00:1 against its own cream ink, on a control
+        // every reader sees as cream on terracotta at 4:1.
+        r: Math.min(radius, full.width / 2, full.height / 2),
         // A bordered pill's dashed edge sampled as "background" reported
         // the rural address at 2.2:1 against its own border blend. The
         // border is chrome, not ground — the runner insets past it. The

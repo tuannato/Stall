@@ -280,6 +280,13 @@ function worstContrastInBox(img, target, textColor) {
     const textLum = luminance(cr, cg, cb);
     // Narrowed by the corner radius: outside it the pixels are the page
     // behind the control, not the control. See ContrastTarget.r in the probe.
+    //
+    // Horizontal only, and that is not an oversight: inside [x+r, x+w-r]
+    // every y of a rounded rect is box paint. A vertical inset was tried on
+    // 2026-09-04 and reverted — it silently dropped 400 of 2,267 sampled
+    // boxes (every control shorter than its own two arcs), and the box that
+    // motivated it turned out to be a control flexbox had crushed to 20px,
+    // which is a defect this guard is supposed to report rather than skip.
     const r = target.r ?? 0;
     // The border's own pixels are chrome, never the text's ground: a dashed
     // pill edge blended to 2.2:1 against its ink is not a reading surface.
@@ -536,7 +543,11 @@ try {
      * pass would still print a tick while stilling nothing.
      */
     const REDUCED = [
-        { vp: VIEWPORTS[0], screens: 'offers,publish' },
+        // Renamed with the fixture 2026-09-04: the one publish screen became
+        // two record sheets, and both are measured — they share `.sheet`'s
+        // transition but not their contents, and a still page is only proved
+        // still for the tree that was actually painted.
+        { vp: VIEWPORTS[0], screens: 'offers,publish-name,describe' },
         { vp: CANVAS, screens: 'broadcast' },
     ];
     for (const pass of REDUCED) {

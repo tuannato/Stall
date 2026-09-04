@@ -102,6 +102,24 @@ export const PUBLISH_X = '✕';
 export const PUBLISH_LEDE =
     'This builds one small transaction that publishes your stall name and look. Stall never holds your key — your wallet signs it.';
 
+/**
+ * The name sheet's subtitle: the fields of the record, named before the seller
+ * fills any of them. It says "one record" because that is the fee — the token
+ * descriptions moved to their own sheet, and their own transactions, exactly
+ * so this sentence can be true.
+ */
+export const PUBLISH_SUB = 'One record: name, tagline, announcement, look, decorations';
+
+/**
+ * The two folds both sheets wear. Hex is the thing a seller checks once and
+ * then never wants in the way again; the QR is a road to a phone that a phone
+ * does not need (it opens the wallet by link), so it is offered at desk width
+ * and folded even there.
+ */
+export const RECORD_BYTES_FOLD = 'Record bytes';
+export const SCAN_WITH_PHONE_FOLD = 'Scan with a phone wallet';
+
+
 /** Paying the right address is not enough: the record counts by who signed. */
 export const PUBLISH_MUST_SIGN =
     'Sign it with this stall\u2019s own wallet, whatever app holds it. A record signed by any other wallet will never be this stall\u2019s.';
@@ -130,9 +148,12 @@ export const PUBLISH_FIAT_LABEL = 'Suggest a display currency (optional)';
 export const PUBLISH_ANNOUNCEMENT_LABEL = 'Announcement (optional)';
 export const PUBLISH_ANNOUNCEMENT_INVALID =
     'An announcement is one legible line, up to 64 bytes. Accents and emoji cost more than one byte each.';
-/** The shared record ceiling, made visible before anything is signed. */
-export const publishBudget = (used: number, max: number): string =>
-    `Record size: ${used} of ${max} bytes`;
+/*
+ * `publishBudget` ("Record size: N of M bytes") retired 2026-09-04: both
+ * sheets now say the same figure at the end of their "Publishes:" line
+ * (`summaryLine`), and two nodes counting one record is how a meter and an
+ * encoder come to disagree in front of a seller.
+ */
 /**
  * A stall with no settings is painted in the shipped default, so the first look
  * in the picker is the look already on screen. Publishing it is a real thing to
@@ -305,8 +326,21 @@ export const STUDIO_SUB = 'Seller studio';
 export const STUDIO_LEDE =
     'The tools for whoever holds this stall’s wallet. Anyone can look; only that wallet can sign.';
 export const STUDIO_OPEN_SETTINGS = 'Name this stall, choose a look';
+/**
+ * It used to say "name, look, decorations **and token descriptions**", which
+ * was the three-job sheet describing itself. A description is a different
+ * record and a different fee; the second launcher below is where it lives now,
+ * and this line stops claiming it.
+ */
 export const STUDIO_SETTINGS_HINT =
-    'One small record signs your name, look, decorations and token descriptions — built here, signed in your wallet.';
+    'One small record signs your stall name, tagline, announcement, look and decorations — built here, signed in your wallet.';
+/**
+ * The second launcher. Its own sheet because it signs its own record, one per
+ * token: a seller who reads one publish control as covering both learns the
+ * difference a fee at a time.
+ */
+export const STUDIO_DESCRIBE_HINT =
+    'A separate record for each token: your words, the shelf it sits under, and your own asking figure. One transaction per token, each time you change one.';
 /*
  * Section titles in the third person: the panel is public — anyone can open
  * the Studio tab — so "Your stall record" over a stranger's screen would be
@@ -757,6 +791,8 @@ export const ANNOUNCEMENT_CHIP = 'From the seller';
  * description transaction does not move it.
  */
 export const DESC_TITLE = 'Describe a token';
+/** The sheet's subtitle: the three fields, and that they are one record. */
+export const DESC_SUB = 'Words · shelf · quote → one record';
 export const DESC_LEDE =
     'Your own words about one token you list. This builds a second small transaction — one for each token you describe, and one more each time you change one.';
 export const DESC_TOKEN_LABEL = 'Which token';
@@ -801,6 +837,17 @@ export const DESC_REMOVE = 'Remove this description';
  * named for what it does (§2): this one removes.
  */
 export const DESC_REMOVE_PAY = 'Remove with another wallet app';
+/**
+ * The way into removal, and the way back out.
+ *
+ * Removal is a **mode of this sheet**, not a second pair of links below it:
+ * the same fields, the same meter and the same two sign controls swap to the
+ * removal record, so what is on screen is the record being signed. The fields
+ * go disabled, because a form a seller can type into while it publishes
+ * something else is a form that lies.
+ */
+export const DESC_REMOVE_OPEN = 'Remove the words…';
+export const DESC_KEEP = 'Keep the words';
 export const DESC_REMOVE_LEDE =
     'This publishes a record that erases what you wrote; the shelf and the price stay. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
 /**
@@ -823,6 +870,13 @@ export const DESC_NO_TOKENS = 'Nothing is listed to describe yet.';
  */
 export const DESC_PRICE_LABEL = 'Price for one whole token (optional)';
 export const DESC_PRICE_CODE_LABEL = 'Unit';
+/**
+ * What a unit wears on the segment. `$` is three characters shorter than USD
+ * and three currencies wide, so the button's accessible name carries the code
+ * and only the glyph is painted.
+ */
+export const priceUnitGlyph = (code: string): string =>
+    code === 'usd' ? '$' : code.toUpperCase();
 export const DESC_PRICE_LEDE =
     'Your own asking figure, published as you write it. Nothing here converts it, and this round does not show it to buyers — the price on a listing is still what its covenant asks.';
 export const DESC_PRICE_REFUSED =
@@ -840,6 +894,52 @@ export const sellerPrice = (figure: string, code: string): string =>
 /** Bytes, never characters: an accented character costs two or three. */
 export const descBytesLeft = (used: number, max: number): string =>
     `${used} of ${max} bytes`;
+
+/**
+ * One part of the "Publishes:" line — a field the record will carry, and its
+ * value where the value is short enough to read back.
+ */
+export type SummaryPart = { label: string; value?: string };
+
+/**
+ * What this record publishes, said in words beside the bytes. Both sheets
+ * wear it, and it is the only place either one states a size.
+ *
+ * **Composed from the parts the encoder was handed**, and never counted a
+ * second time: the byte figure is the record the same call produced, and each
+ * part is one field that call put in it. A summary doing its own arithmetic
+ * would be a second opinion about a permanent record, and the opinion on
+ * screen would be the one nobody signed.
+ */
+export const summaryLine = (
+    parts: readonly SummaryPart[],
+    used: number,
+    max: number,
+): string => {
+    const said = parts.map((p) => (p.value === undefined ? p.label : `${p.label} ${p.value}`));
+    return `Publishes: ${[...said, descBytesLeft(used, max)].join(' · ')}`;
+};
+
+/** The fields a summary can name. Lower case: they run inside a sentence. */
+export const SUMMARY_NAME = 'name';
+export const SUMMARY_LOOK = 'look';
+export const SUMMARY_TAGLINE = 'tagline';
+export const SUMMARY_ANNOUNCEMENT = 'announcement';
+export const SUMMARY_DECOR = 'decor';
+/**
+ * Tag `0x04` has no control on the sheet (CLAUDE §8) and is still carried
+ * forward on every republish, so the line names it: a summary that omitted a
+ * field the record carries would under-report what is being signed.
+ */
+export const SUMMARY_FIAT_HINT = 'currency hint';
+export const SUMMARY_WORDS = 'words';
+export const SUMMARY_SHELF = 'shelf';
+export const SUMMARY_QUOTE = 'quote';
+/** The two records that take something away, named as what they do. */
+export const SUMMARY_REMOVAL = 'removal for';
+export const SUMMARY_CLEARS = 'clears every field for';
+/** Nothing has been asked of the record yet — not a refusal, not a size. */
+export const SUMMARY_NOTHING = 'Nothing to publish yet.';
 
 /** The overlay's brand line. Ours, never the seller's. */
 export const BROADCAST_BRAND = 'stall.cash';

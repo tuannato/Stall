@@ -83,6 +83,7 @@ export const handlers: StallHandlers = {
     onGoHome: () => {},
     onToggleDefault: () => {},
     onOpenPublish: () => {},
+    onOpenDescribe: () => {},
     onClosePublish: () => {},
     onChangeFiat: () => {},
     onTogglePin: () => {},
@@ -156,10 +157,26 @@ export const SCREENS: Record<string, StallView> = {
         // The longest thing a seller can publish, with no spaces to break on.
         descriptions: new Map([[T1, UNBROKEN]]),
     }),
-    publish: base({
+    /*
+     * The two record sheets, one screen each. They were one screen while they
+     * were one sheet; splitting them is not a rename with a spare — the name
+     * sheet carries the segmented look, the decoration chips and the stall
+     * record's own hex, and the describe sheet carries the token picker, the
+     * quote field and the read-back line. Measuring one would certify neither.
+     */
+    'publish-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
-        overlay: { kind: 'publish' },
+        overlay: { kind: 'publish-name' },
+        // A held decoration, so the chips paint pressed and unpressed rather
+        // than one state of the control the probe never sees.
+        attachmentFlags: 0b1,
+        announcement: 'Back on the 10th — orders ship then',
+    }),
+    describe: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        overlay: { kind: 'describe' },
         descriptions: new Map([[T1, 'Existing words']]),
+        shelves: new Map([[T1, 'Morning roast']]),
         // A published price, so the editor's read-back line
         // (`[data-role="seller-price"]`) is a node the probe can see. Without
         // one it stays `hidden` and the only screen carrying that figure was

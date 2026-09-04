@@ -125,9 +125,20 @@ export type PosterFormat = 'print' | 'square' | 'story' | 'stream';
 export type Overlay =
     | { kind: 'idle' }
     | { kind: 'buy'; outpoint: Outpoint }
-    /** Composing the settings transaction. Disclosure, not a wallet. */
-    | { kind: 'publish' }
-    /** Printable poster and PNG formats. Same live-paint wait as publish. */
+    /**
+     * The stall's own record: name, tagline, announcement, look, decorations.
+     * Composing the settings transaction — disclosure, not a wallet.
+     *
+     * Two sheets rather than one, because they sign two different records:
+     * `STL1` is the stall's document and `STLD` is one token's, and one sheet
+     * carrying both read as one publish control covering both — which a seller
+     * discovers a fee at a time. Nothing persists an overlay kind (not
+     * `history.state`, not storage), so the split needed no migration.
+     */
+    | { kind: 'publish-name' }
+    /** One token's own record: words, shelf, quote. `tokenId` preselects. */
+    | { kind: 'describe'; tokenId?: string }
+    /** Printable poster and PNG formats. Same live-paint wait as the sheets. */
     | { kind: 'poster'; format: PosterFormat };
 
 /**

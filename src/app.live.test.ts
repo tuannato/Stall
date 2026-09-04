@@ -656,6 +656,86 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
         (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="publish"]')).toBeNull();
     });
+
+    it('the second sheet keeps its half-written record too', async () => {
+        // The token record is its own sheet now, and its fields are the same
+        // kind of thing: typed into the DOM and nowhere else. A kind added to
+        // the render gate and forgotten in the paint gate is a sheet a
+        // stranger can wipe with dust.
+        const { root } = bootStall(
+            stallEmpty({
+                // The picker's set is what the stall lists, so a described
+                // token needs a listing behind it.
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="studio-open-describe"]') as HTMLButtonElement).click();
+        const field = root.querySelector(
+            '[data-role="describe-text"]',
+        ) as HTMLTextAreaElement;
+        expect(field, 'the describe sheet is open').not.toBeNull();
+        field.value = 'Half written words';
+
+        watches[0]!.hooks.onBurst?.([
+            publish(
+                signedTx({
+                    txid: '0c'.repeat(32),
+                    outputs: [stl1Output('Ripe Beans')],
+                    height: 800_000,
+                }),
+            ),
+        ]);
+        await flush();
+        const still = root.querySelector(
+            '[data-role="describe-text"]',
+        ) as HTMLTextAreaElement;
+        expect(still, 'the sheet is still mounted').not.toBeNull();
+        expect(still.value).toBe('Half written words');
+
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
+        expect(root.textContent, 'the deferred paint arrives with the close').toContain(
+            'Ripe Beans',
+        );
+    });
+});
+
+describe('an-overlay-that-cannot-mount-does-not-stop-the-live-paint', () => {
+    /**
+     * `renderStall` and `livePaint` ask one predicate — `sheetMounts` — whether
+     * a sheet is on screen. Two lists of overlay kinds kept in step by hand is
+     * how an overlay the render gate refuses and the paint gate honours stops a
+     * stall updating for good, with nothing on screen to say why.
+     *
+     * The poster is the reachable case: past the QR ceiling `posterControl`
+     * paints no launcher and `posterSheet` mounts nothing, which is exactly
+     * what `onOpenPoster`'s own comment has always warned about.
+     */
+    it('paints while an overlay that mounts nothing is set', async () => {
+        window.history.replaceState(null, '', `${stallPath(PK)}?m=${'a'.repeat(2600)}`);
+        const { root } = bootStall(
+            stallEmpty({ overlay: { kind: 'poster', format: 'print' } }),
+        );
+        await flush();
+        expect(root.querySelector('.sheet-scrim'), 'no sheet is on screen').toBeNull();
+
+        watches[0]!.hooks.onBurst?.([
+            publish(
+                signedTx({
+                    txid: '0d'.repeat(32),
+                    outputs: [stl1Output('Ripe Beans')],
+                    height: 800_000,
+                }),
+            ),
+        ]);
+        await flush();
+        expect(
+            root.textContent,
+            'the stall kept updating rather than waiting on a sheet nobody can see',
+        ).toContain('Ripe Beans');
+    });
 });
 
 describe('the-poster-survives-a-live-repaint', () => {

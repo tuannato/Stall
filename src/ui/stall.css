@@ -2300,6 +2300,240 @@ textarea.paste-in {
     overflow-wrap: anywhere;
 }
 
+/*
+ * The two record sheets (design round 5, ported 2026-09-04).
+ *
+ * Everything here is shape and token — no look sets a literal beside a token
+ * ground (`a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground`), and
+ * nothing is positioned, so the probe's decoration sweep collects none of it.
+ */
+
+/* A labelled block that is not one `<input>`: a picker, a run of chips. */
+.f {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.f > .lab {
+    font-size: 12.5px;
+    font-weight: 640;
+    color: var(--s-text);
+}
+
+/*
+ * The segmented picker: the look, and the quote's unit. The pressed segment
+ * is the chosen one, which is the whole rule — an inert `aria-pressed` with no
+ * paint would be a picker nobody can read.
+ */
+.seg {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid color-mix(in srgb, var(--s-muted) 38%, transparent);
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
+    /*
+     * The segments sit inside the container's own arc, so nothing of a
+     * pressed fill is clipped by it (see `.seg-b`'s radius), and apart from
+     * each other, so no segment's box holds a neighbour's fill. The gap is
+     * the guard's requirement as much as the design's: on a look with no
+     * corner radius the sampler has nothing to inset by, and an unpressed
+     * segment's muted ink was read against the pressed one's accent at
+     * 1.65:1 (Neo, desktop, measured 2026-09-04).
+     */
+    padding: 2px;
+    gap: 4px;
+    overflow: hidden;
+    background: var(--s-surface);
+}
+
+.seg-two {
+    grid-template-columns: 1fr 1fr;
+}
+
+.seg-b {
+    min-height: 44px;
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 14px;
+    font-weight: 640;
+    background: transparent;
+    border: 0;
+    color: var(--s-muted);
+    cursor: pointer;
+    padding: 0 6px;
+    /*
+     * Its own corner, not the container's — and this is a guard requirement
+     * as much as a shape. The pixel-contrast sampler narrows a box by the
+     * ELEMENT's own `border-top-left-radius` (ContrastTarget.r), because
+     * outside that arc the pixels are the page behind the control. With the
+     * radius on `.seg` and `overflow: hidden`, a pressed segment's white ink
+     * was sampled against the sheet's ground in the clipped corners and
+     * reported at 1.12:1 — a control every reader sees as white on accent.
+     * Measured 2026-09-04, both widths, Modern and Rural.
+     */
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
+}
+
+.seg-b[aria-pressed='true'] {
+    background: var(--s-accent);
+    color: var(--s-surface);
+}
+
+.seg-b:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+/*
+ * The decoration chips, grouped per place. 40px tall and wrapping: a place
+ * holds at most one, and pressing the pressed one takes the place back to
+ * bare, so there is no "None" chip to hit by mistake.
+ */
+.decor-place {
+    gap: 8px;
+}
+
+.dec {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dec-chip {
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: var(--s-btn-radius);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 38%, transparent);
+    background: var(--s-surface);
+    color: var(--s-muted);
+    font: inherit;
+    font-family: var(--s-font);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dec-chip[aria-pressed='true'] {
+    border-color: var(--s-accent);
+    color: var(--s-accent);
+    background: color-mix(in srgb, var(--s-accent) 8%, var(--s-surface));
+}
+
+/*
+ * The byte meter. The figure itself is on the `.pub` line beside it — one
+ * count, from the encoder — so this is the glance and never a second number.
+ * The fill is written through the CSSOM (`--meter-fill`), the same channel
+ * `applyTheme` uses for every `--s-*`: `style-src 'self'` refuses an inline
+ * style attribute, and a class per percentage is 101 rules.
+ */
+.meter {
+    height: 6px;
+    background: color-mix(in srgb, var(--s-muted) 20%, transparent);
+    border-radius: var(--s-btn-radius);
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.meter-i {
+    --meter-fill: 0%;
+    display: block;
+    height: 100%;
+    width: var(--meter-fill);
+    background: var(--s-accent);
+}
+
+.meter[data-over='true'] .meter-i {
+    background: var(--s-danger);
+}
+
+/* "Publishes: …" — what the record carries, and its size. */
+.pub {
+    margin: 0;
+    font-size: 13px;
+    color: var(--s-muted);
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    text-wrap: pretty;
+}
+
+/*
+ * The folds. The hex is a wall a seller checks once; the QR is a road to a
+ * phone that a phone does not need, so it is a desk affordance and folded
+ * even there.
+ */
+details.fold {
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+}
+
+details.fold > .fold-sum {
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 640;
+    color: var(--s-text);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 44px;
+}
+
+details.fold > .fold-sum::-webkit-details-marker {
+    display: none;
+}
+
+/*
+ * Painted from the desk width up. A phone opens its own wallet by link, so
+ * the code there is a second road to the same place taking a screen's worth
+ * of room; at a desk it is the only road to a wallet on another device.
+ */
+.sheet-qr-fold {
+    display: none;
+}
+
+/* The removal warning: the one place on a record sheet that is a warning. */
+.warn {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--s-danger) 45%, transparent);
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: var(--s-text);
+    background: color-mix(in srgb, var(--s-danger) 6%, var(--s-surface));
+    text-wrap: pretty;
+}
+
+/* The sign controls, stacked: the primary, then the quiet second road. */
+.acts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.acts .mini {
+    align-self: center;
+}
+
+/* Danger is reserved for what is wrong — or, here, for what takes away. */
+.buy.danger {
+    background: var(--s-danger);
+    color: var(--s-surface);
+}
+
+/* A field the sheet will not publish takes no input, and says so. */
+.paste-in:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.sheet .sheet-head-t {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
 /* The sheet's own polish (owner's design, 2026-09-01). Scoped to the sheet:
    the door wears .paste-label too and keeps its own dress. */
 .sheet .paste-label {
@@ -3122,6 +3356,17 @@ textarea.paste-in {
         border-radius: var(--s-sheet-radius-d);
         max-height: 86vh;
     }
+
+    /*
+     * The phone code, at the desk width where it is the only road to a wallet
+     * on another device. Folded even here: a seller signing from this browser
+     * never needs it, and an open code would push the sign controls off the
+     * first screen of the sheet.
+     */
+    .sheet-qr-fold {
+        display: block;
+    }
+
 
     /*
      * The studio at desk width stops being stretched mobile. The CTA

@@ -21,6 +21,7 @@ import {
     encodeRemovalHex,
     formatPriceFigure,
     parsePriceFigure,
+    type TokenPrice,
 } from '../domain/description';
 import {
     compareOffers,
@@ -97,9 +98,17 @@ export type StallHandlers = {
     onGoHome?: () => void;
     /** Toggle whether the bare domain opens this stall. */
     onToggleDefault?: (raw: string) => void;
+    /** Open the stall's own record: name, tagline, announcement, look, decor. */
     onOpenPublish?: () => void;
+    /**
+     * Open one token's record. The id is a preselection, never a promise: the
+     * picker's set is what the stall lists, and an id that is not in it simply
+     * does not select.
+     */
+    onOpenDescribe?: (tokenId?: string) => void;
     /** Change the currency the fiat line is read in. */
     onChangeFiat?: (code: string) => void;
+    /** Close whichever record sheet is open. Both wear the same way out. */
     onClosePublish?: () => void;
     onOpenPoster?: () => void;
     onClosePoster?: () => void;
@@ -358,28 +367,23 @@ export function renderStall(
     }
 
     /*
-     * The publish sheet mounts here, once, for every pubkey screen with an
-     * address — it used to mount only inside paintOffers and paintEmpty, so
-     * the footer's publish control on other screens flipped the overlay and
-     * painted nothing. The studio launcher needs it on its panel too.
+     * The sheets mount here, once, for every pubkey screen with an address —
+     * they used to mount only inside paintOffers and paintEmpty, so the
+     * footer's publish control on other screens flipped the overlay and
+     * painted nothing. The studio launchers need them on their panel too.
+     *
+     * `sheetMounts` is the gate, and `livePaint` in app.ts asks that same
+     * function whether to hold a paint back: two lists of overlay kinds kept
+     * in step by hand is how an overlay that mounts nothing stops a stall
+     * updating for good.
      */
-    if (
-        view.route.kind === 'pubkey' &&
-        view.overlay.kind === 'publish' &&
-        view.address !== undefined &&
-        view.address !== ''
-    ) {
-        stall.append(publishOverlay(view, handlers));
-    }
-    if (
-        view.route.kind === 'pubkey' &&
-        view.overlay.kind === 'poster' &&
-        view.address !== undefined &&
-        view.address !== ''
-    ) {
-        const url = shareUrl();
-        if (fitsQr(url)) {
-            stall.append(posterSheet(view, url, stall, handlers));
+    if (sheetMounts(view)) {
+        if (view.overlay.kind === 'publish-name') {
+            stall.append(sheetOverlay(nameSheet(view, handlers), 'publish-sheet', handlers));
+        } else if (view.overlay.kind === 'describe') {
+            stall.append(sheetOverlay(describeSheet(view, handlers), 'describe-sheet', handlers));
+        } else if (view.overlay.kind === 'poster') {
+            stall.append(posterSheet(view, shareUrl(), stall, handlers));
         }
     }
 
@@ -1688,32 +1692,108 @@ const EDITABLE_PRICE_CODES = ['usd', XEC_PRICE_CODE] as const;
 const EDITOR_PRICE_EXPONENT = 2;
 
 /**
- * The description editor, inside the settings sheet rather than on every card.
- *
- * One entry point: a control per offer row would put a second "publish" button
- * beside every buy control, for every visitor, on a page that cannot know which
- * of them is the seller.
- *
- * **Its own transaction, and the sheet says so.** A description is a separate
- * record from the stall's settings, so publishing one does not publish the
- * other, and describing three tokens costs three fees. A seller who learns that
- * after signing learns it the expensive way.
+ * A labelled group inside a sheet: a heading over a control that is not one
+ * `<input>` (a segmented picker, a run of chips). Real fields keep their
+ * `<label>`; a `<label>` over a group of buttons names nothing a browser can
+ * point at.
  */
-function describeSection(
-    view: StallView,
-    address: string,
-    offers: readonly StallOffer[],
-): HTMLElement {
-    const wrap = el('div', 'desc-section');
+function sheetGroup(title: string): HTMLElement {
+    const wrap = el('div', 'f');
+    wrap.append(el('div', 'lab', title));
+    return wrap;
+}
+
+/**
+ * A fold. The hex and the QR are both things a seller checks once — the bytes
+ * before the first signature, the code only when the wallet is on another
+ * device — and both were walls of the sheet before they were folds.
+ *
+ * `<details>` and nothing else: the layout probe opens every one before it
+ * measures, so a folded protected box is still guarded (`publish-hex` is in
+ * `PROTECTED`), and a fold is the one disclosure a keyboard reaches without
+ * script.
+ */
+function sheetFold(role: string, title: string, body: HTMLElement, extra?: string): HTMLElement {
+    const fold = el('details', extra === undefined ? 'fold' : `fold ${extra}`);
+    fold.setAttribute('data-role', role);
+    fold.append(el('summary', 'fold-sum', title));
+    fold.append(body);
+    return fold;
+}
+
+/**
+ * The byte meter: the record's size against the shared ceiling, as a bar.
+ *
+ * The figure itself is said in words on the summary line beside it — one
+ * count, from the encoder — so this is the glance and never a second number.
+ * The fill is written through the CSSOM, the same channel `applyTheme` uses
+ * for every `--s-*`: an inline `style` attribute would be refused outright by
+ * `style-src 'self'`, and a class per percentage is a stylesheet of 101 rules.
+ */
+function sheetMeter(): { wrap: HTMLElement; set: (used: number, max: number) => void } {
+    const wrap = el('div', 'meter');
+    wrap.setAttribute('aria-hidden', 'true');
+    const fill = el('i', 'meter-i');
+    wrap.append(fill);
+    return {
+        wrap,
+        set: (used, max) => {
+            const pct = max <= 0 ? 0 : Math.max(0, Math.min(100, (used / max) * 100));
+            fill.style.setProperty('--meter-fill', `${pct.toFixed(1)}%`);
+            wrap.setAttribute('data-over', used > max ? 'true' : 'false');
+        },
+    };
+}
+
+/**
+ * A figure for the summary line, and **only** for a unit this editor writes.
+ *
+ * A carried price in some other code is void on screen and never on the wire
+ * (`a-price-not-in-usd-or-xec-is-void-and-silent`): painting a figure this
+ * sheet cannot change would offer a seller an edit that is not there. The
+ * field is still named, because the record still carries it — the summary
+ * says what is being signed, and "quote" with no figure is the honest half.
+ */
+function sayPrice(price: TokenPrice): string | undefined {
+    return (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code)
+        ? `${formatPriceFigure(price)} ${price.code.toUpperCase()}`
+        : undefined;
+}
+
+/**
+ * The token descriptions sheet: one token's own record — words, shelf, quote.
+ *
+ * **Its own sheet because it is its own record.** `STLD` is a document about
+ * one token and `STL1` is the stall's; describing three tokens costs three
+ * fees, and a seller who reads one publish control as covering both learns
+ * that the expensive way. One entry point still: a control per offer row would
+ * put a second publish button beside every buy control, for every visitor, on
+ * a page that cannot know which of them is the seller.
+ */
+function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'describe');
-    wrap.append(el('div', 'item-n', copy.DESC_TITLE));
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', copy.DESC_TITLE);
+    wrap.append(sheetHead(copy.DESC_TITLE, copy.DESC_SUB, handlers));
     wrap.append(el('p', 'fine', copy.DESC_LEDE));
 
+    const address = view.address;
+    if (address === undefined || address === '') {
+        wrap.append(el('p', 'ctx', copy.PUBLISH_UNAVAILABLE));
+        return wrap;
+    }
+
+    const offers = offersOf(view);
     const tokenIds = [...new Set(offers.map((o) => o.tokenId))];
     if (tokenIds.length === 0) {
         wrap.append(el('p', 'fine', copy.DESC_NO_TOKENS));
+        wrap.append(sheetFoot(handlers));
         return wrap;
     }
+
+    const form = el('form', 'paste');
 
     const tokenLabel = el('label', 'paste-label', copy.DESC_TOKEN_LABEL);
     const picker = el('select', 'paste-in');
@@ -1726,8 +1806,14 @@ function describeSection(
         option.value = id;
         picker.append(option);
     }
+    // The launcher may name a token — the row a seller pressed. An id that is
+    // not listed here is simply not selected: the picker's set is the shop's.
+    const asked = view.overlay.kind === 'describe' ? view.overlay.tokenId : undefined;
+    if (asked !== undefined && tokenIds.includes(asked)) {
+        picker.value = asked;
+    }
     tokenLabel.append(picker);
-    wrap.append(tokenLabel);
+    form.append(tokenLabel);
 
     const textLabel = el('label', 'paste-label', copy.DESC_TEXT_LABEL);
     const field = el('textarea', 'paste-in');
@@ -1737,11 +1823,15 @@ function describeSection(
     field.setAttribute('data-focus-key', 'describe-text');
     field.setAttribute('autocapitalize', 'sentences');
     textLabel.append(field);
-    wrap.append(textLabel);
+    form.append(textLabel);
 
     // The shelf (STLD tag 0x01): one more field in the same record. maxLength
     // counts characters and is only first aid; the byte cap and the shared
     // budget are the encoder's, and the one meter below shows the record.
+    //
+    // A free field with a datalist, never a closed select: the
+    // heading is the seller's own words, and a list of the ones they already
+    // used is a suggestion, not a vocabulary.
     const shelfLabel = el('label', 'paste-label', copy.DESC_SHELF_LABEL);
     const shelfField = el('input', 'paste-in');
     shelfField.type = 'text';
@@ -1751,11 +1841,24 @@ function describeSection(
     shelfField.spellcheck = false;
     shelfField.setAttribute('data-role', 'describe-shelf');
     shelfField.setAttribute('data-focus-key', 'describe-shelf');
+    const shelvesKnown = [...new Set([...(view.shelves?.values() ?? [])])].sort();
+    if (shelvesKnown.length > 0) {
+        const list = el('datalist');
+        list.id = 'stall-shelves';
+        list.setAttribute('data-role', 'describe-shelf-list');
+        for (const name of shelvesKnown) {
+            const option = el('option');
+            option.value = name;
+            list.append(option);
+        }
+        shelfField.setAttribute('list', list.id);
+        shelfLabel.append(list);
+    }
     shelfLabel.append(shelfField);
-    wrap.append(shelfLabel);
+    form.append(shelfLabel);
 
     /*
-     * The price (STLD tag 0x02): what the seller asks for one whole token.
+     * The quote (STLD tag 0x02): what the seller asks for one whole token.
      *
      * Two units, and no more. `usd` is what most sellers think in; `xec` is
      * the chain's own unit, and it is the only figure that does not go stale
@@ -1780,25 +1883,52 @@ function describeSection(
     priceAmount.setAttribute('data-role', 'describe-price');
     priceAmount.setAttribute('data-focus-key', 'describe-price');
     priceAmountLabel.append(priceAmount);
-    const priceCodeLabel = el('label', 'paste-label', copy.DESC_PRICE_CODE_LABEL);
-    const priceCode = el('select', 'paste-in');
-    priceCode.name = 'describe-price-code';
-    priceCode.setAttribute('data-role', 'describe-price-code');
-    priceCode.setAttribute('data-focus-key', 'describe-price-code');
+    /*
+     * The unit as a two-way segment. A `<select>` of two options is a menu
+     * for a choice that is always visible, and the accessible name carries
+     * the code — "$" alone is a glyph three currencies share.
+     */
+    const priceUnit = sheetGroup(copy.DESC_PRICE_CODE_LABEL);
+    priceUnit.setAttribute('data-role', 'describe-price-code');
+    const unitSeg = el('div', 'seg seg-two');
+    unitSeg.setAttribute('role', 'group');
+    unitSeg.setAttribute('aria-label', copy.DESC_PRICE_CODE_LABEL);
+    let priceCode: string = EDITABLE_PRICE_CODES[0];
+    const unitButtons: HTMLButtonElement[] = [];
+    const paintUnits = (): void => {
+        for (const button of unitButtons) {
+            button.setAttribute(
+                'aria-pressed',
+                button.getAttribute('data-code') === priceCode ? 'true' : 'false',
+            );
+        }
+    };
     for (const code of EDITABLE_PRICE_CODES) {
-        const opt = el('option', undefined, code.toUpperCase());
-        opt.value = code;
-        priceCode.append(opt);
+        const button = el('button', 'seg-b', copy.priceUnitGlyph(code));
+        button.type = 'button';
+        button.setAttribute('data-code', code);
+        button.setAttribute('data-role', `describe-unit-${code}`);
+        button.setAttribute('data-focus-key', `describe-unit-${code}`);
+        // The glyph on screen, the code in the accessible name: a "$" read
+        // aloud is not a currency.
+        button.setAttribute('aria-label', code.toUpperCase());
+        button.addEventListener('click', () => {
+            priceCode = code;
+            paintUnits();
+            refresh();
+        });
+        unitButtons.push(button);
+        unitSeg.append(button);
     }
-    priceCodeLabel.append(priceCode);
-    priceWrap.append(priceAmountLabel, priceCodeLabel);
-    wrap.append(priceWrap);
+    priceUnit.append(unitSeg);
+    priceWrap.append(priceAmountLabel, priceUnit);
+    form.append(priceWrap);
     const priceLede = el('p', 'fine', copy.DESC_PRICE_LEDE);
-    wrap.append(priceLede);
+    form.append(priceLede);
     const priceWhy = el('p', 'fine', copy.DESC_PRICE_NOT_PRICEABLE);
     priceWhy.setAttribute('data-role', 'describe-price-why');
     priceWhy.hidden = true;
-    wrap.append(priceWhy);
+    form.append(priceWhy);
     /*
      * The seller's own figure, read back from the record they signed — its own
      * role, never `fiat`. That node is a conversion of the covenant's asked
@@ -1808,27 +1938,51 @@ function describeSection(
     const sellerPriceLine = el('p', 'fine', '');
     sellerPriceLine.setAttribute('data-role', 'seller-price');
     sellerPriceLine.hidden = true;
-    wrap.append(sellerPriceLine);
+    form.append(sellerPriceLine);
 
-    const counter = el('p', 'fine', '');
-    counter.setAttribute('data-role', 'describe-bytes');
-    wrap.append(counter);
+    const meter = sheetMeter();
+    form.append(meter.wrap);
+    const counter = el('p', 'pub', '');
+    counter.setAttribute('data-role', 'describe-summary');
+    form.append(counter);
 
     const err = el('p', 'ctx', '');
     err.hidden = true;
     err.setAttribute('data-role', 'describe-invalid');
-    wrap.append(err);
+    form.append(err);
 
+    const clearLede = el('p', 'fine', copy.DESC_CLEAR_ALL_LEDE);
+    clearLede.setAttribute('data-role', 'describe-clear-lede');
+    clearLede.hidden = true;
+    form.append(clearLede);
+
+    // Removal is a mode of this sheet, not a second pair of links under it:
+    // the same meter, the same summary and the same two sign controls swap to
+    // the removal record, so what is on screen is the record being signed.
+    const warn = el('p', 'warn', copy.DESC_REMOVE_LEDE);
+    warn.setAttribute('data-role', 'describe-remove-warn');
+    warn.hidden = true;
+    form.append(warn);
+
+    wrap.append(form);
+
+    // Cashtab previews an unknown LOKAD as raw hex, so this sheet is the only
+    // place an `STLD` record is legible before it is signed — the same reason
+    // the stall's own record says it, and the same sentence.
+    wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
     const bytes = el('p', 'fine publish-hex', '');
     bytes.setAttribute('data-role', 'describe-hex');
-    bytes.hidden = true;
-    wrap.append(bytes);
+    const hexFold = sheetFold('describe-hex-fold', copy.RECORD_BYTES_FOLD, bytes);
+    wrap.append(hexFold);
 
     const qrBox = el('div', 'publish-qr');
     qrBox.setAttribute('data-role', 'describe-qr');
     qrBox.hidden = true;
-    wrap.append(qrBox);
+    wrap.append(
+        sheetFold('describe-qr-fold', copy.SCAN_WITH_PHONE_FOLD, qrBox, 'sheet-qr-fold'),
+    );
 
+    const acts = el('div', 'acts');
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'describe-cashtab');
     web.setAttribute('data-focus-key', 'describe-cashtab');
@@ -1839,36 +1993,17 @@ function describeSection(
         link.rel = 'noopener noreferrer';
         link.target = '_blank';
     }
-    wrap.append(web);
-    wrap.append(app);
+    acts.append(web, app);
+    wrap.append(acts);
 
-    // Removal is its own record and its own transaction, offered only where
-    // there is something to remove. It erases the words from this page; the
-    // chain keeps every record ever published, and the copy says so.
-    const remove = el('a', 'mini another', copy.DESC_REMOVE);
-    remove.setAttribute('data-role', 'describe-remove');
-    const removePay = el('a', 'mini another', copy.DESC_REMOVE_PAY);
-    removePay.setAttribute('data-role', 'describe-remove-pay');
-    for (const link of [remove, removePay]) {
-        link.rel = 'noopener noreferrer';
-        link.target = '_blank';
-    }
-    // A removal is a transaction like any other, so it gets the same three ways
-    // to reach a wallet as publishing does. It had only the Cashtab web link,
-    // which strands a seller who publishes from a phone: they could add words
-    // and never take them back.
-    const removeQr = el('div', 'publish-qr');
-    removeQr.setAttribute('data-role', 'describe-remove-qr');
-    removeQr.hidden = true;
-    const clearLede = el('p', 'fine', copy.DESC_CLEAR_ALL_LEDE);
-    clearLede.setAttribute('data-role', 'describe-clear-lede');
-    clearLede.hidden = true;
-    wrap.append(clearLede);
-    const removeLede = el('p', 'fine', copy.DESC_REMOVE_LEDE);
-    wrap.append(removeLede);
-    wrap.append(remove);
-    wrap.append(removePay);
-    wrap.append(removeQr);
+    const removeToggle = el('button', 'mini another link-mute', copy.DESC_REMOVE_OPEN);
+    removeToggle.type = 'button';
+    removeToggle.setAttribute('data-role', 'describe-remove');
+    removeToggle.setAttribute('data-focus-key', 'describe-remove');
+    wrap.append(removeToggle);
+
+    /** Removal mode: the same controls, aimed at the removal record. */
+    let removing = false;
 
     const refresh = (): void => {
         const tokenId = picker.value;
@@ -1905,7 +2040,7 @@ function describeSection(
         const typedPrice =
             figure === ''
                 ? undefined
-                : parsePriceFigure(figure, priceCode.value, EDITOR_PRICE_EXPONENT);
+                : parsePriceFigure(figure, priceCode, EDITOR_PRICE_EXPONENT);
         const priceRefused = figure !== '' && typedPrice === undefined;
         const price = typedPrice ?? carriedPrice;
 
@@ -1917,40 +2052,63 @@ function describeSection(
                 ? ''
                 : copy.sellerPrice(formatPriceFigure(published), published.code.toUpperCase());
 
-        // One meter for every field, in record bytes against the shared
-        // ceiling — three meters would promise three budgets where there is
-        // one, and the 180-byte text cap alone cannot say why a shelf or a
-        // price was refused.
-        counter.textContent = copy.descBytesLeft(
-            descriptionRecordBytes(text, shelf, price),
-            OP_RETURN_BUDGET,
-        );
-
+        const publishedShelf = view.shelves?.get(tokenId);
+        const existing =
+            view.descriptions?.get(tokenId) ?? publishedShelf ?? published;
         // Nothing asked of the record yet, which is not a refusal and gets no
         // error. A figure that was typed and cannot be written **is** asked of
         // it, so it does not count as untouched — otherwise the one refusal a
         // seller can reach with the other fields blank would print nothing.
-        const publishedShelf = view.shelves?.get(tokenId);
-        const existing =
-            view.descriptions?.get(tokenId) ?? publishedShelf ?? published;
         const blank = text === '' && shelf === '' && price === undefined && !priceRefused;
         // Every field empty over a record that exists is a request — the bare
         // tombstone, which takes the words, the shelf and the price off this
         // page in one record. Over nothing it is still nothing asked.
         const clearing = blank && existing !== undefined;
         const empty = blank && existing === undefined;
-        clearLede.hidden = !clearing;
-        const hex =
-            empty || priceRefused
+
+        // The removal record: the words taken away and every other field
+        // restated. One record is the whole truth about one token, so a
+        // removal carrying only the empty push would take the shelf and the
+        // figure off the chain with the words.
+        const removalHex =
+            existing === undefined
                 ? undefined
-                : clearing
-                  ? encodeRemovalHex(tokenId, {})
-                  : encodeDescriptionHex(tokenId, text, {
-                        shelf: shelf === '' ? undefined : shelf,
-                        price,
-                    });
+                : encodeRemovalHex(tokenId, {
+                      shelf: publishedShelf,
+                      price: published,
+                  });
+        const canRemove = removalHex !== undefined;
+        if (removing && !canRemove) {
+            // The token changed under the mode, or there is nothing left to
+            // remove. A removal over nothing costs a fee and changes nothing.
+            removing = false;
+        }
+        removeToggle.hidden = !canRemove && !removing;
+        removeToggle.textContent = removing ? copy.DESC_KEEP : copy.DESC_REMOVE_OPEN;
+        warn.hidden = !removing;
+        // The form on screen is the record being signed, so in removal mode
+        // the fields it will not publish take no input.
+        for (const input of [field, shelfField, priceAmount]) {
+            input.disabled = removing;
+        }
+        for (const button of unitButtons) {
+            button.disabled = removing;
+        }
+        form.classList.toggle('removing', removing);
+
+        clearLede.hidden = removing || !clearing;
+        const hex = removing
+            ? removalHex
+            : empty || priceRefused
+              ? undefined
+              : clearing
+                ? encodeRemovalHex(tokenId, {})
+                : encodeDescriptionHex(tokenId, text, {
+                      shelf: shelf === '' ? undefined : shelf,
+                      price,
+                  });
         const ready = hex !== undefined;
-        err.hidden = ready || empty;
+        err.hidden = removing || ready || empty;
         // Which rule bit, most specific first: the text's own caps, then the
         // price's own shape, then the shared record budget, then the text's
         // screen, then the shelf's.
@@ -1969,13 +2127,61 @@ function describeSection(
                         ? copy.DESC_REFUSED
                         : copy.DESC_SHELF_REFUSED;
 
-        bytes.hidden = !ready;
+        /*
+         * One meter and one summary, over the same record the encoder built.
+         * The size is `descriptionRecordBytes` — the encoder's own arithmetic,
+         * so a refused record still shows how far over it is — and every part
+         * named is a field that same call was handed. Nothing here counts
+         * anything twice.
+         */
+        const name = tokenName(view.tokens, tokenId);
+        const parts: copy.SummaryPart[] = [];
+        let size: number;
+        if (removing) {
+            parts.push({ label: copy.SUMMARY_REMOVAL, value: name });
+            if (publishedShelf !== undefined) {
+                parts.push({ label: copy.SUMMARY_SHELF, value: publishedShelf });
+            }
+            if (published !== undefined) {
+                parts.push({ label: copy.SUMMARY_QUOTE, value: sayPrice(published) });
+            }
+            size = descriptionRecordBytes('', publishedShelf ?? '', published);
+        } else if (clearing) {
+            parts.push({ label: copy.SUMMARY_CLEARS, value: name });
+            size = descriptionRecordBytes('');
+        } else {
+            if (text !== '') {
+                parts.push({ label: copy.SUMMARY_WORDS });
+            }
+            if (shelf !== '') {
+                parts.push({ label: copy.SUMMARY_SHELF, value: shelf });
+            }
+            if (price !== undefined) {
+                parts.push({ label: copy.SUMMARY_QUOTE, value: sayPrice(price) });
+            }
+            size = descriptionRecordBytes(text, shelf, price);
+        }
+        counter.textContent = empty
+            ? copy.SUMMARY_NOTHING
+            : copy.summaryLine(parts, size, OP_RETURN_BUDGET);
+        meter.set(empty ? 0 : size, OP_RETURN_BUDGET);
+
         bytes.textContent = ready ? hex : '';
+        // The node and its fold hide together: a fold open over an empty hex
+        // is a disclosure of nothing.
+        bytes.hidden = !ready;
+        hexFold.hidden = !ready;
         const cashtab = ready ? cashtabPublishUrl(address, hex) : undefined;
         const pay = ready ? payECashPublishUrl(address, hex) : undefined;
         const linked = cashtab !== undefined && pay !== undefined;
         web.hidden = !linked;
         app.hidden = !linked;
+        // A removal is a transaction like any other, so it gets the same
+        // roads to a wallet as writing does — and its own words on them, or
+        // two identical pills would sign two different records.
+        web.textContent = removing ? copy.DESC_REMOVE : copy.PUBLISH_OPEN_CASHTAB;
+        app.textContent = removing ? copy.DESC_REMOVE_PAY : copy.PUBLISH_OPEN_PAY;
+        web.classList.toggle('danger', removing);
         if (linked) {
             web.href = cashtab;
             app.href = pay;
@@ -1992,54 +2198,12 @@ function describeSection(
             qrBox.replaceChildren();
             qrBox.hidden = true;
         }
-
-        // Only offered when this page found something to remove — words, a
-        // shelf or a price, since one removal record erases the whole document
-        // for this token. Publishing a removal over nothing costs a fee and
-        // changes nothing.
-        //
-        // And it carries every field that is not the words: a removal says
-        // "take the words away", and one that restated nothing else would take
-        // the shelf and the figure off the chain with them.
-        const removalHex =
-            existing === undefined
-                ? undefined
-                : encodeRemovalHex(tokenId, {
-                      shelf: publishedShelf,
-                      price: published,
-                  });
-        const canRemove = removalHex !== undefined;
-        remove.hidden = !canRemove;
-        removeLede.hidden = !canRemove;
-        const removeUrl = canRemove ? cashtabPublishUrl(address, removalHex) : undefined;
-        const removePayUrl =
-            canRemove && removalHex !== undefined
-                ? payECashPublishUrl(address, removalHex)
-                : undefined;
-        remove.hidden = removeUrl === undefined;
-        removeLede.hidden = removeUrl === undefined;
-        removePay.hidden = removePayUrl === undefined;
-        if (removeUrl !== undefined) {
-            remove.href = removeUrl;
-        }
-        if (removePayUrl !== undefined) {
-            removePay.href = removePayUrl;
-        }
-        const removeBip21 =
-            canRemove && removalHex !== undefined
-                ? publishBip21(address, removalHex)
-                : undefined;
-        if (removeBip21 !== undefined && fitsQr(removeBip21)) {
-            removeQr.replaceChildren(
-                qrSvg(removeBip21, copy.PUBLISH_QR_ALT),
-                el('p', 'fine', copy.PUBLISH_QR_LEDE),
-            );
-            removeQr.hidden = false;
-        } else {
-            removeQr.replaceChildren();
-            removeQr.hidden = true;
-        }
     };
+
+    removeToggle.addEventListener('click', () => {
+        removing = !removing;
+        refresh();
+    });
 
     // Rebuilt in place, never by repainting: a repaint would take the focus out
     // of the field on every keystroke.
@@ -2066,7 +2230,6 @@ function describeSection(
         }
     });
     priceAmount.addEventListener('input', refresh);
-    priceCode.addEventListener('change', refresh);
     /**
      * Every field belongs to the token, so switching tokens loads that token's
      * record — words, shelf and figure together. Loading two of the three is
@@ -2081,15 +2244,118 @@ function describeSection(
             price !== undefined &&
             (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code);
         priceAmount.value = editable ? formatPriceFigure(price) : '';
-        priceCode.value = editable ? price.code : EDITABLE_PRICE_CODES[0];
+        priceCode = editable ? price.code : EDITABLE_PRICE_CODES[0];
+        paintUnits();
     };
     picker.addEventListener('change', () => {
+        // A removal is about one token. Switching tokens is a different
+        // record, so the mode does not follow the picker.
+        removing = false;
         loadToken();
         refresh();
     });
+    form.addEventListener('submit', (event) => event.preventDefault());
+
+    wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
+    wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
+    wrap.append(sheetFoot(handlers));
     loadToken();
     refresh();
     return wrap;
+}
+
+/**
+ * The head both sheets wear: the title, what the record is, and a close the
+ * seller can reach without scrolling. In flow, never positioned — an
+ * absolutely placed control would land in the probe's decoration sweep for
+ * nothing.
+ */
+function sheetHead(title: string, sub: string, handlers: StallHandlers): HTMLElement {
+    const head = el('div', 'sheet-head');
+    const words = el('div', 'sheet-head-t');
+    words.append(el('div', 'item-n', title));
+    words.append(el('p', 'fine', sub));
+    head.append(words);
+    if (handlers.onClosePublish !== undefined) {
+        const x = el('button', 'mini another sheet-x', copy.PUBLISH_X);
+        x.type = 'button';
+        x.setAttribute('data-role', 'publish-close-top');
+        x.setAttribute('data-focus-key', 'publish-close-top');
+        x.setAttribute('aria-label', copy.PUBLISH_CLOSE);
+        x.addEventListener('click', handlers.onClosePublish);
+        head.append(x);
+    }
+    return head;
+}
+
+/**
+ * The foot both sheets wear: the ask-outright control beside the quiet close.
+ *
+ * Signing happens in another app. The socket watches the stall address, so a
+ * record published from that wallet does re-read on its own — but only while
+ * this page still has a connection, and only if the wallet that signed it is
+ * this stall's. Neither is ours to promise, which is why the copy above states
+ * them as conditions and this control exists to ask outright. It runs a full
+ * refresh, so the sheet closes and the answer is the stall itself.
+ */
+function sheetFoot(handlers: StallHandlers): HTMLElement {
+    const foot = el('div', 'sheet-foot');
+    const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
+    check.type = 'button';
+    check.setAttribute('data-role', 'publish-check');
+    check.setAttribute('data-focus-key', 'publish-check');
+    check.addEventListener('click', () => {
+        handlers.onRetry();
+    });
+    foot.append(check);
+
+    const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'publish-close');
+    close.setAttribute('data-focus-key', 'publish-close');
+    if (handlers.onClosePublish !== undefined) {
+        close.addEventListener('click', handlers.onClosePublish);
+    }
+    foot.append(close);
+    return foot;
+}
+
+/**
+ * Whether this view actually puts a sheet in the DOM.
+ *
+ * **One predicate, two callers.** `renderStall` mounts a sheet only for a
+ * resolved stall with an address (and, for the poster, a link short enough to
+ * scan), and `livePaint` holds an unsolicited paint back while a sheet is
+ * open — so an overlay kind the render gate refuses but the paint gate honours
+ * is a stall that silently stops updating, with nothing on screen to say why.
+ * That was two lists of kinds in two files, kept in step by hand.
+ *
+ * The broadcast branch returns early before any sheet mounts, so a stream
+ * overlay never waits either.
+ */
+export function sheetMounts(view: StallView): boolean {
+    if (
+        view.broadcast !== undefined &&
+        view.route.kind !== 'invalid' &&
+        view.route.kind !== 'home'
+    ) {
+        return false;
+    }
+    if (view.route.kind !== 'pubkey') {
+        return false;
+    }
+    if (view.address === undefined || view.address === '') {
+        return false;
+    }
+    switch (view.overlay.kind) {
+        case 'publish-name':
+        case 'describe':
+            return true;
+        case 'poster':
+            return fitsQr(shareUrl());
+        default:
+            return false;
+    }
 }
 
 /**
@@ -2099,10 +2365,9 @@ function describeSection(
  * taller than the screen, so it cannot strand an asked amount out of reach.
  * A click on the scrim closes it; a click inside it does not.
  */
-function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
+function sheetOverlay(sheet: HTMLElement, focusKey: string, handlers: StallHandlers): HTMLElement {
     const scrim = el('div', 'sheet-scrim');
     scrim.setAttribute('data-role', 'sheet-scrim');
-    const sheet = publishSheet(view, handlers);
     scrim.append(sheet);
     const close = handlers.onClosePublish;
     if (close !== undefined) {
@@ -2127,7 +2392,7 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     // reaches the handler above. `tabindex="-1"` makes the panel itself a
     // target without putting it in the tab order.
     sheet.tabIndex = -1;
-    sheet.setAttribute('data-focus-key', 'publish-sheet');
+    sheet.setAttribute('data-focus-key', focusKey);
     trapTab(sheet);
     queueMicrotask(() => {
         if (sheet.isConnected) {
@@ -2137,31 +2402,21 @@ function publishOverlay(view: StallView, handlers: StallHandlers): HTMLElement {
     return scrim;
 }
 
-function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+/**
+ * The stall's own record: name, tagline, announcement, look, decorations.
+ *
+ * One record and one fee, which is what the subtitle says — the token
+ * descriptions moved to their own sheet precisely so that sentence is true.
+ * No removal road here: `STL1` has no tombstone, a stall cannot unset its
+ * record, and a control that cannot do what it says is worse than none.
+ */
+function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'publish');
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', copy.PUBLISH_TITLE);
-    /*
-     * The way out sits at both ends. The sheet is 92vh on a phone, so the
-     * scrim is a sliver and Escape needs a keyboard — before this header, a
-     * seller had to scroll past two whole record editors to find the only
-     * visible close. In flow, never positioned: an absolutely placed control
-     * would land in the probe's decoration sweep for nothing.
-     */
-    const head = el('div', 'sheet-head');
-    head.append(el('div', 'item-n', copy.PUBLISH_TITLE));
-    if (handlers.onClosePublish !== undefined) {
-        const x = el('button', 'mini another sheet-x', copy.PUBLISH_X);
-        x.type = 'button';
-        x.setAttribute('data-role', 'publish-close-top');
-        x.setAttribute('data-focus-key', 'publish-close-top');
-        x.setAttribute('aria-label', copy.PUBLISH_CLOSE);
-        x.addEventListener('click', handlers.onClosePublish);
-        head.append(x);
-    }
-    wrap.append(head);
+    wrap.append(sheetHead(copy.PUBLISH_TITLE, copy.PUBLISH_SUB, handlers));
     wrap.append(el('p', 'fine', copy.PUBLISH_LEDE));
 
     const address = view.address;
@@ -2187,35 +2442,50 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     input.setAttribute('aria-label', copy.PUBLISH_NAME_LABEL);
     label.append(input);
 
-    const themeLabel = el('label', 'paste-label', copy.PUBLISH_THEME_LABEL);
-    themeLabel.setAttribute('data-role', 'theme-picker');
-    const select = el('select', 'paste-in');
-    select.name = 'theme';
-    select.setAttribute('data-focus-key', 'theme-picker');
-    select.setAttribute('aria-label', copy.PUBLISH_THEME_LABEL);
-    // The look on screen, selected explicitly. A stall with no manifest is
-    // painted with the shipped default, so leaving this to the browser's
-    // first-option rule happened to be right and read as nothing being chosen:
-    // a seller who never touched the picker published the look they already had
-    // and saw no change. `painted` is what the note below compares against.
+    /*
+     * The look, as a segmented control rather than a menu: three shipped rows,
+     * always visible, and the pressed one is the look on screen.
+     *
+     * A stall with no manifest is painted in the shipped default, which is also
+     * the first row — so leaving the choice to a `<select>`'s first-option rule
+     * happened to be right and read as nothing being chosen: a seller who never
+     * touched the picker published the look they already had and saw no change.
+     * `painted` is what the note below compares against, and the marker stays
+     * `theme-picker` because that is what the sheet's other controls are keyed
+     * against.
+     */
     const painted = view.theme?.id ?? DEFAULT_THEME.id;
+    let chosenTheme = painted;
+    const themeGroup = sheetGroup(copy.PUBLISH_THEME_LABEL);
+    themeGroup.setAttribute('data-role', 'theme-picker');
+    const seg = el('div', 'seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', copy.PUBLISH_THEME_LABEL);
+    const lookButtons: HTMLButtonElement[] = [];
+    const paintLooks = (): void => {
+        for (const button of lookButtons) {
+            button.setAttribute(
+                'aria-pressed',
+                button.getAttribute('data-theme-id') === String(chosenTheme) ? 'true' : 'false',
+            );
+        }
+    };
     for (const row of SHIPPED_THEMES) {
-        const option = el('option', '', row.label);
-        option.value = String(row.id);
-        select.append(option);
+        const button = el('button', 'seg-b', row.label);
+        button.type = 'button';
+        button.setAttribute('data-theme-id', String(row.id));
+        button.setAttribute('data-role', `look-${row.id}`);
+        button.setAttribute('data-focus-key', `look-${row.id}`);
+        button.addEventListener('click', () => chooseLook(row.id));
+        lookButtons.push(button);
+        seg.append(button);
     }
-    // Set on the select after the options exist, not as `option.selected`
-    // before each is appended. The old shape depended on when the flag was
-    // assigned relative to the append, and `picker-shows-the-look-already-on-
-    // screen` was passing on a coincidence: the runner landed on the second
-    // option whatever the painted look, which happens to be Neo city.
-    select.value = String(painted);
-    themeLabel.append(select);
+    themeGroup.append(seg);
 
     /*
      * The three P5 fields, each a tagged push the reader already skips when
-     * absent. The budget meter below is the shared 222-byte ceiling made
-     * visible before anything is signed.
+     * absent. The meter and the summary below are the shared 222-byte ceiling
+     * made visible before anything is signed.
      */
     const taglineLabel = el('label', 'paste-label', copy.PUBLISH_TAGLINE_LABEL);
     const taglineInput = el('input', 'paste-in');
@@ -2250,6 +2520,8 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * nothing to suggest. It is still carried forward untouched — a republish
      * restates the whole document, and erasing a field this app merely stopped
      * editing would take it off the chain as a side effect of renaming a stall.
+     * The summary names it, because a record carrying a field the line does not
+     * mention is a line that under-reports what is being signed.
      * Any three lowercase letters, not only a code this build's display table
      * knows: the record's field is wider than the table, and narrowing it here
      * would drop a code somebody signed.
@@ -2259,8 +2531,9 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             ? view.fiatHint
             : undefined;
 
-    const budget = el('p', 'fine', '');
-    budget.setAttribute('data-role', 'publish-budget');
+    const meter = sheetMeter();
+    const summary = el('p', 'pub', '');
+    summary.setAttribute('data-role', 'publish-summary');
 
     const err = el('p', 'ctx', '');
     err.hidden = true;
@@ -2270,9 +2543,17 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     sameLook.setAttribute('data-role', 'publish-same-look');
     const bytes = el('p', 'fine publish-hex', '');
     bytes.setAttribute('data-role', 'publish-hex');
+    const hexFold = sheetFold('publish-hex-fold', copy.RECORD_BYTES_FOLD, bytes);
     const qrBox = el('div', 'publish-qr');
     qrBox.setAttribute('data-role', 'publish-qr');
     qrBox.hidden = true;
+    const qrFold = sheetFold(
+        'publish-qr-fold',
+        copy.SCAN_WITH_PHONE_FOLD,
+        qrBox,
+        'sheet-qr-fold',
+    );
+    const acts = el('div', 'acts');
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'publish-cashtab');
     web.setAttribute('data-focus-key', 'publish-cashtab');
@@ -2283,6 +2564,7 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         link.rel = 'noopener noreferrer';
         link.target = '_blank';
     }
+    acts.append(web, app);
 
     // Rebuilt in place rather than by repainting: a repaint would take the
     // focus out of the field on every keystroke.
@@ -2294,16 +2576,16 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         };
         // The record never names an unminted row's bit — previewing one is
         // free, signing it would pin a row nothing can hold yet (§6).
-        const signable = publishableFlags(Number(select.value), flags);
-        const hex = encodeManifestHex(input.value, Number(select.value), signable, extras);
+        const signable = publishableFlags(chosenTheme, flags);
+        const hex = encodeManifestHex(input.value, chosenTheme, signable, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
         // Which field refused: the name's own rules first, then the
         // announcement's, then the tagline's and the shared ceiling — the
         // seller is told the one that bit.
-        const nameAlone = encodeManifestHex(input.value, Number(select.value), signable);
-        const sansAnnouncement = encodeManifestHex(input.value, Number(select.value), signable, {
+        const nameAlone = encodeManifestHex(input.value, chosenTheme, signable);
+        const sansAnnouncement = encodeManifestHex(input.value, chosenTheme, signable, {
             ...extras,
             announcement: undefined,
         });
@@ -2315,16 +2597,50 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
               : sansAnnouncement !== undefined
                 ? copy.PUBLISH_ANNOUNCEMENT_INVALID
                 : copy.PUBLISH_TAGLINE_INVALID;
-        budget.textContent =
-            hex === undefined ? '' : copy.publishBudget(hex.length / 2, OP_RETURN_BUDGET);
-        budget.hidden = hex === undefined;
+        /*
+         * The meter and the "Publishes:" line, over the record the encoder
+         * just built: the size is that record's own byte length and every part
+         * named is an argument of the same call — the name, the look, the
+         * signable flags and the three extras. Nothing recounts anything,
+         * so the line cannot describe a record nobody signed.
+         */
+        const parts: copy.SummaryPart[] = [];
+        if (input.value !== '') {
+            parts.push({ label: copy.SUMMARY_NAME, value: input.value });
+        }
+        const lookRow = SHIPPED_THEMES.find((row) => row.id === chosenTheme);
+        parts.push({
+            label: copy.SUMMARY_LOOK,
+            value: lookRow?.label ?? String(chosenTheme),
+        });
+        if (extras.tagline !== undefined) {
+            parts.push({ label: copy.SUMMARY_TAGLINE });
+        }
+        if (extras.announcement !== undefined) {
+            parts.push({ label: copy.SUMMARY_ANNOUNCEMENT });
+        }
+        if (extras.fiatHint !== undefined) {
+            parts.push({ label: copy.SUMMARY_FIAT_HINT, value: extras.fiatHint.toUpperCase() });
+        }
+        const worn = wornAttachments(chosenTheme, signable);
+        if (worn.length > 0) {
+            parts.push({
+                label: copy.SUMMARY_DECOR,
+                value: worn.map((row) => row.label).join(' + '),
+            });
+        }
+        summary.hidden = hex === undefined;
+        summary.textContent =
+            hex === undefined ? '' : copy.summaryLine(parts, hex.length / 2, OP_RETURN_BUDGET);
+        meter.set(hex === undefined ? 0 : hex.length / 2, OP_RETURN_BUDGET);
         // Say when the record will not change the look. Publishing the look
         // already on screen is a legitimate thing to do — it is how a name gets
         // set — but a seller who does it unaware reads the unchanged stall as
         // the publish having failed.
-        sameLook.hidden = Number(select.value) !== painted;
+        sameLook.hidden = chosenTheme !== painted;
         bytes.textContent = ready ? hex! : '';
         bytes.hidden = !ready;
+        hexFold.hidden = !ready;
         // The bare BIP21 as a QR: the same record, for a phone wallet to scan
         // rather than a desktop link to follow. Rebuilt because its content is
         // the record, which changes with the name and the look.
@@ -2369,32 +2685,39 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 : { themeId, attachmentFlags: chosenFlags },
         );
     };
-    select.addEventListener('change', () => {
-        refresh();
+    function chooseLook(themeId: number): void {
+        chosenTheme = themeId;
+        paintLooks();
         // Paint the chosen look on the seller's own stall straight away and
         // remember it in view state: the DOM patch keeps the picker's focus
         // (a repaint would rebuild this sheet), and the remembered preview is
         // what every LATER paint applies — so walking to the Shop tab shows
         // the candidate storefront instead of snapping back. No record is
         // signed here; a reload still brings back whatever the chain says.
-        const chosen = Number(select.value);
+        //
         // Flags do not travel across a look. Bit N means row N of *this*
         // theme's table, so carrying them over would hand the seller a
         // decoration they never chose — which is the thing "holding is not
         // consent" exists to prevent, arriving through the front door.
         flags = 0;
-        renderDecor(chosen);
-        previewLook(select, chosen, flags);
-        reportPreview(chosen, flags);
+        renderDecor(themeId);
+        previewLook(seg, themeId, flags);
+        reportPreview(themeId, flags);
         refresh();
-    });
+    }
     form.addEventListener('submit', (event) => event.preventDefault());
     /*
-     * Decoration, one control per slot rather than one per row. Two selects at
-     * most on any shipped look, which is why this is a picker and not six
-     * toggles: a slot that holds one thing is a choice, and a choice is a list.
-     * It also makes two bits in one slot unrepresentable, which is a better
-     * answer than resolving them quietly after the record is signed.
+     * Decoration, chips grouped per place rather than one control per row.
+     * Exclusive within a place — pressing one turns its neighbours off, and
+     * pressing the pressed one takes the place back to bare — which makes two
+     * bits in one slot unrepresentable, a better answer than resolving them
+     * quietly after the record is signed.
+     *
+     * Every row of the painted look is offered, held or not: looking is free
+     * (§6/§7), and `heldTokens` is **absent** whenever the holdings read has
+     * not answered — a chip list built from an absent set would tell a seller
+     * they own nothing. What holding decides is what actually paints, and the
+     * note under the chips says which of the three states this choice is in.
      */
     let flags = view.attachmentFlags ?? 0;
     const decorWrap = el('div', 'decor');
@@ -2426,47 +2749,60 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             return;
         }
         decorWrap.append(el('p', 'fine', copy.DECOR_LEDE));
+        const sayNote = (): void => {
+            decorNote.textContent = describeChoice(themeId);
+            decorNote.hidden = decorNote.textContent === '';
+        };
         for (const slot of [...new Set(rows.map((r) => r.slot))]) {
-            const slotLabel = el('label', 'paste-label', `${copy.DECOR_LABEL} · ${slot}`);
-            // Marked as a picker so choosing here keeps the panel lowered, the
-            // same way choosing a look does — this is the other control whose
-            // whole subject is the stall behind the sheet.
-            slotLabel.setAttribute('data-role', 'theme-picker');
-            const slotSelect = el('select', 'paste-in');
-            slotSelect.name = `att-${slot}`;
-            slotSelect.setAttribute('data-role', `decor-${slot}`);
-            slotSelect.setAttribute('data-focus-key', `decor-${slot}`);
-            slotSelect.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
-            const none = el('option', undefined, copy.DECOR_NONE);
-            none.value = '';
-            slotSelect.append(none);
-            for (const row of rows.filter((r) => r.slot === slot)) {
-                const opt = el('option', undefined, row.label);
-                opt.value = String(row.bit);
-                slotSelect.append(opt);
+            const place = sheetGroup(`${copy.DECOR_LABEL} · ${slot}`);
+            place.classList.add('decor-place');
+            // The place is the marker, one per slot the look ships; the chips
+            // inside carry the bit. Nothing at runtime reads `theme-picker`
+            // off a decoration group — the look's group keeps that name for
+            // the tests keyed to it, and this one is named for what it is.
+            place.setAttribute('data-role', `decor-${slot}`);
+            const chips = el('div', 'dec');
+            chips.setAttribute('role', 'group');
+            chips.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
+            const here = rows.filter((r) => r.slot === slot);
+            const paintChips = (): void => {
+                for (const chip of chips.querySelectorAll('[data-bit]')) {
+                    const bit = Number(chip.getAttribute('data-bit'));
+                    chip.setAttribute(
+                        'aria-pressed',
+                        (flags & (1 << bit)) !== 0 ? 'true' : 'false',
+                    );
+                }
+            };
+            for (const row of here) {
+                const chip = el('button', 'dec-chip', row.label);
+                chip.type = 'button';
+                chip.setAttribute('data-bit', String(row.bit));
+                chip.setAttribute('data-role', `decor-${slot}-${row.bit}`);
+                chip.setAttribute('data-focus-key', `decor-${slot}-${row.bit}`);
+                chip.setAttribute('aria-pressed', (flags & (1 << row.bit)) !== 0 ? 'true' : 'false');
+                chip.addEventListener('click', () => {
+                    const wasOn = (flags & (1 << row.bit)) !== 0;
+                    // One occupant per place, enforced where the choice is
+                    // made: every other bit here goes off before this one on.
+                    for (const other of here) {
+                        flags &= ~(1 << other.bit);
+                    }
+                    if (!wasOn) {
+                        flags |= 1 << row.bit;
+                    }
+                    paintChips();
+                    previewLook(chips, themeId, flags);
+                    reportPreview(themeId, flags);
+                    sayNote();
+                    refresh();
+                });
+                chips.append(chip);
             }
-            const on = rows.find((r) => r.slot === slot && (flags & (1 << r.bit)) !== 0);
-            slotSelect.value = on === undefined ? '' : String(on.bit);
-            slotSelect.addEventListener('change', () => {
-                // One occupant per slot, enforced where the choice is made: every
-                // other bit in this slot goes off before the chosen one goes on.
-                for (const r of rows.filter((x) => x.slot === slot)) {
-                    flags &= ~(1 << r.bit);
-                }
-                if (slotSelect.value !== '') {
-                    flags |= 1 << Number(slotSelect.value);
-                }
-                previewLook(select, Number(select.value), flags);
-                reportPreview(Number(select.value), flags);
-                decorNote.textContent = describeChoice(Number(select.value));
-                decorNote.hidden = decorNote.textContent === '';
-                refresh();
-            });
-            slotLabel.append(slotSelect);
-            decorWrap.append(slotLabel);
+            place.append(chips);
+            decorWrap.append(place);
         }
-        decorNote.textContent = describeChoice(themeId);
-        decorNote.hidden = decorNote.textContent === '';
+        sayNote();
         decorWrap.append(decorNote);
         if (copy.FITTINGS_STALL !== undefined) {
             const shop = el('a', 'mini another', copy.DECOR_SHOP);
@@ -2477,48 +2813,16 @@ function publishSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     };
 
     renderDecor(painted);
-    form.append(label, taglineLabel, announceLabel, themeLabel, budget, err, sameLook, decorWrap);
+    paintLooks();
+    form.append(label, taglineLabel, announceLabel, themeGroup, decorWrap, meter.wrap, summary, err, sameLook);
     wrap.append(form);
     wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
-    wrap.append(bytes);
-    wrap.append(qrBox);
-    wrap.append(web, app);
-
-    // A second record, in the same place a seller already came to publish one.
-    wrap.append(describeSection(view, address, offersOf(view)));
-
-    // Signing happens in another app. The socket now watches the stall address
-    // as well as the agora group, so a record published from that wallet does
-    // re-read on its own — but only while this page still has a connection, and
-    // only if the wallet that signed it is this stall's. Neither is ours to
-    // promise, which is why the copy states them as conditions and this
-    // control exists to ask outright. It runs a full refresh, so the sheet
-    // closes and the answer is the stall itself.
-    //
-    // At the sheet's foot, after BOTH record editors, because the refresh
-    // re-reads both records alike — mid-sheet it claimed the settings block
-    // alone and stranded the close below an editor the seller may never open.
+    wrap.append(hexFold);
+    wrap.append(qrFold);
+    wrap.append(acts);
     wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
-    const foot = el('div', 'sheet-foot');
-    const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
-    check.type = 'button';
-    check.setAttribute('data-role', 'publish-check');
-    check.setAttribute('data-focus-key', 'publish-check');
-    check.addEventListener('click', () => {
-        handlers.onRetry();
-    });
-    foot.append(check);
-
-    const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
-    close.type = 'button';
-    close.setAttribute('data-role', 'publish-close');
-    close.setAttribute('data-focus-key', 'publish-close');
-    if (handlers.onClosePublish !== undefined) {
-        close.addEventListener('click', handlers.onClosePublish);
-    }
-    foot.append(close);
-    wrap.append(foot);
+    wrap.append(sheetFoot(handlers));
     refresh();
     return wrap;
 }
@@ -3192,8 +3496,14 @@ function trapTab(panel: HTMLElement): void {
     });
 }
 
+/**
+ * `summary` is in the list because both sheets now fold the hex and the QR:
+ * a `<summary>` is natively focusable, so a trap that did not count one let
+ * Tab walk out of the dialog at the fold — the exact promise `aria-modal`
+ * makes and the reason `trapTab` exists.
+ */
 const FOCUSABLE =
-    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
 /**
  * The elements a worn set needs, placed by slot rather than by row — so adding
@@ -3394,20 +3704,38 @@ function paintStudio(
 
     const record = studioSection('record', copy.STUDIO_SEC_RECORD);
     record.append(el('p', 'fine', copy.STUDIO_LEDE));
-    const canPublish =
-        view.address !== undefined &&
-        view.address !== '' &&
-        handlers.onOpenPublish !== undefined;
-    if (canPublish) {
+    /*
+     * Two launchers, because there are two records. `STL1` is the stall's own
+     * document — one transaction, one fee — and `STLD` is one token's, one
+     * transaction per token. The single sheet that carried both read as one
+     * publish control covering both, and a seller found out a fee at a time.
+     *
+     * Both are gated on the address, and on nothing else: `sheetMounts` refuses
+     * an overlay with no address, so a control offered without one would set a
+     * state that paints nothing and holds `livePaint` back forever.
+     */
+    const hasAddress = view.address !== undefined && view.address !== '';
+    const openPublish = handlers.onOpenPublish;
+    const openDescribe = handlers.onOpenDescribe;
+    if (hasAddress && openPublish !== undefined) {
         const open = el('button', 'buy', copy.STUDIO_OPEN_SETTINGS);
         open.type = 'button';
         open.setAttribute('data-role', 'studio-open-publish');
         open.setAttribute('data-focus-key', 'studio-open-publish');
-        const go = handlers.onOpenPublish!;
-        open.addEventListener('click', () => go());
+        open.addEventListener('click', () => openPublish());
         record.append(open);
         record.append(el('p', 'fine', copy.STUDIO_SETTINGS_HINT));
-    } else {
+    }
+    if (hasAddress && openDescribe !== undefined) {
+        const open = el('button', 'mini another', copy.DESC_TITLE);
+        open.type = 'button';
+        open.setAttribute('data-role', 'studio-open-describe');
+        open.setAttribute('data-focus-key', 'studio-open-describe');
+        open.addEventListener('click', () => openDescribe());
+        record.append(open);
+        record.append(el('p', 'fine', copy.STUDIO_DESCRIBE_HINT));
+    }
+    if (!hasAddress || (openPublish === undefined && openDescribe === undefined)) {
         record.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
     }
     body.append(record);

@@ -94,9 +94,9 @@ import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
-import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
+import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
-import { priceTier, renderStall, resetIconsForTests } from './render';
+import { priceTier, renderStall, resetIconsForTests, sheetMounts } from './render';
 import {
     lastDrawnPosterSpec,
     SQUARE_SIZE,
@@ -139,6 +139,7 @@ function handlers() {
         onToggleDefault: vi.fn(),
         onPreviewLook: vi.fn(),
         onOpenPublish: vi.fn(),
+        onOpenDescribe: vi.fn(),
         onClosePublish: vi.fn(),
         onOpenPoster: vi.fn(),
         onClosePoster: vi.fn(),
@@ -165,6 +166,48 @@ function idlePubkey(over: Partial<StallView> = {}): StallView {
         address: ADDR,
         ...over,
     };
+}
+
+/*
+ * The name sheet's two pickers, read and pressed as a *person* would — the
+ * pressed segment, the pressed chip. Six tests used to query
+ * `select[name="theme"]` and set `.value`, which pinned the element rather
+ * than the rule and went red the day the design became a segmented control.
+ * What the rules actually say is: the pressed look is the
+ * painted look, changing it hides the same-look note, a place holds at most
+ * one decoration, and the record carries what is pressed.
+ */
+function pressedLook(root: HTMLElement): number | undefined {
+    const on = root.querySelector('[data-role="theme-picker"] [aria-pressed="true"]');
+    const id = on?.getAttribute('data-theme-id');
+    return id === null || id === undefined ? undefined : Number(id);
+}
+
+function pickLook(root: HTMLElement, themeId: number): void {
+    const button = root.querySelector<HTMLButtonElement>(`[data-role="look-${themeId}"]`);
+    expect(button, `no segment for look ${themeId}`).not.toBeNull();
+    button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
+/** The chips of one place, by the bit each one publishes. */
+function decorChips(root: HTMLElement, slot: string): HTMLButtonElement[] {
+    return [
+        ...root.querySelectorAll<HTMLButtonElement>(
+            `[data-role="decor-${slot}"] .dec [data-bit]`,
+        ),
+    ];
+}
+
+function pressedDecor(root: HTMLElement, slot: string): number[] {
+    return decorChips(root, slot)
+        .filter((chip) => chip.getAttribute('aria-pressed') === 'true')
+        .map((chip) => Number(chip.getAttribute('data-bit')));
+}
+
+function pressDecor(root: HTMLElement, slot: string, bit: number): void {
+    const chip = root.querySelector<HTMLButtonElement>(`[data-role="decor-${slot}-${bit}"]`);
+    expect(chip, `no chip for ${slot} bit ${bit}`).not.toBeNull();
+    chip!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
 /** Direct-child notes from `settingsNotes`. Handoff fine print sits inside a row. */
@@ -1725,7 +1768,7 @@ describe('publish-sheet', () => {
         return paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 ...over,
             }),
         );
@@ -1756,9 +1799,14 @@ describe('publish-sheet', () => {
      * likely reading of "I published and the theme did not render".
      */
     it('picker-shows-the-look-already-on-screen', () => {
+        // Rewritten 2026-09-04 against the behaviour rather than the element:
+        // the picker is a segmented control now, and "the pressed one is the
+        // painted one" is the rule — whether it is a `<select>`, three buttons
+        // or whatever a later design brings.
         const { root } = open();
-        const select = root.querySelector('select[name="theme"]') as HTMLSelectElement;
-        expect(select.value).toBe(String(DEFAULT_THEME_ID));
+        expect(pressedLook(root), 'the pressed segment is the painted look').toBe(
+            DEFAULT_THEME_ID,
+        );
         const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
         expect(note.hidden, 'default look is the painted one, so say so').toBe(false);
         expect(note.textContent).toBe(PUBLISH_SAME_LOOK);
@@ -1766,13 +1814,12 @@ describe('publish-sheet', () => {
 
     it('picker-follows-a-published-theme-and-drops-the-note-on-a-change', () => {
         const { root } = open({ theme: decodeTheme(NEO_CITY_THEME_ID) });
-        const select = root.querySelector('select[name="theme"]') as HTMLSelectElement;
-        expect(select.value).toBe(String(NEO_CITY_THEME_ID));
+        expect(pressedLook(root)).toBe(NEO_CITY_THEME_ID);
         const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
         expect(note.hidden).toBe(false);
 
-        select.value = String(RURAL_THEME_ID);
-        select.dispatchEvent(new Event('change'));
+        pickLook(root, RURAL_THEME_ID);
+        expect(pressedLook(root), 'the choice is the pressed one').toBe(RURAL_THEME_ID);
         expect(note.hidden, 'a different look is a real change').toBe(true);
     });
 
@@ -1857,7 +1904,7 @@ describe('publish-sheet', () => {
         // cannot reach.
         const { root } = paint({
             route: { kind: 'unresolvable', address: ADDR },
-            overlay: { kind: 'publish' },
+            overlay: { kind: 'publish-name' },
             tokens: new Map(),
         });
         expect(root.querySelector('[data-role="publish"]')).toBeNull();
@@ -1966,7 +2013,7 @@ describe('publish-sheet-carries-a-scannable-bip21', () => {
     it('draws the QR for a valid record and hides it for an invalid name', () => {
         const view = idlePubkey({
             fetch: { kind: 'empty' },
-            overlay: { kind: 'publish' },
+            overlay: { kind: 'publish-name' },
             stallName: 'Shop',
         });
         const { root } = paint(view);
@@ -2132,7 +2179,7 @@ describe('publish sheet is a sheet, not a row in the shop', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
             }),
         );
         const scrim = root.querySelector('[data-role="sheet-scrim"]') as HTMLElement | null;
@@ -2437,7 +2484,7 @@ describe('repaint-keeps-the-focused-control', () => {
             const opener = root.querySelector('[data-focus-key="tab-studio"]') as HTMLElement;
             opener.focus();
 
-            renderStall(root, offersView([OFFER], undefined, { overlay: { kind: 'publish' } }), handlers());
+            renderStall(root, offersView([OFFER], undefined, { overlay: { kind: 'publish-name' } }), handlers());
             // Focus is wherever the sheet put it; what matters is that the
             // opener's key was snapshot on the idle→open edge.
             renderStall(root, idle, handlers());
@@ -2509,7 +2556,7 @@ describe('sheet-closes-on-escape', () => {
                 idlePubkey({
                     fetch: { kind: 'offers', offers: [OFFER] },
                     tokens: new Map([[TOKEN_ID, BEANS]]),
-                    overlay: { kind: 'publish' },
+                    overlay: { kind: 'publish-name' },
                 }),
                 h,
             );
@@ -2549,7 +2596,7 @@ describe('the-way-out-is-at-both-ends-of-the-sheet', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
             }),
             h,
         );
@@ -2900,20 +2947,18 @@ describe('picker-previews-the-look-without-publishing-it', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 stallName: 'Riverside Goods',
                 theme,
             }),
         );
-        return {
-            root,
-            stall: root.querySelector('.stall') as HTMLElement,
-            select: root.querySelector('select[name="theme"]') as HTMLSelectElement,
-        };
+        // Rewritten 2026-09-04 against the behaviour: the look is chosen by
+        // pressing a segment, and what is asserted is the paint it causes.
+        return { root, stall: root.querySelector('.stall') as HTMLElement };
     }
 
     it('repaints the live stall in the chosen look, strip and all', () => {
-        const { stall, select } = openSheet();
+        const { root, stall } = openSheet();
         // Against the table, not a literal: D1 froze the mapping, not the
         // pixels, so this test asserts "painted in Modern", whatever Modern is.
         const modern = DEFAULT_THEME.bg;
@@ -2922,8 +2967,7 @@ describe('picker-previews-the-look-without-publishing-it', () => {
         );
         expect(stall.querySelector('.orn'), 'Modern ships no strip').toBeNull();
 
-        select.value = String(NEO_CITY_THEME_ID);
-        select.dispatchEvent(new Event('change'));
+        pickLook(root, NEO_CITY_THEME_ID);
 
         const neo = decodeTheme(NEO_CITY_THEME_ID);
         expect(stall.style.getPropertyValue('--s-bg')).toBe(
@@ -2935,8 +2979,7 @@ describe('picker-previews-the-look-without-publishing-it', () => {
         expect(strip).not.toBeNull();
         expect(strip.classList.contains('orn-ticker')).toBe(true);
 
-        select.value = String(DEFAULT_THEME_ID);
-        select.dispatchEvent(new Event('change'));
+        pickLook(root, DEFAULT_THEME_ID);
         expect(stall.querySelectorAll('.orn'), 'never two strips').toHaveLength(0);
         expect(stall.style.getPropertyValue('--s-bg')).toBe(
             `rgb(${modern.r}, ${modern.g}, ${modern.b})`,
@@ -2944,11 +2987,10 @@ describe('picker-previews-the-look-without-publishing-it', () => {
     });
 
     it('still says when publishing would not change anything', () => {
-        const { root, select } = openSheet();
+        const { root } = openSheet();
         const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
         expect(note.hidden, 'the painted look is the selected one').toBe(false);
-        select.value = String(RURAL_THEME_ID);
-        select.dispatchEvent(new Event('change'));
+        pickLook(root, RURAL_THEME_ID);
         expect(note.hidden, 'a previewed look is a real change to publish').toBe(true);
     });
 });
@@ -3133,7 +3175,7 @@ describe('describing-a-token-is-its-own-transaction', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 ...over,
             }),
@@ -3167,10 +3209,17 @@ describe('describing-a-token-is-its-own-transaction', () => {
         // The meter counts the whole record against the shared 222-byte
         // ceiling — one meter for the text and the shelf, because they share
         // one budget (P9): 38 bytes of lokad + id + 9 of text push.
-        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        //
+        // Amended 2026-09-04: the count moved onto the "Publishes:" line, so
+        // the figure is asserted inside it rather than as the whole node —
+        // one node saying the size, from the encoder's own arithmetic.
+        const counter = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
         field.value = 'Cà phê';
         field.dispatchEvent(new Event('input'));
-        expect(counter.textContent).toBe(descBytesLeft(47, OP_RETURN_BUDGET));
+        expect(counter.textContent).toContain(descBytesLeft(47, OP_RETURN_BUDGET));
+        expect(counter.textContent).toBe(
+            summaryLine([{ label: SUMMARY_WORDS }], 47, OP_RETURN_BUDGET),
+        );
     });
 
     it('refuses what the record cannot hold, and hands over nothing', () => {
@@ -3187,6 +3236,9 @@ describe('describing-a-token-is-its-own-transaction', () => {
     });
 
     it('offers removal only where there is something to remove', () => {
+        // Amended 2026-09-04: removal is a mode of this sheet rather than a
+        // second link under it, so the control is the way IN and the sign
+        // buttons carry the record. The gate is unchanged.
         const none = sheet();
         expect(
             (none.root.querySelector('[data-role="describe-remove"]') as HTMLElement).hidden,
@@ -3194,9 +3246,14 @@ describe('describing-a-token-is-its-own-transaction', () => {
         ).toBe(true);
 
         const some = sheet({ descriptions: new Map([[TOKEN_ID, 'Existing words']]) });
-        const remove = some.root.querySelector('[data-role="describe-remove"]') as HTMLAnchorElement;
+        const remove = some.root.querySelector(
+            '[data-role="describe-remove"]',
+        ) as HTMLButtonElement;
         expect(remove.hidden).toBe(false);
-        expect(remove.getAttribute('href')).toContain('op_return_raw');
+        expect(remove.textContent).toBe(copy.DESC_REMOVE_OPEN);
+        remove.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const hex = some.root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        expect(hex.textContent).toBe(encodeRemovalHex(TOKEN_ID, {}));
         // The existing words are loaded for editing rather than starting blank.
         const field = some.root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
         expect(field.value).toBe('Existing words');
@@ -3218,15 +3275,22 @@ describe('the-record-a-seller-signs-stays-on-screen', () => {
         expect(rule, 'no wrap rule for the signed record').not.toBeNull();
         expect(rule![1]).toMatch(/overflow-wrap:\s*anywhere/);
 
-        const { root } = paint(
-            idlePubkey({
-                fetch: { kind: 'offers', offers: [OFFER] },
-                tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
-                stallName: 'Riverside Goods',
-            }),
-        );
-        for (const role of ['publish-hex', 'describe-hex']) {
+        // Amended 2026-09-04: one sheet became two, so each record's hex is
+        // reached through its own overlay kind. The rule under test is
+        // unchanged — both nodes still wear `.publish-hex`.
+        const sheets = [
+            ['publish-hex', { kind: 'publish-name' } as const],
+            ['describe-hex', { kind: 'describe' } as const],
+        ] as const;
+        for (const [role, overlay] of sheets) {
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    overlay,
+                    stallName: 'Riverside Goods',
+                }),
+            );
             const node = root.querySelector(`[data-role="${role}"]`) as HTMLElement;
             expect(node, role).not.toBeNull();
             expect(node.classList.contains('publish-hex'), `${role} wears the rule`).toBe(true);
@@ -3262,24 +3326,33 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
     });
 
     it('names the seller’s handoffs for signing, and not for logging in', () => {
-        const { root } = paint(
-            idlePubkey({
-                fetch: { kind: 'offers', offers: [OFFER] },
-                tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
-                stallName: 'Riverside Goods',
-            }),
-        );
-        for (const role of ['publish-cashtab', 'describe-cashtab']) {
-            const node = root.querySelector(`[data-role="${role}"]`) as HTMLElement;
-            expect(node, role).not.toBeNull();
-            expect(node.textContent, role).toBe(PUBLISH_OPEN_CASHTAB);
-            expect(node.textContent, `${role} must not read as log in`).not.toMatch(
+        // Amended 2026-09-04: the two records live on two sheets now, so each
+        // primary handoff is reached through its own overlay kind. The rule is
+        // unchanged — both say "Sign with", neither says "sign in".
+        const sheets = [
+            ['publish', { kind: 'publish-name' } as const],
+            ['describe', { kind: 'describe' } as const],
+        ] as const;
+        for (const [prefix, overlay] of sheets) {
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    overlay,
+                    stallName: 'Riverside Goods',
+                }),
+            );
+            const node = root.querySelector(
+                `[data-role="${prefix}-cashtab"]`,
+            ) as HTMLElement;
+            expect(node, prefix).not.toBeNull();
+            expect(node.textContent, prefix).toBe(PUBLISH_OPEN_CASHTAB);
+            expect(node.textContent, `${prefix} must not read as log in`).not.toMatch(
                 /sign in\b/i,
             );
+            const other = root.querySelector(`[data-role="${prefix}-pay"]`) as HTMLElement;
+            expect(other.textContent, prefix).toBe(PUBLISH_OPEN_PAY);
         }
-        const other = root.querySelector('[data-role="publish-pay"]') as HTMLElement;
-        expect(other.textContent).toBe(PUBLISH_OPEN_PAY);
     });
 
     it('gives each act its own words', () => {
@@ -3298,21 +3371,31 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
     });
 
     it('the-removal-road-names-the-removal', () => {
-        // The two pay-bridge links sign different records, so they must not
-        // share a label however they share a mechanism.
+        // Amended 2026-09-04: the same two controls now sign both records, one
+        // mode at a time — so instead of two pills a few lines apart, the rule
+        // is that each mode renames them. A control that kept "Sign with
+        // Cashtab" while aimed at a removal would be the same defect wearing
+        // the other hat.
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 descriptions: new Map([[TOKEN_ID, 'Existing words']]),
             }),
         );
+        const write = root.querySelector('[data-role="describe-cashtab"]')!;
         const writePay = root.querySelector('[data-role="describe-pay"]')!;
-        const removePay = root.querySelector('[data-role="describe-remove-pay"]')!;
+        expect(write.textContent).toBe(PUBLISH_OPEN_CASHTAB);
         expect(writePay.textContent).toBe(PUBLISH_OPEN_PAY);
-        expect(removePay.textContent).toBe(DESC_REMOVE_PAY);
-        expect(removePay.textContent).not.toBe(writePay.textContent);
+
+        root.querySelector<HTMLButtonElement>('[data-role="describe-remove"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(write.textContent).toBe(DESC_REMOVE);
+        expect(writePay.textContent).toBe(DESC_REMOVE_PAY);
+        expect(writePay.textContent).not.toBe(PUBLISH_OPEN_PAY);
+        // Danger is reserved for what it is: this one takes words off a page.
+        expect(write.classList.contains('danger')).toBe(true);
     });
 });
 
@@ -3357,7 +3440,7 @@ describe('a-description-field-refuses-the-key-not-the-record', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 descriptions: new Map([[TOKEN_ID, 'Existing words']]),
             }),
@@ -3390,42 +3473,79 @@ describe('a-description-field-refuses-the-key-not-the-record', () => {
 });
 
 describe('removal-is-signable-from-a-phone', () => {
-    it('offers the same three ways to a wallet as publishing does', () => {
-        const { root } = paint(
+    /**
+     * A removal is a transaction like any other, so it gets the same roads to
+     * a wallet as writing does — it had only the Cashtab web link once, which
+     * stranded a seller who publishes from a phone: they could add words and
+     * never take them back.
+     *
+     * Amended 2026-09-04: those roads are now the sheet's own two controls and
+     * its own QR, in removal mode, rather than a second set below the first.
+     */
+    const open = (over: Partial<StallView> = {}) =>
+        paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+                ...over,
             }),
         );
-        const remove = root.querySelector<HTMLAnchorElement>('[data-role="describe-remove"]')!;
-        const pay = root.querySelector<HTMLAnchorElement>('[data-role="describe-remove-pay"]')!;
-        const qr = root.querySelector<HTMLElement>('[data-role="describe-remove-qr"]')!;
-        expect(remove.hidden).toBe(false);
+
+    it('offers the same three ways to a wallet as publishing does', () => {
+        const { root } = open({ descriptions: new Map([[TOKEN_ID, 'Existing words']]) });
+        root.querySelector<HTMLButtonElement>('[data-role="describe-remove"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const web = root.querySelector<HTMLAnchorElement>('[data-role="describe-cashtab"]')!;
+        const pay = root.querySelector<HTMLAnchorElement>('[data-role="describe-pay"]')!;
+        const qr = root.querySelector<HTMLElement>('[data-role="describe-qr"]')!;
+        expect(web.hidden).toBe(false);
+        expect(web.href).toContain('op_return_raw');
         expect(pay.hidden).toBe(false);
         expect(pay.href).toContain('op_return_raw');
         expect(qr.hidden).toBe(false);
         expect(qr.querySelector('svg')).not.toBeNull();
+        // All three carry the removal record, not the one in the fields.
+        const removal = encodeRemovalHex(TOKEN_ID, {})!;
+        expect(pay.href).toContain(encodeURIComponent(removal));
+        expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(removal);
     });
 
     it('offers none of them when there is nothing to remove', () => {
-        const { root } = paint(
-            idlePubkey({
-                fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
-                tokens: new Map([[TOKEN_ID, BEANS]]),
-            }),
-        );
+        const { root } = open();
         expect(
             root.querySelector<HTMLElement>('[data-role="describe-remove"]')!.hidden,
+            'no way into a mode that would sign nothing',
+        ).toBe(true);
+    });
+
+    it('keeps-the-words-comes-back', () => {
+        // The way out of the mode, and the form it hands back: enabled fields
+        // with the seller's own words still in them.
+        const { root } = open({ descriptions: new Map([[TOKEN_ID, 'Existing words']]) });
+        const toggle = root.querySelector<HTMLButtonElement>('[data-role="describe-remove"]')!;
+        toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(toggle.textContent).toBe(copy.DESC_KEEP);
+        const field = root.querySelector<HTMLTextAreaElement>('[data-role="describe-text"]')!;
+        expect(field.disabled, 'the form on screen is the record being signed').toBe(true);
+        expect(
+            root.querySelector<HTMLInputElement>('[data-role="describe-shelf"]')!.disabled,
         ).toBe(true);
         expect(
-            root.querySelector<HTMLElement>('[data-role="describe-remove-pay"]')!.hidden,
+            root.querySelector<HTMLInputElement>('[data-role="describe-price"]')!.disabled,
         ).toBe(true);
-        expect(
-            root.querySelector<HTMLElement>('[data-role="describe-remove-qr"]')!.hidden,
-        ).toBe(true);
+        const warn = root.querySelector<HTMLElement>('[data-role="describe-remove-warn"]')!;
+        expect(warn.hidden).toBe(false);
+        expect(warn.textContent).toBe(copy.DESC_REMOVE_LEDE);
+
+        toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(toggle.textContent).toBe(copy.DESC_REMOVE_OPEN);
+        expect(field.disabled).toBe(false);
+        expect(field.value).toBe('Existing words');
+        expect(warn.hidden).toBe(true);
+        expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Existing words'),
+        );
     });
 });
 
@@ -3434,7 +3554,7 @@ describe('aria-modal-is-a-promise-about-the-keyboard', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -3463,7 +3583,7 @@ describe('aria-modal-is-a-promise-about-the-keyboard', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -3542,30 +3662,30 @@ describe('choosing-a-look-shows-the-look', () => {
         const { root, h } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
+        // Rewritten 2026-09-04: the look is pressed, not selected. Every
+        // assertion below is about the paint and the report, which is what
+        // the rules are — the control's tag name never was.
         const scrim = root.querySelector<HTMLElement>('[data-role="sheet-scrim"]')!;
-        const select = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
-        return { root, h, scrim, select };
+        return { root, h, scrim };
     }
 
     it('applies the chosen look to the stall behind, without any peek', () => {
-        const { root, scrim, select } = openSheet();
+        const { root, scrim } = openSheet();
         const stall = root.querySelector<HTMLElement>('.stall')!;
         const before = stall.style.getPropertyValue('--s-bg');
-        select.value = String(NEO_CITY_THEME_ID);
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+        pickLook(root, NEO_CITY_THEME_ID);
         expect(stall.style.getPropertyValue('--s-bg')).not.toBe(before);
         expect(stall.classList.contains('t-neo')).toBe(true);
         expect(scrim.classList.contains('peek')).toBe(false);
     });
 
     it('reports the try-on so every later paint keeps it', () => {
-        const { h, select } = openSheet();
-        select.value = String(NEO_CITY_THEME_ID);
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+        const { root, h } = openSheet();
+        pickLook(root, NEO_CITY_THEME_ID);
         expect(h.onPreviewLook).toHaveBeenCalledWith({
             themeId: NEO_CITY_THEME_ID,
             attachmentFlags: 0,
@@ -3573,11 +3693,9 @@ describe('choosing-a-look-shows-the-look', () => {
     });
 
     it('picking the record\'s own look back is how a preview ends', () => {
-        const { h, select } = openSheet();
-        select.value = String(NEO_CITY_THEME_ID);
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        select.value = String(DEFAULT_THEME_ID);
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+        const { root, h } = openSheet();
+        pickLook(root, NEO_CITY_THEME_ID);
+        pickLook(root, DEFAULT_THEME_ID);
         expect(h.onPreviewLook).toHaveBeenLastCalledWith(undefined);
     });
 
@@ -3610,9 +3728,8 @@ describe('choosing-a-look-shows-the-look', () => {
     });
 
     it('a click on the scrim closes the sheet', () => {
-        const { h, scrim, select } = openSheet();
-        select.value = String(NEO_CITY_THEME_ID);
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+        const { root, h, scrim } = openSheet();
+        pickLook(root, NEO_CITY_THEME_ID);
         scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(h.onClosePublish).toHaveBeenCalled();
     });
@@ -3623,7 +3740,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 theme: decodeTheme(RURAL_THEME_ID),
                 ...over,
@@ -3632,10 +3749,14 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         return root;
     }
 
-    it('offers one control per slot, not one per row', () => {
+    it('groups the chips per place, one place per slot the look ships', () => {
+        // Rewritten 2026-09-04: the control is a run of chips per place, not a
+        // select per place. The rule the old test held — one
+        // control per slot, never one per row — is now "one group per slot,
+        // every row of that slot a chip inside it".
         const root = sheet();
         // Rural after the live audit: the hanging sign folded into the
-        // base, so crest is gone — five slots, five selects.
+        // base, so crest is gone — five places.
         const slots = ['yard', 'mood', 'trim', 'fringe', 'badge'];
         for (const slot of slots) {
             expect(
@@ -3643,21 +3764,34 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
                 `rural offers the ${slot} slot`,
             ).not.toBeNull();
         }
-        expect(root.querySelectorAll('.decor select').length).toBe(slots.length);
+        expect(root.querySelectorAll('.decor .dec').length).toBe(slots.length);
+        // Every shipped row of this look is offered — held or not, minted or
+        // not. Looking is free (§6/§7); holding decides what paints.
+        const rural = SHIPPED_ATTACHMENTS.filter((r) => r.themeId === RURAL_THEME_ID);
+        expect(root.querySelectorAll('.decor .dec [data-bit]').length).toBe(rural.length);
     });
 
     it('opens the look picker on every look, not just the second one', () => {
         for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
             const root = sheet({ theme: decodeTheme(id) });
-            const themeSelect = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
-            expect(themeSelect.value, `painted ${id}`).toBe(String(id));
+            expect(pressedLook(root), `painted ${id}`).toBe(id);
         }
     });
 
     it('opens on what the record already set', () => {
         const root = sheet({ attachmentFlags: 1 });
-        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
-        expect(yard.value).toBe('0');
+        expect(pressedDecor(root, 'yard')).toEqual([0]);
+    });
+
+    it('holds one decoration per place, and lets the place go bare again', () => {
+        // Exclusive within a place: two bits in one slot are unrepresentable
+        // here, which is a better answer than resolving them quietly after
+        // the record is signed. Pressing the pressed one takes it off.
+        const root = sheet({ stallName: 'Riverside' });
+        pressDecor(root, 'yard', 0);
+        expect(pressedDecor(root, 'yard')).toEqual([0]);
+        pressDecor(root, 'yard', 0);
+        expect(pressedDecor(root, 'yard'), 'a place can go bare again').toEqual([]);
     });
 
     it('says a chosen row is only being looked at until the stall holds it', () => {
@@ -3686,9 +3820,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     it('previews the choice on the stall behind', () => {
         const root = sheet({ stallName: 'Riverside' });
         document.body.append(root);
-        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
-        yard.value = '0';
-        yard.dispatchEvent(new Event('change', { bubbles: true }));
+        pressDecor(root, 'yard', 0);
         expect(root.querySelector('.att-beetle')).not.toBeNull();
         root.remove();
     });
@@ -3697,9 +3829,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         // A record needs a name: `encodeManifestHex` refuses an empty one.
         const root = sheet({ stallName: 'Riverside' });
         const hexBefore = root.querySelector('[data-role="publish-hex"]')!.textContent ?? '';
-        const yard = root.querySelector<HTMLSelectElement>('[data-role="decor-yard"]')!;
-        yard.value = '0';
-        yard.dispatchEvent(new Event('change', { bubbles: true }));
+        pressDecor(root, 'yard', 0);
         const hexAfter = root.querySelector('[data-role="publish-hex"]')!.textContent ?? '';
         expect(hexAfter).not.toBe(hexBefore);
         // Tag byte then two payload bytes, appended after the three required
@@ -3710,15 +3840,13 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     it('drops the flags when the look changes, rather than re-aiming them', () => {
         const root = sheet({ attachmentFlags: 1 });
         document.body.append(root);
-        const theme = root.querySelector<HTMLSelectElement>('select[name="theme"]')!;
-        theme.value = String(NEO_CITY_THEME_ID);
-        theme.dispatchEvent(new Event('change', { bubbles: true }));
+        pickLook(root, NEO_CITY_THEME_ID);
         // Neo has no mood row; bit 0 there is a different row, so carrying
         // the flag over would wear something never chosen. (The yard slot
         // stopped being the discriminator when Neo grew a Grid horizon.)
         expect(root.querySelector('[data-role="decor-mood"]')).toBeNull();
-        const crest = root.querySelector<HTMLSelectElement>('[data-role="decor-crest"]')!;
-        expect(crest.value).toBe('');
+        expect(pressedDecor(root, 'crest'), 'nothing carries across a look').toEqual([]);
+        expect(pressedDecor(root, 'yard')).toEqual([]);
         root.remove();
     });
 
@@ -3884,7 +4012,7 @@ describe('the-shell-and-its-tabs', () => {
         const withSheet = paint(
             offersView([OFFER], undefined, {
                 panel: 'studio',
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
             }),
         );
         expect(withSheet.root.querySelector('[data-role="sheet-scrim"]')).not.toBeNull();
@@ -4768,7 +4896,7 @@ describe('the-editor-shares-one-meter-between-text-and-shelf', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 ...over,
             }),
@@ -4802,7 +4930,10 @@ describe('the-editor-shares-one-meter-between-text-and-shelf', () => {
         const { root } = sheet();
         const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
         const shelfField = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
-        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        // Amended 2026-09-04: one node, `describe-summary`, says the size —
+        // the count moved onto the "Publishes:" line beside the fields it is
+        // counting. The rule (one meter, one shared budget) is unchanged.
+        const counter = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
         const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
 
         field.value = 'D'.repeat(MAX_DESCRIPTION_BYTES);
@@ -4837,7 +4968,7 @@ describe('the-publish-sheet-carries-the-announcement', () => {
     it('encodes the typed sentence into the record and prefills from the view', () => {
         const { root } = paint(
             offersView([OFFER], undefined, {
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 stallName: 'Riverside Goods',
                 announcement: 'Back on the 10th',
             }),
@@ -5117,7 +5248,7 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
     });
 
     it('a publish overlay still does not mount', () => {
-        const { root } = paint(broadcastView({ overlay: { kind: 'publish' } }));
+        const { root } = paint(broadcastView({ overlay: { kind: 'publish-name' } }));
         assertNoShopChrome(root);
     });
 
@@ -5692,7 +5823,7 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 ...over,
             }),
@@ -5703,9 +5834,13 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
             prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 1250n }]]),
         });
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
-        const code = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
         expect(amount.value).toBe('12.50');
-        expect(code.value).toBe('usd');
+        expect(
+            root
+                .querySelector('[data-role="describe-price-code"] [aria-pressed="true"]')
+                ?.getAttribute('data-code'),
+            'the pressed unit is the published one',
+        ).toBe('usd');
         const back = root.querySelector('[data-role="seller-price"]') as HTMLElement;
         expect(back.hidden).toBe(false);
         expect(back.textContent).toBe(copy.sellerPrice('12.50', 'USD'));
@@ -5752,16 +5887,20 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 ...over,
             }),
         );
 
+    // Amended 2026-09-04: the unit is a two-way segment, not a menu. Pressing
+    // it is what a seller does; the assertions below are unchanged.
     const typePrice = (root: HTMLElement, figure: string, code = 'usd') => {
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
-        const select = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
-        select.value = code;
+        const unit = root.querySelector(
+            `[data-role="describe-unit-${code}"]`,
+        ) as HTMLButtonElement;
+        unit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         amount.value = figure;
         amount.dispatchEvent(new Event('input'));
         return root.querySelector('[data-role="describe-hex"]') as HTMLElement;
@@ -5769,11 +5908,15 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
 
     it('offers exactly two units, and writes each at two decimal places', () => {
         const { root } = sheet();
-        const select = root.querySelector('[data-role="describe-price-code"]') as HTMLSelectElement;
-        expect([...select.querySelectorAll('option')].map((o) => o.value)).toEqual([
-            'usd',
-            'xec',
-        ]);
+        const units = [
+            ...root.querySelectorAll('[data-role="describe-price-code"] [data-code]'),
+        ];
+        expect(units.map((u) => u.getAttribute('data-code'))).toEqual(['usd', 'xec']);
+        // The glyph is painted, the code is read aloud: "$" alone is a sign
+        // three currencies share.
+        expect(units.map((u) => u.textContent)).toEqual(['$', 'XEC']);
+        expect(units.map((u) => u.getAttribute('aria-label'))).toEqual(['USD', 'XEC']);
+        expect(units[0]!.getAttribute('aria-pressed'), 'opens on USD').toBe('true');
 
         const hex = typePrice(root, '12.50');
         expect(hex.textContent).toBe(
@@ -5821,7 +5964,7 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
             String(MAX_PRICED_SHELVED_DESCRIPTION_BYTES),
         );
         // And one meter still, counting the price into the same record.
-        const counter = root.querySelector('[data-role="describe-bytes"]') as HTMLElement;
+        const counter = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
         expect(counter.textContent).toContain(`of ${OP_RETURN_BUDGET} bytes`);
     });
 });
@@ -5838,7 +5981,7 @@ describe('editing-words-does-not-drop-the-price', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 descriptions: new Map([[TOKEN_ID, 'Old words']]),
                 shelves: new Map([[TOKEN_ID, 'Coffee']]),
@@ -5858,12 +6001,19 @@ describe('editing-words-does-not-drop-the-price', () => {
     });
 
     it('removing-words-does-not-remove-the-price', () => {
+        // Amended 2026-09-04: removal is a mode, so the record is read off the
+        // sheet's own sign control once the mode is on. What it carries is the
+        // rule and it has not moved — the words go, the shelf and the figure
+        // are restated.
         const { root } = sheet();
-        const remove = root.querySelector('[data-role="describe-remove"]') as HTMLAnchorElement;
-        expect(remove.hidden).toBe(false);
+        const toggle = root.querySelector('[data-role="describe-remove"]') as HTMLButtonElement;
+        expect(toggle.hidden).toBe(false);
+        toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         const removal = encodeRemovalHex(TOKEN_ID, { shelf: 'Coffee', price: PRICE });
         expect(removal).toBeDefined();
-        expect(remove.getAttribute('href')).toContain(encodeURIComponent(removal!));
+        expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(removal);
+        const pay = root.querySelector('[data-role="describe-pay"]') as HTMLAnchorElement;
+        expect(pay.getAttribute('href')).toContain(encodeURIComponent(removal!));
     });
 
     it('offers removal over a price alone', () => {
@@ -5873,7 +6023,7 @@ describe('editing-words-does-not-drop-the-price', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 prices: new Map([[TOKEN_ID, PRICE]]),
             }),
@@ -5908,7 +6058,7 @@ describe('clearing-every-field-removes-everything', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 descriptions: new Map([[TOKEN_ID, 'Old words']]),
                 shelves: new Map([[TOKEN_ID, 'Coffee']]),
@@ -5929,7 +6079,7 @@ describe('clearing-every-field-removes-everything', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 shelves: new Map([[TOKEN_ID, 'Coffee']]),
             }),
@@ -5944,15 +6094,24 @@ describe('clearing-every-field-removes-everything', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
             }),
         );
         clearAll(root);
         expect((root.querySelector('[data-role="describe-hex"]') as HTMLElement).hidden).toBe(true);
         expect(
+            (root.querySelector('[data-role="describe-hex-fold"]') as HTMLElement).hidden,
+            'the fold hides with the record it holds',
+        ).toBe(true);
+        expect(
             (root.querySelector('[data-role="describe-clear-lede"]') as HTMLElement).hidden,
         ).toBe(true);
+        // And the line says so in words rather than printing a size for a
+        // record nobody asked for.
+        expect(
+            (root.querySelector('[data-role="describe-summary"]') as HTMLElement).textContent,
+        ).toBe(SUMMARY_NOTHING);
     });
 });
 
@@ -5971,7 +6130,7 @@ describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 prices: new Map([[TOKEN_ID, EUR]]),
             }),
@@ -6009,7 +6168,7 @@ describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map(),
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
                 prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 1250n }]]),
             }),
@@ -6056,7 +6215,7 @@ describe('republish-carries-an-existing-fiat-hint-forward', () => {
         paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
-                overlay: { kind: 'publish' },
+                overlay: { kind: 'publish-name' },
                 stallName: 'Riverside Goods',
                 ...over,
             }),
@@ -6387,5 +6546,386 @@ describe('the activity panel’s two lists and the row detail', () => {
         await Promise.resolve();
         expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop).toBe(420);
         root.remove();
+    });
+});
+
+describe('two-sheets-two-records', () => {
+    /**
+     * `STL1` is the stall's own document — one transaction, one fee — and
+     * `STLD` is one token's, one transaction per token. The single sheet that
+     * carried both read as one publish control covering both, and a seller
+     * found that out a fee at a time.
+     */
+    it('the-studio-launches-two-records-not-one', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
+
+        const record = root.querySelector('[data-role="studio-sec-record"]') as HTMLElement;
+        const name = record.querySelector(
+            '[data-role="studio-open-publish"]',
+        ) as HTMLButtonElement;
+        const words = record.querySelector(
+            '[data-role="studio-open-describe"]',
+        ) as HTMLButtonElement;
+        expect(name, 'the stall record keeps its launcher').not.toBeNull();
+        expect(words, 'the token record gets its own').not.toBeNull();
+        expect(name.textContent).toBe(copy.STUDIO_OPEN_SETTINGS);
+        expect(words.textContent).toBe(copy.DESC_TITLE);
+
+        name.click();
+        expect(h.onOpenPublish).toHaveBeenCalledTimes(1);
+        words.click();
+        expect(h.onOpenDescribe).toHaveBeenCalledTimes(1);
+
+        // The hint under the first no longer claims the second: it said
+        // "name, look, decorations and token descriptions" while descriptions
+        // were on the same sheet, and that is a fee-per-token promise.
+        expect(record.textContent).toContain(copy.STUDIO_SETTINGS_HINT);
+        expect(copy.STUDIO_SETTINGS_HINT.toLowerCase()).not.toContain('description');
+        expect(record.textContent).toContain(copy.STUDIO_DESCRIBE_HINT);
+    });
+
+    it('each launcher opens its own sheet and only its own', () => {
+        const named = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'publish-name' } }),
+        );
+        expect(named.root.querySelector('[data-role="publish"]')).not.toBeNull();
+        expect(named.root.querySelector('[data-role="describe"]')).toBeNull();
+
+        const words = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'describe' } }),
+        );
+        expect(words.root.querySelector('[data-role="describe"]')).not.toBeNull();
+        expect(words.root.querySelector('[data-role="publish"]')).toBeNull();
+        // Both are the same kind of thing: a dialog inside a scrim.
+        for (const { root } of [named, words]) {
+            const scrim = root.querySelector('[data-role="sheet-scrim"]') as HTMLElement;
+            expect(scrim).not.toBeNull();
+            const sheet = scrim.firstElementChild as HTMLElement;
+            expect(sheet.classList.contains('sheet')).toBe(true);
+            expect(sheet.getAttribute('aria-modal')).toBe('true');
+        }
+    });
+
+    it('a-name-sheet-has-no-removal-road', () => {
+        // STL1 has no tombstone: a stall cannot unset its record, so a
+        // "Remove the words…" control on this sheet would be a control that
+        // cannot do what it says. Removal lives on the token
+        // record, which does have one.
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'publish-name' },
+                stallName: 'Riverside Goods',
+                tagline: 'Fresh from the river bend',
+            }),
+        );
+        const sheet = root.querySelector('[data-role="publish"]') as HTMLElement;
+        expect(sheet.querySelector('[data-role="describe-remove"]')).toBeNull();
+        expect(sheet.textContent).not.toContain(copy.DESC_REMOVE_OPEN);
+        expect(sheet.textContent).not.toContain(copy.DESC_REMOVE);
+    });
+
+    it('a-describe-launcher-preselects-its-token', () => {
+        // The id is a preselection, never a promise: the picker's set is what
+        // the stall lists, and an id outside it simply does not select.
+        const other = '77'.repeat(32);
+        const view = offersView(
+            [OFFER, { ...OFFER, outpoint: { txid: 'bc'.repeat(32), outIdx: 1 }, tokenId: other }],
+            undefined,
+            {
+                overlay: { kind: 'describe', tokenId: other },
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [other, { ...BEANS, tokenId: other, name: 'Green Tea' }],
+                ]),
+            },
+        );
+        const { root } = paint(view);
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        expect(picker.value).toBe(other);
+
+        const stray = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'describe', tokenId: 'ff'.repeat(32) },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(
+            (stray.root.querySelector('[data-role="describe-token"]') as HTMLSelectElement).value,
+            'an id this stall does not list selects nothing of its own',
+        ).toBe(TOKEN_ID);
+    });
+
+    /**
+     * One predicate, two callers. `renderStall` mounts a sheet only for a
+     * resolved stall with an address; `livePaint` holds an unsolicited paint
+     * back while a sheet is open. Two lists of overlay kinds kept in step by
+     * hand is how an overlay that mounts nothing stops a stall updating with
+     * nothing on screen to say why.
+     */
+    it('an-overlay-that-cannot-mount-does-not-stop-the-live-paint', () => {
+        const kinds = [
+            { kind: 'publish-name' } as const,
+            { kind: 'describe' } as const,
+            { kind: 'poster', format: 'print' } as const,
+        ];
+        for (const overlay of kinds) {
+            const mountable = offersView([OFFER], undefined, { overlay });
+            expect(sheetMounts(mountable), `${overlay.kind} mounts`).toBe(true);
+            expect(
+                paint(mountable).root.querySelector('.sheet-scrim'),
+                `${overlay.kind} is on screen`,
+            ).not.toBeNull();
+
+            // No address: `paintUnresolvable` and a bare pubkey route both
+            // reach this, and neither can sign anything.
+            const homeless = offersView([OFFER], undefined, { overlay, address: undefined });
+            expect(sheetMounts(homeless), `${overlay.kind} without an address`).toBe(false);
+            expect(
+                paint(homeless).root.querySelector('.sheet-scrim'),
+                `${overlay.kind} without an address mounts nothing`,
+            ).toBeNull();
+
+            // The stream overlay returns before any sheet mounts.
+            const streamed = offersView([OFFER], undefined, { overlay, broadcast: BROADCAST });
+            expect(sheetMounts(streamed), `${overlay.kind} on a broadcast`).toBe(false);
+            expect(
+                paint(streamed).root.querySelector('.sheet-scrim'),
+                `${overlay.kind} on a broadcast mounts nothing`,
+            ).toBeNull();
+        }
+
+        // And the kinds that were never sheets are never waited on.
+        for (const overlay of [
+            { kind: 'idle' } as const,
+            { kind: 'buy', outpoint: OUTPOINT } as const,
+        ]) {
+            expect(sheetMounts(offersView([OFFER], undefined, { overlay }))).toBe(false);
+        }
+    });
+});
+
+describe('the-summary-says-what-the-record-carries', () => {
+    /**
+     * One count, from the encoder. A meter doing its own arithmetic is a
+     * second opinion about a permanent record, and the opinion on screen
+     * would be the one nobody signed.
+     */
+    it('names every field the encoder was handed, and its own byte count', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'publish-name' },
+                stallName: 'Riverside Goods',
+                tagline: 'Fresh from the river bend',
+                announcement: 'Back on the 10th',
+                fiatHint: 'vnd',
+                theme: decodeTheme(RURAL_THEME_ID),
+                attachmentFlags: 0b1,
+            }),
+        );
+        const hex = encodeManifestHex('Riverside Goods', RURAL_THEME_ID, 0b1, {
+            tagline: 'Fresh from the river bend',
+            announcement: 'Back on the 10th',
+            fiatHint: 'vnd',
+        })!;
+        expect(hex).toBeDefined();
+        expect(root.querySelector('[data-role="publish-hex"]')!.textContent).toBe(hex);
+
+        const rural = SHIPPED_THEMES.find((row) => row.id === RURAL_THEME_ID)!;
+        const worn = wornAttachments(RURAL_THEME_ID, 0b1);
+        const line = root.querySelector('[data-role="publish-summary"]') as HTMLElement;
+        expect(line.hidden).toBe(false);
+        expect(line.textContent).toBe(
+            summaryLine(
+                [
+                    { label: copy.SUMMARY_NAME, value: 'Riverside Goods' },
+                    { label: copy.SUMMARY_LOOK, value: rural.label },
+                    { label: copy.SUMMARY_TAGLINE },
+                    { label: copy.SUMMARY_ANNOUNCEMENT },
+                    { label: copy.SUMMARY_FIAT_HINT, value: 'VND' },
+                    { label: copy.SUMMARY_DECOR, value: worn.map((r) => r.label).join(' + ') },
+                ],
+                hex.length / 2,
+                OP_RETURN_BUDGET,
+            ),
+        );
+        // The size is the record's own length, never a second count.
+        expect(line.textContent).toContain(descBytesLeft(hex.length / 2, OP_RETURN_BUDGET));
+    });
+
+    it('the-meter-and-the-encoder-count-the-same-record', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'describe' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        const shelf = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
+        field.value = 'Roasted weekly.';
+        shelf.value = 'Coffee';
+        shelf.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        const line = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
+        expect(hex.hidden).toBe(false);
+        // The figure the meter prints is the record the links carry, byte for
+        // byte — the whole point of one source.
+        expect(line.textContent).toContain(
+            descBytesLeft(hex.textContent!.length / 2, OP_RETURN_BUDGET),
+        );
+        expect(line.textContent).toBe(
+            summaryLine(
+                [
+                    { label: copy.SUMMARY_WORDS },
+                    { label: copy.SUMMARY_SHELF, value: 'Coffee' },
+                ],
+                hex.textContent!.length / 2,
+                OP_RETURN_BUDGET,
+            ),
+        );
+    });
+
+    it('names a carried field without painting a figure it cannot write', () => {
+        // A price in a unit this editor does not write is carried forward
+        // untouched and shown nowhere — but the record carries it, so the
+        // line names the field. Silence about a field being signed is the
+        // other half of the same honesty.
+        const EUR = { code: 'eur', exponent: 2, amount: 900n } as const;
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'describe' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                prices: new Map([[TOKEN_ID, EUR]]),
+            }),
+        );
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'New words';
+        field.dispatchEvent(new Event('input'));
+        const line = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
+        expect(line.textContent).toContain(copy.SUMMARY_QUOTE);
+        expect(line.textContent, 'no figure this sheet cannot change').not.toContain('9.00');
+        expect(line.textContent).not.toContain('EUR');
+    });
+
+    it('says nothing to publish rather than a size for a record nobody asked for', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'describe' },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(
+            (root.querySelector('[data-role="describe-summary"]') as HTMLElement).textContent,
+        ).toBe(SUMMARY_NOTHING);
+    });
+});
+
+describe('the-record-folds-and-the-phone-code-is-a-desk-fold', () => {
+    const sheetCss = (): string =>
+        readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    it('both sheets fold the hex, with the hex node inside the fold', () => {
+        const sheets = [
+            ['publish', { kind: 'publish-name' } as const],
+            ['describe', { kind: 'describe' } as const],
+        ] as const;
+        for (const [prefix, overlay] of sheets) {
+            const { root } = paint(
+                offersView([OFFER], undefined, {
+                    overlay,
+                    stallName: 'Riverside Goods',
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+                }),
+            );
+            const fold = root.querySelector(
+                `[data-role="${prefix}-hex-fold"]`,
+            ) as HTMLDetailsElement;
+            expect(fold, prefix).not.toBeNull();
+            expect(fold.tagName).toBe('DETAILS');
+            expect(fold.querySelector('summary')!.textContent).toBe(copy.RECORD_BYTES_FOLD);
+            // The probe opens every `<details>` before it measures, so the
+            // protected hex is still guarded inside one.
+            expect(fold.querySelector(`[data-role="${prefix}-hex"]`), prefix).not.toBeNull();
+        }
+    });
+
+    it('the-phone-qr-is-a-desk-fold', () => {
+        // A phone opens its own wallet by link; the code is for the other
+        // device, so it is offered at desk width and folded even there.
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                overlay: { kind: 'publish-name' },
+                stallName: 'Riverside Goods',
+            }),
+        );
+        const fold = root.querySelector('[data-role="publish-qr-fold"]') as HTMLDetailsElement;
+        expect(fold).not.toBeNull();
+        expect(fold.tagName).toBe('DETAILS');
+        expect(fold.classList.contains('sheet-qr-fold')).toBe(true);
+        expect(fold.querySelector('summary')!.textContent).toBe(copy.SCAN_WITH_PHONE_FOLD);
+        expect(fold.querySelector('[data-role="publish-qr"] svg.qr')).not.toBeNull();
+
+        // Painted only from 680px up. happy-dom lays nothing out, so the rule
+        // is read from the sheet that carries it — the same way the hex wrap
+        // rule is.
+        const css = sheetCss();
+        expect(
+            /\.sheet-qr-fold\s*\{[^}]*display:\s*none/.test(css),
+            'the phone-code fold is off below the desk width',
+        ).toBe(true);
+        const desk = css.split('@media (min-width: 680px)').slice(1).join('\n');
+        expect(
+            /\.sheet-qr-fold\s*\{[^}]*display:\s*block/.test(desk),
+            'and back on at 680px',
+        ).toBe(true);
+    });
+});
+
+describe('a-shelf-suggests-the-shelves-that-exist', () => {
+    /**
+     * A free field with a datalist, never a closed select: the
+     * heading is the seller's own words, and the ones they already used are a
+     * suggestion rather than a vocabulary.
+     */
+    it('offers the stall’s own shelves without refusing a new one', () => {
+        const other = '77'.repeat(32);
+        const { root } = paint(
+            offersView(
+                [
+                    OFFER,
+                    { ...OFFER, outpoint: { txid: 'bc'.repeat(32), outIdx: 1 }, tokenId: other },
+                ],
+                undefined,
+                {
+                    overlay: { kind: 'describe' },
+                    tokens: new Map([
+                        [TOKEN_ID, BEANS],
+                        [other, { ...BEANS, tokenId: other, name: 'Green Tea' }],
+                    ]),
+                    shelves: new Map([
+                        [TOKEN_ID, 'Morning roast'],
+                        [other, 'Leaf'],
+                    ]),
+                },
+            ),
+        );
+        const field = root.querySelector('[data-role="describe-shelf"]') as HTMLInputElement;
+        expect(field.tagName, 'a field, not a menu').toBe('INPUT');
+        const list = root.querySelector('[data-role="describe-shelf-list"]') as HTMLElement;
+        expect(list).not.toBeNull();
+        expect(field.getAttribute('list')).toBe(list.id);
+        expect(
+            [...list.querySelectorAll('option')].map((o) => o.value),
+            'every shelf this stall already uses, deduped and ordered',
+        ).toEqual(['Leaf', 'Morning roast']);
+
+        // A heading nobody has used yet still reaches the record.
+        field.value = 'Brand new shelf';
+        field.dispatchEvent(new Event('input'));
+        expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', { shelf: 'Brand new shelf' }),
+        );
     });
 });

@@ -107,7 +107,13 @@ import {
     type LiveTxStatus,
 } from './net/live';
 import { CHRONIK_HOSTS } from './net/hosts';
-import { cheapestOf, identityOf, listingsInShopOrder, renderStall } from './ui';
+import {
+    cheapestOf,
+    identityOf,
+    listingsInShopOrder,
+    renderStall,
+    sheetMounts,
+} from './ui';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -357,7 +363,14 @@ export function boot(
                 onGoHome();
             },
             onOpenPublish: () => {
-                state = { ...state, view: { ...state.view, overlay: { kind: 'publish' } } };
+                state = { ...state, view: { ...state.view, overlay: { kind: 'publish-name' } } };
+                paint();
+            },
+            onOpenDescribe: (tokenId) => {
+                state = {
+                    ...state,
+                    view: { ...state.view, overlay: { kind: 'describe', tokenId } },
+                };
                 paint();
             },
             onClosePublish: () => {
@@ -450,26 +463,29 @@ export function boot(
     /**
      * A paint the visitor did not ask for.
      *
-     * `renderStall` begins with `replaceChildren()`, and the publish sheet keeps
-     * the seller's typed name, their picked look and their chosen decorations in
-     * the DOM and nowhere else. The poster is the same shape: a format chooser
-     * and a canvas preview a streamer is in the middle of. So a paint while
-     * either sheet is open throws that work away — and with a script
-     * subscription watching the stall address, a stranger can now cause that
-     * from outside for the price of dust.
+     * `renderStall` begins with `replaceChildren()`, and each record sheet keeps
+     * what the seller has typed — a name, a look, chosen decorations, a token's
+     * words and figure — in the DOM and nowhere else. The poster is the same
+     * shape: a format chooser and a canvas preview a streamer is in the middle
+     * of. So a paint while any of them is open throws that work away — and with
+     * a script subscription watching the stall address, a stranger can now
+     * cause that from outside for the price of dust.
      *
      * The state is updated either way; only the paint waits. Every path that
      * closes the sheet ends in a paint of its own, which is the flush: there is
      * no way out of the overlay that does not repaint.
      *
+     * **The wait asks the same question the render gate does.** `sheetMounts`
+     * is `renderStall`'s own predicate, so an overlay kind that mounts nothing —
+     * a describe sheet on a route with no address, a poster whose link is past
+     * the QR ceiling — cannot hold a paint back for a sheet that is not on
+     * screen, which would stop the stall updating with nothing to say why.
+     *
      * A paint a person asked for is untouched — including `PUBLISH_CHECK_NOW`,
      * whose whole answer is the sheet closing onto a re-read stall.
      */
     const livePaint = (): void => {
-        if (
-            state.view.overlay.kind === 'publish' ||
-            state.view.overlay.kind === 'poster'
-        ) {
+        if (sheetMounts(state.view)) {
             return;
         }
         paint();

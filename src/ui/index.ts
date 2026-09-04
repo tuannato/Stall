@@ -1,1 +1,7 @@
-export { cheapestOf, identityOf, listingsInShopOrder, renderStall } from './render';
+export {
+    cheapestOf,
+    identityOf,
+    listingsInShopOrder,
+    renderStall,
+    sheetMounts,
+} from './render';
