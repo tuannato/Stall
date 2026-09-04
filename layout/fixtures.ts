@@ -500,12 +500,17 @@ export const SCREENS: Record<string, StallView> = {
         prices: QUOTES,
     }),
     /*
-     * The win this rail was decoupled for: a node that answered without the
-     * agora plugin, whose address history still carried the settings, the
-     * records and the genesis of every token they name. The pay section paints
-     * under the failure message and the hosts box — a protected figure below
-     * two blocks of our own bad news, which is a ground no other screen puts
-     * a `[data-role="seller-price"]` on.
+     * The populated quote rail, and the win this rail was decoupled for: a node
+     * that answered without the agora plugin, whose address history still
+     * carried the settings, the records and the genesis of every token they
+     * name. The book's failure is the panel's other side, so what is measured
+     * here is the rail itself — two rows, both naming shapes, a `$` figure and
+     * an XEC one.
+     *
+     * **The one quote screen in the contrast pass.** Every figure, chip and
+     * muted line the rail paints is on this screen; the outcome screens below
+     * are its geometry with a sentence changed, on grounds this list already
+     * holds.
      */
     'plugin-missing-quotes': base({
         fetch: {
@@ -514,6 +519,42 @@ export const SCREENS: Record<string, StallView> = {
             hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
         },
         prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        shopTab: 'quotes',
+    }),
+    /*
+     * The three states of the quote rail that are not rows, one screen each,
+     * because each is a different sentence in a different place: a quiet one
+     * where a seller has published nothing, a walk that threw (rows, a line and
+     * a retry — a walk returns what it collected, so rows are the ordinary
+     * shape), and our own page cap (rows and a line, no retry).
+     *
+     * **Geometry only**, out of `__contrastScreens`: the figures, the chips and
+     * the muted prose are `plugin-missing-quotes`', painted on the same ground.
+     * `nothing-quoted` deliberately carries no `quotes` in its name — the
+     * runner's audit fails a screen whose name promises a seller's figure and
+     * mounts none, and this one has none to mount.
+     */
+    'nothing-quoted': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        shopTab: 'quotes',
+    }),
+    'quotes-failed': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        descriptionsFailed: true,
+        shopTab: 'quotes',
+    }),
+    'quotes-truncated': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        descriptionsTruncated: true,
+        shopTab: 'quotes',
     }),
     /*
      * The stream overlay, at the four states it spends its time in plus the
@@ -678,6 +719,11 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'unreadable',
     'plugin-missing',
     'plugin-missing-quotes',
+    // The quote rail paints no offer cards either: its rows are the seller's
+    // own, and the decoration interactions these could stage are `offers`'.
+    'nothing-quoted',
+    'quotes-failed',
+    'quotes-truncated',
     // Not state screens, but the same budget rule: the studio and activity
     // panels paint no offer cards, and the name-stress screens exist for the
     // sign and the bar, not for decoration interactions.
@@ -693,6 +739,37 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // Its figures are measured; the decoration variants would be `pay`'s,
     // painted twice.
     'pay-xec',
+]);
+
+/**
+ * Screens the pixel-contrast pass does not sample.
+ *
+ * That pass is most of this guard's runtime — a prepare is a full paint plus
+ * `document.fonts.ready` plus two frames, bought per look and per worn state —
+ * so a screen belongs in it only when it puts a figure or a label on a ground
+ * no other screen does. These do not: each is another screen's ink with one
+ * sentence changed, on the same ground, and their geometry is what they are
+ * here for.
+ *
+ * Its own list rather than a flag on the fixture, so what the pass costs can
+ * be read in one place, and next to the reason each name is on it.
+ */
+export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
+    'nothing-quoted',
+    'quotes-failed',
+    'quotes-truncated',
+    /*
+     * These two were pruned to pay for the panel's segmented control, which
+     * joined the sampled set on every page screen at once (`.seg-b` was
+     * already a contrast target inside the record sheets) and took the run
+     * past its ceiling. Neither loses a ground: every figure on them is an
+     * offer card's, already sampled on `offers`, and what makes each of them
+     * its own screen is geometry the pass never reads — `crowded`'s tools row
+     * and flat sorted run, `sparse`'s closing motif, which cannot sit under a
+     * protected box because the geometry rules refuse exactly that.
+     */
+    'crowded',
+    'sparse',
 ]);
 
 /**

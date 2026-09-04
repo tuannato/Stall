@@ -164,6 +164,7 @@ function handlers() {
         onChangeSort: vi.fn(),
         onChangeFilter: vi.fn(),
         onOpenPay: vi.fn(),
+        onSwitchShopTab: vi.fn(),
     };
 }
 
@@ -7339,19 +7340,28 @@ const PAY_TEA: TokenMeta = {
 /** 1 XEC = $0.00002, so $5.00 is 250,000 XEC — 25,000,000 satoshis. */
 const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
 
+/**
+ * The quote rail as a reader meets it: on the quotes side of the Shop panel.
+ *
+ * The side is set here rather than left to the app because `renderStall` paints
+ * whichever one the view names, and the listings are the default — this helper
+ * is for the tests whose subject is the rail itself.
+ */
 function payView(over: Partial<StallView> = {}): StallView {
     return offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
         prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        shopTab: 'quotes',
         ...over,
     });
 }
 
-describe('the-pay-section-paints-under-the-shop-and-the-empty-screen', () => {
+describe('the-quotes-rail-paints-on-a-shop-and-on-an-empty-stall', () => {
     /**
      * A quote is not gated on a listing: a stall with nothing listed and three
-     * quotes is exactly the price-tag use this rail exists for. So the section
-     * lives under the shop list **and** under the empty screen's message, and
-     * it is absent entirely when there is nothing quoted.
+     * quotes is exactly the price-tag use this rail exists for. So the rail is
+     * a side of the panel on a working shop **and** on an empty one — and on a
+     * stall that quoted nothing it is the one screen that says so, rather than
+     * being absent.
      */
     it('paints the rows on a shop, with the chip and the seller’s own unit', () => {
         const { root } = paint(payView());
@@ -7374,13 +7384,20 @@ describe('the-pay-section-paints-under-the-shop-and-the-empty-screen', () => {
         ).toBe(copy.PAY_OPEN);
     });
 
-    it('paints under the empty screen too, and not at all with no quotes', () => {
+    it('paints on the empty stall too, and says so where nothing is quoted', () => {
         const empty = paint(payView({ fetch: { kind: 'empty' } })).root;
         expect(empty.querySelector('[data-role="pay-section"]')).not.toBeNull();
 
-        const bare = paint(offersView([OFFER])).root;
-        expect(bare.querySelector('[data-role="pay-section"]')).toBeNull();
-        expect(bare.textContent).not.toContain(copy.PAY_SEC_TITLE);
+        // A stall that quoted nothing keeps the rail and the quiet sentence:
+        // the tab exists either way, so an absent section would be a side of
+        // the panel that paints nothing at all.
+        const bare = paint(offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            shopTab: 'quotes',
+        })).root;
+        expect(bare.querySelector('[data-role="pay-row"]')).toBeNull();
+        expect(bare.querySelector('[data-role="quotes-none"]')?.textContent).toBe(
+            copy.QUOTES_NONE,
+        );
     });
 
     it('opens the sheet for the row that was pressed', () => {
@@ -7389,18 +7406,6 @@ describe('the-pay-section-paints-under-the-shop-and-the-empty-screen', () => {
             root.querySelector('[data-role="pay-open"]') as HTMLButtonElement
         ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(h.onOpenPay).toHaveBeenCalledWith(TOKEN_ID);
-    });
-
-    it('points a listed row at the section without changing the route', () => {
-        const { root, h } = paint(payView());
-        const pointer = root.querySelector('[data-role="pay-pointer"]') as HTMLElement;
-        expect(pointer.textContent).toBe(copy.PAY_POINTER);
-        pointer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        expect(h.onOpenPay).not.toHaveBeenCalled();
-        expect(h.onBuy).not.toHaveBeenCalled();
-        // A token with no quote gets no pointer at all.
-        const unquoted = paint(offersView([OFFER])).root;
-        expect(unquoted.querySelector('[data-role="pay-pointer"]')).toBeNull();
     });
 
     it('prints an xec quote in the seller’s own unit, unconverted', () => {
@@ -8347,7 +8352,10 @@ describe('a-not-attributed-token-borrows-no-icon-and-says-so', () => {
      */
     it('paints initials and the line on the pay row', () => {
         const { root } = paint(
-            quoteView({ genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]) }),
+            quoteView({
+                shopTab: 'quotes',
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+            }),
         );
         const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
         const cell = row.querySelector('.item-ic') as HTMLElement;
@@ -8368,7 +8376,7 @@ describe('a-not-attributed-token-borrows-no-icon-and-says-so', () => {
     });
 
     it('an unknown genesis keeps the icon and says nothing', () => {
-        const { root } = paint(quoteView({ genesis: new Map() }));
+        const { root } = paint(quoteView({ shopTab: 'quotes', genesis: new Map() }));
         const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
         expect(
             (row.querySelector('.item-ic') as HTMLElement).getAttribute('data-token-id'),
@@ -8417,7 +8425,10 @@ describe('an-item-is-titled-by-its-words-on-the-pay-surfaces', () => {
      */
     it('titles the pay row with the words and keeps the token name beside it', () => {
         const { root } = paint(
-            quoteView({ descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]) }),
+            quoteView({
+                shopTab: 'quotes',
+                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
+            }),
         );
         const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
         expect(row.querySelector('.item-n')?.textContent).toBe('Half kilo of beans');
@@ -8444,7 +8455,7 @@ describe('an-item-is-titled-by-its-words-on-the-pay-surfaces', () => {
 
 describe('no-words-names-the-token-and-says-so', () => {
     it('falls back to the genesis name and says the seller wrote nothing', () => {
-        const { root } = paint(quoteView());
+        const { root } = paint(quoteView({ shopTab: 'quotes' }));
         const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
         expect(row.querySelector('.item-n')?.textContent).toBe('Roasted Beans');
         expect(row.textContent).toContain(copy.QUOTE_NO_WORDS_LINE);
@@ -8523,6 +8534,14 @@ describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
             ).root;
             expect(painted.textContent ?? '', overlay.kind).not.toContain(BIDI);
         }
+        // The quote rail is its own side of the panel, so the shop screen above
+        // never paints it: named here, or a genesis string reaches a row this
+        // loop cannot see.
+        const rail = paint(
+            quoteView({ shopTab: 'quotes', tokens: new Map([[TOKEN_ID, hostile(bad, bad)]]) }),
+        ).root;
+        expect(rail.querySelector('[data-role="pay-row"]')).not.toBeNull();
+        expect(rail.textContent ?? '').not.toContain(BIDI);
         const stream = paint(
             quoteView({
                 tokens: new Map([[TOKEN_ID, hostile(bad, bad)]]),
@@ -8547,5 +8566,331 @@ describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
         );
         expect(root.textContent ?? '').not.toContain(BIDI);
         expect(root.querySelector('.item-head .item-n')?.textContent).toBe('Roasted Beans');
+    });
+});
+
+/*
+ * The Shop panel's two rails.
+ *
+ * A covenant's asked amount and the seller's own quote are two different
+ * transactions for what may be the same item, and a reader looking at both at
+ * once has no way to tell which figure they would be paying. So they are two
+ * sides of one segmented control, each with its own outcomes in its own words.
+ */
+
+const railTab = (root: HTMLElement, side: 'listings' | 'quotes') =>
+    root.querySelector<HTMLButtonElement>(`[data-role="shop-tab-${side}"]`);
+
+const pressedRail = (root: HTMLElement): string | undefined =>
+    root
+        .querySelector('[data-role="shop-tabs"] [aria-pressed="true"]')
+        ?.getAttribute('data-role') ?? undefined;
+
+/** A shop with one listing and one quote on the same token. */
+function railView(over: Partial<StallView> = {}): StallView {
+    return offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+        prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        ...over,
+    });
+}
+
+const HOSTS_TIMED_OUT = [{ host: 'one.example', result: 'timeout' as const }];
+const HOSTS_NO_PLUGIN = [{ host: 'one.example', result: 'plugin-missing' as const }];
+
+describe('the-two-rails-never-paint-on-one-screen', () => {
+    it('paints the book alone, then the quotes alone', () => {
+        const listings = paint(railView({ shopTab: 'listings' })).root;
+        expect(listings.querySelector('.item-head')).not.toBeNull();
+        expect(listings.querySelector('[data-role="price"]')).not.toBeNull();
+        expect(listings.querySelector('[data-role="pay-row"]')).toBeNull();
+        expect(listings.querySelector('[data-role="seller-price"]')).toBeNull();
+
+        const quotes = paint(railView({ shopTab: 'quotes' })).root;
+        expect(quotes.querySelector('[data-role="pay-row"]')).not.toBeNull();
+        expect(quotes.querySelector('[data-role="seller-price"]')).not.toBeNull();
+        expect(quotes.querySelector('.item-head')).toBeNull();
+        expect(quotes.querySelector('[data-role="price"]')).toBeNull();
+    });
+
+    it('is a pressed group, never a tablist, and never a second dock', () => {
+        const { root } = paint(railView({ shopTab: 'quotes' }));
+        const seg = root.querySelector('[data-role="shop-tabs"]') as HTMLElement;
+        expect(seg.getAttribute('role')).toBe('group');
+        expect(root.querySelector('[role="tablist"]')).toBeNull();
+        expect(root.querySelector('[role="tab"]')).toBeNull();
+        // Two contracts on one node is what the design drew; one of them wins.
+        expect(seg.querySelector('[aria-selected]')).toBeNull();
+        expect(pressedRail(root)).toBe('shop-tab-quotes');
+        expect(railTab(root, 'listings')!.getAttribute('aria-pressed')).toBe('false');
+        expect(root.querySelectorAll('[data-role="shop-tabs"]')).toHaveLength(1);
+        // The dock above it is untouched.
+        expect(root.querySelector('[data-role="tab-shop"]')).not.toBeNull();
+    });
+
+    it('switches on a press', () => {
+        const { root, h } = paint(railView({ shopTab: 'listings' }));
+        railTab(root, 'quotes')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onSwitchShopTab).toHaveBeenCalledWith('quotes');
+    });
+
+    it('keeps the seller’s notice and the settings notes above both sides', () => {
+        for (const side of ['listings', 'quotes'] as const) {
+            const { root } = paint(
+                railView({
+                    shopTab: side,
+                    announcement: 'Back on the 10th',
+                    settingsUnreadable: true,
+                }),
+            );
+            const notice = root.querySelector('[data-role="announcement"]') as HTMLElement;
+            const seg = root.querySelector('[data-role="shop-tabs"]') as HTMLElement;
+            expect(notice, side).not.toBeNull();
+            expect(root.textContent, side).toContain(SETTINGS_UNREADABLE);
+            // Above, in reading order: the notice precedes the control.
+            expect(
+                notice.compareDocumentPosition(seg) & Node.DOCUMENT_POSITION_FOLLOWING,
+                side,
+            ).toBeTruthy();
+        }
+    });
+});
+
+describe('each-tab-paints-its-own-outcome', () => {
+    it('gives the listings its own five, and none of the quotes’ words', () => {
+        const rows = paint(railView({ shopTab: 'listings' })).root;
+        expect(rows.querySelectorAll('.item-head').length).toBeGreaterThan(0);
+
+        const empty = paint(railView({ shopTab: 'listings', fetch: { kind: 'empty' } })).root;
+        expect(empty.textContent).toContain(DEFAULT_THEME.sparse.emptyTitle);
+        expect(empty.querySelector('[data-role="retry"]')).not.toBeNull();
+
+        const unreachable = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: HOSTS_TIMED_OUT },
+            }),
+        ).root;
+        expect(unreachable.textContent).toContain(UNREACHABLE_BODY);
+        expect(unreachable.querySelector('.hosts')?.textContent).toContain('timeout');
+
+        // A node that answered without the plugin is its own screen: the hosts
+        // box says which, and neither is the one below it.
+        const plugin = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'plugin-missing', triedAtMs: 0, hosts: HOSTS_NO_PLUGIN },
+            }),
+        ).root;
+        expect(plugin.querySelector('.hosts')?.textContent).toContain('plugin-missing');
+
+        const unreadable = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'unreadable', triedAtMs: 0, returned: 3 },
+            }),
+        ).root;
+        expect(unreadable.textContent).toContain(UNREADABLE_BODY);
+        expect(unreadable.querySelector('.hosts')).toBeNull();
+
+        for (const screen of [rows, empty, unreachable, plugin, unreadable]) {
+            for (const borrowed of [
+                copy.PAY_SEC_TITLE,
+                copy.QUOTES_NONE,
+                copy.QUOTES_FAILED,
+                copy.QUOTES_TRUNCATED,
+            ]) {
+                expect(screen.textContent).not.toContain(borrowed);
+            }
+        }
+    });
+
+    it('gives the quotes its own, and none of the book’s', () => {
+        const rows = paint(railView({ shopTab: 'quotes' })).root;
+        expect(rows.querySelector('[data-role="pay-row"]')).not.toBeNull();
+
+        // Nothing quoted is not a failure: a quiet sentence, and no retry.
+        const none = paint(railView({ shopTab: 'quotes', prices: new Map() })).root;
+        expect(none.querySelector('[data-role="quotes-none"]')?.textContent).toBe(
+            copy.QUOTES_NONE,
+        );
+        expect(none.querySelector('[data-role="retry"]')).toBeNull();
+
+        // A walk that threw returns what it had already collected, so the
+        // ordinary shape of this screen is rows AND a line — and the line says
+        // the read did not finish, never that the records are damaged.
+        const failed = paint(railView({ shopTab: 'quotes', descriptionsFailed: true })).root;
+        expect(failed.querySelector('[data-role="quotes-failed"]')?.textContent).toBe(
+            copy.QUOTES_FAILED,
+        );
+        expect(failed.querySelector('[data-role="pay-row"]')).not.toBeNull();
+        expect(failed.querySelector('[data-role="quotes-truncated"]')).toBeNull();
+        expect(failed.querySelector('[data-role="retry"]')).not.toBeNull();
+
+        // Our own cap on a walk that answered: a different sentence, and no
+        // retry, because asking again stops in the same place.
+        const truncated = paint(
+            railView({ shopTab: 'quotes', descriptionsTruncated: true }),
+        ).root;
+        expect(truncated.querySelector('[data-role="quotes-truncated"]')?.textContent).toBe(
+            copy.QUOTES_TRUNCATED,
+        );
+        expect(truncated.querySelector('[data-role="quotes-failed"]')).toBeNull();
+        expect(truncated.querySelector('[data-role="retry"]')).toBeNull();
+
+        const unread = paint(
+            railView({
+                shopTab: 'quotes',
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, QUOTE_USD],
+                ]),
+            }),
+        ).root;
+        expect(unread.querySelector('[data-role="pay-unreadable"]')?.textContent).toBe(
+            copy.quotedUnreadable(1),
+        );
+
+        // The quotes need no offer book, so the book's failure is never their
+        // screen: no hosts box, no "no index answered", one tab over.
+        const overFailure = paint(
+            railView({
+                shopTab: 'quotes',
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: HOSTS_TIMED_OUT },
+            }),
+        ).root;
+        expect(overFailure.querySelector('[data-role="pay-row"]')).not.toBeNull();
+        expect(overFailure.querySelector('.hosts')).toBeNull();
+
+        for (const screen of [rows, none, failed, truncated, unread, overFailure]) {
+            for (const borrowed of [UNREACHABLE_BODY, UNREADABLE_BODY]) {
+                expect(screen.textContent).not.toContain(borrowed);
+            }
+        }
+    });
+});
+
+describe('a-tab-whose-read-failed-shows-no-count', () => {
+    /**
+     * The label is the one thing a reader who never scrolls will see, so it
+     * carries a number only when this page read the whole of that side. A zero
+     * is a fact about the seller; a read that did not finish is a fact about
+     * this page, and the two must not wear the same shape.
+     */
+    it('counts both sides when both reads were whole', () => {
+        const { root } = paint(railView({ shopTab: 'listings' }));
+        expect(railTab(root, 'listings')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_LISTINGS, 1),
+        );
+        expect(railTab(root, 'quotes')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 1),
+        );
+    });
+
+    it('says zero only for a stall that really has none', () => {
+        const { root } = paint(
+            railView({ shopTab: 'listings', fetch: { kind: 'empty' }, prices: new Map() }),
+        );
+        expect(railTab(root, 'listings')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_LISTINGS, 0),
+        );
+        expect(railTab(root, 'quotes')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 0),
+        );
+    });
+
+    it('drops the listings number on each of the three book failures', () => {
+        for (const fetch of [
+            { kind: 'unreachable' as const, triedAtMs: 0, hosts: HOSTS_TIMED_OUT },
+            { kind: 'plugin-missing' as const, triedAtMs: 0, hosts: HOSTS_NO_PLUGIN },
+            { kind: 'unreadable' as const, triedAtMs: 0, returned: 3 },
+        ]) {
+            const { root } = paint(railView({ shopTab: 'quotes', fetch }));
+            expect(railTab(root, 'listings')!.textContent, fetch.kind).toBe(
+                copy.SHOP_TAB_LISTINGS,
+            );
+            // The other side read fine and keeps its number.
+            expect(railTab(root, 'quotes')!.textContent, fetch.kind).toBe(
+                copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 1),
+            );
+        }
+    });
+
+    it('drops the quotes number when the walk threw', () => {
+        const { root } = paint(railView({ shopTab: 'quotes', descriptionsFailed: true }));
+        expect(railTab(root, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+        expect(railTab(root, 'listings')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_LISTINGS, 1),
+        );
+    });
+
+    it('drops a number rather than printing a floor as a count', () => {
+        // One quote whose item this page could not read, and one listing this
+        // page could not read: on each side the number it could give would be
+        // a count of what we managed, printed as a count of what they have.
+        const quotes = paint(
+            railView({
+                shopTab: 'quotes',
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, QUOTE_USD],
+                ]),
+            }),
+        ).root;
+        expect(railTab(quotes, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+
+        const listings = paint(
+            railView({
+                shopTab: 'listings',
+                fetch: { kind: 'offers', offers: [OFFER], dropped: 2 },
+            }),
+        ).root;
+        expect(railTab(listings, 'listings')!.textContent).toBe(copy.SHOP_TAB_LISTINGS);
+    });
+});
+
+describe('a-truncated-tab-counts-what-it-read-and-says-so', () => {
+    /**
+     * A walk that stopped at our own cap answered everything it asked for, so
+     * the number is a true count of what it read — and the tab's own line is
+     * what admits the walk may not have reached the end.
+     */
+    it('keeps its number and admits the gap under the rows', () => {
+        const { root } = paint(railView({ shopTab: 'quotes', descriptionsTruncated: true }));
+        expect(railTab(root, 'quotes')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 1),
+        );
+        expect(root.querySelectorAll('[data-role="pay-row"]')).toHaveLength(1);
+        expect(root.querySelector('[data-role="quotes-truncated"]')?.textContent).toBe(
+            copy.QUOTES_TRUNCATED,
+        );
+    });
+});
+
+describe('a-shop-row-pointer-switches-tabs', () => {
+    /**
+     * The one line a Shop row carries about the other rail. It used to scroll
+     * to a section further down the same screen; the section is a tab away now,
+     * so it switches sides and changes no route.
+     */
+    it('switches to the quotes and opens nothing', () => {
+        const { root, h } = paint(railView({ shopTab: 'listings' }));
+        const pointer = root.querySelector('[data-role="pay-pointer"]') as HTMLElement;
+        expect(pointer.textContent).toBe(copy.PAY_POINTER);
+        pointer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onSwitchShopTab).toHaveBeenCalledWith('quotes');
+        expect(h.onBuy).not.toHaveBeenCalled();
+        expect(h.onOpenPay).not.toHaveBeenCalled();
+    });
+
+    it('is a sibling of the row’s head, never a control inside a button', () => {
+        const { root } = paint(railView({ shopTab: 'listings' }));
+        const pointer = root.querySelector('[data-role="pay-pointer"]') as HTMLElement;
+        expect(pointer.closest('button')).toBe(pointer);
+        expect(pointer.parentElement?.classList.contains('item')).toBe(true);
+    });
+
+    it('a listed token with no quote gets no pointer at all', () => {
+        const { root } = paint(offersView([OFFER]));
+        expect(root.querySelector('[data-role="pay-pointer"]')).toBeNull();
     });
 });

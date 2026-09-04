@@ -193,6 +193,17 @@ export type PanelKind = 'shop' | 'studio' | 'activity';
  */
 export type ShopSort = 'curated' | 'price-asc' | 'price-desc' | 'name';
 
+/**
+ * Which rail of the Shop panel is on screen: the offer book's listings, or the
+ * seller's own quotes.
+ *
+ * Two rails and never one screen. A covenant's asked amount and a seller's
+ * quote are two different transactions for what may be the same thing, and a
+ * reader who sees both figures at once has no way to tell which one they would
+ * be paying.
+ */
+export type ShopTab = 'listings' | 'quotes';
+
 export type SessionTokenCache = Map<string, TokenMeta>;
 
 /**
@@ -522,6 +533,16 @@ export type StallView = {
     genesis?: ReadonlyMap<string, GenesisAttribution>;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
+    /**
+     * Which rail of the Shop panel is painted. Absent is the listings.
+     *
+     * Written onto the view at paint time from `boot`'s own closure, exactly
+     * like `fiatCode` — **never** filled in by the load. `refresh()` rebuilds
+     * this object from `loadCurrent()`, so a reader who pressed Retry while
+     * reading the quotes would come back to the listings if the choice lived
+     * here.
+     */
+    shopTab?: ShopTab;
     /**
      * The stalls this browser pinned to the front door — route tokens from
      * `saved.ts`, read at paint time like `isDefaultStall`. Only the door

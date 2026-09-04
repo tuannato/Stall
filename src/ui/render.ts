@@ -58,6 +58,7 @@ import type {
     RouteWhy,
     SessionTokenCache,
     ShopSort,
+    ShopTab,
     StallEvent,
     StallHistory,
     StallOffer,
@@ -156,6 +157,12 @@ export type StallHandlers = {
     onTogglePin?: (raw: string) => void;
     /** Reorder a big shop's cards. UI state only, like the panel. */
     onChangeSort?: (sort: ShopSort) => void;
+    /**
+     * Show the other rail of the Shop panel. UI state only, like the sort —
+     * no navigation, no load, and nothing written down: which figures a
+     * reader is looking at is not a fact about the stall.
+     */
+    onSwitchShopTab?: (tab: ShopTab) => void;
     /** Narrow a big shop to cards matching the typed text. */
     onChangeFilter?: (text: string) => void;
     /**
@@ -1036,34 +1043,34 @@ function paintEmpty(
     if (notice !== null) {
         body.append(notice);
     }
+    settingsNotes(body, view);
     stall.querySelector('.stall-headings')?.append(
         ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
     );
-    const theme = view.theme ?? DEFAULT_THEME;
-    const emptyBlock = el('div', 'sparse-empty');
-    emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
-    emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));
-    emptyBlock.append(el('div', 'sparse-shelf'));
-    const cta = el('a', 'cta', copy.LIST_FIRST);
-    cta.setAttribute('data-role', 'list-first');
-    cta.href = CASHTAB_LIST_URL;
-    cta.target = '_blank';
-    cta.rel = 'noopener';
-    emptyBlock.append(cta);
-    body.append(emptyBlock);
-    // Under the message, never inside it: a stall with nothing listed and
-    // three quotes is exactly what this rail is for, and the empty screen's
-    // own sentence is still about the offer book.
-    const quotes = paySection(view, handlers);
-    if (quotes !== null) {
-        body.append(quotes);
+    body.append(shopTabsControl(view, handlers));
+    if (shopTabOf(view) === 'quotes') {
+        // A stall with nothing listed and three quotes is exactly what this
+        // rail is for, so the empty book is not the whole screen here.
+        body.append(quotesPanel(view, handlers));
+    } else {
+        const theme = view.theme ?? DEFAULT_THEME;
+        const emptyBlock = el('div', 'sparse-empty');
+        emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
+        emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));
+        emptyBlock.append(el('div', 'sparse-shelf'));
+        const cta = el('a', 'cta', copy.LIST_FIRST);
+        cta.setAttribute('data-role', 'list-first');
+        cta.href = CASHTAB_LIST_URL;
+        cta.target = '_blank';
+        cta.rel = 'noopener';
+        emptyBlock.append(cta);
+        body.append(emptyBlock);
+        // The live path no longer applies an empty answer, so a stall whose
+        // last offer genuinely sold keeps that row until someone asks again.
+        // This is where they ask.
+        body.append(retryControl(handlers));
+        body.append(sparseMotif(view));
     }
-    settingsNotes(body, view);
-    // The live path no longer applies an empty answer, so a stall whose last
-    // offer genuinely sold keeps that row until someone asks again. This is
-    // where they ask.
-    body.append(retryControl(handlers));
-    body.append(sparseMotif(view));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
@@ -1085,10 +1092,14 @@ function paintUnreadable(
             : header(displayName(view), copy.UNREADABLE_SUB, view.address),
     );
     const body = el('main', 'stall-body');
-    body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
     appendPayHintNote(body, view);
-    body.append(retryControl(handlers));
-    appendQuotesUnderFailure(body, view, handlers);
+    body.append(shopTabsControl(view, handlers));
+    if (shopTabOf(view) === 'quotes') {
+        body.append(quotesPanel(view, handlers));
+    } else {
+        body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
+        body.append(retryControl(handlers));
+    }
     stall.append(body);
     stall.append(stallFooter(identity, view, handlers));
 }
@@ -1108,11 +1119,15 @@ function paintUnreachable(
     }
 
     const body = el('main', 'stall-body');
-    body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
     appendPayHintNote(body, view);
-    body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
-    body.append(retryControl(handlers));
-    appendQuotesUnderFailure(body, view, handlers);
+    body.append(shopTabsControl(view, handlers));
+    if (shopTabOf(view) === 'quotes') {
+        body.append(quotesPanel(view, handlers));
+    } else {
+        body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
+        body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
+        body.append(retryControl(handlers));
+    }
     stall.append(body);
 
     if (named || identity !== undefined) {
@@ -1132,23 +1147,6 @@ function paintUnreachable(
 function readName(view: StallView): string | undefined {
     const name = view.stallName;
     return name === undefined || name === '' ? undefined : name;
-}
-
-/**
- * The pay rail under a failure message. A quote is the seller's own record and
- * needs no offer book, so it belongs on these screens exactly as it belongs on
- * the empty one — but the quotes this page could not read the genesis for are
- * **not** counted here: this screen is already saying we failed.
- */
-function appendQuotesUnderFailure(
-    body: HTMLElement,
-    view: StallView,
-    handlers: StallHandlers,
-): void {
-    const quotes = paySection(view, handlers, { countUnread: false });
-    if (quotes !== null) {
-        body.append(quotes);
-    }
 }
 
 function paintOffers(
@@ -1178,118 +1176,125 @@ function paintOffers(
     if (notice !== null) {
         body.append(notice);
     }
+    // Why the look is not the one the seller asked for, above the control:
+    // it is about the stall, so it belongs to neither rail.
+    settingsNotes(body, view);
+    body.append(shopTabsControl(view, handlers));
     /*
      * A big shop gets tools; a small one stays a stall. The threshold counts
      * the full shop, never the filtered remainder, so the tools cannot
      * filter themselves off the page. The filter narrows what is painted —
      * a way of looking, never a claim: the header above keeps counting
      * everything listed, and an emptied shelf says the filter did it.
+     *
+     * Computed whichever rail is on screen, because the sparse chrome below
+     * keys on the shown count and that chrome belongs to the stall.
      */
     const tools = distinct >= SHOP_TOOLS_MIN;
-    if (tools) {
-        body.append(shopTools(view, handlers));
-    }
     const filter = tools ? normalizedFilter(view.shopFilter) : undefined;
     const shown =
         filter === undefined
             ? offers
             : offers.filter((o) => tokenMatchesFilter(view.tokens, o.tokenId, filter));
-    if (filter !== undefined && shown.length === 0) {
-        const none = el('p', 'mid-p', copy.SHOP_FILTER_NONE);
-        none.setAttribute('data-role', 'filter-none');
-        body.append(none);
-    }
-    // Ordered first, then divided. Nothing sorted before this, so two offers of
-    // one token could sit either side of a third token's row. Copied: the array
-    // belongs to the caller's view.
-    const ordered = [...shown].sort(compareOffers);
-    const sort: ShopSort = tools ? (view.shopSort ?? 'curated') : 'curated';
-    if (sort === 'curated') {
-        /*
-         * The seller's own shelves lead the curated view (STLD tag 0x01):
-         * tokens whose winning record names a shelf are pulled out of the
-         * type sections and grouped under that heading, in the order the
-         * curated sort first meets them. The heading is seller text — the
-         * decoder screened it, and it lands as textContent, never markup.
-         * An explicit sort below flattens shelves and sections alike.
-         */
-        const named = view.shelves;
-        let unshelved = ordered;
-        if (named !== undefined && named.size > 0) {
-            const runs = new Map<string, StallOffer[]>();
-            unshelved = [];
-            for (const offer of ordered) {
-                const shelfName = named.get(offer.tokenId);
-                if (shelfName === undefined) {
-                    unshelved.push(offer);
-                    continue;
-                }
-                const run = runs.get(shelfName);
-                if (run === undefined) {
-                    runs.set(shelfName, [offer]);
-                } else {
-                    run.push(offer);
-                }
-            }
-            for (const [shelfName, run] of runs) {
-                const listings = listingsOf(run);
-                body.append(shelfHead(shelfName, listings.length));
-                const items = el('div', 'items');
-                for (const listing of listings) {
-                    items.append(offerRow(listing, view, handlers));
-                }
-                body.append(items);
-            }
-        }
-        const sections = sectionsOf(unshelved, view.tokens, (id) => view.nftGroups?.get(id));
-        // One section is not a division, it is a heading over the whole shop. A
-        // stall that sells only tokens should look like a stall, not a filing
-        // cabinet with one drawer.
-        const divided = sections.length > 1;
-        for (const section of sections) {
-            if (divided) {
-                body.append(sectionHead(section.category, view));
-            }
-            for (const group of section.groups) {
-                const listings = listingsOf(group.offers);
-                if (group.groupTokenId !== undefined) {
-                    body.append(collectionHead(group.groupTokenId, listings.length, view));
-                } else if (group.groupLabel !== undefined) {
-                    body.append(lookHead(group.groupLabel, listings.length));
-                }
-                const items = el('div', 'items');
-                for (const listing of listings) {
-                    items.append(offerRow(listing, view, handlers));
-                }
-                body.append(items);
-            }
-        }
+    const onQuotes = shopTabOf(view) === 'quotes';
+    if (onQuotes) {
+        body.append(quotesPanel(view, handlers));
     } else {
-        // An explicit sort is one flat run: a price order that restarted at
-        // every section border would not be a price order. The section and
-        // collection headings return with the curated default.
-        const items = el('div', 'items');
-        for (const listing of sortedListings(listingsOf(ordered), sort, view.tokens)) {
-            items.append(offerRow(listing, view, handlers));
+        if (tools) {
+            body.append(shopTools(view, handlers));
         }
-        body.append(items);
-    }
-    // Said on the shop that works, because that is where it is invisible.
-    const dropped = view.fetch?.kind === 'offers' ? (view.fetch.dropped ?? 0) : 0;
-    if (dropped > 0) {
-        body.append(el('p', 'fine', copy.droppedOffers(dropped)));
+        if (filter !== undefined && shown.length === 0) {
+            const none = el('p', 'mid-p', copy.SHOP_FILTER_NONE);
+            none.setAttribute('data-role', 'filter-none');
+            body.append(none);
+        }
+        // Ordered first, then divided. Nothing sorted before this, so two offers
+        // of one token could sit either side of a third token's row. Copied: the
+        // array belongs to the caller's view.
+        const ordered = [...shown].sort(compareOffers);
+        const sort: ShopSort = tools ? (view.shopSort ?? 'curated') : 'curated';
+        if (sort === 'curated') {
+            /*
+             * The seller's own shelves lead the curated view (STLD tag 0x01):
+             * tokens whose winning record names a shelf are pulled out of the
+             * type sections and grouped under that heading, in the order the
+             * curated sort first meets them. The heading is seller text — the
+             * decoder screened it, and it lands as textContent, never markup.
+             * An explicit sort below flattens shelves and sections alike.
+             */
+            const named = view.shelves;
+            let unshelved = ordered;
+            if (named !== undefined && named.size > 0) {
+                const runs = new Map<string, StallOffer[]>();
+                unshelved = [];
+                for (const offer of ordered) {
+                    const shelfName = named.get(offer.tokenId);
+                    if (shelfName === undefined) {
+                        unshelved.push(offer);
+                        continue;
+                    }
+                    const run = runs.get(shelfName);
+                    if (run === undefined) {
+                        runs.set(shelfName, [offer]);
+                    } else {
+                        run.push(offer);
+                    }
+                }
+                for (const [shelfName, run] of runs) {
+                    const listings = listingsOf(run);
+                    body.append(shelfHead(shelfName, listings.length));
+                    const items = el('div', 'items');
+                    for (const listing of listings) {
+                        items.append(offerRow(listing, view, handlers));
+                    }
+                    body.append(items);
+                }
+            }
+            const sections = sectionsOf(unshelved, view.tokens, (id) => view.nftGroups?.get(id));
+            // One section is not a division, it is a heading over the whole shop.
+            // A stall that sells only tokens should look like a stall, not a
+            // filing cabinet with one drawer.
+            const divided = sections.length > 1;
+            for (const section of sections) {
+                if (divided) {
+                    body.append(sectionHead(section.category, view));
+                }
+                for (const group of section.groups) {
+                    const listings = listingsOf(group.offers);
+                    if (group.groupTokenId !== undefined) {
+                        body.append(collectionHead(group.groupTokenId, listings.length, view));
+                    } else if (group.groupLabel !== undefined) {
+                        body.append(lookHead(group.groupLabel, listings.length));
+                    }
+                    const items = el('div', 'items');
+                    for (const listing of listings) {
+                        items.append(offerRow(listing, view, handlers));
+                    }
+                    body.append(items);
+                }
+            }
+        } else {
+            // An explicit sort is one flat run: a price order that restarted at
+            // every section border would not be a price order. The section and
+            // collection headings return with the curated default.
+            const items = el('div', 'items');
+            for (const listing of sortedListings(listingsOf(ordered), sort, view.tokens)) {
+                items.append(offerRow(listing, view, handlers));
+            }
+            body.append(items);
+        }
+        // Said on the shop that works, because that is where it is invisible.
+        const dropped = view.fetch?.kind === 'offers' ? (view.fetch.dropped ?? 0) : 0;
+        if (dropped > 0) {
+            body.append(el('p', 'fine', copy.droppedOffers(dropped)));
+        }
     }
     // A shop of one or two is a big stage with a small cast: the look's own
     // closing motif fills the lower half with intent, and the empty fields
     // invite the seller by name. Presence keys on the SHOWN count — a
     // filter narrowing to two earns the motif too, and its arrival is an
-    // append below the cards, never a re-layout above them.
-    // Under the shop list and above the closing motif: the quotes are a
-    // second rail, not a footnote to the first.
-    const quotes = paySection(view, handlers);
-    if (quotes !== null) {
-        body.append(quotes);
-    }
+    // append below the cards, never a re-layout above them. The motif closes
+    // the shelves, so it belongs to the rail that paints them.
     if (shown.length <= 2) {
         stall.querySelector('.stall-headings')?.append(
             ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
@@ -1300,11 +1305,11 @@ function paintOffers(
                 body.prepend(invite);
             }
         }
-        body.append(sparseMotif(view));
+        if (!onQuotes) {
+            body.append(sparseMotif(view));
+        }
     }
     stall.append(body);
-
-    settingsNotes(body, view);
     stall.append(stallFooter(identityOf(view), view, handlers));
 }
 
@@ -1735,30 +1740,107 @@ function groupWholePart(figure: string): string {
     return frac === undefined ? grouped : `${grouped}.${frac}`;
 }
 
+/** Which rail of the Shop panel is painted. Absent is the listings. */
+function shopTabOf(view: StallView): ShopTab {
+    return view.shopTab ?? 'listings';
+}
+
 /**
- * The direct-payment rail's own surface, under the shop list, under the empty
- * screen's message, and under a failure message alike.
+ * How many rows a side holds — or **no number at all**, which is the whole
+ * rule these two functions exist for.
  *
- * Painted only when something is quoted: an empty section is a heading over
- * nothing, and this rail is opt-in for the seller — a stall that published no
- * quotes has not chosen to be on it.
+ * The count rides the tab's label, and a label is the one thing a reader who
+ * never scrolls will see. So it may only ever say what this page actually
+ * read: a zero is a claim about the seller, and a side whose read did not
+ * finish has nothing to claim. That covers the three book failures, a records
+ * walk that threw, and — on either side — a read that came back knowing it had
+ * dropped rows, because a floor printed as a count is our gap reported as
+ * their inventory.
  *
- * `countUnread` is off on the screens that are already saying we failed. The
- * count is our own gap said out loud, which is right on a working shop and
- * doubled under a hosts box: a reader would be told twice, in two wordings,
- * about one failure — and the second telling reads as being about the seller's
- * items rather than about this page.
+ * A walk that stopped at our own cap is different and keeps its number: it
+ * answered every page it asked for, and the tab's own line is what admits the
+ * end may be further on.
  */
-function paySection(
-    view: StallView,
-    handlers: StallHandlers,
-    opts: { countUnread?: boolean } = {},
-): HTMLElement | null {
-    const items = quotedItems(view);
-    const unreadable = opts.countUnread === false ? 0 : unreadableQuotes(view);
-    if (items.length === 0 && unreadable === 0) {
-        return null;
+function listingsCount(view: StallView): number | undefined {
+    const fetch = view.fetch;
+    if (fetch === undefined) {
+        return undefined;
     }
+    if (fetch.kind === 'empty') {
+        return 0;
+    }
+    if (fetch.kind === 'offers' && (fetch.dropped ?? 0) === 0) {
+        // One card per token, which is what the shop paints.
+        return new Set(fetch.offers.map((offer) => offer.tokenId)).size;
+    }
+    return undefined;
+}
+
+function quotesCount(view: StallView): number | undefined {
+    if (view.descriptionsFailed === true || unreadableQuotes(view) > 0) {
+        return undefined;
+    }
+    return quotedItems(view).length;
+}
+
+/**
+ * The Shop panel's two rails, as a segmented control at the top of the panel.
+ *
+ * `role="group"` with `aria-pressed`, the pattern every other segmented
+ * control here already uses — deliberately **not** `role="tablist"`, which
+ * promises a screen reader `tabpanel`, `aria-controls`, a roving `tabindex`
+ * and arrow keys that this screen does not have, and buys nothing it does not
+ * already get from a pressed button. Never a second dock either: the bar
+ * below switches panels and is untouched.
+ */
+function shopTabsControl(view: StallView, handlers: StallHandlers): HTMLElement {
+    const seg = el('div', 'seg seg-two shop-seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', copy.SHOP_TABS_LABEL);
+    seg.setAttribute('data-role', 'shop-tabs');
+    const active = shopTabOf(view);
+    const sides: { key: ShopTab; label: string; count?: number }[] = [
+        { key: 'listings', label: copy.SHOP_TAB_LISTINGS, count: listingsCount(view) },
+        { key: 'quotes', label: copy.SHOP_TAB_QUOTES, count: quotesCount(view) },
+    ];
+    for (const side of sides) {
+        const button = el('button', 'seg-b', copy.shopTabLabel(side.label, side.count));
+        button.type = 'button';
+        button.setAttribute('aria-pressed', side.key === active ? 'true' : 'false');
+        button.setAttribute('data-role', `shop-tab-${side.key}`);
+        button.setAttribute('data-focus-key', `shop-tab-${side.key}`);
+        const go = handlers.onSwitchShopTab;
+        if (go !== undefined) {
+            button.addEventListener('click', () => go(side.key));
+        }
+        seg.append(button);
+    }
+    return seg;
+}
+
+/**
+ * The direct-payment rail: the seller's own quotes, and the outcomes of the
+ * walk that found them.
+ *
+ * Its own side of the panel rather than a section under the shop list, so the
+ * covenant's asked amount and the seller's figure are never on one screen.
+ * Every sentence here is about the records walk and none of them is about the
+ * offer book: a quote needs no covenant, so the book's failure is one tab over
+ * and its words stay there.
+ *
+ * The three things this side can be short of are three different sentences.
+ * The count of quotes whose item this page could not read is the seller's
+ * inventory minus our own gap, said out loud rather than silently shortening
+ * the list. A walk that threw says the read did not finish — never that the
+ * records came back damaged, which is a different thing that does not stop a
+ * walk — and carries the retry, because that is a failure with a way forward.
+ * Our own page cap is the third, and gets no retry: asking again stops in the
+ * same place. Nothing quoted at all is none of those and is not a failure:
+ * this rail is the seller's to opt into.
+ */
+function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
+    const items = quotedItems(view);
+    const unreadable = unreadableQuotes(view);
     const section = el('section', 'pay-sec');
     section.setAttribute('data-role', 'pay-section');
     section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
@@ -1774,6 +1856,27 @@ function paySection(
         const note = el('p', 'fine', copy.quotedUnreadable(unreadable));
         note.setAttribute('data-role', 'pay-unreadable');
         section.append(note);
+    }
+    if (view.descriptionsFailed === true) {
+        const note = el('p', 'fine', copy.QUOTES_FAILED);
+        note.setAttribute('data-role', 'quotes-failed');
+        section.append(note);
+        section.append(retryControl(handlers));
+    }
+    if (view.descriptionsTruncated === true) {
+        const note = el('p', 'fine', copy.QUOTES_TRUNCATED);
+        note.setAttribute('data-role', 'quotes-truncated');
+        section.append(note);
+    }
+    if (
+        items.length === 0 &&
+        unreadable === 0 &&
+        view.descriptionsFailed !== true &&
+        view.descriptionsTruncated !== true
+    ) {
+        const quiet = el('p', 'mid-p', copy.QUOTES_NONE);
+        quiet.setAttribute('data-role', 'quotes-none');
+        section.append(quiet);
     }
     return section;
 }
@@ -1868,10 +1971,14 @@ function payRow(
  *
  * A sibling of the row's head button, never inside it: the head is a
  * `<button>` and a control nested in one is markup no browser agrees about.
- * It scrolls to the section and changes no route — the two figures stay on
- * two rows, and this only says the other one exists.
+ * It shows the other side and changes no route — the two figures stay on two
+ * screens, and this only says the other one exists.
  */
-function payPointer(tokenId: string, view: StallView): HTMLElement | null {
+function payPointer(
+    tokenId: string,
+    view: StallView,
+    handlers: StallHandlers,
+): HTMLElement | null {
     if (!quotedItems(view).some((item) => item.tokenId === tokenId)) {
         return null;
     }
@@ -1880,14 +1987,9 @@ function payPointer(tokenId: string, view: StallView): HTMLElement | null {
     pointer.setAttribute('data-role', 'pay-pointer');
     pointer.setAttribute('data-focus-key', `pay-pointer:${tokenId}`);
     pointer.addEventListener('click', (event) => {
+        // The row's head opens the listing; this is a control of its own.
         event.stopPropagation();
-        // Found at click time and from the pointer's own tree: the section is
-        // appended after the rows, and a detached tree has no `document` to
-        // ask.
-        const target = pointer
-            .closest('.stall')
-            ?.querySelector('[data-role="pay-section"]');
-        scrollSectionIntoView(target ?? null);
+        handlers.onSwitchShopTab?.('quotes');
     });
     return pointer;
 }
@@ -4087,7 +4189,7 @@ function offerRow(
         }
     });
     card.append(head);
-    const pointer = payPointer(listing.tokenId, view);
+    const pointer = payPointer(listing.tokenId, view, handlers);
     if (pointer !== null) {
         card.append(pointer);
     }

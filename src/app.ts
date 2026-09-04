@@ -38,6 +38,7 @@ import type {
     Outpoint,
     RouteParse,
     SessionTokenCache,
+    ShopTab,
     StallEvent,
     StallHistory,
     StallOffer,
@@ -307,6 +308,19 @@ export function boot(
      */
     let payHintUsed = false;
     /**
+     * Which rail of the Shop panel is on screen, and the stall that choice
+     * belongs to.
+     *
+     * Closure state, written onto every paint like `fiatCode` — never a field
+     * `loadCurrent` fills in: `refresh()` rebuilds the view from the load, so
+     * a reader who pressed Retry while reading the quotes would come back to
+     * the listings. `shopTabFor` is what makes it stall-scoped rather than
+     * global: the same stall read again keeps the reader's side, and a
+     * different seller decides again from their own shop.
+     */
+    let shopTab: ShopTab = 'listings';
+    let shopTabFor: string | undefined;
+    /**
      * The transactions this page has watched arrive, newest first.
      *
      * Kept here as well as on the view because a paint is not guaranteed: a
@@ -404,6 +418,7 @@ export function boot(
             fiatCode,
             fiatRate,
             payRate,
+            shopTab,
         };
         renderStall(root, view, {
             onChangeFiat: (code: string): void => {
@@ -504,6 +519,12 @@ export function boot(
                 // A way of looking at the shelves, not a fact about the
                 // stall: UI state like `panel`, gone on the next full load.
                 state = { ...state, view: { ...state.view, shopSort: sort } };
+                paint();
+            },
+            onSwitchShopTab: (tab) => {
+                // The reader's own choice, and it outlives the load: a
+                // re-read of this stall paints whichever side they are on.
+                shopTab = tab;
                 paint();
             },
             onChangeFilter: (text) => {
@@ -945,6 +966,30 @@ export function boot(
         };
     };
 
+    /**
+     * Which rail a stall opens on, decided **once** — on the first definite
+     * fetch for that seller — and sticky from then on.
+     *
+     * `refresh()` paints the opening screen before the index is asked and a
+     * live book lands after it, so a default recomputed at paint time would
+     * say listings, flip to the quotes when the load landed and flip back on
+     * the next message, all under a reader mid-sentence.
+     *
+     * A scanned `?pay=` link names an item on the quote rail, so it opens
+     * there whether or not it matched. Otherwise the quotes win only when the
+     * shop has nothing to browse and the seller has quoted something: a book
+     * that **failed** is not a shop with nothing in it — it is a shop this
+     * page could not read, and the screen that says so is the listings'.
+     */
+    const openingShopTab = (view: StallView): ShopTab => {
+        if (view.payHint !== undefined) {
+            return 'quotes';
+        }
+        return view.fetch?.kind === 'empty' && quotedItems(view).length > 0
+            ? 'quotes'
+            : 'listings';
+    };
+
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
         live?.close();
@@ -980,6 +1025,12 @@ export function boot(
                 ...(walked === undefined ? {} : { history: walked }),
             },
         };
+        // The first definite fetch for this seller decides the rail; a re-read
+        // of a stall already open keeps whichever side the reader is on.
+        if (next.pubkeyHex === undefined || next.pubkeyHex !== shopTabFor) {
+            shopTab = openingShopTab(loaded.view);
+            shopTabFor = next.pubkeyHex;
+        }
         // A scanned link is answered from the records, and on a failure screen
         // those arrive after this paint — judging the hint against the state
         // the failure returned would call the seller's own item unknown. The

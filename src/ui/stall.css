@@ -4170,20 +4170,40 @@ details.fold > .fold-sum::-webkit-details-marker {
 
 
 /*
+ * The Shop panel's own segmented control: which rail is on screen.
+ *
+ * Full width across the top of the panel, and its labels carry a count that
+ * grows with the shop — so each segment keeps its share of the width and a
+ * long label is cut inside its own segment rather than widening the control
+ * past the page.
+ */
+.shop-seg {
+    width: 100%;
+}
+
+.shop-seg .seg-b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/*
  * The direct-payment rail.
  *
- * A second surface under the shop list, and deliberately not a second kind of
- * offer card: the figure on a row here is the seller's own quote, so it wears
- * its own type and its own chip and never the "from", the stock line or the
+ * One side of the Shop panel, and deliberately not a second kind of offer
+ * card: the figure on a row here is the seller's own quote, so it wears its
+ * own type and its own chip and never the "from", the stock line or the
  * converted glance an Agora row carries.
+ *
+ * No rule above it. It used to sit under the shop list, where a line was what
+ * separated the two rails; they are two screens now, the control is the
+ * boundary, and a second line under the control reads as a divider inside one
+ * of them.
  */
 .pay-sec {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 10px;
-    padding-top: 22px;
-    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
 }
 
 .pay-lede {

@@ -1035,7 +1035,40 @@ export const PAY_SEC_TITLE = 'Pay the seller directly';
  * is the thing that is true of any seller reached through a chat window.
  */
 export const PAY_SEC_LEDE =
-    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote; they deliver off-chain. You are trusting the seller, as with any seller you reach through a chat.';
+    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote — you receive no token; they deliver off-chain. You are trusting the seller, as with any seller you reach through a chat.';
+/*
+ * The Shop panel's two rails. A segmented control, never a second tab bar and
+ * never a tablist: the dock below it is the only bar that switches panels, and
+ * this one only says which figures are on screen.
+ */
+export const SHOP_TABS_LABEL = 'Which rail of this shop to show';
+export const SHOP_TAB_LISTINGS = 'Listings';
+export const SHOP_TAB_QUOTES = 'Quotes';
+/**
+ * The count rides the label because that is the one place a reader who never
+ * scrolls will meet it. **No number at all** when the side's read did not
+ * finish: a zero is a fact about the seller, and that would be a fact about
+ * this page.
+ */
+export const shopTabLabel = (side: string, count?: number): string =>
+    count === undefined ? side : `${side} · ${count}`;
+/**
+ * Nothing quoted. A quiet sentence and never an error — the rail is the
+ * seller's to opt into, and a stall that published no quote has simply not
+ * chosen it. No retry: there is nothing here that failed.
+ */
+export const QUOTES_NONE =
+    'This seller has not quoted anything to pay for directly.';
+/**
+ * The records walk threw. **The read did not finish** — never that the records
+ * came back damaged, which is a different thing (a record this page could not
+ * decode) and does not stop a walk.
+ */
+export const QUOTES_FAILED =
+    'This page did not finish reading the seller’s records, so quotes may be missing from this list.';
+/** Our own page cap on the same walk. Their history is long; we stopped. */
+export const QUOTES_TRUNCATED =
+    'We stopped reading this seller’s history before the end, so they may have quoted more than this.';
 /**
  * The item's name is the seller's own words; the token's genesis name takes
  * the small line beside it. A token name is true and is rarely the thing a

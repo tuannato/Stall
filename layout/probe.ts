@@ -24,7 +24,13 @@ import {
     OBS_STICKER_HEIGHT,
     OBS_STICKER_WIDTH,
 } from '../src/ui/obsSizes';
-import { NO_DECOR_SCREENS, SCREENS, STATE_SCREENS, handlers } from './fixtures';
+import {
+    GEOMETRY_ONLY_SCREENS,
+    NO_DECOR_SCREENS,
+    SCREENS,
+    STATE_SCREENS,
+    handlers,
+} from './fixtures';
 
 /**
  * What a decoration may never touch. Wider than the price, because a QR that is
@@ -1119,10 +1125,13 @@ declare global {
  * shot flattened onto white — which the transparency pass measures properly,
  * over black AND white, rather than paying for it twice here. The two
  * long-name screens are geometry for the sticker rule and put no figure on a
- * ground this list does not already hold.
+ * ground this list does not already hold. `GEOMETRY_ONLY_SCREENS` is the same
+ * judgement written down for the page screens.
  */
 window.__contrastScreens = screensForViewport().filter(
-    (name) => !NO_DECOR_SCREENS.has(name) || name === 'broadcast',
+    (name) =>
+        (!NO_DECOR_SCREENS.has(name) || name === 'broadcast') &&
+        !GEOMETRY_ONLY_SCREENS.has(name),
 );
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__themes = SHIPPED_THEMES.map((t) => t.id);

@@ -1016,3 +1016,169 @@ describe('a-superseded-facts-answer-is-dropped', () => {
         expect(root.textContent).not.toContain('First Stall');
     });
 });
+
+/*
+ * The Shop panel's two rails: which side a stall opens on, and what keeps a
+ * reader there.
+ *
+ * The choice is `boot`'s own closure state, applied at every paint the way the
+ * currency is. It is not on the view the load answers with: `refresh()`
+ * rebuilds that object from `loadCurrent()`, so a reader who pressed Retry
+ * while reading the quotes would land back on the listings.
+ */
+
+const railPressed = (root: HTMLElement): string | undefined =>
+    root
+        .querySelector('[data-role="shop-tabs"] [aria-pressed="true"]')
+        ?.getAttribute('data-role') ?? undefined;
+
+const railTab = (root: HTMLElement, side: 'listings' | 'quotes') =>
+    root.querySelector<HTMLButtonElement>(`[data-role="shop-tab-${side}"]`);
+
+const QUOTED_OFFER: StallOffer = {
+    outpoint: { txid: 'ab'.repeat(32), outIdx: 0 },
+    tokenId: QUOTED,
+    atoms: 12n,
+    variant: 'PARTIAL',
+    askedSats: 120_000n,
+    askedAtoms: 1n,
+};
+
+const listedQuotedStall = (over: Partial<AppState['view']> = {}): AppState =>
+    quotedStall({ fetch: { kind: 'offers', offers: [QUOTED_OFFER] }, ...over });
+
+describe('the-shop-opens-on-the-tab-that-has-content', () => {
+    it('opens the quotes when nothing is listed and something is quoted', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall());
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+        expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
+    });
+
+    it('opens the listings when the shop has any', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => listedQuotedStall());
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-listings');
+    });
+
+    it('opens the listings on an empty stall that quotes nothing', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall({ prices: new Map() }));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-listings');
+    });
+
+    it('opens the listings when the book failed, whatever the records hold', async () => {
+        // "Lists nothing" is a fact about the seller and this screen has none:
+        // the book failed, so the shop is unknown rather than empty.
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({ fetch: { kind: 'unreachable', triedAtMs: 1, hosts: [] } }),
+        );
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-listings');
+        expect(root.textContent).toContain(UNREACHABLE_BODY);
+    });
+});
+
+describe('the-opening-tab-is-decided-once-and-sticks', () => {
+    /**
+     * `refresh()` paints the opening screen before the index is asked, and a
+     * live book lands after it. A default computed at paint time would say
+     * listings, flip to quotes when the load landed, and flip back on the next
+     * message — three screens under one reader.
+     */
+    it('does not decide again for a stall already open', async () => {
+        let listed = false;
+        const root = document.createElement('div');
+        boot(root, async () => (listed ? listedQuotedStall() : quotedStall()));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+
+        // The same stall, read again, now with a listing on it. The rule would
+        // say listings; the decision was already made.
+        listed = true;
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+    });
+
+    it('decides again for a different stall', async () => {
+        const other = '02'.padEnd(66, 'b');
+        let first = true;
+        const root = document.createElement('div');
+        boot(root, async () => {
+            if (first) {
+                first = false;
+                return quotedStall();
+            }
+            return {
+                ...listedQuotedStall(),
+                pubkeyHex: other,
+                view: {
+                    ...listedQuotedStall().view,
+                    route: { kind: 'pubkey' as const, pubkeyHex: other, address: ADDR },
+                },
+            };
+        });
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-listings');
+    });
+});
+
+describe('a-retry-on-the-quotes-tab-comes-back-to-the-quotes-tab', () => {
+    /**
+     * A walk that threw is the one quotes outcome with a way forward, so it
+     * carries the same Retry the book's failures do — and that control runs the
+     * whole load again. The side the reader is on is not part of what is
+     * rebuilt.
+     */
+    it('re-reads the stall and leaves the reader where they were', async () => {
+        let loads = 0;
+        const root = document.createElement('div');
+        boot(root, async () => {
+            loads += 1;
+            return listedQuotedStall({ descriptionsFailed: true });
+        });
+        await flush();
+        railTab(root, 'quotes')!.click();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+
+        (root.querySelector('[data-role="retry"]') as HTMLButtonElement).click();
+        await flush();
+        expect(loads, 'the retry re-read the stall').toBe(2);
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+        expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
+    });
+});
+
+describe('a-pay-hint-opens-the-quotes-tab', () => {
+    /**
+     * A scanned code names an item on the quote rail, so it lands on that rail
+     * — including when it opened nothing, because the note about it is a note
+     * about that side.
+     */
+    it('lands behind the sheet the link opened', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => listedQuotedStall({ payHint: QUOTED.slice(0, 12) }));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+    });
+
+    it('lands there even when the link named nothing this stall quotes', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => listedQuotedStall({ payHint: 'ab'.repeat(6) }));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-quotes');
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNKNOWN,
+        );
+    });
+});

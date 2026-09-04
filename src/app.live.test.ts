@@ -2551,6 +2551,15 @@ describe('a-plugin-failure-still-paints-the-quotes', () => {
         expect(root.textContent, 'the book failed and says so').toContain(UNREACHABLE_BODY);
         expect(root.querySelector('.hosts')).not.toBeNull();
         expect(root.textContent, 'a name this load read').toContain('Riverside Goods');
+        // The quotes are the panel's other rail now. A failed book is not a
+        // shop with nothing in it, so the screen opens on the side that says
+        // so — and the count on the other label is what says there is a quote
+        // to go and read.
+        const toQuotes = root.querySelector(
+            '[data-role="shop-tab-quotes"]',
+        ) as HTMLButtonElement;
+        expect(toQuotes.textContent, 'the quote this load read is counted').toContain('1');
+        toQuotes.click();
         expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
         expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
         expect(root.textContent).toContain('Ripe Beans');
@@ -2560,10 +2569,15 @@ describe('a-plugin-failure-still-paints-the-quotes', () => {
 describe('an-unreachable-book-paints-no-quote-count-it-cannot-explain', () => {
     /**
      * The genesis read is how a quote becomes a row: without it the item could
-     * be an NFT, and a figure per whole token means nothing about one. On the
-     * shop that gap is counted out loud. Under a failure message it is not —
-     * our failure is already on this screen once, and printing "N quoted items
-     * this page could not read" beneath a hosts box says it twice.
+     * be an NFT, and a figure per whole token means nothing about one. That gap
+     * is counted out loud — but never on the screen that is already saying we
+     * failed, where a reader would be told twice about one failure and the
+     * second telling reads as being about the seller's items.
+     *
+     * The two are different sides of the panel now, so that is what keeps them
+     * apart: the failure screen carries the message and the hosts box, the
+     * count belongs to the rail it is about, and the label above says no number
+     * at all rather than a zero it cannot stand behind.
      */
     it('says nothing about quotes whose genesis it could not read', async () => {
         chain.book = PLUGIN_MISSING;
@@ -2578,16 +2592,26 @@ describe('an-unreachable-book-paints-no-quote-count-it-cannot-explain', () => {
         expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
         expect(root.querySelector('[data-role="pay-section"]')).toBeNull();
         expect(root.textContent).toContain(UNREACHABLE_BODY);
+        // Not a zero either: this page knows of a quote it could not read.
+        expect(
+            root.querySelector('[data-role="shop-tab-quotes"]')?.textContent,
+        ).not.toContain('0');
     });
 
-    it('still counts it on a screen that is not our failure', async () => {
+    it('still counts it on the rail the count is about', async () => {
         publishNameAndQuote(UNREAD_TOKEN, ['3e'.repeat(32), '3f'.repeat(32)]);
 
         const root = document.createElement('div');
         boot(root);
         await flush();
 
+        (
+            root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement
+        ).click();
         expect(root.querySelector('[data-role="pay-unreadable"]')).not.toBeNull();
+        expect(root.textContent, 'and nothing about the book').not.toContain(
+            UNREACHABLE_BODY,
+        );
     });
 });
 
@@ -2618,4 +2642,68 @@ describe('a-first-load-failure-paints-no-name-it-did-not-read', () => {
         // twice: measured at ~2.9s alone here and over five under the parallel
         // suite, which is the runner's default budget rather than a hang.
     }, 20_000);
+});
+
+describe('a-live-listing-does-not-move-a-reader-off-the-quotes-tab', () => {
+    /**
+     * Which rail is on screen is `boot`'s own closure state, so a repaint
+     * nobody asked for cannot take it: a listing arriving over the socket is
+     * news about the other side, and a reader mid-sentence on the quotes stays
+     * where they are. The opening side is decided once, on the first definite
+     * fetch, and never again for this stall.
+     */
+    const QUOTED_META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('keeps the reader on the quotes across a book that moved', async () => {
+        const { root } = bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, QUOTED_META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        const pressed = (): string | undefined =>
+            root
+                .querySelector('[data-role="shop-tabs"] [aria-pressed="true"]')
+                ?.getAttribute('data-role') ?? undefined;
+        expect(pressed(), 'a shop with listings opens on them').toBe('shop-tab-listings');
+
+        (
+            root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement
+        ).click();
+        expect(pressed()).toBe('shop-tab-quotes');
+
+        const listings = (): string =>
+            root.querySelector('[data-role="shop-tab-listings"]')?.textContent ?? '';
+        expect(listings(), 'one token listed').toContain('1');
+
+        // A second token joins the book. The label counts it — the numbers are
+        // read at paint time, so a live re-read moves them — and nothing else
+        // about the reader's screen changes.
+        chain.book = {
+            kind: 'offers',
+            offers: [
+                OFFER,
+                {
+                    ...OFFER,
+                    tokenId: 'bc'.repeat(32),
+                    outpoint: { txid: 'ee'.repeat(32), outIdx: 0 },
+                },
+            ],
+        };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+
+        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(listings(), 'and the label counted it').toContain('2');
+        expect(pressed(), 'and the reader did not move').toBe('shop-tab-quotes');
+        expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
+    });
 });

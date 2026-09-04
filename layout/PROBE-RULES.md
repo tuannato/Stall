@@ -87,30 +87,52 @@ nothing.
   it.
 
 - **The seller's quote is a protected box** (`[data-role="seller-price"]`).
-  It is a money figure a buyer reads before pressing Pay, on the pay surface
-  and inside the pay sheet, and a covered one reads as nothing — the same rule
-  the covenant's price has. The `offers` and `empty` fixtures both carry
-  `prices` so the selector matches something: one quote on a listed token
-  (which earns its Shop row the pointer) and one on a token the stall does not
-  list, because the pay set is not gated on listings and a fixture whose every
-  quote also had an offer would measure half the surface. Two new screens,
-  `pay` and `pay-xec`, put the sheet's own figures over the scrim; `pay-xec`
-  is in `STATE_SCREENS` because its decoration variants would be `pay`'s
-  painted twice.
+  It is a money figure a buyer reads before pressing Pay, on the quote rail and
+  inside the pay sheet, and a covered one reads as nothing — the same rule the
+  covenant's price has. Two screens, `pay` and `pay-xec`, put the sheet's own
+  figures over the scrim; `pay-xec` is in `STATE_SCREENS` because its decoration
+  variants would be `pay`'s painted twice. Both keep `prices` for the sheet they
+  open, one quote on a listed token and one on a token the stall does not list,
+  because the pay set is not gated on listings.
 
-- **A quote paints under a failure message, and its fixture may not carry
-  metadata the real path could not get.** The offer book and the seller's own
-  records are two reads of two indexes, so `unreachable`, `unreadable` and
-  `plugin-missing` now carry a name this load read and the seller's `prices` —
-  and **no `tokens` entries for the tokens those quotes name**, because that
-  genesis read goes to the index that just failed and usually fails with it.
-  Those three are the case where nothing paints and nothing is counted (the
-  count is our own gap said out loud, and under a hosts box it would say one
-  failure twice). `plugin-missing-quotes` is the case that does paint: a node
-  that answered without `agora.py` while its address history carried
-  everything. It is the only screen that puts `[data-role="seller-price"]`
-  under two blocks of our own bad news, so it is measured rather than
-  reasoned about, contrast pass included — it cost 173 of the 2,831 boxes.
+- **The rail is a side of the Shop panel, so a fixture names the side.** Since
+  the panel became Listings | Quotes, `renderStall` paints one of them and
+  `view.shopTab` is what picks — so `offers` and `empty` keep their `prices`
+  (the tab labels count them, and a listed quoted token still earns its Shop row
+  the pointer) while the rows themselves are on the screens that ask for them.
+  `plugin-missing-quotes` is that screen: `shopTab: 'quotes'` over a node that
+  answered without `agora.py` while its address history carried everything —
+  both naming shapes, a `$` figure and an XEC one, and **the only quote screen
+  the contrast pass samples**. It cost 173 of the 2,831 boxes when it was added
+  under the old shape and it keeps that seat rather than a new one.
+
+- **A failure screen's own fixture may not carry metadata the real path could
+  not get.** The offer book and the seller's own records are two reads of two
+  indexes, so `unreachable`, `unreadable` and `plugin-missing` carry a name this
+  load read and the seller's `prices` — and **no `tokens` entries for the tokens
+  those quotes name**, because that genesis read goes to the index that just
+  failed and usually fails with it. They paint the listings side, which is where
+  such a stall opens: the message, the hosts box and the retry, with the count
+  of what we could not read on the rail it is about rather than under a hosts
+  box, where it would say one failure twice.
+
+- **The three quote outcomes that are not rows are geometry only.**
+  `nothing-quoted` (the quiet sentence), `quotes-failed` (rows, a line and the
+  retry) and `quotes-truncated` (rows and a line) are in
+  `GEOMETRY_ONLY_SCREENS`, which `probe.ts` subtracts from `__contrastScreens`:
+  each is `plugin-missing-quotes`' ink with one sentence changed, on the same
+  ground, and the contrast pass is most of this guard's runtime. `nothing-quoted`
+  carries no `quotes` in its name on purpose — the runner fails a screen whose
+  name promises a seller's figure and mounts none, and that screen has none to
+  mount.
+
+- **The panel's segmented control is measured wherever a shop is.** It is
+  `.seg`/`.seg-b`, already in `CONTRAST_TEXT` from the record sheets, so a
+  pressed segment's ink on `--s-accent` and an unpressed one's `--s-muted` are
+  sampled on every page screen rather than only inside a sheet. Its labels carry
+  a count that grows with the shop, so `.shop-seg .seg-b` clips and ellipsises:
+  the grid's `minmax(0, 1fr)` columns cannot widen, and an unclipped label would
+  overflow its own segment instead.
 
 - **The rail's buyer note moved inside the amount card**, under the figure —
   which re-measures `.pay-amt`, a certified box. It is a `.note` on the card's
@@ -652,6 +674,23 @@ No screen was added: the new
 lines are muted ink on grounds `CONTRAST_TEXT` already samples, and the two
 boxes went when a quote row's name stopped being the token's name on the
 `QUOTED` row. The ceiling is untouched and the debt stands.
+
+**And again 2026-09-04 with the Shop panel's two rails, where the debt above
+came due.** The segmented control is `.seg-b`, which `CONTRAST_TEXT` already
+held for the record sheets — so splitting the panel put two sampled boxes on
+**every page screen at once**, and the quote rows leaving `offers`, `empty`,
+`pay` and `pay-xec` for their own side did not pay for them: **2,954 boxes and
+150.8s**, every rule green and the runtime line red. Pruned rather than raised,
+in the order this file already names: `crowded` and `sparse` left
+`__contrastScreens` (`GEOMETRY_ONLY_SCREENS` in `fixtures.ts`, which `probe.ts`
+subtracts) and the run settled at **2,541 boxes and 140.9s / 141.8s** on two
+runs of the same tree, both alone on an idle box. Neither prune
+loses a ground — every figure on those two is an offer card's, already sampled
+on `offers`, and what makes each of them its own screen is geometry the
+contrast pass never reads. Three screens were added and none of them is in that
+pass. The lesson to carry: a **selector** already in `CONTRAST_TEXT` can grow
+the matrix as much as a screen can, and it does it without anybody adding a
+screen.
 
 **On a second box the same tree read 152.7s and failed, then 144.7s and passed
 minutes later** — the hot-box effect again, this time from the run that
