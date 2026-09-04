@@ -23,6 +23,8 @@
  * Pure: no fetch, no DOM. The fetch lives in `src/net/price.ts`.
  */
 
+import { MAX_PRICE_EXPONENT, XEC_PRICE_CODE, type TokenPrice } from './description';
+
 /** Satoshis per XEC. The chain's unit is the satoshi; the price feed's is XEC. */
 const SATS_PER_XEC = 100n;
 
@@ -123,6 +125,93 @@ export function scaleRate(xecPriceInFiat: number): bigint | undefined {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * The seller's quote, in the satoshis a wallet will be asked to sign.
+ *
+ * **It lives here because the rate does.** `RATE_SCALE` is private to this
+ * module on purpose — a second place that knows what a scaled rate means is a
+ * second place that can be wrong about it — so the conversion comes to the
+ * rate rather than the rate leaving.
+ *
+ * **XEC has two decimals.** The unit is `SATS_PER_XEC`, a hundred satoshis,
+ * and never 10⁸: the off-by-a-million version of this composes links a
+ * thousand times the seller's quote.
+ *
+ * **It rounds up, in both branches.** Rounding down composes a link that pays
+ * the seller less than the figure they published, and a `12.345` XEC quote —
+ * an exponent this editor does not write but another app may — has no exact
+ * answer in satoshis at all.
+ *
+ * All bigint: an eight-byte amount overflows a double long before the wire
+ * runs out of room (§8).
+ */
+export function satsForQuote(
+    price: TokenPrice,
+    qty: bigint,
+    scaledRate: bigint | undefined,
+): bigint | undefined {
+    if (typeof qty !== 'bigint' || qty < 1n) {
+        return undefined;
+    }
+    if (typeof price.amount !== 'bigint' || price.amount < 1n) {
+        return undefined;
+    }
+    if (
+        !Number.isInteger(price.exponent) ||
+        price.exponent < 0 ||
+        price.exponent > MAX_PRICE_EXPONENT
+    ) {
+        return undefined;
+    }
+    const unit = 10n ** BigInt(price.exponent);
+    const items = price.amount * qty * SATS_PER_XEC;
+    if (price.code === XEC_PRICE_CODE) {
+        // The chain's own unit: no rate is involved, and none is consulted
+        // even when the caller happens to hold one.
+        return ceilDiv(items, unit);
+    }
+    if (scaledRate === undefined || scaledRate <= 0n) {
+        return undefined;
+    }
+    return ceilDiv(items * RATE_SCALE, unit * scaledRate);
+}
+
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+    return (numerator + denominator - 1n) / denominator;
+}
+
+/**
+ * What one XEC costs, for the line that says where a converted figure came
+ * from. `undefined` when there is no rate, or no such currency.
+ *
+ * Not `formatFiat`: an XEC costs a small fraction of a cent, so two decimal
+ * places would print every rate as `< $0.01` and the line would explain
+ * nothing. Up to `RATE_GLANCE_DIGITS` places with the trailing zeros stripped
+ * back to two — enough to recognise the feed's figure, and rounded, which is
+ * what the `≈` the caller puts on the line is for.
+ */
+const RATE_GLANCE_DIGITS = 8;
+
+export function formatXecRate(
+    scaledRate: bigint | undefined,
+    code: string,
+): string | undefined {
+    const currency = fiatCurrency(code);
+    if (currency === undefined || scaledRate === undefined || scaledRate <= 0n) {
+        return undefined;
+    }
+    const unit = 10n ** BigInt(RATE_GLANCE_DIGITS);
+    const half = RATE_SCALE / (unit * 2n);
+    const sub = (scaledRate + half) / (RATE_SCALE / unit);
+    const text = sub.toString().padStart(RATE_GLANCE_DIGITS + 1, '0');
+    const whole = text.slice(0, text.length - RATE_GLANCE_DIGITS);
+    const frac = text
+        .slice(text.length - RATE_GLANCE_DIGITS)
+        .replace(/0+$/, '')
+        .padEnd(2, '0');
+    return withSymbol(currency, `${whole}.${frac}`);
 }
 
 /**

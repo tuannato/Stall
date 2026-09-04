@@ -3,6 +3,7 @@ import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import {
     isHomePath,
     parseBroadcastParams,
+    parsePayParam,
     parseSellerParam,
     sellerFromPath,
     stallPath,
@@ -15,6 +16,7 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens } from './net/holdings';
 import { fetchXecPrice } from './net/price';
+import { DEFAULT_FIAT_CODE } from './domain/fiat';
 import {
     clearSavedStall,
     isPinnedStall,
@@ -111,6 +113,7 @@ import {
     cheapestOf,
     identityOf,
     listingsInShopOrder,
+    quotedItems,
     renderStall,
     sheetMounts,
 } from './ui';
@@ -127,21 +130,33 @@ export const BROADCAST_RAIL_REST_MS = 3_000;
 export const BROADCAST_RAIL_LIVE_MS = 5_000;
 
 /**
- * Copy the overlay params from the URL onto a view. Used by both
- * `loadCurrent` and `openingFromLocation`: `refresh` paints the latter
- * first, and a first frame without `view.broadcast` is the shop.
+ * Copy the URL's own parameters onto a view — the stream overlay's, and the
+ * item a scanned `?pay=` link named. Used by both `loadCurrent` and
+ * `openingFromLocation`: `refresh` paints the latter first, and a first frame
+ * without `view.broadcast` is the shop.
  */
-function withBroadcast(state: AppState): AppState {
-    // The door is not a stall. `view=broadcast` on `/` is dropped here;
-    // `invalid` still carries it and `renderStall` keeps the ordinary screen.
+function withUrlParams(state: AppState): AppState {
+    // The door is not a stall. `view=broadcast` on `/` is dropped here, and so
+    // is `?pay=`; `invalid` still carries the first and `renderStall` keeps the
+    // ordinary screen.
     if (state.view.route.kind === 'home') {
         return state;
     }
     const broadcast = parseBroadcastParams(location.search);
-    if (broadcast === undefined) {
+    // A stream overlay mounts no sheet, so an item named on one would open
+    // nothing and say nothing. The parameter is simply not carried there.
+    const payHint = broadcast === undefined ? parsePayParam(location.search) : undefined;
+    if (broadcast === undefined && payHint === undefined) {
         return state;
     }
-    return { ...state, view: { ...state.view, broadcast } };
+    return {
+        ...state,
+        view: {
+            ...state.view,
+            ...(broadcast === undefined ? {} : { broadcast }),
+            ...(payHint === undefined ? {} : { payHint }),
+        },
+    };
 }
 
 /** The card the overlay is showing: shop order, then the cursor. */
@@ -237,6 +252,24 @@ export function boot(
      * that is honestly a few minutes old at a glance.
      */
     let fiatRate: bigint | undefined;
+    /**
+     * The rate the open pay sheet is composing against, and when it was read.
+     *
+     * **Its own field, never `fiatRate`.** That one is the glance beside a
+     * covenant's asked amount and may vanish at any moment; this is frozen for
+     * one buyer's visit to one sheet, because the figure they are about to
+     * sign must not move under their cursor. The sheet keeps its own copy too
+     * — it holds the typed quantity in a closure and cannot be repainted for a
+     * rate — so this exists to seed the sheet when it opens.
+     */
+    let payRate: { rate: bigint; atMs: number } | undefined;
+    /**
+     * A `?pay=` link is answered once per page load. The URL is deliberately
+     * not rewritten, so a reload of a scanned link reopens the sheet — but the
+     * seller's "check now" is a refresh of the same load, and reopening a
+     * sheet the buyer closed would be this page arguing with them.
+     */
+    let payHintUsed = false;
     /**
      * The transactions this page has watched arrive, newest first.
      *
@@ -334,6 +367,7 @@ export function boot(
             pinnedDoorFull: pinnedDoorIsFull(),
             fiatCode,
             fiatRate,
+            payRate,
         };
         renderStall(root, view, {
             onChangeFiat: (code: string): void => {
@@ -362,6 +396,10 @@ export function boot(
             onGoHome: () => {
                 onGoHome();
             },
+            onOpenPay: (tokenId) => {
+                onOpenPay(tokenId);
+            },
+            onPayRate: (timeoutMs) => readPayRate(timeoutMs),
             onOpenPublish: () => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'publish-name' } } };
                 paint();
@@ -447,7 +485,8 @@ export function boot(
         // re-read must not replay the fade or the pulse.
         if (
             state.view.broadcastStepped !== undefined ||
-            state.view.broadcastPulse !== undefined
+            state.view.broadcastPulse !== undefined ||
+            state.view.payHintScroll !== undefined
         ) {
             state = {
                 ...state,
@@ -455,6 +494,7 @@ export function boot(
                     ...state.view,
                     broadcastStepped: undefined,
                     broadcastPulse: undefined,
+                    payHintScroll: undefined,
                 },
             };
         }
@@ -594,6 +634,54 @@ export function boot(
         livePaint();
     };
 
+    /**
+     * Open the pay sheet, then go and get a rate for it.
+     *
+     * The sheet opens first on purpose: a round trip before anything appears
+     * would read as a control that did nothing, and the sheet's no-rate state
+     * is an honest screen rather than a placeholder. The answer repaints it
+     * once — a paint the buyer asked for, at the one moment they have typed
+     * nothing into it yet.
+     */
+    const onOpenPay = (tokenId: string): void => {
+        const claimed = generation;
+        payRate = undefined;
+        state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
+        paint();
+        void (async () => {
+            const fresh = await readPayRate();
+            // Only for the sheet that asked: a buyer who closed it, or moved
+            // to another item, must not have it repainted under them.
+            if (
+                claimed !== generation ||
+                fresh === undefined ||
+                state.view.overlay.kind !== 'pay' ||
+                state.view.overlay.tokenId !== tokenId
+            ) {
+                return;
+            }
+            paint();
+        })();
+    };
+
+    /**
+     * One fresh rate for the pay sheet: remembered here and handed back, with
+     * **no paint**. The sheet holds the buyer's own quantity in a closure, and
+     * `renderStall` opens with `replaceChildren()` — so a paint from this path
+     * would throw away what they typed. The sheet refreshes itself in place.
+     */
+    const readPayRate = async (
+        timeoutMs?: number,
+    ): Promise<{ rate: bigint; atMs: number } | undefined> => {
+        const rate = await fetchXecPrice(
+            DEFAULT_FIAT_CODE,
+            timeoutMs === undefined ? undefined : { timeoutMs },
+        );
+        payRate = rate === undefined ? undefined : { rate, atMs: Date.now() };
+        state = { ...state, view: { ...state.view, payRate } };
+        return payRate;
+    };
+
     const onBuy = async (outpoint: Outpoint): Promise<void> => {
         const overlay: Overlay = { kind: 'buy', outpoint };
         state = { ...state, view: { ...state.view, overlay } };
@@ -699,6 +787,72 @@ export function boot(
         state = { ...state, view: { ...state.view, activityGaps } };
     };
 
+    /**
+     * What a scanned `?pay=` link opens, from the state the load answered
+     * with — **once per page load**.
+     *
+     * Resolved against this stall's own records, never against the chain: the
+     * parameter is a prefix of a token id and the pay set is the only place it
+     * is looked for. Exactly one match opens the sheet through the same path
+     * the Pay control uses; anything else opens nothing.
+     *
+     * Three outcomes rather than two, and the third is the whole point: a
+     * screen that could not read the records must not report "no such item",
+     * which is a claim about the seller made from our own failure (§4).
+     */
+    const applyPayHint = (next: AppState): AppState => {
+        const hint = next.view.payHint;
+        if (hint === undefined || payHintUsed) {
+            return next;
+        }
+        payHintUsed = true;
+        const matches = quotedItems(next.view).filter((item) =>
+            item.tokenId.startsWith(hint),
+        );
+        if (matches.length === 1) {
+            const tokenId = matches[0]!.tokenId;
+            // The rate comes from the same road the Pay control takes; the
+            // sheet opens first and is repainted when it answers.
+            queueMicrotask(() => {
+                if (
+                    state.view.route.kind === 'pubkey' &&
+                    state.view.overlay.kind === 'pay' &&
+                    state.view.overlay.tokenId === tokenId
+                ) {
+                    void (async () => {
+                        const fresh = await readPayRate();
+                        if (fresh !== undefined && state.view.overlay.kind === 'pay') {
+                            paint();
+                        }
+                    })();
+                }
+            });
+            return {
+                ...next,
+                view: { ...next.view, overlay: { kind: 'pay', tokenId } },
+            };
+        }
+        const fetchKind = next.view.fetch?.kind;
+        const routeKind = next.view.route.kind;
+        const couldNotRead =
+            fetchKind === 'unreachable' ||
+            fetchKind === 'plugin-missing' ||
+            fetchKind === 'unreadable' ||
+            routeKind === 'unresolved' ||
+            routeKind === 'unresolvable' ||
+            next.view.descriptionsTruncated === true;
+        return {
+            ...next,
+            view: {
+                ...next.view,
+                payHintNote: couldNotRead ? 'unread' : 'unknown',
+                // Only when there is something to bring into view, and only
+                // for the paint that shows the note.
+                ...(couldNotRead ? {} : { payHintScroll: true as const }),
+            },
+        };
+    };
+
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
         live?.close();
@@ -726,14 +880,14 @@ export function boot(
         // The activity caption dates from here — the last full load — because
         // this function just emptied the ring; "since the page opened" would
         // claim coverage across a gap it cannot see.
-        state = {
+        state = applyPayHint({
             ...next,
             view: {
                 ...next.view,
                 watchedSinceMs: Date.now(),
                 ...(walked === undefined ? {} : { history: walked }),
             },
-        };
+        });
         adoptFiatHint();
         paint();
         watch(claimed);
@@ -1444,7 +1598,7 @@ export function boot(
 
 async function loadCurrent(): Promise<AppState> {
     if (isHomePath(location.pathname)) {
-        return withBroadcast({
+        return withUrlParams({
             view: { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
             offers: [],
         });
@@ -1452,7 +1606,7 @@ async function loadCurrent(): Promise<AppState> {
 
     const raw = sellerFromPath(location.pathname);
     if (raw === undefined) {
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route: { kind: 'invalid', raw: location.pathname },
                 overlay: { kind: 'idle' },
@@ -1471,7 +1625,7 @@ async function loadCurrent(): Promise<AppState> {
         route = await resolveSeller(parsed, chronik);
     } catch {
         if (parsed.kind === 'invalid') {
-            return withBroadcast({
+            return withUrlParams({
                 view: {
                     route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                     overlay: { kind: 'idle' },
@@ -1481,7 +1635,7 @@ async function loadCurrent(): Promise<AppState> {
             });
         }
         if (parsed.kind === 'pubkey') {
-            return withBroadcast({
+            return withUrlParams({
                 view: {
                     route: {
                         kind: 'pubkey',
@@ -1496,7 +1650,7 @@ async function loadCurrent(): Promise<AppState> {
                 offers: [],
             });
         }
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route: { kind: 'unresolved', address: parsed.address },
                 fetch: unreachableNow(),
@@ -1509,7 +1663,7 @@ async function loadCurrent(): Promise<AppState> {
     }
 
     if (route.kind !== 'pubkey') {
-        return withBroadcast({
+        return withUrlParams({
             view: { route, overlay: { kind: 'idle' }, tokens: new Map(), address: addressOf(route) },
             offers: [],
         });
@@ -1575,7 +1729,7 @@ async function loadCurrent(): Promise<AppState> {
         // load left behind, and improving it is a separate change with its own
         // reasoning, not a side effect of running two reads at once.
         const later = Boolean(cachedName) || cachedTokens.size > 0;
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route,
                 fetch,
@@ -1694,11 +1848,45 @@ async function loadCurrent(): Promise<AppState> {
         }
     }
 
+    /*
+     * Genesis facts for tokens the seller **quoted** but does not list.
+     *
+     * A second read, and deliberately after the descriptions answered rather
+     * than folded into the first: that one runs in parallel with this walk on
+     * purpose (see `addrPageSoon`), and widening it would make the offers wait
+     * for a set that does not exist until the walk is done.
+     *
+     * A read that fails leaves those rows unpainted and counted — a quote
+     * whose genesis this page never saw could be an NFT, and a quote per whole
+     * token means nothing about one.
+     */
+    const quotedIds = [...descriptionLookup.prices.keys()].filter(
+        (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)) === undefined,
+    );
+    if (quotedIds.length > 0) {
+        try {
+            for (const meta of await loadTokenMeta(chronik, quotedIds)) {
+                sessionTokens.set(cacheKey(route.pubkeyHex, meta.tokenId), meta);
+            }
+        } catch {
+            // Counted by the section, never invented.
+        }
+    }
+
     const tokens: SessionTokenCache = new Map();
     for (const offer of offers) {
         const meta = sessionTokens.get(cacheKey(route.pubkeyHex, offer.tokenId));
         if (meta) {
             tokens.set(offer.tokenId, meta);
+        }
+    }
+    // The quoted items, listed or not: the pay rail needs a name and a kind
+    // for every one of them, and a sold-out listing must not take the quote
+    // off the page with it.
+    for (const tokenId of descriptionLookup.prices.keys()) {
+        const meta = sessionTokens.get(cacheKey(route.pubkeyHex, tokenId));
+        if (meta) {
+            tokens.set(tokenId, meta);
         }
     }
     // The collections themselves, so a heading can print a name.
@@ -1709,7 +1897,7 @@ async function loadCurrent(): Promise<AppState> {
         }
     }
 
-    return withBroadcast({
+    return withUrlParams({
         view: {
             route,
             fetch,
@@ -1723,6 +1911,10 @@ async function loadCurrent(): Promise<AppState> {
             descriptions: descriptionLookup.descriptions,
             shelves: descriptionLookup.shelves,
             prices: descriptionLookup.prices,
+            // Said on screen only where it changes an answer: a `?pay=` link
+            // that matched nothing cannot be called unknown after a walk that
+            // stopped early.
+            descriptionsTruncated: descriptionLookup.truncated,
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
             theme,
@@ -1750,14 +1942,14 @@ function openingFromLocation(): AppState {
     const idle = { kind: 'idle' as const };
     const emptyTokens = new Map();
     if (isHomePath(location.pathname)) {
-        return withBroadcast({
+        return withUrlParams({
             view: { route: { kind: 'home' }, overlay: idle, tokens: emptyTokens },
             offers: [],
         });
     }
     const raw = sellerFromPath(location.pathname);
     if (raw === undefined) {
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route: { kind: 'invalid', raw: location.pathname },
                 overlay: idle,
@@ -1768,7 +1960,7 @@ function openingFromLocation(): AppState {
     }
     const parsed = parseSellerParam(raw);
     if (parsed.kind === 'invalid') {
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route: { kind: 'invalid', raw: parsed.raw, why: parsed.why },
                 overlay: idle,
@@ -1780,7 +1972,7 @@ function openingFromLocation(): AppState {
     if (parsed.kind === 'pubkey') {
         const address = p2pkhAddress(parsed.pubkeyHex);
         const cachedName = sessionNames.get(parsed.pubkeyHex);
-        return withBroadcast({
+        return withUrlParams({
             view: {
                 route: {
                     kind: 'pubkey',
@@ -1797,7 +1989,7 @@ function openingFromLocation(): AppState {
             pubkeyHex: parsed.pubkeyHex,
         });
     }
-    return withBroadcast({
+    return withUrlParams({
         view: {
             route: { kind: 'unresolved', address: parsed.address },
             fetch: { kind: 'opening' },

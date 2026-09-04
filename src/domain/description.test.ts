@@ -1,13 +1,18 @@
-import { fromHex, getStackArray } from 'ecash-lib';
+import { fromHex, getStackArray, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import {
     MAX_DESCRIPTION_BYTES,
     MAX_PRICED_DESCRIPTION_BYTES,
     MAX_PRICED_SHELVED_DESCRIPTION_BYTES,
     MAX_SHELF_BYTES,
+    MAX_TOLERANCE_DESCRIPTION_BYTES,
+    MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES,
     PRICE_FIELD_BYTES,
     PRICE_TAG,
+    SHELF_TAG,
     STLD_HEX,
+    TOLERANCE_FIELD_BYTES,
+    TOLERANCE_TAG,
     XEC_PRICE_CODE,
     decodeDescriptionPushes,
     descriptionBytes,
@@ -17,6 +22,7 @@ import {
     formatPriceFigure,
     isStld,
     parsePriceFigure,
+    samePrice,
     type TokenPrice,
 } from './description';
 import { OP_RETURN_BUDGET } from './manifest';
@@ -638,5 +644,216 @@ describe('removing-words-does-not-remove-the-price', () => {
             expect(pushes[2]!.length, label).toBe(0);
             expect(decodeDescriptionPushes(pushes)?.kind, label).toBe('tombstone');
         }
+    });
+});
+
+describe('tolerance-is-one-byte-one-sided-and-bounded', () => {
+    /**
+     * Tag 0x03: the shortfall the seller accepts, as a percentage. One byte,
+     * read 1–100 — a timeless margin, not a validity window, and checked
+     * whenever the seller looks rather than at any particular moment.
+     *
+     * Zero is unsayable on purpose: "accepts nothing less" is what an absent
+     * field already means to a reader who is told none was stated.
+     */
+    const priced = (over: Partial<TokenPrice> = {}): TokenPrice => ({
+        code: 'usd',
+        exponent: 2,
+        amount: 500n,
+        ...over,
+    });
+
+    it('round-trips every percent the field can hold', () => {
+        for (const tolerancePct of [1, 2, 5, 10, 25, 100]) {
+            const price = priced({ tolerancePct });
+            const hex = encodeDescriptionHex(TOKEN, 'Beans', { price });
+            expect(hex, String(tolerancePct)).toBeDefined();
+            const back = decodeDescriptionPushes(pushesOf(hex!));
+            expect(back?.price, String(tolerancePct)).toEqual(price);
+        }
+    });
+
+    it('is exactly one byte under the tag', () => {
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', {
+            price: priced({ tolerancePct: 2 }),
+        })!;
+        const field = pushesOf(hex).find((p) => p[0] === TOLERANCE_TAG);
+        expect(field).toBeDefined();
+        expect(field!.length).toBe(TOLERANCE_FIELD_BYTES);
+        expect(field![1]).toBe(2);
+    });
+
+    it('voids the field alone on 0, on >100 and on any other length', () => {
+        const withField = (payload: readonly number[]): Uint8Array => {
+            const price = priced();
+            const hex = encodeDescriptionHex(TOKEN, 'Beans', { price })!;
+            const extra = [1 + payload.length, TOLERANCE_TAG, ...payload]
+                .map((b) => b.toString(16).padStart(2, '0'))
+                .join('');
+            return fromHex(`${hex}${extra}`);
+        };
+        for (const [label, payload] of [
+            ['zero', [0]],
+            ['over a hundred', [101]],
+            ['two bytes', [0, 2]],
+            ['no bytes', []],
+        ] as const) {
+            const back = decodeDescriptionPushes(
+                getStackArray(`6a${toHex(withField(payload))}`).map((p) => fromHex(p)),
+            );
+            // The record still reads and the price still stands: one malformed
+            // field costs itself and nothing else.
+            expect(back?.kind, label).toBe('text');
+            expect(back?.price, label).toEqual(priced());
+        }
+    });
+
+    it('refuses to write a value it could not read back', () => {
+        for (const tolerancePct of [0, 101, -1, 2.5, Number.NaN]) {
+            expect(
+                encodeDescriptionHex(TOKEN, 'Beans', { price: priced({ tolerancePct }) }),
+                String(tolerancePct),
+            ).toBeUndefined();
+        }
+    });
+});
+
+describe('absent-tolerance-is-not-a-number', () => {
+    /**
+     * No default in the reader. A field that is absent means the seller stated
+     * nothing, and an app-chosen number in its place would be the app's policy
+     * printed as the seller's promise — the mutable-default trap.
+     */
+    it('leaves the entry with no tolerance at all', () => {
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', {
+            price: { code: 'usd', exponent: 2, amount: 500n },
+        })!;
+        const back = decodeDescriptionPushes(pushesOf(hex));
+        expect(back?.price).toEqual({ code: 'usd', exponent: 2, amount: 500n });
+        expect(back?.price?.tolerancePct).toBeUndefined();
+    });
+
+    it('drops a tolerance that rides no price', () => {
+        // It is a field of the quote, not of the record: with nothing to
+        // qualify there is nothing for a reader to say about it.
+        const hex = encodeDescriptionHex(TOKEN, 'Beans')!;
+        const extra = `02${TOLERANCE_TAG.toString(16).padStart(2, '0')}02`;
+        const back = decodeDescriptionPushes(
+            getStackArray(`6a${hex}${extra}`).map((p) => fromHex(p)),
+        );
+        expect(back?.kind).toBe('text');
+        expect(back?.price).toBeUndefined();
+    });
+});
+
+describe('same-price-sees-the-tolerance', () => {
+    /**
+     * The encoder's decode-back guard compares the price field by field. A
+     * comparison blind to the byte would let a record be written whose
+     * tolerance the reader drops, and the seller would be told it published.
+     */
+    it('tells two quotes apart by their tolerance alone', () => {
+        const base: TokenPrice = { code: 'usd', exponent: 2, amount: 500n };
+        expect(samePrice(base, base)).toBe(true);
+        expect(samePrice(base, { ...base, tolerancePct: 2 })).toBe(false);
+        expect(samePrice({ ...base, tolerancePct: 2 }, { ...base, tolerancePct: 5 })).toBe(
+            false,
+        );
+        expect(samePrice({ ...base, tolerancePct: 2 }, { ...base, tolerancePct: 2 })).toBe(
+            true,
+        );
+    });
+});
+
+describe('an-xec-quote-ignores-a-tolerance', () => {
+    /**
+     * An XEC quote involves no rate, so there is no drift for a margin to
+     * cover — but a field this editor does not write is not a field it may
+     * erase (the `0x04` rule). It is decoded, carried through every republish,
+     * and simply never painted.
+     */
+    it('carries the byte beside an xec quote rather than dropping it', () => {
+        const price: TokenPrice = {
+            code: XEC_PRICE_CODE,
+            exponent: 2,
+            amount: 500_000n,
+            tolerancePct: 5,
+        };
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', { price })!;
+        expect(decodeDescriptionPushes(pushesOf(hex))?.price).toEqual(price);
+        const removal = encodeRemovalHex(TOKEN, { price })!;
+        expect(decodeDescriptionPushes(pushesOf(removal))?.price).toEqual(price);
+    });
+});
+
+describe('tag-budget-counts-the-tolerance', () => {
+    /**
+     * Three bytes: the push byte, the tag and the value. The maxima move with
+     * it, and the meter is the encoder's own arithmetic so the two cannot
+     * disagree about a record a seller is looking at.
+     */
+    const price: TokenPrice = {
+        code: 'usd',
+        exponent: 2,
+        amount: 500n,
+        tolerancePct: 2,
+    };
+
+    it('lands the maxima on the budget exactly', () => {
+        expect(MAX_TOLERANCE_DESCRIPTION_BYTES).toBe(MAX_PRICED_DESCRIPTION_BYTES - 3);
+        expect(MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES).toBe(
+            MAX_PRICED_SHELVED_DESCRIPTION_BYTES - 3,
+        );
+        const words = 'A'.repeat(MAX_TOLERANCE_DESCRIPTION_BYTES);
+        expect(descriptionRecordBytes(words, '', price)).toBe(OP_RETURN_BUDGET);
+        expect(encodeDescriptionHex(TOKEN, words, { price })).toBeDefined();
+        expect(encodeDescriptionHex(TOKEN, `${words}A`, { price })).toBeUndefined();
+
+        const shelved = 'A'.repeat(MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES);
+        const shelf = 'S'.repeat(MAX_SHELF_BYTES);
+        expect(descriptionRecordBytes(shelved, shelf, price)).toBe(OP_RETURN_BUDGET);
+        expect(encodeDescriptionHex(TOKEN, shelved, { shelf, price })).toBeDefined();
+        expect(encodeDescriptionHex(TOKEN, `${shelved}A`, { shelf, price })).toBeUndefined();
+    });
+
+    it('counts it from the price entry, and emits it after the price', () => {
+        const withoutIt = descriptionRecordBytes('Beans', '', {
+            code: 'usd',
+            exponent: 2,
+            amount: 500n,
+        });
+        expect(descriptionRecordBytes('Beans', '', price)).toBe(withoutIt + 3);
+        // Ascending tags, which is what decode-back leans on: shelf, price,
+        // tolerance.
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', { shelf: 'Coffee', price })!;
+        const tags = pushesOf(hex)
+            .slice(3)
+            .map((p) => p[0]);
+        expect(tags).toEqual([SHELF_TAG, PRICE_TAG, TOLERANCE_TAG]);
+    });
+});
+
+describe('removal-and-edits-carry-the-tolerance', () => {
+    /**
+     * One record is the whole truth about one token, so every publish restates
+     * every field. A removal that dropped the byte would take the seller's
+     * margin off the chain along with their words.
+     */
+    const price: TokenPrice = {
+        code: 'usd',
+        exponent: 2,
+        amount: 500n,
+        tolerancePct: 5,
+    };
+
+    it('restates it through a removal and through an edit', () => {
+        const removal = encodeRemovalHex(TOKEN, { shelf: 'Coffee', price })!;
+        const back = decodeDescriptionPushes(pushesOf(removal));
+        expect(back?.kind).toBe('tombstone');
+        expect(back?.shelf).toBe('Coffee');
+        expect(back?.price).toEqual(price);
+
+        const edited = encodeDescriptionHex(TOKEN, 'New words', { shelf: 'Coffee', price })!;
+        expect(decodeDescriptionPushes(pushesOf(edited))?.price).toEqual(price);
     });
 });

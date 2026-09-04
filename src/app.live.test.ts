@@ -243,7 +243,8 @@ const { priceControl } = vi.hoisted(() => ({
 }));
 
 vi.mock('./net/price', () => ({
-    fetchXecPrice: (code: string) => priceControl.fetch(code),
+    fetchXecPrice: (code: string, _opts?: { timeoutMs?: number }) =>
+        priceControl.fetch(code),
 }));
 
 /**
@@ -2187,5 +2188,93 @@ describe('a-failed-page-does-not-poison-the-list', () => {
         expect(chain.historyPageCalls, 'the same page, asked again').toEqual([0, 1, 1]);
         expect(painted.view?.history?.rows).toHaveLength(2);
         expect(painted.view?.history?.failed).toBeFalsy();
+    });
+});
+
+describe('a-live-update-does-not-change-the-figure-under-a-buyer', () => {
+    /**
+     * The pay sheet holds the buyer's quantity in a closure and the rate it
+     * froze in `view.payRate`. A book message and a facts re-read both land
+     * while it is open — a stranger's dust is enough to cause one — and
+     * neither may move the figure the buyer is about to sign.
+     *
+     * The state is what is asserted, not the DOM: `livePaint` already waits on
+     * `sheetMounts`, so "the tree did not change" would pass without the rate
+     * being protected at all.
+     */
+    const QUOTED_META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const FROZEN = 20_000_000n;
+
+    it('keeps the frozen rate and the painted figure across a burst', async () => {
+        priceControl.fetch = async () => FROZEN;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, QUOTED_META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')
+            ?.textContent;
+        expect(figure, 'the sheet composed a figure').toBe('250,000');
+        expect(painted.view?.payRate?.rate).toBe(FROZEN);
+
+        // The feed would answer differently now; nothing on the live path asks.
+        priceControl.fetch = async () => 10_000_000n;
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        watches[0]!.hooks.onBurst?.(['0d'.repeat(32)]);
+        await flush();
+
+        expect(painted.view?.payRate?.rate, 'the frozen rate is untouched').toBe(FROZEN);
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+            'and so is the figure on screen',
+        ).toBe(figure);
+    });
+});
+
+describe('the-door-and-a-broadcast-drop-the-pay-hint', () => {
+    /**
+     * The door is not a stall, and a stream overlay mounts no sheet — so on
+     * either of them an item named in the URL would open nothing and say
+     * nothing. The parameter is not carried there at all.
+     */
+    // The real `loadCurrent`, because the parameter is read there: an
+    // injected loader answers a state the URL never touched, which would make
+    // this pass without either parameter being dropped by anything.
+    it('carries no hint on the apex or under a broadcast', async () => {
+        window.history.replaceState(null, '', `/?pay=${'cd'.repeat(6)}`);
+        boot(document.createElement('div'));
+        await flush();
+        expect(painted.view?.route.kind).toBe('home');
+        expect(painted.view?.payHint).toBeUndefined();
+        expect(painted.view?.payHintNote).toBeUndefined();
+
+        window.history.replaceState(
+            null,
+            '',
+            `${stallPath(PK)}?view=broadcast&pay=${'cd'.repeat(6)}`,
+        );
+        boot(document.createElement('div'));
+        await flush();
+        expect(painted.view?.broadcast, 'the overlay is still the overlay').toBeDefined();
+        expect(painted.view?.payHint).toBeUndefined();
+        expect(painted.view?.overlay.kind).toBe('idle');
+    });
+
+    it('carries it on an ordinary stall URL', async () => {
+        window.history.replaceState(null, '', `${stallPath(PK)}?pay=${'cd'.repeat(6)}`);
+        boot(document.createElement('div'));
+        await flush();
+        expect(painted.view?.payHint).toBe('cd'.repeat(6));
     });
 });

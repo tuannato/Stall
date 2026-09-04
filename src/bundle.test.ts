@@ -112,11 +112,13 @@ describe('nothing-is-served-as-a-data-url', () => {
  * is allowed and must be a deliberate diff, not a surprise.
  */
 describe('served-weight-has-a-ceiling', () => {
-    // Measured 564,858 the day the two Inter subsets landed and 649,559
-    // the day the three design stylesheets applied directly (the owner's
-    // ruling). The margin is for ordinary growth; an 85 KB latin-ext
-    // subset re-added by accident still lands past this and fails.
-    const CEILING_BYTES = 700_000;
+    // Measured 564,858 the day the two Inter subsets landed, 649,559 the day
+    // the three design stylesheets applied directly (the owner's ruling), and
+    // 710,198 the day the direct-payment rail shipped — 691,199 the commit
+    // before it, so the whole rail is about 19 KB of code, copy and CSS. The
+    // margin is for ordinary growth; an 85 KB latin-ext subset re-added by
+    // accident still lands past this and fails.
+    const CEILING_BYTES = 760_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

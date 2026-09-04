@@ -1,6 +1,16 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { describe, expect, it } from 'vitest';
-import { parseBroadcastParams, parseSellerParam, sellerFromPath, stallPath } from './route';
+import {
+    MAX_PAY_PARAM_CHARS,
+    MIN_PAY_PARAM_CHARS,
+    PAY_PARAM_PREFIX,
+    parseBroadcastParams,
+    parsePayParam,
+    parseSellerParam,
+    payLandingUrl,
+    sellerFromPath,
+    stallPath,
+} from './route';
 
 const SAMPLE_P2PKH = encodeCashAddress(
     'ecash',
@@ -213,5 +223,61 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
         expect(() => parseBroadcastParams('?view=broadcast&preset=%')).not.toThrow();
         expect(parseBroadcastParams('%')).toBeUndefined();
         expect(parseBroadcastParams('?view=broadcast&preset=%')).toEqual(defaults);
+    });
+});
+
+describe('a-malformed-pay-param-is-ignored', () => {
+    /**
+     * `?pay=` names an item by a prefix of its token id. Bounded and
+     * lowercase-hex or nothing: the value is compared against this stall's own
+     * records and never concatenated into a request, but a parser that
+     * accepted anything would hand an unbounded search string to the matcher.
+     */
+    it('takes a bounded lowercase hex prefix and nothing else', () => {
+        const id = 'cd'.repeat(32);
+        expect(parsePayParam(`?pay=${id.slice(0, MIN_PAY_PARAM_CHARS)}`)).toBe(
+            id.slice(0, MIN_PAY_PARAM_CHARS),
+        );
+        expect(parsePayParam(`?pay=${id}`)).toBe(id);
+        expect(parsePayParam(`?view=broadcast&pay=${id}`)).toBe(id);
+    });
+
+    it('refuses short, long, uppercase, non-hex and absent', () => {
+        const id = 'cd'.repeat(32);
+        for (const raw of [
+            id.slice(0, MIN_PAY_PARAM_CHARS - 1),
+            `${id}c`,
+            id.slice(0, 12).toUpperCase(),
+            'zzzzzzzzzzzz',
+            '',
+        ]) {
+            expect(parsePayParam(`?pay=${raw}`), raw).toBeUndefined();
+        }
+        expect(parsePayParam('')).toBeUndefined();
+        expect(parsePayParam('?m=abc')).toBeUndefined();
+        expect(MAX_PAY_PARAM_CHARS).toBe(64);
+    });
+});
+
+describe('a-landing-link-names-an-item-by-a-prefix', () => {
+    /**
+     * The base is passed in, never read from `location`: this module is pure,
+     * and a domain function reaching for the browser's URL is the wall §9
+     * draws around `src/domain`.
+     */
+    it('appends the parameter to whatever base it is handed', () => {
+        const id = 'cd'.repeat(32);
+        const prefix = id.slice(0, PAY_PARAM_PREFIX);
+        expect(payLandingUrl('https://stall.cash/s/abc', id)).toBe(
+            `https://stall.cash/s/abc?pay=${prefix}`,
+        );
+        // The prefix is what the parser accepts back, so a scanned link
+        // resolves rather than being dropped as malformed.
+        expect(parsePayParam(`?pay=${prefix}`)).toBe(prefix);
+    });
+
+    it('refuses a token id it could not name', () => {
+        expect(payLandingUrl('https://stall.cash/s/abc', 'not-a-token-id')).toBeUndefined();
+        expect(payLandingUrl('', 'cd'.repeat(32))).toBeUndefined();
     });
 });

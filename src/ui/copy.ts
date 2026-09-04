@@ -404,6 +404,35 @@ export const EVENT_TOKEN_MOVE = 'A decoration token moved';
 export const EVENT_OTHER = 'A transaction at this address';
 
 /**
+ * A direct payment: money that arrived carrying an `STLP` memo.
+ *
+ * **Paid, never bought or sold.** The chain proves satoshis reached the
+ * seller's address and nothing else — no token changed hands, and whether the
+ * seller delivered is off-chain. So the row names the payment, names who it
+ * went to, and stops there.
+ */
+export const EVENT_PAYMENT = 'Payment · to the seller';
+export const eventPayment = (amount: string): string =>
+    `Payment · ${amount} ${XEC} · to the seller`;
+/**
+ * The memo, labelled as what it is. Every byte of it was written by whoever
+ * paid: it is not signed by the seller, nothing cross-checks the item, and the
+ * record carries no figure at all.
+ */
+export const EVENT_PAYMENT_CLAIM_LABEL = 'The payer’s claim';
+export const paymentClaim = (item: string, quantity: string): string =>
+    `${item} · ${quantity}`;
+export const paymentQuantity = (count: string): string => `× ${count}`;
+/**
+ * Absent means one; a field that was written and could not be read means the
+ * quantity is not stated. Words, never a number — a guessed one would sit
+ * beside a figure somebody actually paid.
+ */
+export const PAYMENT_QUANTITY_UNSTATED = 'Quantity not stated';
+export const EVENT_PAYMENT_NOT_PROOF =
+    'Written by the payer — not a proof of what was delivered.';
+
+/**
  * The two lists, named for what each of them actually is.
  *
  * "Watching" is this page's own ring, on this page's clock. "History" is a
@@ -817,6 +846,13 @@ export const DESC_OVER_BUDGET =
  */
 export const DESC_OVER_BUDGET_PRICED =
     'The description, the shelf and the price share one record, and together they are over its size. With a price the words go up to 168 bytes — 134 with a full shelf as well.';
+/**
+ * And with a tolerance byte riding the quote as well: three bytes more, so
+ * the ladder names its own pair. `MAX_TOLERANCE_DESCRIPTION_BYTES` and
+ * `MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES` are where these come from.
+ */
+export const DESC_OVER_BUDGET_TOLERANCE =
+    'The description, the shelf, the price and the tolerance share one record, and together they are over its size. With both the words go up to 165 bytes \u2014 131 with a full shelf as well.';
 export const DESC_TOO_LONG =
     'That is longer than one record holds. Shorten it until the counter is not over.';
 export const DESC_REFUSED =
@@ -935,11 +971,150 @@ export const SUMMARY_FIAT_HINT = 'currency hint';
 export const SUMMARY_WORDS = 'words';
 export const SUMMARY_SHELF = 'shelf';
 export const SUMMARY_QUOTE = 'quote';
+export const SUMMARY_TOLERANCE = 'tolerance';
 /** The two records that take something away, named as what they do. */
 export const SUMMARY_REMOVAL = 'removal for';
 export const SUMMARY_CLEARS = 'clears every field for';
 /** Nothing has been asked of the record yet — not a refusal, not a size. */
 export const SUMMARY_NOTHING = 'Nothing to publish yet.';
+
+/*
+ * The direct-payment rail: the seller's own quote, and the payment a buyer's
+ * wallet signs for it.
+ *
+ * **Paid, never bought or sold.** No token changes hands, nothing is held in
+ * escrow, and this page cannot tell whether the seller delivered — so every
+ * sentence here is about money leaving a wallet and nothing else. The word
+ * for the seller's on-chain figure is a **quote**; the thing it is for is an
+ * **item**; the control is **Pay**.
+ */
+export const PAY_SEC_TITLE = 'Pay the seller directly';
+export const PAY_SEC_LEDE =
+    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote; they deliver off-chain.';
+/** The chip that says whose figure a row carries. Never beside an Agora price. */
+export const SELLER_QUOTE_CHIP = 'Seller\u2019s quote';
+export const PAY_OPEN = 'Pay';
+/**
+ * The one line a Shop row may carry about the other rail.
+ *
+ * It names the other number rather than pointing vaguely at it, because a row
+ * that said only "also: pay directly" would leave a buyer to assume the
+ * covenant's figure and the seller's quote are the same money.
+ */
+export const PAY_POINTER =
+    'Also: the seller\u2019s own quote for one, paid directly \u2014 not this listing \u2192';
+/** Our own gap, counted rather than hidden \u2014 the listings line, one surface over. */
+export const quotedUnreadable = (n: number): string =>
+    `${n} quoted ${n === 1 ? 'item' : 'items'} this page could not read.`;
+
+export const PAY_TITLE = 'Pay the seller';
+/** Over the figure the wallet will be asked to sign. */
+export const PAY_CAP_SIGNS = 'Your wallet signs';
+/** Over the quote itself, when there is no figure to sign yet. */
+export const PAY_CAP_QUOTE = 'Seller\u2019s quote';
+/**
+ * The quote, restated under the derived figure. Labelled as the seller's,
+ * because the number above it is one this page computed and this one is not.
+ */
+export const payQuoteEquals = (figure: string): string =>
+    `= ${figure} (seller\u2019s quote)`;
+/** An XEC quote is the figure itself: no rate is involved anywhere in it. */
+export const PAY_XEC_QUOTE_NOTE =
+    'Seller\u2019s quote, written in XEC \u2014 no rate involved';
+/** Where the converted figure came from. `\u2248`: a glance, never a second price. */
+export const payRateLine = (rate: string, at: string): string =>
+    `\u2248 at 1 ${XEC} = ${rate} \u00b7 CoinGecko \u00b7 ${at}`;
+export const PAY_RATE_REFRESH = 'Get a fresh price';
+export const PAY_NO_XEC_YET = 'No XEC amount yet';
+export const PAY_NO_RATE_WHY =
+    'CoinGecko did not answer, so the wallet cannot be told how much XEC to send. There is no link and no code until a price arrives.';
+/**
+ * Under the dust floor the network will not relay the output at all, so
+ * nothing is composed and the sheet says which way out there is.
+ */
+export const PAY_SUB_DUST =
+    'This total is under the smallest amount the network will relay. Raise the quantity, or ask the seller.';
+export const PAY_QUANTITY_LABEL = 'Quantity';
+export const PAY_QUANTITY_EDIT = 'Edit';
+export const payQuantityShown = (count: string): string => `\u00d7 ${count}`;
+/**
+ * The two hand-offs, named for what they do. **Pay, never Buy**: on this rail
+ * nothing is bought \u2014 money reaches the seller and the seller delivers.
+ */
+export const PAY_CASHTAB = 'Pay in Cashtab';
+export const PAY_OTHER_WALLET = 'Pay with another wallet app';
+/**
+ * The press-time valve. A rate older than `PAY_RATE_MAX_AGE_MS` is refetched
+ * on the press, and the press never opens a wallet afterwards \u2014 so each of
+ * these ends by asking for the press again, and the figure it refers to has
+ * already been repainted above it.
+ */
+export const PAY_RATE_MOVED = 'Price updated \u2014 review and pay again';
+export const PAY_RATE_REFRESHED = 'Rate refreshed \u2014 press Pay again';
+export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
+export const PAY_QR_FOLD = 'Scan with a phone wallet';
+export const PAY_QR_ALT = 'QR code of the payment';
+export const PAY_QR_LEDE = 'Opens the same payment in the phone\u2019s wallet.';
+/**
+ * A phone can scan a code an hour after it was painted, so the code carries
+ * the rate's own lifetime and is taken away rather than left to be scanned
+ * for an amount nobody would recognise.
+ */
+export const PAY_QR_STALE = 'Get a fresh price to scan';
+
+/** The fine print. Every sentence is a limit of this rail, said before the press. */
+export const PAY_NOTE_DIRECT =
+    'You pay the seller directly. No escrow, no token changes hands \u2014 the seller delivers off-chain.';
+export const PAY_FINE_MEMO =
+    'The memo names the item and quantity \u2014 both are public parts of the transaction.';
+export const PAY_FINE_SOME_WALLETS = 'Some wallets pay without the memo.';
+export const PAY_FINE_DELIVERY =
+    'Arrange delivery with the seller off-chain. This page cannot tell that a payment happened, and never that anything was delivered.';
+/** Quantity is whole items: the record has no way to say half of one. */
+export const PAY_FINE_WHOLE_ITEMS =
+    'Whole items only \u2014 this quote is per whole token, and a fractional quantity is not supported.';
+/**
+ * The seller's stated margin, and the two honest ways of not stating one.
+ * Never a verdict and never a check mark: this says what the seller wrote,
+ * and whether a particular payment covered it is the seller's call.
+ */
+export const payTolerance = (pct: number): string =>
+    `The seller accepts within ${pct}% of this quote.`;
+export const PAY_TOLERANCE_WIDE = 'The seller accepts more than the app shows.';
+export const PAY_TOLERANCE_NONE = 'The seller has not stated a tolerance.';
+
+/**
+ * A `?pay=` link that opened nothing, in two sentences that are not the same
+ * claim: the first is about the stall, the second is about this page.
+ */
+export const PAY_HINT_UNKNOWN = 'This link named an item this stall does not quote';
+export const PAY_HINT_UNREAD =
+    'This link named an item, and this page could not read the seller\u2019s records';
+
+/**
+ * The seller's own tolerance control (STLD tag 0x03), on USD quotes only \u2014
+ * an XEC quote involves no rate, so there is no drift for a margin to cover.
+ */
+export const DESC_TOLERANCE_LABEL = 'Tolerance';
+/** A preset on the segment, and the same figure inside the summary line. */
+export const tolerancePreset = (pct: number): string => `${pct}%`;
+export const DESC_TOLERANCE_HINT =
+    'A payment within this margin of your quote still counts as paid in full \u2014 rates move between glance and signature.';
+export const DESC_TOLERANCE_NONE = 'No tolerance is stated on this quote yet.';
+/**
+ * A published value none of the presets can express. Shown, disabled, and
+ * carried forward untouched: a record is permanent, and a sheet that could
+ * reach a field but not restate it would erase it on the next republish.
+ */
+export const DESC_TOLERANCE_FIXED =
+    'This quote carries a tolerance this sheet cannot change. Publishing keeps it as it is.';
+/**
+ * The two figures a seller now has, and the sentence that they are not one
+ * thing. Nothing links them: the covenant asks what it asks, and this quote
+ * is what the seller wrote.
+ */
+export const DESC_TWO_PRICES =
+    'Buyers see your Agora price in the Shop and this quote under Pay the seller; the two are not linked.';
 
 /** The overlay's brand line. Ours, never the seller's. */
 export const BROADCAST_BRAND = 'stall.cash';

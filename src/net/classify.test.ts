@@ -3,6 +3,7 @@ import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import { encodeDescriptionHex } from '../domain/description';
 import { encodeManifestHex } from '../domain/manifest';
+import { encodePaymentMemoHex } from '../domain/payment';
 import { DEFAULT_THEME_ID } from '../domain/theme';
 import type { ChainTx, ChainTxInput, ChainTxOutput } from './chain';
 import {
@@ -12,6 +13,7 @@ import {
     classifyTx,
     eventKindOf,
     historyEventOf,
+    paymentMemoOf,
     touchesAgora,
     unionFacts,
     bookShapeOf,
@@ -601,5 +603,76 @@ describe('a-walked-row-carries-the-chain-clock-and-a-finality-state', () => {
         );
         expect(unknown.chainTimeS).toBeUndefined();
         expect(unknown.seenAtMs, 'a walk never stamps the page clock').toBeUndefined();
+    });
+});
+
+describe('an-stlp-payment-wakes-no-fact-reader', () => {
+    /**
+     * A payment memo is not one of the stall's own records. It changes no
+     * setting, no description and no holding, so a burst of them must not send
+     * every open tab through two capped history walks.
+     *
+     * The kind is asserted beside the facts on purpose: `NO_FACTS` alone is
+     * what an ordinary payment already answers, so a test that stopped there
+     * would pass without the memo being read at all.
+     */
+    const memoScript = (tokenId: string, quantity: bigint): string =>
+        `6a${encodePaymentMemoHex(tokenId, quantity)!}`;
+
+    it('reads the memo, names the transaction a payment and asks for nothing', () => {
+        const paid = tx({ outputs: [STALL, memoScript(TOKEN_OTHER, 2n)] });
+        expect(classifyTx(paid, STALL, WANTED)).toEqual(NO_FACTS);
+        const memo = paymentMemoOf(paid, STALL);
+        expect(memo).toEqual({ tokenId: TOKEN_OTHER, quantity: 2n });
+        expect(eventKindOf(paid, classifyTx(paid, STALL, WANTED), memo)).toBe('payment');
+    });
+
+    it('is not a payment when nothing reached the stall', () => {
+        // A memo in a transaction that paid somebody else says nothing about
+        // this stall, and naming it here would put a stranger's claim in the
+        // seller's own list.
+        const elsewhere = tx({ outputs: [STRANGER, memoScript(TOKEN_OTHER, 1n)] });
+        expect(paymentMemoOf(elsewhere, STALL)).toBeUndefined();
+        expect(eventKindOf(elsewhere, classifyTx(elsewhere, STALL, WANTED))).toBe('other');
+    });
+
+    it('leaves an unreadable memo as ordinary money', () => {
+        const broken = tx({ outputs: [STALL, `6a04${'53544c50'}0102`] });
+        expect(paymentMemoOf(broken, STALL)).toBeUndefined();
+        expect(eventKindOf(broken, classifyTx(broken, STALL, WANTED))).toBe('other');
+    });
+});
+
+describe('a-payment-outranks-a-token-move', () => {
+    /**
+     * One name per transaction, and the memo is the more specific answer: a
+     * payer sending a token back alongside their payment would otherwise have
+     * their claim filed as a decoration moving.
+     */
+    it('names a payment that also moves a worn token a payment', () => {
+        const both = tx({
+            outputs: [STALL, `6a${encodePaymentMemoHex(TOKEN_OTHER, 1n)!}`],
+            tokens: [TOKEN_WORN],
+        });
+        const facts = classifyTx(both, STALL, WANTED);
+        expect(facts.holdings, 'the move is visible').toBe(true);
+        expect(eventKindOf(both, facts, paymentMemoOf(both, STALL))).toBe('payment');
+    });
+
+    it('still lets the stall’s own records outrank it', () => {
+        const published = tx({
+            outputs: [STALL, stl1(), `6a${encodePaymentMemoHex(TOKEN_OTHER, 1n)!}`],
+        });
+        const facts = classifyTx(published, STALL, WANTED);
+        expect(eventKindOf(published, facts, paymentMemoOf(published, STALL))).toBe(
+            'settings',
+        );
+    });
+
+    it('carries the claim onto a walked row', () => {
+        const paid = tx({ outputs: [STALL, `6a${encodePaymentMemoHex(TOKEN_OTHER, 4n)!}`] });
+        const row = historyEventOf(paid, CTX);
+        expect(row.kind).toBe('payment');
+        expect(row.payment).toEqual({ tokenId: TOKEN_OTHER, quantity: 4n });
     });
 });

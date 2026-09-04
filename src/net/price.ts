@@ -16,7 +16,10 @@ import { PRICE_HOST } from './hosts';
  * This never throws. A price feed must not be able to take the shop down: the
  * asked amount is on chain and does not need this to be right.
  */
-export async function fetchXecPrice(code: string): Promise<bigint | undefined> {
+export async function fetchXecPrice(
+    code: string,
+    opts?: { timeoutMs?: number },
+): Promise<bigint | undefined> {
     // The code is concatenated into a URL, so it is checked against the shipped
     // table first rather than trusted from storage or a query string.
     if (!isSupportedFiat(code)) {
@@ -30,6 +33,12 @@ export async function fetchXecPrice(code: string): Promise<bigint | undefined> {
             referrerPolicy: 'no-referrer',
             credentials: 'omit',
             cache: 'no-store',
+            // A caller waiting on a press cannot wait forever: a feed that
+            // does not answer in time is "no rate", which is a state this
+            // whole module is already built around.
+            ...(opts?.timeoutMs === undefined
+                ? {}
+                : { signal: AbortSignal.timeout(opts.timeoutMs) }),
         });
         if (!res.ok) {
             return undefined;

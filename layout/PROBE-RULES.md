@@ -86,6 +86,18 @@ nothing.
   the same shape: the value takes both tracks so no label shares a row with
   it.
 
+- **The seller's quote is a protected box** (`[data-role="seller-price"]`).
+  It is a money figure a buyer reads before pressing Pay, on the pay surface
+  and inside the pay sheet, and a covered one reads as nothing — the same rule
+  the covenant's price has. The `offers` and `empty` fixtures both carry
+  `prices` so the selector matches something: one quote on a listed token
+  (which earns its Shop row the pointer) and one on a token the stall does not
+  list, because the pay set is not gated on listings and a fixture whose every
+  quote also had an offer would measure half the surface. Two new screens,
+  `pay` and `pay-xec`, put the sheet's own figures over the scrim; `pay-xec`
+  is in `STATE_SCREENS` because its decoration variants would be `pay`'s
+  painted twice.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels
@@ -107,6 +119,37 @@ a permanent record carries and how big it is), and `.seg-b` and `.dec-chip`,
 the pressed-state controls the sheets are made of. A pressed segment inks
 itself on `--s-accent` and a pressed chip on a wash of it; no other screen
 puts a label on either ground.
+
+**A control that draws its own edge has no contrast margin to spend.**
+`legibleOn` corrects `--s-accent` against `--s-bg` to `MIN_CONTRAST = 3` —
+which is exactly this pass's floor — so anything anti-aliased between an
+accent-inked control and what is behind it lands *under* the floor, and an
+outline in the ink's own colour is worse still: sampled, it is the ink on
+itself. Four measurements from the pay rail, all on Rural (theme 3), all with
+the sampler's vertical inset of `border-width + 1`:
+
+- **A 1px accent-wash rule around the "Seller's quote" chip: 2.99:1**
+  (`empty @desktop`, worst pixel `211,171,148` — the border blend exactly, at
+  the third row of a 21px pill whose 999px radius leaves almost no flat top).
+  Fixed by removing the rule: accent ink on a `--s-bg` ground, nothing drawn.
+- **The Pay pill's own anti-aliased top row: 1.96:1** (`offers @desktop`,
+  worst pixel `208,167,144` at `y = box.y`, the fill blending into the card).
+  Fixed with a 1px rim in a deepened accent — the inset steps past it, and the
+  row it does sample is darker than the fill rather than lighter.
+- **The Shop-row pointer's box ending on the card's own border: 2.86:1
+  unworn, 2.03:1 worn** (worst pixel `185,174,155`). A full-width control
+  whose last row *is* the card edge is read against that edge. Fixed with
+  margins instead of padding, so the box ends clear of it.
+- **Then 2.79:1 worn** from the pointer's own `--s-bg` ground anti-aliasing
+  into the card surface, and **1.00:1** when it was given `.mini`'s accent
+  border (that border sampled as ground). Final shape: **no ground and no
+  rule**, ink `--s-text`, which `legibleOn` corrects against the surface as
+  well as the page — the flat card behind it is the only thing sampled, so the
+  measured ratio is the guaranteed one.
+
+`.chip` and `.pay-pointer` join `CONTRAST_TEXT` with `seller-price`; the pay
+sheet's `price` was already covered. Runtime after all of it: **140–143s of the
+150s ceiling** across four runs, contrast sampling **2,658 boxes**.
 
 Sampling amendments, each measured:
 
@@ -214,8 +257,8 @@ Sampling amendments, each measured:
   kill at all. Every theme file's reduce block now sits LAST in its own
   file (stall.css's rule, same measured reason) and names its
   transitions alongside its animations.
-- **The pass runs `offers,publish-name,describe` and `broadcast`, and never
-  the studio —
+- **The pass runs `offers,publish-name,describe,pay` and `broadcast`, and
+  never the studio —
   so the studio's own sheet declares no motion at all.** `obsGuide.css`
   carries no transition, no animation and no `@keyframes`, and a vitest
   grep (`the-diagram-has-no-transition`) is what holds it, because nothing

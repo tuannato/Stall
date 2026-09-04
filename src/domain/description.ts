@@ -98,6 +98,30 @@ export const PRICE_TAG = 0x02;
 /** Tag + three code bytes + one exponent byte + eight amount bytes. */
 export const PRICE_FIELD_BYTES = 13;
 
+/**
+ * Tag 0x03: the shortfall the seller accepts on this quote, as a percentage.
+ *
+ * **One-sided and timeless.** It says a payment still counts as paid in full
+ * when it lands within this margin *below* the quote; overpayment always
+ * covers, and there is no window — a rate moves between the glance and the
+ * signature, and the seller checks whenever they look.
+ *
+ * One byte, read 1–100. Zero is unsayable on purpose: an absent field already
+ * means the seller stated nothing, and a reader that turned a missing byte
+ * into a number would print the app's policy as the seller's promise.
+ *
+ * **It rides the price entry, and is carried whatever the code says.** An
+ * `xec` quote involves no rate, so nothing paints a margin beside one — but a
+ * field this app does not edit is not a field it may erase, so a record that
+ * carries one keeps it through every republish.
+ */
+export const TOLERANCE_TAG = 0x03;
+
+/** Tag plus the one byte under it. */
+export const TOLERANCE_FIELD_BYTES = 2;
+
+const MAX_TOLERANCE_PCT = 100;
+
 /** A bound on the fractional digits a reader prints, not on the range. */
 export const MAX_PRICE_EXPONENT = 8;
 
@@ -120,6 +144,12 @@ export type TokenPrice = {
     readonly exponent: number;
     /** Minor units, `>= 1`. Never a `Number`. */
     readonly amount: bigint;
+    /**
+     * Tag 0x03: the shortfall this seller accepts, 1–100. **Absent is "none
+     * stated"**, never a number — the reader has no default, because a default
+     * here would be this app's policy wearing the seller's signature.
+     */
+    readonly tolerancePct?: number;
 };
 
 const TOKEN_ID_BYTES = 32;
@@ -136,6 +166,7 @@ const REQUIRED_PUSHES = 3;
  */
 const RECORD_HEAD_BYTES = 38;
 const PRICE_PUSH_BYTES = PRICE_FIELD_BYTES + 1;
+const TOLERANCE_PUSH_BYTES = TOLERANCE_FIELD_BYTES + 1;
 const FULL_SHELF_PUSH_BYTES = 1 + 1 + MAX_SHELF_BYTES;
 const LONG_TEXT_PUSH_OVERHEAD = 2;
 
@@ -146,6 +177,14 @@ export const MAX_PRICED_DESCRIPTION_BYTES =
 /** Words that still fit beside a price and a full shelf: that, minus 34. */
 export const MAX_PRICED_SHELVED_DESCRIPTION_BYTES =
     MAX_PRICED_DESCRIPTION_BYTES - FULL_SHELF_PUSH_BYTES;
+
+/** With a tolerance byte riding the price as well: that, minus three. */
+export const MAX_TOLERANCE_DESCRIPTION_BYTES =
+    MAX_PRICED_DESCRIPTION_BYTES - TOLERANCE_PUSH_BYTES;
+
+/** And with a full shelf on top of both. */
+export const MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES =
+    MAX_PRICED_SHELVED_DESCRIPTION_BYTES - TOLERANCE_PUSH_BYTES;
 
 /**
  * A record says one of two things: here are the words, or take them away.
@@ -211,7 +250,13 @@ export function decodeDescriptionPushes(
     // A price rides the same grammar and voids the same way: a payload that is
     // not twelve bytes under the tag, an exponent out of range or an amount of
     // zero costs this field and nothing else.
-    const price = readPrice(extras.get(PRICE_TAG));
+    // The tolerance rides the price rather than standing on its own: it is a
+    // fact about the quote, so with no quote to qualify there is nothing a
+    // reader could say about it and it goes nowhere.
+    const price = withTolerance(
+        readPrice(extras.get(PRICE_TAG)),
+        readTolerance(extras.get(TOLERANCE_TAG)),
+    );
     // A zero-length third push is the removal instruction, not a short record.
     // A shelf rides it unchanged: each record is the whole truth about one
     // token, so "no words, shelved" is one record, not a removal plus a
@@ -296,6 +341,41 @@ function readPrice(payload: Uint8Array | undefined): TokenPrice | undefined {
         return undefined;
     }
     return { code, exponent, amount };
+}
+
+/**
+ * Tag 0x03, the reading half: exactly one byte, 1–100. Any other length, a
+ * zero or a value above a hundred voids **this field alone** — the quote it
+ * rides is untouched, the same way a malformed shelf costs only the shelf.
+ */
+function readTolerance(payload: Uint8Array | undefined): number | undefined {
+    if (payload === undefined || payload.length !== TOLERANCE_FIELD_BYTES - 1) {
+        return undefined;
+    }
+    const pct = payload[0]!;
+    return pct >= 1 && pct <= MAX_TOLERANCE_PCT ? pct : undefined;
+}
+
+function withTolerance(
+    price: TokenPrice | undefined,
+    tolerancePct: number | undefined,
+): TokenPrice | undefined {
+    if (price === undefined || tolerancePct === undefined) {
+        return price;
+    }
+    return { ...price, tolerancePct };
+}
+
+/** The same one byte, written. `undefined` when the value cannot be one. */
+function toleranceField(tolerancePct: number): Uint8Array | undefined {
+    if (
+        !Number.isInteger(tolerancePct) ||
+        tolerancePct < 1 ||
+        tolerancePct > MAX_TOLERANCE_PCT
+    ) {
+        return undefined;
+    }
+    return Uint8Array.of(TOLERANCE_TAG, tolerancePct);
 }
 
 /** The same thirteen bytes, written. `undefined` when they cannot be. */
@@ -472,6 +552,12 @@ export function descriptionRecordBytes(
     }
     if (price !== undefined) {
         total += encodePush(new Uint8Array(PRICE_FIELD_BYTES)).length;
+        // Counted from the price entry, which is where it lives: a meter that
+        // asked for the margin separately would be a second place the record's
+        // shape is written down.
+        if (price.tolerancePct !== undefined) {
+            total += encodePush(new Uint8Array(TOLERANCE_FIELD_BYTES)).length;
+        }
     }
     return total;
 }
@@ -544,16 +630,40 @@ function taggedPushes(
             return undefined;
         }
         pushes.push(field);
+        // After the price, because the tags run ascending and decode-back
+        // leans on that order — and because it is a fact about the quote,
+        // which has to exist for it to mean anything.
+        if (price.tolerancePct !== undefined) {
+            const margin = toleranceField(price.tolerancePct);
+            if (margin === undefined) {
+                return undefined;
+            }
+            pushes.push(margin);
+        }
     }
     return pushes;
 }
 
-/** Field by field, because a `toEqual` here would be an object identity check. */
-function samePrice(a: TokenPrice | undefined, b: TokenPrice | undefined): boolean {
+/**
+ * Field by field, because a `toEqual` here would be an object identity check.
+ *
+ * The tolerance is compared with the rest: the encoder's decode-back guard is
+ * this function, and one blind to the byte would let a record be written whose
+ * margin the reader drops — published, and not what the seller was shown.
+ */
+export function samePrice(
+    a: TokenPrice | undefined,
+    b: TokenPrice | undefined,
+): boolean {
     if (a === undefined || b === undefined) {
         return a === b;
     }
-    return a.code === b.code && a.exponent === b.exponent && a.amount === b.amount;
+    return (
+        a.code === b.code &&
+        a.exponent === b.exponent &&
+        a.amount === b.amount &&
+        a.tolerancePct === b.tolerancePct
+    );
 }
 
 /** How many bytes a description costs on the wire, for a live counter. */

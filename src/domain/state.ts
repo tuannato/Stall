@@ -1,5 +1,6 @@
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
+import type { PaymentMemo } from './payment';
 import type { DecodedTheme } from './theme';
 
 /** Three-layer stall state. Mixing layers is how empty and unreachable collapse. */
@@ -138,6 +139,12 @@ export type Overlay =
     | { kind: 'publish-name' }
     /** One token's own record: words, shelf, quote. `tokenId` preselects. */
     | { kind: 'describe'; tokenId?: string }
+    /**
+     * One quoted item, and the payment a buyer's own wallet would sign for it.
+     * Disclosure, not a checkout: this origin holds no key and composes a
+     * BIP21 the wallet signs, exactly as the publish sheets do.
+     */
+    | { kind: 'pay'; tokenId: string }
     /** Printable poster and PNG formats. Same live-paint wait as the sheets. */
     | { kind: 'poster'; format: PosterFormat };
 
@@ -178,7 +185,18 @@ export type SessionTokenCache = Map<string, TokenMeta>;
  * rest are what the script subscription carries: the stall's own records, a
  * decoration's token moving, and ordinary money, which is most of it.
  */
-export type StallEventKind = 'book' | 'settings' | 'description' | 'token-move' | 'other';
+export type StallEventKind =
+    | 'book'
+    | 'settings'
+    | 'description'
+    /**
+     * A transaction that paid the stall and carried an `STLP` memo naming what
+     * it was for. The memo is the payer's own words — never verified, never a
+     * receipt — so the row says the money arrived and nothing about delivery.
+     */
+    | 'payment'
+    | 'token-move'
+    | 'other';
 
 /**
  * What a `book` transaction provably did, from the plugin's own group
@@ -247,6 +265,14 @@ export type StallEvent = {
     sats?: bigint;
     /** For a `book` event: what the plugin entries prove it did. */
     book?: BookShape;
+    /**
+     * For a `payment` event: the `STLP` memo, exactly as the payer wrote it.
+     *
+     * Held apart from every other field on this row because it is the one part
+     * nobody checked — the amount is the chain's, the status is the chain's,
+     * and this is a claim. A screen that prints it says so.
+     */
+    payment?: PaymentMemo;
     /**
      * For a `settings` or `description` row: did the stall's own key sign it.
      *
@@ -355,6 +381,38 @@ export type StallView = {
     fiatCode?: string;
     fiatRate?: bigint;
     /**
+     * The rate the open pay sheet was composed against, and when it was read.
+     *
+     * **Its own field, never `fiatRate`.** That one is the glance beside a
+     * covenant's asked amount and may be absent at any moment; this one is
+     * frozen for the length of one buyer's visit to one sheet, because the
+     * figure they are about to sign must not move under their cursor. The
+     * stamp is what the press-time valve compares against.
+     */
+    payRate?: { rate: bigint; atMs: number };
+    /**
+     * The item a `?pay=` link named, as the parameter was written — a prefix
+     * of a token id, resolved against this stall's own records and never
+     * against the chain.
+     */
+    payHint?: string;
+    /**
+     * What to say when that link named nothing this page could open.
+     *
+     * Two different sentences, and only one of them is about the seller:
+     * `unknown` is a complete read that holds no such quote, `unread` is this
+     * page failing to read the records at all. Collapsing them would be §4's
+     * empty-versus-unreachable mistake on a new surface.
+     */
+    payHintNote?: 'unknown' | 'unread';
+    /**
+     * One-shot: bring the pay section into view for a link that named no
+     * item. Set for the paint that does it and cleared after, the same
+     * discipline as `justChanged` — a live repaint must not throw a reader
+     * who has scrolled elsewhere back down the page.
+     */
+    payHintScroll?: true;
+    /**
      * tokenId → the seller's own words about that token.
      *
      * Deliberately **not** on `TokenMeta`. §4 allows session memory of a name
@@ -420,6 +478,13 @@ export type StallView = {
      * `the-shop-paints-no-price-in-round-one`.
      */
     prices?: ReadonlyMap<string, TokenPrice>;
+    /**
+     * The descriptions walk hit its cap, so a quote this page holds no record
+     * of may still exist. Said on screen only where it changes an answer — a
+     * `?pay=` link that matched nothing cannot be called unknown after a walk
+     * that stopped early.
+     */
+    descriptionsTruncated?: boolean;
     /** The active panel of a resolved stall. Absent is the storefront. */
     panel?: PanelKind;
     /**

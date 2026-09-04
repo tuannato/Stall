@@ -1,17 +1,21 @@
 
 import {
     CASHTAB_LIST_URL,
+    cashtabPayUrl,
     cashtabPublishUrl,
     cashtabTokenUrl,
+    payBip21,
+    payECashPayUrl,
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
-import { formatFiat } from '../domain/fiat';
+import { fiatCurrency, formatFiat, formatXecRate, satsForQuote } from '../domain/fiat';
 import { isPriceable, sectionsOf, type Category } from '../domain/category';
 import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
 import { fitsQr, qrMatrix } from '../domain/qr';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
+import { encodePaymentMemoHex } from '../domain/payment';
 import {
     MAX_DESCRIPTION_BYTES,
     XEC_PRICE_CODE,
@@ -25,6 +29,7 @@ import {
 } from '../domain/description';
 import {
     compareOffers,
+    DUST_SATS,
     formatAtoms,
     formatTokenRate,
     formatXec,
@@ -108,7 +113,23 @@ export type StallHandlers = {
     onOpenDescribe?: (tokenId?: string) => void;
     /** Change the currency the fiat line is read in. */
     onChangeFiat?: (code: string) => void;
-    /** Close whichever record sheet is open. Both wear the same way out. */
+    /**
+     * Open the pay sheet for one quoted item. The app fetches and freezes the
+     * rate there, so the figure a buyer reads cannot move under their cursor.
+     */
+    onOpenPay?: (tokenId: string) => void;
+    /**
+     * Ask the feed for a fresh rate for the open pay sheet: it is remembered
+     * without a paint and handed straight back, because the sheet holds the
+     * buyer's own quantity in its closure and a repaint would throw it away.
+     *
+     * The fetch itself stays on the app's side of the wall; the sheet decides
+     * when to ask, which is on the refresh control and on a stale press.
+     */
+    onPayRate?: (
+        timeoutMs?: number,
+    ) => Promise<{ rate: bigint; atMs: number } | undefined>;
+    /** Close whichever sheet is open. They all wear the same way out. */
     onClosePublish?: () => void;
     onOpenPoster?: () => void;
     onClosePoster?: () => void;
@@ -268,6 +289,9 @@ export function renderStall(
     handlers: StallHandlers,
 ): void {
     paintedIconCells.clear();
+    // A timer from the paint before this one would fire against a tree that
+    // no longer exists; the sheet that wants one arms it again below.
+    clearPayQrTimer();
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     // Snapshot the opener on the idle→open edge only: a live repaint while
     // the sheet is up finds focus *inside* the sheet, and overwriting the
@@ -382,6 +406,8 @@ export function renderStall(
             stall.append(sheetOverlay(nameSheet(view, handlers), 'publish-sheet', handlers));
         } else if (view.overlay.kind === 'describe') {
             stall.append(sheetOverlay(describeSheet(view, handlers), 'describe-sheet', handlers));
+        } else if (view.overlay.kind === 'pay') {
+            stall.append(sheetOverlay(paySheet(view, handlers), 'pay-sheet', handlers));
         } else if (view.overlay.kind === 'poster') {
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
         }
@@ -394,6 +420,12 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
+    // A link that named no item brings the section into view once — the app
+    // clears the flag with the paint that showed it, so a live repaint cannot
+    // throw a reader who has scrolled elsewhere back down the page.
+    if (view.payHintScroll === true) {
+        scrollSectionIntoView(stall.querySelector('[data-role="pay-section"]'));
+    }
     // The container is the last resort a repaint may hand focus to: not
     // tabbable, but focusable by script, so an orphaned keyboard visitor
     // resumes from the shop instead of from `<body>` at the top of the page.
@@ -699,6 +731,7 @@ function paintUnresolvable(
             copy.UNRESOLVABLE_HINT,
         ]),
     );
+    appendPayHintNote(body, view);
     body.append(listInCashtab());
     body.append(retryControl(handlers));
     stall.append(body);
@@ -794,6 +827,7 @@ function paintStoppedLooking(
     body.append(
         mid(copy.UNRESOLVED_TITLE, [copy.UNRESOLVED_BODY, copy.UNRESOLVED_HINT]),
     );
+    appendPayHintNote(body, view);
     body.append(retryControl(handlers));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -978,6 +1012,10 @@ function paintEmpty(
         ),
     );
     const body = el('main', 'stall-body');
+    const hint = payHintNote(view);
+    if (hint !== null) {
+        body.append(hint);
+    }
     const notice = announcementNote(view) ?? noticeInvite(view, handlers);
     if (notice !== null) {
         body.append(notice);
@@ -997,6 +1035,13 @@ function paintEmpty(
     cta.rel = 'noopener';
     emptyBlock.append(cta);
     body.append(emptyBlock);
+    // Under the message, never inside it: a stall with nothing listed and
+    // three quotes is exactly what this rail is for, and the empty screen's
+    // own sentence is still about the offer book.
+    const quotes = paySection(view, handlers);
+    if (quotes !== null) {
+        body.append(quotes);
+    }
     settingsNotes(body, view);
     // The live path no longer applies an empty answer, so a stall whose last
     // offer genuinely sold keeps that row until someone asks again. This is
@@ -1020,6 +1065,7 @@ function paintUnreadable(
     stall.append(header(displayName(view), copy.UNREADABLE_SUB, view.address));
     const body = el('main', 'stall-body');
     body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
+    appendPayHintNote(body, view);
     body.append(retryControl(handlers));
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -1051,6 +1097,7 @@ function paintUnreachable(
         }
     }
     body.append(el('p', 'mid-p', copy.UNREACHABLE_BODY));
+    appendPayHintNote(body, view);
     body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
     body.append(retryControl(handlers));
     stall.append(body);
@@ -1079,6 +1126,10 @@ function paintOffers(
         ),
     );
     const body = el('main', 'stall-body');
+    const hint = payHintNote(view);
+    if (hint !== null) {
+        body.append(hint);
+    }
     const notice = announcementNote(view);
     if (notice !== null) {
         body.append(notice);
@@ -1189,6 +1240,12 @@ function paintOffers(
     // invite the seller by name. Presence keys on the SHOWN count — a
     // filter narrowing to two earns the motif too, and its arrival is an
     // append below the cards, never a re-layout above them.
+    // Under the shop list and above the closing motif: the quotes are a
+    // second rail, not a footnote to the first.
+    const quotes = paySection(view, handlers);
+    if (quotes !== null) {
+        body.append(quotes);
+    }
     if (shown.length <= 2) {
         stall.querySelector('.stall-headings')?.append(
             ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
@@ -1547,6 +1604,218 @@ export function listingsInShopOrder(view: StallView): TokenListing[] {
     return out;
 }
 
+/** The units a quote is painted in. Every other code is decoded and silent. */
+const PAINTED_QUOTE_CODES: readonly string[] = ['usd', XEC_PRICE_CODE];
+
+/** One item the seller has quoted, and the figure they wrote for it. */
+export type QuotedItem = { tokenId: string; price: TokenPrice };
+
+/**
+ * The pay set: every quote this page can paint, **not** the intersection with
+ * what is listed on Agora.
+ *
+ * A quote needs no covenant, so gating it on a listing would defeat the rail:
+ * a stall with nothing listed and three quotes is the price-tag case this
+ * exists for, and a sold-out listing would otherwise take the quote off the
+ * page with it.
+ *
+ * `isPriceable` is affirmative, so a token whose genesis this page never read
+ * is not a row — it could be an NFT, and a quote per whole token means nothing
+ * about one. Those are counted instead (`unreadableQuotes`).
+ */
+export function quotedItems(view: StallView): QuotedItem[] {
+    const out: QuotedItem[] = [];
+    for (const [tokenId, price] of view.prices ?? []) {
+        if (!PAINTED_QUOTE_CODES.includes(price.code)) {
+            continue;
+        }
+        if (!isPriceable(tokenId, view.tokens.get(tokenId))) {
+            continue;
+        }
+        out.push({ tokenId, price });
+    }
+    return out;
+}
+
+/**
+ * Quotes this page could not read the item's genesis for. Our own gap, said
+ * out loud for the same reason the dropped-listings line is: a section that
+ * silently showed two of three would report our failure as the seller's
+ * inventory.
+ */
+export function unreadableQuotes(view: StallView): number {
+    let n = 0;
+    for (const [tokenId, price] of view.prices ?? []) {
+        if (PAINTED_QUOTE_CODES.includes(price.code) && !view.tokens.has(tokenId)) {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+/**
+ * The seller's figure, in the seller's own unit, exactly as they wrote it.
+ *
+ * Grouped for reading and never converted: the record's own exponent decides
+ * the decimals, so a quote published as `5000.00` XEC prints five thousand
+ * XEC with its own two places rather than being rounded, trimmed or run
+ * through a rate (§8).
+ */
+function quoteFigure(price: TokenPrice): string {
+    const figure = groupWholePart(formatPriceFigure(price));
+    if (price.code === XEC_PRICE_CODE) {
+        return `${figure} ${copy.XEC}`;
+    }
+    const currency = fiatCurrency(price.code);
+    if (currency === undefined) {
+        return figure;
+    }
+    return currency.symbolAfter === undefined
+        ? `${currency.symbol}${figure}`
+        : `${figure}${currency.symbolAfter}${currency.symbol}`;
+}
+
+function groupWholePart(figure: string): string {
+    const [whole = '', frac] = figure.split('.');
+    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return frac === undefined ? grouped : `${grouped}.${frac}`;
+}
+
+/**
+ * The direct-payment rail's own surface, under the shop list and under the
+ * empty screen's message alike.
+ *
+ * Painted only when something is quoted: an empty section is a heading over
+ * nothing, and this rail is opt-in for the seller — a stall that published no
+ * quotes has not chosen to be on it.
+ */
+function paySection(view: StallView, handlers: StallHandlers): HTMLElement | null {
+    const items = quotedItems(view);
+    const unreadable = unreadableQuotes(view);
+    if (items.length === 0 && unreadable === 0) {
+        return null;
+    }
+    const section = el('section', 'pay-sec');
+    section.setAttribute('data-role', 'pay-section');
+    section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
+    section.append(el('p', 'fine pay-lede', copy.PAY_SEC_LEDE));
+    if (items.length > 0) {
+        const rows = el('div', 'items pay-items');
+        for (const item of items) {
+            rows.append(payRow(item, view, handlers));
+        }
+        section.append(rows);
+    }
+    if (unreadable > 0) {
+        const note = el('p', 'fine', copy.quotedUnreadable(unreadable));
+        note.setAttribute('data-role', 'pay-unreadable');
+        section.append(note);
+    }
+    return section;
+}
+
+/**
+ * One quoted item: the seller's figure and the way to pay it.
+ *
+ * No "from", no stock, no rate, no converted glance — every one of those
+ * belongs to an Agora row, and a quote wearing them would read as the same
+ * money. The chip says whose figure this is; nothing on the row says what it
+ * is worth in anything else.
+ */
+function payRow(
+    item: QuotedItem,
+    view: StallView,
+    handlers: StallHandlers,
+): HTMLElement {
+    const row = el('div', 'item pay-row');
+    row.setAttribute('data-role', 'pay-row');
+    const name = tokenName(view.tokens, item.tokenId);
+    row.append(itemIcon(item.tokenId, name));
+    const words = el('div', 'pay-b');
+    words.append(el('span', 'item-n', name));
+    words.append(el('span', 'chip', copy.SELLER_QUOTE_CHIP));
+    row.append(words);
+    const right = el('div', 'pay-r');
+    const figure = el('span', 'pay-q', quoteFigure(item.price));
+    figure.setAttribute('data-role', 'seller-price');
+    right.append(figure);
+    const open = el('button', 'buy pay-btn', copy.PAY_OPEN);
+    open.type = 'button';
+    open.setAttribute('data-role', 'pay-open');
+    open.setAttribute('data-focus-key', `pay-open:${item.tokenId}`);
+    const onOpenPay = handlers.onOpenPay;
+    if (onOpenPay !== undefined) {
+        open.addEventListener('click', () => onOpenPay(item.tokenId));
+    }
+    right.append(open);
+    row.append(right);
+    return row;
+}
+
+/**
+ * The one line a Shop row may carry about the other rail.
+ *
+ * A sibling of the row's head button, never inside it: the head is a
+ * `<button>` and a control nested in one is markup no browser agrees about.
+ * It scrolls to the section and changes no route — the two figures stay on
+ * two rows, and this only says the other one exists.
+ */
+function payPointer(tokenId: string, view: StallView): HTMLElement | null {
+    if (!quotedItems(view).some((item) => item.tokenId === tokenId)) {
+        return null;
+    }
+    const pointer = el('button', 'pay-pointer', copy.PAY_POINTER);
+    pointer.type = 'button';
+    pointer.setAttribute('data-role', 'pay-pointer');
+    pointer.setAttribute('data-focus-key', `pay-pointer:${tokenId}`);
+    pointer.addEventListener('click', (event) => {
+        event.stopPropagation();
+        // Found at click time and from the pointer's own tree: the section is
+        // appended after the rows, and a detached tree has no `document` to
+        // ask.
+        const target = pointer
+            .closest('.stall')
+            ?.querySelector('[data-role="pay-section"]');
+        scrollSectionIntoView(target ?? null);
+    });
+    return pointer;
+}
+
+/** happy-dom has no scroller, so the call is a capability check, not a cast. */
+function scrollSectionIntoView(node: Element | null): void {
+    if (node === null) {
+        return;
+    }
+    const scroll = (node as { scrollIntoView?: unknown }).scrollIntoView;
+    if (typeof scroll === 'function') {
+        (node as HTMLElement).scrollIntoView({ block: 'start' });
+    }
+}
+
+/**
+ * What a `?pay=` link that opened nothing has to say, under the screen it
+ * landed on. Two sentences, and only one of them is about the seller.
+ */
+function appendPayHintNote(body: HTMLElement, view: StallView): void {
+    const note = payHintNote(view);
+    if (note !== null) {
+        body.append(note);
+    }
+}
+
+function payHintNote(view: StallView): HTMLElement | null {
+    if (view.payHintNote === undefined) {
+        return null;
+    }
+    const note = el(
+        'p',
+        'note',
+        view.payHintNote === 'unknown' ? copy.PAY_HINT_UNKNOWN : copy.PAY_HINT_UNREAD,
+    );
+    note.setAttribute('data-role', 'pay-hint-note');
+    return note;
+}
+
 /**
  * Cards or more before the sort and the find box appear. Below this they are
  * chrome on a shop a glance already covers.
@@ -1690,6 +1959,15 @@ const EDITABLE_PRICE_CODES = ['usd', XEC_PRICE_CODE] as const;
  * would be a different price after an unrelated release.
  */
 const EDITOR_PRICE_EXPONENT = 2;
+
+/**
+ * The margins this editor offers, and the reason for the steps: under 1% is
+ * unpayable in practice once a feed's update cadence and its rounding are in
+ * play, 2% covers the drift between a glance and a signature on an ordinary
+ * day, and past 10% the quote is decorative. The **reader** takes any 1–100,
+ * because a record is permanent and another app may write one.
+ */
+const TOLERANCE_PRESETS = [1, 2, 5, 10] as const;
 
 /**
  * A labelled group inside a sheet: a heading over a control that is not one
@@ -1925,6 +2203,70 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     form.append(priceWrap);
     const priceLede = el('p', 'fine', copy.DESC_PRICE_LEDE);
     form.append(priceLede);
+    /*
+     * The tolerance (STLD tag 0x03): the shortfall this seller accepts on a
+     * quote that needs a rate. Presets only, because <1% is unpayable in
+     * practice and >10% makes the quote decorative — but the reader takes any
+     * 1–100, since a record is permanent and another app may write one.
+     *
+     * Hidden under an XEC quote: no rate is involved in one, so there is no
+     * drift for a margin to cover. A record that already carries a byte beside
+     * an XEC quote keeps it — this sheet simply never adds one.
+     */
+    const toleranceGroup = sheetGroup(copy.DESC_TOLERANCE_LABEL);
+    toleranceGroup.setAttribute('data-role', 'describe-tolerance');
+    const toleranceSeg = el('div', 'seg');
+    toleranceSeg.setAttribute('role', 'group');
+    toleranceSeg.setAttribute('aria-label', copy.DESC_TOLERANCE_LABEL);
+    const toleranceButtons: HTMLButtonElement[] = [];
+    /**
+     * What the sheet will write, and how it got there.
+     *
+     * `pressed` is the seller's own choice on this screen; it starts at the
+     * default so a **typed** figure carries one without a second press. A
+     * carried price is different: an untouched one is restated verbatim, byte
+     * or no byte, so nothing is pressed until the seller presses it.
+     */
+    let tolerancePressed: number | undefined = TOLERANCE_PRESETS[1];
+    let toleranceTouched = false;
+    const paintTolerance = (): void => {
+        for (const button of toleranceButtons) {
+            button.setAttribute(
+                'aria-pressed',
+                Number(button.getAttribute('data-pct')) === tolerancePressed
+                    ? 'true'
+                    : 'false',
+            );
+        }
+    };
+    for (const pct of TOLERANCE_PRESETS) {
+        const button = el('button', 'seg-b', copy.tolerancePreset(pct));
+        button.type = 'button';
+        button.setAttribute('data-pct', String(pct));
+        button.setAttribute('data-role', `describe-tolerance-${pct}`);
+        button.setAttribute('data-focus-key', `describe-tolerance-${pct}`);
+        button.addEventListener('click', () => {
+            tolerancePressed = pct;
+            toleranceTouched = true;
+            paintTolerance();
+            refresh();
+        });
+        toleranceButtons.push(button);
+        toleranceSeg.append(button);
+    }
+    toleranceGroup.append(toleranceSeg);
+    const toleranceNote = el('p', 'fine', copy.DESC_TOLERANCE_HINT);
+    toleranceNote.setAttribute('data-role', 'describe-tolerance-note');
+    toleranceGroup.append(toleranceNote);
+    form.append(toleranceGroup);
+    /*
+     * The two rails, and the sentence that they are not one thing. Nothing
+     * links them: the covenant asks what it asks, and this figure is what the
+     * seller wrote.
+     */
+    const twoPrices = el('p', 'fine', copy.DESC_TWO_PRICES);
+    twoPrices.setAttribute('data-role', 'describe-two-prices');
+    form.append(twoPrices);
     const priceWhy = el('p', 'fine', copy.DESC_PRICE_NOT_PRICEABLE);
     priceWhy.setAttribute('data-role', 'describe-price-why');
     priceWhy.hidden = true;
@@ -2042,7 +2384,63 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 ? undefined
                 : parsePriceFigure(figure, priceCode, EDITOR_PRICE_EXPONENT);
         const priceRefused = figure !== '' && typedPrice === undefined;
-        const price = typedPrice ?? carriedPrice;
+        /*
+         * Which margin the record carries, and the whole rule in one place:
+         * a **typed** figure takes the pressed preset (2% by default), a
+         * preset **pressed over a carried price** republishes that price with
+         * the byte, and an **untouched carried price is restated verbatim**,
+         * byte or no byte. The encoder writes what it is handed and invents
+         * nothing.
+         *
+         * The carried value is offered back only when a preset can say it. One
+         * this sheet cannot express is shown disabled and carried forward
+         * untouched — a publish restates the whole document, so a sheet that
+         * dropped a field it merely could not edit would destroy a permanent
+         * record as a side effect of fixing a typo (the `0x04` rule).
+         */
+        const carriedTolerance = published?.tolerancePct;
+        const carriedIsPreset =
+            carriedTolerance !== undefined &&
+            (TOLERANCE_PRESETS as readonly number[]).includes(carriedTolerance);
+        // Hidden under an XEC quote (no rate, no drift) and over a price this
+        // sheet is only carrying forward: pressing a margin onto a record it
+        // cannot otherwise edit would be an edit disguised as a restatement.
+        const toleranceEditable =
+            priceable && priceCode !== XEC_PRICE_CODE && carriedPrice === undefined;
+        toleranceGroup.hidden = !toleranceEditable;
+        for (const button of toleranceButtons) {
+            button.disabled = removing || (carriedTolerance !== undefined && !carriedIsPreset);
+        }
+        if (!toleranceTouched) {
+            tolerancePressed = carriedIsPreset
+                ? carriedTolerance
+                : carriedTolerance !== undefined
+                  ? undefined
+                  : published === undefined
+                    ? TOLERANCE_PRESETS[1]
+                    : undefined;
+            paintTolerance();
+        }
+        toleranceNote.textContent =
+            carriedTolerance !== undefined && !carriedIsPreset
+                ? copy.DESC_TOLERANCE_FIXED
+                : tolerancePressed === undefined
+                  ? copy.DESC_TOLERANCE_NONE
+                  : copy.DESC_TOLERANCE_HINT;
+        /*
+         * The margin the record will carry. An XEC quote takes only what the
+         * record already had; a USD one takes what is pressed, falling back to
+         * the carried byte so an untouched record is restated verbatim.
+         */
+        const tolerancePct =
+            priceCode === XEC_PRICE_CODE
+                ? carriedTolerance
+                : (tolerancePressed ?? carriedTolerance);
+        const typedWithMargin =
+            typedPrice === undefined || tolerancePct === undefined
+                ? typedPrice
+                : { ...typedPrice, tolerancePct };
+        const price = typedWithMargin ?? carriedPrice;
 
         // Read back what the chain says, in the unit it says it — never a
         // conversion, and never for a code this editor could not have written.
@@ -2122,7 +2520,9 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     : descriptionRecordBytes(text, shelf, price) > OP_RETURN_BUDGET
                       ? price === undefined
                           ? copy.DESC_OVER_BUDGET
-                          : copy.DESC_OVER_BUDGET_PRICED
+                          : price.tolerancePct === undefined
+                            ? copy.DESC_OVER_BUDGET_PRICED
+                            : copy.DESC_OVER_BUDGET_TOLERANCE
                       : text !== '' && encodeDescriptionHex(tokenId, text) === undefined
                         ? copy.DESC_REFUSED
                         : copy.DESC_SHELF_REFUSED;
@@ -2158,6 +2558,12 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             }
             if (price !== undefined) {
                 parts.push({ label: copy.SUMMARY_QUOTE, value: sayPrice(price) });
+                if (price.tolerancePct !== undefined) {
+                    parts.push({
+                        label: copy.SUMMARY_TOLERANCE,
+                        value: copy.tolerancePreset(price.tolerancePct),
+                    });
+                }
             }
             size = descriptionRecordBytes(text, shelf, price);
         }
@@ -2245,6 +2651,10 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code);
         priceAmount.value = editable ? formatPriceFigure(price) : '';
         priceCode = editable ? price.code : EDITABLE_PRICE_CODES[0];
+        // A margin belongs to one token's record, so switching tokens drops
+        // whatever was pressed for the last one.
+        toleranceTouched = false;
+        tolerancePressed = undefined;
         paintUnits();
     };
     picker.addEventListener('change', () => {
@@ -2262,6 +2672,404 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     loadToken();
     refresh();
     return wrap;
+}
+
+/**
+ * How long a frozen rate may compose a payment before it is asked again.
+ *
+ * Two minutes bounds the gap between the figure a buyer read and the figure
+ * their wallet is handed — it is a span between reading a page and pressing a
+ * control, not a claim about the market.
+ */
+export const PAY_RATE_MAX_AGE_MS = 120_000;
+
+/** A refetch that has not answered by here is "no fresh price", not a wait. */
+const PAY_RATE_TIMEOUT_MS = 8_000;
+
+/**
+ * The valve's own threshold when the seller stated none.
+ *
+ * **Never painted as the seller's.** A tolerance on screen is something they
+ * published; this is only this app deciding when a moved figure deserves a
+ * second look, and the sheet says outright that the seller stated nothing.
+ */
+const PAY_VALVE_DEFAULT_PCT = 2;
+
+/** What the memo's quantity field holds: eight unsigned bytes. */
+const MAX_PAY_QUANTITY = (1n << 64n) - 1n;
+
+/** The width the design opens the scan fold at. Read once, at paint. */
+const PAY_QR_OPEN_QUERY = '(min-width: 680px)';
+
+/**
+ * The open sheet's own timer, in module state because `renderStall` throws the
+ * tree away on every paint and a timer left armed would fire against a sheet
+ * that is no longer there. Cleared at the top of every paint, re-armed by the
+ * sheet that wants it.
+ */
+let payQrTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearPayQrTimer(): void {
+    if (payQrTimer !== undefined) {
+        clearTimeout(payQrTimer);
+        payQrTimer = undefined;
+    }
+}
+
+/**
+ * One quoted item, and the payment a buyer's own wallet would sign for it.
+ *
+ * **Disclosure, not a checkout.** This origin holds no key: it composes a
+ * BIP21 and the buyer's wallet signs it, the same hand-off the buy control and
+ * both record sheets already use. Nothing here can tell that a payment
+ * happened, and nothing on it claims to.
+ *
+ * Two pieces of state live in this closure rather than on the view, because
+ * `renderStall` opens with `replaceChildren()` and a repaint would take them:
+ * the quantity the buyer typed, and the rate the figure was composed against.
+ * Every update — the refresh control, the press-time valve, the code ageing
+ * out — is this sheet's own `refresh()`, in place.
+ */
+function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const wrap = el('div', 'sheet');
+    wrap.setAttribute('data-role', 'pay');
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', copy.PAY_TITLE);
+
+    const tokenId = view.overlay.kind === 'pay' ? view.overlay.tokenId : '';
+    const item = quotedItems(view).find((row) => row.tokenId === tokenId);
+    const address = view.address ?? '';
+    const name = tokenName(view.tokens, tokenId);
+    wrap.append(sheetHead(copy.PAY_TITLE, name, handlers));
+    if (item === undefined) {
+        // A scanned link, or a re-read, can name a token this stall does not
+        // quote. Say that rather than painting a sheet with no figure on it.
+        wrap.append(el('p', 'ctx', copy.PAY_HINT_UNKNOWN));
+        wrap.append(payFoot(handlers));
+        return wrap;
+    }
+    const price = item.price;
+    const usesRate = price.code !== XEC_PRICE_CODE;
+
+    /** The buyer's own quantity: whole items, at least one. */
+    let quantity = 1n;
+    /** The rate this sheet froze, and when. Never `view.fiatRate`. */
+    let rate = usesRate ? view.payRate : undefined;
+
+    const card = el('div', 'pay-amt');
+    const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
+    card.append(cap);
+    const figureRow = el('div', 'pay-x');
+    const figure = el('span', 'pay-x-n', '');
+    figure.setAttribute('data-role', 'price');
+    figureRow.append(figure, el('span', 'item-u', copy.XEC));
+    card.append(figureRow);
+    const quote = el('div', 'pay-eq', '');
+    quote.setAttribute('data-role', 'seller-price');
+    card.append(quote);
+    const rateRow = el('div', 'pay-rate-row');
+    const rateLabel = el('span', 'pay-rate', '');
+    rateLabel.setAttribute('data-role', 'rate');
+    const refreshRate = el('button', 'mini', copy.PAY_RATE_REFRESH);
+    refreshRate.type = 'button';
+    refreshRate.setAttribute('data-role', 'pay-refresh');
+    refreshRate.setAttribute('data-focus-key', 'pay-refresh');
+    rateRow.append(rateLabel, refreshRate);
+    if (usesRate) {
+        card.append(rateRow);
+    }
+    const why = el('p', 'fine', '');
+    why.hidden = true;
+    card.append(why);
+    wrap.append(card);
+
+    const valve = el('p', 'note', '');
+    valve.setAttribute('data-role', 'pay-valve');
+    valve.hidden = true;
+    wrap.append(valve);
+
+    /*
+     * Quantity: a figure with a way in, because one is the ordinary case and a
+     * bare number field over a money figure invites an edit nobody came here
+     * to make.
+     */
+    const qtyRow = el('dl', 'row pay-qty');
+    qtyRow.append(el('dt', undefined, copy.PAY_QUANTITY_LABEL));
+    const qtyValue = el('dd');
+    const qtyShown = el('b', undefined, copy.payQuantityShown('1'));
+    const qtyEdit = el('button', 'mini another', copy.PAY_QUANTITY_EDIT);
+    qtyEdit.type = 'button';
+    qtyEdit.setAttribute('data-role', 'pay-quantity-edit');
+    qtyEdit.setAttribute('data-focus-key', 'pay-quantity-edit');
+    const qtyField = el('input', 'paste-in pay-qty-in');
+    qtyField.type = 'text';
+    qtyField.inputMode = 'numeric';
+    qtyField.autocomplete = 'off';
+    qtyField.value = '1';
+    qtyField.maxLength = 20;
+    qtyField.hidden = true;
+    qtyField.setAttribute('aria-label', copy.PAY_QUANTITY_LABEL);
+    qtyField.setAttribute('data-role', 'pay-quantity');
+    qtyField.setAttribute('data-focus-key', 'pay-quantity');
+    qtyValue.append(qtyShown, qtyEdit, qtyField);
+    qtyRow.append(qtyValue);
+    wrap.append(qtyRow);
+    qtyEdit.addEventListener('click', () => {
+        qtyShown.hidden = true;
+        qtyEdit.hidden = true;
+        qtyField.hidden = false;
+        qtyField.focus();
+    });
+    qtyField.addEventListener('input', () => {
+        // Whole items only, at least one, and no larger than the memo's own
+        // field holds — eight unsigned bytes. Read as a `bigint`, never a
+        // `Number`: the ceiling is past where a double keeps every digit.
+        const typed = qtyField.value.trim();
+        const asked = /^\d{1,20}$/.test(typed) ? BigInt(typed) : 0n;
+        quantity = asked >= 1n && asked <= MAX_PAY_QUANTITY ? asked : 1n;
+        qtyShown.textContent = copy.payQuantityShown(quantity.toString());
+        refresh();
+    });
+
+    wrap.append(el('p', 'note', copy.PAY_NOTE_DIRECT));
+    wrap.append(el('p', 'fine', copy.PAY_FINE_MEMO));
+    wrap.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
+    /*
+     * The seller's own margin, and the two honest ways of not having one. Only
+     * a quote that needs a rate can drift, and a value past what this app's
+     * own presets can say is named as wider rather than printed as a figure
+     * whose meaning nothing here can vouch for.
+     */
+    const stated = usesRate ? price.tolerancePct : undefined;
+    wrap.append(
+        el(
+            'p',
+            'fine',
+            stated === undefined
+                ? copy.PAY_TOLERANCE_NONE
+                : stated > 25
+                  ? copy.PAY_TOLERANCE_WIDE
+                  : copy.payTolerance(stated),
+        ),
+    );
+    wrap.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
+    if (decimalsOf(view.tokens, tokenId) > 0) {
+        wrap.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
+    }
+
+    const acts = el('div', 'acts');
+    const web = el('a', 'buy', copy.PAY_CASHTAB);
+    web.setAttribute('data-focus-key', 'pay-cashtab');
+    const app = el('a', 'mini another', copy.PAY_OTHER_WALLET);
+    app.setAttribute('data-focus-key', 'pay-wallet');
+    for (const link of [web, app]) {
+        link.rel = 'noopener noreferrer';
+        link.target = '_blank';
+    }
+    acts.append(web, app);
+    wrap.append(acts);
+
+    const qrBody = el('div', 'publish-qr pay-qr-body');
+    const qrFold = sheetFold('pay-qr-fold', copy.PAY_QR_FOLD, qrBody);
+    /*
+     * Closed on a phone, open from the width the design opens it at. Read once
+     * at paint and never again: there is no resize handling, so a widened
+     * window keeps whatever state it opened with — accepted, because the
+     * summary is one click away either way, and a sentence explaining that on
+     * a buyer's sheet would be chrome about the chrome.
+     *
+     * Not `.sheet-qr-fold`: that one hides itself on a phone, and this code is
+     * the point of the sheet on a desktop and still worth reaching on a phone.
+     */
+    (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
+    wrap.append(qrFold);
+    wrap.append(payFoot(handlers));
+
+    /**
+     * Everything the figure touches, recomposed from one `satsForQuote`
+     * result: the figure on screen, both links and the code are that same
+     * `bigint`, so a buyer cannot be shown one number and handed another.
+     */
+    const refresh = (): void => {
+        clearPayQrTimer();
+        const sats = satsForQuote(price, quantity, rate?.rate);
+        const memoHex = encodePaymentMemoHex(tokenId, quantity);
+        const subDust = sats !== undefined && sats < DUST_SATS;
+        const composable = sats !== undefined && memoHex !== undefined;
+        const bip21 = composable ? payBip21(address, sats, memoHex) : undefined;
+        const cashtab = composable ? cashtabPayUrl(address, sats, memoHex) : undefined;
+        const pay = composable ? payECashPayUrl(address, sats, memoHex) : undefined;
+
+        figureRow.hidden = sats === undefined;
+        figure.textContent = sats === undefined ? '' : formatXec(sats);
+        cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTE : copy.PAY_CAP_SIGNS;
+        /*
+         * With a figure, the quote sits under it labelled as the seller's; an
+         * XEC quote **is** the figure, so restating it would print one number
+         * twice and the line says where it came from instead. With no figure
+         * at all the quote is the only thing there is to show, and it takes
+         * the top of the card.
+         */
+        quote.textContent = !usesRate
+            ? copy.PAY_XEC_QUOTE_NOTE
+            : sats === undefined
+              ? quoteFigure(price)
+              : copy.payQuoteEquals(quoteFigure(price));
+
+        if (usesRate) {
+            const glance = formatXecRate(rate?.rate, price.code);
+            rateRow.hidden = glance === undefined;
+            rateLabel.textContent =
+                glance === undefined || rate === undefined
+                    ? ''
+                    : copy.payRateLine(glance, formatTriedAt(rate.atMs));
+        }
+        why.hidden = sats !== undefined && !subDust;
+        why.textContent = subDust
+            ? copy.PAY_SUB_DUST
+            : sats === undefined
+              ? copy.PAY_NO_RATE_WHY
+              : '';
+
+        const linked = cashtab !== undefined && pay !== undefined;
+        web.hidden = !linked;
+        app.hidden = !linked;
+        // A control with no destination is not a control: the role comes off
+        // with the href, so nothing on screen offers a press that does nothing.
+        if (linked) {
+            web.href = cashtab;
+            app.href = pay;
+            web.setAttribute('data-role', 'pay-cashtab');
+            app.setAttribute('data-role', 'pay-wallet');
+        } else {
+            web.removeAttribute('href');
+            app.removeAttribute('href');
+            web.removeAttribute('data-role');
+            app.removeAttribute('data-role');
+        }
+
+        /*
+         * The code has the rate's own lifetime. A phone can scan it an hour
+         * after it was painted, and the amount inside it came from a rate that
+         * has moved since — so it is taken away rather than left scannable,
+         * and a timer does that without anyone touching the page. An XEC quote
+         * never ages: no rate is involved in it at all.
+         */
+        const aged =
+            usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
+        qrFold.hidden = bip21 === undefined;
+        if (bip21 !== undefined && !aged && fitsQr(bip21)) {
+            const box = el('div', 'pay-qr');
+            box.setAttribute('data-role', 'pay-qr');
+            box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
+            qrBody.replaceChildren(box);
+            if (usesRate && rate !== undefined) {
+                const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
+                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+            }
+        } else if (bip21 !== undefined) {
+            qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
+        } else {
+            qrBody.replaceChildren();
+        }
+    };
+
+    /**
+     * The press-time valve. A frozen rate older than `PAY_RATE_MAX_AGE_MS` is
+     * refetched **on the press**, and the press opens nothing afterwards: a
+     * second press is always required.
+     *
+     * That is the platform, not caution about the market. WebKit blocks
+     * `window.open` after an awaited fetch as a matter of course, and a link
+     * opened with `noopener` returns `null` whether it was blocked or not — so
+     * an auto-open would be a silent no-op on every iPhone, with a buyer
+     * pressing a control that appears to do nothing. The change lands on the
+     * press and never under the cursor.
+     */
+    const armValve = (link: HTMLAnchorElement): void => {
+        link.addEventListener('click', (event) => {
+            if (!usesRate || rate === undefined) {
+                return;
+            }
+            if (Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
+                return;
+            }
+            event.preventDefault();
+            const before = satsForQuote(price, quantity, rate.rate);
+            void (async () => {
+                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                rate = fresh;
+                refresh();
+                const after = satsForQuote(price, quantity, fresh?.rate);
+                valve.hidden = false;
+                valve.textContent =
+                    fresh === undefined || after === undefined
+                        ? copy.PAY_RATE_UNAVAILABLE
+                        : movedPastTolerance(before, after, price.tolerancePct)
+                          ? copy.PAY_RATE_MOVED
+                          : copy.PAY_RATE_REFRESHED;
+            })();
+        });
+    };
+    armValve(web);
+    armValve(app);
+
+    refreshRate.addEventListener('click', () => {
+        void (async () => {
+            rate = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            refresh();
+        })();
+    });
+
+    refresh();
+    return wrap;
+}
+
+/** happy-dom ships no `matchMedia`, and the honest fallback is the closed one. */
+function payQrFoldOpens(): boolean {
+    const mq = (window as { matchMedia?: (query: string) => { matches: boolean } })
+        .matchMedia;
+    if (typeof mq !== 'function') {
+        return false;
+    }
+    try {
+        return mq.call(window, PAY_QR_OPEN_QUERY).matches === true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Did the figure move by more than the seller's stated margin? The app's own
+ * default stands in when they stated none — and the sheet says that in words
+ * rather than printing this number as theirs.
+ */
+function movedPastTolerance(
+    before: bigint | undefined,
+    after: bigint,
+    tolerancePct: number | undefined,
+): boolean {
+    if (before === undefined || before <= 0n) {
+        return true;
+    }
+    const pct = BigInt(tolerancePct ?? PAY_VALVE_DEFAULT_PCT);
+    const drift = after > before ? after - before : before - after;
+    return drift * 100n > before * pct;
+}
+
+/** The pay sheet's foot: one way out, and no record to go looking for. */
+function payFoot(handlers: StallHandlers): HTMLElement {
+    const foot = el('div', 'sheet-foot');
+    const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'pay-close');
+    close.setAttribute('data-focus-key', 'pay-close');
+    if (handlers.onClosePublish !== undefined) {
+        close.addEventListener('click', handlers.onClosePublish);
+    }
+    foot.append(close);
+    return foot;
 }
 
 /**
@@ -2350,6 +3158,7 @@ export function sheetMounts(view: StallView): boolean {
     switch (view.overlay.kind) {
         case 'publish-name':
         case 'describe':
+        case 'pay':
             return true;
         case 'poster':
             return fitsQr(shareUrl());
@@ -2944,6 +3753,10 @@ function offerRow(
         }
     });
     card.append(head);
+    const pointer = payPointer(listing.tokenId, view);
+    if (pointer !== null) {
+        card.append(pointer);
+    }
     if (expanded) {
         card.append(itemDetail(view, listing));
     }
@@ -4110,7 +4923,7 @@ function watchingSection(view: StallView): HTMLElement {
     const list = el('ol', 'events');
     list.setAttribute('data-role', 'events');
     for (const event of events) {
-        list.append(eventRow(event));
+        list.append(eventRow(event, view));
     }
     wrap.append(list);
     if (events.length >= MAX_STALL_EVENTS) {
@@ -4144,7 +4957,7 @@ function historySection(
         const list = el('ol', 'events');
         list.setAttribute('data-role', 'history');
         for (const row of history.rows) {
-            list.append(eventRow(row));
+            list.append(eventRow(row, view));
         }
         wrap.append(list);
         // Only where a row could carry the label: a note about decorations on
@@ -4264,7 +5077,7 @@ function historyControl(
  * kept and made stricter — a row must not grow a control the visitor did not
  * ask for, so every control lives behind the disclosure they opened.
  */
-function eventRow(event: StallEvent): HTMLElement {
+function eventRow(event: StallEvent, view: StallView): HTMLElement {
     const row = el('li', 'event');
     const fold = el('details', 'event-fold');
     fold.setAttribute('data-role', 'event-detail');
@@ -4314,6 +5127,30 @@ function eventRow(event: StallEvent): HTMLElement {
         dl.append(amount);
     }
 
+    // The memo, in three parts and with no verdict between them: what the
+    // payer said the money was for, what they said the quantity was, and the
+    // sentence that neither is a proof of delivery. Nothing signed it and
+    // nothing checks it against the amount above.
+    if (event.payment !== undefined) {
+        const claimed = event.payment;
+        const name = view.tokens.has(claimed.tokenId)
+            ? tokenName(view.tokens, claimed.tokenId)
+            : claimed.tokenId;
+        dl.append(el('dt', 'event-dt', copy.EVENT_PAYMENT_CLAIM_LABEL));
+        const claim = el(
+            'dd',
+            'event-dd',
+            copy.paymentClaim(
+                name,
+                claimed.quantity === undefined
+                    ? copy.PAYMENT_QUANTITY_UNSTATED
+                    : copy.paymentQuantity(claimed.quantity.toString()),
+            ),
+        );
+        claim.setAttribute('data-role', 'payment-claim');
+        dl.append(claim);
+    }
+
     dl.append(el('dt', 'event-dt', copy.EVENT_STATUS_LABEL));
     const status = el('dd', 'event-dd', eventStatusLabel(event.status));
     status.setAttribute('data-role', 'event-status');
@@ -4322,6 +5159,9 @@ function eventRow(event: StallEvent): HTMLElement {
     // Gated at 64 lowercase hex, so the burst's `UNKNOWN_TXID` stand-in — a
     // message that named no transaction — never becomes an href.
     body.append(dl);
+    if (event.payment !== undefined) {
+        body.append(el('p', 'fine', copy.EVENT_PAYMENT_NOT_PROOF));
+    }
     const url = EXPLORER_TX_URL(event.txid);
     if (url !== undefined) {
         const link = el('a', 'mini another event-out', copy.EVENT_OPEN_EXPLORER);
@@ -4401,6 +5241,14 @@ function eventStatusLabel(status: EventStatus | undefined): string {
 
 function eventLabel(event: StallEvent): string {
     switch (event.kind) {
+        case 'payment':
+            // Paid, never bought or sold: the chain proves money arrived at
+            // the seller's address and says nothing about delivery. The
+            // amount joins the line only when every output to the stall
+            // carried a figure — omitted, never zero.
+            return event.sats === undefined
+                ? copy.EVENT_PAYMENT
+                : copy.eventPayment(formatXec(event.sats));
         case 'book':
             // Only what the plugin entries proved. `consumed` covers a take
             // and a cancel alike — the wire cannot tell them apart, so the
@@ -4773,6 +5621,23 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
 
 function shareUrl(): string {
     return `${location.origin}${location.pathname}${location.search}`;
+}
+
+/**
+ * The stall's own page, with the **search dropped**.
+ *
+ * `shareUrl()` keeps it, so a printed link carrying `?m=` still hints at the
+ * settings record when somebody shares it. A landing link must not: on a
+ * `?view=broadcast&cards=quotes` URL that would compose
+ * `…&cards=quotes?pay=…`, which is a link into the stream overlay rather than
+ * to the page with the note on it.
+ *
+ * Here rather than in `src/domain` because it reads `location`, which that
+ * layer has no business touching (§9's directory walls); `payLandingUrl` takes
+ * the base and stays pure.
+ */
+export function stallBaseUrl(): string {
+    return `${location.origin}${location.pathname}`;
 }
 
 function shareControl(): HTMLElement {

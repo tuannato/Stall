@@ -17,7 +17,7 @@ import {
     tierCharCeilings,
     overlayTierCharCeilings,
 } from '../domain/theme';
-import { stallPath } from '../domain/route';
+
 import { qrMatrix } from '../domain/qr';
 import type {
     BroadcastParams,
@@ -87,6 +87,8 @@ import {
     MAX_DESCRIPTION_BYTES,
     MAX_PRICED_DESCRIPTION_BYTES,
     MAX_PRICED_SHELVED_DESCRIPTION_BYTES,
+    MAX_TOLERANCE_DESCRIPTION_BYTES,
+    MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES,
     encodeDescriptionHex,
     encodeRemovalHex,
 } from '../domain/description';
@@ -96,7 +98,19 @@ import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
-import { priceTier, renderStall, resetIconsForTests, sheetMounts } from './render';
+import {
+    PAY_RATE_MAX_AGE_MS,
+    priceTier,
+    renderStall,
+    resetIconsForTests,
+    sheetMounts,
+    stallBaseUrl,
+} from './render';
+import { satsForQuote } from '../domain/fiat';
+import { formatXec } from '../domain/money';
+import { cashtabPayUrl, payBip21, payECashPayUrl } from '../domain/cashtab';
+import { encodePaymentMemoHex } from '../domain/payment';
+import { payLandingUrl, stallPath } from '../domain/route';
 import {
     lastDrawnPosterSpec,
     SQUARE_SIZE,
@@ -148,6 +162,7 @@ function handlers() {
         onTogglePin: vi.fn(),
         onChangeSort: vi.fn(),
         onChangeFilter: vi.fn(),
+        onOpenPay: vi.fn(),
     };
 }
 
@@ -5768,13 +5783,18 @@ describe('the-visitor-has-no-currency-control-and-the-glance-is-usd', () => {
     });
 });
 
-describe('the-shop-paints-no-price-in-round-one', () => {
+describe('an-agora-row-never-carries-the-sellers-quote', () => {
     /**
-     * The record is written and read; nothing public shows it. Every priced row
-     * on an Agora stall already carries the covenant's asked amount and a
-     * converted glance beside it, so a third money figure would be two prices
-     * for one thing with no screen saying which one binds. Public painting
-     * arrives with the Pay surface, under this same role and labelled a quote.
+     * Two rails, two figures, and never both on one row. An Agora row's price
+     * is what its covenant asks; the seller's quote is a different number for
+     * a different transaction, and a row carrying both would be two prices for
+     * one thing with nothing on screen saying which one binds.
+     *
+     * The quote now paints — in its own section, under its own role — so these
+     * assertions are scoped to the surfaces that must never carry it: the
+     * offer row, the disclosure the row opens, the empty screen's own message,
+     * the Activity panel and the stream overlay. The section below them is a
+     * different surface and has its own tests.
      */
     const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
     const priced = (over: Partial<StallView> = {}) =>
@@ -5784,17 +5804,29 @@ describe('the-shop-paints-no-price-in-round-one', () => {
             ...over,
         });
 
-    it('shows no seller price on the shop, the expander or the empty screen', () => {
-        for (const [label, view] of [
-            ['shop', priced()],
-            ['expander', priced({ overlay: { kind: 'buy', outpoint: OUTPOINT } })],
-            ['empty', priced({ fetch: { kind: 'empty' } })],
-            ['activity', priced({ panel: 'activity' })],
-        ] as const) {
-            const { root } = paint(view);
-            expect(root.querySelector('[data-role="seller-price"]'), label).toBeNull();
-            expect(root.textContent, label).not.toContain('12.50');
-        }
+    it('keeps the quote off the offer row and off the disclosure it opens', () => {
+        const shop = paint(priced()).root;
+        const row = shop.querySelector('.item') as HTMLElement;
+        expect(row.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(row.textContent).not.toContain('12.50');
+
+        const opened = paint(priced({ overlay: { kind: 'buy', outpoint: OUTPOINT } })).root;
+        const detail = opened.querySelector('[data-role="detail"]') as HTMLElement;
+        expect(detail).not.toBeNull();
+        expect(detail.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(detail.textContent).not.toContain('12.50');
+    });
+
+    it('keeps it out of the empty screen’s message and off the Activity panel', () => {
+        const empty = paint(priced({ fetch: { kind: 'empty' } })).root;
+        const message = empty.querySelector('.sparse-empty') as HTMLElement;
+        expect(message).not.toBeNull();
+        expect(message.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(message.textContent).not.toContain('12.50');
+
+        const activity = paint(priced({ panel: 'activity' })).root;
+        expect(activity.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(activity.textContent).not.toContain('12.50');
     });
 
     it('shows none on the broadcast overlay', () => {
@@ -5807,7 +5839,8 @@ describe('the-shop-paints-no-price-in-round-one', () => {
 
     it('leaves the covenant’s own asked amount exactly where it was', () => {
         const { root } = paint(priced());
-        expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+        const row = root.querySelector('.item') as HTMLElement;
+        expect(row.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
     });
 });
 
@@ -5841,7 +5874,11 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
                 ?.getAttribute('data-code'),
             'the pressed unit is the published one',
         ).toBe('usd');
-        const back = root.querySelector('[data-role="seller-price"]') as HTMLElement;
+        // Scoped to the sheet: the same role now paints on the pay surface
+        // behind it, and a query from the root would read that row's figure.
+        const back = root.querySelector(
+            '[data-role="describe"] [data-role="seller-price"]',
+        ) as HTMLElement;
         expect(back.hidden).toBe(false);
         expect(back.textContent).toBe(copy.sellerPrice('12.50', 'USD'));
         // Never the fiat node, which is the converted glance beside a covenant.
@@ -5852,9 +5889,13 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
         const { root } = sheet();
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
         expect(amount.value).toBe('');
-        expect((root.querySelector('[data-role="seller-price"]') as HTMLElement).hidden).toBe(
-            true,
-        );
+        expect(
+            (
+                root.querySelector(
+                    '[data-role="describe"] [data-role="seller-price"]',
+                ) as HTMLElement
+            ).hidden,
+        ).toBe(true);
     });
 
     it('only-a-fungible-token-can-be-priced', () => {
@@ -5918,14 +5959,19 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
         expect(units.map((u) => u.getAttribute('aria-label'))).toEqual(['USD', 'XEC']);
         expect(units[0]!.getAttribute('aria-pressed'), 'opens on USD').toBe('true');
 
+        // Amended: a typed USD figure now carries the tolerance byte as well,
+        // at the preset the segment opens on. The rule this test guards has
+        // not moved — two units, two decimal places, and nothing else — and
+        // the margin is a field of the quote, written where the quote is.
         const hex = typePrice(root, '12.50');
         expect(hex.textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, '', {
-                price: { code: 'usd', exponent: 2, amount: 1250n },
+                price: { code: 'usd', exponent: 2, amount: 1250n, tolerancePct: 2 },
             }),
         );
         // `xec` is the chain's own unit and takes the same two decimals, so a
-        // stream QR can carry a figure that never goes stale.
+        // stream QR can carry a figure that never goes stale — and no margin,
+        // because no rate is involved in one.
         const inXec = typePrice(root, '450.00', 'xec');
         expect(inXec.textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, '', {
@@ -5955,13 +6001,20 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
         field.dispatchEvent(new Event('input'));
         typePrice(root, '12.50');
         expect(err.hidden).toBe(false);
-        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_PRICED);
-        // The maxima are stated, not implied.
+        // Amended: a typed figure carries a margin, so the ladder names the
+        // pair that includes it. Both pairs are still stated, not implied.
+        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_TOLERANCE);
         expect(copy.DESC_OVER_BUDGET_PRICED).toContain(
             String(MAX_PRICED_DESCRIPTION_BYTES),
         );
         expect(copy.DESC_OVER_BUDGET_PRICED).toContain(
             String(MAX_PRICED_SHELVED_DESCRIPTION_BYTES),
+        );
+        expect(copy.DESC_OVER_BUDGET_TOLERANCE).toContain(
+            String(MAX_TOLERANCE_DESCRIPTION_BYTES),
+        );
+        expect(copy.DESC_OVER_BUDGET_TOLERANCE).toContain(
+            String(MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES),
         );
         // And one meter still, counting the price into the same record.
         const counter = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
@@ -6668,6 +6721,7 @@ describe('two-sheets-two-records', () => {
         const kinds = [
             { kind: 'publish-name' } as const,
             { kind: 'describe' } as const,
+            { kind: 'pay', tokenId: TOKEN_ID } as const,
             { kind: 'poster', format: 'print' } as const,
         ];
         for (const overlay of kinds) {
@@ -6927,5 +6981,757 @@ describe('a-shelf-suggests-the-shelves-that-exist', () => {
         expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, '', { shelf: 'Brand new shelf' }),
         );
+    });
+});
+
+describe('a-payment-row-says-paid-and-never-sold', () => {
+    /**
+     * The chain proves money arrived. It proves nothing about delivery, and
+     * the memo beside it is the payer's own words — so the row names the
+     * payment, prints the claim as a claim, and reaches no verdict.
+     */
+    const PAID = {
+        txid: 'ab'.repeat(32),
+        kind: 'payment' as const,
+        seenAtMs: 1_756_400_000_000,
+        sats: 25_000_000n,
+        payment: { tokenId: TOKEN_ID, quantity: 3n },
+    };
+
+    it('names the payment, the amount and who it went to', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                events: [PAID],
+            }),
+        );
+        const kind = root.querySelector('.event-kind');
+        expect(kind?.textContent).toBe(copy.eventPayment('250,000'));
+        expect(kind?.textContent).toContain('to the seller');
+        for (const word of ['sold', 'bought', 'Sold', 'Bought']) {
+            expect(root.textContent, word).not.toContain(word);
+        }
+    });
+
+    it('carries the claim and says it is one', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                events: [PAID],
+            }),
+        );
+        const claim = root.querySelector('[data-role="payment-claim"]');
+        expect(claim?.textContent).toBe(
+            copy.paymentClaim('Roasted Beans', copy.paymentQuantity('3')),
+        );
+        expect(root.textContent).toContain(copy.EVENT_PAYMENT_CLAIM_LABEL);
+        expect(root.textContent).toContain(copy.EVENT_PAYMENT_NOT_PROOF);
+    });
+
+    it('prints an unstated quantity as words and an unknown item as its id', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map(), {
+                panel: 'activity',
+                events: [{ ...PAID, payment: { tokenId: TOKEN_ID } }],
+            }),
+        );
+        const claim = root.querySelector('[data-role="payment-claim"]');
+        expect(claim?.textContent).toBe(
+            copy.paymentClaim(TOKEN_ID, copy.PAYMENT_QUANTITY_UNSTATED),
+        );
+    });
+
+    it('says only "to the seller" when no amount could be added up', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                events: [{ ...PAID, sats: undefined }],
+            }),
+        );
+        expect(root.querySelector('.event-kind')?.textContent).toBe(copy.EVENT_PAYMENT);
+    });
+});
+
+/* The direct-payment rail: the surface, the sheet and the landing hint. */
+
+const QUOTE_USD = { code: 'usd', exponent: 2, amount: 500n } as const;
+const TOKEN_UNLISTED = '11'.repeat(32);
+const PAY_TEA: TokenMeta = {
+    tokenId: TOKEN_UNLISTED,
+    name: 'Green Tea',
+    ticker: 'PAY_TEA',
+    decimals: 0,
+    tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+};
+/** 1 XEC = $0.00002, so $5.00 is 250,000 XEC — 25,000,000 satoshis. */
+const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
+
+function payView(over: Partial<StallView> = {}): StallView {
+    return offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+        prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        ...over,
+    });
+}
+
+describe('the-pay-section-paints-under-the-shop-and-the-empty-screen', () => {
+    /**
+     * A quote is not gated on a listing: a stall with nothing listed and three
+     * quotes is exactly the price-tag use this rail exists for. So the section
+     * lives under the shop list **and** under the empty screen's message, and
+     * it is absent entirely when there is nothing quoted.
+     */
+    it('paints the rows on a shop, with the chip and the seller’s own unit', () => {
+        const { root } = paint(payView());
+        const section = root.querySelector('[data-role="pay-section"]') as HTMLElement;
+        expect(section).not.toBeNull();
+        expect(section.textContent).toContain(copy.PAY_SEC_TITLE);
+        expect(section.textContent).toContain(copy.PAY_SEC_LEDE);
+        const rows = [...section.querySelectorAll('[data-role="pay-row"]')];
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.textContent).toContain(copy.SELLER_QUOTE_CHIP);
+        expect(
+            rows[0]!.querySelector('[data-role="seller-price"]')?.textContent,
+        ).toBe('$5.00');
+        // The seller's figure, and nothing computed beside it.
+        expect(rows[0]!.querySelector('[data-role="fiat"]')).toBeNull();
+        expect(rows[0]!.textContent).not.toContain('≈');
+        expect(rows[0]!.textContent).not.toContain(PRICE_FROM);
+        expect(
+            (rows[0]!.querySelector('[data-role="pay-open"]') as HTMLElement).textContent,
+        ).toBe(copy.PAY_OPEN);
+    });
+
+    it('paints under the empty screen too, and not at all with no quotes', () => {
+        const empty = paint(payView({ fetch: { kind: 'empty' } })).root;
+        expect(empty.querySelector('[data-role="pay-section"]')).not.toBeNull();
+
+        const bare = paint(offersView([OFFER])).root;
+        expect(bare.querySelector('[data-role="pay-section"]')).toBeNull();
+        expect(bare.textContent).not.toContain(copy.PAY_SEC_TITLE);
+    });
+
+    it('opens the sheet for the row that was pressed', () => {
+        const { root, h } = paint(payView());
+        (
+            root.querySelector('[data-role="pay-open"]') as HTMLButtonElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onOpenPay).toHaveBeenCalledWith(TOKEN_ID);
+    });
+
+    it('points a listed row at the section without changing the route', () => {
+        const { root, h } = paint(payView());
+        const pointer = root.querySelector('[data-role="pay-pointer"]') as HTMLElement;
+        expect(pointer.textContent).toBe(copy.PAY_POINTER);
+        pointer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onOpenPay).not.toHaveBeenCalled();
+        expect(h.onBuy).not.toHaveBeenCalled();
+        // A token with no quote gets no pointer at all.
+        const unquoted = paint(offersView([OFFER])).root;
+        expect(unquoted.querySelector('[data-role="pay-pointer"]')).toBeNull();
+    });
+
+    it('prints an xec quote in the seller’s own unit, unconverted', () => {
+        const { root } = paint(
+            payView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            }),
+        );
+        const figure = root.querySelector('[data-role="pay-row"] [data-role="seller-price"]');
+        expect(figure?.textContent).toBe(`5,000.00 ${copy.XEC}`);
+    });
+});
+
+describe('a-quoted-token-with-no-listing-is-not-silently-dropped', () => {
+    /**
+     * The pay set is every record the seller published, not the intersection
+     * with what is listed on Agora. A sold-out listing used to take the quote
+     * off the page with it, which is the whole point of a rail that does not
+     * need a covenant.
+     */
+    it('paints a quoted token this stall does not list', () => {
+        const { root } = paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, PAY_TEA],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, { code: 'usd', exponent: 2, amount: 1_200n }],
+                ]),
+            }),
+        );
+        const rows = [...root.querySelectorAll('[data-role="pay-row"]')];
+        expect(rows).toHaveLength(2);
+        expect(rows.map((r) => r.textContent)).toEqual([
+            expect.stringContaining('Roasted Beans'),
+            expect.stringContaining('Green Tea'),
+        ]);
+    });
+
+    it('refuses to quote a token that is not fungible', () => {
+        const nft: TokenMeta = {
+            tokenId: TOKEN_UNLISTED,
+            name: 'Pixel #1',
+            ticker: 'PX',
+            decimals: 0,
+            tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' },
+        };
+        const { root } = paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, nft],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, { code: 'usd', exponent: 2, amount: 1_200n }],
+                ]),
+            }),
+        );
+        expect(root.querySelectorAll('[data-role="pay-row"]')).toHaveLength(1);
+    });
+});
+
+describe('a-quoted-token-whose-meta-never-arrived-is-counted-not-painted', () => {
+    /**
+     * Metadata this page could not read is our gap, and a row built without it
+     * could be an NFT — so it is not painted. Counted out loud, exactly like
+     * the listings this page could not read: seven of ten shown, silently,
+     * reads as seven quoted.
+     */
+    it('counts it in a line and paints no row for it', () => {
+        const { root } = paint(
+            payView({
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [TOKEN_UNLISTED, { code: 'usd', exponent: 2, amount: 1_200n }],
+                ]),
+            }),
+        );
+        expect(root.querySelectorAll('[data-role="pay-row"]')).toHaveLength(1);
+        const note = root.querySelector('[data-role="pay-unreadable"]');
+        expect(note?.textContent).toBe(copy.quotedUnreadable(1));
+    });
+
+    it('says nothing when every quoted token was read', () => {
+        const { root } = paint(payView());
+        expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
+    });
+});
+
+describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
+    /**
+     * On this sheet `[data-role="price"]` is the figure the payer signs — a
+     * number this page derived, which is the one place §8's rule is inverted,
+     * and stated. So it and the link are proved to come from one `bigint`
+     * rather than from two calls that happen to agree today.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, ...over }));
+
+    it('paints the same satoshis it composed the BIP21 from', () => {
+        const { root } = sheet();
+        const sats = satsForQuote(QUOTE_USD, 1n, PAY_RATE.rate)!;
+        expect(sats).toBe(25_000_000n);
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]');
+        expect(figure?.textContent).toBe(formatXec(sats));
+        const bip21 = payBip21(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!)!;
+        expect(
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
+        ).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!));
+        expect(
+            (root.querySelector('[data-role="pay-wallet"]') as HTMLAnchorElement).href,
+        ).toBe(payECashPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!));
+        expect(bip21).toContain('250000.00');
+    });
+
+    it('keeps the quote in its own role and paints no fiat node', () => {
+        const { root } = sheet();
+        const quote = root.querySelector('[data-role="pay"] [data-role="seller-price"]');
+        expect(quote?.textContent).toBe(copy.payQuoteEquals('$5.00'));
+        expect(root.querySelector('[data-role="pay"] [data-role="fiat"]')).toBeNull();
+        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]');
+        expect(rate?.textContent).toContain('≈ at 1 XEC = $0.00002');
+        expect(rate?.textContent).toContain('CoinGecko');
+    });
+
+    it('drops the rate entirely for an xec quote', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+        });
+        expect(root.querySelector('[data-role="pay"] [data-role="rate"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-refresh"]')).toBeNull();
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+        ).toBe('5,000');
+        expect(root.textContent).toContain(copy.PAY_XEC_QUOTE_NOTE);
+    });
+
+    it('composes nothing at all with no rate, and says why', () => {
+        const { root } = sheet({ payRate: undefined });
+        expect(root.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-wallet"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-qr"]')).toBeNull();
+        expect(root.textContent).toContain(copy.PAY_NO_RATE_WHY);
+        // The refresh control is the only way forward, and it is there.
+        expect(root.querySelector('[data-role="pay-refresh"]')).not.toBeNull();
+    });
+
+    it('carries the fine print the rail is bound by', () => {
+        const { root } = sheet();
+        for (const line of [
+            copy.PAY_NOTE_DIRECT,
+            copy.PAY_FINE_MEMO,
+            copy.PAY_FINE_SOME_WALLETS,
+            copy.PAY_FINE_DELIVERY,
+            copy.PAY_TOLERANCE_NONE,
+        ]) {
+            expect(root.textContent, line).toContain(line);
+        }
+        for (const word of ['Buy', 'bought', 'sold']) {
+            expect(
+                root.querySelector('[data-role="pay"]')?.textContent,
+                word,
+            ).not.toContain(word);
+        }
+    });
+
+    it('states the seller’s tolerance where they published one', () => {
+        const stated = sheet({
+            prices: new Map([[TOKEN_ID, { ...QUOTE_USD, tolerancePct: 5 }]]),
+        }).root;
+        expect(stated.textContent).toContain(copy.payTolerance(5));
+        const wide = sheet({
+            prices: new Map([[TOKEN_ID, { ...QUOTE_USD, tolerancePct: 60 }]]),
+        }).root;
+        expect(wide.textContent).toContain(copy.PAY_TOLERANCE_WIDE);
+    });
+
+    it('multiplies by the quantity the buyer typed, in the figure and the link', () => {
+        const { root } = sheet();
+        const edit = root.querySelector('[data-role="pay-quantity-edit"]') as HTMLElement;
+        edit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const field = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        field.value = '3';
+        field.dispatchEvent(new Event('input'));
+        const sats = satsForQuote(QUOTE_USD, 3n, PAY_RATE.rate)!;
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+        ).toBe(formatXec(sats));
+        expect(
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
+        ).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 3n)!));
+    });
+});
+
+describe('a-sub-dust-quote-has-no-pay-link', () => {
+    /**
+     * Below the dust floor the network refuses the output, so a link composed
+     * from it fails inside the wallet after the buyer has read the page and
+     * pressed Pay. The sheet composes nothing and says which way out there is.
+     */
+    it('paints one line instead of a link or a code', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: PAY_RATE,
+                // One cent at this rate is 33,334 sats — well over dust — so
+                // the quote itself has to be tiny: 1 XEC is 100 satoshis.
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 100n }]]),
+            }),
+        );
+        expect(root.textContent).toContain(copy.PAY_SUB_DUST);
+        expect(root.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-qr"]')).toBeNull();
+    });
+});
+
+describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () => {
+    /**
+     * The press is where a stale rate is caught, and the press never opens a
+     * wallet afterwards: WebKit blocks `window.open` past an awaited fetch and
+     * returns `null` whether it blocked or not, so an auto-open would be a
+     * silent no-op on every iPhone. A second press is always required.
+     */
+    const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+
+    it('refetches, repaints in place and asks for the press again', async () => {
+        const view = payView({
+            overlay: { kind: 'pay', tokenId: TOKEN_ID },
+            payRate: stale,
+        });
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({
+                // A move well past the default valve: half the price per XEC
+                // doubles the satoshis.
+                rate: scaleRate(0.00001)!,
+                atMs: Date.now(),
+            })),
+        };
+        renderStall(root, view, h);
+        // The buyer's own quantity, which must survive the refetch.
+        (
+            root.querySelector('[data-role="pay-quantity-edit"]') as HTMLElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const field = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        field.value = '3';
+        field.dispatchEvent(new Event('input'));
+
+        const link = root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement;
+        const press = new MouseEvent('click', { bubbles: true, cancelable: true });
+        link.dispatchEvent(press);
+        expect(press.defaultPrevented, 'the stale press opened nothing').toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(h.onPayRate).toHaveBeenCalledTimes(1);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
+            copy.PAY_RATE_MOVED,
+        );
+        expect(
+            (root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement).value,
+            'the quantity is the buyer’s and survives the refetch',
+        ).toBe('3');
+        const fresh = satsForQuote(QUOTE_USD, 3n, scaleRate(0.00001)!)!;
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+        ).toBe(formatXec(fresh));
+        expect(
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
+        ).toBe(cashtabPayUrl(ADDR, fresh, encodePaymentMemoHex(TOKEN_ID, 3n)!));
+    });
+
+    it('says the rate merely refreshed when the figure did not move', async () => {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({ rate: stale.rate, atMs: Date.now() })),
+        };
+        renderStall(
+            root,
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }),
+            h,
+        );
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
+            copy.PAY_RATE_REFRESHED,
+        );
+    });
+
+    it('says so when no fresh price arrived', async () => {
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRate: vi.fn(async () => undefined) };
+        renderStall(
+            root,
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }),
+            h,
+        );
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
+            copy.PAY_RATE_UNAVAILABLE,
+        );
+        expect(root.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+    });
+
+    it('lets a fresh rate through untouched', () => {
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRate: vi.fn(async () => undefined) };
+        renderStall(
+            root,
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() },
+            }),
+            h,
+        );
+        const press = new MouseEvent('click', { bubbles: true, cancelable: true });
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
+            press,
+        );
+        expect(press.defaultPrevented).toBe(false);
+        expect(h.onPayRate).not.toHaveBeenCalled();
+    });
+});
+
+describe('a-pay-qr-never-carries-a-stale-amount', () => {
+    /**
+     * A phone can scan a code an hour after it was painted, and the amount in
+     * it was derived from a rate that has moved since. The code has the rate's
+     * own lifetime, and after that it is taken away rather than left scannable.
+     */
+    it('swaps the code for a line once the rate ages out', () => {
+        vi.useFakeTimers();
+        try {
+            const root = document.createElement('div');
+            renderStall(
+                root,
+                payView({
+                    overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                    payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() },
+                }),
+                handlers(),
+            );
+            expect(root.querySelector('[data-role="pay-qr"]')).not.toBeNull();
+            vi.advanceTimersByTime(PAY_RATE_MAX_AGE_MS + 1_000);
+            expect(root.querySelector('[data-role="pay-qr"]')).toBeNull();
+            expect(root.textContent).toContain(copy.PAY_QR_STALE);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('never ages an xec quote, which has no rate in it', () => {
+        vi.useFakeTimers();
+        try {
+            const root = document.createElement('div');
+            renderStall(
+                root,
+                payView({
+                    overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                    prices: new Map([
+                        [TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }],
+                    ]),
+                }),
+                handlers(),
+            );
+            vi.advanceTimersByTime(PAY_RATE_MAX_AGE_MS * 4);
+            expect(root.querySelector('[data-role="pay-qr"]')).not.toBeNull();
+            expect(root.textContent).not.toContain(copy.PAY_QR_STALE);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('opens the fold on a desk and leaves it closed on a phone', () => {
+        const withWidth = (matches: boolean): HTMLElement => {
+            vi.stubGlobal('matchMedia', () => ({ matches }));
+            const root = document.createElement('div');
+            renderStall(
+                root,
+                payView({
+                    overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                    payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() },
+                }),
+                handlers(),
+            );
+            vi.unstubAllGlobals();
+            return root;
+        };
+        expect(
+            (withWidth(true).querySelector('[data-role="pay-qr-fold"]') as HTMLDetailsElement)
+                .open,
+        ).toBe(true);
+        expect(
+            (withWidth(false).querySelector('[data-role="pay-qr-fold"]') as HTMLDetailsElement)
+                .open,
+        ).toBe(false);
+        // No `matchMedia` at all is the closed state, never a throw.
+        vi.stubGlobal('matchMedia', undefined);
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() },
+            }),
+            handlers(),
+        );
+        vi.unstubAllGlobals();
+        expect(
+            (root.querySelector('[data-role="pay-qr-fold"]') as HTMLDetailsElement).open,
+        ).toBe(false);
+    });
+});
+
+describe('the-editor-writes-presets-only-and-reads-anything', () => {
+    /**
+     * The tolerance is written when the seller types a figure or presses a
+     * preset over a carried one. An untouched carried price is restated
+     * verbatim, byte or no byte — the encoder invents nothing.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('offers four presets, opens on 2%, and writes it with a typed figure', () => {
+        const { root } = sheet();
+        const seg = root.querySelector('[data-role="describe-tolerance"]') as HTMLElement;
+        expect(seg).not.toBeNull();
+        const presets = [...seg.querySelectorAll('[data-pct]')].map((b) =>
+            b.getAttribute('data-pct'),
+        );
+        expect(presets).toEqual(['1', '2', '5', '10']);
+        expect(seg.querySelector('[aria-pressed="true"]')?.getAttribute('data-pct')).toBe('2');
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_HINT);
+        expect(root.textContent).toContain(copy.DESC_TWO_PRICES);
+
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = '12.50';
+        amount.dispatchEvent(new Event('input'));
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 1250n, tolerancePct: 2 },
+            }),
+        );
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).toContain(
+            copy.SUMMARY_TOLERANCE,
+        );
+    });
+
+    it('hides the control under an xec quote and writes no byte there', () => {
+        const { root } = sheet();
+        (
+            root.querySelector('[data-role="describe-unit-xec"]') as HTMLButtonElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = '450.00';
+        amount.dispatchEvent(new Event('input'));
+        expect(
+            (root.querySelector('[data-role="describe-tolerance"]') as HTMLElement).hidden,
+        ).toBe(true);
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'xec', exponent: 2, amount: 45_000n },
+            }),
+        );
+    });
+
+    it('reads a published value none of the presets can express, and keeps it', () => {
+        const carried = { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 15 } as const;
+        const { root } = sheet({ prices: new Map([[TOKEN_ID, carried]]) });
+        const seg = root.querySelector('[data-role="describe-tolerance"]') as HTMLElement;
+        expect(seg.querySelector('[aria-pressed="true"]')).toBeNull();
+        expect(
+            [...seg.querySelectorAll('button')].every((b) => b.disabled),
+            'a value this sheet cannot express takes no input',
+        ).toBe(true);
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_FIXED);
+        // Untouched, the record is restated exactly as it stands.
+        const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
+        field.value = 'New words';
+        field.dispatchEvent(new Event('input'));
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'New words', { price: carried }),
+        );
+    });
+
+    it('says none is stated over a carried price with no byte, and writes one on a press', () => {
+        const carried = { code: 'usd', exponent: 2, amount: 500n } as const;
+        const { root } = sheet({ prices: new Map([[TOKEN_ID, carried]]) });
+        const seg = root.querySelector('[data-role="describe-tolerance"]') as HTMLElement;
+        expect(seg.querySelector('[aria-pressed="true"]')).toBeNull();
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_NONE);
+        (seg.querySelector('[data-pct="5"]') as HTMLButtonElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true }),
+        );
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { ...carried, tolerancePct: 5 },
+            }),
+        );
+    });
+});
+
+describe('retyping-a-figure-keeps-a-carried-tolerance', () => {
+    /**
+     * Carry is keyed on the value being one of the presets, never on the unit:
+     * a seller fixing a typo in their figure must not lose the margin they
+     * published with it.
+     */
+    it('keeps a preset value through a retyped figure', () => {
+        const carried = { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 5 } as const;
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+                prices: new Map([[TOKEN_ID, carried]]),
+            }),
+        );
+        const seg = root.querySelector('[data-role="describe-tolerance"]') as HTMLElement;
+        expect(seg.querySelector('[aria-pressed="true"]')?.getAttribute('data-pct')).toBe('5');
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = '6.00';
+        amount.dispatchEvent(new Event('input'));
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 600n, tolerancePct: 5 },
+            }),
+        );
+    });
+});
+
+describe('a-landing-link-drops-the-search', () => {
+    /**
+     * `shareUrl()` keeps `location.search` so a printed `?m=` survives being
+     * shared. A landing link must not: on a broadcast URL that would produce
+     * `…&cards=quotes?pay=…`, a link into the stream overlay rather than to
+     * the page with the note on it.
+     */
+    it('builds from origin and path only', () => {
+        const path = stallPath(PK);
+        for (const search of ['?view=broadcast&cards=quotes', `?m=${'ab'.repeat(32)}`, '']) {
+            window.history.replaceState(null, '', `${path}${search}`);
+            expect(stallBaseUrl(), search).toBe(`${location.origin}${path}`);
+            expect(payLandingUrl(stallBaseUrl(), TOKEN_ID), search).toBe(
+                `${location.origin}${path}?pay=${TOKEN_ID.slice(0, 12)}`,
+            );
+        }
+        window.history.replaceState(null, '', `${path}?m=${'ab'.repeat(32)}`);
+        const shared = paint(offersView([OFFER], undefined, { panel: 'studio' })).root;
+        expect(
+            (shared.querySelector('.share-url') as HTMLInputElement).value,
+            'the share link still keeps it',
+        ).toContain('?m=');
+    });
+});
+
+describe('a-pay-hint-that-opened-nothing-says-which-kind-of-nothing', () => {
+    /**
+     * Two sentences, and only one of them is about the seller: a complete read
+     * that holds no such quote, against this page failing to read the records
+     * at all. Collapsing them is §4's empty-versus-unreachable mistake on a
+     * new surface.
+     */
+    it('says "not quoted" over a shop that was read', () => {
+        const { root } = paint(payView({ payHintNote: 'unknown' }));
+        expect(root.textContent).toContain(copy.PAY_HINT_UNKNOWN);
+        expect(root.textContent).not.toContain(copy.PAY_HINT_UNREAD);
+    });
+
+    it('says "could not read" on every screen that failed', () => {
+        for (const view of [
+            payView({
+                payHintNote: 'unread',
+                fetch: { kind: 'unreachable', triedAtMs: 1_756_400_000_000, hosts: [] },
+            }),
+            payView({ payHintNote: 'unread', fetch: { kind: 'unreadable', triedAtMs: 1, returned: 2 } }),
+            {
+                route: { kind: 'unresolvable' as const, address: ADDR },
+                overlay: { kind: 'idle' as const },
+                tokens: new Map(),
+                payHintNote: 'unread' as const,
+            },
+        ]) {
+            const { root } = paint(view);
+            expect(root.textContent).toContain(copy.PAY_HINT_UNREAD);
+            expect(root.textContent).not.toContain(copy.PAY_HINT_UNKNOWN);
+        }
     });
 });

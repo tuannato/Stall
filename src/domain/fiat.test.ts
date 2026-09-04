@@ -4,9 +4,12 @@ import {
     FIAT_CURRENCIES,
     fiatFractionDigits,
     formatFiat,
+    formatXecRate,
     isSupportedFiat,
+    satsForQuote,
     scaleRate,
 } from './fiat';
+import { XEC_PRICE_CODE, type TokenPrice } from './description';
 
 /** A plausible XEC price: 1 XEC ≈ $0.00003. */
 const USD_RATE = scaleRate(0.00003);
@@ -123,5 +126,95 @@ describe('fiat maths never leaves bigint', () => {
                 c.toLowerCase(),
             );
         }
+    });
+});
+
+describe('satsForQuote', () => {
+    /**
+     * The seller's quote, in the satoshis a wallet will sign.
+     *
+     * Every vector below is computed by hand, never by running the helper
+     * twice: a round trip through the same arithmetic proves the function
+     * agrees with itself and nothing else. XEC has **two** decimals — the unit
+     * here is 100 satoshis, not 10⁸, and the off-by-a-million version of this
+     * formula composed links a thousand times the quote.
+     */
+    const usd = (amount: bigint, exponent = 2): TokenPrice => ({
+        code: 'usd',
+        exponent,
+        amount,
+    });
+
+    it('turns a dollar quote into satoshis at the frozen rate', () => {
+        // $5.00 at 1 XEC = $0.00002 is 250,000 XEC, which is 25,000,000 sats.
+        expect(satsForQuote(usd(500n), 1n, scaleRate(0.00002))).toBe(25_000_000n);
+        // Three of them, and nothing else changes.
+        expect(satsForQuote(usd(500n), 3n, scaleRate(0.00002))).toBe(75_000_000n);
+        // $1.00 at 1 XEC = $0.00004 is 25,000 XEC = 2,500,000 sats.
+        expect(satsForQuote(usd(100n), 1n, scaleRate(0.00004))).toBe(2_500_000n);
+    });
+
+    it('reads an xec quote with no rate at all', () => {
+        // 5,000.00 XEC is 500,000 satoshis, whatever any feed says today.
+        expect(
+            satsForQuote({ code: XEC_PRICE_CODE, exponent: 2, amount: 500_000n }, 1n, undefined),
+        ).toBe(500_000n);
+        // 12.345 XEC — an exponent this editor does not write, which another
+        // app may. 1,234.5 satoshis has no exact answer, so it rounds up.
+        expect(
+            satsForQuote({ code: XEC_PRICE_CODE, exponent: 3, amount: 12_345n }, 1n, undefined),
+        ).toBe(1235n);
+        // A rate offered beside an xec quote is ignored, not applied.
+        expect(
+            satsForQuote(
+                { code: XEC_PRICE_CODE, exponent: 2, amount: 500_000n },
+                1n,
+                scaleRate(0.00002),
+            ),
+        ).toBe(500_000n);
+    });
+
+    it('rounds up, because rounding down underpays the seller', () => {
+        // $0.01 at 1 XEC = $0.00003 is 333.33… XEC = 33,333.33 sats.
+        expect(satsForQuote(usd(1n), 1n, scaleRate(0.00003))).toBe(33_334n);
+    });
+
+    it('answers nothing rather than a figure it cannot stand behind', () => {
+        expect(satsForQuote(usd(500n), 1n, undefined), 'no rate').toBeUndefined();
+        expect(satsForQuote(usd(500n), 1n, 0n), 'a zero rate').toBeUndefined();
+        expect(satsForQuote(usd(500n), 0n, scaleRate(0.00002)), 'no items').toBeUndefined();
+        expect(satsForQuote(usd(0n), 1n, scaleRate(0.00002)), 'no price').toBeUndefined();
+        expect(
+            satsForQuote(usd(500n, 9n as unknown as number), 1n, scaleRate(0.00002)),
+            'an exponent off the wire',
+        ).toBeUndefined();
+    });
+
+    it('holds an eight-byte amount without ever becoming a double', () => {
+        // Past 2^53, where a `Number` would start losing the low bits.
+        const amount = 2n ** 60n;
+        expect(
+            satsForQuote({ code: XEC_PRICE_CODE, exponent: 0, amount }, 1n, undefined),
+        ).toBe(amount * 100n);
+    });
+});
+
+describe('the-rate-a-pay-sheet-shows-is-a-glance', () => {
+    /**
+     * One XEC, in the currency the quote is in, at enough digits to be
+     * recognisable — an XEC costs a small fraction of a cent, so the fiat
+     * formatter's two decimals would print every rate as `< $0.01`.
+     *
+     * Rounded for a glance and marked as one by the `≈` the caller puts on
+     * the line: it is what the conversion above was computed from, never a
+     * second price.
+     */
+    it('prints the feed’s figure with its own digits and its own symbol', () => {
+        expect(formatXecRate(scaleRate(0.00002), 'usd')).toBe('$0.00002');
+        expect(formatXecRate(scaleRate(0.000035), 'usd')).toBe('$0.000035');
+        // Two decimals at least, so a round figure does not read as an integer.
+        expect(formatXecRate(scaleRate(1), 'usd')).toBe('$1.00');
+        expect(formatXecRate(undefined, 'usd')).toBeUndefined();
+        expect(formatXecRate(scaleRate(0.00002), 'not-a-code')).toBeUndefined();
     });
 });

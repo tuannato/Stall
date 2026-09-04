@@ -1,5 +1,6 @@
 import { STLD_HEX } from '../domain/description';
 import { isStl1 } from '../domain/manifest';
+import { decodePaymentPushes, isStlp, type PaymentMemo } from '../domain/payment';
 import type { BookShape, EventStatus, StallEvent, StallEventKind } from '../domain/state';
 import type { ChainPluginEntries, ChainTx } from './chain';
 import {
@@ -183,15 +184,28 @@ export function bookShapeOf(tx: ChainTx): BookShape | undefined {
  * the rarest and the most consequential; ordinary money is last because it is
  * almost all of the traffic.
  *
- * Pure, and deliberately takes the `FactsToRead` rather than re-deriving it: two
- * places deciding what an `STL1` looks like is how they drift apart.
+ * Pure, and deliberately takes the `FactsToRead` **and** the memo rather than
+ * re-deriving either: two places deciding what an `STL1` looks like is how they
+ * drift apart, and re-parsing the outputs for an `STLP` here would be a second
+ * opinion on the same bytes `classifyTx`'s caller already read.
+ *
+ * A payment outranks a token move: a payer who sends a token back alongside
+ * their money would otherwise have their claim filed as a decoration moving,
+ * which is the less specific of the two answers.
  */
-export function eventKindOf(tx: ChainTx, facts: FactsToRead): StallEventKind {
+export function eventKindOf(
+    tx: ChainTx,
+    facts: FactsToRead,
+    memo?: PaymentMemo,
+): StallEventKind {
     if (facts.settings) {
         return 'settings';
     }
     if (facts.descriptions) {
         return 'description';
+    }
+    if (memo !== undefined) {
+        return 'payment';
     }
     if (facts.holdings) {
         return 'token-move';
@@ -249,6 +263,41 @@ function touchesScript(tx: ChainTx, stallOutputScript: string): boolean {
         }
     }
     return false;
+}
+
+/**
+ * The `STLP` memo on a transaction that paid this stall, or nothing.
+ *
+ * **Two conditions, and the first one is the point.** Money has to have
+ * reached the stall's own script: a memo in a transaction that paid somebody
+ * else says nothing about this stall, and filing it here would put a
+ * stranger's claim in the seller's list for the price of an OP_RETURN.
+ *
+ * Read **once**, by the caller that already fetched the transaction, and
+ * handed to `eventKindOf` — this is the only place that turns those bytes into
+ * a memo. Nothing here is verified: authorship is not checked, the quantity is
+ * not checked against anything, and the record carries no amount to check. It
+ * is the payer's claim, and every screen that prints it says so.
+ */
+export function paymentMemoOf(
+    tx: ChainTx,
+    stallOutputScript: string,
+): PaymentMemo | undefined {
+    const script = stallOutputScript.toLowerCase();
+    if (!tx.outputs.some((output) => output.outputScript.toLowerCase() === script)) {
+        return undefined;
+    }
+    for (const output of tx.outputs) {
+        const pushes = opReturnPushes(output.outputScript);
+        if (pushes === undefined || !isStlp(pushes)) {
+            continue;
+        }
+        const memo = decodePaymentPushes(pushes);
+        if (memo !== undefined) {
+            return memo;
+        }
+    }
+    return undefined;
 }
 
 /**
@@ -446,7 +495,8 @@ export function receivedSats(tx: ChainTx, ctx: EventContext): bigint | undefined
  */
 export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
     const facts = classifyTx(tx, ctx.script, ctx.wantedTokenIds);
-    const kind = eventKindOf(tx, facts);
+    const memo = paymentMemoOf(tx, ctx.script);
+    const kind = eventKindOf(tx, facts, memo);
     const book = kind === 'book' ? bookShapeOf(tx) : undefined;
     const chainTimeS = chainTimeOf(tx);
     const sats = receivedSats(tx, ctx);
@@ -458,6 +508,7 @@ export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
         ...(chainTimeS === undefined ? {} : { chainTimeS }),
         ...(sats === undefined ? {} : { sats }),
         ...(book === undefined ? {} : { book }),
+        ...(kind === 'payment' && memo !== undefined ? { payment: memo } : {}),
         ...(isRecord ? { signedByStall: txSignedByStall(tx, ctx.hash) } : {}),
     };
 }

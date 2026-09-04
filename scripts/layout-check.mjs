@@ -547,7 +547,7 @@ try {
         // two record sheets, and both are measured — they share `.sheet`'s
         // transition but not their contents, and a still page is only proved
         // still for the tree that was actually painted.
-        { vp: VIEWPORTS[0], screens: 'offers,publish-name,describe' },
+        { vp: VIEWPORTS[0], screens: 'offers,publish-name,describe,pay' },
         { vp: CANVAS, screens: 'broadcast' },
     ];
     for (const pass of REDUCED) {

@@ -4200,3 +4200,228 @@ details.fold > .fold-sum::-webkit-details-marker {
     }
 }
 
+
+/*
+ * The direct-payment rail.
+ *
+ * A second surface under the shop list, and deliberately not a second kind of
+ * offer card: the figure on a row here is the seller's own quote, so it wears
+ * its own type and its own chip and never the "from", the stock line or the
+ * converted glance an Agora row carries.
+ */
+.pay-sec {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+    padding-top: 22px;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+}
+
+.pay-lede {
+    max-width: 60ch;
+}
+
+/*
+ * Its own grid, so the quote and its control sit at the row's right edge
+ * rather than under the name. Named areas for the same reason the offer card
+ * has them: `.item-ic` places itself on `ic`, and a grid without that name
+ * would leave the tile wherever auto-placement put it.
+ */
+.pay-row {
+    display: grid;
+    grid-template-areas: 'ic name right';
+    grid-template-columns: var(--s-icon) minmax(0, 1fr) auto;
+    gap: var(--s-card-gap);
+    align-items: center;
+    padding: var(--s-card-pad);
+}
+
+.pay-b {
+    grid-area: name;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+}
+
+/*
+ * Whose figure this is, said on the row rather than left to be inferred.
+ *
+ * Accent ink on `--s-bg`, which is the pair `legibleOn` corrects — the same
+ * construction `.mini` uses, so the label reads under every mood rather than
+ * only under the ones somebody happened to look at. A tinted ground and no
+ * rule around it: an outline in a wash of the accent is a band of paint the
+ * ink's own colour, and a label whose edge is nearly its letters is the
+ * defect the pixel pass exists to find.
+ */
+.chip {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--s-accent);
+    background: var(--s-bg);
+    border-radius: var(--s-btn-radius);
+    padding: 3px 8px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.pay-r {
+    grid-area: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+/* The seller's figure: tabular, and never wrapped — it is one number. */
+.pay-q {
+    font-size: 20px;
+    font-weight: var(--s-price-weight);
+    letter-spacing: var(--s-price-track);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    line-height: 1.05;
+}
+
+/*
+ * The row's own control: the shop's primary pill, narrowed to its label. The
+ * rim is a deepened accent rather than none — a filled pill against a card of
+ * the same family needs an edge to sit on, and the darker line also keeps the
+ * pill's anti-aliased boundary away from the label's own colour.
+ */
+.pay-btn {
+    width: auto;
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 14px;
+    border: 1px solid color-mix(in srgb, var(--s-text) 18%, var(--s-accent));
+}
+
+/*
+ * The one line a Shop row carries about the other rail. A full-width row of
+ * its own under the head button, because the head is a `<button>` and a
+ * control inside one is markup no browser agrees about. 44px so a thumb can
+ * reach it.
+ */
+/*
+ * The pointer paints **no ground and no rule of its own**, and that is the
+ * whole of its styling decision.
+ *
+ * `--s-accent` is only guaranteed 3:1 against `--s-bg` — the floor exactly,
+ * with nothing to spare — so any edge this control drew would anti-alias into
+ * a band that misses it, and an outline in the ink's own colour is worse
+ * still: sampled, it is the ink on itself. Painting nothing leaves the card's
+ * flat surface behind the words, and `--s-text` is the ink `legibleOn`
+ * corrects against that surface as well as against the page. The arrow at the
+ * end of the sentence and the 44px hit area are what say it is a control.
+ *
+ * Margins, not padding: the box has to end clear of the card's own edge — a
+ * control whose last row IS the card's border is read against that border.
+ */
+.pay-pointer {
+    display: flex;
+    align-items: center;
+    align-self: flex-start;
+    min-height: 44px;
+    margin: 0 var(--s-card-pad) 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--s-text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pay-pointer:hover {
+    color: var(--s-accent);
+}
+
+/* The sheet's amount card: what the wallet signs, then where it came from. */
+.pay-amt {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border: var(--s-card-border);
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+}
+
+.pay-cap {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+}
+
+.pay-x {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    line-height: 1.05;
+}
+
+.pay-x-n {
+    font-size: 36px;
+    font-weight: var(--s-price-weight);
+    letter-spacing: var(--s-price-track);
+    font-variant-numeric: tabular-nums;
+}
+
+.pay-eq {
+    font-size: 15px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--s-text);
+}
+
+.pay-rate-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.pay-rate {
+    font-size: 12.5px;
+    color: var(--s-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.pay-qty {
+    margin: 0;
+}
+
+.pay-qty dd {
+    gap: 10px;
+}
+
+.pay-qty-in {
+    width: 7ch;
+}
+
+.pay-qr-body {
+    gap: 8px;
+}
+
+@media (min-width: 680px) {
+    /*
+     * Two to a row at desk width: the quote and its control are a short pair,
+     * and one per line leaves a column of empty page beside them.
+     */
+    .pay-items {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

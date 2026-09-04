@@ -52,6 +52,10 @@ const PROTECTED = [
     // figure like any other here: covered, it reads as nothing — and this one
     // is the only figure on the panel a reader could check against a wallet.
     '[data-role="receipt-amount"]',
+    // The seller's own quote, on the pay surface and inside the pay sheet.
+    // It is a money figure a buyer reads before pressing Pay, and a covered
+    // one reads as nothing — the same rule the covenant's price has.
+    '[data-role="seller-price"]',
 ].join(', ');
 
 /**
@@ -1055,6 +1059,13 @@ const CONTRAST_TEXT = [
     // studio section is the one place a seller reads instructions rather than
     // a figure.
     '.obs-h',
+    // The pay rail's own three: the seller's quote, the chip that says whose
+    // figure it is, and the one line a Shop row carries about the other rail.
+    // All three ink themselves on `--s-accent` or on the card's own ground,
+    // which no other measured node puts a label on.
+    '[data-role="seller-price"]',
+    '.chip',
+    '.pay-pointer',
 ].join(', ');
 
 declare global {

@@ -17,7 +17,14 @@ vi.mock('./net/price', () => ({
 }));
 import { sellerFromPath, stallPath } from './domain/route';
 import type { StallOffer } from './domain/state';
-import { HOME_LEDE, HOME_TITLE, OPEN_ANOTHER_STALL, OPENING_BODY } from './ui/copy';
+import {
+    HOME_LEDE,
+    HOME_TITLE,
+    OPEN_ANOTHER_STALL,
+    OPENING_BODY,
+    PAY_HINT_UNKNOWN,
+    PAY_HINT_UNREAD,
+} from './ui/copy';
 import { DEFAULT_THEME } from './domain/theme';
 
 const EMPTY_TITLE = DEFAULT_THEME.sparse.emptyTitle;
@@ -566,6 +573,199 @@ describe('the-rail-preset-starts-no-timer', () => {
         expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
         expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
             false,
+        );
+    });
+});
+
+/* The `?pay=` landing: what a scanned code opens, and what it says when it cannot. */
+
+const QUOTED = 'cd'.repeat(32);
+const QUOTED_TWIN = `${QUOTED.slice(0, 20)}${'ef'.repeat(22)}`;
+
+function quotedMeta(tokenId: string, name: string) {
+    return {
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+}
+
+function quotedStall(over: Partial<AppState['view']> = {}): AppState {
+    return {
+        view: {
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'empty' },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            stallName: 'Riverside Goods',
+            tokens: new Map([[QUOTED, quotedMeta(QUOTED, 'Roasted Beans')]]),
+            prices: new Map([[QUOTED, { code: 'usd', exponent: 2, amount: 500n }]]),
+            ...over,
+        },
+        offers: [],
+        pubkeyHex: PK,
+    };
+}
+
+describe('a-pay-hint-opens-the-sheet-for-exactly-one-item', () => {
+    /**
+     * The parameter names an item by a prefix of its token id, resolved
+     * against this stall's own records — never a chain lookup. Exactly one
+     * match opens the sheet; anything else opens nothing.
+     */
+    it('opens the pay sheet for the one item the prefix names', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall({ payHint: QUOTED.slice(0, 12) }));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')).toBeNull();
+    });
+});
+
+describe('an-ambiguous-or-unknown-pay-hint-is-the-ordinary-stall', () => {
+    it('opens nothing when two items share the prefix', async () => {
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({
+                payHint: QUOTED.slice(0, 12),
+                tokens: new Map([
+                    [QUOTED, quotedMeta(QUOTED, 'Roasted Beans')],
+                    [QUOTED_TWIN, quotedMeta(QUOTED_TWIN, 'Green Tea')],
+                ]),
+                prices: new Map([
+                    [QUOTED, { code: 'usd', exponent: 2, amount: 500n }],
+                    [QUOTED_TWIN, { code: 'usd', exponent: 2, amount: 900n }],
+                ]),
+            }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNKNOWN,
+        );
+    });
+
+    it('says so when the stall quotes nothing of that name', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall({ payHint: 'ab'.repeat(6) }));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNKNOWN,
+        );
+    });
+});
+
+describe('a-pay-hint-is-consumed-once-per-load', () => {
+    /**
+     * The URL is not rewritten, so a reload of a scanned link reopens the
+     * sheet — which is what a scanned link should do. But the seller's "check
+     * now" is a refresh of the same page load, and it must not reopen a sheet
+     * the buyer closed.
+     */
+    it('does not reopen the sheet on a refresh of the same load', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall({ payHint: QUOTED.slice(0, 12) }));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')).toBeNull();
+    });
+});
+
+describe('a-pay-hint-is-applied-from-the-loaded-state-not-a-live-read', () => {
+    /**
+     * `loadCurrent` answers one state with the prices already in it, so there
+     * is no race to wait for and no second apply to hook. The hint resolves
+     * against the state the load returned, and against nothing that arrives
+     * afterwards.
+     */
+    it('resolves against the state the load answered with', async () => {
+        const root = document.createElement('div');
+        // A stall whose load carried no prices at all: the hint is judged on
+        // that answer, not deferred until something else lands.
+        boot(root, async () =>
+            quotedStall({ payHint: QUOTED.slice(0, 12), prices: new Map() }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNKNOWN,
+        );
+    });
+});
+
+describe('a-pay-hint-on-an-unreachable-stall-says-so', () => {
+    /**
+     * "No such item" and "this page could not read the records" are two
+     * different claims, and only the first one is about the seller. Collapsing
+     * them is §4's empty-versus-unreachable mistake on a new surface.
+     */
+    it('says it could not read, on every screen that failed', async () => {
+        for (const view of [
+            { fetch: { kind: 'unreachable' as const, triedAtMs: 1, hosts: [] }, prices: new Map() },
+            { fetch: { kind: 'unreadable' as const, triedAtMs: 1, returned: 2 }, prices: new Map() },
+            {
+                fetch: {
+                    kind: 'plugin-missing' as const,
+                    triedAtMs: 1,
+                    hosts: [],
+                },
+                prices: new Map(),
+            },
+        ]) {
+            const root = document.createElement('div');
+            boot(root, async () => quotedStall({ payHint: QUOTED.slice(0, 12), ...view }));
+            await flush();
+            expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+                PAY_HINT_UNREAD,
+            );
+        }
+    });
+
+    it('says the same on a route that never resolved', async () => {
+        const root = document.createElement('div');
+        boot(root, async () => ({
+            view: {
+                route: { kind: 'unresolvable' as const, address: ADDR },
+                overlay: { kind: 'idle' as const },
+                address: ADDR,
+                tokens: new Map(),
+                payHint: QUOTED.slice(0, 12),
+            },
+            offers: [],
+        }));
+        await flush();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNREAD,
+        );
+    });
+});
+
+describe('a-pay-hint-on-a-truncated-walk-says-so', () => {
+    /**
+     * A descriptions walk that hit its cap says nothing about whether the
+     * quote exists — our own ceiling reported as the seller's inventory is the
+     * claim §5 refuses everywhere else.
+     */
+    it('never calls a quote unknown after a walk that stopped early', async () => {
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({
+                payHint: 'ab'.repeat(6),
+                descriptionsTruncated: true,
+            }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_UNREAD,
         );
     });
 });

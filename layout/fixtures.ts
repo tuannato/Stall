@@ -12,6 +12,7 @@
  */
 import { SHIPPED_ATTACHMENTS } from '../src/domain/attachments';
 import { scaleRate } from '../src/domain/fiat';
+import type { TokenPrice } from '../src/domain/description';
 import type {
     BroadcastParams,
     Outpoint,
@@ -31,6 +32,12 @@ export const GROUP = 'aa'.repeat(32);
 /** The long-figure rows: one tier-2 card, one tier-3 card (see priceTier). */
 export const LONG = '33'.repeat(32);
 export const LONGER = '44'.repeat(32);
+/**
+ * A token the seller **quoted** and never listed. The pay rail is not gated on
+ * a listing, so a fixture whose every quote also has an offer would measure
+ * only half of what the section paints.
+ */
+export const QUOTED = '55'.repeat(32);
 export const OUT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
 
 /** A frozen instant, so a repainted screen is byte-identical to itself. */
@@ -70,7 +77,22 @@ export const tokens = new Map<string, TokenMeta>([
     // name hides it (the critic's Tea-vs-Crate false-positive finding).
     [LONG, meta(LONG, 'Harvest Ledger', 'SLP_TOKEN_TYPE_FUNGIBLE')],
     [LONGER, meta(LONGER, 'Century Flag #7', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
+    [QUOTED, meta(QUOTED, 'Sticker pack', 'SLP_TOKEN_TYPE_FUNGIBLE')],
 ]);
+
+/**
+ * The seller's own figures, in both units this app writes and with a margin on
+ * the one that needs a rate. `[data-role="seller-price"]` is a protected box
+ * and a contrast target, and a selector matching nothing in a fixture is a
+ * guard that measures nothing.
+ */
+export const QUOTES = new Map<string, TokenPrice>([
+    [T1, { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 }],
+    [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+]);
+
+/** The rate the pay sheet froze, at the fixture's own frozen instant. */
+const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
 
 /** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
 export const UNBROKEN = 'A'.repeat(178);
@@ -147,6 +169,10 @@ export const SCREENS: Record<string, StallView> = {
         // the type sections under its own heading.
         announcement: 'Back on the 10th — orders ship then',
         shelves: new Map([[T1, 'Morning roast']]),
+        // One quote on a listed token (which earns the Shop row its pointer)
+        // and one on a token this stall does not list — the case the rail
+        // exists for, and the one a listing-gated set would have hidden.
+        prices: QUOTES,
     }),
     expanded: base({
         fetch: {
@@ -184,6 +210,27 @@ export const SCREENS: Record<string, StallView> = {
         prices: new Map([[T1, { code: 'usd', exponent: 2, amount: 1250n }]]),
     }),
     /*
+     * The pay sheet, at the two states its figure can be in.
+     *
+     * `pay` is the ordinary one: a USD quote, a frozen rate, the derived XEC
+     * the wallet signs, the rate line and the scan code. `pay-xec` is the
+     * seller's own unit — no rate anywhere in it, so no rate line, no refresh
+     * and nothing that can go stale. Both sit over the shop, because the
+     * sheet's own figures must be measured against the scrim and the stall
+     * behind it.
+     */
+    pay: base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        overlay: { kind: 'pay', tokenId: T1 },
+        payRate: PAY_RATE,
+    }),
+    'pay-xec': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        overlay: { kind: 'pay', tokenId: QUOTED },
+    }),
+    /*
      * The shop that sells decorations, which is the one page where the
      * Decorations section and its per-look runs are the only dividers there
      * are — a single section prints no section heading, so nothing else on
@@ -206,7 +253,13 @@ export const SCREENS: Record<string, StallView> = {
     }),
     // The announcement on the empty shop, where "away until Monday" is most
     // of the explanation a visitor gets.
-    empty: base({ fetch: { kind: 'empty' }, announcement: 'Away until Monday' }),
+    // Quotes are not gated on listings, so the section paints here too — a
+    // stall with nothing listed and a price tag is what this rail is for.
+    empty: base({
+        fetch: { kind: 'empty' },
+        announcement: 'Away until Monday',
+        prices: QUOTES,
+    }),
     door: {
         route: { kind: 'home' },
         overlay: { kind: 'idle' },
@@ -510,6 +563,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // Exists for the tools row and the flat sorted run; the decoration
     // interactions it could stage are the same ones `offers` already does.
     'crowded',
+    // The same sheet shape as `pay`, in the one state that has no rate in it.
+    // Its figures are measured; the decoration variants would be `pay`'s,
+    // painted twice.
+    'pay-xec',
 ]);
 
 /**

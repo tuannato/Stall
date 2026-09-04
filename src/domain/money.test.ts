@@ -6,6 +6,7 @@ import {
     formatTokenRate,
     formatXec,
     formatXecFromNanoSats,
+    formatXecUngrouped,
     NANOSATS_PER_SAT,
     nanoSatsPerAtom,
     compareOffers,
@@ -164,5 +165,31 @@ describe('same-token-offers-are-adjacent', () => {
         // Priced first, unpriced last within the token, never floated to the top.
         expect(order[0]!.priceNanoSatsPerAtom).toBe(100n);
         expect(order[1]!.priceNanoSatsPerAtom).toBeUndefined();
+    });
+});
+
+describe('a-bip21-amount-is-ungrouped-and-two-decimals', () => {
+    /**
+     * `formatXec` does three things a payment URI must not: it groups
+     * thousands, it strips trailing zeros, and it drops the point on a whole
+     * number. A wallet handed `250,000` reads a separator it does not expect;
+     * one handed `250000` reads a different figure than the one on screen was
+     * rounded to. So the wire has its own formatter, and the contrast between
+     * the two is the point of keeping them side by side.
+     */
+    it('always prints two decimals and never a separator', () => {
+        expect(formatXecUngrouped(25_000_000n)).toBe('250000.00');
+        expect(formatXecUngrouped(546n)).toBe('5.46');
+        expect(formatXecUngrouped(500n)).toBe('5.00');
+        expect(formatXecUngrouped(1n)).toBe('0.01');
+        expect(formatXecUngrouped(0n)).toBe('0.00');
+        // The same amounts through the display formatter, for contrast.
+        expect(formatXec(25_000_000n)).toBe('250,000');
+        expect(formatXec(500n)).toBe('5');
+    });
+
+    it('holds an amount far past what a double can', () => {
+        const huge = 10n ** 20n + 7n;
+        expect(formatXecUngrouped(huge)).toBe('1000000000000000000.07');
     });
 });

@@ -14,8 +14,38 @@ export const RATE_TOO_SMALL = '< 0.0001';
 /** SLP/ALP genesis decimals sit in 0–9; 18 is a hard ceiling, not a guess. */
 const MAX_DECIMALS = 18;
 
+/**
+ * The floor a chain output has to clear to be relayed at all.
+ *
+ * Named here rather than at the one screen that reads it because it is a fact
+ * about the network, not about a sheet: nothing composes a payment link below
+ * it, and the sheet that would have shown one says why instead.
+ */
+export const DUST_SATS = 546n;
+
 export function formatXec(sats: bigint): string {
     return formatScaled(sats, SATS_PER_XEC, 2);
+}
+
+/**
+ * The same amount, for a payment URI rather than for a reader.
+ *
+ * Its own code path, deliberately beside the display one so the difference is
+ * visible: `formatXec` groups thousands, strips trailing zeros and drops the
+ * decimal point on a whole number — three things a BIP21 `amount` must not
+ * do. A wallet handed `250,000` reads a separator it does not expect, and one
+ * handed `250000` where the screen said `250,000.00` is being told a figure
+ * nobody checked.
+ *
+ * All bigint, so an eight-byte quote converted at a real rate keeps every
+ * digit on the way to the wallet.
+ */
+export function formatXecUngrouped(sats: bigint): string {
+    const sign = sats < 0n ? '-' : '';
+    const abs = sats < 0n ? -sats : sats;
+    const whole = abs / SATS_PER_XEC;
+    const frac = abs % SATS_PER_XEC;
+    return `${sign}${whole.toString()}.${frac.toString().padStart(2, '0')}`;
 }
 
 /**

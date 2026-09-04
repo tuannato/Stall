@@ -16,6 +16,7 @@
  */
 
 import { decodeCashAddress, encodeCashAddress } from 'ecashaddrjs';
+import { DUST_SATS, formatXecUngrouped } from './money';
 
 const CASHTAB_ORIGIN = 'https://cashtab.com';
 const PAY_E_CASH_ORIGIN = 'https://pay.e.cash';
@@ -86,6 +87,66 @@ export function publishBip21(
         return undefined;
     }
     return `${dest}?amount=${DUST_XEC}&op_return_raw=${opReturnRawHex}`;
+}
+
+/**
+ * The BIP21 a buyer's wallet signs to pay the seller directly.
+ *
+ * **A sibling of `publishBip21`, never a widening of it.** That one's amount
+ * is dust and always dust, and four call sites rest on it; this one carries a
+ * figure derived from the seller's own quote. One function taking an optional
+ * amount would be one function two very different screens could get wrong.
+ *
+ * Two rules the amount has to keep, and both are why `formatXecUngrouped`
+ * exists: the field is XEC (writing `546` sends 546 XEC), and it carries no
+ * thousands separator and exactly two decimals.
+ *
+ * **Nothing below the dust floor is composed.** Under `DUST_SATS` the network
+ * will not relay the output, so a link built from one fails inside the wallet
+ * after the buyer has read the page and pressed Pay. The screen says why
+ * instead.
+ */
+export function payBip21(
+    address: string,
+    sats: bigint,
+    opReturnRawHex: string,
+): string | undefined {
+    const dest = p2pkhEcashAddress(address);
+    if (dest === undefined || !isEncoderOpReturnRaw(opReturnRawHex)) {
+        return undefined;
+    }
+    // `typeof`, not a comparison: a `Number` here would compare fine and then
+    // print a rounded figure into a payment URI.
+    if (typeof sats !== 'bigint' || sats < DUST_SATS) {
+        return undefined;
+    }
+    return `${dest}?amount=${formatXecUngrouped(sats)}&op_return_raw=${opReturnRawHex}`;
+}
+
+/** Cashtab web takes the pay BIP21 raw in the fragment, as it does a publish. */
+export function cashtabPayUrl(
+    address: string,
+    sats: bigint,
+    opReturnRawHex: string,
+): string | undefined {
+    const bip21 = payBip21(address, sats, opReturnRawHex);
+    if (bip21 === undefined) {
+        return undefined;
+    }
+    return `${CASHTAB_ORIGIN}/#/send?bip21=${bip21}`;
+}
+
+/** pay.e.cash takes the same string encoded in a query, as it does a publish. */
+export function payECashPayUrl(
+    address: string,
+    sats: bigint,
+    opReturnRawHex: string,
+): string | undefined {
+    const bip21 = payBip21(address, sats, opReturnRawHex);
+    if (bip21 === undefined) {
+        return undefined;
+    }
+    return `${PAY_E_CASH_ORIGIN}/?bip21=${encodeURIComponent(bip21)}`;
 }
 
 /**
