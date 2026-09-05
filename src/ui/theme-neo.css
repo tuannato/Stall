@@ -251,33 +251,28 @@
     color: #8aa6c9;
 }
 
-/* The design's blinking chevron, on our caret node — border-drawn. */
-.t-neo .item-caret {
-    width: 0;
-    height: 0;
-    border: 0;
-    border-left: 8px solid #ff4d7a;
-    border-top: 6px solid transparent;
-    border-bottom: 6px solid transparent;
-    /* The base's chevron uses the individual `rotate`; `transform: none`
-       never touches it, which tilted this triangle 45°. */
-    rotate: 0deg;
-    margin-top: 0;
-    transform: none;
-    filter: drop-shadow(0 0 6px rgba(255, 77, 122, 0.8));
-    animation: t-neo-blinkc 2.2s ease-in-out infinite;
+/*
+ * The drawn glyphs: square-capped and lit. The row caret is pink under the
+ * sign's glow and does not blink — a caret on every row is not the sign
+ * (owner, 2026-09-06).
+ */
+.t-neo .ic {
+    stroke-width: 2;
+    stroke-linecap: square;
 }
 
-@keyframes t-neo-blinkc {
-    0%,
-    100% {
-        opacity: 0.65;
-        transform: translateX(0);
-    }
-    50% {
-        opacity: 1;
-        transform: translateX(3px);
-    }
+.t-neo .item-caret {
+    color: #ff4d7a;
+    filter: drop-shadow(0 0 6px rgba(255, 77, 122, 0.8));
+}
+
+.t-neo .fold-caret,
+.t-neo .pay-pointer .ic {
+    color: #3df2ea;
+}
+
+.t-neo .event-caret {
+    color: #8aa6c9;
 }
 
 .t-neo .mini {
@@ -769,7 +764,6 @@
  * armed-transition check is the guard.
  */
 @media (prefers-reduced-motion: reduce) {
-    .t-neo .item-caret,
     .t-neo .invite-cursor,
     .t-neo .sm-neon,
     .t-neo .sm-chevrons i {

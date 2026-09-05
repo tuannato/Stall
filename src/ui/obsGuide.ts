@@ -19,6 +19,7 @@ import type { StallView } from '../domain/state';
 import { stallPath } from '../domain/route';
 import type { StallHandlers } from './render';
 import { identityOf } from './render';
+import { SVG_NS } from './glyphs';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -189,7 +190,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
     return node;
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * One SVG node. `createElementNS`, never `innerHTML`: the CSP is `'self'`

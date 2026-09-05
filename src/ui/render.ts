@@ -38,6 +38,7 @@ import {
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
 import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
+import { glyph, SVG_NS } from './glyphs';
 import { isWithheldToken } from '../domain/withheld';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
@@ -861,8 +862,6 @@ function paintUnresolvable(
     // No share: the link here opens this screen.
     stall.append(stallFooter(address, view, handlers, { share: false }));
 }
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built
@@ -2244,7 +2243,8 @@ function payPointer(
     if (!quotedItems(view).some((item) => item.tokenId === tokenId)) {
         return null;
     }
-    const pointer = el('button', 'pay-pointer', copy.PAY_POINTER);
+    const pointer = el('button', 'pay-pointer');
+    pointer.append(el('span', undefined, copy.PAY_POINTER), glyph('forward'));
     pointer.type = 'button';
     pointer.setAttribute('data-role', 'pay-pointer');
     pointer.setAttribute('data-focus-key', `pay-pointer:${tokenId}`);
@@ -2477,20 +2477,9 @@ function sheetFold(role: string, title: string, body: HTMLElement, extra?: strin
     // A real caret node: the summary's own marker is styled away, and a fold
     // with nothing saying it opens reads as a heading with nothing under it —
     // which is exactly how the owner read "More" on a phone.
-    // An SVG, not a glyph: the summary's `textContent` stays the title, which
-    // the fold tests compare byte for byte.
-    const caret = document.createElementNS(SVG_NS, 'svg');
-    caret.setAttribute('class', 'fold-caret');
-    caret.setAttribute('viewBox', '0 0 16 16');
-    caret.setAttribute('aria-hidden', 'true');
-    const chevron = document.createElementNS(SVG_NS, 'path');
-    chevron.setAttribute('d', 'M6 3l5 5-5 5');
-    chevron.setAttribute('fill', 'none');
-    chevron.setAttribute('stroke', 'currentColor');
-    chevron.setAttribute('stroke-width', '2');
-    chevron.setAttribute('stroke-linecap', 'round');
-    caret.append(chevron);
-    summary.append(caret);
+    // A drawn glyph, not a character: the summary's `textContent` stays the
+    // title, which the fold tests compare byte for byte.
+    summary.append(glyph('chevron', 'fold-caret'));
     fold.append(summary);
     fold.append(body);
     return fold;
@@ -3932,7 +3921,8 @@ function sheetHead(title: string, sub: string, handlers: StallHandlers): HTMLEle
     words.append(el('p', 'fine', sub));
     head.append(words);
     if (handlers.onClosePublish !== undefined) {
-        const x = el('button', 'mini another sheet-x', copy.PUBLISH_X);
+        const x = el('button', 'mini another sheet-x');
+        x.append(glyph('close'));
         x.type = 'button';
         x.setAttribute('data-role', 'publish-close-top');
         x.setAttribute('data-focus-key', 'publish-close-top');
@@ -4552,8 +4542,7 @@ function offerRow(
     // open; the caret tells a thumb.
     // The design's own fourth column — a named grid area now, so it can sit
     // at the row's right edge instead of dangling under the name.
-    const caret = el('span', 'item-caret');
-    caret.setAttribute('aria-hidden', 'true');
+    const caret = glyph('chevron', 'item-caret');
     const price = el('span', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
@@ -4678,7 +4667,11 @@ function itemFace(
 ): HTMLElement | null {
     const panel = el('div', 'item-face');
     panel.setAttribute('data-role', 'item-face');
-    const back = el('button', 'item-back', rail === 'quotes' ? copy.ITEM_BACK_QUOTES : copy.ITEM_BACK_LISTINGS);
+    const back = el('button', 'item-back');
+    back.append(
+        glyph('back'),
+        el('span', undefined, rail === 'quotes' ? copy.ITEM_BACK_QUOTES : copy.ITEM_BACK_LISTINGS),
+    );
     back.type = 'button';
     back.setAttribute('data-role', 'item-back');
     back.setAttribute('data-focus-key', 'item-back');
@@ -4748,7 +4741,8 @@ function itemFace(
         }
         card.append(faceFold(view, how, handlers));
         if (offersOf(view).some((offer) => offer.tokenId === tokenId)) {
-            const across = el('button', 'pay-pointer', copy.LISTED_POINTER);
+            const across = el('button', 'pay-pointer');
+            across.append(el('span', undefined, copy.LISTED_POINTER), glyph('forward'));
             across.type = 'button';
             across.setAttribute('data-role', 'listed-pointer');
             across.addEventListener('click', () => {
@@ -4873,9 +4867,10 @@ function itemFace(
     how.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
     card.append(faceFold(view, how, handlers));
     // The other rail's face, not a tab switch: on a face there are no tabs,
-    // so a switch would repaint the same face and leave "← Listings" false.
+    // so a switch would repaint the same face and leave "Listings" false.
     if (quotedItems(view).some((item) => item.tokenId === tokenId)) {
-        const across = el('button', 'pay-pointer', copy.PAY_POINTER);
+        const across = el('button', 'pay-pointer');
+        across.append(el('span', undefined, copy.PAY_POINTER), glyph('forward'));
         across.type = 'button';
         across.setAttribute('data-role', 'pay-pointer');
         across.addEventListener('click', () => {
@@ -5221,17 +5216,7 @@ function signPinButton(pin: SignPin, name: string): HTMLButtonElement {
         btn.title = pin.pinned ? copy.PINNED_ON_DOOR : copy.PIN_TO_DOOR;
         btn.addEventListener('click', pin.onToggle);
     }
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.classList.add('pin-ic');
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute(
-        'd',
-        'M15 2 L20 7 L18.6 8.4 L18 8.2 L14.4 11.8 L14.8 15 L13.4 16.4 L9.8 12.8 L5.4 17.2 L4 16.8 L4.4 15.4 L8.8 11 L5.2 7.4 L6.6 6 L9.8 6.4 L13.4 2.8 L13.2 2.2 Z',
-    );
-    svg.append(path);
-    btn.append(svg);
+    btn.append(glyph('pin', 'pin-ic'));
     return btn;
 }
 
@@ -6155,8 +6140,9 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     glance.append(el('span', 'event-txid', `${event.txid.slice(0, 10)}…`));
     // A real node, because `summary { display: grid }` drops the browser's own
     // marker and a fold with nothing saying it opens is a fold nobody opens.
-    const caret = el('span', 'event-caret', '›');
+    const caret = el('span', 'event-caret');
     caret.setAttribute('aria-hidden', 'true');
+    caret.append(glyph('chevron'));
     glance.append(caret);
     fold.append(glance);
 

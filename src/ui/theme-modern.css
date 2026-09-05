@@ -334,24 +334,17 @@
     color: color-mix(in srgb, var(--s-accent) 82%, var(--s-text));
 }
 
-/*
- * No transform here: the base draws the chevron with the individual
- * `rotate` property, and a theme `transform: rotate(45deg)` COMPOSES with
- * it — the caret shipped at 90°, a corner mark on every row of every look.
- */
-.t-modern .item-caret {
-    width: 9px;
-    height: 9px;
-    border: 0;
-    border-right: 2.5px solid #2563eb;
-    border-top: 2.5px solid #2563eb;
-    border-bottom: 0;
-    rotate: 45deg;
-    transition: translate 0.2s;
+/* The drawn glyphs: this look supplies the ink and the line, nothing else. */
+.t-modern .ic {
+    stroke-width: 2;
 }
 
-.t-modern .item-head:hover .item-caret {
-    translate: 2px -2px;
+.t-modern .item-caret {
+    color: #2563eb;
+}
+
+.t-modern .pay-pointer .ic {
+    color: #2563eb;
 }
 
 .t-modern .mini {
@@ -481,7 +474,6 @@
     .t-modern .tagline-invite,
     .t-modern .notice-invite,
     .t-modern .cta,
-    .t-modern .item-caret,
     .t-modern .mini {
         transition: none;
     }

@@ -76,8 +76,6 @@ export const wearing = (labels: readonly string[]): string =>
 export const FITTINGS_STALL: string | undefined = undefined;
 
 export const PUBLISH_CLOSE = 'Close';
-/** The top close wears the glyph; the word rides its aria-label. */
-export const PUBLISH_X = '✕';
 
 /**
  * The signer is the whole security story here, and Cashtab cannot tell them:
@@ -1218,7 +1216,7 @@ export const PAY_OPEN = 'Pay';
  * covenant's figure and the seller's quote are the same money.
  */
 export const PAY_POINTER =
-    'Also: the seller\u2019s own quote for one, paid directly \u2014 not this listing \u2192';
+    'Also: the seller\u2019s own quote for one, paid directly \u2014 not this listing';
 /**
  * Our own gap, counted rather than hidden \u2014 the listings line, one surface
  * over. It covers every record that is not a row: a genesis this page never
@@ -1259,12 +1257,13 @@ export const PAY_HOW_FOLD = 'How this works';
 export const ROW_LABEL_AGORA = 'Agora';
 export const ROW_LABEL_PAY = 'Pay the seller';
 /** The face's close control: back to the rail it came from. */
-export const ITEM_BACK_LISTINGS = '\u2190 Listings';
-export const ITEM_BACK_QUOTES = '\u2190 Quotes';
+/** The words alone: the back glyph is drawn beside them, never typed. */
+export const ITEM_BACK_LISTINGS = 'Listings';
+export const ITEM_BACK_QUOTES = 'Quotes';
 /** Under the Pay control on a quote's face — the one sentence, the rest folds. */
 export const QUOTE_PAID_DIRECT = 'Paid directly to the seller.';
 /** The quote face's pointer to the other rail, when the token is listed too. */
-export const LISTED_POINTER = 'Also listed on Agora \u2192';
+export const LISTED_POINTER = 'Also listed on Agora';
 /** The Pay control after the rate moved: it restates the figure it will open. */
 export const payFigure = (xec: string): string => `Pay ${xec} ${XEC}`;
 export const PAY_NO_RATE_WHY =

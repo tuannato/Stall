@@ -9325,6 +9325,73 @@ describe('a-truncated-tab-counts-what-it-read-and-says-so', () => {
     });
 });
 
+/*
+ * Round 8: every control that used to say what it does with a typed
+ * character — ✕ to close, ← to go back, → to cross rails, › to open a row —
+ * carries one drawn glyph instead, and its words carry no glyph character.
+ * One `svg.ic` per control, aria-hidden, so a reader hears the label and
+ * a `textContent` comparison still equals the copy constant.
+ */
+describe('every-glyph-control-carries-an-icon-and-no-glyph-text', () => {
+    const GLYPH_CHARS = /[✕←→›×]/;
+
+    function expectOneIcon(control: Element | null, name: string): void {
+        expect(control, name).not.toBeNull();
+        const icons = control!.querySelectorAll('svg.ic');
+        expect(icons, `${name} carries one icon`).toHaveLength(1);
+        expect(icons[0]!.getAttribute('aria-hidden'), `${name}'s icon is decoration`).toBe('true');
+        expect(icons[0]!.textContent, `${name}'s icon holds no text`).toBe('');
+        expect(control!.textContent ?? '', `${name} spells no glyph`).not.toMatch(GLYPH_CHARS);
+    }
+
+    it('the sheet close, the row caret and the pointer on the shop', () => {
+        const { root } = paint(railView({ shopTab: 'listings', overlay: { kind: 'describe' } }));
+        expectOneIcon(root.querySelector('[data-role="publish-close-top"]'), 'sheet close');
+        expectOneIcon(root.querySelector('.item-head .item-caret')?.parentElement ?? null, 'row head');
+        expect(root.querySelector('.item-head .item-caret')?.tagName.toLowerCase()).toBe('svg');
+        expectOneIcon(root.querySelector('[data-role="pay-pointer"]'), 'row pointer');
+    });
+
+    it('the back control and the pointer on both faces', () => {
+        const listing = paint(railView({ overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } })).root;
+        expectOneIcon(listing.querySelector('[data-role="item-back"]'), 'back (listing face)');
+        expectOneIcon(listing.querySelector('[data-role="pay-pointer"]'), 'pointer (listing face)');
+        const quote = paint(railView({ overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' } })).root;
+        expectOneIcon(quote.querySelector('[data-role="item-back"]'), 'back (quote face)');
+        expectOneIcon(quote.querySelector('[data-role="listed-pointer"]'), 'pointer (quote face)');
+    });
+
+    it('the activity caret and the pin', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [{ txid: 'ab'.repeat(32), kind: 'book', seenAtMs: 1_756_400_000_000 }],
+            }),
+        );
+        expectOneIcon(root.querySelector('.event-caret'), 'activity caret');
+        const shop = paint(offersView([OFFER])).root;
+        const pin = shop.querySelector('[data-role="pin-stall"]');
+        expectOneIcon(pin, 'pin');
+        expect(pin!.querySelector('svg.ic')!.getAttribute('viewBox')).toBe('0 0 16 16');
+    });
+
+    it('the fold caret is the same glyph node', () => {
+        const { root } = paint(railView({ overlay: { kind: 'describe' } }));
+        const caret = root.querySelector('details.fold > .fold-sum > .fold-caret');
+        expect(caret?.classList.contains('ic')).toBe(true);
+    });
+
+    it('the five constants carry the words alone', () => {
+        expect(copy.ITEM_BACK_LISTINGS).toBe('Listings');
+        expect(copy.ITEM_BACK_QUOTES).toBe('Quotes');
+        expect(copy.PAY_POINTER).toBe(
+            'Also: the seller’s own quote for one, paid directly — not this listing',
+        );
+        expect(copy.LISTED_POINTER).toBe('Also listed on Agora');
+        expect('PUBLISH_X' in copy, 'the close control has no typed glyph to spell').toBe(false);
+    });
+});
+
 describe('a-shop-row-pointer-switches-tabs', () => {
     /**
      * The one line a Shop row carries about the other rail. It used to scroll

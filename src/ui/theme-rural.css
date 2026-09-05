@@ -280,15 +280,19 @@
     color: var(--s-muted);
 }
 
-/* Same composition trap as Modern: rotate lives in the base, never here. */
+/* The drawn glyphs. The caret is 14px: this look's row grid seats a 14px caret track. */
+.t-rural .ic {
+    stroke-width: 1.75;
+}
+
 .t-rural .item-caret {
-    width: 9px;
-    height: 9px;
-    border: 0;
-    border-right: 2.5px solid #9e4620;
-    border-top: 2.5px solid #9e4620;
-    border-bottom: 0;
-    rotate: 45deg;
+    width: 14px;
+    height: 14px;
+    color: #9e4620;
+}
+
+.t-rural .pay-pointer .ic {
+    color: #9e4620;
 }
 
 .t-rural .mini {
