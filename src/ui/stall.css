@@ -2439,6 +2439,27 @@ details.fold > .fold-sum {
     cursor: pointer;
 }
 
+/*
+ * The seller's words under a quote: one line with an ellipsis on the row —
+ * the face and the sheet show them whole, and a row's name opens the face —
+ * and the whole text on the face, wrapping anywhere a 180-byte string needs.
+ */
+.pay-words {
+    display: block;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.face-words {
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--s-text);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+}
+
 .fold-caret {
     flex: none;
     width: 16px;

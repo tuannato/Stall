@@ -124,7 +124,6 @@ import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { broadcastCards } from './broadcast';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
-import { itemTitle } from '../domain/text';
 import {
     lastDrawnPosterSpec,
     SQUARE_SIZE,
@@ -8863,27 +8862,29 @@ describe('auth-pubkey-is-never-painted', () => {
     });
 });
 
-describe('an-item-is-titled-by-its-words-on-the-pay-surfaces', () => {
+describe('a-quote-is-titled-by-its-token-and-the-words-follow', () => {
     /**
-     * A quote is for an item, and the seller's own words are what say what the
-     * item is. The genesis name is a token's name — true, and rarely the thing
-     * a buyer is paying for — so it takes the small second line.
+     * The token's name titles every quote surface; the seller's words follow
+     * — one line on the row (the face and the sheet show them whole), never
+     * cut mid-word. Owner's call, 2026-09-05: a sentence cut at forty
+     * characters read "paid strai" where a name should be.
      */
-    it('titles the pay row with the words and keeps the token name beside it', () => {
+    it('titles the pay row with the token name and puts the words under it, one line', () => {
         const { root } = paint(
             quoteView({
                 shopTab: 'quotes',
-                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
+                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans, roasted on the day it ships']]),
             }),
         );
         const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
-        expect(row.querySelector('.item-n')?.textContent).toBe('Half kilo of beans');
-        expect(row.querySelector('[data-role="quote-token-name"]')?.textContent).toBe(
-            'Roasted Beans',
-        );
+        expect(row.querySelector('.item-n')?.textContent).toBe('Roasted Beans');
+        const words = row.querySelector('[data-role="quote-words"]') as HTMLElement;
+        expect(words.textContent).toBe('Half kilo of beans, roasted on the day it ships');
+        expect(words.classList.contains('pay-words'), 'one line, clipped by the sheet').toBe(true);
+        expect(row.querySelector('[data-role="quote-token-name"]')).toBeNull();
     });
 
-    it('titles the pay sheet head the same way and paints the whole words', () => {
+    it('titles the pay sheet head with the token name and paints the whole words below', () => {
         const words = 'Half kilo of beans, roasted on the day it ships';
         const { root } = paint(
             quoteView({
@@ -8892,10 +8893,22 @@ describe('an-item-is-titled-by-its-words-on-the-pay-surfaces', () => {
             }),
         );
         const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
-        expect(sheet.querySelector('.sheet-head .item-n')?.textContent).toBe(itemTitle(words));
+        expect(sheet.querySelector('.sheet-head .item-n')?.textContent).toBe('Roasted Beans');
         expect(sheet.textContent).toContain(copy.PAY_WORDS_LABEL);
-        // The head's cut is a title; the sheet is where the whole record shows.
         expect(sheet.querySelector('[data-role="pay-words"]')?.textContent).toBe(words);
+    });
+
+    it('titles the quote face with the token name and shows the words whole', () => {
+        const words = 'Support the work: one coffee, paid straight to my wallet. No token, no delivery.';
+        const { root } = paint(
+            quoteView({
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' },
+                descriptions: new Map([[TOKEN_ID, words]]),
+            }),
+        );
+        const face = root.querySelector('[data-role="item-face"]') as HTMLElement;
+        expect(face.querySelector('.face-nm')?.textContent).toBe('Roasted Beans');
+        expect(face.querySelector('[data-role="quote-words"]')?.textContent).toBe(words);
     });
 });
 
@@ -10193,7 +10206,7 @@ describe('an-item-face-is-keyed-by-token-and-rail', () => {
         expect(root.querySelector('[data-role="item-face"]')).not.toBeNull();
     });
 
-    it('a quote face is the other rail, with the seller’s words as its title and Pay as its control', () => {
+    it('a quote face is the other rail, titled by the token with Pay as its control', () => {
         const { root } = paint(
             railView({
                 overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' },

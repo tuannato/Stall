@@ -532,6 +532,18 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'idle' },
         tokens: new Map(),
     },
+    /*
+     * The same address, reached from the door's paste box: the seller's
+     * first-stall checklist (`pasted`), with its numbered steps, the stuck
+     * step marked and the two controls. `unresolvable` above is the visitor's
+     * screen — since the gate of 2026-09-05 the checklist was on no screen.
+     */
+    'first-stall': {
+        route: { kind: 'unresolvable', address: ADDR },
+        overlay: { kind: 'idle' },
+        tokens: new Map(),
+        pasted: true,
+    },
     unresolved: {
         route: { kind: 'unresolved', address: ADDR },
         overlay: { kind: 'idle' },
@@ -794,6 +806,7 @@ export const SCREENS: Record<string, StallView> = {
 export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'opening',
     'unresolvable',
+    'first-stall',
     'unresolved',
     'invalid',
     'script',
@@ -869,6 +882,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'pay-moved',
     'pay-dust',
     'item-quote',
+    // The checklist is `unresolvable`'s ground with numbered steps on it;
+    // its muted status lines are not contrast targets. Geometry only.
+    'first-stall',
 ]);
 
 /**

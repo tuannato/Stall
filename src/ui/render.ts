@@ -37,7 +37,7 @@ import {
     RATE_TOO_SMALL,
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
-import { isLegibleText, itemTitle, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
+import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
 import { isWithheldToken } from '../domain/withheld';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
@@ -2103,13 +2103,18 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
 function quoteNaming(
     view: StallView,
     tokenId: string,
-): { title: string; tokenName?: string; note?: string } {
-    const genesisName = tokenName(view.tokens, tokenId);
+): { title: string; words?: string; note?: string } {
+    // The token's own name titles every quote surface (owner, 2026-09-05):
+    // a name is a name, short and screened, where the seller's words are a
+    // sentence — and a sentence cut at forty characters read "paid strai".
+    // The words follow, whole on the face and the sheet, one line with an
+    // ellipsis on the row; nothing is cut mid-word anywhere.
+    const title = tokenName(view.tokens, tokenId);
     const words = view.descriptions?.get(tokenId);
     if (words === undefined || words === '') {
-        return { title: genesisName, note: copy.QUOTE_NO_WORDS_LINE };
+        return { title, note: copy.QUOTE_NO_WORDS_LINE };
     }
-    return { title: itemTitle(words), tokenName: genesisName };
+    return { title, words };
 }
 
 /**
@@ -2178,9 +2183,10 @@ function payRow(
     // The token's own name, small, under the item's: a genesis name is true
     // and is rarely the thing a buyer is paying for. Absent when it is already
     // the title, which is what a quote with no words falls back to.
-    if (named.tokenName !== undefined) {
-        const under = el('span', 'pay-sub', named.tokenName);
-        under.setAttribute('data-role', 'quote-token-name');
+    if (named.words !== undefined) {
+        // One line, an ellipsis at the end: the face and the sheet show it whole.
+        const under = el('span', 'pay-sub pay-words', named.words);
+        under.setAttribute('data-role', 'quote-words');
         words.append(under);
     }
     if (named.note !== undefined) {
@@ -3489,10 +3495,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         wrap.append(payFoot(handlers));
         return wrap;
     }
-    // The item is named by the seller's words, with the token's own name — or
-    // the fact that they wrote none — on the head's second line.
+    // The token's name titles the head; the seller's words are printed whole
+    // under their own label below the figure, so the head's second line
+    // carries only the fact that they wrote none.
     const named = quoteNaming(view, tokenId);
-    wrap.append(sheetHead(named.title, named.tokenName ?? named.note ?? '', handlers));
+    wrap.append(sheetHead(named.title, named.note ?? '', handlers));
     const price = item.price;
     const usesRate = price.code !== XEC_PRICE_CODE;
 
@@ -4692,9 +4699,10 @@ function itemFace(
         headRow.append(itemIcon(tokenId, named.title, 'item-ic-lg', ICON_HERO_SIZE, minted !== 'not-attributed'));
         const names = el('div');
         names.append(el('div', 'face-nm', named.title));
-        if (named.tokenName !== undefined) {
-            const under = el('div', 'pay-sub', named.tokenName);
-            under.setAttribute('data-role', 'quote-token-name');
+        if (named.words !== undefined) {
+            // Whole, never cut: the row's one line opens here to read the rest.
+            const under = el('div', 'face-words', named.words);
+            under.setAttribute('data-role', 'quote-words');
             names.append(under);
         }
         if (named.note !== undefined) {

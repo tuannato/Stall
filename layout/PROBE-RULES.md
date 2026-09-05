@@ -840,6 +840,17 @@ missing ground. `.face` and `.scard` now carry the item card's own ground
 tokens. Read alone after that fix: **131.7s, contrast 99.7s over
 2,017 boxes**, every rule green.
 
+**2026-09-05, the quote surfaces re-titled and a thirty-second screen:
+136.9s, contrast 101.9s over 2,023 boxes**, every rule green, run alone. The
+token name titles the pay row, the quote face and the pay sheet head now,
+with the seller's words following (one line with an ellipsis on the row,
+whole on the face) — the same ink on the same grounds, so no box moved.
+`first-stall` joined the screens, geometry only: the seller's checklist had
+been on no screen since the never-spent address gained its visitor variant
+the same day — the numbered `<i>` steps, `aria-current="step"` and the two
+controls are measured for overlap and edges now, and their muted status
+lines are not contrast targets.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var
