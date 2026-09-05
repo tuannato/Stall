@@ -4743,7 +4743,15 @@ details.fold.fold-cta[open] > .fold-sum {
     margin: 0;
 }
 
+/*
+ * The figure and its Edit control share the value cell: a flex row, so the
+ * gap applies — on a `dd` that was not one, "× 1" sat against the control's
+ * border (round 8's 44px control made it visible; the gap never applied).
+ */
 .pay-qty dd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 10px;
 }
 
