@@ -851,6 +851,34 @@ the same day — the numbered `<i>` steps, `aria-current="step"` and the two
 controls are measured for overlap and edges now, and their muted status
 lines are not contrast targets.
 
+**2026-09-05, `text-spills`: words that paint past their box, under a control
+or cut off.** Measured live on the owner's phone: the quote row's one-line
+words (nowrap, ellipsis) ran under the Pay control on Neo — the flex column
+that holds the name aligns its children to the start, so a one-line sentence
+was sized to its content and never clipped, and no rule saw it: the coverage
+rules read what `elementFromPoint` returns, and a control painted over
+spilled text returns the control. The rule walks every block with words
+(`aria-hidden` decorations and empty boxes skipped, inline boxes skipped)
+whose `overflow-x` is `visible` and whose `scrollWidth` exceeds its
+`clientWidth`, and calls the spill a defect in two cases only: the spilled
+strip **overlaps another element** that is neither ancestor nor descendant
+(a control, a price node, a name, a line of fine print), or it **crosses the
+nearest clipping ancestor's right edge** (a sheet, the scroller). A box that
+merely pokes into its parent's padding is tolerated — the door's paste unit
+runs 16px into the door's own padding by design, and the activity summary
+grid is 4–6px wider than its row on every look, past the card edge and under
+nothing (worth a look in the polish round, not a defect by this rule).
+
+A first, wider form (any spill at all) fired 1,498 times on the first run,
+almost all of it the Neo sign's `aria-hidden` chevron strip, seven times per
+variant across the animation instants — which is what taught the rule to
+skip decorations and to say *where* the words land. Proved red on the live
+defect (the `.pay-b` column, 10–115px under the Pay control across the three
+looks) and on a second one nobody had reported: the pay sheet's words `dd`
+in Neo's mono face, 39px past the sheet's edge. Both fixed in the same
+commit: the name column caps every child at its width, the sheet's words
+wrap anywhere. Green after: 133.3s, 2,023 boxes, every rule.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var

@@ -658,6 +658,73 @@ function measure(screen: string, themeLabel: string): Failure[] {
             fail('theme does not reach the bottom', `height ${box.height} < ${window.innerHeight}`);
         }
     }
+    /*
+     * Words that spill out of their own box and land where they should not.
+     * A block whose content is wider than its box and whose overflow is
+     * `visible` paints past its edge; no other rule sees it — the coverage
+     * rules read what `elementFromPoint` returns, and a control painted over
+     * spilled text returns the control. Two things make a spill a defect: the
+     * spilled strip **overlaps another element** that is not the node's own
+     * ancestor or descendant (words under a button, over a neighbour's
+     * words), or it **crosses the nearest clipping ancestor's edge** (words
+     * cut off by a sheet or the scroller). A box that merely pokes into its
+     * parent's padding, and a decoration (`aria-hidden`), are not. Measured
+     * live 2026-09-05: the quote row's one-line words ran under the Pay
+     * control on Neo, because the flex column sized the line to its content.
+     */
+    const clipperOf = (node: Element): Element | null => {
+        let up = node.parentElement;
+        while (up !== null && up !== root) {
+            if (getComputedStyle(up).overflowX !== 'visible') {
+                return up;
+            }
+            up = up.parentElement;
+        }
+        return null;
+    };
+    for (const node of root.querySelectorAll<HTMLElement>('*')) {
+        if (!(node instanceof HTMLElement) || node.clientWidth === 0) {
+            continue;
+        }
+        if (node.closest('[aria-hidden="true"]') !== null || (node.textContent ?? '').trim() === '') {
+            continue;
+        }
+        const cs = getComputedStyle(node);
+        if (cs.overflowX !== 'visible' || cs.display === 'inline') {
+            continue;
+        }
+        const spill = node.scrollWidth - node.clientWidth;
+        if (spill <= 1) {
+            continue;
+        }
+        const box = node.getBoundingClientRect();
+        // The strip the words paint into, past the box's own right edge.
+        const strip = new DOMRect(box.right, box.top, spill, box.height);
+        const clipper = clipperOf(node);
+        const cut = clipper !== null && strip.right > clipper.getBoundingClientRect().right + 1;
+        let under: Element | undefined;
+        if (!cut) {
+            for (const other of root.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [data-role="price"], [data-role="seller-price"], .item-n, .face-nm, .fine, .note, .pub')) {
+                if (other === node || node.contains(other) || other.contains(node)) {
+                    continue;
+                }
+                if (other.closest('[aria-hidden="true"]') !== null) {
+                    continue;
+                }
+                const r = other.getBoundingClientRect();
+                if (r.width > 0 && overlaps(strip, r)) {
+                    under = other;
+                    break;
+                }
+            }
+        }
+        if (cut || under !== undefined) {
+            fail(
+                'text-spills',
+                `${describe(node)} paints ${spill}px past its box (${node.scrollWidth} > ${node.clientWidth})${cut ? ', cut off by ' + describe(clipper!) : ', under ' + describe(under!)}`,
+            );
+        }
+    }
     return out;
 }
 

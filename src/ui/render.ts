@@ -2185,7 +2185,7 @@ function payRow(
     // the title, which is what a quote with no words falls back to.
     if (named.words !== undefined) {
         // One line, an ellipsis at the end: the face and the sheet show it whole.
-        const under = el('span', 'pay-sub pay-words', named.words);
+        const under = el('span', 'pay-sub pay-words-line', named.words);
         under.setAttribute('data-role', 'quote-words');
         words.append(under);
     }

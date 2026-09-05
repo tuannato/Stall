@@ -2444,12 +2444,27 @@ details.fold > .fold-sum {
  * the face and the sheet show them whole, and a row's name opens the face —
  * and the whole text on the face, wrapping anywhere a 180-byte string needs.
  */
-.pay-words {
+.pay-words-line {
     display: block;
+    max-width: 100%;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/*
+ * Everything in the row's name column is capped at the column: a flex column
+ * that aligns its children to the start sizes each to its content, and a
+ * one-line sentence sized to its content ran under the Pay control.
+ */
+.pay-b > * {
+    max-width: 100%;
+}
+
+.item-open {
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .face-words {
@@ -4614,6 +4629,11 @@ details.fold.fold-cta[open] > .fold-sum {
 .pay-words dd {
     text-align: left;
     font-variant-numeric: normal;
+    /* The whole record, wrapping anywhere a 180-byte string needs: in a
+       mono face a long word ran 39px past the sheet's edge. */
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
     max-width: 42ch;
 }
 

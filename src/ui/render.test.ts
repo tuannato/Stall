@@ -8880,7 +8880,7 @@ describe('a-quote-is-titled-by-its-token-and-the-words-follow', () => {
         expect(row.querySelector('.item-n')?.textContent).toBe('Roasted Beans');
         const words = row.querySelector('[data-role="quote-words"]') as HTMLElement;
         expect(words.textContent).toBe('Half kilo of beans, roasted on the day it ships');
-        expect(words.classList.contains('pay-words'), 'one line, clipped by the sheet').toBe(true);
+        expect(words.classList.contains('pay-words-line'), 'one line, clipped by the sheet').toBe(true);
         expect(row.querySelector('[data-role="quote-token-name"]')).toBeNull();
     });
 
