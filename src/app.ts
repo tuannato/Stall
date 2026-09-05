@@ -15,7 +15,7 @@ import {
     wornAttachments,
 } from './domain/attachments';
 import { DEFAULT_THEME_ID } from './domain/theme';
-import { loadHeldTokens } from './net/holdings';
+import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
 import { DEFAULT_FIAT_CODE } from './domain/fiat';
 import {
@@ -2305,17 +2305,24 @@ async function loadCurrent(): Promise<AppState> {
      * seller is looking.
      */
     let heldTokens: ReadonlySet<string> | undefined;
+    let mintedHere: ReadonlySet<string> | undefined;
     {
         const wanted = new Set(
             wornAttachments(theme?.id ?? DEFAULT_THEME_ID, attachmentFlags)
                 .map((row) => row.tokenId)
                 .filter((id): id is string => id !== undefined),
         );
-        if (wanted.size > 0) {
-            // The derived p2pkh when the route was a bare key: §3 says the stall
-            // address is that, and it is the address a decoration is held at.
-            heldTokens = await loadHeldTokens(createChronik() as never, address, wanted);
-        }
+        // One utxo read per stall open, two answers: which decorations the
+        // address holds, and which tokens it holds a mint baton for — the
+        // seller's own product, the way a freshly minted token reaches the
+        // studio without its id pasted by hand (owner, 2026-09-05). The
+        // derived p2pkh when the route was a bare key: §3 says the stall
+        // address is that, and it is the address both are held at.
+        const holdings = await loadHoldings(createChronik() as never, address, wanted);
+        // `heldTokens` keeps its old meaning: absent when nothing was wanted,
+        // so "holds none of them" is never said about an empty question.
+        heldTokens = wanted.size > 0 ? holdings?.held : undefined;
+        mintedHere = holdings?.mintedHere;
     }
 
     /*
@@ -2330,7 +2337,9 @@ async function loadCurrent(): Promise<AppState> {
      * whose genesis this page never saw could be an NFT, and a quote per whole
      * token means nothing about one.
      */
-    const quotedIds = [...descriptionLookup.prices.keys()].filter(
+    // The quoted tokens, and the ones the wallet can still mint: both need a
+    // name on the studio and in the picker, neither is on the book.
+    const quotedIds = [...new Set([...descriptionLookup.prices.keys(), ...(mintedHere ?? [])])].filter(
         (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)) === undefined,
     );
     if (quotedIds.length > 0) {
@@ -2380,6 +2389,14 @@ async function loadCurrent(): Promise<AppState> {
             tokens.set(tokenId, meta);
         }
     }
+    // The tokens this wallet can still mint: on the studio and in the picker
+    // by name, or by their id when the genesis read did not answer.
+    for (const tokenId of mintedHere ?? []) {
+        const meta = sessionTokens.get(cacheKey(route.pubkeyHex, tokenId));
+        if (meta !== undefined) {
+            tokens.set(tokenId, meta);
+        }
+    }
     // The collections themselves, so a heading can print a name.
     for (const groupId of nftLookup.groups.values()) {
         const meta = sessionTokens.get(cacheKey(route.pubkeyHex, groupId));
@@ -2414,6 +2431,7 @@ async function loadCurrent(): Promise<AppState> {
             theme,
             attachmentFlags,
             heldTokens,
+            mintedHere,
             // Fails closed: with no holdings answer — a read that failed, or a
             // record whose bits name only unminted rows — nothing is worn.
             // `undefined` here would be the picker's skip-the-check affordance

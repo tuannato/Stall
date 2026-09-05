@@ -82,7 +82,7 @@ const chain = {
     /** Newest first, as chronik answers. */
     addressTxs: [] as ChainTx[],
     txs: new Map<string, ChainTx>(),
-    utxos: [] as { token?: { tokenId?: string } }[],
+    utxos: [] as { token?: { tokenId?: string; isMintBaton?: boolean } }[],
     /**
      * Genesis facts this chain will answer for, keyed by token id. Empty by
      * default, so `chronik.token()` throws exactly as it always did here — a
@@ -3030,5 +3030,35 @@ describe('a-withheld-quote-spends-no-genesis-lookup', () => {
         );
         await flush();
         expect(chain.calls.tx).toBe(0);
+    });
+});
+
+describe('a-token-whose-baton-the-wallet-holds-reaches-the-studio', () => {
+    /**
+     * A freshly minted token has no listing, no record and no quote, so the
+     * describe set never held it and the seller had to paste its id. The
+     * one utxo read a stall open already makes for the decorations answers
+     * a second question: which tokens this wallet holds a mint baton for —
+     * the seller's own product, on the items card by name.
+     */
+    it('lists the baton-held token on the items card, from the one holdings read of the load', async () => {
+        const MINTED = '5e'.repeat(32);
+        window.history.replaceState(null, '', stallPath(PK));
+        chain.utxos = [
+            { token: { tokenId: MINTED, isMintBaton: true } },
+            { token: { tokenId: MINTED } },
+        ];
+        chain.genesis.set(MINTED, genesisOf('Fresh Mint'));
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+        await flush();
+        expect(chain.calls.utxos, 'one holdings read per open').toBe(1);
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        await flush();
+        const row = root.querySelector(`[data-role="studio-item"][data-token-id="${MINTED}"]`);
+        expect(row, 'the minted token has a row').not.toBeNull();
+        expect(row?.textContent).toContain('Fresh Mint');
+        expect(row?.querySelector('[data-role="studio-item-describe"]')).not.toBeNull();
     });
 });

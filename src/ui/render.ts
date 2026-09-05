@@ -342,6 +342,11 @@ export function renderStall(
     if ([...(view.justChanged ?? [])].some((tokenId) => shownTokens.has(tokenId))) {
         announce(root.ownerDocument, copy.EVENT_BOOK);
     }
+    // The reader's place, read off the tree about to go (see `lastScreenKey`).
+    const keptScroll = (root.querySelector('.stall-scroll') as HTMLElement | null)?.scrollTop ?? 0;
+    const thisScreen = screenKey(view);
+    const sameScreen = thisScreen === lastScreenKey;
+    lastScreenKey = thisScreen;
     root.replaceChildren();
     applyTitle(view);
     const frame = el('div', 'frame');
@@ -459,6 +464,17 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
+    const scroller = stall.querySelector('.stall-scroll') as HTMLElement | null;
+    if (sameScreen && keptScroll > 0 && scroller !== null) {
+        // After the tree is connected: a browser does not keep `scrollTop`
+        // on a detached node, so this rides a microtask the way the sheets'
+        // focus hand-off does.
+        queueMicrotask(() => {
+            if (scroller.isConnected) {
+                scroller.scrollTop = keptScroll;
+            }
+        });
+    }
     // A link that named no item brings the section into view once — the app
     // clears the flag with the paint that showed it, so a live repaint cannot
     // throw a reader who has scrolled elsewhere back down the page.
@@ -2540,6 +2556,11 @@ export function describableTokenIds(view: StallView): string[] {
             ...listed,
             ...(view.descriptions?.keys() ?? []),
             ...(view.prices?.keys() ?? []),
+            // Tokens whose mint baton the stall's wallet holds: the seller's
+            // own product, read from the same utxo answer as the decorations
+            // (owner's call, 2026-09-05 — a fresh token had no way in but
+            // its id, pasted by hand).
+            ...(view.mintedHere ?? []),
         ]),
     ];
 }
@@ -5856,7 +5877,23 @@ function posterSheet(
  * which is the thing this exists to survive. Keyed by identity so switching
  * stalls does not restore somebody else's place, and never persisted.
  */
-let activityScroll: { key: string; top: number } | undefined;
+/**
+ * Where the reader was, for every panel. `renderStall` rebuilds the tree on
+ * every paint — a reconnect, a book tick, the fiat answer — and a scroll
+ * region rebuilt from scratch starts at the top: a visitor who reopened the
+ * tab halfway down a shop or the studio was thrown to the sign (owner,
+ * 2026-09-05). The old scroller's offset is read at the moment of the
+ * repaint and put back on the new one when the screen is the same screen —
+ * same stall, same panel, same overlay — and dropped when it is not: a face
+ * just opened or a tab just pressed starts at its top on purpose. Never
+ * persisted.
+ */
+let lastScreenKey: string | undefined;
+
+function screenKey(view: StallView): string {
+    const item = view.overlay.kind === 'item' ? `${view.overlay.tokenId}/${view.overlay.rail}` : '';
+    return `${identityOf(view) ?? ''}|${view.panel ?? 'shop'}|${view.overlay.kind}|${item}`;
+}
 
 /**
  * The activity panel: what this page watched arrive, and what a reader asked
@@ -5911,25 +5948,6 @@ function paintActivity(
     body.append(historySection(view, handlers, scroller));
     scroller.append(body);
 
-    const key = identityOf(view) ?? '';
-    scroller.addEventListener(
-        'scroll',
-        () => {
-            activityScroll = { key, top: scroller.scrollTop };
-        },
-        { passive: true },
-    );
-    // After the tree is built, and after it is connected: a browser does not
-    // keep `scrollTop` on a detached node, so this rides a microtask the way
-    // the sheets' focus hand-off does.
-    const saved = activityScroll?.key === key ? activityScroll.top : 0;
-    if (saved > 0) {
-        queueMicrotask(() => {
-            if (scroller.isConnected) {
-                scroller.scrollTop = saved;
-            }
-        });
-    }
 }
 
 /**

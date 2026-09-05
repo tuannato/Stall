@@ -16,8 +16,16 @@
 
 export type UtxoChronik = {
     address(address: string): {
-        utxos(): Promise<{ utxos?: readonly { token?: { tokenId?: string } }[] }>;
+        utxos(): Promise<{
+            utxos?: readonly { token?: { tokenId?: string; isMintBaton?: boolean } }[];
+        }>;
     };
+};
+
+/** One utxo read, two answers: the wanted ids held, and the tokens this wallet can still mint. */
+export type Holdings = {
+    held: ReadonlySet<string>;
+    mintedHere: ReadonlySet<string>;
 };
 
 /** More token UTXOs than this and the answer is refused rather than trusted. */
@@ -39,6 +47,23 @@ export async function loadHeldTokens(
     if (wanted.size === 0) {
         return new Set();
     }
+    return (await loadHoldings(chronik, address, wanted))?.held;
+}
+
+/**
+ * The same read, answering both questions at once: which of the wanted ids
+ * the address holds, and which tokens it holds a **mint baton** for. The
+ * baton set is the one enumeration this page makes of a wallet's utxos, and
+ * it is deliberately narrow: a baton is the seller's own product, not their
+ * purse — it is how a freshly minted, unlisted token reaches the studio
+ * without its id being pasted by hand. `undefined` when the read did not
+ * answer, or answered with more utxos than this page trusts.
+ */
+export async function loadHoldings(
+    chronik: UtxoChronik,
+    address: string,
+    wanted: ReadonlySet<string>,
+): Promise<Holdings | undefined> {
     let answer;
     try {
         answer = await chronik.address(address).utxos();
@@ -50,14 +75,21 @@ export async function loadHeldTokens(
         return undefined;
     }
     const held = new Set<string>();
+    const mintedHere = new Set<string>();
     for (const utxo of utxos) {
         const id = utxo?.token?.tokenId;
-        // Only the ids we asked about: a stall's wallet is nobody's business
-        // beyond the question being answered, and the set is what gets held in
-        // memory for the life of the page.
-        if (typeof id === 'string' && wanted.has(id)) {
+        if (typeof id !== 'string' || !/^[0-9a-f]{64}$/.test(id)) {
+            continue;
+        }
+        // Only the ids we asked about, and the batons: a stall's wallet is
+        // nobody's business beyond the two questions being answered, and
+        // the sets are what gets held in memory for the life of the page.
+        if (wanted.has(id)) {
             held.add(id);
         }
+        if (utxo?.token?.isMintBaton === true) {
+            mintedHere.add(id);
+        }
     }
-    return held;
+    return { held, mintedHere };
 }

@@ -416,6 +416,13 @@ export type StallView = {
      * says the weaker thing rather than telling a seller they own nothing.
      */
     heldTokens?: ReadonlySet<string>;
+    /**
+     * Token ids whose **mint baton** the stall address holds, from the same
+     * utxo read as `heldTokens`. Not a holdings list: a baton says "this
+     * wallet can still mint this token", which is the seller's own product
+     * and not their purse. Absent means the read did not answer.
+     */
+    mintedHere?: ReadonlySet<string>;
     /** The settings walk hit its cap, so this look may not be the current one. */
     settingsTruncated?: boolean;
     /** The seller published settings this page could not read. */

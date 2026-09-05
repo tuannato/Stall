@@ -371,7 +371,7 @@ export const SHEET_MORE = 'More';
 export const STUDIO_NO_ITEMS =
     'Nothing listed or described yet. Describe a token and paste its id to start.';
 export const STUDIO_ITEMS_HINT =
-    'Minted a token that is not listed here? Describe a token, then paste its id.';
+    'A token you minted appears here while your wallet holds its mint baton. Any other: Describe a token, then paste its id.';
 
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';

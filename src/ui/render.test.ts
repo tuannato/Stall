@@ -105,6 +105,7 @@ import {
     tokenName,
     tokenTicker,
     overlayMounts,
+    describableTokenIds,
     holdsLivePaint,
 } from './render';
 import { satsForQuote } from '../domain/fiat';
@@ -10588,5 +10589,68 @@ describe('the-guide-is-linked-from-the-door-the-studio-and-the-first-stall', () 
         const firstLink = first.querySelector('[data-role="first-stall-guide-link"]') as HTMLAnchorElement;
         expect(firstLink.getAttribute('href')).toBe('/guide#listings');
         expect(firstLink.closest('[data-role="first-stall"]')).not.toBeNull();
+    });
+});
+
+describe('a-live-update-keeps-the-readers-place-on-the-shop', () => {
+    /**
+     * A reconnect, a book tick or the fiat answer repaints the whole tree,
+     * and a scroll region rebuilt from scratch starts at the top: a visitor
+     * who reopened the tab halfway down a shop or the studio was thrown to
+     * the sign. The old scroller's offset is put back when the screen is the
+     * same screen, and dropped when it is not — a face just opened or a tab
+     * just pressed starts at its top.
+     */
+    const many = Array.from({ length: 24 }, (_, i) => ({
+        ...OFFER,
+        tokenId: (i + 10).toString(16).padStart(2, '0').repeat(32),
+        outpoint: { txid: OUTPOINT.txid, outIdx: i },
+    }));
+    const shop = (over: Partial<StallView> = {}) => offersView(many, undefined, over);
+
+    it('puts the offset back on a repaint of the same screen, and not on another', async () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const h = handlers();
+            renderStall(root, shop(), h);
+            root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop = 300;
+            renderStall(root, shop(), h);
+            await Promise.resolve();
+            expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop, 'same screen').toBe(300);
+
+            renderStall(root, shop({ overlay: { kind: 'item', tokenId: many[3]!.tokenId, rail: 'listings' } }), h);
+            await Promise.resolve();
+            expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop, 'a face just opened').toBe(0);
+
+            renderStall(root, shop({ panel: 'studio' }), h);
+            root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop = 120;
+            renderStall(root, shop({ panel: 'studio' }), h);
+            await Promise.resolve();
+            expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop, 'the studio too').toBe(120);
+
+            renderStall(root, shop({ panel: 'activity' }), h);
+            await Promise.resolve();
+            expect(root.querySelector<HTMLElement>('.stall-scroll')!.scrollTop, 'another panel').toBe(0);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('a-token-this-wallet-can-still-mint-is-on-the-items-card', () => {
+    it('lists a baton-held token with no listing, record or quote, beside the rest', () => {
+        const MINTED = '44'.repeat(32);
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS], [MINTED, { ...TEA, tokenId: MINTED }]]),
+                mintedHere: new Set([MINTED]),
+                panel: 'studio',
+            }),
+        );
+        const rows = [...root.querySelectorAll('[data-role="studio-item"]')].map((r) => r.getAttribute('data-token-id'));
+        expect(rows).toEqual([TOKEN_ID, MINTED]);
+        expect(describableTokenIds(idlePubkey({ fetch: { kind: 'empty' }, mintedHere: new Set([MINTED]) }))).toEqual([MINTED]);
     });
 });
