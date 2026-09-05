@@ -38,9 +38,12 @@ export type GenesisLookup = {
  * the mint still lands on its script — requiring the signature alone was a
  * permanent false negative on tokens the seller really did mint.
  *
- * The output test is forgeable and harmless: anyone can mint a token to
- * somebody else's address, and all that buys them is the seller being allowed
- * to quote it. The seller still signs the `STLD` record either way.
+ * The output test is forgeable: anyone can mint a token to somebody else's
+ * address. What it buys them is the seller being allowed to quote it — the
+ * seller still signs the `STLD` record — and a reader line that says the
+ * genesis names this stall, which is exactly what it proves and no more. It
+ * must never be painted as "this stall minted it"; only the signed-input
+ * branch could carry that, and the reader is not told which branch decided.
  *
  * A transaction that was read and satisfies neither is decided
  * `not-attributed` — that is the answer the editor's refusal rests on. Only a

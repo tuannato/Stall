@@ -125,6 +125,7 @@ import {
     renderStall,
     sheetMounts,
 } from './ui';
+import { PAY_RATE_TIMEOUT_MS } from './ui/render';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -750,7 +751,7 @@ export function boot(
         state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
         paint();
         void (async () => {
-            const fresh = await readPayRate();
+            const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
             // Only for the sheet that asked: a buyer who closed it, or moved
             // to another item, must not have it repainted under them.
             if (
@@ -912,8 +913,20 @@ export function boot(
         );
         if (matches.length === 1) {
             const tokenId = matches[0]!.tokenId;
+            // A sheet already open holds a half-written record in the DOM and
+            // nowhere else — on a failure screen the facts land after the
+            // paint, and a seller may have opened the describe sheet in that
+            // window. The link is answered from the records either way; it
+            // may not swap a sheet out from under whoever opened it.
+            if (next.view.overlay.kind !== 'idle') {
+                return next;
+            }
             // The rate comes from the same road the Pay control takes; the
-            // sheet opens first and is repainted when it answers.
+            // sheet opens first and is repainted when it answers. The guard is
+            // checked again after the await — a buyer who closed this sheet
+            // and opened another item's has typed into that one by the time
+            // a slow answer lands, and it must not be repainted under them.
+            const claimed = generation;
             queueMicrotask(() => {
                 if (
                     state.view.route.kind === 'pubkey' &&
@@ -921,10 +934,16 @@ export function boot(
                     state.view.overlay.tokenId === tokenId
                 ) {
                     void (async () => {
-                        const fresh = await readPayRate();
-                        if (fresh !== undefined && state.view.overlay.kind === 'pay') {
-                            paint();
+                        const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
+                        if (
+                            claimed !== generation ||
+                            fresh === undefined ||
+                            state.view.overlay.kind !== 'pay' ||
+                            state.view.overlay.tokenId !== tokenId
+                        ) {
+                            return;
                         }
+                        paint();
                     })();
                 }
             });

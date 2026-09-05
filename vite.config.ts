@@ -285,5 +285,10 @@ export default defineConfig({
         include: ['src/**/*.test.ts'],
         environment: 'node',
         reporters: ['default'],
+        // A slow test at vitest's 5 s default is a red that comes and goes
+        // with the machine — measured 0/1/0 on three clean runs — and a
+        // suite that is sometimes red makes every "verified green" a false
+        // signal. Slow tests still carry their own larger budgets.
+        testTimeout: 20_000,
     },
 });

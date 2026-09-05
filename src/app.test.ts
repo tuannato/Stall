@@ -1188,3 +1188,43 @@ describe('a-pay-hint-opens-the-quotes-tab', () => {
         );
     });
 });
+
+describe('a-pay-hint-does-not-replace-an-open-sheet', () => {
+    /**
+     * On a failure screen the records land after the paint, and the `?pay=`
+     * link is answered when they do. A seller who opened the describe sheet
+     * in that window has a half-written record in the DOM and nowhere else,
+     * and CLAUDE §4's rule is that every paint nobody asked for waits while a
+     * sheet is open. This road went straight to `paint()` and swapped the
+     * overlay underneath, which is exactly the erasure that rule names.
+     */
+    it('leaves a describe sheet standing when the facts land with a match', async () => {
+        let answer: (lookup: DescriptionLookup) => void = () => {};
+        const descriptions = new Promise<DescriptionLookup>((resolve) => {
+            answer = resolve;
+        });
+        const root = document.createElement('div');
+        boot(root, async () =>
+            bookFailed(
+                { manifest: Promise.resolve(undefined), descriptions },
+                {
+                    overlay: { kind: 'describe' },
+                    tokens: new Map([[QUOTED, quotedMeta(QUOTED, 'Roasted Beans')]]),
+                    payHint: QUOTED.slice(0, 12),
+                },
+            ),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="publish-close"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+
+        answer(
+            noRecords({
+                prices: new Map([[QUOTED, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]'), 'the sheet was swapped').toBeNull();
+        expect(root.querySelector('[data-role="publish-close"]')).not.toBeNull();
+    });
+});

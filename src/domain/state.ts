@@ -509,11 +509,11 @@ export type StallView = {
      * Same record, same trust and the same absence rule as `descriptions`:
      * absent is "none found", never "none published".
      *
-     * **Nothing public paints it in this round.** The editor reads it back to
-     * the seller who signed it; the shop, the overlay and the poster paint the
-     * covenant's asked amount and nothing else, because a second money figure
-     * on an Agora row would be two prices for one thing. Test:
-     * `the-shop-paints-no-price-in-round-one`.
+     * **It never shares a row with a covenant's asked amount.** The pay rail
+     * paints it under `seller-price` on its own surface and the editor reads
+     * it back to the seller who signed it; an Agora row keeps `price`,
+     * because a second money figure on that row would be two prices for one
+     * thing. Test: `an-agora-row-never-carries-the-sellers-quote`.
      */
     prices?: ReadonlyMap<string, TokenPrice>;
     /**

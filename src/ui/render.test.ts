@@ -123,6 +123,7 @@ import { BROADCAST_BRAND, BROADCAST_CAPTION } from './copy';
 
 const PK =
     '03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+// hash160 of the dummy key 02·aa×32 — nobody's, and decodable.
 const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
 const TOKEN_ID = 'cd'.repeat(32);
 const OUTPOINT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
@@ -7398,7 +7399,11 @@ describe('the-quotes-rail-paints-on-a-shop-and-on-an-empty-stall', () => {
         // A stall that quoted nothing keeps the rail and the quiet sentence:
         // the tab exists either way, so an absent section would be a side of
         // the panel that paints nothing at all.
+        // A finished walk always lands a map, empty or not — `prices`
+        // undefined is the window before it answers, which says "still
+        // reading" and never "nothing quoted".
         const bare = paint(offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            prices: new Map(),
             shopTab: 'quotes',
         })).root;
         expect(bare.querySelector('[data-role="pay-row"]')).toBeNull();
@@ -8503,7 +8508,7 @@ describe('an-age-is-not-a-claim-about-stock', () => {
     });
 });
 
-describe('an-attributed-token-says-this-stall-minted-it', () => {
+describe('an-attributed-token-says-its-genesis-names-this-stall', () => {
     /**
      * The negative line and silence were the only two shapes, so absence meant
      * either "this stall minted it" or "this page could not tell". The
@@ -8518,6 +8523,12 @@ describe('an-attributed-token-says-this-stall-minted-it', () => {
         expect(chip).not.toBeNull();
         expect(chip!.textContent).toBe(copy.QUOTE_MINTED_CHIP);
         expect(row.textContent).not.toContain(copy.QUOTE_NOT_MINTED_HERE);
+        // Two of the three sources behind `attributed` are the minter's own
+        // claim and a mint output that paid this stall — neither proves who
+        // signed the genesis, so the row may not say this stall minted it.
+        for (const claim of ['minted here', 'minted by this stall']) {
+            expect(row.textContent!.toLowerCase(), claim).not.toContain(claim);
+        }
     });
 
     it('carries the line in the pay sheet', () => {
@@ -8530,6 +8541,9 @@ describe('an-attributed-token-says-this-stall-minted-it', () => {
         const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
         const line = sheet.querySelector('[data-role="quote-minted"]');
         expect(line).not.toBeNull();
+        for (const claim of ['minted here', 'minted by this stall']) {
+            expect(sheet.textContent!.toLowerCase(), claim).not.toContain(claim);
+        }
         expect(line!.textContent).toBe(copy.QUOTE_MINTED_HERE);
     });
 });
@@ -9262,5 +9276,100 @@ describe('the-payers-address-is-offered-as-a-citation', () => {
         expect(root.querySelector('[data-role="payer-address"]')).toBeNull();
         expect(root.querySelector('[data-role="payer-copy"]')).toBeNull();
         expect(root.textContent).not.toContain(copy.EVENT_PAYER_NOTE);
+    });
+});
+
+describe('the-price-lede-does-not-say-buyers-cannot-see-the-quote', () => {
+    /**
+     * The lede under the price field was written before the pay rail shipped,
+     * when nothing public painted the figure, and it kept saying so after
+     * `DESC_TWO_PRICES` on the same form began saying the opposite. A seller
+     * signs a permanent record under the sentence beside the field, so that
+     * sentence may not describe a round that is over. Pinned by absence: the
+     * words that were false, not whichever replaced them.
+     */
+    it('carries no claim that buyers do not see the figure', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+            }),
+        );
+        expect(root.textContent).toContain(copy.DESC_TWO_PRICES);
+        expect(root.textContent).not.toMatch(/does not show it to buyers/i);
+        expect(copy.DESC_PRICE_LEDE).not.toMatch(/this round/i);
+    });
+});
+
+describe('a-quotes-count-is-a-number-only-when-every-record-is-a-row', () => {
+    /**
+     * A label's number is a claim about the seller. Three ways a record in
+     * `view.prices` fails to become a row, and none of them is "the seller
+     * quoted nothing": the walk has not answered yet (a failure screen paints
+     * before its facts land), the code is a unit this page does not paint, or
+     * the token is a kind `isPriceable` refuses. Each used to print `Quotes ·
+     * 0` — the first one under `QUOTES_NONE` as the first sentence a scanned
+     * link met — which is the empty-versus-unreachable collapse on a count.
+     */
+    const NFT: TokenMeta = {
+        ...BEANS,
+        tokenId: 'ee'.repeat(32),
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' },
+    };
+
+    it('prints no number and no "nothing quoted" while the walk is still out', () => {
+        const { root } = paint(railView({ shopTab: 'quotes', prices: undefined }));
+        expect(railTab(root, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+        expect(root.querySelector('[data-role="quotes-none"]')).toBeNull();
+        expect(root.querySelector('[data-role="quotes-reading"]')?.textContent).toBe(
+            copy.QUOTES_READING,
+        );
+    });
+
+    it('withholds the number when a quote is in a unit this page does not paint', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'quotes',
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    ['ee'.repeat(32), { code: 'eur', exponent: 2, amount: 500n }],
+                ]),
+            }),
+        );
+        expect(railTab(root, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+        expect(root.querySelector('[data-role="pay-unreadable"]')?.textContent).toBe(
+            copy.quotedUnreadable(1),
+        );
+        expect(root.querySelector('[data-role="quotes-none"]')).toBeNull();
+    });
+
+    it('withholds the number when a quote sits on a kind this page refuses', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'quotes',
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [NFT.tokenId, NFT],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, QUOTE_USD],
+                    [NFT.tokenId, QUOTE_USD],
+                ]),
+            }),
+        );
+        expect(railTab(root, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+        expect(root.querySelector('[data-role="pay-unreadable"]')?.textContent).toBe(
+            copy.quotedUnreadable(1),
+        );
+        expect(root.querySelectorAll('[data-role="pay-row"]')).toHaveLength(1);
+    });
+
+    it('still says zero for a walk that finished and found no quote', () => {
+        const { root } = paint(railView({ shopTab: 'quotes', prices: new Map() }));
+        expect(railTab(root, 'quotes')!.textContent).toBe(
+            copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 0),
+        );
+        expect(root.querySelector('[data-role="quotes-none"]')).not.toBeNull();
     });
 });

@@ -402,7 +402,8 @@ export const SCREENS: Record<string, StallView> = {
                 seenAtMs: TRIED_AT_MS - 150_000,
                 sats: 25_000_000n,
                 payment: { tokenId: T1, quantity: 2n },
-                payerAddress: 'ecash:qq9h6d0a5q65fgywv4ry64x04ur9wm2sxgx4vh8vqx',
+                // hash160 of the dummy key 02·bb×32 — nobody's, and decodable.
+                payerAddress: 'ecash:qr9w00zzq6s88t3e97h3ktsuj32y3m87t5wzyf3kzq',
                 status: { kind: 'finalized', avalanche: true },
             },
             { txid: '77'.repeat(32), kind: 'other', seenAtMs: TRIED_AT_MS - 180_000 },

@@ -992,7 +992,7 @@ export const DESC_PRICE_CODE_LABEL = 'Unit';
 export const priceUnitGlyph = (code: string): string =>
     code === 'usd' ? '$' : code.toUpperCase();
 export const DESC_PRICE_LEDE =
-    'Your own asking figure, published as you write it. Nothing here converts it, and this round does not show it to buyers — the price on a listing is still what its covenant asks.';
+    'Your own asking figure, published as you write it. Nothing here converts it.';
 export const DESC_PRICE_REFUSED =
     'A price is a figure above zero, with up to two decimal places and no separators — “12.50”, not “1,200” or “0”.';
 /**
@@ -1098,6 +1098,11 @@ export const shopTabLabel = (side: string, count?: number): string =>
 export const QUOTES_NONE =
     'This seller has not quoted anything to pay for directly.';
 /**
+ * The records are still being read — a failure screen paints before its
+ * facts land. Not `QUOTES_NONE`, which is a claim about the seller.
+ */
+export const QUOTES_READING = 'Still reading the seller’s records.';
+/**
  * The records walk threw. **The read did not finish** — never that the records
  * came back damaged, which is a different thing (a record this page could not
  * decode) and does not stop a walk.
@@ -1123,20 +1128,24 @@ export const QUOTE_NOT_MINTED_HERE = 'Token minted by another wallet';
  * The positive half, so absence stops being ambiguous.
  *
  * With only the negative line and silence, a row that said nothing meant
- * either "this stall minted it" or "this page could not tell" — two different
- * facts wearing one shape, which is the empty-versus-unreachable collapse on
- * the quote rail.
+ * either "attributed" or "this page could not tell" — two different facts
+ * wearing one shape, which is the empty-versus-unreachable collapse on the
+ * quote rail.
  *
- * **It says who minted, and vouches for nothing else.** The rule proves the
- * provenance of the mint; it cannot prove a name is not somebody else's brand,
- * and no reader of a chain can. A seller who mints their own token and calls
- * it after a well-known one is attributed, and these two sentences are still
- * exactly true of it — they name the minter and say nothing about the word on
- * the label. A chip on the row, where the space is a name column's; the whole
+ * **It says what the genesis points at, and never who signed it.** Three
+ * sources decide `attributed`, and two of them prove no signature: an ALP
+ * `authPubkey` is the minter's own unauthenticated claim, and a mint output
+ * paying this stall's script is something anyone can send. Only the third —
+ * the stall's key on the genesis input — proves this stall minted it, and the
+ * reader cannot tell which of the three it has. So the sentence is the
+ * weakest true one: the genesis names this stall. It vouches for nothing
+ * else — not that the name is not somebody's brand, and no reader of a chain
+ * can. A chip on the row, where the space is a name column's; the whole
  * sentence in the sheet, which a scanned link can open with no row on screen.
  */
-export const QUOTE_MINTED_CHIP = 'Minted here';
-export const QUOTE_MINTED_HERE = 'Token minted by this stall';
+export const QUOTE_MINTED_CHIP = 'Genesis names this stall';
+export const QUOTE_MINTED_HERE =
+    'This token’s genesis names this stall — as the minter’s own claim, or by paying the minted supply here. It says where the token came from, not who owns its name.';
 /** The units `recordAge` counts in, as a reader says them. */
 const AGE_NOUNS = {
     minute: 'minute',
@@ -1174,7 +1183,12 @@ export const PAY_OPEN = 'Pay';
  */
 export const PAY_POINTER =
     'Also: the seller\u2019s own quote for one, paid directly \u2014 not this listing \u2192';
-/** Our own gap, counted rather than hidden \u2014 the listings line, one surface over. */
+/**
+ * Our own gap, counted rather than hidden \u2014 the listings line, one surface
+ * over. It covers every record that is not a row: a genesis this page never
+ * read, a quote in a unit it does not paint, a token of a kind it refuses to
+ * price. The unit is never named (§5), only the record counted.
+ */
 export const quotedUnreadable = (n: number): string =>
     `${n} quoted ${n === 1 ? 'item' : 'items'} this page could not read.`;
 

@@ -219,5 +219,5 @@ describe('built-bundle-times-out-a-chronik-request', () => {
 
         // And nothing in the chronik path is left waiting forever.
         expect(code).not.toMatch(/timeout:\s*0\s*,\s*responseType:\s*["']arraybuffer["']/);
-    });
+    }, 120_000);
 });

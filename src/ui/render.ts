@@ -1717,13 +1717,16 @@ export function quotedItems(view: StallView): QuotedItem[] {
  * inventory.
  */
 export function unreadableQuotes(view: StallView): number {
-    let n = 0;
-    for (const [tokenId, price] of view.prices ?? []) {
-        if (PAINTED_QUOTE_CODES.includes(price.code) && !view.tokens.has(tokenId)) {
-            n += 1;
-        }
+    // Every record in `prices` that did not become a row, whatever stopped
+    // it: a genesis this page never read, a unit it does not paint, a kind
+    // `isPriceable` refuses. Counting only the first of those let the other
+    // two vanish from the rows and the count alike, and a label then said
+    // `0` about a seller who had quoted.
+    const prices = view.prices;
+    if (prices === undefined) {
+        return 0;
     }
-    return n;
+    return prices.size - quotedItems(view).length;
 }
 
 /**
@@ -1791,10 +1794,17 @@ function listingsCount(view: StallView): number | undefined {
 }
 
 function quotesCount(view: StallView): number | undefined {
-    if (view.descriptionsFailed === true || unreadableQuotes(view) > 0) {
+    // A number only when this page read the whole side and every record it
+    // read is a row on it. No records yet is the failure screen's window
+    // before its facts land — a zero there is a claim about the seller made
+    // before anything was read, the same collapse `listingsCount` refuses
+    // with no fetch.
+    const prices = view.prices;
+    if (prices === undefined || view.descriptionsFailed === true) {
         return undefined;
     }
-    return quotedItems(view).length;
+    const rows = quotedItems(view).length;
+    return rows === prices.size ? rows : undefined;
 }
 
 /**
@@ -1882,7 +1892,14 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
         note.setAttribute('data-role', 'quotes-truncated');
         section.append(note);
     }
-    if (
+    if (view.prices === undefined) {
+        // The walk has not answered — a failure screen paints before its
+        // facts land. "Nothing quoted" is a sentence about the seller and
+        // cannot be said before their records were read.
+        const reading = el('p', 'fine', copy.QUOTES_READING);
+        reading.setAttribute('data-role', 'quotes-reading');
+        section.append(reading);
+    } else if (
         items.length === 0 &&
         unreadable === 0 &&
         view.descriptionsFailed !== true &&
@@ -3147,7 +3164,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 export const PAY_RATE_MAX_AGE_MS = 120_000;
 
 /** A refetch that has not answered by here is "no fresh price", not a wait. */
-const PAY_RATE_TIMEOUT_MS = 8_000;
+export const PAY_RATE_TIMEOUT_MS = 8_000;
 
 /**
  * The valve's own threshold when the seller stated none.

@@ -21,9 +21,10 @@ export type GenesisAttribution = 'attributed' | 'not-attributed' | 'unknown';
  *
  * `genesisInfo.authPubkey` is bytes the minter chose — chronik's own fixture
  * carries the ASCII "Token Pubkey" in that field — so it is screened before it
- * is compared and never reaches a screen. Forging it can only make a token
- * look like this stall's own, which is the direction that costs a seller
- * nothing: they are the one who signs the quote either way.
+ * is compared and never reaches a screen. Forging it makes a token look like
+ * this stall's own: the seller is still the one who signs the quote, and the
+ * reader paints the claim as what it is — a genesis that names this stall —
+ * never as proof of who minted, which this field cannot give.
  */
 const COMPRESSED_PUBKEY = /^0[23][0-9a-f]{64}$/;
 

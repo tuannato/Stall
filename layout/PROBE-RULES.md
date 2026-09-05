@@ -190,6 +190,11 @@ nothing.
   could press. Measured with the row added: **2,600 boxes and 143.8s**, +48 on
   2,552 and no screen added.
 
+The quote row's chip became "Genesis names this stall" (longer than "Minted
+here") and the quotes rail gained a `QUOTES_READING` line for the window
+before the walk answers (2026-09-05). Measured alone:
+**2,602 boxes and 141.2s**; the name-floor rule did not move on any look.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels

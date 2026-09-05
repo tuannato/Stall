@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { encodeCashAddress } from 'ecashaddrjs';
+import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
@@ -2715,5 +2716,68 @@ describe('a-live-listing-does-not-move-a-reader-off-the-quotes-tab', () => {
         expect(listings(), 'and the label counted it').toContain('2');
         expect(pressed(), 'and the reader did not move').toBe('shop-tab-quotes');
         expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
+    });
+});
+
+describe('a-pay-hint-rate-lands-only-on-the-sheet-that-asked', () => {
+    /**
+     * A `?pay=` link opens one item's sheet and asks for a rate. The guard
+     * that stops that answer repainting a *different* sheet was checked before
+     * the fetch and dropped after it — so a buyer who closed item A, opened
+     * item B and typed a quantity had A's late rate rebuild B's sheet under
+     * them, quantity gone. `onOpenPay` keeps the full guard across its await;
+     * this road has to as well.
+     */
+    const TOKEN_B = 'bb'.repeat(32);
+    const FROZEN = 20_000_000n;
+    const META_A: TokenMeta = {
+        tokenId: TOKEN,
+        name: 'Roasted Beans',
+        ticker: 'BEAN',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('keeps a quantity typed into the other item’s sheet', async () => {
+        // Every ask — the glance rate the listings paint and the rate A's
+        // sheet froze — hangs until B is open; B's own ask is then answered
+        // at once, and A's is answered last, over B's typed quantity.
+        let answerA: (rate: bigint) => void = () => {};
+        const rateA = new Promise<bigint>((resolve) => {
+            answerA = resolve;
+        });
+        priceControl.fetch = () => rateA;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([
+                    [TOKEN, META_A],
+                    [TOKEN_B, { ...META_A, tokenId: TOKEN_B, name: 'Second' }],
+                ]),
+                prices: new Map([
+                    [TOKEN, { code: 'usd', exponent: 2, amount: 500n }],
+                    [TOKEN_B, { code: 'usd', exponent: 2, amount: 700n }],
+                ]),
+                payHint: TOKEN.slice(0, 12),
+            }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay"]'), 'the link opened A').not.toBeNull();
+
+        (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+        priceControl.fetch = async () => FROZEN;
+        const opens = root.querySelectorAll('[data-role="pay-open"]');
+        expect(opens).toHaveLength(2);
+        (opens[1] as HTMLButtonElement).click();
+        await flush();
+        const qty = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        expect(qty, 'B is on screen with its figure').not.toBeNull();
+        qty.value = '3';
+        qty.dispatchEvent(new Event('input', { bubbles: true }));
+        await flush();
+
+        answerA(FROZEN);
+        await flush();
+        const after = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        expect(after.value, 'A’s late answer rebuilt B’s sheet').toBe('3');
     });
 });
