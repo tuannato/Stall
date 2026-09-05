@@ -133,7 +133,14 @@ export type PosterFormat = 'print' | 'square' | 'story' | 'stream';
 
 export type Overlay =
     | { kind: 'idle' }
-    | { kind: 'buy'; outpoint: Outpoint }
+    /**
+     * One token's face, on one rail: the expander raised to a surface of its
+     * own. Keyed by token and rail, never by outpoint — a partial fill
+     * re-creates the remainder as a new UTXO and would close a face keyed on
+     * the old one under the reader; a quote has no outpoint at all; and one
+     * item never stands for both rails.
+     */
+    | { kind: 'item'; tokenId: string; rail: 'listings' | 'quotes' }
     /**
      * The stall's own record: name, tagline, announcement, look, decorations.
      * Composing the settings transaction — disclosure, not a wallet.

@@ -136,7 +136,7 @@ const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
 export const UNBROKEN = 'A'.repeat(178);
 
 export const handlers: StallHandlers = {
-    onBuy: () => {},
+    onOpenItem: () => {},
     onRetry: () => {},
     onCloseSheet: () => {},
     onOpenStall: () => {},
@@ -219,12 +219,12 @@ export const SCREENS: Record<string, StallView> = {
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
     }),
-    expanded: base({
+    'item-listing': base({
         fetch: {
             kind: 'offers',
             offers: [offer(T1, 0, 120_000n), offer(T1, 3, 150_000n), offer(T2, 1, 87_500n), offer(FIRMA_WITHHELD, 0, 100_000n)],
         },
-        overlay: { kind: 'buy', outpoint: OUT },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
         // The longest thing a seller can publish, with no spaces to break on.
         descriptions: new Map([[T1, UNBROKEN]]),
     }),
@@ -292,6 +292,47 @@ export const SCREENS: Record<string, StallView> = {
         // is a card one line shorter, measured beside the dated one.
         quoteTimes: QUOTE_TIMES,
         overlay: { kind: 'pay', tokenId: QUOTED },
+    }),
+    /*
+     * Two more states of the same sheet, staged from the view because only a
+     * press produces them: the valve's "moved" outcome, where the control
+     * restates the figure it will open and a line says the rate jumped past
+     * the seller's tolerance; and a quote under the dust floor, where no link
+     * is composed and one line says which way out there is. Geometry only —
+     * every ground on them is `pay`'s.
+     */
+    'pay-moved': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+        payRate: PAY_RATE,
+        payRateOutcome: 'moved',
+    }),
+    'pay-dust': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        // One satoshi of XEC: no rate involved, and under `DUST_SATS`.
+        prices: new Map<string, TokenPrice>([[T1, { code: 'xec', exponent: 2, amount: 1n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    /*
+     * The quote rail's face: the seller's words as the title, the genesis
+     * name under it, the figure in the unit they wrote, Pay, and the fold.
+     * In-flow where the rows were, no scrim. The listings' face is
+     * `item-listing`.
+     */
+    'item-quote': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
     }),
     /*
      * The shop that sells decorations, which is the one page where the
@@ -780,6 +821,9 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // Its figures are measured; the decoration variants would be `pay`'s,
     // painted twice.
     'pay-xec',
+    'pay-moved',
+    'pay-dust',
+    'item-quote',
 ]);
 
 /**
@@ -811,6 +855,20 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
      */
     'crowded',
     'sparse',
+    /*
+     * Pruned 2026-09-05 to pay for the item face, which is a screen the
+     * contrast pass samples (`item-listing`, the old `expanded`): `pay-xec`
+     * is `pay`'s sheet with one figure in another unit, `emoji-name` is the
+     * sign's ground with a different string on it. The three new sheet
+     * states are geometry from the day they shipped: `pay-moved` and
+     * `pay-dust` are `pay`'s card with one line changed, `item-quote` is the
+     * quote row's ink on the card ground `item-listing` already samples.
+     */
+    'pay-xec',
+    'emoji-name',
+    'pay-moved',
+    'pay-dust',
+    'item-quote',
 ]);
 
 /**

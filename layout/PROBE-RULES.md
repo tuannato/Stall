@@ -773,6 +773,26 @@ change, which is what "pay for a screen by pruning one" was protecting — and
 the reading being a full ten seconds under the band above is the box, not the
 matrix, exactly as the paragraph before this one says.
 
+**2026-09-05, the item face: 132.4s, contrast 100.4s over 2,035 boxes** (−566
+on 2,601), every rule green, run alone and cold. The expander became a face —
+one token on one rail, painted in flow where the rows were, with no scrim —
+and the rows lost their glance lines (rate, fiat, "lowest of N", ticker and
+stock) to it, which is where most of the boxes went: a glance line was a
+`CONTRAST_TEXT` target on every row of every offers screen, and now it is
+one box on one face. The `expanded` screen is `item-listing` (same payload:
+`.row.big dd`, the withheld FIRMA row, the unbroken description, the
+listings block), so the rule that measures a long asked figure against the
+name column still has a screen to read. Three sheet states joined,
+**geometry only**: `pay-moved` (the valve's outcome staged on the view,
+`payRateOutcome`), `pay-dust` (a one-satoshi XEC quote, no link composed),
+and `item-quote` (the quote rail's face). Two screens left the contrast
+pass to pay for the face being sampled: `pay-xec` is `pay`'s sheet with a
+figure in another unit, `emoji-name` is the sign's ground under a different
+string. Both keep their geometry rules. The face's back control is a
+`<button>` with no chrome of its own at a 44px hit target, which the
+no-controls rule on the broadcast never sees because the broadcast mounts no
+overlay at all.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var

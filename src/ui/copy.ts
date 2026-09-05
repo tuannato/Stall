@@ -1238,6 +1238,16 @@ export const PAY_RATE_REFRESH = 'Get a fresh price';
  * final line or the borrowed-id warning, which stay where they are.
  */
 export const PAY_HOW_FOLD = 'How this works';
+/** Which rail a shop row is on, under its name: the covenant's book, or the seller's own quote. */
+export const ROW_LABEL_AGORA = 'Agora';
+export const ROW_LABEL_PAY = 'Pay the seller';
+/** The face's close control: back to the rail it came from. */
+export const ITEM_BACK_LISTINGS = '\u2190 Listings';
+export const ITEM_BACK_QUOTES = '\u2190 Quotes';
+/** Under the Pay control on a quote's face — the one sentence, the rest folds. */
+export const QUOTE_PAID_DIRECT = 'Paid directly to the seller.';
+/** The quote face's pointer to the other rail, when the token is listed too. */
+export const LISTED_POINTER = 'Also listed on Agora \u2192';
 /** The Pay control after the rate moved: it restates the figure it will open. */
 export const payFigure = (xec: string): string => `Pay ${xec} ${XEC}`;
 export const PAY_NO_RATE_WHY =

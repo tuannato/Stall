@@ -104,10 +104,11 @@ import {
     priceTier,
     renderStall,
     resetIconsForTests,
-    sheetMounts,
     stallBaseUrl,
     tokenName,
     tokenTicker,
+    overlayMounts,
+    holdsLivePaint,
 } from './render';
 import { satsForQuote } from '../domain/fiat';
 import { formatXec,
@@ -161,7 +162,7 @@ const OFFER: StallOffer = {
 
 function handlers() {
     return {
-        onBuy: vi.fn(),
+        onOpenItem: vi.fn(),
         onRetry: vi.fn(),
         onCloseSheet: vi.fn(),
         onOpenStall: vi.fn(),
@@ -324,7 +325,7 @@ describe('empty vs unreachable', () => {
         ) as HTMLButtonElement;
         retry.click();
         expect(h.onRetry).toHaveBeenCalledTimes(1);
-        expect(h.onBuy).not.toHaveBeenCalled();
+        expect(h.onOpenItem).not.toHaveBeenCalled();
     });
 });
 
@@ -478,7 +479,7 @@ describe('asked-amount-not-covered', () => {
         expect((row as HTMLButtonElement).disabled).toBe(false);
 
         (row as HTMLButtonElement).click();
-        expect(h.onBuy).toHaveBeenCalledWith(OUTPOINT);
+        expect(h.onOpenItem).toHaveBeenCalledWith(TOKEN_ID, 'listings');
     });
 
     it('lets an expanded row span the grid so the neighbour keeps its price', () => {
@@ -489,30 +490,30 @@ describe('asked-amount-not-covered', () => {
             tokenId: OTHER_TOKEN,
             outpoint: { txid: OUTPOINT.txid, outIdx: 1 },
         };
-        const { root } = paint(
-            idlePubkey({
-                fetch: { kind: 'offers', offers: [OFFER, neighbour] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
-                tokens: new Map([
-                    [TOKEN_ID, BEANS],
-                    [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
-                ]),
-                // Any look: the span is no longer one layout's privilege, so
-                // the guarantee is asserted on the default one.
-                theme: decodeTheme(RURAL_THEME_ID),
-            }),
-        );
+        const view = idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER, neighbour] },
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            tokens: new Map([
+                [TOKEN_ID, BEANS],
+                [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
+            ]),
+            theme: decodeTheme(RURAL_THEME_ID),
+        });
+        const { root } = paint(view);
         const stall = root.querySelector('.stall') as HTMLElement;
-        const cards = [...stall.querySelectorAll('.item')];
-        expect(cards).toHaveLength(2);
-        // By class, not by position: `compareOffers` orders by token id, and
-        // which token happens to sort first is not what this test is about.
-        expect(cards.filter((c) => c.classList.contains('open'))).toHaveLength(1);
+        // The face replaces the rows outright: no card shares a grid with it,
+        // so there is no neighbour for an opened item to crush.
+        expect(stall.querySelectorAll('.item')).toHaveLength(0);
         const prices = stall.querySelectorAll('[data-role="price"]');
-        expect(prices).toHaveLength(2);
+        expect(prices).toHaveLength(1);
         expect(prices[0]?.textContent).toBe('1,200');
-        expect(prices[1]?.textContent).toBe('1,200');
-        expect(stall.contains(prices[1]!)).toBe(true);
+        // Closed, both cards are back, each with its own figure.
+        const closed = paint({ ...view, overlay: { kind: 'idle' } }).root;
+        expect(closed.querySelectorAll('.item')).toHaveLength(2);
+        const both = closed.querySelectorAll('[data-role="price"]');
+        expect(both).toHaveLength(2);
+        expect(both[0]?.textContent).toBe('1,200');
+        expect(both[1]?.textContent).toBe('1,200');
         // Whether the span actually keeps it on screen is a browser fact this
         // runner cannot see: happy-dom does not lay out. What is asserted here
         // is that the neighbour and its price are still rendered at all.
@@ -530,7 +531,7 @@ describe('handoff-does-not-claim-this-maker-is-selected', () => {
         const { root, h } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 stallName: "Nato's Corner",
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
@@ -549,7 +550,7 @@ describe('handoff-does-not-claim-this-maker-is-selected', () => {
         // This origin builds nothing, so it has no fee of its own to quote.
         expect(text).not.toContain('Network fee');
 
-        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const detail = root.querySelector('[data-role="item-face"]') as HTMLElement;
         expect(detail).not.toBeNull();
         expect(detail.textContent).toContain(HANDOFF_MAY_PRESELECT);
         expect(detail.textContent).toContain(HANDOFF_PRICE_IS_NOT_THE_ROW);
@@ -565,10 +566,10 @@ describe('handoff-does-not-claim-this-maker-is-selected', () => {
 
         // Both disclosure lines sit with the link, in the expander, not a sheet.
         expect(root.querySelector('.sheet')).toBeNull();
-        const head = root.querySelector('button.item-head') as HTMLButtonElement;
-        head.click();
+        const back = root.querySelector('[data-role="item-back"]') as HTMLButtonElement;
+        back.click();
         expect(h.onCloseSheet).toHaveBeenCalledTimes(1);
-        expect(h.onBuy).not.toHaveBeenCalled();
+        expect(h.onOpenItem).not.toHaveBeenCalled();
     });
 });
 
@@ -992,7 +993,7 @@ describe('min-exceeds-remaining-is-not-buyable', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [stranded] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -1006,7 +1007,7 @@ describe('min-exceeds-remaining-is-not-buyable', () => {
         expect(text).not.toContain(PRICE_FROM);
 
         // Cashtab drops this offer too, so a link there is a dead end.
-        expect(root.querySelector('[data-role="detail"] a.buy')).toBeNull();
+        expect(root.querySelector('[data-role="item-face"] a.buy')).toBeNull();
         expect(text).toContain('only the seller can cancel it');
     });
 });
@@ -1016,7 +1017,7 @@ describe('look-for-is-not-the-min-take', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -1025,7 +1026,7 @@ describe('look-for-is-not-the-min-take', () => {
         expect(text).toContain('1,200 XEC');
         expect(text).not.toContain('priced at 1,200');
         expect(text).not.toContain('the one priced at');
-        const cta = root.querySelector('[data-role="detail"] a.buy') as HTMLAnchorElement;
+        const cta = root.querySelector('[data-role="item-face"] a.buy') as HTMLAnchorElement;
         expect(cta.href).not.toContain('action=');
         expect(cta.href).not.toContain('quantity=');
     });
@@ -1036,13 +1037,13 @@ describe('token identity on the row and sheet', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
         expect(root.textContent).toContain('Roasted Beans');
         expect(root.textContent).toContain('BEAN');
-        expect(root.querySelector('.item-q')?.textContent).toContain('BEAN');
+        expect(root.querySelector('[data-role="item-face"]')?.textContent).toContain('BEAN');
         expect(root.textContent).toContain(TOKEN_TICKER);
     });
 
@@ -1056,11 +1057,11 @@ describe('token identity on the row and sheet', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, tickerOnly]]),
             }),
         );
-        expect(root.querySelector('.item-n')?.textContent).toBe('BEAN');
+        expect(root.querySelector('.face-nm')?.textContent).toBe('BEAN');
         expect(root.textContent).not.toContain(TOKEN_TICKER);
     });
 
@@ -1096,6 +1097,7 @@ describe('rate-is-not-the-asked-price', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [PARTIAL_LOT] },
                 tokens: new Map([[TOKEN_ID, oneDec]]),
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
         expect(
@@ -1124,7 +1126,7 @@ describe('unknown-decimals-is-not-a-rate', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [PARTIAL_LOT] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
         const rate = root.querySelector('[data-role="rate"]') as HTMLElement;
@@ -1139,7 +1141,7 @@ describe('unknown-decimals-is-not-a-rate', () => {
             (root.querySelector('[data-role="price"]') as HTMLElement).textContent,
         ).toBe('1,045.01');
         // A missing genesis must not mint a decimals=0 token fact.
-        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const detail = root.querySelector('[data-role="item-face"]') as HTMLElement;
         expect(detail.textContent).not.toContain(TOKEN_DECIMALS);
         expect(detail.textContent).not.toContain(TOKEN_TYPE);
     });
@@ -1150,6 +1152,7 @@ describe('unknown-decimals-is-not-a-rate', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [PARTIAL_LOT] },
                 tokens: new Map([[TOKEN_ID, zeroDec]]),
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
         const rate = root.querySelector('[data-role="rate"]')?.textContent;
@@ -1174,6 +1177,7 @@ describe('tiny-rate-is-not-free', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [tiny] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
         const rate = root.querySelector('[data-role="rate"]') as HTMLElement;
@@ -1199,7 +1203,7 @@ describe('unbuyable-has-no-rate', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [stranded] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -1208,7 +1212,7 @@ describe('unbuyable-has-no-rate', () => {
         expect(root.querySelector('[data-role="price"]')).toBeNull();
         expect(root.textContent).not.toContain(tokenRate('1,200'));
         expect(root.textContent).not.toContain('XEC/token');
-        expect(root.querySelector('[data-role="detail"] a.buy')).toBeNull();
+        expect(root.querySelector('[data-role="item-face"] a.buy')).toBeNull();
     });
 });
 
@@ -1222,19 +1226,19 @@ describe('cashtab-link-is-not-inside-the-row-button', () => {
         const { root, h } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
         const link = root.querySelector('a.buy') as HTMLAnchorElement;
-        const head = root.querySelector('button.item-head') as HTMLButtonElement;
+        const back = root.querySelector('[data-role="item-back"]') as HTMLButtonElement;
         expect(link).not.toBeNull();
-        expect(head).not.toBeNull();
-        expect(head.contains(link)).toBe(false);
+        expect(back).not.toBeNull();
+        expect(back.contains(link)).toBe(false);
         expect(link.closest('button')).toBeNull();
 
         link.click();
-        expect(h.onBuy).not.toHaveBeenCalled();
+        expect(h.onOpenItem).not.toHaveBeenCalled();
         expect(h.onCloseSheet).not.toHaveBeenCalled();
     });
 });
@@ -1244,11 +1248,11 @@ describe('token-facts-on-the-expander', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
-        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const detail = root.querySelector('[data-role="item-face"]') as HTMLElement;
         expect(detail.textContent).toContain(TOKEN_TICKER);
         expect(detail.textContent).toContain('BEAN');
         expect(detail.textContent).toContain(TOKEN_ID_LABEL);
@@ -1271,11 +1275,11 @@ describe('token-facts-on-the-expander', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, noType]]),
             }),
         );
-        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const detail = root.querySelector('[data-role="item-face"]') as HTMLElement;
         expect(detail.textContent).not.toContain(TOKEN_TYPE);
         expect(detail.textContent).toContain(TOKEN_ID);
         expect(detail.textContent).not.toContain(TOKEN_ID.slice(0, 10) + '…');
@@ -1586,9 +1590,12 @@ describe('token icon', () => {
             // is its own variant now: 128 for the 44px row cell, 256 for
             // the 120–140px hero, each fetched exactly once. A shared 64
             // was the old contract, and it painted every hero soft.
+            // The rows fetch 128 and the face's hero 256: one paint of each.
+            const rows = offersView(two, undefined, {});
             const view = offersView(two, undefined, {
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             });
+            paint(rows);
             paint(view);
             expect(images).toHaveLength(2);
             expect(images[0]!.getAttribute('src')).toBe(iconUrl(TOKEN_ID));
@@ -1596,11 +1603,12 @@ describe('token icon', () => {
             expect(images[0]!.referrerPolicy).toBe('no-referrer');
             images[0]!.dispatchEvent(new Event('load'));
             images[1]!.dispatchEvent(new Event('load'));
+            const againRows = paint(rows);
             const again = paint(view);
             paint(view);
-            // Repaints clone the cached nodes; nothing asks the network twice.
+            // Three more paints, no new Image: each is a clone of the one loaded.
             expect(images).toHaveLength(2);
-            const row = again.root.querySelector('.item-ic:not(.item-ic-lg) img');
+            const row = againRows.root.querySelector('.item-ic:not(.item-ic-lg) img');
             const hero = again.root.querySelector('.item-ic-lg img');
             expect(row).not.toBeNull();
             expect(hero).not.toBeNull();
@@ -2090,15 +2098,15 @@ describe('expanded-card-shows-a-large-token-image', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
-        const detail = root.querySelector('[data-role="detail"]') as HTMLElement;
-        expect(detail).not.toBeNull();
-        const big = detail.querySelector('.item-ic.item-ic-lg') as HTMLElement;
+        const face = root.querySelector('[data-role="item-face"]') as HTMLElement;
+        expect(face).not.toBeNull();
+        const big = face.querySelector('.item-ic.item-ic-lg') as HTMLElement;
         expect(big).not.toBeNull();
-        // It is the first thing in the panel.
-        expect(detail.firstElementChild).toBe(big);
+        // The hero leads the card's head row: the first thing after the back control.
+        expect(face.querySelector('.face-h')?.firstElementChild).toBe(big);
         // No icon has loaded, so it holds the initials, never an empty square.
         expect(big.textContent?.length ?? 0).toBeGreaterThan(0);
     });
@@ -2437,8 +2445,19 @@ describe('grouped-price-is-an-asked-amount-of-this-stall', () => {
             (p) => p.textContent,
         );
         expect(prices[1], 'the grouped card shows the cheapest ask').toBe('300');
-        const lots = root.querySelector('.item-lots');
-        expect(lots?.textContent).toBe(lowestOfListings(2));
+        // The rows carry no glance lines; "lowest of N" is the face's.
+        expect(root.querySelector('.item-lots')).toBeNull();
+        const face = paint(
+            offersView(
+                [dear, other, cheap],
+                new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
+                ]),
+                { overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } },
+            ),
+        ).root;
+        expect(face.querySelector('.item-lots')?.textContent).toBe(lowestOfListings(2));
     });
 
     it('lists every offer of the token in the detail, cheapest first', () => {
@@ -2456,7 +2475,7 @@ describe('grouped-price-is-an-asked-amount-of-this-stall', () => {
         };
         const { root } = paint(
             offersView([dear, cheap], undefined, {
-                overlay: { kind: 'buy', outpoint: cheap.outpoint },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             }),
         );
         const block = root.querySelector('[data-role="listings"]');
@@ -2469,7 +2488,7 @@ describe('grouped-price-is-an-asked-amount-of-this-stall', () => {
         // each wears the price role so the layout guard protects it too.
         expect(figures).toEqual(['300 XEC', '900 XEC']);
         // The card's stock line is the sum of real UTXO remainders.
-        expect(root.querySelector('.item-q')?.textContent).toContain('24 left');
+        expect(root.querySelector('[data-role="item-stock"]')?.textContent).toContain('24 left');
     });
 });
 
@@ -2697,11 +2716,11 @@ describe('danger-is-reserved-for-what-is-wrong', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
-        const panel = root.querySelector('[data-role="detail"]') as HTMLElement;
+        const panel = root.querySelector('[data-role="item-face"]') as HTMLElement;
         const notes = [...panel.querySelectorAll('.note')].map((n) => n.textContent);
         expect(notes).toContain(HANDOFF_MAY_PRESELECT);
         expect(notes).toContain(HANDOFF_PRICE_IS_NOT_THE_ROW);
@@ -2860,7 +2879,7 @@ describe('fiat-is-beside-the-price-never-inside-it', () => {
         });
 
     it('paints a fiat line that is not the price node', () => {
-        const { root } = paint(withRate());
+        const { root } = paint(withRate({ overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } }));
         const fiat = root.querySelector('[data-role="fiat"]') as HTMLElement;
         expect(fiat).not.toBeNull();
         expect(fiat.textContent).toBe('$0.04');
@@ -2916,7 +2935,7 @@ describe('genesis-link-arms-before-it-leaves', () => {
     const withUrl = (url: string | undefined) =>
         idlePubkey({
             fetch: { kind: 'offers', offers: [OFFER] },
-            overlay: { kind: 'buy', outpoint: OUTPOINT },
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
             tokens: new Map([[TOKEN_ID, { ...BEANS, url }]]),
         });
 
@@ -3171,7 +3190,7 @@ describe('a-token-with-no-description-shows-no-empty-slot', () => {
         paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 ...(descriptions === undefined ? {} : { descriptions }),
             }),
@@ -3199,7 +3218,7 @@ describe('a-token-with-no-description-shows-no-empty-slot', () => {
                 String(descriptions),
             ).toBeNull();
             // The card is otherwise intact.
-            expect(root.querySelector('[data-role="detail"]')).not.toBeNull();
+            expect(root.querySelector('[data-role="item-face"]')).not.toBeNull();
         }
     });
 
@@ -3367,7 +3386,7 @@ describe('cashtab-handoffs-say-which-act-they-are', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
             }),
         );
@@ -6049,6 +6068,7 @@ describe('the-visitor-has-no-currency-control-and-the-glance-is-usd', () => {
         renderStall(root, offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
             fiatCode: 'usd',
             fiatRate: scaleRate(0.00003),
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
         }), { ...handlers(), onChangeFiat: vi.fn() });
         expect(root.querySelector('[data-role="fiat-picker"]')).toBeNull();
         expect(root.textContent).not.toContain('Show prices in');
@@ -6101,8 +6121,8 @@ describe('an-agora-row-never-carries-the-sellers-quote', () => {
         expect(row.querySelector('[data-role="seller-price"]')).toBeNull();
         expect(row.textContent).not.toContain('12.50');
 
-        const opened = paint(priced({ overlay: { kind: 'buy', outpoint: OUTPOINT } })).root;
-        const detail = opened.querySelector('[data-role="detail"]') as HTMLElement;
+        const opened = paint(priced({ overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } })).root;
+        const detail = opened.querySelector('[data-role="item-face"]') as HTMLElement;
         expect(detail).not.toBeNull();
         expect(detail.querySelector('[data-role="seller-price"]')).toBeNull();
         expect(detail.textContent).not.toContain('12.50');
@@ -7027,7 +7047,8 @@ describe('two-sheets-two-records', () => {
         ];
         for (const overlay of kinds) {
             const mountable = offersView([OFFER], undefined, { overlay });
-            expect(sheetMounts(mountable), `${overlay.kind} mounts`).toBe(true);
+            expect(overlayMounts(mountable), `${overlay.kind} mounts`).toBe(true);
+            expect(holdsLivePaint(mountable), `${overlay.kind} holds the paint`).toBe(true);
             expect(
                 paint(mountable).root.querySelector('.sheet-scrim'),
                 `${overlay.kind} is on screen`,
@@ -7036,7 +7057,7 @@ describe('two-sheets-two-records', () => {
             // No address: `paintUnresolvable` and a bare pubkey route both
             // reach this, and neither can sign anything.
             const homeless = offersView([OFFER], undefined, { overlay, address: undefined });
-            expect(sheetMounts(homeless), `${overlay.kind} without an address`).toBe(false);
+            expect(overlayMounts(homeless), `${overlay.kind} without an address`).toBe(false);
             expect(
                 paint(homeless).root.querySelector('.sheet-scrim'),
                 `${overlay.kind} without an address mounts nothing`,
@@ -7044,7 +7065,7 @@ describe('two-sheets-two-records', () => {
 
             // The stream overlay returns before any sheet mounts.
             const streamed = offersView([OFFER], undefined, { overlay, broadcast: BROADCAST });
-            expect(sheetMounts(streamed), `${overlay.kind} on a broadcast`).toBe(false);
+            expect(overlayMounts(streamed), `${overlay.kind} on a broadcast`).toBe(false);
             expect(
                 paint(streamed).root.querySelector('.sheet-scrim'),
                 `${overlay.kind} on a broadcast mounts nothing`,
@@ -7054,9 +7075,9 @@ describe('two-sheets-two-records', () => {
         // And the kinds that were never sheets are never waited on.
         for (const overlay of [
             { kind: 'idle' } as const,
-            { kind: 'buy', outpoint: OUTPOINT } as const,
+            { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } as const,
         ]) {
-            expect(sheetMounts(offersView([OFFER], undefined, { overlay }))).toBe(false);
+            expect(holdsLivePaint(offersView([OFFER], undefined, { overlay }))).toBe(false);
         }
     });
 });
@@ -7393,7 +7414,7 @@ describe('the-quotes-rail-paints-on-a-shop-and-on-an-empty-stall', () => {
      * stall that quoted nothing it is the one screen that says so, rather than
      * being absent.
      */
-    it('paints the rows on a shop, with the chip and the seller’s own unit', () => {
+    it('paints the rows on a shop, with the rail label and the seller’s own unit', () => {
         const { root } = paint(payView());
         const section = root.querySelector('[data-role="pay-section"]') as HTMLElement;
         expect(section).not.toBeNull();
@@ -7401,7 +7422,7 @@ describe('the-quotes-rail-paints-on-a-shop-and-on-an-empty-stall', () => {
         expect(section.textContent).toContain(copy.PAY_SEC_LEDE);
         const rows = [...section.querySelectorAll('[data-role="pay-row"]')];
         expect(rows).toHaveLength(1);
-        expect(rows[0]!.textContent).toContain(copy.SELLER_QUOTE_CHIP);
+        expect(rows[0]!.textContent).toContain(copy.ROW_LABEL_PAY);
         expect(
             rows[0]!.querySelector('[data-role="seller-price"]')?.textContent,
         ).toBe('$5.00');
@@ -8725,7 +8746,7 @@ describe('auth-pubkey-is-never-painted', () => {
         const claimed: TokenMeta = { ...BEANS, authPubkey: MINTER_KEY };
         for (const overlay of [
             { kind: 'idle' } as const,
-            { kind: 'buy', outpoint: OUTPOINT } as const,
+            { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } as const,
             { kind: 'pay', tokenId: TOKEN_ID } as const,
             { kind: 'describe' } as const,
         ]) {
@@ -8845,7 +8866,7 @@ describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
         const bad = `a${BIDI}b`;
         for (const overlay of [
             { kind: 'idle' } as const,
-            { kind: 'buy', outpoint: OUTPOINT } as const,
+            { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } as const,
             { kind: 'pay', tokenId: TOKEN_ID } as const,
             { kind: 'describe' } as const,
         ]) {
@@ -8880,12 +8901,12 @@ describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
     it('screens the ticker on its own, so a clean name keeps a dirty ticker off', () => {
         const { root } = paint(
             quoteView({
-                overlay: { kind: 'buy', outpoint: OUTPOINT },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
                 tokens: new Map([[TOKEN_ID, hostile('Roasted Beans', `a${BIDI}b`)]]),
             }),
         );
         expect(root.textContent ?? '').not.toContain(BIDI);
-        expect(root.querySelector('.item-head .item-n')?.textContent).toBe('Roasted Beans');
+        expect(root.querySelector('.face-nm')?.textContent).toBe('Roasted Beans');
     });
 });
 
@@ -9198,7 +9219,7 @@ describe('a-shop-row-pointer-switches-tabs', () => {
         expect(pointer.textContent).toBe(copy.PAY_POINTER);
         pointer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(h.onSwitchShopTab).toHaveBeenCalledWith('quotes');
-        expect(h.onBuy).not.toHaveBeenCalled();
+        expect(h.onOpenItem).not.toHaveBeenCalled();
         expect(h.onOpenPay).not.toHaveBeenCalled();
     });
 
@@ -9970,5 +9991,178 @@ describe('a-moved-rate-on-the-view-paints-the-moved-state', () => {
             copy.payFigure(formatXec(sats)),
         );
         expect(pressForUrl(root, 'pay-cashtab')).toContain(`amount=${formatXecUngrouped(sats)}`);
+    });
+});
+
+/** The item face: the expander raised to a surface of its own, one per token and rail. */
+const listingFace = (over: Partial<StallView> = {}) =>
+    paint(
+        offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            fiatCode: 'usd',
+            fiatRate: scaleRate(0.00003),
+            ...over,
+        }),
+    );
+
+describe('the-item-face-carries-one-button-and-both-handoff-lines', () => {
+    /**
+     * A listing's face: name, `from` and the figure, stock, one control, and
+     * the two handoff sentences — two different truths, decided once and not
+     * reopened. Everything else the row used to carry folds. The face never
+     * composes a BIP21: its one control is the token page.
+     */
+    it('paints the figure with from, the stock, one control and both sentences', () => {
+        const { root } = listingFace();
+        const face = root.querySelector('[data-role="item-face"]') as HTMLElement;
+        expect(face, 'the face mounted').not.toBeNull();
+        expect(face.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+        expect(face.querySelector('[data-role="item-stock"]')).not.toBeNull();
+        const controls = [...face.querySelectorAll('a.buy, button.buy')].filter(
+            (node) => node.closest('details') === null,
+        );
+        expect(controls).toHaveLength(1);
+        expect(controls[0]!.textContent).toBe(copy.OPEN_IN_CASHTAB);
+        for (const line of [copy.HANDOFF_MAY_PRESELECT, copy.HANDOFF_PRICE_IS_NOT_THE_ROW]) {
+            const node = [...face.querySelectorAll('.note')].find((n) => n.textContent === line);
+            expect(node, line).toBeDefined();
+            expect(node!.closest('details'), `${line} is not folded`).toBeNull();
+        }
+        expect(face.querySelector('[data-role="item-back"]')?.textContent).toBe(
+            copy.ITEM_BACK_LISTINGS,
+        );
+        expect(root.querySelector('[data-role="shop-tabs"]'), 'no rows behind the face').toBeNull();
+    });
+
+    it('folds the glance lines, the covenant rows and the token facts', () => {
+        const { root } = listingFace();
+        const fold = root.querySelector('[data-role="item-how"]') as HTMLDetailsElement;
+        expect(fold.tagName).toBe('DETAILS');
+        expect(fold.open).toBe(false);
+        expect(fold.querySelector('[data-role="rate"]')).not.toBeNull();
+        expect(fold.querySelector('[data-role="fiat"]')).not.toBeNull();
+        expect(fold.querySelector('.row.big dd')).not.toBeNull();
+        expect(fold.textContent).toContain(copy.HANDOFF_FINE_PRINT);
+    });
+});
+
+describe('the-shop-row-carries-no-glance-lines', () => {
+    /**
+     * A row is icon · name · label · from + figure. The rate, the fiat glance
+     * and "lowest of N" moved to the face, where the fold explains them. The
+     * label says which rail the row is on.
+     */
+    it('paints from and the figure, a rail label, and no rate or fiat', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                fiatCode: 'usd',
+                fiatRate: scaleRate(0.00003),
+            }),
+        );
+        const row = root.querySelector('.item') as HTMLElement;
+        expect(row.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+        expect(row.querySelector('[data-role="rate"]')).toBeNull();
+        expect(row.querySelector('[data-role="fiat"]')).toBeNull();
+        expect(row.querySelector('.item-lots')).toBeNull();
+        expect(row.querySelector('[data-role="rail-label"]')?.textContent).toBe(copy.ROW_LABEL_AGORA);
+    });
+});
+
+describe('an-item-face-is-keyed-by-token-and-rail', () => {
+    /**
+     * A partial fill re-creates the remainder as a new UTXO. A face keyed by
+     * outpoint would close under the reader the moment a stranger took part
+     * of the cheapest offer; keyed by token and rail it stays.
+     */
+    it('survives the cheapest offer being replaced by its remainder', () => {
+        const remainder: StallOffer = {
+            ...OFFER,
+            outpoint: { txid: 'ee'.repeat(32), outIdx: 0 },
+            atoms: OFFER.atoms - 1n,
+        };
+        const { root } = paint(
+            offersView([remainder], new Map([[TOKEN_ID, BEANS]]), {
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            }),
+        );
+        expect(root.querySelector('[data-role="item-face"]')).not.toBeNull();
+    });
+
+    it('a quote face is the other rail, with the seller’s words as its title and Pay as its control', () => {
+        const { root } = paint(
+            railView({
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' },
+                descriptions: new Map([[TOKEN_ID, 'Roasted weekly, shipped rolled']]),
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+            }),
+        );
+        const face = root.querySelector('[data-role="item-face"]') as HTMLElement;
+        expect(face.querySelector('[data-role="seller-price"]')).not.toBeNull();
+        expect(face.querySelector('[data-role="price"]'), 'no converted figure on a quote face').toBeNull();
+        expect(face.querySelector('[data-role="pay-open"]')).not.toBeNull();
+        expect(face.querySelector('[data-role="quote-not-minted"]')).not.toBeNull();
+        expect(face.querySelector('[data-role="quote-not-minted"]')!.closest('details')).toBeNull();
+        expect(face.textContent).toContain(copy.QUOTE_PAID_DIRECT);
+        expect(face.querySelector('[data-role="item-back"]')?.textContent).toBe(copy.ITEM_BACK_QUOTES);
+        expect(face.querySelectorAll('a[href*="amount="]'), 'the face composes no BIP21').toHaveLength(0);
+    });
+});
+
+describe('the-mount-table-has-two-predicates', () => {
+    /**
+     * One table says, per overlay kind, whether it mounts and whether an
+     * unsolicited paint waits for it. The item face mounts and never holds
+     * the paint: nothing on it is typed, and a listing's figure is the
+     * chain's. Two lists kept in step by hand is how an overlay that mounts
+     * nothing stops a stall updating for good.
+     */
+    it('mounts the item face and lets the live paint through it', () => {
+        const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+        });
+        expect(overlayMounts(view)).toBe(true);
+        expect(holdsLivePaint(view)).toBe(false);
+        expect(paint(view).root.querySelector('[data-role="item-face"]')).not.toBeNull();
+    });
+
+    it('keeps the four sheets holding the paint, and idle holding nothing', () => {
+        for (const overlay of [
+            { kind: 'publish-name' } as const,
+            { kind: 'describe' } as const,
+            { kind: 'pay', tokenId: TOKEN_ID } as const,
+        ]) {
+            const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay });
+            expect(overlayMounts(view), overlay.kind).toBe(true);
+            expect(holdsLivePaint(view), overlay.kind).toBe(true);
+        }
+        const idle = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]));
+        expect(overlayMounts(idle)).toBe(false);
+        expect(holdsLivePaint(idle)).toBe(false);
+    });
+
+    it('mounts nothing on a broadcast, whatever the kind', () => {
+        const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            broadcast: BROADCAST,
+        });
+        expect(overlayMounts(view)).toBe(false);
+        expect(holdsLivePaint(view)).toBe(false);
+    });
+});
+
+describe('the-quotes-row-keeps-pay-straight-to-the-sheet', () => {
+    /**
+     * The face is opened from the row's name; the row's Pay control still
+     * opens the pay sheet in one press. No press is added to the money path.
+     */
+    it('presses Pay on the row and opens the sheet, not the face', () => {
+        const h = { ...handlers(), onOpenPay: vi.fn(), onOpenItem: vi.fn() };
+        const root = document.createElement('div');
+        renderStall(root, railView({ shopTab: 'quotes' }), h);
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        expect(h.onOpenPay).toHaveBeenCalledWith(TOKEN_ID);
+        expect(h.onOpenItem).not.toHaveBeenCalled();
+        (root.querySelector('[data-role="pay-row"] [data-role="item-open"]') as HTMLButtonElement).click();
+        expect(h.onOpenItem).toHaveBeenCalledWith(TOKEN_ID, 'quotes');
     });
 });

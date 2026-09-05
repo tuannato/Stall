@@ -35,8 +35,6 @@ import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from './domain/state';
 import type {
     EventStatus,
     FetchStatus,
-    Overlay,
-    Outpoint,
     RouteParse,
     SessionTokenCache,
     ShopTab,
@@ -126,7 +124,7 @@ import {
     identityOf,
     quotedItems,
     renderStall,
-    sheetMounts,
+    holdsLivePaint,
 } from './ui';
 import { PAY_RATE_TIMEOUT_MS } from './ui/render';
 
@@ -446,8 +444,9 @@ export function boot(
                 paint();
                 void refreshFiat();
             },
-            onBuy: (outpoint) => {
-                void onBuy(outpoint);
+            onOpenItem: (tokenId, rail) => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'item', tokenId, rail } } };
+                paint();
             },
             onRetry: () => {
                 void refresh();
@@ -593,7 +592,7 @@ export function boot(
      * closes the sheet ends in a paint of its own, which is the flush: there is
      * no way out of the overlay that does not repaint.
      *
-     * **The wait asks the same question the render gate does.** `sheetMounts`
+     * **The wait asks the same question the render gate does.** `holdsLivePaint`
      * is `renderStall`'s own predicate, so an overlay kind that mounts nothing —
      * a describe sheet on a route with no address, a poster whose link is past
      * the QR ceiling — cannot hold a paint back for a sheet that is not on
@@ -603,7 +602,7 @@ export function boot(
      * whose whole answer is the sheet closing onto a re-read stall.
      */
     const livePaint = (): void => {
-        if (sheetMounts(state.view)) {
+        if (holdsLivePaint(state.view)) {
             return;
         }
         paint();
@@ -804,12 +803,6 @@ export function boot(
         return payRate;
     };
 
-    const onBuy = async (outpoint: Outpoint): Promise<void> => {
-        const overlay: Overlay = { kind: 'buy', outpoint };
-        state = { ...state, view: { ...state.view, overlay } };
-        paint();
-    };
-
     const onOpenStall = (raw: string): void => {
         if (parseSellerParam(raw).kind === 'invalid') {
             return;
@@ -938,7 +931,10 @@ export function boot(
             // paint, and a seller may have opened the describe sheet in that
             // window. The link is answered from the records either way; it
             // may not swap a sheet out from under whoever opened it.
-            if (next.view.overlay.kind !== 'idle') {
+            // A sheet holds a half-written record or a buyer's own state; the
+            // item face holds nothing typed, so the link replaces it — the
+            // same table `livePaint` reads.
+            if (holdsLivePaint(next.view)) {
                 return next;
             }
             // The rate comes from the same road the Pay control takes; the

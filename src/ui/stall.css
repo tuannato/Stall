@@ -1232,12 +1232,6 @@ body {
  * Guarded by the probe's name-floor rule, not by this comment.
  */
 @media (max-width: 679.98px) {
-    .item-p .item-rate,
-    .item-p .item-fiat,
-    .item-p .item-lots {
-        max-width: 176px;
-    }
-
     .item-head[data-price-tier='3'] {
         grid-template-areas: var(--s-areas-m3);
         grid-template-columns: var(--s-cols-m3);
@@ -4441,4 +4435,92 @@ details.fold > .fold-sum::-webkit-details-marker {
     .pay-items {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
+
+/*
+ * The item face — one token on one rail, in-flow where the rows were. The
+ * design's `.face` at 18px padding, the hero beside the name, the figure at
+ * 34px, one full-width control; the rail label under a row's name; the
+ * back control at a 44px hit target with no chrome of its own.
+ */
+.item-face {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.item-back {
+    align-self: flex-start;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 650;
+    color: var(--s-accent);
+    background: none;
+    border: 0;
+    padding: 0;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+.face {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+}
+.face-h {
+    display: grid;
+    grid-template-columns: var(--s-hero) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+}
+.face-h .item-ic-lg {
+    align-self: center;
+    margin-bottom: 0;
+}
+.face-nm {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: var(--s-track);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+.face-x {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-variant-numeric: tabular-nums;
+}
+.face-x .x {
+    font-size: 34px;
+    font-weight: var(--s-price-weight);
+    letter-spacing: var(--s-price-track);
+}
+.face-stock {
+    font-size: 13.5px;
+    color: var(--s-muted);
+}
+.face .buy {
+    width: 100%;
+}
+.rail-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+}
+.item-open {
+    font: inherit;
+    text-align: left;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    min-height: 44px;
+}
+.warn {
+    color: var(--s-danger);
 }

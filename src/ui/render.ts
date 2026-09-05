@@ -54,7 +54,6 @@ import type {
     EventStatus,
     FetchStatus,
     HostAttempt,
-    Outpoint,
     PanelKind,
     PosterFormat,
     RouteWhy,
@@ -66,6 +65,7 @@ import type {
     StallOffer,
     StallView,
     TokenMeta,
+    Overlay,
 } from '../domain/state';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
 import { EXPLORER_TX_URL } from '../domain/explorer';
@@ -100,7 +100,8 @@ import './theme-rural.css';
 import './broadcast.css';
 
 export type StallHandlers = {
-    onBuy: (outpoint: Outpoint) => void;
+    /** Open one token's face on one rail — the expander raised to a surface. */
+    onOpenItem: (tokenId: string, rail: 'listings' | 'quotes') => void;
     onRetry: () => void;
     onCloseSheet: () => void;
     /** Apex paste. Optional so a render-only test need not invent navigation. */
@@ -430,12 +431,12 @@ export function renderStall(
      * footer's publish control on other screens flipped the overlay and
      * painted nothing. The studio launchers need them on their panel too.
      *
-     * `sheetMounts` is the gate, and `livePaint` in app.ts asks that same
+     * `overlayMounts` is the gate, and `livePaint` in app.ts asks that same
      * function whether to hold a paint back: two lists of overlay kinds kept
      * in step by hand is how an overlay that mounts nothing stops a stall
      * updating for good.
      */
-    if (sheetMounts(view)) {
+    if (overlayMounts(view)) {
         if (view.overlay.kind === 'publish-name') {
             stall.append(sheetOverlay(nameSheet(view, handlers), 'publish-sheet', handlers));
         } else if (view.overlay.kind === 'describe') {
@@ -1058,29 +1059,35 @@ function paintEmpty(
     stall.querySelector('.stall-headings')?.append(
         ...[taglineInvite(view, handlers)].filter((n): n is HTMLElement => n !== null),
     );
-    body.append(shopTabsControl(view, handlers));
-    if (shopTabOf(view) === 'quotes') {
-        // A stall with nothing listed and three quotes is exactly what this
-        // rail is for, so the empty book is not the whole screen here.
-        body.append(quotesPanel(view, handlers));
+    const face = facePanel(view, handlers);
+    if (face !== null) {
+        // One token's face replaces the rail it came from: no tabs, no rows.
+        body.append(face);
     } else {
-        const theme = view.theme ?? DEFAULT_THEME;
-        const emptyBlock = el('div', 'sparse-empty');
-        emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
-        emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));
-        emptyBlock.append(el('div', 'sparse-shelf'));
-        const cta = el('a', 'cta', copy.LIST_FIRST);
-        cta.setAttribute('data-role', 'list-first');
-        cta.href = CASHTAB_LIST_URL;
-        cta.target = '_blank';
-        cta.rel = 'noopener';
-        emptyBlock.append(cta);
-        body.append(emptyBlock);
-        // The live path no longer applies an empty answer, so a stall whose
-        // last offer genuinely sold keeps that row until someone asks again.
-        // This is where they ask.
-        body.append(retryControl(handlers));
-        body.append(sparseMotif(view));
+        body.append(shopTabsControl(view, handlers));
+        if (shopTabOf(view) === 'quotes') {
+            // A stall with nothing listed and three quotes is exactly what this
+            // rail is for, so the empty book is not the whole screen here.
+            body.append(quotesPanel(view, handlers));
+        } else {
+            const theme = view.theme ?? DEFAULT_THEME;
+            const emptyBlock = el('div', 'sparse-empty');
+            emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
+            emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));
+            emptyBlock.append(el('div', 'sparse-shelf'));
+            const cta = el('a', 'cta', copy.LIST_FIRST);
+            cta.setAttribute('data-role', 'list-first');
+            cta.href = CASHTAB_LIST_URL;
+            cta.target = '_blank';
+            cta.rel = 'noopener';
+            emptyBlock.append(cta);
+            body.append(emptyBlock);
+            // The live path no longer applies an empty answer, so a stall whose
+            // last offer genuinely sold keeps that row until someone asks again.
+            // This is where they ask.
+            body.append(retryControl(handlers));
+            body.append(sparseMotif(view));
+        }
     }
     stall.append(body);
     stall.append(stallFooter(identityOf(view), view, handlers));
@@ -1104,12 +1111,18 @@ function paintUnreadable(
     );
     const body = el('main', 'stall-body');
     appendPayHintNote(body, view);
-    body.append(shopTabsControl(view, handlers));
-    if (shopTabOf(view) === 'quotes') {
-        body.append(quotesPanel(view, handlers));
+    const face = facePanel(view, handlers);
+    if (face !== null) {
+        // One token's face replaces the rail it came from: no tabs, no rows.
+        body.append(face);
     } else {
-        body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
-        body.append(retryControl(handlers));
+        body.append(shopTabsControl(view, handlers));
+        if (shopTabOf(view) === 'quotes') {
+            body.append(quotesPanel(view, handlers));
+        } else {
+            body.append(el('p', 'mid-p', copy.UNREADABLE_BODY));
+            body.append(retryControl(handlers));
+        }
     }
     stall.append(body);
     stall.append(stallFooter(identity, view, handlers));
@@ -1131,26 +1144,32 @@ function paintUnreachable(
 
     const body = el('main', 'stall-body');
     appendPayHintNote(body, view);
-    body.append(shopTabsControl(view, handlers));
-    if (shopTabOf(view) === 'quotes') {
-        body.append(quotesPanel(view, handlers));
+    const face = facePanel(view, handlers);
+    if (face !== null) {
+        // One token's face replaces the rail it came from: no tabs, no rows.
+        body.append(face);
     } else {
-        // Two failures, two sentences. `plugin-missing` is a node that
-        // answered — a protocol-level 404 from a chronik without `agora.py` —
-        // and telling a reader no index answered describes our own situation
-        // as the network's. The hosts box already names which of the two this
-        // was, and the retry is a way forward from either.
-        body.append(
-            el(
-                'p',
-                'mid-p',
-                fetch.kind === 'plugin-missing'
-                    ? copy.PLUGIN_MISSING_BODY
-                    : copy.UNREACHABLE_BODY,
-            ),
-        );
-        body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
-        body.append(retryControl(handlers));
+        body.append(shopTabsControl(view, handlers));
+        if (shopTabOf(view) === 'quotes') {
+            body.append(quotesPanel(view, handlers));
+        } else {
+            // Two failures, two sentences. `plugin-missing` is a node that
+            // answered — a protocol-level 404 from a chronik without `agora.py` —
+            // and telling a reader no index answered describes our own situation
+            // as the network's. The hosts box already names which of the two this
+            // was, and the retry is a way forward from either.
+            body.append(
+                el(
+                    'p',
+                    'mid-p',
+                    fetch.kind === 'plugin-missing'
+                        ? copy.PLUGIN_MISSING_BODY
+                        : copy.UNREACHABLE_BODY,
+                ),
+            );
+            body.append(hostsBox(fetch.triedAtMs, fetch.hosts));
+            body.append(retryControl(handlers));
+        }
     }
     stall.append(body);
 
@@ -1211,6 +1230,15 @@ function paintOffers(
     // Why the look is not the one the seller asked for, above the control:
     // it is about the stall, so it belongs to neither rail.
     settingsNotes(body, view);
+    const face = facePanel(view, handlers);
+    if (face !== null) {
+        // One token's face replaces the rail it came from: no tabs, no tools,
+        // no rows. The header above still counts the whole shop.
+        body.append(face);
+        stall.append(body);
+        stall.append(stallFooter(identityOf(view), view, handlers));
+        return;
+    }
     body.append(shopTabsControl(view, handlers));
     /*
      * A big shop gets tools; a small one stays a stall. The threshold counts
@@ -1446,17 +1474,6 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
  * cheapest row, and a live re-read can hand "cheapest" to a sibling — the
  * visitor is reading this token, not one UTXO of it.
  */
-function isExpanded(view: StallView, listing: TokenListing): boolean {
-    if (view.overlay.kind !== 'buy') {
-        return false;
-    }
-    const open = view.overlay.outpoint;
-    return listing.offers.some(
-        (offer) =>
-            offer.outpoint.txid === open.txid && offer.outpoint.outIdx === open.outIdx,
-    );
-}
-
 /**
  * One icon variant per (size, token): the row's 128 and the opened card's
  * 256 are separate fetches with separate cache entries, keyed together so
@@ -2061,8 +2078,17 @@ function payRow(
     const minted = view.genesis?.get(item.tokenId);
     row.append(itemIcon(item.tokenId, named.title, undefined, ICON_ROW_SIZE, minted !== 'not-attributed'));
     const words = el('div', 'pay-b');
-    words.append(el('span', 'item-n', named.title));
-    words.append(el('span', 'chip', copy.SELLER_QUOTE_CHIP));
+    // The name opens the face; the row's Pay control still opens the pay
+    // sheet in one press, so no press is added to the money path.
+    const openFace = el('button', 'item-n item-open', named.title);
+    openFace.type = 'button';
+    openFace.setAttribute('data-role', 'item-open');
+    openFace.setAttribute('data-focus-key', `item-open:${item.tokenId}`);
+    openFace.addEventListener('click', () => handlers.onOpenItem(item.tokenId, 'quotes'));
+    words.append(openFace);
+    const rail = el('span', 'pay-sub rail-label', copy.ROW_LABEL_PAY);
+    rail.setAttribute('data-role', 'rail-label');
+    words.append(rail);
     // The token's own name, small, under the item's: a genesis name is true
     // and is rarely the thing a buyer is paying for. Absent when it is already
     // the title, which is what a quote with no words falls back to.
@@ -3832,7 +3858,25 @@ function sheetFoot(handlers: StallHandlers): HTMLElement {
  * The broadcast branch returns early before any sheet mounts, so a stream
  * overlay never waits either.
  */
-export function sheetMounts(view: StallView): boolean {
+/**
+ * One table, per overlay kind: whether it mounts at all, and whether an
+ * unsolicited paint waits for it. The four sheets hold a half-written record
+ * or a buyer's own state in the DOM, so a paint nobody asked for waits. The
+ * item face mounts and never holds: nothing on it is typed, a listing's
+ * figure is the chain's, and a quote face repainting costs nothing. Two
+ * lists kept in step by hand is how an overlay that mounts nothing stops a
+ * stall updating for good — so both predicates read this one table.
+ */
+const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }> = {
+    idle: { mounts: false, holds: false },
+    item: { mounts: true, holds: false },
+    'publish-name': { mounts: true, holds: true },
+    describe: { mounts: true, holds: true },
+    pay: { mounts: true, holds: true },
+    poster: { mounts: true, holds: true },
+};
+
+function overlayAllowed(view: StallView): boolean {
     if (
         view.broadcast !== undefined &&
         view.route.kind !== 'invalid' &&
@@ -3846,16 +3890,20 @@ export function sheetMounts(view: StallView): boolean {
     if (view.address === undefined || view.address === '') {
         return false;
     }
-    switch (view.overlay.kind) {
-        case 'publish-name':
-        case 'describe':
-        case 'pay':
-            return true;
-        case 'poster':
-            return fitsQr(shareUrl());
-        default:
-            return false;
+    if (view.overlay.kind === 'poster') {
+        return fitsQr(shareUrl());
     }
+    return true;
+}
+
+/** Whether the overlay on the view mounts at all — the render gate. */
+export function overlayMounts(view: StallView): boolean {
+    return overlayAllowed(view) && OVERLAY_TABLE[view.overlay.kind].mounts;
+}
+
+/** Whether a paint nobody asked for waits for the overlay on the view. */
+export function holdsLivePaint(view: StallView): boolean {
+    return overlayAllowed(view) && OVERLAY_TABLE[view.overlay.kind].holds;
 }
 
 /**
@@ -4334,19 +4382,17 @@ function offerRow(
 ): HTMLElement {
     // The card speaks for its cheapest buyable row; the detail shows them all.
     const offer = cheapestOf(listing);
-    const expanded = isExpanded(view, listing);
-    const card = el('div', expanded ? 'item open' : 'item');
+    const card = el('div', 'item');
     // One-shot: set only by a message-triggered re-read with proven book
     // movement, and cleared by this very paint's caller — see StallView.
     if (view.justChanged?.has(listing.tokenId) === true) {
         card.classList.add('just-changed');
     }
     const name = tokenName(view.tokens, offer.tokenId);
-    const ticker = tokenTicker(view.tokens, offer.tokenId);
 
     const head = el('button', 'item-head');
     head.type = 'button';
-    head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    head.setAttribute('aria-haspopup', 'true');
     // Keyed by the outpoint: a partial fill re-creates the remainder as a new
     // UTXO, so a row that changed identity correctly loses focus rather than
     // handing it to whatever took its place in the list.
@@ -4368,17 +4414,11 @@ function offerRow(
      * number, it is a wrong one, printed as confidently as a right one. A
      * ticker with no count still says which token it is.
      */
-    const known = knownDecimals(view.tokens, offer.tokenId);
-    // Summed across every listing of this token: each addend is a UTXO's own
-    // remaining atoms, so the sum is chain truth, not an estimate.
-    const totalAtoms = listing.offers.reduce((sum, o) => sum + o.atoms, 0n);
-    const left =
-        known === undefined ? undefined : copy.remainingAtoms(formatAtoms(totalAtoms, known));
-    const stock =
-        left === undefined ? ticker : ticker !== undefined ? `${ticker} · ${left}` : left;
-    if (stock !== undefined) {
-        info.append(el('span', 'item-q', stock));
-    }
+    // Which rail this row is on. The ticker and the stock moved to the face,
+    // where the fold has room to say what each means.
+    const rail = el('span', 'item-q rail-label', copy.ROW_LABEL_AGORA);
+    rail.setAttribute('data-role', 'rail-label');
+    info.append(rail);
     head.append(info);
     // A touch device gets no cursor and no hover, so nothing said these rows
     // open. `aria-expanded` already told a screen reader; this tells a thumb.
@@ -4414,42 +4454,22 @@ function offerRow(
         // what stretched every card on every look.
         amount.append(el('span', 'item-u', copy.XEC));
         price.append(amount);
-        price.append(rateLine(offer, view));
     }
     // Fiat sits beside the rate, at rate size, in its own node — never inside
     // `[data-role="price"]`. It is supplementary: the covenant encodes
     // `askedSats`, and a figure large enough to be comfortable is a second
     // price. Absent whenever the feed did not answer.
-    if (!isUnbuyable(offer)) {
-        const fiat = formatFiat(offer.askedSats, view.fiatRate, view.fiatCode ?? '');
-        if (fiat !== undefined) {
-            const fiatLine = el('span', 'item-fiat', fiat);
-            fiatLine.setAttribute('data-role', 'fiat');
-            price.append(fiatLine);
-        }
-        // Which meaning the figure has, said outright — never a second "from".
-        if (listing.offers.length > 1) {
-            price.append(
-                el('span', 'item-lots', copy.lowestOfListings(listing.offers.length)),
-            );
-        }
-    }
+    // The rate, the fiat glance and "lowest of N" live on the face, where the
+    // fold explains them: a row is icon, name, rail label, from and figure.
     head.append(price);
     head.append(caret);
     head.addEventListener('click', () => {
-        if (expanded) {
-            handlers.onCloseSheet();
-        } else {
-            handlers.onBuy(offer.outpoint);
-        }
+        handlers.onOpenItem(listing.tokenId, 'listings');
     });
     card.append(head);
     const pointer = payPointer(listing.tokenId, view, handlers);
     if (pointer !== null) {
         card.append(pointer);
-    }
-    if (expanded) {
-        card.append(itemDetail(view, listing));
     }
     return card;
 }
@@ -4510,30 +4530,126 @@ function rateLine(offer: StallOffer, view: StallView): HTMLElement {
  * In-place detail. Lives next to the row button, never inside it: an `<a>`
  * nested in `button.item` would fire the row's own click.
  */
-function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
-    const offer = cheapestOf(listing);
-    const panel = el('div', 'item-detail');
-    panel.setAttribute('data-role', 'detail');
+/**
+ * One token's face, on one rail — the expander raised to a surface of its
+ * own, in-flow under the sign where the rows were. A listing's face is name,
+ * `from` and the figure, stock, one control to the token page, and the two
+ * handoff sentences (two different truths, decided once); the rate, the fiat
+ * glance, "lowest of N", the covenant rows, the token's facts and words fold
+ * under "How this works". A quote's face is the seller's words as title, the
+ * genesis name under it, the borrowed-id warning, the figure in the unit they
+ * wrote, Pay, and one sentence — the mechanism folds. Neither composes a
+ * BIP21: the pay sheet is where money is composed. The face never holds the
+ * live paint (see `OVERLAY_TABLE`): a listing's figure is the chain's.
+ */
+function itemFace(
+    view: StallView,
+    tokenId: string,
+    rail: 'listings' | 'quotes',
+    handlers: StallHandlers,
+): HTMLElement | null {
+    const panel = el('div', 'item-face');
+    panel.setAttribute('data-role', 'item-face');
+    const back = el('button', 'item-back', rail === 'quotes' ? copy.ITEM_BACK_QUOTES : copy.ITEM_BACK_LISTINGS);
+    back.type = 'button';
+    back.setAttribute('data-role', 'item-back');
+    back.setAttribute('data-focus-key', 'item-back');
+    back.addEventListener('click', () => handlers.onCloseSheet());
+    panel.append(back);
+    const card = el('div', 'card face');
+    panel.append(card);
+    const how = el('div');
 
+    if (rail === 'quotes') {
+        const item = quotedItems(view).find((row) => row.tokenId === tokenId);
+        if (item === undefined) {
+            return null;
+        }
+        const named = quoteNaming(view, tokenId);
+        const minted = view.genesis?.get(tokenId);
+        const headRow = el('div', 'face-h');
+        headRow.append(itemIcon(tokenId, named.title, 'item-ic-lg', ICON_HERO_SIZE, minted !== 'not-attributed'));
+        const names = el('div');
+        names.append(el('div', 'face-nm', named.title));
+        if (named.tokenName !== undefined) {
+            const under = el('div', 'pay-sub', named.tokenName);
+            under.setAttribute('data-role', 'quote-token-name');
+            names.append(under);
+        }
+        if (named.note !== undefined) {
+            const note = el('div', 'pay-sub', named.note);
+            note.setAttribute('data-role', 'quote-no-words');
+            names.append(note);
+        }
+        if (minted === 'not-attributed') {
+            const borrowed = el('div', 'pay-sub warn', copy.QUOTE_NOT_MINTED_HERE);
+            borrowed.setAttribute('data-role', 'quote-not-minted');
+            names.append(borrowed);
+        }
+        headRow.append(names);
+        card.append(headRow);
+        const figure = el('div', 'face-x');
+        const q = el('span', 'x pay-q', quoteFigure(item.price));
+        q.setAttribute('data-role', 'seller-price');
+        figure.append(q);
+        card.append(figure);
+        const open = el('button', 'buy pay-btn', copy.PAY_OPEN);
+        open.type = 'button';
+        open.setAttribute('data-role', 'pay-open');
+        open.setAttribute('data-focus-key', `pay-open:${tokenId}`);
+        const onOpenPay = handlers.onOpenPay;
+        if (onOpenPay !== undefined) {
+            open.addEventListener('click', () => onOpenPay(tokenId));
+        }
+        card.append(open);
+        card.append(el('p', 'fine', copy.QUOTE_PAID_DIRECT));
+        how.append(el('p', 'fine', copy.PAY_NOTE_DIRECT));
+        const tolerance = toleranceLine(item.price);
+        if (tolerance !== null) {
+            how.append(tolerance);
+        }
+        const age = quoteAgeNode(view, tokenId, 'p', 'fine');
+        if (age !== null) {
+            how.append(age);
+        }
+        if (minted === 'attributed') {
+            const here = el('p', 'fine', copy.QUOTE_MINTED_HERE);
+            here.setAttribute('data-role', 'quote-minted');
+            how.append(here);
+        }
+        card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
+        if (offersOf(view).some((offer) => offer.tokenId === tokenId)) {
+            const across = el('button', 'pay-pointer', copy.LISTED_POINTER);
+            across.type = 'button';
+            across.setAttribute('data-role', 'listed-pointer');
+            across.addEventListener('click', () => {
+                handlers.onOpenItem(tokenId, 'listings');
+            });
+            panel.append(across);
+        }
+        return panel;
+    }
+
+    const listing = listingsInShopOrder(view).find((row) => row.tokenId === tokenId);
+    if (listing === undefined) {
+        return null;
+    }
+    const offer = cheapestOf(listing);
     const d = decimalsOf(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
     const meta = tokenMeta(view.tokens, offer.tokenId);
-
-    // The token's own image, large, at the top of the opened card. Same source
-    // and cache as the row icon (our Worker); initials stay until it loads and
-    // a failed load keeps them, exactly as the small one does.
     const name = tokenName(view.tokens, offer.tokenId);
-    panel.append(itemIcon(offer.tokenId, name, 'item-ic-lg', ICON_HERO_SIZE));
-    // Every fact lives in its own column beside the hero image. A wrapper,
-    // not grid placement: the desktop grid once made the icon span 99
-    // implicit rows, and ~90 empty rows each bought a row-gap — a thousand
-    // pixels of blank track painted inside the open card (reported three
-    // times before it was measured).
-    const rows = el('div', 'detail-rows');
-    panel.append(rows);
+    const headRow = el('div', 'face-h');
+    headRow.append(itemIcon(offer.tokenId, name, 'item-ic-lg', ICON_HERO_SIZE));
+    headRow.append(el('div', 'face-nm', name));
+    card.append(headRow);
 
+    const figure = el('div', 'face-x');
     if (isUnbuyable(offer)) {
-        rows.append(
+        figure.append(el('span', 'dash', copy.DASHED_PRICE));
+        figure.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
+        card.append(figure);
+        card.append(
             el(
                 'div',
                 'ctx',
@@ -4543,63 +4659,38 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
                 ),
             ),
         );
-        rows.append(tokenFacts(offer, meta, ticker));
-    const described = tokenDescription(view, offer.tokenId);
-    if (described !== undefined) {
-        rows.append(described);
-    }
-    const link = tokenLink(meta);
-    if (link !== undefined) {
-        rows.append(link);
-    }
+        how.append(tokenFacts(offer, meta, ticker));
+        const described = tokenDescription(view, offer.tokenId);
+        if (described !== undefined) {
+            how.append(described);
+        }
+        const link = tokenLink(meta);
+        if (link !== undefined) {
+            how.append(link);
+        }
         // No link out: Cashtab will not show this row either.
-        rows.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+        how.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+        card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
         return panel;
     }
-
-    const asked = formatXec(offer.askedSats);
-    const minAtoms = formatAtoms(offer.askedAtoms, d);
-    const stock = formatAtoms(offer.atoms, d);
-    rows.append(
-        sheetRow(
-            copy.MIN_PURCHASE,
-            ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms,
-        ),
-    );
-    rows.append(sheetRow(copy.YOU_PAY, copy.payAmount(asked), true));
-    rows.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(stock)));
-
-    // Every listing of this token, cheapest first — the rest of what the
-    // card's "lowest of N" promised. Each figure is that offer's own
-    // `askedSats`; each row's meta is its own minimum take and stock.
-    if (listing.offers.length > 1) {
-        rows.append(listingsBlock(listing, view));
+    if (offer.askedAtoms < offer.atoms) {
+        figure.append(el('span', 'item-from from', copy.PRICE_FROM));
     }
-
-    rows.append(tokenFacts(offer, meta, ticker));
-    const described = tokenDescription(view, offer.tokenId);
-    if (described !== undefined) {
-        rows.append(described);
+    const asked = el('span', 'x item-x', formatXec(offer.askedSats));
+    asked.setAttribute('data-role', 'price');
+    figure.append(asked);
+    figure.append(el('span', 'item-u', copy.XEC));
+    card.append(figure);
+    // The stock, summed across every listing of this token: each addend is a
+    // UTXO's own remaining atoms, so the sum is chain truth. Omitted, not
+    // guessed, when the genesis decimals never arrived.
+    const known = knownDecimals(view.tokens, offer.tokenId);
+    if (known !== undefined) {
+        const totalAtoms = listing.offers.reduce((sum, o) => sum + o.atoms, 0n);
+        const stock = el('div', 'face-stock', copy.remainingAtoms(formatAtoms(totalAtoms, known)));
+        stock.setAttribute('data-role', 'item-stock');
+        card.append(stock);
     }
-    const link = tokenLink(meta);
-    if (link !== undefined) {
-        rows.append(link);
-    }
-
-    // No network fee row: this origin builds nothing, so it has no fee to
-    // quote. Cashtab shows its own before it signs.
-
-    // The panel used to precede a signature here. It now precedes a market.
-    // Cashtab's depth bars are a per-token spot (sometimes fiat), not the
-    // covenant minimum on this card — so there is no hunt figure to print.
-    // `.note`, not `.ctx`. These are the two most load-bearing sentences on the
-    // buyer's path, and they are an explanation, not an error: painting them in
-    // the danger colour on every expanded card spent the one colour that should
-    // mean something has gone wrong. `.ctx` keeps the validation errors and the
-    // unbuyable line above, where red is the truth.
-    rows.append(el('div', 'note', copy.HANDOFF_MAY_PRESELECT));
-    rows.append(el('div', 'note', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
-
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
         const cta = el('a', 'buy', copy.OPEN_IN_CASHTAB);
@@ -4608,13 +4699,54 @@ function itemDetail(view: StallView, listing: TokenListing): HTMLElement {
         // No opener: Stall has no reason to reach into that tab, and leaving
         // the handle would let it reach back into this one.
         cta.rel = 'noopener noreferrer';
-        cta.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
-        rows.append(cta);
+        card.append(cta);
     }
-    rows.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+    // The two most load-bearing sentences on the buyer's path, and an
+    // explanation, not an error: `.note`, never the danger colour.
+    card.append(el('div', 'note', copy.HANDOFF_MAY_PRESELECT));
+    card.append(el('div', 'note', copy.HANDOFF_PRICE_IS_NOT_THE_ROW));
+
+    how.append(rateLine(offer, view));
+    const fiat = formatFiat(offer.askedSats, view.fiatRate, view.fiatCode ?? '');
+    if (fiat !== undefined) {
+        const fiatLine = el('span', 'item-fiat', fiat);
+        fiatLine.setAttribute('data-role', 'fiat');
+        how.append(fiatLine);
+    }
+    if (listing.offers.length > 1) {
+        how.append(el('span', 'item-lots', copy.lowestOfListings(listing.offers.length)));
+    }
+    const minAtoms = formatAtoms(offer.askedAtoms, d);
+    how.append(sheetRow(copy.MIN_PURCHASE, ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms));
+    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(formatXec(offer.askedSats)), true));
+    how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, d))));
+    if (listing.offers.length > 1) {
+        how.append(listingsBlock(listing, view));
+    }
+    how.append(tokenFacts(offer, meta, ticker));
+    const described = tokenDescription(view, offer.tokenId);
+    if (described !== undefined) {
+        how.append(described);
+    }
+    const link = tokenLink(meta);
+    if (link !== undefined) {
+        how.append(link);
+    }
+    how.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
+    card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
+    const pointer = payPointer(tokenId, view, handlers);
+    if (pointer !== null) {
+        panel.append(pointer);
+    }
     return panel;
+}
+
+/** The face for the overlay on the view, or null when it names nothing on that rail. */
+function facePanel(view: StallView, handlers: StallHandlers): HTMLElement | null {
+    if (view.overlay.kind !== 'item' || !overlayMounts(view)) {
+        return null;
+    }
+    return itemFace(view, view.overlay.tokenId, view.overlay.rail, handlers);
 }
 
 /**
@@ -5214,7 +5346,7 @@ function paintStudio(
      * transaction per token. The single sheet that carried both read as one
      * publish control covering both, and a seller found out a fee at a time.
      *
-     * Both are gated on the address, and on nothing else: `sheetMounts` refuses
+     * Both are gated on the address, and on nothing else: `overlayMounts` refuses
      * an overlay with no address, so a control offered without one would set a
      * state that paints nothing and holds `livePaint` back forever.
      */

@@ -4,7 +4,8 @@ export {
     listingsInShopOrder,
     quotedItems,
     renderStall,
-    sheetMounts,
+    overlayMounts,
+    holdsLivePaint,
     stallBaseUrl,
 } from './render';
 export type { QuotedItem } from './render';

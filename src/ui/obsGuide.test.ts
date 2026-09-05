@@ -72,7 +72,7 @@ function view(over: Partial<StallView> = {}): StallView {
 
 function handlers(): StallHandlers {
     return {
-        onBuy: vi.fn(),
+        onOpenItem: vi.fn(),
         onRetry: vi.fn(),
         onCloseSheet: vi.fn(),
     };

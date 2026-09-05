@@ -576,7 +576,7 @@ describe('failed-facts-refetch-keeps-the-painted-facts', () => {
                 fetch: { kind: 'offers', offers: [OFFER] },
                 // The words live in the disclosure panel, so it has to be open
                 // for them to be on screen at all.
-                overlay: { kind: 'buy', outpoint: OFFER.outpoint },
+                overlay: { kind: 'item', tokenId: TOKEN, rail: 'listings' },
                 tokens: new Map([[TOKEN, TOKEN_META]]),
                 descriptions: new Map([[TOKEN, 'Grown on the hill']]),
             }),
@@ -737,7 +737,7 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
 
 describe('an-overlay-that-cannot-mount-does-not-stop-the-live-paint', () => {
     /**
-     * `renderStall` and `livePaint` ask one predicate — `sheetMounts` — whether
+     * `renderStall` and `livePaint` ask one predicate — `holdsLivePaint` — whether
      * a sheet is on screen. Two lists of overlay kinds kept in step by hand is
      * how an overlay the render gate refuses and the paint gate honours stops a
      * stall updating for good, with nothing on screen to say why.
@@ -2273,7 +2273,7 @@ describe('a-live-update-does-not-change-the-figure-under-a-buyer', () => {
      * neither may move the figure the buyer is about to sign.
      *
      * The state is what is asserted, not the DOM: `livePaint` already waits on
-     * `sheetMounts`, so "the tree did not change" would pass without the rate
+     * `holdsLivePaint`, so "the tree did not change" would pass without the rate
      * being protected at all.
      */
     const QUOTED_META = {
