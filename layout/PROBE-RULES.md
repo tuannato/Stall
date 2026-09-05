@@ -795,7 +795,8 @@ no-controls rule on the broadcast never sees because the broadcast mounts no
 overlay at all.
 
 **2026-09-05, the door and the first stall: 131.6s, contrast 98.0s over 2,032
-boxes** (−3 on 2,035), every rule green, run alone. The door became two beats
+boxes** (−3 on 2,035), every rule green, run alone. (The door half was reverted
+the same day on the owner's call; the first-stall half stands.) The door became two beats
 — the seller's three steps, then the paste box — with the illustration
 upright and small on every width instead of the tilted desktop-only card,
 and the never-spent screen became a checklist with the stuck step marked. No

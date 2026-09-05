@@ -44,6 +44,8 @@ import {
     SHARE_LEDE,
     STUDIO_DEFAULT_HINT,
     HOME_PASTE_INVALID,
+    HOME_SELLER,
+    HOME_DEMO_SOON,
     HOME_PASTE_SUBMIT,
     HOME_TITLE,
     LINK_COPIED,
@@ -578,8 +580,10 @@ describe('home is not an unreadable link', () => {
         expect(text).toContain(HOME_LEDE);
         // The two intro paragraphs became three chips and one trust line
         // (Stall Design, direction D) — the same facts, scannable.
-        expect(text).toContain(copy.HOME_BEAT_OPEN);
-        expect(text).toContain(copy.HOME_BEAT_MINE);
+        expect(text).toContain(copy.HOME_CHIPS_FINE);
+        for (const chip of copy.HOME_CHIPS) {
+            expect(text).toContain(chip);
+        }
         expect(text).toContain(HOME_PASTE_SUBMIT);
         expect(text).not.toContain(LINK_UNREADABLE_TITLE);
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -2050,11 +2054,11 @@ describe('publish-sheet', () => {
 describe('apex directs the seller to their own address', () => {
     it('names the receive address, not a public key they cannot see', () => {
         const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
-        expect(root.textContent).toContain(copy.HOME_STEPS[1]);
+        expect(root.textContent).toContain(HOME_SELLER);
         // A seller can copy their address out of Cashtab; the pubkey is shown
         // nowhere, so the seller line must not send them looking for one.
-        expect(copy.HOME_STEPS[1].toLowerCase()).toContain('address');
-        expect(copy.HOME_STEPS[1].toLowerCase()).not.toContain('public key');
+        expect(HOME_SELLER.toLowerCase()).toContain('address');
+        expect(HOME_SELLER.toLowerCase()).not.toContain('public key');
     });
 });
 
@@ -2149,13 +2153,13 @@ describe('expanded-card-shows-a-large-token-image', () => {
 });
 
 describe('apex signposts a demo without becoming a shop', () => {
-    it('links a real stall in one line and fetches nothing', () => {
+    it('shows a coming-soon placeholder, not a fetched stall', () => {
         const h = handlers();
         const root = document.createElement('div');
         renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
-        const demo = root.querySelector('.door-demo');
+        const demo = root.querySelector('[data-role="demo-soon"]');
         expect(demo).not.toBeNull();
-        expect(demo!.textContent).toContain(copy.HOME_DEMO_LINK);
+        expect(demo!.textContent).toContain(HOME_DEMO_SOON);
         // A real route now, not a "coming soon". Still a link: the apex never
         // fetches, so it cannot promise what that shop has in it.
         const open = demo!.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
@@ -10230,51 +10234,6 @@ describe('the-quotes-row-keeps-pay-straight-to-the-sheet', () => {
         expect(h.onOpenItem).not.toHaveBeenCalled();
         (root.querySelector('[data-role="pay-row"] [data-role="item-open"]') as HTMLButtonElement).click();
         expect(h.onOpenItem).toHaveBeenCalledWith(TOKEN_ID, 'quotes');
-    });
-});
-
-/*
- * The door is two beats. "Open a stall" is the seller's three steps in the
- * order the apex invites; "This is my stall" is the paste box and the one
- * fine line saying nothing is sent. The illustration and the real-stall link
- * follow; the streamer line stays. Nothing else stands before the box.
- */
-describe('the-door-is-two-beats', () => {
-    const home = (): StallView => ({
-        route: { kind: 'home' },
-        overlay: { kind: 'idle' },
-        tokens: new Map(),
-    });
-
-    it('paints the three steps, then the paste box, in that order', () => {
-        const { root } = paint(home());
-        const open = root.querySelector('[data-role="door-open"]') as HTMLElement;
-        const mine = root.querySelector('[data-role="door-mine"]') as HTMLElement;
-        expect(open, 'the first beat').not.toBeNull();
-        expect(mine, 'the second beat').not.toBeNull();
-        expect(open.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(open.textContent).toContain(copy.HOME_BEAT_OPEN);
-        const steps = [...open.querySelectorAll('ol.steps > li')].map((li) => li.textContent);
-        expect(steps).toEqual(copy.HOME_STEPS.map((step, i) => `${i + 1}${step}`));
-        expect(mine.textContent).toContain(copy.HOME_BEAT_MINE);
-        expect(mine.querySelector('form.paste'), 'the paste box is the second beat').not.toBeNull();
-        expect(mine.textContent).toContain(copy.HOME_PASTE_FINE);
-        // The form still submits into the same handler with the same value.
-        expect(root.querySelector('.paste-in')).not.toBeNull();
-    });
-
-    it('keeps the illustration, the real-stall link and the streamer line, and shares nothing', () => {
-        const { root, h } = paint(home());
-        expect(root.querySelector('[data-role="door-preview"]')).not.toBeNull();
-        const demo = root.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
-        expect(demo.textContent).toBe(copy.HOME_DEMO_LINK);
-        expect(demo.tagName).toBe('BUTTON');
-        demo.click();
-        expect(h.onOpenStall).toHaveBeenCalledWith(copy.DEMO_STALL_ADDRESS);
-        const stream = root.querySelector('[data-role="door-stream-link"]') as HTMLAnchorElement;
-        expect(stream.getAttribute('href')).toBe('/stream');
-        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
-        expect(root.querySelector('svg.qr')).toBeNull();
     });
 });
 
