@@ -2420,7 +2420,9 @@ describe('controls that look like buttons are not underlined', () => {
      * `.buy` and `.mini` are worn by both `<button>` and `<a>`. An anchor is
      * inline by default, so `width: 100%` was ignored and the padding overflowed
      * the line box wherever the parent was not flex — which is `listInCashtab`,
-     * on the first screen a new seller sees.
+     * on the first screen a new seller sees. Since round 8 the box is `flex`
+     * (a block-level box too — the glyph sits beside the words); what the
+     * rule refuses is the inline default.
      */
     it('gives .buy a block box and no underline', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
@@ -2429,7 +2431,7 @@ describe('controls that look like buttons are not underlined', () => {
         );
         const buy = css.match(/\.buy\s*\{([^}]+)\}/);
         expect(buy).not.toBeNull();
-        expect(buy![1]).toMatch(/display:\s*block/);
+        expect(buy![1]).toMatch(/display:\s*(block|flex)/);
         expect(buy![1]).toMatch(/text-decoration:\s*none/);
         const mini = css.match(/\.mini\s*\{([^}]+)\}/);
         expect(mini![1]).toMatch(/text-decoration:\s*none/);
@@ -9381,6 +9383,42 @@ describe('every-glyph-control-carries-an-icon-and-no-glyph-text', () => {
         expect(caret?.classList.contains('ic')).toBe(true);
     });
 
+    it('the retry, the check, the add and the explorer link carry a glyph beside their words', () => {
+        const down = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
+        const retry = down.querySelector('[data-role="retry"]');
+        expectOneIcon(retry, 'retry');
+        expect([copy.TRY_AGAIN, copy.CHECK_AGAIN]).toContain(retry!.textContent);
+        const sheet = paint(railView({ overlay: { kind: 'describe' } })).root;
+        const check = sheet.querySelector('[data-role="publish-check"]');
+        expectOneIcon(check, 'check for it now');
+        expect(check!.textContent).toBe(copy.PUBLISH_CHECK_NOW);
+        const add = sheet.querySelector('[data-role="describe-paste-add"]');
+        expectOneIcon(add, 'add');
+        expect(add!.textContent).toBe(copy.DESC_PASTE_ADD);
+        const activity = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [{ txid: 'ab'.repeat(32), kind: 'book', seenAtMs: 1_756_400_000_000 }],
+            }),
+        ).root;
+        const out = activity.querySelector('[data-role="event-explorer"]');
+        expectOneIcon(out, 'explorer link');
+        expect(out!.textContent).toBe(copy.EVENT_OPEN_EXPLORER);
+    });
+
+    it('a pressed default-stall toggle carries a check, an unpressed one nothing', () => {
+        const off = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' })).root;
+        const offBtn = off.querySelector('[data-role="studio-default-stall"]')!;
+        expect(offBtn.querySelector('svg.ic')).toBeNull();
+        expect(offBtn.textContent).toBe(copy.OPEN_BY_DEFAULT);
+        const on = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', isDefaultStall: true }),
+        ).root;
+        const onBtn = on.querySelector('[data-role="studio-default-stall"]');
+        expectOneIcon(onBtn, 'pressed toggle');
+        expect(onBtn!.textContent).toBe(copy.OPENING_BY_DEFAULT);
+    });
+
     it('the five constants carry the words alone', () => {
         expect(copy.ITEM_BACK_LISTINGS).toBe('Listings');
         expect(copy.ITEM_BACK_QUOTES).toBe('Quotes');
@@ -9389,6 +9427,77 @@ describe('every-glyph-control-carries-an-icon-and-no-glyph-text', () => {
         );
         expect(copy.LISTED_POINTER).toBe('Also listed on Agora');
         expect('PUBLISH_X' in copy, 'the close control has no typed glyph to spell').toBe(false);
+    });
+});
+
+/*
+ * A copy control says "copied" by swapping its words; the glyph beside them
+ * is a sibling node and must survive the swap — `textContent = …` on the
+ * button would take it with the old words. The share copy and the Activity
+ * copy are the two in this module; the OBS copy has the same test beside it.
+ */
+describe('a-copied-control-keeps-its-icon', () => {
+    async function pressWithClipboard(btn: HTMLButtonElement): Promise<void> {
+        const original = navigator.clipboard;
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            btn.click();
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(writeText).toHaveBeenCalled();
+        } finally {
+            Object.defineProperty(navigator, 'clipboard', { configurable: true, value: original });
+        }
+    }
+
+    it('the share copy swaps its words and keeps one glyph', async () => {
+        const { root } = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }));
+        const btn = root.querySelector('.share button.mini') as HTMLButtonElement;
+        expect(btn.querySelectorAll('svg.ic')).toHaveLength(1);
+        expect(btn.textContent).toBe(copy.COPY_LINK);
+        await pressWithClipboard(btn);
+        expect(btn.textContent).toBe(copy.LINK_COPIED);
+        expect(btn.querySelectorAll('svg.ic'), 'the glyph survives the swap').toHaveLength(1);
+    });
+
+    it('the activity copy does the same', async () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [{ txid: 'ab'.repeat(32), kind: 'book', seenAtMs: 1_756_400_000_000 }],
+            }),
+        );
+        const btn = root.querySelector('[data-role="event-copy"]') as HTMLButtonElement;
+        expect(btn.querySelectorAll('svg.ic')).toHaveLength(1);
+        expect(btn.textContent).toBe(copy.EVENT_COPY_TXID);
+        await pressWithClipboard(btn);
+        expect(btn.textContent).toBe(copy.EVENT_TXID_COPIED);
+        expect(btn.querySelectorAll('svg.ic')).toHaveLength(1);
+    });
+});
+
+/*
+ * Round 8 put every tappable control on one 44px floor. The floor is a
+ * declaration in the shipped block, so it is read there — a probe can only
+ * measure the screens it paints, and a control that loses its floor on a
+ * screen nobody fixtures is exactly the one that goes unmeasured.
+ */
+describe('every-tappable-control-keeps-a-44px-floor', () => {
+    it('declares min-height: 44px on each control class', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const blocks = new Map<string, string>();
+        for (const block of css.split('}')) {
+            const [selector, body] = block.split('{');
+            if (selector === undefined || body === undefined) continue;
+            blocks.set(selector.trim().replace(/\s+/g, ' '), body);
+        }
+        const missing: string[] = [];
+        for (const selector of ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back']) {
+            const body = blocks.get(selector);
+            if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
+        }
+        expect(missing, 'each tappable control declares its own 44px floor').toEqual([]);
     });
 });
 

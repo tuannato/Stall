@@ -308,6 +308,11 @@
         color 0.2s;
 }
 
+/* Pressed reads by weight (and the check glyph); the look's colour is already the accent. */
+.t-rural .mini[aria-pressed='true'] {
+    font-weight: 700;
+}
+
 .t-rural .mini:hover {
     background: #9e4620;
     color: #fff3ea;

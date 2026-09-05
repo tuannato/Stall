@@ -363,6 +363,11 @@
         color 0.2s;
 }
 
+/* Pressed reads by weight (and the check glyph); the look's colour is already the accent. */
+.t-modern .mini[aria-pressed='true'] {
+    font-weight: 700;
+}
+
 .t-modern .mini:hover {
     background: #2563eb;
     border-color: #2563eb;

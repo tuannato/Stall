@@ -19,7 +19,7 @@ import type { StallView } from '../domain/state';
 import { stallPath } from '../domain/route';
 import type { StallHandlers } from './render';
 import { identityOf } from './render';
-import { SVG_NS } from './glyphs';
+import { glyphLabel, SVG_NS } from './glyphs';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -350,19 +350,20 @@ function copyControl(url: string): HTMLElement {
     field.readOnly = true;
     field.value = url;
     field.setAttribute('aria-label', OBS_COPY_LINK);
-    const btn = el('button', 'mini obs-copy', OBS_COPY_LINK);
+    const btn = el('button', 'mini obs-copy');
+    const say = glyphLabel(btn, 'copy', OBS_COPY_LINK);
     btn.type = 'button';
     const fallback = (): void => {
         field.focus();
         field.select();
-        btn.textContent = OBS_COPY_LINK_FALLBACK;
+        say(OBS_COPY_LINK_FALLBACK);
     };
     btn.addEventListener('click', () => {
         const clipboard = navigator.clipboard;
         if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
             void clipboard.writeText(url).then(
                 () => {
-                    btn.textContent = OBS_LINK_COPIED;
+                    say(OBS_LINK_COPIED, 'check');
                 },
                 () => {
                     fallback();

@@ -38,7 +38,7 @@ import {
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
 import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
-import { glyph, SVG_NS } from './glyphs';
+import { glyph, glyphLabel, SVG_NS } from './glyphs';
 import { isWithheldToken } from '../domain/withheld';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
@@ -998,7 +998,8 @@ function paintOpening(
  * empty answer is no longer applied over a painted book.
  */
 function retryControl(handlers: StallHandlers, label = copy.TRY_AGAIN): HTMLElement {
-    const retry = el('button', 'mini', label);
+    const retry = el('button', 'mini');
+    glyphLabel(retry, 'retry', label);
     retry.type = 'button';
     retry.setAttribute('data-role', 'retry');
     retry.setAttribute('data-focus-key', 'retry');
@@ -2644,7 +2645,8 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     pasteField.setAttribute('data-role', 'describe-paste');
     pasteField.setAttribute('data-focus-key', 'describe-paste');
     pasteLabel.append(pasteField);
-    const pasteAdd = el('button', 'mini another', copy.DESC_PASTE_ADD);
+    const pasteAdd = el('button', 'mini another');
+    glyphLabel(pasteAdd, 'plus', copy.DESC_PASTE_ADD);
     pasteAdd.type = 'button';
     pasteAdd.setAttribute('data-role', 'describe-paste-add');
     pasteAdd.setAttribute('data-focus-key', 'describe-paste-add');
@@ -3945,7 +3947,8 @@ function sheetHead(title: string, sub: string, handlers: StallHandlers): HTMLEle
  */
 function sheetFoot(handlers: StallHandlers): HTMLElement {
     const foot = el('div', 'sheet-foot');
-    const check = el('button', 'mini', copy.PUBLISH_CHECK_NOW);
+    const check = el('button', 'mini');
+    glyphLabel(check, 'retry', copy.PUBLISH_CHECK_NOW);
     check.type = 'button';
     check.setAttribute('data-role', 'publish-check');
     check.setAttribute('data-focus-key', 'publish-check');
@@ -5628,6 +5631,10 @@ function paintStudio(
         btn.setAttribute('data-role', 'studio-default-stall');
         btn.setAttribute('data-focus-key', 'studio-default-stall');
         btn.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
+        if (isDefault) {
+            // The pressed state carries the check; the words still say it.
+            btn.prepend(glyph('check'));
+        }
         btn.addEventListener('click', () => onToggle(raw));
         pref.append(btn);
         pref.append(el('p', 'fine', copy.STUDIO_DEFAULT_HINT));
@@ -6239,7 +6246,8 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     }
     const url = EXPLORER_TX_URL(event.txid);
     if (url !== undefined) {
-        const link = el('a', 'mini another event-out', copy.EVENT_OPEN_EXPLORER);
+        const link = el('a', 'mini another event-out');
+        glyphLabel(link, 'external', copy.EVENT_OPEN_EXPLORER, 'after');
         link.href = url;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
@@ -6260,7 +6268,8 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
  * this page already painted, copied. Neither opens anything.
  */
 function copyControl(value: string, role: string): HTMLElement {
-    const btn = el('button', 'mini event-copy', copy.EVENT_COPY_TXID);
+    const btn = el('button', 'mini event-copy');
+    const say = glyphLabel(btn, 'copy', copy.EVENT_COPY_TXID);
     btn.type = 'button';
     btn.setAttribute('data-role', role);
     btn.addEventListener('click', () => {
@@ -6268,15 +6277,15 @@ function copyControl(value: string, role: string): HTMLElement {
         if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
             void clipboard.writeText(value).then(
                 () => {
-                    btn.textContent = copy.EVENT_TXID_COPIED;
+                    say(copy.EVENT_TXID_COPIED, 'check');
                 },
                 () => {
-                    btn.textContent = copy.EVENT_TXID_SELECT;
+                    say(copy.EVENT_TXID_SELECT);
                 },
             );
             return;
         }
-        btn.textContent = copy.EVENT_TXID_SELECT;
+        say(copy.EVENT_TXID_SELECT);
     });
     return btn;
 }
@@ -6426,8 +6435,11 @@ function footer(
         const btn = el('button', 'mini another', label);
         btn.type = 'button';
         btn.setAttribute('data-role', 'default-stall');
-    btn.setAttribute('data-focus-key', 'default-stall');
+        btn.setAttribute('data-focus-key', 'default-stall');
         btn.setAttribute('aria-pressed', pin.isDefault ? 'true' : 'false');
+        if (pin.isDefault) {
+            btn.prepend(glyph('check'));
+        }
         btn.addEventListener('click', () => pin.onToggle(pin.raw));
         ft.append(btn);
     }
@@ -6754,19 +6766,20 @@ function shareControl(): HTMLElement {
     field.readOnly = true;
     field.value = url;
     field.setAttribute('aria-label', copy.COPY_LINK);
-    const btn = el('button', 'mini', copy.COPY_LINK);
+    const btn = el('button', 'mini');
+    const say = glyphLabel(btn, 'copy', copy.COPY_LINK);
     btn.type = 'button';
     const fallback = (): void => {
         field.focus();
         field.select();
-        btn.textContent = copy.COPY_LINK_FALLBACK;
+        say(copy.COPY_LINK_FALLBACK);
     };
     btn.addEventListener('click', () => {
         const clipboard = navigator.clipboard;
         if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
             void clipboard.writeText(url).then(
                 () => {
-                    btn.textContent = copy.LINK_COPIED;
+                    say(copy.LINK_COPIED, 'check');
                 },
                 () => {
                     fallback();

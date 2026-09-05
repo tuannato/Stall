@@ -33,6 +33,37 @@ const GLYPH_PATHS: Record<GlyphName, string> = {
     plus: 'M8 3v10M3 8h10',
 };
 
+/**
+ * A control's glyph and its words: the glyph is a sibling node, the words a
+ * `<span>`, so a control that swaps its words (a copy control saying
+ * "copied") writes the span and keeps the glyph — `textContent = …` on the
+ * control itself would take the glyph with the old words. Returns the setter
+ * for the words, which may swap the glyph too.
+ */
+export function glyphLabel(
+    control: HTMLElement,
+    name: GlyphName,
+    text: string,
+    side: 'before' | 'after' = 'before',
+): (text: string, name?: GlyphName) => void {
+    let icon = glyph(name);
+    const words = document.createElement('span');
+    words.textContent = text;
+    if (side === 'before') {
+        control.append(icon, words);
+    } else {
+        control.append(words, icon);
+    }
+    return (next, nextName) => {
+        words.textContent = next;
+        if (nextName !== undefined) {
+            const fresh = glyph(nextName);
+            icon.replaceWith(fresh);
+            icon = fresh;
+        }
+    };
+}
+
 /** One `<svg class="ic …" aria-hidden>` holding the named path. */
 export function glyph(name: GlyphName, extraClass?: string): SVGSVGElement {
     const svg = document.createElementNS(SVG_NS, 'svg');

@@ -205,6 +205,8 @@ describe('the-copy-button-copies-the-generated-url', () => {
             await Promise.resolve();
             expect(writeText).toHaveBeenCalledWith(expect.stringContaining('view=broadcast'));
             expect(btn.textContent).toBe(OBS_LINK_COPIED);
+            // a-copied-control-keeps-its-icon: the glyph is a sibling of the words.
+            expect(btn.querySelectorAll('svg.ic'), 'the glyph survives the swap').toHaveLength(1);
         } finally {
             Object.defineProperty(navigator, 'clipboard', {
                 configurable: true,
