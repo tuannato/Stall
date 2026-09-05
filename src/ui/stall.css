@@ -4613,15 +4613,32 @@ details.fold > .fold-sum::-webkit-details-marker {
     gap: 14px;
     padding: 18px;
 }
+/*
+ * The face's head: the icon at the design's 56px beside the name, never the
+ * old expander's hero — `--s-hero` is 256px on Modern, which left the name a
+ * 70px column and dropped the picture under it.
+ */
 .face-h {
     display: grid;
-    grid-template-columns: var(--s-hero) minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
     gap: 12px;
     align-items: center;
 }
-.face-h .item-ic-lg {
+.face-h .item-ic.item-ic-lg {
+    /* `.item-ic` carries the row grid's `grid-area: ic`; in this grid that
+       name resolves to nothing and auto-placement pushed the picture into an
+       implicit third column, with the name in the 56px first one. */
+    grid-area: 1 / 1;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--s-icon-radius);
     align-self: center;
     margin-bottom: 0;
+    font-size: 20px;
+}
+.face-h > :not(.item-ic) {
+    grid-area: 1 / 2;
+    min-width: 0;
 }
 .face-nm {
     font-size: 19px;
