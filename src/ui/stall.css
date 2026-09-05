@@ -2609,6 +2609,11 @@ details.fold.fold-cta[open] > .fold-sum {
     cursor: default;
 }
 
+.paste-in::placeholder {
+    color: var(--s-muted);
+    opacity: 0.8;
+}
+
 .sheet .sheet-head-t {
     display: flex;
     flex-direction: column;
@@ -2626,7 +2631,7 @@ details.fold.fold-cta[open] > .fold-sum {
 
 .sheet .paste-in:focus {
     outline: 2px solid var(--s-accent);
-    outline-offset: 1px;
+    outline-offset: 2px;
 }
 
 .sheet .decor {
@@ -2679,12 +2684,24 @@ details.fold.fold-cta[open] > .fold-sum {
     font: inherit;
     font-family: var(--s-font);
     font-size: 16px;
+    line-height: 1.35;
+    min-height: 44px;
     padding: 10px;
     border: 1px solid var(--s-muted);
     border-radius: var(--s-radius);
     background: var(--s-surface);
     color: var(--s-text);
     width: 100%;
+}
+
+/*
+ * A field the reader cannot type into wears a shaded ground and a dashed
+ * edge — never a smaller face, which is what iOS zooms on.
+ */
+.share-url,
+.paste-in[readonly] {
+    background: color-mix(in srgb, var(--s-shade) 5%, var(--s-surface));
+    border-style: dashed;
 }
 
 .share-url {
