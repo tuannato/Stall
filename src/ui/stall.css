@@ -2638,23 +2638,100 @@ details.fold > .fold-sum::-webkit-details-marker {
     gap: 16px;
 }
 
-.studio-sec {
+/*
+ * The studio's three cards and its trailing preference. A card is a head row
+ * (title, one control) over rows; two columns from 680px with Share across
+ * both — the grid moves paint, never reading order.
+ */
+.studio {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background: var(--s-surface);
-    border: var(--s-card-border);
-    border-radius: calc(var(--s-radius) + 2px);
-    box-shadow: var(--s-card-shadow);
-    padding: 16px 15px;
+    gap: 12px;
 }
 
-.studio-sec .section-head {
-    margin-top: 0;
+.studio-lede {
+    margin: 0 2px;
 }
 
-.studio-sec .buy {
-    margin: 2px 0;
+.scard {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+}
+
+.scard-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.scard-t {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: var(--s-track);
+    text-transform: var(--s-sign-case);
+}
+
+.kv {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    min-height: 28px;
+}
+
+.kv span:last-child {
+    color: var(--s-muted);
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.trow {
+    display: grid;
+    grid-template-areas:
+        'ic nm'
+        'ic acts';
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 6px 10px;
+    align-items: center;
+    padding: 10px 0;
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 16%, transparent);
+}
+
+.trow .item-ic {
+    grid-area: ic;
+    align-self: start;
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+}
+
+.trow .nm {
+    grid-area: nm;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.trow .acts2 {
+    grid-area: acts;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.trow .acts2 .fine {
+    margin: 0;
+}
+
+.sheet-more {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 /* The poster row: words left, control right, split from the ticket above. */
@@ -2681,17 +2758,19 @@ details.fold > .fold-sum::-webkit-details-marker {
    stub says "aside" where the solid cards say "tool". */
 .studio-browser {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     margin-top: 2px;
-    padding: 12px 14px;
-    border: 1.5px dashed color-mix(in srgb, var(--s-muted) 32%, transparent);
-    border-radius: var(--s-radius);
+    padding: 4px 2px;
+    font-size: 13.5px;
+    color: var(--s-muted);
 }
 
-.studio-browser .mini {
-    align-self: flex-start;
+.studio-browser .fine {
+    margin: 0;
+    flex: 1 1 100%;
 }
 
 /*
@@ -3882,6 +3961,27 @@ details.fold > .fold-sum::-webkit-details-marker {
     }
     50% {
         box-shadow: 0 8px 30px rgba(37, 99, 235, 0.6);
+    }
+}
+
+@media (min-width: 680px) {
+    .studio {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .studio-lede,
+    .studio-browser,
+    [data-role='studio-card-share'] {
+        grid-column: 1 / -1;
+    }
+
+    .trow {
+        grid-template-areas: 'ic nm acts';
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        padding: 6px 0;
     }
 }
 

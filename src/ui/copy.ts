@@ -326,30 +326,12 @@ export const TAB_ACTIVITY = 'Activity';
 export const STUDIO_SUB = 'Seller studio';
 export const STUDIO_LEDE =
     'The tools for whoever holds this stall’s wallet. Anyone can look; only that wallet can sign.';
-export const STUDIO_OPEN_SETTINGS = 'Name this stall, choose a look';
-/**
- * It used to say "name, look, decorations **and token descriptions**", which
- * was the three-job sheet describing itself. A description is a different
- * record and a different fee; the second launcher below is where it lives now,
- * and this line stops claiming it.
- */
-export const STUDIO_SETTINGS_HINT =
-    'One small record signs your stall name, tagline, announcement, look and decorations — built here, signed in your wallet.';
-/**
- * The second launcher. Its own sheet because it signs its own record, one per
- * token: a seller who reads one publish control as covering both learns the
- * difference a fee at a time.
- */
-export const STUDIO_DESCRIBE_HINT =
-    'A separate record for each token: your words, the shelf it sits under, and your own asking figure. One transaction per token, each time you change one.';
 /*
  * Section titles in the third person: the panel is public — anyone can open
  * the Studio tab — so "Your stall record" over a stranger's screen would be
  * the page claiming to know who is reading it. The lede two lines up already
  * says whose tools these are.
  */
-export const STUDIO_SEC_RECORD = 'The stall record';
-export const STUDIO_SEC_SHARE = 'Share this stall';
 /**
  * What the Activity panel is, said where a seller reads their own tools. It
  * is a feed of what this page happened to read — a ring on the page clock and
@@ -366,6 +348,26 @@ export const STUDIO_ACTIVITY_NOTE =
  */
 export const STUDIO_DEFAULT_HINT =
     'Kept in this browser only — it sets which stall the bare domain opens here. The shared link is unchanged.';
+
+/**
+ * The studio is three cards and a preference: Name & look (what the stall
+ * record says, and one control to change it), Items & prices (the describe
+ * sheet's own set — listed, described, quoted or pasted — one row each with
+ * the two things a seller does to a token), and Share (the link, the code,
+ * the poster and the stream overlay's recipe, folded). The browser
+ * preference trails, because it is this browser's and not the stall's.
+ */
+export const STUDIO_CARD_NAME = 'Name & look';
+export const STUDIO_CHANGE = 'Change';
+export const STUDIO_LOOK_ROW = 'Look';
+export const STUDIO_NO_NAME = 'No name published yet';
+export const STUDIO_NO_TAGLINE = 'No tagline';
+export const STUDIO_CARD_ITEMS = 'Items & prices';
+export const STUDIO_DESCRIBE_ROW = 'Describe';
+export const STUDIO_PRICE_ROW = 'Set a price';
+export const STUDIO_CARD_SHARE = 'Share';
+/** The fold under a sheet's primary control: everything the record can also carry. */
+export const SHEET_MORE = 'More';
 
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';

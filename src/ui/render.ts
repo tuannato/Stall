@@ -2460,6 +2460,27 @@ function sayPrice(price: TokenPrice): string | undefined {
  * put a second publish button beside every buy control, for every visitor, on
  * a page that cannot know which of them is the seller.
  */
+/**
+ * Every token this stall may write a record about: what it lists, what the
+ * seller has already described or quoted — and whatever they paste into the
+ * describe sheet, which joins in the sheet itself. The raw book, not
+ * `offersOf`: a withheld token stays in the set so a record the seller
+ * already published on it — words, shelf, removal — stays reachable; only its
+ * price field is refused. The set used to be the shop's alone, so a listing
+ * that sold out took its own record out of reach. Never a holdings read: the
+ * sheet is visible to any visitor.
+ */
+export function describableTokenIds(view: StallView): string[] {
+    const listed = (view.fetch?.kind === 'offers' ? view.fetch.offers : []).map((o) => o.tokenId);
+    return [
+        ...new Set([
+            ...listed,
+            ...(view.descriptions?.keys() ?? []),
+            ...(view.prices?.keys() ?? []),
+        ]),
+    ];
+}
+
 function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'describe');
@@ -2467,7 +2488,11 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', copy.DESC_TITLE);
     wrap.append(sheetHead(copy.DESC_TITLE, copy.DESC_SUB, handlers));
-    wrap.append(el('p', 'fine', copy.DESC_LEDE));
+    // Everything the record can carry beyond words and a figure folds under
+    // "More" after the sign controls: the shelf, the tolerance, the way in
+    // for a pasted token id, the meter, removal, the bytes and the phone QR.
+    const more = el('div', 'sheet-more');
+    more.append(el('p', 'fine', copy.DESC_LEDE));
 
     const address = view.address;
     if (address === undefined || address === '') {
@@ -2475,27 +2500,8 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         return wrap;
     }
 
-    // The raw book, not `offersOf`: a withheld token stays in the picker so
-    // a record the seller already published on it — words, shelf, removal —
-    // stays reachable. Only its price field is refused.
+    const tokenIds = describableTokenIds(view);
     const listed = new Set((view.fetch?.kind === 'offers' ? view.fetch.offers : []).map((o) => o.tokenId));
-    /*
-     * Every token this sheet may write a record about: what the stall lists,
-     * what the seller has already described or quoted, and anything they paste
-     * below.
-     *
-     * The set used to be the shop's alone, so a listing that sold out took its
-     * own record out of reach — words, shelf and figure together, on a record
-     * that is permanent and republishable. And a seller with an unlisted token
-     * to quote met one sentence and no field at all.
-     */
-    const tokenIds = [
-        ...new Set([
-            ...listed,
-            ...(view.descriptions?.keys() ?? []),
-            ...(view.prices?.keys() ?? []),
-        ]),
-    ];
     /**
      * Genesis facts and attributions this sheet asked for itself, held in its
      * own closure. A lookup answered by a repaint would take a half-written
@@ -2566,7 +2572,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const pasteWhy = el('p', 'ctx', '');
     pasteWhy.hidden = true;
     pasteWhy.setAttribute('data-role', 'describe-paste-why');
-    pick.append(pasteLabel, pasteAdd, pasteWhy);
+    more.append(pasteLabel, pasteAdd, pasteWhy);
     wrap.append(pick);
 
     const form = el('form', 'paste');
@@ -2611,7 +2617,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         shelfLabel.append(list);
     }
     shelfLabel.append(shelfField);
-    form.append(shelfLabel);
+    more.append(shelfLabel);
 
     /*
      * The quote (STLD tag 0x02): what the seller asks for one whole token.
@@ -2736,7 +2742,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const toleranceNote = el('p', 'fine', copy.DESC_TOLERANCE_HINT);
     toleranceNote.setAttribute('data-role', 'describe-tolerance-note');
     toleranceGroup.append(toleranceNote);
-    form.append(toleranceGroup);
+    more.append(toleranceGroup);
     /*
      * The two rails, and the sentence that they are not one thing. Nothing
      * links them: the covenant asks what it asks, and this figure is what the
@@ -2781,7 +2787,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     form.append(sellerPriceLine);
 
     const meter = sheetMeter();
-    form.append(meter.wrap);
+    more.append(meter.wrap);
     const counter = el('p', 'pub', '');
     counter.setAttribute('data-role', 'describe-summary');
     form.append(counter);
@@ -2806,22 +2812,6 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 
     wrap.append(form);
 
-    // Cashtab previews an unknown LOKAD as raw hex, so this sheet is the only
-    // place an `STLD` record is legible before it is signed — the same reason
-    // the stall's own record says it, and the same sentence.
-    wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
-    const bytes = el('p', 'fine publish-hex', '');
-    bytes.setAttribute('data-role', 'describe-hex');
-    const hexFold = sheetFold('describe-hex-fold', copy.RECORD_BYTES_FOLD, bytes);
-    wrap.append(hexFold);
-
-    const qrBox = el('div', 'publish-qr');
-    qrBox.setAttribute('data-role', 'describe-qr');
-    qrBox.hidden = true;
-    wrap.append(
-        sheetFold('describe-qr-fold', copy.SCAN_WITH_PHONE_FOLD, qrBox, 'sheet-qr-fold'),
-    );
-
     const acts = el('div', 'acts');
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'describe-cashtab');
@@ -2834,13 +2824,32 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         link.target = '_blank';
     }
     acts.append(web, app);
+    // Never inside the fold: a phone reaches its wallet by this link.
     wrap.append(acts);
 
     const removeToggle = el('button', 'mini another link-mute', copy.DESC_REMOVE_OPEN);
     removeToggle.type = 'button';
     removeToggle.setAttribute('data-role', 'describe-remove');
     removeToggle.setAttribute('data-focus-key', 'describe-remove');
-    wrap.append(removeToggle);
+    more.append(removeToggle);
+
+    // Cashtab previews an unknown LOKAD as raw hex, so this sheet is the only
+    // place an `STLD` record is legible before it is signed — the same reason
+    // the stall's own record says it, and the same sentence.
+    more.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
+    const bytes = el('p', 'fine publish-hex', '');
+    bytes.setAttribute('data-role', 'describe-hex');
+    const hexFold = sheetFold('describe-hex-fold', copy.RECORD_BYTES_FOLD, bytes);
+    more.append(hexFold);
+
+    const qrBox = el('div', 'publish-qr');
+    qrBox.setAttribute('data-role', 'describe-qr');
+    qrBox.hidden = true;
+    more.append(
+        sheetFold('describe-qr-fold', copy.SCAN_WITH_PHONE_FOLD, qrBox, 'sheet-qr-fold'),
+    );
+    const moreFold = sheetFold('describe-more', copy.SHEET_MORE, more) as HTMLDetailsElement;
+    wrap.append(moreFold);
 
     /** Removal mode: the same controls, aimed at the removal record. */
     let removing = false;
@@ -2857,6 +2866,11 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         noTokens.hidden = !noToken;
         tokenLabel.hidden = noToken;
         form.hidden = noToken;
+        // Nothing to pick: the way in is the paste field, which sits in the
+        // fold — so the fold opens, or the note above points at a closed door.
+        if (noToken) {
+            moreFold.open = true;
+        }
 
         // Per whole token, and only for a fungible one: no field at all
         // otherwise, with the line saying why in its place.
@@ -3990,7 +4004,6 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', copy.PUBLISH_TITLE);
     wrap.append(sheetHead(copy.PUBLISH_TITLE, copy.PUBLISH_SUB, handlers));
-    wrap.append(el('p', 'fine', copy.PUBLISH_LEDE));
 
     const address = view.address;
     if (address === undefined || address === '') {
@@ -4387,13 +4400,21 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 
     renderDecor(painted);
     paintLooks();
-    form.append(label, taglineLabel, announceLabel, themeGroup, decorWrap, meter.wrap, summary, err, sameLook);
+    // Name, tagline, the "Publishes:" line and the sentence that refused a
+    // field stand before the sign controls, and nothing else does. The look,
+    // the announcement, the decorations, the meter, the bytes and the phone
+    // QR fold under "More": the record carries them, a seller renaming a
+    // stall does not read them. The pay.e.cash road never folds.
+    form.append(label, taglineLabel, summary, err, sameLook);
     wrap.append(form);
-    wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
-    wrap.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
-    wrap.append(hexFold);
-    wrap.append(qrFold);
     wrap.append(acts);
+    const more = el('div', 'sheet-more');
+    more.append(el('p', 'fine', copy.PUBLISH_LEDE));
+    more.append(themeGroup, announceLabel, decorWrap, meter.wrap);
+    more.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
+    more.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
+    more.append(hexFold, qrFold);
+    wrap.append(sheetFold('publish-more', copy.SHEET_MORE, more));
     wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
     wrap.append(sheetFoot(handlers));
     refresh();
@@ -5338,15 +5359,37 @@ function stallTabs(view: StallView, handlers: StallHandlers): HTMLElement {
  * a section (the "single drawer" rule on `.section-head`'s own comment), and
  * it comes last because it is a preference of this browser, not a seller tool.
  */
-function studioSection(role: string, title: string): HTMLElement {
-    const sec = el('section', 'studio-sec');
-    sec.setAttribute('data-role', `studio-sec-${role}`);
-    const head = el('div', 'section-head');
-    head.append(el('h2', 'section-title', title));
-    sec.append(head);
-    return sec;
+/** One studio card: a head row with the title and one control, then rows. */
+function studioCard(role: string, title: string): { card: HTMLElement; head: HTMLElement } {
+    const card = el('section', 'card scard');
+    card.setAttribute('data-role', `studio-card-${role}`);
+    const head = el('div', 'scard-h');
+    head.append(el('h2', 'scard-t', title));
+    card.append(head);
+    return { card, head };
 }
 
+/** A label and a value on one line of a studio card. */
+function kvRow(label: string, value: string, role?: string): HTMLElement {
+    const row = el('div', 'kv');
+    if (role !== undefined) {
+        row.setAttribute('data-role', role);
+    }
+    row.append(el('span', undefined, label), el('span', undefined, value));
+    return row;
+}
+
+/**
+ * The studio: three cards and a preference. Name & look reads the stall
+ * record back and carries the one control that changes it; Items & prices
+ * lists the describe sheet's own set, one row per token with the two things
+ * a seller does to one (a withheld token keeps its row and loses only the
+ * price control, the sheet's own refusal); Share holds the link, the code,
+ * the poster and the stream overlay's recipe under a fold. The browser
+ * preference trails: it is this browser's, not the stall's. No count is
+ * printed anywhere on it — a failed book leaves the items card listing what
+ * the records still name, and a number would be a claim about the seller.
+ */
 function paintStudio(
     stall: HTMLElement,
     view: StallView,
@@ -5362,66 +5405,105 @@ function paintStudio(
         ),
     );
     const body = el('main', 'stall-body studio');
-
-    const record = studioSection('record', copy.STUDIO_SEC_RECORD);
-    record.append(el('p', 'fine', copy.STUDIO_LEDE));
+    // The honest qualifier the dock label cannot carry.
+    body.append(el('p', 'fine studio-lede', copy.STUDIO_LEDE));
     /*
-     * Two launchers, because there are two records. `STL1` is the stall's own
-     * document — one transaction, one fee — and `STLD` is one token's, one
-     * transaction per token. The single sheet that carried both read as one
-     * publish control covering both, and a seller found out a fee at a time.
-     *
-     * Both are gated on the address, and on nothing else: `overlayMounts` refuses
-     * an overlay with no address, so a control offered without one would set a
-     * state that paints nothing and holds `livePaint` back forever.
+     * Both launchers are gated on the address, and on nothing else:
+     * `overlayMounts` refuses an overlay with no address, so a control offered
+     * without one would set a state that paints nothing and holds `livePaint`
+     * back forever.
      */
     const hasAddress = view.address !== undefined && view.address !== '';
     const openPublish = handlers.onOpenPublish;
     const openDescribe = handlers.onOpenDescribe;
+
+    const name = studioCard('name', copy.STUDIO_CARD_NAME);
     if (hasAddress && openPublish !== undefined) {
-        const open = el('button', 'buy', copy.STUDIO_OPEN_SETTINGS);
-        open.type = 'button';
-        open.setAttribute('data-role', 'studio-open-publish');
-        open.setAttribute('data-focus-key', 'studio-open-publish');
-        open.addEventListener('click', () => openPublish());
-        record.append(open);
-        record.append(el('p', 'fine', copy.STUDIO_SETTINGS_HINT));
+        const change = el('button', 'mini', copy.STUDIO_CHANGE);
+        change.type = 'button';
+        change.setAttribute('data-role', 'studio-open-publish');
+        change.setAttribute('data-focus-key', 'studio-open-publish');
+        change.addEventListener('click', () => openPublish());
+        name.head.append(change);
     }
+    name.card.append(
+        kvRow(view.stallName ?? copy.STUDIO_NO_NAME, view.tagline ?? copy.STUDIO_NO_TAGLINE, 'studio-name-row'),
+    );
+    const lookId = view.theme?.id ?? DEFAULT_THEME.id;
+    name.card.append(
+        kvRow(
+            copy.STUDIO_LOOK_ROW,
+            SHIPPED_THEMES.find((row) => row.id === lookId)?.label ?? String(lookId),
+            'studio-look-row',
+        ),
+    );
+    if (!hasAddress || (openPublish === undefined && openDescribe === undefined)) {
+        name.card.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
+    }
+    body.append(name.card);
+
+    const items = studioCard('items', copy.STUDIO_CARD_ITEMS);
     if (hasAddress && openDescribe !== undefined) {
-        const open = el('button', 'mini another', copy.DESC_TITLE);
+        const open = el('button', 'mini', copy.DESC_TITLE);
         open.type = 'button';
         open.setAttribute('data-role', 'studio-open-describe');
         open.setAttribute('data-focus-key', 'studio-open-describe');
         open.addEventListener('click', () => openDescribe());
-        record.append(open);
-        record.append(el('p', 'fine', copy.STUDIO_DESCRIBE_HINT));
+        items.head.append(open);
     }
-    if (!hasAddress || (openPublish === undefined && openDescribe === undefined)) {
-        record.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
+    const ids = describableTokenIds(view);
+    if (ids.length === 0) {
+        items.card.append(el('p', 'fine', copy.DESC_NO_TOKENS));
     }
-    // What the Activity panel is, said where a seller reads their own tools:
-    // a ring on the page clock and a capped walk on the chain's, neither of
-    // which can back the word "ledger".
-    const activityNote = el('p', 'fine', copy.STUDIO_ACTIVITY_NOTE);
-    activityNote.setAttribute('data-role', 'studio-activity-note');
-    record.append(activityNote);
-    body.append(record);
+    for (const id of ids) {
+        const row = el('div', 'trow');
+        row.setAttribute('data-role', 'studio-item');
+        row.setAttribute('data-token-id', id);
+        const title = tokenName(view.tokens, id);
+        row.append(itemIcon(id, title));
+        row.append(el('div', 'nm', title));
+        const acts = el('div', 'acts2');
+        if (hasAddress && openDescribe !== undefined) {
+            const describe = el('button', 'mini', copy.STUDIO_DESCRIBE_ROW);
+            describe.type = 'button';
+            describe.setAttribute('data-role', 'studio-item-describe');
+            describe.setAttribute('data-focus-key', `studio-item-describe:${id}`);
+            describe.addEventListener('click', () => openDescribe(id));
+            acts.append(describe);
+            // The describe sheet's own refusal, said where the row is: a
+            // withheld token keeps its words and its shelf, and no quote.
+            if (isWithheldToken(id, view.tokens.get(id))) {
+                const why = el('span', 'fine', copy.DESC_QUOTE_WITHHELD);
+                why.setAttribute('data-role', 'studio-item-withheld');
+                acts.append(why);
+            } else {
+                const price = el('button', 'mini', copy.STUDIO_PRICE_ROW);
+                price.type = 'button';
+                price.setAttribute('data-role', 'studio-item-price');
+                price.setAttribute('data-focus-key', `studio-item-price:${id}`);
+                price.addEventListener('click', () => openDescribe(id));
+                acts.append(price);
+            }
+        }
+        row.append(acts);
+        items.card.append(row);
+    }
+    body.append(items.card);
 
-    const share = studioSection('share', copy.STUDIO_SEC_SHARE);
-    share.append(shareControl());
-    posterControl(share, view, handlers);
-    body.append(share);
-
-    // The stream overlay's recipe. Its strings live in the module itself,
-    // and it never navigates or stores: a section, the view, the handlers.
-    const broadcast = studioSection('broadcast', OBS_GUIDE_TITLE);
-    paintObsGuide(broadcast, view, handlers);
-    body.append(broadcast);
+    const share = studioCard('share', copy.STUDIO_CARD_SHARE);
+    share.card.append(shareControl());
+    posterControl(share.card, view, handlers);
+    // The stream overlay's recipe, folded: its strings live in the module
+    // itself, and it never navigates or stores.
+    const obs = el('div');
+    paintObsGuide(obs, view, handlers);
+    share.card.append(sheetFold('obs-guide-fold', OBS_GUIDE_TITLE, obs));
+    body.append(share.card);
 
     const raw = identityOf(view);
     const onToggle = handlers.onToggleDefault;
     if (raw !== undefined && onToggle !== undefined) {
-        const pref = el('div', 'studio-browser');
+        const pref = el('div', 'pref studio-browser');
         const isDefault = view.isDefaultStall === true;
         const btn = el(
             'button',
@@ -5711,6 +5793,11 @@ function paintActivity(
         ),
     );
     const body = el('main', 'stall-body');
+    // What this panel is, said on the panel: a ring on the page clock and a
+    // capped walk on the chain's, neither of which can back the word "ledger".
+    const note = el('p', 'fine', copy.STUDIO_ACTIVITY_NOTE);
+    note.setAttribute('data-role', 'studio-activity-note');
+    body.append(note);
     const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
     if (!watching) {
         body.append(el('p', 'note', copy.ACTIVITY_NOT_WATCHING));

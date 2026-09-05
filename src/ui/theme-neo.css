@@ -732,7 +732,7 @@
    cards and tickets, tints them its own teal, and glows the timeline. The
    rail recolor overrides background-image ALONE — stall.css owns the
    geometry longhands, and a `background:` shorthand here would kill them. */
-.t-neo .studio-sec {
+.t-neo .scard {
     border-radius: 0;
 }
 

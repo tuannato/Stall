@@ -43,8 +43,6 @@ import {
     DEMO_STALL_ADDRESS,
     SHARE_LEDE,
     STUDIO_DEFAULT_HINT,
-    STUDIO_SEC_RECORD,
-    STUDIO_SEC_SHARE,
     HOME_PASTE_INVALID,
     HOME_PASTE_SUBMIT,
     HOME_TITLE,
@@ -843,59 +841,103 @@ describe('copy-link', () => {
     });
 });
 
-describe('the-studio-groups-its-tools', () => {
+describe('the-studio-is-three-cards-and-a-preference', () => {
     /**
-     * Three titled sections — the record, the share tools, then the stream
-     * overlay's recipe — and the browser preference trailing with no heading:
-     * it is a preference of this browser, not a seller tool, so it comes last
-     * and its fine line says where it lives. The heads carry their own
-     * data-role so a query for the shop's `section-<category>` heads can
-     * never collect a studio head.
+     * Name & look, Items & prices, Share — then the browser preference with
+     * no heading, because it is this browser's and not the stall's. The
+     * body's direct children are exactly those, in that order: a containment
+     * fence, proved red by planting a paragraph between two cards.
      */
-    it('paints the record, the share tools, the OBS guide, then the browser preference', () => {
+    it('paints the three cards and the preference, and nothing else in the body', () => {
         const { root } = paint(
             idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }),
         );
-        const secs = [...root.querySelectorAll('.studio-sec')];
-        expect(secs.map((s) => s.getAttribute('data-role'))).toEqual([
-            'studio-sec-record',
-            'studio-sec-share',
-            'studio-sec-broadcast',
+        const body = root.querySelector('main.studio') as HTMLElement;
+        const kinds = [...body.children].map(
+            (child) => child.getAttribute('data-role') ?? child.className,
+        );
+        expect(kinds).toEqual([
+            'fine studio-lede',
+            'studio-card-name',
+            'studio-card-items',
+            'studio-card-share',
+            'pref studio-browser',
         ]);
-        expect(secs[0]!.querySelector('.section-title')?.textContent).toBe(
-            STUDIO_SEC_RECORD,
-        );
-        expect(secs[1]!.querySelector('.section-title')?.textContent).toBe(
-            STUDIO_SEC_SHARE,
-        );
-        expect(secs[2]!.querySelector('.section-title')?.textContent).toBe(
-            OBS_GUIDE_TITLE,
-        );
-        // The guide paints into its own section, never into share.
-        expect(secs[2]!.querySelector('[data-role="obs-guide"]')).not.toBeNull();
-        expect(secs[1]!.querySelector('[data-role="obs-guide"]')).toBeNull();
-        // Each tool sits in its group: the publish launcher in the record,
-        // the copy-link and the poster in share, the toggle in neither.
-        expect(
-            secs[0]!.querySelector('[data-role="studio-open-publish"]'),
-        ).not.toBeNull();
-        expect(secs[1]!.querySelector('[data-role="copy-link"]')).not.toBeNull();
-        expect(secs[1]!.querySelector('[data-role="open-poster"]')).not.toBeNull();
-        const pref = root.querySelector('.studio-browser')!;
-        expect(pref).not.toBeNull();
-        expect(
-            pref.querySelector('[data-role="studio-default-stall"]'),
-        ).not.toBeNull();
+        const name = body.querySelector('[data-role="studio-card-name"]')!;
+        expect(name.querySelector('.scard-t')?.textContent).toBe(copy.STUDIO_CARD_NAME);
+        expect(name.querySelector('[data-role="studio-open-publish"]')?.textContent).toBe(copy.STUDIO_CHANGE);
+        expect(name.querySelector('[data-role="studio-look-row"]')?.textContent).toContain('Modern');
+        const share = body.querySelector('[data-role="studio-card-share"]')!;
+        expect(share.querySelector('[data-role="copy-link"]')).not.toBeNull();
+        expect(share.querySelector('[data-role="open-poster"]')).not.toBeNull();
+        const obs = share.querySelector('details[data-role="obs-guide-fold"]') as HTMLDetailsElement;
+        expect(obs, 'the OBS recipe folds under Share').not.toBeNull();
+        expect(obs.open).toBe(false);
+        expect(obs.querySelector('[data-role="obs-guide"]')).not.toBeNull();
+        expect(obs.textContent).toContain(OBS_GUIDE_TITLE);
+        const pref = body.querySelector('.studio-browser')!;
+        expect(pref.querySelector('[data-role="studio-default-stall"]')).not.toBeNull();
         expect(pref.textContent).toContain(STUDIO_DEFAULT_HINT);
-        expect(
-            pref.compareDocumentPosition(secs[1]!) &
-                Node.DOCUMENT_POSITION_PRECEDING,
-            'the preference trails the share tools',
-        ).toBeTruthy();
         // A studio head never answers a shop-category query.
         for (const head of root.querySelectorAll('.section-head')) {
             expect(head.getAttribute('data-role')).toBeNull();
         }
+    });
+});
+
+describe('the-items-card-lists-the-describe-pickers-set', () => {
+    const QUOTED_TOKEN = '33'.repeat(32);
+    /**
+     * Listed ∪ described ∪ quoted — the describe sheet's own set, never a
+     * holdings read — one row each with Describe and Set a price, both into
+     * the describe sheet on that token. A withheld token keeps its row and
+     * loses only the price control, with the sheet's own refusal beside it.
+     * No count is printed anywhere on the card.
+     */
+    it('paints one row per token with the two controls, and the refusal on a withheld one', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER, { ...OFFER, tokenId: FIRMA_ID, outpoint: { txid: OUTPOINT.txid, outIdx: 7 } }] },
+                descriptions: new Map([[OTHER_TOKEN, 'Loose leaf']]),
+                prices: new Map([[QUOTED_TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER_TOKEN, TEA], [FIRMA_ID, FIRMA_META]]),
+                panel: 'studio',
+            }),
+            h,
+        );
+        const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
+        const rows = [...card.querySelectorAll('[data-role="studio-item"]')];
+        expect(rows.map((row) => row.getAttribute('data-token-id'))).toEqual([
+            TOKEN_ID,
+            FIRMA_ID,
+            OTHER_TOKEN,
+            QUOTED_TOKEN,
+        ]);
+        (rows[0]!.querySelector('[data-role="studio-item-describe"]') as HTMLButtonElement).click();
+        expect(h.onOpenDescribe).toHaveBeenLastCalledWith(TOKEN_ID);
+        (rows[2]!.querySelector('[data-role="studio-item-price"]') as HTMLButtonElement).click();
+        expect(h.onOpenDescribe).toHaveBeenLastCalledWith(OTHER_TOKEN);
+        expect(rows[1]!.querySelector('[data-role="studio-item-price"]')).toBeNull();
+        expect(rows[1]!.querySelector('[data-role="studio-item-withheld"]')?.textContent).toBe(copy.DESC_QUOTE_WITHHELD);
+        expect(rows[1]!.querySelector('[data-role="studio-item-describe"]')).not.toBeNull();
+        expect(card.querySelector('.scard-h')?.textContent).not.toMatch(/\d/);
+    });
+
+    it('a failed book still lists what the records name, and prints no count', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] },
+                descriptions: new Map([[OTHER_TOKEN, 'Loose leaf']]),
+                tokens: new Map([[OTHER_TOKEN, TEA]]),
+                panel: 'studio',
+            }),
+        );
+        const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
+        expect([...card.querySelectorAll('[data-role="studio-item"]')]).toHaveLength(1);
+        expect(card.textContent).not.toMatch(/\d/);
     });
 });
 
@@ -6931,16 +6973,17 @@ describe('two-sheets-two-records', () => {
         const root = document.createElement('div');
         renderStall(root, offersView([OFFER], undefined, { panel: 'studio' }), h);
 
-        const record = root.querySelector('[data-role="studio-sec-record"]') as HTMLElement;
-        const name = record.querySelector(
+        const nameCard = root.querySelector('[data-role="studio-card-name"]') as HTMLElement;
+        const itemsCard = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
+        const name = nameCard.querySelector(
             '[data-role="studio-open-publish"]',
         ) as HTMLButtonElement;
-        const words = record.querySelector(
+        const words = itemsCard.querySelector(
             '[data-role="studio-open-describe"]',
         ) as HTMLButtonElement;
         expect(name, 'the stall record keeps its launcher').not.toBeNull();
         expect(words, 'the token record gets its own').not.toBeNull();
-        expect(name.textContent).toBe(copy.STUDIO_OPEN_SETTINGS);
+        expect(name.textContent).toBe(copy.STUDIO_CHANGE);
         expect(words.textContent).toBe(copy.DESC_TITLE);
 
         name.click();
@@ -6951,9 +6994,6 @@ describe('two-sheets-two-records', () => {
         // The hint under the first no longer claims the second: it said
         // "name, look, decorations and token descriptions" while descriptions
         // were on the same sheet, and that is a fee-per-token promise.
-        expect(record.textContent).toContain(copy.STUDIO_SETTINGS_HINT);
-        expect(copy.STUDIO_SETTINGS_HINT.toLowerCase()).not.toContain('description');
-        expect(record.textContent).toContain(copy.STUDIO_DESCRIBE_HINT);
     });
 
     it('each launcher opens its own sheet and only its own', () => {
@@ -10252,5 +10292,90 @@ describe('the-first-stall-checklist-marks-the-stuck-step', () => {
         expect(root.querySelector('svg.qr')).toBeNull();
         expect(root.querySelector('[data-role="poster"]')).toBeNull();
         expect(root.textContent).not.toContain(copy.COPY_LINK);
+    });
+});
+
+/*
+ * The name sheet: name, tagline, the "Publishes:" line and the sentence that
+ * refused a field stand before the sign controls, and nothing else does. A
+ * containment fence over the sheet's own children, proved red by planting a
+ * paragraph in the form.
+ */
+describe('nothing-stands-between-the-name-and-the-sign-control', () => {
+    it('allows the head, then a form of name · tagline · summary · invalid · same-look, then the controls', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'publish-name' } }),
+        );
+        const sheet = root.querySelector('[data-role="publish"]') as HTMLElement;
+        const before: Element[] = [];
+        for (const child of sheet.children) {
+            if (child.querySelector('[data-role="publish-cashtab"]') !== null) {
+                break;
+            }
+            before.push(child);
+        }
+        expect(before.map((node) => node.className)).toEqual(['sheet-head', 'paste']);
+        const form = before[1]!;
+        const allowed = new Set(['stall-name', 'publish-tagline', 'publish-summary', 'publish-invalid', 'publish-same-look']);
+        for (const child of form.children) {
+            const key =
+                child.getAttribute('data-role') ??
+                child.querySelector('[data-role]')?.getAttribute('data-role') ??
+                child.querySelector('input')?.name;
+            expect(allowed.has(key ?? ''), `unexpected node before the sign control: ${child.outerHTML.slice(0, 80)}`).toBe(true);
+        }
+        // The pay.e.cash road never folds; the fold comes after both controls.
+        const pay = sheet.querySelector('[data-role="publish-pay"]')!;
+        expect(pay.closest('details')).toBeNull();
+        const more = sheet.querySelector('details[data-role="publish-more"]') as HTMLDetailsElement;
+        expect(pay.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
+describe('the-name-sheets-more-is-a-fold', () => {
+    it('folds the look, the announcement, the decorations, the meter and the record bytes, closed', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'publish-name' }, stallName: 'Riverside Goods' }),
+        );
+        const more = root.querySelector('details[data-role="publish-more"]') as HTMLDetailsElement;
+        expect(more).not.toBeNull();
+        expect(more.open).toBe(false);
+        expect(more.querySelector('summary')?.textContent).toBe(copy.SHEET_MORE);
+        for (const sel of ['[data-role="theme-picker"]', '[data-role="publish-announcement"]', '[data-role="decor"]', '.meter', '[data-role="publish-hex-fold"]', '[data-role="publish-qr-fold"]']) {
+            expect(more.querySelector(sel), `${sel} is inside More`).not.toBeNull();
+        }
+        for (const sel of ['[data-role="publish-pay"]', '[data-role="publish-summary"]', '[data-role="publish-invalid"]', '[data-role="publish-check"]']) {
+            expect(root.querySelector(sel)?.closest('details'), `${sel} never folds`).toBeNull();
+        }
+        // Folded controls still write the record: the look picker is live.
+        (more.querySelector('[data-role="look-2"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="publish-summary"]')?.textContent).toContain('Neo');
+    });
+});
+
+describe('the-describe-sheets-more-is-a-fold', () => {
+    it('folds the shelf, the tolerance, the paste field, removal and the bytes, closed', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay: { kind: 'describe' } }),
+        );
+        const more = root.querySelector('details[data-role="describe-more"]') as HTMLDetailsElement;
+        expect(more).not.toBeNull();
+        expect(more.open).toBe(false);
+        for (const sel of ['[data-role="describe-shelf"]', '[data-role="describe-tolerance"]', '[data-role="describe-paste"]', '[data-role="describe-remove"]', '.meter', '[data-role="describe-hex-fold"]', '[data-role="describe-qr-fold"]']) {
+            expect(more.querySelector(sel), `${sel} is inside More`).not.toBeNull();
+        }
+        for (const sel of ['[data-role="describe-pay"]', '[data-role="describe-cashtab"]', '[data-role="describe-summary"]', '[data-role="describe-invalid"]', '[data-role="describe-price"]', '[data-role="describe-text"]', '[data-role="describe-token"]']) {
+            expect(root.querySelector(sel)?.closest('details'), `${sel} never folds`).toBeNull();
+        }
+        const pay = root.querySelector('[data-role="describe-pay"]')!;
+        expect(pay.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('opens the fold when there is nothing to pick, so the paste field is not behind a closed door', () => {
+        const { root } = paint(idlePubkey({ fetch: { kind: 'empty' }, overlay: { kind: 'describe' } }));
+        const more = root.querySelector('details[data-role="describe-more"]') as HTMLDetailsElement;
+        expect(more.open).toBe(true);
+        expect(root.querySelector('[data-role="describe-no-tokens"]')).not.toBeNull();
+        expect(more.querySelector('[data-role="describe-paste"]')).not.toBeNull();
     });
 });
