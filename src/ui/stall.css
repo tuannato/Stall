@@ -1456,20 +1456,6 @@ body {
     font-family: var(--s-font);
 }
 
-/*
- * The description editor, inside the settings sheet. A separate record and a
- * separate transaction from the stall's settings, so it is separated on screen
- * too — a seller must not read one publish control as covering both.
- */
-.desc-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 12px;
-    padding-top: 16px;
-    border-top: 2px solid color-mix(in srgb, var(--s-muted) 18%, transparent);
-}
-
 textarea.paste-in {
     resize: vertical;
     min-height: 68px;
@@ -1606,22 +1592,7 @@ textarea.paste-in {
     word-break: break-all;
 }
 
-.item-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-    padding: 0 var(--s-detail-x) var(--s-detail-x);
-    border-top: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
-}
-
 /* The facts, one column beside (desktop) or under (mobile) the hero image. */
-.detail-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-    min-width: 0;
-}
-
 /*
  * The token's own image, large, at the top of an opened card. Reuses the icon
  * cache and clipping of `.item-ic`; only size and placement differ.
@@ -3359,12 +3330,6 @@ details.fold > .fold-sum::-webkit-details-marker {
      * the owner three times before it was measured; a structure that
      * cannot express the bug replaced the numbers that tried to avoid it.
      */
-    .item-detail {
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 20px;
-    }
-
     .detail-rows {
         flex: 1;
         min-width: 0;
@@ -3924,6 +3889,29 @@ details.fold > .fold-sum::-webkit-details-marker {
 @keyframes door-floaty {
     50% {
         transform: rotate(2.5deg) translateY(-8px);
+    }
+}
+
+@media (min-width: 680px) {
+    /* `.stall-body.studio`: the body's own desktop rule comes later in this
+       sheet at the same specificity and would win with `.studio` alone. */
+    .stall-body.studio {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .studio-lede,
+    .studio-browser,
+    [data-role='studio-card-share'] {
+        grid-column: 1 / -1;
+    }
+
+    .trow {
+        grid-template-areas: 'ic nm acts';
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        padding: 6px 0;
     }
 }
 
@@ -4605,6 +4593,20 @@ details.fold > .fold-sum::-webkit-details-marker {
     align-items: center;
     cursor: pointer;
 }
+/*
+ * The face and the studio cards carry the card ground themselves. `card` is
+ * a design word with no rule of its own, and a face with no ground put its
+ * fine print straight onto the page — on Rural with a sunburst worn, the
+ * fiat glance measured 2.64:1 on the rays (probe, 2026-09-05).
+ */
+.face,
+.scard {
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: var(--s-radius);
+    box-shadow: var(--s-card-shadow);
+}
+
 .face {
     display: flex;
     flex-direction: column;

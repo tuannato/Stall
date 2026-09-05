@@ -1342,3 +1342,28 @@ describe('a-shared-link-does-not-show-the-seller-prompts', () => {
         expect(invites(root)).toBeGreaterThan(0);
     });
 });
+
+/*
+ * The door repaints — the fiat answer landing, a pin toggle — and a paste
+ * box rebuilt empty under whoever is typing an address was the door's own
+ * way of refusing one. The draft rides module state and the field carries a
+ * focus key, so a repaint puts both back.
+ */
+describe('a-repaint-does-not-empty-the-paste-box', () => {
+    it('keeps the typed address across a repaint of the door', async () => {
+        window.history.replaceState({ door: true }, '', '/');
+        const root = document.createElement('div');
+        boot(root, async () => homeState());
+        await flush();
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        input.value = 'ecash:qq';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        // A navigation event repaints the door from a fresh load.
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        const again = root.querySelector('.paste-in') as HTMLInputElement;
+        expect(again).not.toBe(input);
+        expect(again.value).toBe('ecash:qq');
+        expect(again.getAttribute('data-focus-key')).toBe('seller-input');
+    });
+});

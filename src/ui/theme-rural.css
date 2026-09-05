@@ -206,7 +206,9 @@
  * box), swaying on its string.
  */
 .t-rural .item-p {
-    padding: 8px 10px 8px 26px;
+    /* 22/8, not 26/10: at 375px the tag's chrome was starving the name
+       column to the width of one six-letter word, which then broke. */
+    padding: 8px 8px 8px 22px;
     background: radial-gradient(
         circle at 9px 50%,
         var(--s-bg) 2.2px,

@@ -61,7 +61,6 @@ export type Shape = {
     padD: string;
     padXM: string;
     padXD: string;
-    detailX: string;
     gap: string;
     /** The offer card. */
     cardPad: string;
@@ -349,7 +348,6 @@ export const DEFAULT_THEME: DecodedTheme = {
         padD: '36px 34px',
         padXM: '18px',
         padXD: '34px',
-        detailX: '16px',
         gap: '14px',
         cardPad: '14px',
         cardGap: '12px',
@@ -488,7 +486,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 padD: '28px 24px',
                 padXM: '12px',
                 padXD: '24px',
-                detailX: '12px',
                 gap: '6px',
                 cardPad: '11px 12px',
                 cardGap: '12px',
@@ -627,7 +624,6 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 padD: '32px 40px',
                 padXM: '18px',
                 padXD: '40px',
-                detailX: '18px',
                 gap: '16px',
                 cardPad: '18px',
                 cardGap: '14px',
@@ -887,7 +883,6 @@ function shapeVars(s: Shape): Record<string, string> {
         '--s-pad-d': s.padD,
         '--s-pad-x-m': s.padXM,
         '--s-pad-x-d': s.padXD,
-        '--s-detail-x': s.detailX,
         '--s-gap': s.gap,
         '--s-card-pad': s.cardPad,
         '--s-card-gap': s.cardGap,

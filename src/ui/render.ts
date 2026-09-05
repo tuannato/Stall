@@ -102,6 +102,8 @@ import './broadcast.css';
 export type StallHandlers = {
     /** Open one token's face on one rail — the expander raised to a surface. */
     onOpenItem: (tokenId: string, rail: 'listings' | 'quotes') => void;
+    /** The item face's fold was opened or closed: state only, no paint. */
+    onItemHow?: (open: boolean) => void;
     onRetry: () => void;
     onCloseSheet: () => void;
     /** Apex paste. Optional so a render-only test need not invent navigation. */
@@ -271,6 +273,8 @@ function restoreFocus(root: HTMLElement, key: string | null): boolean {
  * `replaceChildren` exactly because nothing in the tree does.
  */
 let overlayWasOpen = false;
+/** Whether the last paint mounted an item face — the open edge focuses its back control. */
+let faceWasOpen = false;
 let overlayOpener: string | null = null;
 
 /**
@@ -466,6 +470,14 @@ export function renderStall(
     // resumes from the shop instead of from `<body>` at the top of the page.
     stall.tabIndex = -1;
     let landed = restoreFocus(root, keptFocus);
+    // The face replaces the list in flow with no dialog to take focus, so
+    // on its open edge the back control does: a keyboard reader who pressed
+    // a row must land on the face, not on `<body>` where the row was.
+    const faceOpen = view.overlay.kind === 'item' && overlayMounts(view);
+    if (faceOpen && !faceWasOpen && restoreFocus(root, 'item-back')) {
+        landed = true;
+    }
+    faceWasOpen = faceOpen;
     if (!overlayOpen && overlayWasOpen) {
         // The sheet just closed. Its own controls are gone with it, so the
         // WAI-ARIA dialog contract applies: focus returns to the control
@@ -780,8 +792,23 @@ function paintUnresolvable(
     handlers: StallHandlers,
 ): void {
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
-    stall.append(header(copy.FIRST_STALL_HEADER, copy.FIRST_STALL_SUB, address));
     const body = el('main', 'stall-body');
+    if (view.pasted !== true) {
+        // A visitor who did not paste this address — a buyer holding a link
+        // or a poster before the seller listed. Nothing on this screen is
+        // theirs: a fact about the seller, a retry, and no control that
+        // lists a token.
+        stall.append(header(copy.NEVER_SPENT_HEADER, copy.FIRST_STALL_SUB, address));
+        appendPayHintNote(body, view);
+        const note = el('p', 'mid-p', copy.NEVER_SPENT_VISITOR);
+        note.setAttribute('data-role', 'never-spent');
+        body.append(note);
+        body.append(retryControl(handlers, copy.CHECK_AGAIN));
+        stall.append(body);
+        stall.append(stallFooter(address, view, handlers, { share: false }));
+        return;
+    }
+    stall.append(header(copy.FIRST_STALL_HEADER, copy.FIRST_STALL_SUB, address));
     // A waiting state, not a shop, and for a new seller the first screen: they
     // pasted the address they sell from before listing, which is the order
     // the door invites. A checklist with the stuck step marked, one control
@@ -2897,6 +2924,9 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         priceWrap.hidden = !quotable;
         priceLede.hidden = !quotable;
         priceWhy.hidden = quotable;
+        // Two prices exist only when this sheet can write one and the shop
+        // shows the other.
+        twoPrices.hidden = !quotable || !listed.has(tokenId);
         // Most fundamental first: a token whose kind this page never read is
         // not a token it may write a per-whole-token figure about at all.
         priceWhy.textContent = withheld
@@ -4442,7 +4472,6 @@ function offerRow(
 
     const head = el('button', 'item-head');
     head.type = 'button';
-    head.setAttribute('aria-haspopup', 'true');
     // Keyed by the outpoint: a partial fill re-creates the remainder as a new
     // UTXO, so a row that changed identity correctly loses focus rather than
     // handing it to whatever took its place in the list.
@@ -4456,14 +4485,6 @@ function offerRow(
     // name was one unbroken run of name, ticker, stock, "from", figure and rate.
     const info = el('span', 'item-b');
     info.append(el('span', 'item-n', name));
-    /*
-     * The stock line is omitted when genesis decimals did not load, for the
-     * same reason `rateLine` omits the rate: `decimalsOf` defaults to 0, and
-     * `formatAtoms` at 0 prints the atoms verbatim — so a nine-decimal token
-     * with one token left read as "1000000000 left". That is not a missing
-     * number, it is a wrong one, printed as confidently as a right one. A
-     * ticker with no count still says which token it is.
-     */
     // Which rail this row is on. The ticker and the stock moved to the face,
     // where the fold has room to say what each means.
     const rail = el('span', 'item-q rail-label', copy.ROW_LABEL_AGORA);
@@ -4471,7 +4492,7 @@ function offerRow(
     info.append(rail);
     head.append(info);
     // A touch device gets no cursor and no hover, so nothing said these rows
-    // open. `aria-expanded` already told a screen reader; this tells a thumb.
+    // open; the caret tells a thumb.
     // The design's own fourth column — a named grid area now, so it can sit
     // at the row's right edge instead of dangling under the name.
     const caret = el('span', 'item-caret');
@@ -4667,7 +4688,7 @@ function itemFace(
             here.setAttribute('data-role', 'quote-minted');
             how.append(here);
         }
-        card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
+        card.append(faceFold(view, how, handlers));
         if (offersOf(view).some((offer) => offer.tokenId === tokenId)) {
             const across = el('button', 'pay-pointer', copy.LISTED_POINTER);
             across.type = 'button';
@@ -4720,13 +4741,15 @@ function itemFace(
         }
         // No link out: Cashtab will not show this row either.
         how.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
-        card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
+        card.append(faceFold(view, how, handlers));
         return panel;
     }
     if (offer.askedAtoms < offer.atoms) {
         figure.append(el('span', 'item-from from', copy.PRICE_FROM));
     }
-    const asked = el('span', 'x item-x', formatXec(offer.askedSats));
+    // `x` alone: the theme sheets size `.item-x` for the row's tag, and the
+    // face's figure has its own size on every look.
+    const asked = el('span', 'x', formatXec(offer.askedSats));
     asked.setAttribute('data-role', 'price');
     figure.append(asked);
     figure.append(el('span', 'item-u', copy.XEC));
@@ -4766,10 +4789,17 @@ function itemFace(
     if (listing.offers.length > 1) {
         how.append(el('span', 'item-lots', copy.lowestOfListings(listing.offers.length)));
     }
-    const minAtoms = formatAtoms(offer.askedAtoms, d);
-    how.append(sheetRow(copy.MIN_PURCHASE, ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms));
+    // Both token counts only when the genesis decimals are known: at 0,
+    // `formatAtoms` prints atoms verbatim, and "1000000000 left" for one
+    // token is not a missing number, it is a wrong one (CLAUDE §8).
+    if (known !== undefined) {
+        const minAtoms = formatAtoms(offer.askedAtoms, known);
+        how.append(sheetRow(copy.MIN_PURCHASE, ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms));
+    }
     how.append(sheetRow(copy.YOU_PAY, copy.payAmount(formatXec(offer.askedSats)), true));
-    how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, d))));
+    if (known !== undefined) {
+        how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, known))));
+    }
     if (listing.offers.length > 1) {
         how.append(listingsBlock(listing, view));
     }
@@ -4783,12 +4813,36 @@ function itemFace(
         how.append(link);
     }
     how.append(el('p', 'fine', copy.HANDOFF_FINE_PRINT));
-    card.append(sheetFold('item-how', copy.PAY_HOW_FOLD, how));
-    const pointer = payPointer(tokenId, view, handlers);
-    if (pointer !== null) {
-        panel.append(pointer);
+    card.append(faceFold(view, how, handlers));
+    // The other rail's face, not a tab switch: on a face there are no tabs,
+    // so a switch would repaint the same face and leave "← Listings" false.
+    if (quotedItems(view).some((item) => item.tokenId === tokenId)) {
+        const across = el('button', 'pay-pointer', copy.PAY_POINTER);
+        across.type = 'button';
+        across.setAttribute('data-role', 'pay-pointer');
+        across.addEventListener('click', () => {
+            handlers.onOpenItem(tokenId, 'quotes');
+        });
+        panel.append(across);
     }
     return panel;
+}
+
+/**
+ * The face's fold. Its open state rides the overlay (`how`), because every
+ * unsolicited paint rebuilds the face — a book tick, a stranger's dust, the
+ * fiat answer — and a fold that shut itself under a reader is a regression
+ * the old expander could not have. The summary carries a focus key for the
+ * same reason: a repaint with focus on it must not land on `<body>`.
+ */
+function faceFold(view: StallView, how: HTMLElement, handlers: StallHandlers): HTMLElement {
+    const fold = sheetFold('item-how', copy.PAY_HOW_FOLD, how) as HTMLDetailsElement;
+    fold.open = view.overlay.kind === 'item' && view.overlay.how === true;
+    fold.querySelector('summary')?.setAttribute('data-focus-key', 'item-how');
+    fold.addEventListener('toggle', () => {
+        handlers.onItemHow?.(fold.open);
+    });
+    return fold;
 }
 
 /** The face for the overlay on the view, or null when it names nothing on that rail. */
@@ -5464,7 +5518,9 @@ function paintStudio(
         row.setAttribute('data-role', 'studio-item');
         row.setAttribute('data-token-id', id);
         const title = tokenName(view.tokens, id);
-        row.append(itemIcon(id, title));
+        // Initials for a withheld token: its record stays editable, its
+        // artwork stays off every surface this page paints.
+        row.append(itemIcon(id, title, undefined, undefined, !isWithheldToken(id, view.tokens.get(id))));
         row.append(el('div', 'nm', title));
         const acts = el('div', 'acts2');
         if (hasAddress && openDescribe !== undefined) {
@@ -6520,7 +6576,7 @@ function applyTitle(view: StallView): void {
                     : copy.LINK_UNREADABLE_TITLE;
             return;
         case 'unresolvable':
-            document.title = copy.FIRST_STALL_HEADER;
+            document.title = view.pasted === true ? copy.FIRST_STALL_HEADER : copy.NEVER_SPENT_HEADER;
             return;
         default: {
             // A stall's own address, not the site name. stallName only exists
@@ -6541,6 +6597,14 @@ function applyTitle(view: StallView): void {
  * it. Same control contract as ever — same input attributes, same
  * `paste-invalid` line, same submit path into `onOpenStall`.
  */
+/**
+ * What the visitor has typed into the door's paste box. Module state, like
+ * the activity scroll offset: `renderStall` rebuilds the door on every paint
+ * — a pin toggle, the fiat answer landing — and a box that came back empty
+ * mid-address was the door's own way of refusing an address.
+ */
+let doorDraft = '';
+
 function pasteForm(handlers: StallHandlers): HTMLFormElement {
     const form = el('form', 'paste door-paste');
     const label = el('label', 'door-display', copy.HOME_PASTE_LABEL);
@@ -6561,6 +6625,11 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     input.setAttribute('autocapitalize', 'none');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('aria-label', copy.HOME_PASTE_LABEL);
+    input.setAttribute('data-focus-key', 'seller-input');
+    input.value = doorDraft;
+    input.addEventListener('input', () => {
+        doorDraft = input.value;
+    });
     const submit = el('button', 'buy door-open', copy.HOME_PASTE_SUBMIT);
     submit.type = 'submit';
     unit.append(pfx, input, submit);
@@ -6590,6 +6659,7 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
             return;
         }
         err.hidden = true;
+        doorDraft = '';
         // The one road that stamps the navigation: the seller invites paint
         // on a stall reached from here and on no other (see `view.pasted`).
         handlers.onOpenStall?.(raw, true);

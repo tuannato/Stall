@@ -19,6 +19,7 @@ import {
 } from '../domain/theme';
 
 import { qrMatrix } from '../domain/qr';
+import type { GenesisAttribution } from '../domain/genesis';
 import type {
     BroadcastParams,
     Outpoint,
@@ -159,6 +160,7 @@ const OFFER: StallOffer = {
 function handlers() {
     return {
         onOpenItem: vi.fn(),
+    onItemHow: vi.fn(),
         onRetry: vi.fn(),
         onCloseSheet: vi.fn(),
         onOpenStall: vi.fn(),
@@ -373,11 +375,12 @@ describe('invalid is not empty', () => {
 });
 
 describe('unresolvable', () => {
-    it('has "Nothing to read from this address"', () => {
+    it('is the first-stall checklist for the seller who pasted it', () => {
         const { root } = paint({
             route: { kind: 'unresolvable', address: ADDR },
             overlay: { kind: 'idle' },
             tokens: new Map(),
+            pasted: true,
         });
         const text = root.textContent ?? '';
         expect(text).toContain(copy.FIRST_STALL_HEADER);
@@ -927,6 +930,9 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         expect(rows[1]!.querySelector('[data-role="studio-item-price"]')).toBeNull();
         expect(rows[1]!.querySelector('[data-role="studio-item-withheld"]')?.textContent).toBe(copy.DESC_QUOTE_WITHHELD);
         expect(rows[1]!.querySelector('[data-role="studio-item-describe"]')).not.toBeNull();
+        // Its record stays editable; its artwork stays off the page: initials.
+        expect(rows[1]!.querySelector('img'), 'a withheld token paints no artwork').toBeNull();
+        expect(rows[1]!.querySelector('.item-ic')?.textContent?.length ?? 0).toBeGreaterThan(0);
         expect(card.querySelector('.scard-h')?.textContent).not.toMatch(/\d/);
     });
 
@@ -2069,6 +2075,7 @@ describe('unresolvable-is-not-a-shareable-shop', () => {
             overlay: { kind: 'idle' },
             address: ADDR,
             tokens: new Map(),
+            pasted: true,
         });
         // A never-spent address is not a shop, so its link is not offered.
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -2184,6 +2191,7 @@ describe('unresolvable narrates the journey forward', () => {
             overlay: { kind: 'idle' },
             address: ADDR,
             tokens: new Map(),
+            pasted: true,
         });
         // The forward half is the checklist: the next two steps say what opens here.
         expect(root.textContent).toContain(copy.FIRST_STALL_STEPS[1].status);
@@ -3741,28 +3749,39 @@ describe('seven-of-ten-shown-is-not-seven-listed', () => {
 });
 
 describe('unknown-decimals-is-not-a-stock-count', () => {
-    it('omits the count rather than printing atoms as whole tokens', () => {
-        const { root } = paint(
+    /**
+     * `decimalsOf` defaults to 0 and `formatAtoms` at 0 prints atoms verbatim,
+     * so a token whose genesis never landed would read "1000000000 left" for
+     * one token — not a missing number, a wrong one. Every count on the face
+     * — the card's stock line and the fold's two rows — is omitted until the
+     * decimals are known; the asked figure, which needs none, still prints.
+     */
+    const bigLot: StallOffer = { ...OFFER, atoms: 1_000_000_000n, askedAtoms: 1_000_000_000n };
+    const face = (tokens: Map<string, TokenMeta>) =>
+        paint(
             idlePubkey({
-                // Metadata absent: exactly what a live-arrived listing looks
-                // like before its genesis read lands.
-                fetch: { kind: 'offers', offers: [{ ...OFFER, atoms: 1_000_000_000n }] },
-                tokens: new Map(),
+                fetch: { kind: 'offers', offers: [bigLot] },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                tokens,
             }),
-        );
-        const text = root.textContent ?? '';
-        expect(text).not.toContain('1000000000');
-        expect(text).not.toContain('1,000,000,000');
+        ).root;
+
+    it('omits every count rather than printing atoms as whole tokens', () => {
+        const root = face(new Map());
+        expect(root.querySelector('[data-role="item-face"]')).not.toBeNull();
+        expect(root.textContent).not.toContain('1000000000');
+        expect(root.textContent).not.toContain('1,000,000,000');
+        expect(root.querySelector('[data-role="item-stock"]')).toBeNull();
+        expect(root.textContent).not.toContain(THIS_STALLS_STOCK);
+        expect(root.textContent).not.toContain(MIN_PURCHASE);
+        expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
     });
 
     it('still counts stock when genesis decimals are known', () => {
-        const { root } = paint(
-            idlePubkey({
-                fetch: { kind: 'offers', offers: [OFFER] },
-                tokens: new Map([[TOKEN_ID, BEANS]]),
-            }),
-        );
-        expect(root.querySelector('.item-q')).not.toBeNull();
+        const root = face(new Map([[TOKEN_ID, { ...BEANS, decimals: 9 }]]));
+        expect(root.querySelector('[data-role="item-stock"]')?.textContent).toContain('1 left');
+        expect(root.textContent).toContain(THIS_STALLS_STOCK);
+        expect(root.textContent).toContain(MIN_PURCHASE);
     });
 });
 
@@ -10249,6 +10268,7 @@ describe('the-first-stall-checklist-marks-the-stuck-step', () => {
         overlay: { kind: 'idle' },
         address: ADDR,
         tokens: new Map(),
+        pasted: true,
     });
 
     it('paints three steps with the first marked current, the two controls and the watching line', () => {
@@ -10366,5 +10386,137 @@ describe('the-describe-sheets-more-is-a-fold', () => {
         expect(more.open).toBe(true);
         expect(root.querySelector('[data-role="describe-no-tokens"]')).not.toBeNull();
         expect(more.querySelector('[data-role="describe-paste"]')).not.toBeNull();
+    });
+});
+
+/*
+ * The never-spent address, seen by someone who did not paste it: a buyer
+ * holding a link or a poster before the seller listed. Nothing on that
+ * screen is theirs — no "your", no checklist, no control that lists a token.
+ */
+describe('a-shared-link-to-a-never-spent-address-is-not-your-first-stall', () => {
+    it('paints a fact about the seller and a retry, and nothing addressed to the reader', () => {
+        const { root, h } = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+        });
+        expect(root.textContent).toContain(copy.NEVER_SPENT_HEADER);
+        expect(root.textContent).toContain(copy.NEVER_SPENT_VISITOR);
+        expect(root.textContent).toContain(ADDR);
+        expect(document.title).toBe(copy.NEVER_SPENT_HEADER);
+        expect(root.textContent).not.toContain(copy.FIRST_STALL_HEADER);
+        expect(root.querySelector('[data-role="first-stall"]')).toBeNull();
+        expect(root.querySelector('[data-role="list-in-cashtab"]')).toBeNull();
+        expect(root.textContent?.toLowerCase()).not.toContain('you pasted');
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        (root.querySelector('[data-role="retry"]') as HTMLButtonElement).click();
+        expect(h.onRetry).toHaveBeenCalledTimes(1);
+    });
+});
+
+/*
+ * The face's fold rides the overlay: a live repaint rebuilds the face, and a
+ * fold that shut itself under a reader is a regression the old expander
+ * could not have. The summary carries a focus key for the same reason.
+ */
+describe('a-live-update-does-not-close-an-open-fold', () => {
+    const face = (how: boolean | undefined) =>
+        paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings', how },
+            }),
+        );
+
+    it('paints the fold open when the view says so, closed otherwise, and reports a toggle', () => {
+        const closed = face(undefined).root.querySelector('details[data-role="item-how"]') as HTMLDetailsElement;
+        expect(closed.open).toBe(false);
+        const { root, h } = face(true);
+        const open = root.querySelector('details[data-role="item-how"]') as HTMLDetailsElement;
+        expect(open.open).toBe(true);
+        expect(open.querySelector('summary')?.getAttribute('data-focus-key')).toBe('item-how');
+        open.open = false;
+        open.dispatchEvent(new Event('toggle'));
+        expect(h.onItemHow).toHaveBeenCalledWith(false);
+    });
+});
+
+describe('a-face-pointer-opens-the-other-rails-face', () => {
+    it('a listing face with a quote opens the quote face, never a tab switch', () => {
+        const { root, h } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 500n }]]),
+                descriptions: new Map([[TOKEN_ID, 'Whole bean']]),
+            }),
+        );
+        const pointer = root.querySelector('[data-role="item-face"] [data-role="pay-pointer"]') as HTMLButtonElement;
+        expect(pointer, 'the cross-link is on the face').not.toBeNull();
+        pointer.click();
+        expect(h.onOpenItem).toHaveBeenCalledWith(TOKEN_ID, 'quotes');
+        expect(h.onSwitchShopTab).not.toHaveBeenCalled();
+    });
+});
+
+describe('the-face-opens-with-focus-on-its-back-control', () => {
+    it('lands a keyboard reader on the back control when a row press opens the face', () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const h = handlers();
+            renderStall(root, offersView([OFFER], new Map([[TOKEN_ID, BEANS]])), h);
+            const head = root.querySelector('button.item-head') as HTMLButtonElement;
+            head.focus();
+            expect(document.activeElement).toBe(head);
+            renderStall(
+                root,
+                offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                    overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                }),
+                h,
+            );
+            expect(document.activeElement).toBe(root.querySelector('[data-role="item-back"]'));
+            // A repaint while the face is up keeps whatever the reader was on.
+            (root.querySelector('summary[data-focus-key="item-how"]') as HTMLElement).focus();
+            renderStall(
+                root,
+                offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                    overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                }),
+                h,
+            );
+            expect(document.activeElement?.getAttribute('data-focus-key')).toBe('item-how');
+            expect(root.querySelector('button.item-head')).toBeNull();
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('a row makes no popup claim', () => {
+        const { root } = paint(offersView([OFFER], new Map([[TOKEN_ID, BEANS]])));
+        expect(root.querySelector('button.item-head')?.getAttribute('aria-haspopup')).toBeNull();
+    });
+});
+
+describe('the-two-prices-line-needs-a-price-field', () => {
+    const sheet = (genesis: Map<string, GenesisAttribution>) =>
+        paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                overlay: { kind: 'describe', tokenId: TOKEN_ID },
+                genesis,
+            }),
+        ).root;
+
+    it('hides the line when the token is another wallet’s mint and no price can be written', () => {
+        const root = sheet(new Map([[TOKEN_ID, 'not-attributed']]));
+        expect((root.querySelector('[data-role="describe-price-field"]') as HTMLElement).hidden).toBe(true);
+        expect((root.querySelector('[data-role="describe-two-prices"]') as HTMLElement).hidden).toBe(true);
+    });
+
+    it('shows it when this stall minted the token and lists it too', () => {
+        const root = sheet(new Map([[TOKEN_ID, 'attributed']]));
+        expect((root.querySelector('[data-role="describe-price-field"]') as HTMLElement).hidden).toBe(false);
+        expect((root.querySelector('[data-role="describe-two-prices"]') as HTMLElement).hidden).toBe(false);
     });
 });

@@ -140,7 +140,12 @@ export type Overlay =
      * the old one under the reader; a quote has no outpoint at all; and one
      * item never stands for both rails.
      */
-    | { kind: 'item'; tokenId: string; rail: 'listings' | 'quotes' }
+    /**
+     * One token's face on one rail. `how` is whether its fold is open — view
+     * state, because a live repaint rebuilds the face and a fold that shut
+     * itself under a reader is a regression the old expander never had.
+     */
+    | { kind: 'item'; tokenId: string; rail: 'listings' | 'quotes'; how?: boolean }
     /**
      * The stall's own record: name, tagline, announcement, look, decorations.
      * Composing the settings transaction — disclosure, not a wallet.

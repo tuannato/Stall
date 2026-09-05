@@ -756,6 +756,15 @@ export const FIRST_STALL_STEPS = [
 export const FIRST_STALL_WATCHING =
     'This page is watching the address. If nothing shows after a listing confirms, check the address you pasted.';
 export const CHECK_AGAIN = 'Check again';
+/**
+ * The same never-spent address seen by someone who did not paste it — a buyer
+ * who scanned a poster before the seller listed. Nothing here is theirs: no
+ * checklist, no "you", no control that lists a token. A fact about the
+ * seller and a retry.
+ */
+export const NEVER_SPENT_HEADER = 'Not open yet';
+export const NEVER_SPENT_VISITOR =
+    'This address has not listed anything yet. A stall opens here once its seller lists a token.';
 
 /** Says what the link is for, so a resolved stall reads as the thing to send. */
 /**

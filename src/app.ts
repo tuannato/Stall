@@ -394,6 +394,12 @@ export function boot(
             return;
         }
         fiatRate = rate;
+        // The door paints no fiat, and a repaint there rebuilds the paste box
+        // under whoever is typing an address into it. The rate is kept for
+        // the stall the door opens next.
+        if (state.view.route.kind === 'home') {
+            return;
+        }
         livePaint();
     };
 
@@ -450,6 +456,14 @@ export function boot(
             onOpenItem: (tokenId, rail) => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'item', tokenId, rail } } };
                 paint();
+            },
+            onItemHow: (open) => {
+                const overlay = state.view.overlay;
+                if (overlay.kind === 'item') {
+                    // State only: the fold already moved on screen, and a
+                    // paint here would rebuild the face under the reader.
+                    state = { ...state, view: { ...state.view, overlay: { ...overlay, how: open } } };
+                }
             },
             onRetry: () => {
                 void refresh();

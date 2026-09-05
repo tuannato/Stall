@@ -821,6 +821,25 @@ under their own folds, and the seven fewer boxes are the studio's retired
 hint lines and the two activity headings leaving the sampled set. Nothing
 new to prune; nothing new to skip.
 
+**2026-09-05, after the door revert and the QA batch:** the door's chips and
+seller paragraph are back in the sampled set, so the count the two entries
+above subtract is back too — 2,029 boxes on the reverted tree, measured by
+the independent QA run. The studio's desktop two-column block had been lost
+with the door revert's region replace (it sat between the door's phone rules
+and the door's own media block) and is rebuilt as `.stall-body.studio`; the
+Rural tag lost 4px of chrome at every width so a six-letter name at 375px no
+longer breaks mid-word; `.item-detail`, `.detail-rows`, `.desc-section` and
+`--s-detail-x` are gone (a var with one reader that no element carried —
+the `--s-accent-2` shape, which `every-theme-var-reaches-the-stylesheet`
+cannot see). **And the first run of this batch went red**: `item-listing` on
+Rural with both root rows worn, `span.item-fiat` at 2.64:1 — the face's fold
+sat straight on the sunburst's rays, because `card` was a design word with
+no rule of its own and the face had no ground; the bigger face figure had
+moved the line onto a darker ray, which is how a layout shift found a
+missing ground. `.face` and `.scard` now carry the item card's own ground
+tokens. Read alone after that fix: **131.7s, contrast 99.7s over
+2,017 boxes**, every rule green.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var
