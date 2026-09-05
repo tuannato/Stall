@@ -24,6 +24,8 @@ import {
     OPENING_BODY,
     PAY_HINT_UNKNOWN,
     PAY_HINT_UNREAD,
+    PAY_HINT_WITHHELD,
+    SHOP_TAB_LISTINGS,
     PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
 } from './ui/copy';
@@ -1226,5 +1228,52 @@ describe('a-pay-hint-does-not-replace-an-open-sheet', () => {
         await flush();
         expect(root.querySelector('[data-role="pay"]'), 'the sheet was swapped').toBeNull();
         expect(root.querySelector('[data-role="publish-close"]')).not.toBeNull();
+    });
+});
+
+const FIRMA_ID = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
+
+describe('a-pay-hint-naming-a-withheld-token-says-so', () => {
+    /**
+     * A link naming a token this page does not carry is neither "no such
+     * quote" nor "could not read the records": the record is there, read,
+     * and withheld by this page's own rule. Said as such, and no sheet opens.
+     */
+    it('answers withheld, and opens nothing', async () => {
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({
+                payHint: FIRMA_ID.slice(0, 12),
+                tokens: new Map([[FIRMA_ID, quotedMeta(FIRMA_ID, 'Firma')]]),
+                prices: new Map([[FIRMA_ID, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        expect(root.querySelector('[data-role="pay-hint-note"]')?.textContent).toBe(
+            PAY_HINT_WITHHELD,
+        );
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+    });
+});
+
+describe('a-withheld-quote-does-not-open-the-quotes-rail', () => {
+    /**
+     * The opening side is decided from what will be painted. A stall whose
+     * only quote is withheld has nothing on that rail to open on.
+     */
+    it('opens the listings side', async () => {
+        const root = document.createElement('div');
+        boot(root, async () =>
+            quotedStall({
+                fetch: { kind: 'empty' },
+                tokens: new Map([[FIRMA_ID, quotedMeta(FIRMA_ID, 'Firma')]]),
+                prices: new Map([[FIRMA_ID, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        const pressed = root.querySelector('[data-role="shop-tabs"] [aria-pressed="true"]');
+        // The book is empty, so the label's zero is honest — it is the side
+        // that is open which this test is about.
+        expect(pressed?.textContent).toContain(SHOP_TAB_LISTINGS);
     });
 });

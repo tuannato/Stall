@@ -1,4 +1,5 @@
 import { encodeCashAddress } from 'ecashaddrjs';
+import { isWithheldToken } from './domain/withheld';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import {
     isHomePath,
@@ -971,6 +972,19 @@ export function boot(
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },
             };
         }
+        // A withheld record is read and refused by this page's own rule —
+        // neither "no such quote" nor "could not read", and no sheet.
+        const withheldHit = [...(next.view.prices?.keys() ?? [])].some(
+            (tokenId) =>
+                tokenId.startsWith(hint) &&
+                isWithheldToken(tokenId, next.view.tokens.get(tokenId)),
+        );
+        if (matches.length === 0 && withheldHit) {
+            return {
+                ...next,
+                view: { ...next.view, payHintNote: 'withheld' },
+            };
+        }
         const routeKind = next.view.route.kind;
         /*
          * "Could not read" is about the records this link names, and the offer
@@ -1184,7 +1198,11 @@ export function boot(
         pubkeyHex: string,
         hash: string,
     ): Promise<void> => {
-        const quoted = [...(state.view.prices?.keys() ?? [])];
+        // A withheld token is never painted, so its attribution is never
+        // asked for — the reads are capped and shared with the real quotes.
+        const quoted = [...(state.view.prices?.keys() ?? [])].filter(
+            (tokenId) => !isWithheldToken(tokenId, state.view.tokens.get(tokenId)),
+        );
         if (quoted.length === 0) {
             return;
         }
@@ -2322,7 +2340,10 @@ async function loadCurrent(): Promise<AppState> {
     // them and every one is a request behind a fresh failover client.
     const genesisUndecided = decideGenesisFree(
         route.pubkeyHex,
-        [...descriptionLookup.prices.keys()],
+        [...descriptionLookup.prices.keys()].filter(
+            (tokenId) =>
+                !isWithheldToken(tokenId, sessionTokens.get(cacheKey(route.pubkeyHex, tokenId))),
+        ),
         (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)),
         descriptionLookup.genesis,
     );

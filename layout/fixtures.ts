@@ -28,6 +28,8 @@ export const ADDR = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
 export const PK = `03${'aa'.repeat(32)}`;
 export const T1 = 'cd'.repeat(32);
 export const T2 = '11'.repeat(32);
+/** FIRMA, by id — withheld by the owner's rule, so the offers screen paints the withheld line. */
+export const FIRMA_WITHHELD = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
 export const NFT = 'ee'.repeat(32);
 export const GROUP = 'aa'.repeat(32);
 /** The long-figure rows: one tier-2 card, one tier-3 card (see priceTier). */
@@ -220,7 +222,7 @@ export const SCREENS: Record<string, StallView> = {
     expanded: base({
         fetch: {
             kind: 'offers',
-            offers: [offer(T1, 0, 120_000n), offer(T1, 3, 150_000n), offer(T2, 1, 87_500n)],
+            offers: [offer(T1, 0, 120_000n), offer(T1, 3, 150_000n), offer(T2, 1, 87_500n), offer(FIRMA_WITHHELD, 0, 100_000n)],
         },
         overlay: { kind: 'buy', outpoint: OUT },
         // The longest thing a seller can publish, with no spaces to break on.

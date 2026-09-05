@@ -211,6 +211,14 @@ matrix. The contrast pass has drifted from 108s to 115s across the day on
 the same box; the next screen added to the matrix pays for itself in prunes
 first.
 
+Round 6 (2026-09-05): the `offers` fixture carries a withheld FIRMA listing,
+so the shop paints the withheld line and `WITHHELD_WHY` under the tabs; the
+quotes rail can carry the same pair. No figure box moved — **2,602 boxes**
+still — and the run measured **150.5s ninety seconds after three suite runs,
+144.2s five minutes after**: the same box, the same matrix, the difference
+is heat. The owner's ruling stands — read the cold number, do not prune for
+a warm one.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels

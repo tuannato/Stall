@@ -38,6 +38,7 @@ import {
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
 import { isLegibleText, itemTitle, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
+import { isWithheldToken } from '../domain/withheld';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
 import {
@@ -330,7 +331,10 @@ export function renderStall(
     if (overlayOpen && !overlayWasOpen) {
         overlayOpener = focusKeyOf(root.ownerDocument.activeElement);
     }
-    if ((view.justChanged?.size ?? 0) > 0) {
+    // Only a change a reader can see: a withheld listing that moved is a
+    // book move over a screen on which nothing moved.
+    const shownTokens = new Set(offersOf(view).map((offer) => offer.tokenId));
+    if ([...(view.justChanged ?? [])].some((tokenId) => shownTokens.has(tokenId))) {
         announce(root.ownerDocument, copy.EVENT_BOOK);
     }
     root.replaceChildren();
@@ -885,7 +889,7 @@ function paintPubkey(
             paintUnreadable(stall, view, handlers);
             break;
         case 'offers':
-            paintOffers(stall, view, fetch.offers, handlers);
+            paintOffers(stall, view, [...offersOf(view)], handlers);
             break;
     }
 }
@@ -1178,10 +1182,18 @@ function paintOffers(
     // The header counts what the shop displays: distinct tokens, one card
     // each. The per-token listing counts live on the cards and in the detail.
     const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
+    const withheld = withheldListings(view);
     stall.append(
         header(
             displayName(view),
-            copy.itemsForSale(distinct),
+            // A number while anything is withheld would be a floor, and a
+            // zero over a stall whose listings this page chose not to paint
+            // is the empty-versus-unreachable collapse in the largest type.
+            withheld === 0
+                ? copy.itemsForSale(distinct)
+                : distinct === 0
+                  ? copy.WITHHELD_ALL_LISTINGS
+                  : copy.ITEMS_FOR_SALE_WITHHELD,
             view.address,
             view.tagline,
             signPinOf(view, handlers),
@@ -1222,6 +1234,11 @@ function paintOffers(
     } else {
         if (tools) {
             body.append(shopTools(view, handlers));
+        }
+        if (withheld > 0) {
+            const note = el('p', 'fine', copy.withheldListingsLine(withheld));
+            note.setAttribute('data-role', 'withheld-note');
+            body.append(note, el('p', 'fine', copy.WITHHELD_WHY));
         }
         if (filter !== undefined && shown.length === 0) {
             const none = el('p', 'mid-p', copy.SHOP_FILTER_NONE);
@@ -1598,7 +1615,35 @@ function itemIcon(
  */
 /** The offers behind the current screen, or none when it is not a shop. */
 function offersOf(view: StallView): readonly StallOffer[] {
-    return view.fetch?.kind === 'offers' ? view.fetch.offers : [];
+    // The one place a listing becomes a row: a withheld token leaves here,
+    // so every derivation — the shop, the picker, the card list — is clean.
+    return view.fetch?.kind === 'offers'
+        ? view.fetch.offers.filter(
+              (offer) => !isWithheldToken(offer.tokenId, view.tokens.get(offer.tokenId)),
+          )
+        : [];
+}
+
+/** Distinct listed tokens this page chose not to paint. */
+function withheldListings(view: StallView): number {
+    const ids = new Set<string>();
+    for (const offer of view.fetch?.kind === 'offers' ? view.fetch.offers : []) {
+        if (isWithheldToken(offer.tokenId, view.tokens.get(offer.tokenId))) {
+            ids.add(offer.tokenId);
+        }
+    }
+    return ids.size;
+}
+
+/** Quoted tokens this page chose not to paint. */
+function withheldQuotes(view: StallView): number {
+    let n = 0;
+    for (const tokenId of view.prices?.keys() ?? []) {
+        if (isWithheldToken(tokenId, view.tokens.get(tokenId))) {
+            n += 1;
+        }
+    }
+    return n;
 }
 
 /**
@@ -1711,6 +1756,9 @@ export function quotedItems(view: StallView): QuotedItem[] {
         if (!isPriceable(tokenId, view.tokens.get(tokenId))) {
             continue;
         }
+        if (isWithheldToken(tokenId, view.tokens.get(tokenId))) {
+            continue;
+        }
         out.push({ tokenId, price });
     }
     return out;
@@ -1732,7 +1780,9 @@ export function unreadableQuotes(view: StallView): number {
     if (prices === undefined) {
         return 0;
     }
-    return prices.size - quotedItems(view).length;
+    // A withheld record is not one this page could not read: subtracted
+    // here, or the seller's withheld quote would be reported as our gap.
+    return prices.size - quotedItems(view).length - withheldQuotes(view);
 }
 
 /**
@@ -1792,9 +1842,10 @@ function listingsCount(view: StallView): number | undefined {
     if (fetch.kind === 'empty') {
         return 0;
     }
-    if (fetch.kind === 'offers' && (fetch.dropped ?? 0) === 0) {
-        // One card per token, which is what the shop paints.
-        return new Set(fetch.offers.map((offer) => offer.tokenId)).size;
+    if (fetch.kind === 'offers' && (fetch.dropped ?? 0) === 0 && withheldListings(view) === 0) {
+        // One card per token, which is what the shop paints — and no number
+        // while a card is withheld, because that number would be a floor.
+        return new Set(offersOf(view).map((offer) => offer.tokenId)).size;
     }
     return undefined;
 }
@@ -1807,6 +1858,9 @@ function quotesCount(view: StallView): number | undefined {
     // with no fetch.
     const prices = view.prices;
     if (prices === undefined || view.descriptionsFailed === true) {
+        return undefined;
+    }
+    if (withheldQuotes(view) > 0) {
         return undefined;
     }
     const rows = quotedItems(view).length;
@@ -1887,6 +1941,12 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
         note.setAttribute('data-role', 'pay-unreadable');
         section.append(note);
     }
+    const withheld = withheldQuotes(view);
+    if (withheld > 0) {
+        const note = el('p', 'fine', copy.withheldQuotesLine(withheld));
+        note.setAttribute('data-role', 'withheld-note');
+        section.append(note, el('p', 'fine', copy.WITHHELD_WHY));
+    }
     if (view.descriptionsFailed === true) {
         const note = el('p', 'fine', copy.QUOTES_FAILED);
         note.setAttribute('data-role', 'quotes-failed');
@@ -1911,8 +1971,11 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
         view.descriptionsFailed !== true &&
         view.descriptionsTruncated !== true
     ) {
-        const quiet = el('p', 'mid-p', copy.QUOTES_NONE);
-        quiet.setAttribute('data-role', 'quotes-none');
+        // A stall whose only quote is withheld did not quote nothing.
+        const quiet = el('p', 'mid-p', withheld > 0 ? copy.WITHHELD_ALL_QUOTES : copy.QUOTES_NONE);
+        if (withheld === 0) {
+            quiet.setAttribute('data-role', 'quotes-none');
+        }
         section.append(quiet);
     }
     return section;
@@ -2104,7 +2167,11 @@ function payHintNote(view: StallView): HTMLElement | null {
     const note = el(
         'p',
         'note',
-        view.payHintNote === 'unknown' ? copy.PAY_HINT_UNKNOWN : copy.PAY_HINT_UNREAD,
+        view.payHintNote === 'unknown'
+            ? copy.PAY_HINT_UNKNOWN
+            : view.payHintNote === 'withheld'
+              ? copy.PAY_HINT_WITHHELD
+              : copy.PAY_HINT_UNREAD,
     );
     note.setAttribute('data-role', 'pay-hint-note');
     return note;
@@ -2357,7 +2424,10 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         return wrap;
     }
 
-    const listed = new Set(offersOf(view).map((o) => o.tokenId));
+    // The raw book, not `offersOf`: a withheld token stays in the picker so
+    // a record the seller already published on it — words, shelf, removal —
+    // stays reachable. Only its price field is refused.
+    const listed = new Set((view.fetch?.kind === 'offers' ? view.fetch.offers : []).map((o) => o.tokenId));
     /*
      * Every token this sheet may write a record about: what the stall lists,
      * what the seller has already described or quoted, and anything they paste
@@ -2750,15 +2820,21 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * about a row they are selling, and nothing is borrowed by writing one.
          */
         const notOurs = attribution === 'not-attributed';
-        const quotable = priceable && !notOurs;
+        // A withheld token keeps its words, shelf and removal road — a
+        // published record is permanent — and loses only the quote, which
+        // this page would never show.
+        const withheld = isWithheldToken(tokenId, known.get(tokenId));
+        const quotable = priceable && !notOurs && !withheld;
         priceWrap.hidden = !quotable;
         priceLede.hidden = !quotable;
         priceWhy.hidden = quotable;
         // Most fundamental first: a token whose kind this page never read is
         // not a token it may write a per-whole-token figure about at all.
-        priceWhy.textContent = priceable
-            ? copy.DESC_QUOTE_NOT_YOURS
-            : copy.DESC_PRICE_NOT_PRICEABLE;
+        priceWhy.textContent = withheld
+            ? copy.DESC_QUOTE_WITHHELD
+            : priceable
+              ? copy.DESC_QUOTE_NOT_YOURS
+              : copy.DESC_PRICE_NOT_PRICEABLE;
 
         const published = view.prices?.get(tokenId);
         // Whether the field on screen can express what the chain already says.

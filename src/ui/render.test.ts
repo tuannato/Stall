@@ -122,6 +122,7 @@ import {
     publishBip21,
 } from '../domain/cashtab';
 import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
+import { broadcastCards } from './broadcast';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { itemTitle } from '../domain/text';
@@ -8660,7 +8661,10 @@ describe('a-mint-claim-is-not-a-claim-about-the-name', () => {
     });
 
     it('treats a token named after somebody else’s brand like any other', () => {
-        const impostor: TokenMeta = { ...BEANS, name: 'USDC', ticker: 'USDC' };
+        // Not a crypto or fiat name: those are the withheld list's business
+        // (CLAUDE §4) and never reach a row. The claim here is about the
+        // attribution line, which vouches for nothing about any name.
+        const impostor: TokenMeta = { ...BEANS, name: 'Nike', ticker: 'NIKE' };
         const { root } = paint(
             payView({
                 tokens: new Map([[TOKEN_ID, impostor]]),
@@ -9707,5 +9711,163 @@ describe('a-long-genesis-name-is-cut-without-splitting-a-character', () => {
         expect(tokenTicker(tokens, id)).toBeUndefined();
         const other = new Map([[id, { ...BEANS, tokenId: id, name: 'Short', ticker: long }]]);
         expect([...tokenTicker(other, id)!]).toHaveLength(TOKEN_NAME_MAX_CHARS);
+    });
+});
+
+/** FIRMA, by id (cashtab/src/constants/tokens.ts) — one of the four the owner withheld. */
+const FIRMA_ID = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
+const FIRMA_META: TokenMeta = {
+    ...BEANS,
+    tokenId: FIRMA_ID,
+    name: 'Firma',
+    ticker: 'FIRMA',
+    tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+};
+const FIRMA_OFFER: StallOffer = {
+    ...OFFER,
+    outpoint: { txid: 'fa'.repeat(32), outIdx: 0 },
+    tokenId: FIRMA_ID,
+};
+/** A fresh id whose genesis *name* is one Cashtab refuses at creation. */
+const LOOKALIKE_ID = 'fb'.repeat(32);
+const LOOKALIKE_META: TokenMeta = { ...BEANS, tokenId: LOOKALIKE_ID, name: 'Firma', ticker: 'FRM' };
+
+describe('a-withheld-listing-paints-no-row-and-takes-the-number-off-the-label', () => {
+    /**
+     * A withheld row is one this page chose not to paint — not one it could
+     * not read. It leaves the shop, the label loses its number (a floor
+     * printed as a count is a claim about the seller), and one line says
+     * how many and why.
+     */
+    it('paints the other listing, no number, and the line', () => {
+        const { root } = paint(
+            offersView([OFFER, FIRMA_OFFER], new Map([[TOKEN_ID, BEANS], [FIRMA_ID, FIRMA_META]]), {
+                shopTab: 'listings',
+            }),
+        );
+        expect(root.querySelectorAll('.item')).toHaveLength(1);
+        expect(root.textContent).not.toContain('Firma');
+        expect(railTab(root, 'listings')!.textContent).toBe(copy.SHOP_TAB_LISTINGS);
+        expect(root.textContent).not.toContain(copy.itemsForSale(1));
+        expect(root.textContent).not.toContain(copy.itemsForSale(2));
+        expect(root.querySelector('[data-role="withheld-note"]')?.textContent).toBe(
+            copy.withheldListingsLine(1),
+        );
+        expect(root.textContent).toContain(copy.WITHHELD_WHY);
+    });
+});
+
+describe('a-withheld-shop-does-not-say-zero-items-for-sale', () => {
+    /**
+     * A stall whose only listing is withheld is not an empty stall and not a
+     * stall with zero items: the header and the rail say what happened.
+     */
+    it('says the listings are withheld, never zero and never empty', () => {
+        const { root } = paint(
+            offersView([FIRMA_OFFER], new Map([[FIRMA_ID, FIRMA_META]]), { shopTab: 'listings' }),
+        );
+        expect(root.querySelectorAll('.item')).toHaveLength(0);
+        expect(root.textContent).toContain(copy.WITHHELD_ALL_LISTINGS);
+        expect(root.textContent).not.toContain(copy.itemsForSale(0));
+        expect(root.textContent).not.toContain(copy.EMPTY_SUB);
+    });
+});
+
+describe('a-withheld-quote-paints-no-row-and-is-not-counted-as-unreadable', () => {
+    /**
+     * The quote rail counts records it could not read; a withheld record is
+     * not one of those. The arithmetic (`prices.size − rows`) must subtract
+     * the withheld explicitly or the line would call the seller's FIRMA
+     * quote one this page failed to read.
+     */
+    it('drops the row, keeps the count honest, says why', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'quotes',
+                tokens: new Map([[TOKEN_ID, BEANS], [LOOKALIKE_ID, LOOKALIKE_META]]),
+                prices: new Map([[TOKEN_ID, QUOTE_USD], [LOOKALIKE_ID, QUOTE_USD]]),
+            }),
+        );
+        expect(root.querySelectorAll('[data-role="pay-row"]')).toHaveLength(1);
+        expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
+        expect(railTab(root, 'quotes')!.textContent).toBe(copy.SHOP_TAB_QUOTES);
+        expect(root.querySelector('[data-role="withheld-note"]')?.textContent).toBe(
+            copy.withheldQuotesLine(1),
+        );
+    });
+
+    it('a stall whose only quote is withheld does not say it quoted nothing', () => {
+        const { root } = paint(
+            railView({
+                shopTab: 'quotes',
+                fetch: { kind: 'empty' },
+                tokens: new Map([[LOOKALIKE_ID, LOOKALIKE_META]]),
+                prices: new Map([[LOOKALIKE_ID, QUOTE_USD]]),
+            }),
+        );
+        expect(root.querySelector('[data-role="quotes-none"]')).toBeNull();
+        expect(root.textContent).toContain(copy.WITHHELD_ALL_QUOTES);
+    });
+});
+
+describe('a-withheld-card-is-never-at-the-cursor', () => {
+    /**
+     * Every cursor site asks `broadcastCards`, so the list it answers is the
+     * one place a withheld card has to be absent from: a cursor over a
+     * longer list than the one painted names the wrong row.
+     */
+    it('leaves withheld tokens out of both rails of the card list', () => {
+        const listings = broadcastCards(
+            broadcastView({
+                fetch: { kind: 'offers', offers: [OFFER, FIRMA_OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS], [FIRMA_ID, FIRMA_META]]),
+            }),
+        );
+        expect(listings.map((card) => card.tokenId)).toEqual([TOKEN_ID]);
+        const quotes = broadcastCards(
+            broadcastView({
+                broadcast: { ...BROADCAST, cards: 'quotes' },
+                fetch: { kind: 'empty' },
+                tokens: new Map([[TOKEN_ID, BEANS], [LOOKALIKE_ID, LOOKALIKE_META]]),
+                prices: new Map([[TOKEN_ID, QUOTE_USD], [LOOKALIKE_ID, QUOTE_USD]]),
+            }),
+        );
+        expect(quotes.map((card) => card.tokenId)).toEqual([TOKEN_ID]);
+    });
+});
+
+describe('the-price-field-is-refused-on-a-withheld-token', () => {
+    /**
+     * The token stays in the picker: a seller who published words on one
+     * keeps the words, the shelf and the removal road, because a record is
+     * permanent and this page must not make it unreachable. Only the quote
+     * is refused, with the reason where the field was.
+     */
+    it('keeps the token, hides the price field, and still writes the words', () => {
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            quoteView({
+                overlay: { kind: 'describe', tokenId: FIRMA_ID },
+                fetch: { kind: 'offers', offers: [OFFER, FIRMA_OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS], [FIRMA_ID, FIRMA_META]]),
+                prices: undefined,
+                genesis: new Map([[FIRMA_ID, 'attributed' as const]]),
+            }),
+            handlers(),
+        );
+        const picker = describeField(root, 'describe-token') as HTMLSelectElement;
+        expect([...picker.options].map((o) => o.value)).toContain(FIRMA_ID);
+        expect(picker.value).toBe(FIRMA_ID);
+        expect(describeField(root, 'describe-price-field').hidden).toBe(true);
+        const why = describeField(root, 'describe-price-why');
+        expect(why.hidden).toBe(false);
+        expect(why.textContent).toBe(copy.DESC_QUOTE_WITHHELD);
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Not for sale here.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-hex').textContent).toBe(
+            encodeDescriptionHex(FIRMA_ID, 'Not for sale here.'),
+        );
     });
 });

@@ -455,7 +455,7 @@ export type StallView = {
      * page failing to read the records at all. Collapsing them would be §4's
      * empty-versus-unreachable mistake on a new surface.
      */
-    payHintNote?: 'unknown' | 'unread';
+    payHintNote?: 'unknown' | 'unread' | 'withheld';
     /**
      * One-shot: bring the pay section into view for a link that named no
      * item. Set for the paint that does it and cleared after, the same

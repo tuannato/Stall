@@ -18,6 +18,8 @@ import {
     UNREACHABLE_BODY,
     QUOTE_NOT_MINTED_HERE,
     UNRESOLVABLE_TITLE,
+    WITHHELD_ALL_LISTINGS,
+    EVENT_BOOK,
 } from './ui/copy';
 
 /**
@@ -2972,5 +2974,61 @@ describe('a-pay-sheet-opened-cold-learns-its-attribution-in-place', () => {
         expect(sheet!.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(
             QUOTE_NOT_MINTED_HERE,
         );
+    });
+});
+
+const FIRMA_ID = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
+const FIRMA_META: TokenMeta = {
+    tokenId: FIRMA_ID,
+    name: 'Firma',
+    ticker: 'FIRMA',
+    decimals: 4,
+    tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+};
+
+describe('a-live-withheld-listing-never-reaches-the-shop', () => {
+    /**
+     * The socket brings a withheld offer in through the same re-read as any
+     * other. No row, and no "the offer book moved" for a screen reader over
+     * a screen on which nothing moved.
+     */
+    it('paints no row and announces nothing', async () => {
+        document.getElementById('sr-live')?.remove();
+        const { root } = bootStall(stallEmpty({ tokens: new Map([[FIRMA_ID, FIRMA_META]]) }));
+        await flush();
+        chain.book = {
+            kind: 'offers',
+            offers: [{ ...OFFER, tokenId: FIRMA_ID, outpoint: { txid: 'fa'.repeat(32), outIdx: 0 } }],
+        };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+        expect(root.querySelectorAll('.item')).toHaveLength(0);
+        expect(root.textContent).toContain(WITHHELD_ALL_LISTINGS);
+        expect(document.getElementById('sr-live')?.textContent ?? '').not.toBe(EVENT_BOOK);
+    });
+});
+
+describe('a-withheld-quote-spends-no-genesis-lookup', () => {
+    /**
+     * Twenty-four reads per load, shared with the real quotes. A withheld
+     * token is not painted, so its attribution is never asked for.
+     */
+    it('reads no genesis for a withheld token', async () => {
+        publish({
+            txid: FIRMA_ID,
+            inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
+            outputs: [{ outputScript: STALL_SCRIPT, token: { tokenId: FIRMA_ID } }],
+        });
+        bootStall(
+            withGenesisPending(
+                stallEmpty({
+                    tokens: new Map([[FIRMA_ID, FIRMA_META]]),
+                    prices: new Map([[FIRMA_ID, { code: 'usd', exponent: 2, amount: 500n }]]),
+                }),
+                [FIRMA_ID],
+            ),
+        );
+        await flush();
+        expect(chain.calls.tx).toBe(0);
     });
 });

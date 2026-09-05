@@ -966,6 +966,13 @@ export const DESC_PASTE_UNREAD =
  */
 export const DESC_QUOTE_NOT_YOURS =
     'This token was minted by another wallet. A quote on it would borrow its id, its picture and whatever it stands for — mint your own token for this item.';
+/**
+ * The field gone for a token this page withholds. The words, the shelf and
+ * the removal road stay: a published record is permanent, and an editor
+ * that could not reach it could not retract it either.
+ */
+export const DESC_QUOTE_WITHHELD =
+    'This page does not carry this token, so a quote on it would never be shown here.';
 export const DESC_QUOTE_UNATTRIBUTED =
     'This page could not tell which wallet minted this token.';
 export const DESC_QUOTE_LISTED_TOO =
@@ -1097,6 +1104,21 @@ export const shopTabLabel = (side: string, count?: number): string =>
  */
 export const QUOTES_NONE =
     'This seller has not quoted anything to pay for directly.';
+/**
+ * Rows this page chose not to paint — never "could not read". The count and
+ * the reason, on the rail the count is about; the tokens are not named,
+ * because naming them is painting them.
+ */
+export const withheldListingsLine = (n: number): string =>
+    `${n} ${n === 1 ? 'listing is' : 'listings are'} not shown here.`;
+export const withheldQuotesLine = (n: number): string =>
+    `${n} ${n === 1 ? 'quote is' : 'quotes are'} not shown here.`;
+export const WITHHELD_WHY =
+    'This page does not carry tokens on eCash’s impersonation blacklist, nor FIRMA, fCHF, fEUR or XECX.';
+export const WITHHELD_ALL_LISTINGS = 'Everything listed here is a token this page does not carry.';
+export const WITHHELD_ALL_QUOTES = 'Everything quoted here is a token this page does not carry.';
+/** The shop header when a number would be a floor. */
+export const ITEMS_FOR_SALE_WITHHELD = 'Items for sale';
 /**
  * The records are still being read — a failure screen paints before its
  * facts land. Not `QUOTES_NONE`, which is a claim about the seller.
@@ -1290,6 +1312,9 @@ export const PAY_TOLERANCE_NONE = 'The seller has not stated a tolerance.';
 export const PAY_HINT_UNKNOWN = 'This link named an item this stall does not quote';
 export const PAY_HINT_UNREAD =
     'This link named an item, and this page could not read the seller\u2019s records';
+/** The link named a record this page read and withholds by its own rule. */
+export const PAY_HINT_WITHHELD =
+    'This link named a token this page does not carry, so there is nothing to pay for here.';
 
 /**
  * The seller's own tolerance control (STLD tag 0x03), on USD quotes only \u2014
