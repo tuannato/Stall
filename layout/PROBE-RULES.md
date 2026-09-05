@@ -219,6 +219,13 @@ still — and the run measured **150.5s ninety seconds after three suite runs,
 is heat. The owner's ruling stands — read the cold number, do not prune for
 a warm one.
 
+Round 7, step 1 (2026-09-05): the pay sheet's fine print folded under
+`pay-how` (a closed `<details>` the probe opens before measuring, so every
+folded line is still sampled — folding buys the probe nothing, by design),
+the positive provenance line and the quote's age moved into it, and the
+moved state rides the view (`payRateOutcome`) so a fixture can stage it.
+Measured alone, cold: **2,601 boxes and 141.7s**.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels

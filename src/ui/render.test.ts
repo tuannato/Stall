@@ -6051,7 +6051,7 @@ describe('the-visitor-has-no-currency-control-and-the-glance-is-usd', () => {
             fiatRate: scaleRate(0.00003),
         }), { ...handlers(), onChangeFiat: vi.fn() });
         expect(root.querySelector('[data-role="fiat-picker"]')).toBeNull();
-        expect(root.textContent).not.toContain(copy.FIAT_LABEL);
+        expect(root.textContent).not.toContain('Show prices in');
         // The glance itself stays: it is the covenant's own asked amount,
         // converted for a look, and it is not the seller's figure.
         expect(root.querySelector('[data-role="fiat"]')?.textContent).toBe('$0.04');
@@ -6578,7 +6578,7 @@ describe('republish-carries-an-existing-fiat-hint-forward', () => {
     it('offers no control and still writes the hint the record carries', () => {
         const { root } = sheet({ fiatHint: 'vnd' });
         expect(root.querySelector('[data-role="publish-fiat"]')).toBeNull();
-        expect(root.textContent).not.toContain(copy.PUBLISH_FIAT_LABEL);
+        expect(root.textContent).not.toContain('Suggest a display currency');
         const hex = root.querySelector('[data-role="publish-hex"]') as HTMLElement;
         expect(hex.textContent).toBe(
             encodeManifestHex('Riverside Goods', DEFAULT_THEME_ID, 0, { fiatHint: 'vnd' }),
@@ -7728,6 +7728,9 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
         expect(
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
         ).toBe(formatXec(fresh));
+        expect(control.textContent, 'the control restates the figure it will open').toBe(
+            copy.payFigure(formatXec(fresh)),
+        );
         // The second press, on a rate that is now fresh, is the one that opens.
         control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         expect(open).toHaveBeenCalledOnce();
@@ -9869,5 +9872,103 @@ describe('the-price-field-is-refused-on-a-withheld-token', () => {
         expect(describeField(root, 'describe-hex').textContent).toBe(
             encodeDescriptionHex(FIRMA_ID, 'Not for sale here.'),
         );
+    });
+});
+
+describe('the-pay-sheets-fine-print-is-folded', () => {
+    /**
+     * Seven sentences stood between the figure and the Pay control. The two
+     * that bind the rail stay where they were — the no-escrow sentence inside
+     * the amount card, the final line under the control — and the rest fold
+     * under one summary, closed. A closed `<details>` is not `hidden` and
+     * keeps its text, so this asserts the fold itself, not the words.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, ...over }));
+
+    it('folds the memo, wallet, delivery and tolerance lines under one closed summary', () => {
+        const { root } = sheet({ genesis: new Map([[TOKEN_ID, 'attributed' as const]]) });
+        const fold = root.querySelector('[data-role="pay-how"]') as HTMLDetailsElement;
+        expect(fold).not.toBeNull();
+        expect(fold.tagName).toBe('DETAILS');
+        expect(fold.open).toBe(false);
+        expect(fold.querySelector('summary')!.textContent).toBe(copy.PAY_HOW_FOLD);
+        for (const line of [copy.PAY_FINE_MEMO, copy.PAY_FINE_SOME_WALLETS, copy.PAY_FINE_DELIVERY]) {
+            expect(fold.textContent, line).toContain(line);
+        }
+        expect(fold.querySelector('[data-role="pay-tolerance"]')).not.toBeNull();
+        expect(fold.querySelector('[data-role="quote-minted"]')).not.toBeNull();
+    });
+
+    it('keeps the binding sentences and the borrowed-id warning out of the fold', () => {
+        const { root } = sheet({
+            genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+            descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]),
+        });
+        for (const role of ['pay-final', 'quote-not-minted', 'pay-words', 'pay-cashtab']) {
+            const node = root.querySelector(`[data-role="${role}"]`);
+            expect(node, role).not.toBeNull();
+            expect(node!.closest('details'), `${role} is not folded`).toBeNull();
+        }
+        expect(root.querySelector('.pay-amt')!.textContent).toContain(copy.PAY_NOTE_DIRECT);
+    });
+});
+
+describe('nothing-stands-between-the-figure-and-the-pay-control', () => {
+    /**
+     * The fence is containment, not a word count: every direct child of the
+     * sheet before the one holding the Pay control is one of the named
+     * parts. A paragraph slipped in between goes red; a re-wording does not.
+     */
+    const ALLOWED = [
+        '.sheet-head',
+        '.pay-amt',
+        '.pay-words',
+        '.pay-qty',
+        '[data-role="pay-valve"]',
+        '.acts',
+    ];
+
+    it('lets only the head, the card, the words, the quantity and the valve precede Pay', () => {
+        const { root } = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        const control = sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement;
+        const children = [...sheet.children];
+        const holder = children.find((child) => child.contains(control));
+        expect(holder, 'the control is inside a direct child of the sheet').toBeDefined();
+        const before = children.slice(0, children.indexOf(holder!) + 1);
+        expect(before.length).toBeGreaterThan(2);
+        for (const child of before) {
+            expect(
+                ALLOWED.some((selector) => child.matches(selector)),
+                `${child.tagName.toLowerCase()}.${[...child.classList].join('.')} stands before Pay`,
+            ).toBe(true);
+        }
+    });
+});
+
+describe('a-moved-rate-on-the-view-paints-the-moved-state', () => {
+    /**
+     * The valve's outcome rides the view so a fixture can stage what only a
+     * press produces: the moved line in the rate row and a Pay control that
+     * restates the figure it will open — composed from the same satoshis as
+     * the figure and both URLs.
+     */
+    it('restates the figure on the control and says the price moved', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: PAY_RATE,
+                payRateOutcome: 'moved',
+            }),
+        );
+        const sats = satsForQuote(QUOTE_USD, 1n, PAY_RATE.rate)!;
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_RATE_MOVED);
+        expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(
+            copy.payFigure(formatXec(sats)),
+        );
+        expect(pressForUrl(root, 'pay-cashtab')).toContain(`amount=${formatXecUngrouped(sats)}`);
     });
 });

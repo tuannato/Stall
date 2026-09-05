@@ -442,6 +442,12 @@ export type StallView = {
      */
     payRate?: { rate: bigint; atMs: number };
     /**
+     * What the press-time valve found, so a fixture can stage what only a
+     * press produces: the rate row's line and a Pay control that restates
+     * the figure it will open. The sheet seeds its own state from this.
+     */
+    payRateOutcome?: 'moved' | 'refreshed' | 'unavailable';
+    /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never
      * against the chain.

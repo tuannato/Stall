@@ -72,7 +72,6 @@ export const PUBLISH_OPEN_PAY = 'Sign with another wallet app';
  * middle one is how a seller sets a flag, sees nothing, and is told nothing.
  */
 export const DECOR_LABEL = 'Decoration';
-export const DECOR_NONE = 'None';
 export const DECOR_LEDE =
     'Decorations are tokens. Your stall wears one when it holds the token and your settings say so — so this is two things, and both are yours.';
 export const DECOR_PREVIEW_ONLY =
@@ -141,7 +140,6 @@ export const PUBLISH_TAGLINE_INVALID =
  * offers no control for it — while a record that already carries one keeps it
  * on republish. Test: `republish-carries-an-existing-fiat-hint-forward`.
  */
-export const PUBLISH_FIAT_LABEL = 'Suggest a display currency (optional)';
 /**
  * The announcement (tag 0x05). A dated sentence, not a status: "back on the
  * 10th" ages in front of the reader, while an away-flag goes stale with
@@ -799,7 +797,6 @@ export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';
  * is the label the picker wears the day it comes back. Test:
  * `the-visitor-has-no-currency-control-and-the-glance-is-usd`.
  */
-export const FIAT_LABEL = 'Show prices in';
 
 /**
  * The homepage a token's minter wrote into genesis. Permanent on chain, and
@@ -1232,7 +1229,17 @@ export const PAY_XEC_QUOTE_NOTE =
 export const payRateLine = (rate: string, at: string): string =>
     `\u2248 at 1 ${XEC} = ${rate} \u00b7 CoinGecko \u00b7 ${at}`;
 export const PAY_RATE_REFRESH = 'Get a fresh price';
-export const PAY_NO_XEC_YET = 'No XEC amount yet';
+/**
+ * The rail's remaining fine print under one closed summary: memo, wallets
+ * that drop it, delivery, whole units, tolerance, the quote's age and its
+ * provenance when the genesis names this stall. Closed, because a buyer is
+ * deciding on the figure and the two sentences that stay beside it; open
+ * to anyone who wants the mechanism. Never the no-escrow sentence, the
+ * final line or the borrowed-id warning, which stay where they are.
+ */
+export const PAY_HOW_FOLD = 'How this works';
+/** The Pay control after the rate moved: it restates the figure it will open. */
+export const payFigure = (xec: string): string => `Pay ${xec} ${XEC}`;
 export const PAY_NO_RATE_WHY =
     'CoinGecko did not answer, so the wallet cannot be told how much XEC to send. There is no link and no code until a price arrives.';
 /**

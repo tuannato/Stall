@@ -3271,6 +3271,32 @@ const PAY_QR_OPEN_QUERY = '(min-width: 680px)';
  */
 let payQrTimer: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * The seller's tolerance as the rail says it: only for a quote that involves
+ * a rate. An xec quote mounts no line at all — not the figure and not its
+ * absence: the record may carry the byte (it is carried whatever the code),
+ * and "not stated" would be a sentence that record contradicts. One helper,
+ * so the pay sheet and the item face cannot disagree about which quotes
+ * have one.
+ */
+export function toleranceLine(price: TokenPrice): HTMLElement | null {
+    if (price.code === XEC_PRICE_CODE) {
+        return null;
+    }
+    const stated = price.tolerancePct;
+    const line = el(
+        'p',
+        'fine',
+        stated === undefined
+            ? copy.PAY_TOLERANCE_NONE
+            : stated > 25
+              ? copy.PAY_TOLERANCE_WIDE
+              : copy.payTolerance(stated),
+    );
+    line.setAttribute('data-role', 'pay-tolerance');
+    return line;
+}
+
 function clearPayQrTimer(): void {
     if (payQrTimer !== undefined) {
         clearTimeout(payQrTimer);
@@ -3358,26 +3384,20 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // Whose genesis this is, said here as well as on the row: a scanned link
     // opens this sheet without the row ever being on screen. One node, painted
     // in place, because the answer can land after the sheet did.
-    const provenance = el('p', 'fine', '');
-    provenance.hidden = true;
-    card.append(provenance);
+    // The borrowed-id warning stays in the card, beside the figure: the id,
+    // the picture and whatever the token stands for off-chain are all
+    // borrowed, and a buyer decides here. The positive half — what the
+    // genesis points at, never who signed — is mechanism, and folds.
+    const borrowed = el('p', 'fine', copy.QUOTE_NOT_MINTED_HERE);
+    borrowed.setAttribute('data-role', 'quote-not-minted');
+    borrowed.hidden = true;
+    card.append(borrowed);
+    const minted = el('p', 'fine', copy.QUOTE_MINTED_HERE);
+    minted.setAttribute('data-role', 'quote-minted');
+    minted.hidden = true;
     const paintProvenance = (mintedBy: GenesisAttribution | undefined): void => {
-        if (mintedBy === 'not-attributed') {
-            // The id, the picture and whatever the token stands for off-chain
-            // are all borrowed.
-            provenance.hidden = false;
-            provenance.textContent = copy.QUOTE_NOT_MINTED_HERE;
-            provenance.setAttribute('data-role', 'quote-not-minted');
-        } else if (mintedBy === 'attributed') {
-            // Its positive half: what the genesis points at, never who signed.
-            provenance.hidden = false;
-            provenance.textContent = copy.QUOTE_MINTED_HERE;
-            provenance.setAttribute('data-role', 'quote-minted');
-        } else {
-            provenance.hidden = true;
-            provenance.textContent = '';
-            provenance.removeAttribute('data-role');
-        }
+        borrowed.hidden = mintedBy !== 'not-attributed';
+        minted.hidden = mintedBy !== 'attributed';
     };
     const mintedBy = view.genesis?.get(tokenId);
     paintProvenance(mintedBy);
@@ -3402,11 +3422,6 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             .catch(() => {
                 // Undecided says nothing, which is what the sheet already shows.
             });
-    }
-    // Beside the quote it is about, on the surface a scanned link opens first.
-    const age = quoteAgeNode(view, tokenId, 'p', 'fine');
-    if (age !== null) {
-        card.append(age);
     }
     wrap.append(card);
 
@@ -3474,41 +3489,35 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         refresh();
     });
 
-    wrap.append(el('p', 'fine', copy.PAY_FINE_MEMO));
-    wrap.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
+    // Everything that binds the rail and is not the figure's own sentence
+    // goes under one closed summary after the control: mechanism, read by
+    // whoever wants it, never standing between the figure and Pay.
+    const how = el('div');
+    how.append(el('p', 'fine', copy.PAY_FINE_MEMO));
+    how.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
     /*
      * The seller's own margin, and the two honest ways of not having one. Only
      * a quote that needs a rate can drift, and a value past what this app's
      * own presets can say is named as wider rather than printed as a figure
      * whose meaning nothing here can vouch for.
      */
-    if (usesRate) {
-        // A tolerance is a shortfall against a rate. An xec quote has no rate,
-        // so nothing is mounted for one — not the figure and not its absence:
-        // the record may carry the byte (it is carried whatever the code), and
-        // "not stated" would be a sentence that record contradicts.
-        const stated = price.tolerancePct;
-        const tolerance = el(
-            'p',
-            'fine',
-            stated === undefined
-                ? copy.PAY_TOLERANCE_NONE
-                : stated > 25
-                  ? copy.PAY_TOLERANCE_WIDE
-                  : copy.payTolerance(stated),
-        );
-        tolerance.setAttribute('data-role', 'pay-tolerance');
-        wrap.append(tolerance);
+    const tolerance = toleranceLine(price);
+    if (tolerance !== null) {
+        how.append(tolerance);
     }
-    wrap.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
+    how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
+    if (decimalsOf(view.tokens, tokenId) > 0) {
+        how.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
+    }
+    const age = quoteAgeNode(view, tokenId, 'p', 'fine');
+    if (age !== null) {
+        how.append(age);
+    }
+    how.append(minted);
     // Below the card, which keeps its one sentence: that the money cannot come
-    // back is said where the rest of the rail's limits are.
+    // back is said right under the control that sends it.
     const final = el('p', 'fine', copy.PAY_NOTE_FINAL);
     final.setAttribute('data-role', 'pay-final');
-    wrap.append(final);
-    if (decimalsOf(view.tokens, tokenId) > 0) {
-        wrap.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
-    }
 
     const acts = el('div', 'acts');
     // Buttons, not anchors. An anchor carries its destination where a
@@ -3543,7 +3552,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * the point of the sheet on a desktop and still worth reaching on a phone.
      */
     (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
+    wrap.append(final);
     wrap.append(qrFold);
+    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
     wrap.append(payFoot(handlers));
 
     /**
@@ -3551,6 +3562,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * result: the figure on screen, both links and the code are that same
      * `bigint`, so a buyer cannot be shown one number and handed another.
      */
+    /** What the valve last found; seeded from the view so a fixture can stage it. */
+    let outcome: StallView['payRateOutcome'] = view.payRateOutcome;
+
     const refresh = (): void => {
         clearPayQrTimer();
         const sats = satsForQuote(price, quantity, rate?.rate);
@@ -3597,6 +3611,19 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         appUrl = pay;
         web.hidden = !linked;
         app.hidden = !linked;
+        // After the price moved the control restates the figure it will open,
+        // composed from the same satoshis as the figure and both URLs.
+        web.textContent =
+            outcome === 'moved' && sats !== undefined ? copy.payFigure(formatXec(sats)) : copy.PAY_CASHTAB;
+        valve.hidden = outcome === undefined;
+        valve.textContent =
+            outcome === 'unavailable'
+                ? copy.PAY_RATE_UNAVAILABLE
+                : outcome === 'moved'
+                  ? copy.PAY_RATE_MOVED
+                  : outcome === 'refreshed'
+                    ? copy.PAY_RATE_REFRESHED
+                    : '';
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -3664,15 +3691,14 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
                 rate = fresh;
-                refresh();
                 const after = satsForQuote(price, quantity, fresh?.rate);
-                valve.hidden = false;
-                valve.textContent =
+                outcome =
                     fresh === undefined || after === undefined
-                        ? copy.PAY_RATE_UNAVAILABLE
+                        ? 'unavailable'
                         : movedPastTolerance(before, after, price.tolerancePct)
-                          ? copy.PAY_RATE_MOVED
-                          : copy.PAY_RATE_REFRESHED;
+                          ? 'moved'
+                          : 'refreshed';
+                refresh();
             })();
         });
     };
@@ -3682,6 +3708,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     refreshRate.addEventListener('click', () => {
         void (async () => {
             rate = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            outcome = rate === undefined ? 'unavailable' : 'refreshed';
             refresh();
         })();
     });
