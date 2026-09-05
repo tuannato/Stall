@@ -2745,7 +2745,7 @@ details.fold.fold-cta[open] > .fold-sum {
     order: -1;
     max-width: 172px;
     padding: 8px;
-    border-radius: 8px;
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
     box-shadow: 0 1px 3px color-mix(in srgb, var(--s-shade) 18%, transparent);
 }
 
@@ -2959,10 +2959,13 @@ details.fold.fold-cta[open] > .fold-sum {
  * worn phone camera. Bigger across the board (owner's call, 2026-08-30) —
  * the publish one most of all, because it is the one that signs money.
  */
+/* The plate takes the look's inner radius; the code inside keeps its
+   white ground and quiet zone (§9), whatever the corner does. */
 .share-qr {
     max-width: 240px;
     align-self: flex-start;
     padding: 8px;
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
 }
 
 /* The signing code as a ticket too (owner's design, 2026-09-01), centred in

@@ -280,6 +280,15 @@
     color: var(--s-muted);
 }
 
+/* The small frames sit at 6px here: the look's inner radius (8 − 4) reads too tight beside its 999px pills. */
+.t-rural .ctx,
+.t-rural .note,
+.t-rural .warn,
+.t-rural .publish-hex,
+.t-rural .share-qr {
+    border-radius: 6px;
+}
+
 /* The drawn glyphs. The caret is 14px: this look's row grid seats a 14px caret track. */
 .t-rural .ic {
     stroke-width: 1.75;
