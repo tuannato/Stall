@@ -2023,8 +2023,17 @@ textarea.paste-in {
     height: 1px;
 }
 
+/*
+ * One strip over two sections: the walk follows the ring with no heading and
+ * only its own lede between them — the two clocks are the one thing worth a
+ * line — so the second rail starts close under the first.
+ */
 .activity-sec + .activity-sec {
-    margin-top: 18px;
+    margin-top: 6px;
+}
+
+.activity-sec > .fine {
+    margin: 0 2px 6px;
 }
 
 .event-time {

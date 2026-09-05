@@ -806,6 +806,20 @@ recipe's, so `positionedPseudos` has nothing to refuse. The two door screens
 and `unresolvable` are still in the contrast pass; three fewer boxes is the
 old door's chips and seller paragraph leaving the sampled set.
 
+**2026-09-05, the studio's three cards, the sheets' "More" folds and the
+activity strip, one reading for both: 130.9s, contrast 96.1s over 2,025
+boxes** (−7 on 2,032), every rule green — and this one was started straight
+after three suite runs on the weak box, so it is a warm reading that still sat
+under the band. The studio's sections became three cards and a preference
+(`.scard`, `.trow`, `.kv`), the OBS recipe folded under Share, both record
+sheets moved everything past their headline fields under a closed `More`
+after the sign controls, and the activity panel lost both section headings.
+No protected box moved: the probe opens every fold before it measures, so
+the hex, the QR and the meter are guarded under `More` exactly as they were
+under their own folds, and the seven fewer boxes are the studio's retired
+hint lines and the two activity headings leaving the sampled set. Nothing
+new to prune; nothing new to skip.
+
 ## What this guard still cannot see
 
 - Whether a `t-*`-scoped theme override applies on every screen a base var

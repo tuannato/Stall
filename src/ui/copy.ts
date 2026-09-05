@@ -444,15 +444,6 @@ export const EVENT_PAYMENT_NOT_PROOF =
     'Written by the payer — not a proof of what was delivered.';
 
 /**
- * The two lists, named for what each of them actually is.
- *
- * "Watching" is this page's own ring, on this page's clock. "History" is a
- * walk of the address, on the chain's. One heading each, because a reader
- * looking at a time needs to know whose clock it came from.
- */
-export const ACTIVITY_WATCHING_TITLE = 'Watching';
-export const ACTIVITY_HISTORY_TITLE = 'History';
-/**
  * The Activity tab is public — anyone can open it — so it says so once,
  * before the rows. Nothing here is private to the seller, and a panel that
  * looked like a seller's own ledger would invite someone to treat it as one.

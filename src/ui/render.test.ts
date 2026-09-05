@@ -6762,6 +6762,36 @@ describe('the activity panel’s two lists and the row detail', () => {
         expect(rows[1]!.querySelector('.event-time')).toBeNull();
     });
 
+    it('the-activity-panel-is-one-strip-over-two-sections', () => {
+        /**
+         * Two sections in the DOM — two lists, two clocks, two caps, each its
+         * own `<ol>` and its own closers — and one strip on screen: no heading
+         * on either, the live line leads, the walk's lede says the clock
+         * changes, and the end of the history is still its own sentence.
+         */
+        const { root } = paint(
+            activity({
+                watchedSinceMs: AT,
+                events: [{ txid: TXID_A, kind: 'other', seenAtMs: AT }],
+                history: {
+                    rows: [{ txid: TXID_B, kind: 'other', chainTimeS: Math.floor(AT / 1000) }],
+                    pagesRead: 1,
+                    done: true,
+                },
+            }),
+        );
+        const panel = root.querySelector('main') as HTMLElement;
+        expect(panel.querySelector('.section-title'), 'no heading on the strip').toBeNull();
+        const watching = panel.querySelector('[data-role="activity-watching"]')!;
+        const history = panel.querySelector('[data-role="activity-history"]')!;
+        expect(watching.querySelector('ol.events')).not.toBeNull();
+        expect(history.querySelector('ol.events')).not.toBeNull();
+        expect(watching.querySelector('.activity-lede'), 'the live line leads').not.toBeNull();
+        expect(history.textContent).toContain(copy.ACTIVITY_HISTORY_LEDE);
+        expect(history.textContent).toContain(copy.ACTIVITY_HISTORY_END);
+        expect(history.textContent).not.toContain(copy.activityHistoryCapped(1).slice(0, 12));
+    });
+
     it('activity-rows-carry-no-control-outside-the-detail', () => {
         const { root } = paint(
             activity({

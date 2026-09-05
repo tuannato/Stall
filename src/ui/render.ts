@@ -5832,18 +5832,17 @@ function paintActivity(
     }
 }
 
-/** The heading shape the studio's sections already use. */
-function sectionTitle(text: string): HTMLElement {
-    const head = el('div', 'section-head');
-    head.append(el('h2', 'section-title', text));
-    return head;
-}
-
-/** The live ring: what this page watched arrive, on this page's clock. */
+/**
+ * The live ring: what this page watched arrive, on this page's clock. The
+ * panel is one visual strip over two sections — this one and the walk under
+ * it — with no heading on either: the live line leads, the walk's own lede
+ * says the clock changes, and the rows wear one treatment. Two `<ol>`s
+ * because they are two lists with two clocks and two caps; one strip because
+ * a reader scrolls one feed.
+ */
 function watchingSection(view: StallView): HTMLElement {
     const wrap = el('section', 'activity-sec');
     wrap.setAttribute('data-role', 'activity-watching');
-    wrap.append(sectionTitle(copy.ACTIVITY_WATCHING_TITLE));
     if (view.watchedSinceMs !== undefined) {
         // Its own class, never `:first-child`: the design's live chip must not
         // leak onto whatever paragraph happens to lead another screen's body.
@@ -5891,7 +5890,6 @@ function historySection(
 ): HTMLElement {
     const wrap = el('section', 'activity-sec');
     wrap.setAttribute('data-role', 'activity-history');
-    wrap.append(sectionTitle(copy.ACTIVITY_HISTORY_TITLE));
     wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_LEDE));
     const history: StallHistory = view.history ?? { rows: [], pagesRead: 0 };
     if (history.rows.length > 0) {
