@@ -108,7 +108,9 @@ import {
     stallBaseUrl,
 } from './render';
 import { satsForQuote } from '../domain/fiat';
-import { formatXec } from '../domain/money';
+import { formatXec,
+    formatXecUngrouped,
+} from '../domain/money';
 import { cashtabPayUrl, payBip21, payECashPayUrl } from '../domain/cashtab';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
@@ -7346,7 +7348,10 @@ const PAY_TEA: TokenMeta = {
     tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
 };
 /** 1 XEC = $0.00002, so $5.00 is 250,000 XEC — 25,000,000 satoshis. */
-const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
+// Frozen *now*: the pay controls open a wallet only over a rate younger than
+// `PAY_RATE_MAX_AGE_MS`, so a fixture stamped in the past presses into the
+// valve instead of the wallet.
+const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: Date.now()};
 
 /**
  * The quote rail as a reader meets it: on the quotes side of the Shop panel.
@@ -7510,6 +7515,24 @@ describe('a-quoted-token-whose-meta-never-arrived-is-counted-not-painted', () =>
     });
 });
 
+/**
+ * The pay controls are buttons: a destination lives in the sheet's closure and
+ * reaches a wallet only through `window.open` at press time, so the URL a test
+ * reads is the one the wallet was handed and nothing a stranger could copy.
+ */
+function pressForUrl(root: HTMLElement, role: string): string | undefined {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    try {
+        const control = root.querySelector(`[data-role="${role}"]`) as HTMLElement | null;
+        expect(control, `${role} is on screen`).not.toBeNull();
+        control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        const call = open.mock.calls[0];
+        return call === undefined ? undefined : String(call[0]);
+    } finally {
+        open.mockRestore();
+    }
+}
+
 describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
     /**
      * On this sheet `[data-role="price"]` is the figure the payer signs — a
@@ -7527,12 +7550,12 @@ describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
         const figure = root.querySelector('[data-role="pay"] [data-role="price"]');
         expect(figure?.textContent).toBe(formatXec(sats));
         const bip21 = payBip21(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!)!;
-        expect(
-            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
-        ).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!));
-        expect(
-            (root.querySelector('[data-role="pay-wallet"]') as HTMLAnchorElement).href,
-        ).toBe(payECashPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!));
+        expect(pressForUrl(root, 'pay-cashtab')).toBe(
+            cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!),
+        );
+        expect(pressForUrl(root, 'pay-wallet')).toBe(
+            payECashPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!),
+        );
         expect(bip21).toContain('250000.00');
     });
 
@@ -7609,9 +7632,9 @@ describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
         expect(
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
         ).toBe(formatXec(sats));
-        expect(
-            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
-        ).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 3n)!));
+        expect(pressForUrl(root, 'pay-cashtab')).toBe(
+            cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 3n)!),
+        );
     });
 });
 
@@ -7670,10 +7693,10 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
         field.value = '3';
         field.dispatchEvent(new Event('input'));
 
-        const link = root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement;
-        const press = new MouseEvent('click', { bubbles: true, cancelable: true });
-        link.dispatchEvent(press);
-        expect(press.defaultPrevented, 'the stale press opened nothing').toBe(true);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        const control = root.querySelector('[data-role="pay-cashtab"]') as HTMLElement;
+        control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        expect(open, 'the stale press opened nothing').not.toHaveBeenCalled();
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
@@ -7688,9 +7711,13 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
         expect(
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
         ).toBe(formatXec(fresh));
-        expect(
-            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).href,
-        ).toBe(cashtabPayUrl(ADDR, fresh, encodePaymentMemoHex(TOKEN_ID, 3n)!));
+        // The second press, on a rate that is now fresh, is the one that opens.
+        control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        expect(open).toHaveBeenCalledOnce();
+        expect(String(open.mock.calls[0]![0])).toBe(
+            cashtabPayUrl(ADDR, fresh, encodePaymentMemoHex(TOKEN_ID, 3n)!),
+        );
+        open.mockRestore();
     });
 
     it('says the rate merely refreshed when the figure did not move', async () => {
@@ -7704,7 +7731,7 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
             payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }),
             h,
         );
-        (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
             new MouseEvent('click', { bubbles: true, cancelable: true }),
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -9227,10 +9254,23 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
     it('names the stall in every payment link on every screen that composes one', () => {
         for (const screen of screens) {
             const { root } = paint(screen.view);
-            const payees = [...root.querySelectorAll('a[href]')]
-                .map((node) => payeeOf((node as HTMLAnchorElement).href))
+            // The record sheets hand a wallet an anchor; the pay sheet hands it
+            // a URL through `window.open` at press time and carries no anchor
+            // at all. Both are read, because both are money leaving a wallet.
+            const hrefs = [...root.querySelectorAll('a[href]')].map(
+                (node) => (node as HTMLAnchorElement).href,
+            );
+            for (const role of ['pay-cashtab', 'pay-wallet']) {
+                if (root.querySelector(`[data-role="${role}"]`) !== null) {
+                    const handed = pressForUrl(root, role);
+                    expect(handed, `${role} handed nothing to a wallet`).toBeDefined();
+                    hrefs.push(handed!);
+                }
+            }
+            const payees = hrefs
+                .map((href) => payeeOf(href))
                 .filter((payee): payee is string => payee !== undefined);
-            // A screen that composed nothing is a screen this sweep did not
+            // A screen that handed nothing over is a screen this sweep did not
             // measure — said out loud, because a silent zero here is the
             // vacuous green this guard exists to refuse.
             expect(payees.length, `${screen.name} composed no payment link`).toBeGreaterThan(0);
@@ -9371,5 +9411,127 @@ describe('a-quotes-count-is-a-number-only-when-every-record-is-a-row', () => {
             copy.shopTabLabel(copy.SHOP_TAB_QUOTES, 0),
         );
         expect(root.querySelector('[data-role="quotes-none"]')).not.toBeNull();
+    });
+});
+
+describe('a-pay-control-has-no-destination-to-copy', () => {
+    /**
+     * An anchor carrying the composed URL could be middle-clicked, opened from
+     * the context menu or dragged to the address bar — none of which reaches
+     * the press-time valve — so after the rate aged the wallet was handed the
+     * stale amount by every road but the one guarded. A button holds no
+     * destination: the URL lives in the sheet, is rewritten by every refresh,
+     * and reaches a wallet only through a press the valve has seen.
+     */
+    const sheet = () =>
+        paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }));
+
+    it('carries no anchor with an amount, and opens the figure on screen once', () => {
+        const { root } = sheet();
+        const pay = root.querySelector('[data-role="pay"]') as HTMLElement;
+        for (const link of pay.querySelectorAll('a[href]')) {
+            expect((link as HTMLAnchorElement).href).not.toContain('amount=');
+        }
+        for (const role of ['pay-cashtab', 'pay-wallet']) {
+            expect(root.querySelector(`[data-role="${role}"]`)?.tagName).toBe('BUTTON');
+        }
+        // Typed first, so a URL captured when the control was armed fails here.
+        (
+            root.querySelector('[data-role="pay-quantity-edit"]') as HTMLElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const field = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        field.value = '3';
+        field.dispatchEvent(new Event('input'));
+        const sats = satsForQuote(QUOTE_USD, 3n, PAY_RATE.rate)!;
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        expect(open).toHaveBeenCalledOnce();
+        const [url, target, features] = open.mock.calls[0]!;
+        expect(String(url)).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 3n)!));
+        expect(String(url)).toContain(`amount=${formatXecUngrouped(sats)}`);
+        expect(target).toBe('_blank');
+        expect(String(features)).toContain('noopener');
+        open.mockRestore();
+    });
+});
+
+describe('a-stale-rate-never-reaches-a-wallet', () => {
+    /**
+     * The timer path: the rate ages under an open sheet, the code is already
+     * taken away, and a press must open nothing until a fresh rate has been
+     * fetched and the figure repainted.
+     */
+    it('opens nothing on a press over an aged rate', async () => {
+        const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({ rate: stale.rate, atMs: Date.now() })),
+        };
+        renderStall(
+            root,
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }),
+            h,
+        );
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        for (const role of ['pay-cashtab', 'pay-wallet']) {
+            (root.querySelector(`[data-role="${role}"]`) as HTMLElement).dispatchEvent(
+                new MouseEvent('click', { bubbles: true, cancelable: true }),
+            );
+        }
+        expect(open).not.toHaveBeenCalled();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
+            copy.PAY_RATE_REFRESHED,
+        );
+        open.mockRestore();
+    });
+});
+
+describe('the-pay-sheet-says-a-payment-is-final', () => {
+    /**
+     * Escrow and delivery were said; that the money cannot come back was not.
+     * One `fine` line below the amount card — the card keeps its one sentence
+     * — and no refund verb anywhere on the sheet, because this page composes
+     * no refund and must not read as if it could.
+     */
+    it('carries the line and no refund verb', () => {
+        const { root } = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
+        );
+        const line = root.querySelector('[data-role="pay-final"]');
+        expect(line?.textContent).toBe(copy.PAY_NOTE_FINAL);
+        expect(line?.closest('.pay-amt'), 'outside the amount card').toBeNull();
+        const text = (root.querySelector('[data-role="pay"]') as HTMLElement).textContent!;
+        expect(text.toLowerCase()).not.toContain('refund');
+    });
+});
+
+describe('an-xec-quote-mounts-no-tolerance-line', () => {
+    /**
+     * A tolerance is a shortfall against a rate, and an xec quote has no rate.
+     * The record may still carry the byte — it is carried whatever the code —
+     * so "the seller has not stated a tolerance" was a sentence the record
+     * contradicted. Nothing is mounted: not the figure, not its absence.
+     */
+    it('mounts the node for usd and not for xec', () => {
+        const usd = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
+        ).root;
+        expect(usd.querySelector('[data-role="pay-tolerance"]')?.textContent).toBe(
+            copy.PAY_TOLERANCE_NONE,
+        );
+        const xec = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                prices: new Map([
+                    [TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n, tolerancePct: 5 }],
+                ]),
+            }),
+        ).root;
+        expect(xec.querySelector('[data-role="pay-tolerance"]')).toBeNull();
+        expect(xec.textContent).not.toContain(copy.PAY_TOLERANCE_NONE);
     });
 });

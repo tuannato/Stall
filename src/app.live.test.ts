@@ -2781,3 +2781,52 @@ describe('a-pay-hint-rate-lands-only-on-the-sheet-that-asked', () => {
         expect(after.value, 'A’s late answer rebuilt B’s sheet').toBe('3');
     });
 });
+
+describe('a-quantity-typed-before-the-rate-lands-survives-it', () => {
+    /**
+     * `onOpenPay` fetches the rate and paints when it lands; a paint rebuilds
+     * the sheet. The quantity is the buyer's — typed into the sheet in the
+     * window before the rate answered — and a rebuild that reset it to one
+     * would sign the wrong figure. It rides the view now, like the rate.
+     */
+    const META: TokenMeta = {
+        tokenId: TOKEN,
+        name: 'Roasted Beans',
+        ticker: 'BEAN',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('keeps 3 when the rate lands after it was typed', async () => {
+        let answer: (rate: bigint) => void = () => {};
+        const pending = new Promise<bigint>((resolve) => {
+            answer = resolve;
+        });
+        priceControl.fetch = () => pending;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        (
+            root.querySelector('[data-role="pay-quantity-edit"]') as HTMLElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const field = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        field.value = '3';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+
+        answer(20_000_000n);
+        await flush();
+        const after = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        expect(after.value, 'the rate landing rebuilt the sheet at one').toBe('3');
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+            'the figure is three items at the rate that landed',
+        ).toBe('750,000');
+    });
+});

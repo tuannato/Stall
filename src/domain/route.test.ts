@@ -316,3 +316,25 @@ describe('a-landing-link-names-an-item-by-a-prefix', () => {
         expect(payLandingUrl('', 'cd'.repeat(32))).toBeUndefined();
     });
 });
+
+describe('a-foreign-prefix-is-not-a-stall-address', () => {
+    /**
+     * `isValidCashAddress` accepts any prefix whose own checksum validates
+     * unless told which one to demand. An `etoken:` or `bitcoincash:` string
+     * then reached `view.address` and every composer refused it downstream
+     * with no sentence — a figure on the pay sheet and no way to pay. The
+     * prefix is demanded at the parse, where a refusal has a screen.
+     */
+    it('refuses etoken: and bitcoincash: forms of a valid hash', () => {
+        for (const prefix of ['etoken', 'bitcoincash']) {
+            const foreign = encodeCashAddress(prefix, 'p2pkh', '22'.repeat(20));
+            expect(parseSellerParam(foreign).kind, foreign).toBe('invalid');
+        }
+    });
+
+    it('still resolves the ecash: form and the bare form', () => {
+        const own = encodeCashAddress('ecash', 'p2pkh', '22'.repeat(20));
+        expect(parseSellerParam(own).kind).toBe('address');
+        expect(parseSellerParam(own.slice('ecash:'.length)).kind).toBe('address');
+    });
+});

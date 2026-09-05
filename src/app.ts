@@ -301,6 +301,8 @@ export function boot(
      * rate — so this exists to seed the sheet when it opens.
      */
     let payRate: { rate: bigint; atMs: number } | undefined;
+    /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
+    let payQuantity: bigint | undefined;
     /**
      * A `?pay=` link is answered once per page load. The URL is deliberately
      * not rewritten, so a reload of a scanned link reopens the sheet — but the
@@ -419,6 +421,7 @@ export function boot(
             fiatCode,
             fiatRate,
             payRate,
+            payQuantity,
             shopTab,
         };
         renderStall(root, view, {
@@ -452,6 +455,11 @@ export function boot(
                 onOpenPay(tokenId);
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onPayQuantity: (tokenId, quantity) => {
+                if (state.view.overlay.kind === 'pay' && state.view.overlay.tokenId === tokenId) {
+                    payQuantity = quantity;
+                }
+            },
             onLookupToken: (tokenId) => lookupToken(tokenId),
             onOpenPublish: () => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'publish-name' } } };
@@ -748,6 +756,7 @@ export function boot(
     const onOpenPay = (tokenId: string): void => {
         const claimed = generation;
         payRate = undefined;
+        payQuantity = undefined;
         state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
         paint();
         void (async () => {

@@ -131,6 +131,12 @@ export type StallHandlers = {
      * The fetch itself stays on the app's side of the wall; the sheet decides
      * when to ask, which is on the refresh control and on a stale press.
      */
+    /**
+     * The quantity the buyer typed into the pay sheet, so a repaint — the
+     * rate landing, a flush when the overlay closes — rebuilds the sheet with
+     * it rather than at one. Answers nothing and paints nothing.
+     */
+    onPayQuantity?: (tokenId: string, quantity: bigint) => void;
     onPayRate?: (
         timeoutMs?: number,
     ) => Promise<{ rate: bigint; atMs: number } | undefined>;
@@ -3204,11 +3210,13 @@ function clearPayQrTimer(): void {
  * both record sheets already use. Nothing here can tell that a payment
  * happened, and nothing on it claims to.
  *
- * Two pieces of state live in this closure rather than on the view, because
- * `renderStall` opens with `replaceChildren()` and a repaint would take them:
- * the quantity the buyer typed, and the rate the figure was composed against.
- * Every update — the refresh control, the press-time valve, the code ageing
- * out — is this sheet's own `refresh()`, in place.
+ * The rate the figure was composed against lives in this closure, seeded from
+ * `view.payRate`; so does the quantity, seeded from `view.payQuantity` and
+ * reported back through `onPayQuantity` on every accepted input — because
+ * `renderStall` opens with `replaceChildren()`, and a repaint that rebuilt
+ * the sheet at one after the buyer typed three would sign the wrong figure.
+ * Every update this sheet makes itself — the refresh control, the press-time
+ * valve, the code ageing out — is its own `refresh()`, in place.
  */
 function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'sheet');
@@ -3238,7 +3246,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const usesRate = price.code !== XEC_PRICE_CODE;
 
     /** The buyer's own quantity: whole items, at least one. */
-    let quantity = 1n;
+    let quantity = view.payQuantity ?? 1n;
     /** The rate this sheet froze, and when. Never `view.fiatRate`. */
     let rate = usesRate ? view.payRate : undefined;
 
@@ -3322,7 +3330,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const qtyRow = el('dl', 'row pay-qty');
     qtyRow.append(el('dt', undefined, copy.PAY_QUANTITY_LABEL));
     const qtyValue = el('dd');
-    const qtyShown = el('b', undefined, copy.payQuantityShown('1'));
+    const qtyShown = el('b', undefined, copy.payQuantityShown(quantity.toString()));
     const qtyEdit = el('button', 'mini another', copy.PAY_QUANTITY_EDIT);
     qtyEdit.type = 'button';
     qtyEdit.setAttribute('data-role', 'pay-quantity-edit');
@@ -3331,7 +3339,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     qtyField.type = 'text';
     qtyField.inputMode = 'numeric';
     qtyField.autocomplete = 'off';
-    qtyField.value = '1';
+    qtyField.value = quantity.toString();
     qtyField.maxLength = 20;
     qtyField.hidden = true;
     qtyField.setAttribute('aria-label', copy.PAY_QUANTITY_LABEL);
@@ -3354,6 +3362,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const asked = /^\d{1,20}$/.test(typed) ? BigInt(typed) : 0n;
         quantity = asked >= 1n && asked <= MAX_PAY_QUANTITY ? asked : 1n;
         qtyShown.textContent = copy.payQuantityShown(quantity.toString());
+        handlers.onPayQuantity?.(tokenId, quantity);
         refresh();
     });
 
@@ -3365,9 +3374,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * own presets can say is named as wider rather than printed as a figure
      * whose meaning nothing here can vouch for.
      */
-    const stated = usesRate ? price.tolerancePct : undefined;
-    wrap.append(
-        el(
+    if (usesRate) {
+        // A tolerance is a shortfall against a rate. An xec quote has no rate,
+        // so nothing is mounted for one — not the figure and not its absence:
+        // the record may carry the byte (it is carried whatever the code), and
+        // "not stated" would be a sentence that record contradicts.
+        const stated = price.tolerancePct;
+        const tolerance = el(
             'p',
             'fine',
             stated === undefined
@@ -3375,22 +3388,37 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 : stated > 25
                   ? copy.PAY_TOLERANCE_WIDE
                   : copy.payTolerance(stated),
-        ),
-    );
+        );
+        tolerance.setAttribute('data-role', 'pay-tolerance');
+        wrap.append(tolerance);
+    }
     wrap.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
+    // Below the card, which keeps its one sentence: that the money cannot come
+    // back is said where the rest of the rail's limits are.
+    const final = el('p', 'fine', copy.PAY_NOTE_FINAL);
+    final.setAttribute('data-role', 'pay-final');
+    wrap.append(final);
     if (decimalsOf(view.tokens, tokenId) > 0) {
         wrap.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
     }
 
     const acts = el('div', 'acts');
-    const web = el('a', 'buy', copy.PAY_CASHTAB);
+    // Buttons, not anchors. An anchor carries its destination where a
+    // middle-click, the context menu's "open in new tab" or "copy link
+    // address", or a drag to the address bar can take it — none of which
+    // reaches the press-time valve below — so once the rate had aged, every
+    // road but the guarded one handed a wallet the stale amount. A button
+    // holds no destination: the URL lives here, is rewritten by every
+    // `refresh()`, and reaches a wallet only through a press the valve saw.
+    const web = el('button', 'buy', copy.PAY_CASHTAB);
+    web.type = 'button';
     web.setAttribute('data-focus-key', 'pay-cashtab');
-    const app = el('a', 'mini another', copy.PAY_OTHER_WALLET);
+    const app = el('button', 'mini another', copy.PAY_OTHER_WALLET);
+    app.type = 'button';
     app.setAttribute('data-focus-key', 'pay-wallet');
-    for (const link of [web, app]) {
-        link.rel = 'noopener noreferrer';
-        link.target = '_blank';
-    }
+    /** The composed destinations: written by `refresh()`, read at press time. */
+    let webUrl: string | undefined;
+    let appUrl: string | undefined;
     acts.append(web, app);
     wrap.append(acts);
 
@@ -3457,18 +3485,17 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
               : '';
 
         const linked = cashtab !== undefined && pay !== undefined;
+        webUrl = cashtab;
+        appUrl = pay;
         web.hidden = !linked;
         app.hidden = !linked;
         // A control with no destination is not a control: the role comes off
-        // with the href, so nothing on screen offers a press that does nothing.
+        // with the destination, so nothing on screen offers a press that does
+        // nothing.
         if (linked) {
-            web.href = cashtab;
-            app.href = pay;
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
         } else {
-            web.removeAttribute('href');
-            app.removeAttribute('href');
             web.removeAttribute('data-role');
             app.removeAttribute('data-role');
         }
@@ -3511,15 +3538,20 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * pressing a control that appears to do nothing. The change lands on the
      * press and never under the cursor.
      */
-    const armValve = (link: HTMLAnchorElement): void => {
-        link.addEventListener('click', (event) => {
-            if (!usesRate || rate === undefined) {
+    const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
+        control.addEventListener('click', () => {
+            const url = destination();
+            if (url === undefined) {
                 return;
             }
-            if (Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
+            if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
+                // Synchronously, inside the buyer's own press — the one open a
+                // browser treats as theirs. `noreferrer` on top of `noopener`;
+                // the origin's `Referrer-Policy: no-referrer` header is the belt
+                // behind it.
+                window.open(url, '_blank', 'noopener,noreferrer');
                 return;
             }
-            event.preventDefault();
             const before = satsForQuote(price, quantity, rate.rate);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
@@ -3536,8 +3568,8 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             })();
         });
     };
-    armValve(web);
-    armValve(app);
+    armValve(web, () => webUrl);
+    armValve(app, () => appUrl);
 
     refreshRate.addEventListener('click', () => {
         void (async () => {

@@ -1263,6 +1263,13 @@ export const PAY_FINE_MEMO =
 export const PAY_FINE_SOME_WALLETS = 'Some wallets pay without the memo.';
 export const PAY_FINE_DELIVERY =
     'Arrange delivery with the seller off-chain. This page cannot tell that a payment happened, and never that anything was delivered.';
+/**
+ * That the money cannot come back. Below the card, which keeps its one
+ * sentence; no refund verb, because this page composes no refund and must
+ * not read as if it could.
+ */
+export const PAY_NOTE_FINAL =
+    'A payment is final once the network has it. This page cannot reverse one, and neither can the seller’s wallet on your behalf.';
 /** Quantity is whole items: the record has no way to say half of one. */
 export const PAY_FINE_WHOLE_ITEMS =
     'Whole items only \u2014 this quote is per whole token, and a fractional quantity is not supported.';

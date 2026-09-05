@@ -419,6 +419,12 @@ export type StallView = {
     fiatCode?: string;
     fiatRate?: bigint;
     /**
+     * The quantity the buyer typed into the pay sheet, whole items. On the
+     * view so a repaint rebuilds the sheet with it — a rate landing after the
+     * buyer typed used to reset it to one. Cleared when a sheet opens.
+     */
+    payQuantity?: bigint;
+    /**
      * The rate the open pay sheet was composed against, and when it was read.
      *
      * **Its own field, never `fiatRate`.** That one is the glance beside a

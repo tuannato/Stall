@@ -195,6 +195,13 @@ here") and the quotes rail gained a `QUOTES_READING` line for the window
 before the walk answers (2026-09-05). Measured alone:
 **2,602 boxes and 141.2s**; the name-floor rule did not move on any look.
 
+The two Pay controls became `<button>`s (an anchor's destination can be
+copied past the press-time valve), one `fine` line joined the pay sheet
+(a payment is final) and the tolerance line is not mounted for an xec quote
+(2026-09-05). Measured alone: **2,602 boxes and 144.3s**. `CONTRAST_TEXT`
+matches `.buy`/`.mini` by class, so the buttons are sampled where the
+anchors were.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels

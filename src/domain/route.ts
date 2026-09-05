@@ -9,7 +9,11 @@ export function parseSellerParam(raw: string): RouteParse {
         return { kind: 'pubkey', pubkeyHex: trimmed.toLowerCase() };
     }
     const withPrefix = trimmed.includes(':') ? trimmed : `ecash:${trimmed}`;
-    if (!isValidCashAddress(withPrefix)) {
+    // The prefix is demanded here, where a refusal has a screen. Left
+    // optional, any prefix whose own checksum validates — `etoken:`,
+    // `bitcoincash:` — reached `view.address`, and every composer downstream
+    // refused it with no sentence.
+    if (!isValidCashAddress(withPrefix, 'ecash')) {
         return { kind: 'invalid', raw };
     }
     try {
