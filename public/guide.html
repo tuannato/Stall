@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How a stall works · Stall</title>
+    <link rel="stylesheet" href="/stream.css" />
+    <link rel="stylesheet" href="/guide.css" />
+  </head>
+  <body>
+    <div class="canopy" aria-hidden="true"></div>
+    <main class="wrap">
+      <div class="brand">
+        <a class="brand-home" href="/">
+          <img
+            class="brand-mark"
+            src="/stream-logo.png"
+            width="30"
+            height="36"
+            alt=""
+          />
+          <span class="brand-word">Stall</span>
+        </a>
+        <p class="brand-kicker">how a stall works</p>
+      </div>
+
+      <div class="lede-block">
+        <h1 class="display">One link. Two ways to sell.</h1>
+        <p class="lede">
+          A stall is a page that reads the eCash chain for one seller. It holds
+          no key and signs nothing: your wallet signs, Stall shows. Two things
+          can be on it — <a href="#listings">listings</a>, which are Agora
+          offers your wallet made, and <a href="#quotes">quotes</a>, which are
+          prices you published for items you deliver yourself.
+        </p>
+        <nav class="toc" aria-label="On this page">
+          <a href="#listings">Listings</a>
+          <a href="#quotes">Quotes</a>
+          <a href="#rules">The rules</a>
+          <a href="/stream">On stream</a>
+        </nav>
+      </div>
+
+      <section class="block" id="listings">
+        <h2 class="section-title">Listings — sell a token on Agora</h2>
+        <p class="lede-sm">
+          An Agora listing is a token locked in a covenant with an asking price.
+          Anyone can buy it from any wallet that speaks Agora; Stall gathers
+          yours under one link.
+        </p>
+        <ol class="steps">
+          <li class="step">
+            <p class="step-n mono">01</p>
+            <p class="step-body">
+              <span class="step-title">List a token in Cashtab</span>
+              <span class="step-copy">
+                In <a href="https://cashtab.com/#/etokens">Cashtab</a>, open a
+                token you hold and list it on Agora with the price you want.
+                That listing is a transaction from your address.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">02</p>
+            <p class="step-body">
+              <span class="step-title">Paste your address at stall.cash</span>
+              <span class="step-copy">
+                The one Cashtab shows on its Receive screen. Your stall opens at
+                <b class="mono">stall.cash/s/</b> + your address. That link is
+                yours to share; nothing is sent, nothing is stored.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">03</p>
+            <p class="step-body">
+              <span class="step-title">Name it, then share it</span>
+              <span class="step-copy">
+                Studio → Name &amp; look publishes a name, a tagline and a look
+                in one small record your wallet signs. Studio → Share gives you
+                the link, a QR and a poster.
+              </span>
+            </p>
+          </li>
+        </ol>
+
+        <h3 class="sub-title">What a buyer sees</h3>
+        <div class="truths">
+          <div class="truth">
+            <p class="truth-title">The price the covenant asks.</p>
+            <p class="truth-copy">
+              Every row shows the smallest amount that buys from your listing,
+              read from the chain. Stall never computes a price of its own.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Buying happens in Cashtab.</p>
+            <p class="truth-copy">
+              “See offers in Cashtab” opens the token’s order book. Cashtab
+              opens this token’s offers and preselects the cheapest one the
+              viewer can afford, which may belong to another seller.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Cashtab’s book is not your stall.</p>
+            <p class="truth-copy">
+              Cashtab does not name the seller. Its prices are per token, and
+              sometimes in fiat — not the minimum take on this card.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Nothing here signs.</p>
+            <p class="truth-copy">
+              Cashtab builds and signs the payment, not this site. Stall never
+              holds a key, never sees one, and cannot reverse a purchase.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="quotes">
+        <h2 class="section-title">Quotes — name a price, get paid directly</h2>
+        <p class="lede-sm">
+          A quote is a small record your wallet signs onto the chain: your price
+          for one token you minted, in USD or XEC. Buyers tap Pay and their
+          wallet pays your address. You deliver the item yourself.
+        </p>
+
+        <h3 class="sub-title">Seller — set a price</h3>
+        <ol class="steps">
+          <li class="step">
+            <p class="step-n mono">01</p>
+            <p class="step-body">
+              <span class="step-title">Open your stall → Studio → Items &amp; prices</span>
+              <span class="step-copy">
+                A token you list already has a row. A token you minted but never
+                listed does not: press “Describe a token” and paste its id.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">02</p>
+            <p class="step-body">
+              <span class="step-title">Describe &amp; price</span>
+              <span class="step-copy">
+                Write what buyers should know, type the figure, pick USD or XEC.
+                Your own asking figure, published as you write it. Nothing here
+                converts it.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">03</p>
+            <p class="step-body">
+              <span class="step-title">Sign with Cashtab</span>
+              <span class="step-copy">
+                One small transaction. The quote shows under Quotes once the
+                network has it; payments show under Activity, public like the
+                rest.
+              </span>
+            </p>
+          </li>
+        </ol>
+
+        <h3 class="sub-title">Buyer — pay</h3>
+        <ol class="steps">
+          <li class="step">
+            <p class="step-n mono">01</p>
+            <p class="step-body">
+              <span class="step-title">Open the seller’s link, tap Quotes</span>
+              <span class="step-copy">
+                Or scan the QR on their poster or stream — it opens the same
+                item.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">02</p>
+            <p class="step-body">
+              <span class="step-title">Tap Pay and read the figure</span>
+              <span class="step-copy">
+                The XEC your wallet signs, the seller’s quote it comes from, and
+                the rate it was converted at. A rate older than two minutes is
+                fetched again before anything opens.
+              </span>
+            </p>
+          </li>
+          <li class="step">
+            <p class="step-n mono">03</p>
+            <p class="step-body">
+              <span class="step-title">Sign in your wallet</span>
+              <span class="step-copy">
+                You pay the seller directly. No escrow. No token is sent to you
+                — the seller delivers off-chain.
+              </span>
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="block" id="rules">
+        <h2 class="section-title">The rules of a quote</h2>
+        <div class="truths">
+          <div class="truth">
+            <p class="truth-title">Yours.</p>
+            <p class="truth-copy">
+              Your price per whole token, in USD or XEC, signed by your stall’s
+              wallet. It stays until you change it.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Your token.</p>
+            <p class="truth-copy">
+              Only a token your stall minted can take a quote. A quote on
+              somebody else’s token would borrow its name and its picture.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Direct.</p>
+            <p class="truth-copy">
+              Payment goes to your address. No escrow, no middleman. The page
+              shows <em>paid</em>, never <em>delivered</em> — delivery is the
+              seller’s promise, as with any seller you reach through a chat.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Final.</p>
+            <p class="truth-copy">
+              A payment is final once the network has it. This page cannot
+              reverse one, and neither can the seller’s wallet on your behalf.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Converted once.</p>
+            <p class="truth-copy">
+              A USD quote becomes XEC at the moment of paying. An XEC quote
+              never converts. A seller may allow a shortfall of 1–100%, and a
+              payment within it counts as paid in full.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Whole units.</p>
+            <p class="truth-copy">
+              Whole tokens only. Nothing under 5.46 XEC — the network would not
+              relay it.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Public.</p>
+            <p class="truth-copy">
+              Quotes, payments and the memo that names the item are chain data
+              anyone can read. The memo is the payer’s claim, not a receipt.
+            </p>
+          </div>
+          <div class="truth">
+            <p class="truth-title">Not shown.</p>
+            <p class="truth-copy">
+              Firma, fCHF, fEUR, XECX and tokens named after well-known coins
+              never appear on a stall, listed or quoted.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p class="cta-row">
+        <a class="cta" href="/">
+          <span class="cta-pref mono">ecash:</span>
+          <span>Open your stall</span>
+        </a>
+      </p>
+    </main>
+  </body>
+</html>

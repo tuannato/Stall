@@ -598,6 +598,15 @@ function paintHome(
     streamLink.setAttribute('data-role', 'door-stream-link');
     stream.append(streamLink);
     body.append(stream);
+    // The general guide: listings and quotes on one static page (§9), a
+    // real navigation like the stream line above it.
+    const guide = el('p', 'fine door-stream');
+    guide.append(copy.HOME_GUIDE_LEAD, ' ');
+    const guideLink = el('a', undefined, copy.HOME_GUIDE_LINK);
+    guideLink.setAttribute('href', '/guide');
+    guideLink.setAttribute('data-role', 'door-guide-link');
+    guide.append(guideLink);
+    body.append(guide);
     const pinned = pinnedDoor(view, handlers);
     if (pinned !== null) {
         body.append(pinned);
@@ -825,7 +834,12 @@ function paintUnresolvable(
     acts.setAttribute('data-role', 'first-stall-acts');
     acts.append(listInCashtab(), retryControl(handlers, copy.CHECK_AGAIN));
     card.append(acts);
-    card.append(el('p', 'fine', copy.FIRST_STALL_WATCHING));
+    const watching = el('p', 'fine', copy.FIRST_STALL_WATCHING);
+    const guide = el('a', undefined, copy.FIRST_STALL_GUIDE_LINK);
+    guide.setAttribute('href', '/guide#listings');
+    guide.setAttribute('data-role', 'first-stall-guide-link');
+    watching.append(' ', guide);
+    card.append(watching);
     body.append(card);
     stall.append(body);
     // No share: the link here opens this screen.
@@ -5565,6 +5579,10 @@ function paintStudio(
         // until its seller names it — say where.
         const hint = el('p', 'fine', copy.STUDIO_ITEMS_HINT);
         hint.setAttribute('data-role', 'studio-items-hint');
+        const guide = el('a', undefined, copy.STUDIO_GUIDE_LINK);
+        guide.setAttribute('href', '/guide#quotes');
+        guide.setAttribute('data-role', 'studio-guide-link');
+        hint.append(' ', guide);
         items.card.append(hint);
     }
     body.append(items.card);
@@ -5576,7 +5594,10 @@ function paintStudio(
     // itself, and it never navigates or stores.
     const obs = el('div');
     paintObsGuide(obs, view, handlers);
-    share.card.append(sheetFold('obs-guide-fold', OBS_GUIDE_TITLE, obs));
+    // Dressed as the card's one primary control (owner, 2026-09-05): a fold
+    // still — the recipe is long and nobody signs anything in it — but its
+    // summary is the button a streamer looks for, not a line among lines.
+    share.card.append(sheetFold('obs-guide-fold', OBS_GUIDE_TITLE, obs, 'fold-cta'));
     body.append(share.card);
 
     const raw = identityOf(view);

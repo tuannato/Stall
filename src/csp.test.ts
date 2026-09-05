@@ -217,6 +217,10 @@ describe('deploy-spec-matches-the-app', () => {
         expect(stream, 'location = /stream').not.toBeNull();
         expect(stream![0]).toContain('Cache-Control "no-store"');
         expect(stream![0]).toContain('try_files /stream.html =404');
+        const guide = nginx.match(/location\s+=\s+\/guide\s*\{[^}]*\}/);
+        expect(guide, 'location = /guide').not.toBeNull();
+        expect(guide![0]).toContain('Cache-Control "no-store"');
+        expect(guide![0]).toContain('try_files /guide.html =404');
     });
 });
 
@@ -369,6 +373,8 @@ describe('unhashed-path-is-not-cacheable', () => {
             '/404.html',
             '/stream',
             '/stream.css',
+            '/guide',
+            '/guide.css',
             ...stallSource,
         ]) {
             expect(declared.get(path)?.get('cache-control'), path).toBe('no-store');
@@ -407,5 +413,10 @@ describe('the-stream-guide-is-a-document-path-with-no-store', () => {
         expect(declared.get('/stream.css')?.get('cache-control')).toBe('no-store');
         expect(read('public', 'stream.html')).toContain('<!doctype html>');
         expect(read('public', 'stream.css').length).toBeGreaterThan(0);
+        // The general guide, same rule.
+        expect(declared.get('/guide')?.get('cache-control')).toBe('no-store');
+        expect(declared.get('/guide.css')?.get('cache-control')).toBe('no-store');
+        expect(read('public', 'guide.html')).toContain('<!doctype html>');
+        expect(read('public', 'guide.css').length).toBeGreaterThan(0);
     });
 });

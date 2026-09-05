@@ -713,6 +713,12 @@ export const HOME_SELLER =
 /** The door's one line for streamers: the guide is a page of its own (§9). */
 export const HOME_STREAM_LEAD = 'Streaming?';
 export const HOME_STREAM_LINK = 'Put your stall on stream';
+/** The door's one line for the general guide: a page of its own, like the stream guide (§9). */
+export const HOME_GUIDE_LEAD = 'New here?';
+export const HOME_GUIDE_LINK = 'How a stall works';
+/** The studio items card and the first-stall checklist point at the guide's chapters. */
+export const STUDIO_GUIDE_LINK = 'How quotes work';
+export const FIRST_STALL_GUIDE_LINK = 'How a stall works';
 
 export const HOME_DEMO_TITLE = 'See a real stall';
 /**

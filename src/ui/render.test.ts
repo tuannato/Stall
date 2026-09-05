@@ -880,6 +880,9 @@ describe('the-studio-is-three-cards-and-a-preference', () => {
         const obs = share.querySelector('details[data-role="obs-guide-fold"]') as HTMLDetailsElement;
         expect(obs, 'the OBS recipe folds under Share').not.toBeNull();
         expect(obs.open).toBe(false);
+        // Its summary wears the card's primary-control dress, so a streamer
+        // finds it; it is still a fold, still closed.
+        expect(obs.classList.contains('fold-cta')).toBe(true);
         expect(obs.querySelector('[data-role="obs-guide"]')).not.toBeNull();
         expect(obs.textContent).toContain(OBS_GUIDE_TITLE);
         const pref = body.querySelector('.studio-browser')!;
@@ -952,7 +955,7 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
         expect([...card.querySelectorAll('[data-role="studio-item"]')]).toHaveLength(1);
         expect(card.textContent).not.toMatch(/\d/);
-        expect(card.querySelector('[data-role="studio-items-hint"]')?.textContent).toBe(copy.STUDIO_ITEMS_HINT);
+        expect(card.querySelector('[data-role="studio-items-hint"]')?.textContent).toContain(copy.STUDIO_ITEMS_HINT);
     });
 
     it('says how a minted-but-unlisted token gets in: describe it and paste its id', () => {
@@ -10550,5 +10553,40 @@ describe('the-two-prices-line-needs-a-price-field', () => {
         const root = sheet(new Map([[TOKEN_ID, 'attributed']]));
         expect((root.querySelector('[data-role="describe-price-field"]') as HTMLElement).hidden).toBe(false);
         expect((root.querySelector('[data-role="describe-two-prices"]') as HTMLElement).hidden).toBe(false);
+    });
+});
+
+/*
+ * The general guide is a static page (§9). Three screens point at it with a
+ * plain same-origin anchor: the door, the studio's items card and the
+ * seller's first-stall checklist — each at the chapter that answers the
+ * question asked there.
+ */
+describe('the-guide-is-linked-from-the-door-the-studio-and-the-first-stall', () => {
+    it('carries one plain anchor per screen, at the right chapter', () => {
+        const door = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }).root;
+        const doorLink = door.querySelector('[data-role="door-guide-link"]') as HTMLAnchorElement;
+        expect(doorLink.tagName).toBe('A');
+        expect(doorLink.getAttribute('href')).toBe('/guide');
+        expect(doorLink.textContent).toBe(copy.HOME_GUIDE_LINK);
+        expect(doorLink.getAttribute('target')).toBeNull();
+
+        const studio = paint(
+            idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), panel: 'studio' }),
+        ).root;
+        const studioLink = studio.querySelector('[data-role="studio-guide-link"]') as HTMLAnchorElement;
+        expect(studioLink.getAttribute('href')).toBe('/guide#quotes');
+        expect(studioLink.closest('[data-role="studio-items-hint"]')).not.toBeNull();
+
+        const first = paint({
+            route: { kind: 'unresolvable', address: ADDR },
+            overlay: { kind: 'idle' },
+            address: ADDR,
+            tokens: new Map(),
+            pasted: true,
+        }).root;
+        const firstLink = first.querySelector('[data-role="first-stall-guide-link"]') as HTMLAnchorElement;
+        expect(firstLink.getAttribute('href')).toBe('/guide#listings');
+        expect(firstLink.closest('[data-role="first-stall"]')).not.toBeNull();
     });
 });

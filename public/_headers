@@ -52,6 +52,15 @@
 /stream.css
   Cache-Control: no-store
 
+# The general guide (listings and quotes) is a third document path, same
+# rule: a cached guide would keep a stale sentence after the app's own copy
+# moves — the guide quotes the app verbatim and a test holds it to that.
+/guide
+  Cache-Control: no-store
+
+/guide.css
+  Cache-Control: no-store
+
 # Hashed filenames, so the bytes at a URL never change. Safe to cache hard only
 # because the document above is never cached.
 /assets/*
