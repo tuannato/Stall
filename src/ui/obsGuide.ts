@@ -52,6 +52,10 @@ export const OBS_PRESET_CORNER = 'Corner card';
 export const OBS_PRESET_RAIL = 'Side rail';
 
 export const OBS_MODE_LABEL = 'Price display';
+/** The third picker: which rail the corner card shows. A link option since the quote card shipped; a picker since 2026-09-05. */
+export const OBS_CARDS_LABEL = 'Cards show';
+export const OBS_CARDS_LISTINGS = 'Agora listings';
+export const OBS_CARDS_QUOTES = 'Your quotes (paid to you)';
 export const OBS_MODE_FIXED = 'Always show a price';
 export const OBS_MODE_RAIL = 'Rest, then show a price';
 
@@ -84,8 +88,9 @@ export const OBS_TRUTH_RAIL_RESTS =
 export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
     'Side rail never shows a price — it is the name and the QR only.';
 /**
- * The one place a streamer meets `cards=quotes`: it is a link option, not a
- * picker, so nothing else on this page would ever say it exists.
+ * Where a streamer meets the quote cards: a picker ("Cards show") since
+ * 2026-09-05 — it was a link option alone, and the owner could not find it —
+ * and this truth, which names the picker's own words.
  *
  * The XEC advice is the honest half. The page a viewer lands on converts a USD
  * quote at the moment of the scan, so nothing on the stream goes stale — but
@@ -93,7 +98,7 @@ export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
  * rate for a day they were not watching, and an XEC quote needs none.
  */
 export const OBS_TRUTH_QUOTE_CARDS =
-    'Quote cards are opt-in — add “cards=quotes” to the link and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.';
+    'Quote cards are opt-in — pick “Your quotes (paid to you)” under “Cards show” and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.';
 export const OBS_TRUTH_STALE_OVERLAY =
     'If the overlay stops updating, OBS shut the source down — toggle the source’s visibility to bring it back.';
 
@@ -102,6 +107,7 @@ const DEFAULT_MODE: ObsMode = 'rail';
 
 let selectedPreset: ObsPreset = DEFAULT_PRESET;
 let selectedMode: ObsMode = DEFAULT_MODE;
+let selectedCards: ObsCards = 'listings';
 
 /**
  * The selection above is file-scoped on purpose (see the module doc), which
@@ -111,12 +117,19 @@ let selectedMode: ObsMode = DEFAULT_MODE;
 export function resetObsGuideForTests(): void {
     selectedPreset = DEFAULT_PRESET;
     selectedMode = DEFAULT_MODE;
+    selectedCards = 'listings';
 }
 
-function urlFor(raw: string, preset: ObsPreset, mode: ObsMode): string {
+type ObsCards = 'listings' | 'quotes';
+
+function urlFor(raw: string, preset: ObsPreset, mode: ObsMode, cards: ObsCards = 'listings'): string {
     const path = stallPath(raw);
+    // The rail preset mounts no card, so neither the mode nor the cards
+    // switch rides its link: the parser would ignore them, and a param that
+    // does nothing is a promise the overlay does not keep.
     const modePart = preset === 'rail' ? '' : `&mode=${mode}`;
-    return `${location.origin}${path}?view=broadcast&preset=${preset}${modePart}&bg=transparent`;
+    const cardsPart = preset !== 'rail' && cards === 'quotes' ? '&cards=quotes' : '';
+    return `${location.origin}${path}?view=broadcast&preset=${preset}${modePart}${cardsPart}&bg=transparent`;
 }
 
 /**
@@ -131,9 +144,34 @@ export function broadcastGuideUrl(
     view: StallView,
     preset: ObsPreset,
     mode: ObsMode,
+    cards: ObsCards = 'listings',
 ): string | undefined {
     const raw = identityOf(view);
-    return raw === undefined ? undefined : urlFor(raw, preset, mode);
+    return raw === undefined ? undefined : urlFor(raw, preset, mode, cards);
+}
+
+/** Which rail the corner card shows: the listings, or the seller's own quotes. */
+function cardsPicker(onChange: () => void): HTMLElement {
+    const label = el('label', 'paste-label obs-field', OBS_CARDS_LABEL);
+    const select = el('select', 'paste-in');
+    select.setAttribute('data-role', 'obs-cards-picker');
+    select.setAttribute('data-focus-key', 'obs-cards-picker');
+    const options: Array<[ObsCards, string]> = [
+        ['listings', OBS_CARDS_LISTINGS],
+        ['quotes', OBS_CARDS_QUOTES],
+    ];
+    for (const [value, text] of options) {
+        const opt = el('option', undefined, text);
+        opt.value = value;
+        opt.selected = value === selectedCards;
+        select.append(opt);
+    }
+    select.addEventListener('change', () => {
+        selectedCards = select.value as ObsCards;
+        onChange();
+    });
+    label.append(select);
+    return label;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -521,13 +559,14 @@ export function paintObsGuide(
         fields.append(presetPicker(renderBody));
         if (selectedPreset !== 'rail') {
             fields.append(modePicker(renderBody));
+            fields.append(cardsPicker(renderBody));
         }
         choose.append(fields);
         where.append(choose);
         grid.append(where);
 
         const copyStep = stepBox(2, OBS_STEP_COPY, 'obs-step-copy');
-        copyStep.append(copyControl(urlFor(raw, selectedPreset, selectedMode)));
+        copyStep.append(copyControl(urlFor(raw, selectedPreset, selectedMode, selectedCards)));
         grid.append(copyStep);
 
         const source = stepBox(3, OBS_STEP_SOURCE, 'obs-step-source');

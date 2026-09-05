@@ -39,6 +39,9 @@ import {
     OBS_TRUTH_RAIL_RESTS,
     OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
     OBS_TRUTH_STALE_OVERLAY,
+    OBS_CARDS_LABEL,
+    OBS_CARDS_LISTINGS,
+    OBS_CARDS_QUOTES,
 } from './obsGuide';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
@@ -455,14 +458,16 @@ describe('the-studio-names-the-quotes-toggle', () => {
         );
         expect(plate, 'the corner preset carries the quote-cards truth').toBeDefined();
         const quoted = [...OBS_TRUTH_QUOTE_CARDS.matchAll(/“[^”]*”/g)].map((m) => m[0]);
-        expect(quoted, 'the constant names the switch in quotes').toEqual([
-            '“cards=quotes”',
+        expect(quoted, 'the constant names the picker and its option in quotes').toEqual([
+            `“${OBS_CARDS_QUOTES}”`,
+            `“${OBS_CARDS_LABEL}”`,
         ]);
         const bolded = [...plate!.querySelectorAll('strong')].map((s) => s.textContent);
-        // The lead phrase, as every truth has, and the switch itself.
+        // The lead phrase, as every truth has, and the picker's own words.
         expect(bolded).toEqual([
             OBS_TRUTH_QUOTE_CARDS.slice(0, OBS_TRUTH_QUOTE_CARDS.indexOf(' — ')),
-            '“cards=quotes”',
+            `“${OBS_CARDS_QUOTES}”`,
+            `“${OBS_CARDS_LABEL}”`,
         ]);
         expect(OBS_TRUTH_QUOTE_CARDS).toContain('XEC');
     });
@@ -513,5 +518,36 @@ describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
         );
         const withoutId = section.querySelector('[data-role="obs-guide-link"]');
         expect(withoutId?.getAttribute('href')).toBe('/stream');
+    });
+});
+
+describe('the-cards-picker-writes-the-link', () => {
+    /**
+     * `cards=quotes` was a link option a streamer met only in the truths;
+     * the owner could not find it. It is a picker now, beside the mode, and
+     * the link the copy field holds follows it — absent by default, present
+     * when the seller's quotes are chosen, and gone with the rail preset,
+     * which mounts no card for it to change.
+     */
+    it('adds cards=quotes to the copied link when Your quotes is picked, and only on the corner preset', () => {
+        const section = document.createElement('section');
+        paintObsGuide(section, view(), handlers());
+        const field = () => section.querySelector('.share-url') as HTMLInputElement;
+        const picker = () => section.querySelector('[data-role="obs-cards-picker"]') as HTMLSelectElement | null;
+        expect(picker()).not.toBeNull();
+        expect(new URL(field().value).searchParams.get('cards')).toBeNull();
+        const options = [...picker()!.options].map((o) => o.textContent);
+        expect(options).toEqual([OBS_CARDS_LISTINGS, OBS_CARDS_QUOTES]);
+
+        picker()!.value = 'quotes';
+        picker()!.dispatchEvent(new Event('change'));
+        expect(new URL(field().value).searchParams.get('cards')).toBe('quotes');
+        expect(picker()!.value, 'the choice survives the re-render').toBe('quotes');
+
+        const presetSelect = section.querySelector('[data-role="obs-preset-picker"]') as HTMLSelectElement;
+        presetSelect.value = 'rail';
+        presetSelect.dispatchEvent(new Event('change'));
+        expect(picker(), 'the rail mounts no card').toBeNull();
+        expect(new URL(field().value).searchParams.get('cards')).toBeNull();
     });
 });
