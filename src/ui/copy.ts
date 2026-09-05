@@ -363,11 +363,15 @@ export const STUDIO_LOOK_ROW = 'Look';
 export const STUDIO_NO_NAME = 'No name published yet';
 export const STUDIO_NO_TAGLINE = 'No tagline';
 export const STUDIO_CARD_ITEMS = 'Items & prices';
-export const STUDIO_DESCRIBE_ROW = 'Describe';
-export const STUDIO_PRICE_ROW = 'Set a price';
+export const STUDIO_DESCRIBE_ROW = 'Describe & price';
 export const STUDIO_CARD_SHARE = 'Share';
 /** The fold under a sheet's primary control: everything the record can also carry. */
 export const SHEET_MORE = 'More';
+/** The items card when the describe set is empty, and the way in for a token this stall minted but never listed. */
+export const STUDIO_NO_ITEMS =
+    'Nothing listed or described yet. Describe a token and paste its id to start.';
+export const STUDIO_ITEMS_HINT =
+    'Minted a token that is not listed here? Describe a token, then paste its id.';
 
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';

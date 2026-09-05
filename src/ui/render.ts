@@ -2437,7 +2437,25 @@ function sheetGroup(title: string): HTMLElement {
 function sheetFold(role: string, title: string, body: HTMLElement, extra?: string): HTMLElement {
     const fold = el('details', extra === undefined ? 'fold' : `fold ${extra}`);
     fold.setAttribute('data-role', role);
-    fold.append(el('summary', 'fold-sum', title));
+    const summary = el('summary', 'fold-sum', title);
+    // A real caret node: the summary's own marker is styled away, and a fold
+    // with nothing saying it opens reads as a heading with nothing under it —
+    // which is exactly how the owner read "More" on a phone.
+    // An SVG, not a glyph: the summary's `textContent` stays the title, which
+    // the fold tests compare byte for byte.
+    const caret = document.createElementNS(SVG_NS, 'svg');
+    caret.setAttribute('class', 'fold-caret');
+    caret.setAttribute('viewBox', '0 0 16 16');
+    caret.setAttribute('aria-hidden', 'true');
+    const chevron = document.createElementNS(SVG_NS, 'path');
+    chevron.setAttribute('d', 'M6 3l5 5-5 5');
+    chevron.setAttribute('fill', 'none');
+    chevron.setAttribute('stroke', 'currentColor');
+    chevron.setAttribute('stroke-width', '2');
+    chevron.setAttribute('stroke-linecap', 'round');
+    caret.append(chevron);
+    summary.append(caret);
+    fold.append(summary);
     fold.append(body);
     return fold;
 }
@@ -2603,7 +2621,10 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const pasteWhy = el('p', 'ctx', '');
     pasteWhy.hidden = true;
     pasteWhy.setAttribute('data-role', 'describe-paste-why');
-    more.append(pasteLabel, pasteAdd, pasteWhy);
+    // The way in for a token this stall minted but never listed stands beside
+    // the picker, never under a fold: it was under "More" for a day and a
+    // seller with a fresh token could not find it.
+    pick.append(pasteLabel, pasteAdd, pasteWhy);
     wrap.append(pick);
 
     const form = el('form', 'paste');
@@ -2879,8 +2900,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     more.append(
         sheetFold('describe-qr-fold', copy.SCAN_WITH_PHONE_FOLD, qrBox, 'sheet-qr-fold'),
     );
-    const moreFold = sheetFold('describe-more', copy.SHEET_MORE, more) as HTMLDetailsElement;
-    wrap.append(moreFold);
+    wrap.append(sheetFold('describe-more', copy.SHEET_MORE, more));
 
     /** Removal mode: the same controls, aimed at the removal record. */
     let removing = false;
@@ -2897,11 +2917,6 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         noTokens.hidden = !noToken;
         tokenLabel.hidden = noToken;
         form.hidden = noToken;
-        // Nothing to pick: the way in is the paste field, which sits in the
-        // fold — so the fold opens, or the note above points at a closed door.
-        if (noToken) {
-            moreFold.open = true;
-        }
 
         // Per whole token, and only for a fungible one: no field at all
         // otherwise, with the line saying why in its place.
@@ -5511,7 +5526,7 @@ function paintStudio(
     }
     const ids = describableTokenIds(view);
     if (ids.length === 0) {
-        items.card.append(el('p', 'fine', copy.DESC_NO_TOKENS));
+        items.card.append(el('p', 'fine', copy.STUDIO_NO_ITEMS));
     }
     for (const id of ids) {
         const row = el('div', 'trow');
@@ -5524,6 +5539,9 @@ function paintStudio(
         row.append(el('div', 'nm', title));
         const acts = el('div', 'acts2');
         if (hasAddress && openDescribe !== undefined) {
+            // One control: words, shelf and price are one record on one
+            // sheet, and two buttons that opened the same sheet read as two
+            // roads (owner, 2026-09-05).
             const describe = el('button', 'mini', copy.STUDIO_DESCRIBE_ROW);
             describe.type = 'button';
             describe.setAttribute('data-role', 'studio-item-describe');
@@ -5536,17 +5554,18 @@ function paintStudio(
                 const why = el('span', 'fine', copy.DESC_QUOTE_WITHHELD);
                 why.setAttribute('data-role', 'studio-item-withheld');
                 acts.append(why);
-            } else {
-                const price = el('button', 'mini', copy.STUDIO_PRICE_ROW);
-                price.type = 'button';
-                price.setAttribute('data-role', 'studio-item-price');
-                price.setAttribute('data-focus-key', `studio-item-price:${id}`);
-                price.addEventListener('click', () => openDescribe(id));
-                acts.append(price);
             }
         }
         row.append(acts);
         items.card.append(row);
+    }
+    if (ids.length > 0 && hasAddress && openDescribe !== undefined) {
+        // The set is listed ∪ described ∪ quoted, never a holdings read (the
+        // studio is public), so a token minted and never listed is not here
+        // until its seller names it — say where.
+        const hint = el('p', 'fine', copy.STUDIO_ITEMS_HINT);
+        hint.setAttribute('data-role', 'studio-items-hint');
+        items.card.append(hint);
     }
     body.append(items.card);
 

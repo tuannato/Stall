@@ -925,9 +925,13 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         ]);
         (rows[0]!.querySelector('[data-role="studio-item-describe"]') as HTMLButtonElement).click();
         expect(h.onOpenDescribe).toHaveBeenLastCalledWith(TOKEN_ID);
-        (rows[2]!.querySelector('[data-role="studio-item-price"]') as HTMLButtonElement).click();
+        (rows[2]!.querySelector('[data-role="studio-item-describe"]') as HTMLButtonElement).click();
         expect(h.onOpenDescribe).toHaveBeenLastCalledWith(OTHER_TOKEN);
-        expect(rows[1]!.querySelector('[data-role="studio-item-price"]')).toBeNull();
+        // One control per row: words, shelf and price are one record on one sheet.
+        for (const row of rows) {
+            expect(row.querySelectorAll('button')).toHaveLength(1);
+            expect(row.querySelector('button')?.textContent).toBe(copy.STUDIO_DESCRIBE_ROW);
+        }
         expect(rows[1]!.querySelector('[data-role="studio-item-withheld"]')?.textContent).toBe(copy.DESC_QUOTE_WITHHELD);
         expect(rows[1]!.querySelector('[data-role="studio-item-describe"]')).not.toBeNull();
         // Its record stays editable; its artwork stays off the page: initials.
@@ -948,6 +952,14 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
         expect([...card.querySelectorAll('[data-role="studio-item"]')]).toHaveLength(1);
         expect(card.textContent).not.toMatch(/\d/);
+        expect(card.querySelector('[data-role="studio-items-hint"]')?.textContent).toBe(copy.STUDIO_ITEMS_HINT);
+    });
+
+    it('says how a minted-but-unlisted token gets in: describe it and paste its id', () => {
+        const { root } = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }));
+        const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
+        expect(card.textContent).toContain(copy.STUDIO_NO_ITEMS);
+        expect(card.textContent).not.toContain('below');
     });
 });
 
@@ -10370,22 +10382,42 @@ describe('the-describe-sheets-more-is-a-fold', () => {
         const more = root.querySelector('details[data-role="describe-more"]') as HTMLDetailsElement;
         expect(more).not.toBeNull();
         expect(more.open).toBe(false);
-        for (const sel of ['[data-role="describe-shelf"]', '[data-role="describe-tolerance"]', '[data-role="describe-paste"]', '[data-role="describe-remove"]', '.meter', '[data-role="describe-hex-fold"]', '[data-role="describe-qr-fold"]']) {
+        for (const sel of ['[data-role="describe-shelf"]', '[data-role="describe-tolerance"]', '[data-role="describe-remove"]', '.meter', '[data-role="describe-hex-fold"]', '[data-role="describe-qr-fold"]']) {
             expect(more.querySelector(sel), `${sel} is inside More`).not.toBeNull();
         }
-        for (const sel of ['[data-role="describe-pay"]', '[data-role="describe-cashtab"]', '[data-role="describe-summary"]', '[data-role="describe-invalid"]', '[data-role="describe-price"]', '[data-role="describe-text"]', '[data-role="describe-token"]']) {
+        // The way in for a token this stall minted but never listed never folds.
+        for (const sel of ['[data-role="describe-paste"]', '[data-role="describe-paste-add"]', '[data-role="describe-pay"]', '[data-role="describe-cashtab"]', '[data-role="describe-summary"]', '[data-role="describe-invalid"]', '[data-role="describe-price"]', '[data-role="describe-text"]', '[data-role="describe-token"]']) {
             expect(root.querySelector(sel)?.closest('details'), `${sel} never folds`).toBeNull();
         }
         const pay = root.querySelector('[data-role="describe-pay"]')!;
         expect(pay.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('opens the fold when there is nothing to pick, so the paste field is not behind a closed door', () => {
+    it('with nothing to pick, the paste field stands beside the note and outside any fold', () => {
         const { root } = paint(idlePubkey({ fetch: { kind: 'empty' }, overlay: { kind: 'describe' } }));
-        const more = root.querySelector('details[data-role="describe-more"]') as HTMLDetailsElement;
-        expect(more.open).toBe(true);
-        expect(root.querySelector('[data-role="describe-no-tokens"]')).not.toBeNull();
-        expect(more.querySelector('[data-role="describe-paste"]')).not.toBeNull();
+        const note = root.querySelector('[data-role="describe-no-tokens"]') as HTMLElement;
+        expect(note).not.toBeNull();
+        expect(note.hidden).toBe(false);
+        const paste = root.querySelector('[data-role="describe-paste"]') as HTMLElement;
+        expect(paste.closest('details')).toBeNull();
+        expect(note.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('every fold on a sheet carries a caret node, so a summary never reads as a dead heading', () => {
+        for (const overlay of [{ kind: 'describe' as const }, { kind: 'publish-name' as const }]) {
+            const { root } = paint(offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay }));
+            const folds = [...root.querySelectorAll('details.fold')];
+            expect(folds.length).toBeGreaterThan(0);
+            for (const fold of folds) {
+                const summary = fold.firstElementChild as HTMLElement;
+                expect(summary.tagName).toBe('SUMMARY');
+                const caret = summary.querySelector('.fold-caret');
+                expect(caret, `${fold.getAttribute('data-role')} has a caret`).not.toBeNull();
+                expect(caret?.getAttribute('aria-hidden')).toBe('true');
+                // No glyph: the summary's text is still exactly its title.
+                expect(caret?.textContent).toBe('');
+            }
+        }
     });
 });
 
