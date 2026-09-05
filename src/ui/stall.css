@@ -2242,11 +2242,12 @@ textarea.paste-in {
  * refuse the take. `.note` below is the other job it used to do.
  */
 .ctx {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--s-danger);
     background: var(--s-surface);
-    border-radius: 7px;
-    padding: 8px 10px;
+    border-left: 2px solid var(--s-danger);
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
+    padding: 9px 11px;
     line-height: 1.45;
 }
 
@@ -2256,12 +2257,12 @@ textarea.paste-in {
  * spending the danger colour on text that is merely important.
  */
 .note {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--s-muted);
     background: var(--s-surface);
     border-left: 2px solid var(--s-accent);
-    border-radius: 7px;
-    padding: 8px 10px;
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
+    padding: 9px 11px;
     line-height: 1.45;
 }
 
@@ -2274,12 +2275,15 @@ textarea.paste-in {
  */
 .publish-hex {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 1.65;
     letter-spacing: 0.02em;
+    /* Its own ink, so the muted-text guard reads this block; it inherited
+       the same colour unseen before. */
+    color: var(--s-muted);
     background: color-mix(in srgb, var(--s-shade) 5%, var(--s-surface));
     border: var(--s-card-border);
-    border-radius: 9px;
+    border-radius: max(0px, calc(var(--s-radius) - 4px));
     padding: 10px 12px;
     max-height: 92px;
     overflow: auto;
@@ -2441,7 +2445,7 @@ textarea.paste-in {
 /* "Publishes: …" — what the record carries, and its size. */
 .pub {
     margin: 0;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--s-muted);
     line-height: 1.45;
     font-variant-numeric: tabular-nums;
@@ -2576,10 +2580,10 @@ details.fold.fold-cta[open] > .fold-sum {
 /* The removal warning: the one place on a record sheet that is a warning. */
 .warn {
     margin: 0;
-    padding: 10px 12px;
+    padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--s-danger) 45%, transparent);
     border-radius: max(0px, calc(var(--s-radius) - 4px));
-    font-size: 13.5px;
+    font-size: 12.5px;
     line-height: 1.45;
     color: var(--s-text);
     background: color-mix(in srgb, var(--s-danger) 6%, var(--s-surface));
@@ -4551,7 +4555,7 @@ details.fold.fold-cta[open] > .fold-sum {
  */
 .chip {
     display: inline-block;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;

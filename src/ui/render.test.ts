@@ -9504,6 +9504,47 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
     });
 });
 
+/*
+ * Round 8 put the small text on one scale: 11 for chips and the hex,
+ * 11.5 for fine print, 12.5 for a note, a context line, a warning and the
+ * publish summary. A size is a declaration in the shipped block, so the
+ * scale is read there; a block that drifts off it is a new size nobody
+ * chose. `.publish-hex` carries its ink as well, so the muted-text guard
+ * sees it (it used to inherit, unseen).
+ */
+describe('small-text-is-one-scale', () => {
+    it('declares each small face at its step', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const scale: Record<string, number> = {
+            '.chip': 11,
+            '.rail-label': 11,
+            '.publish-hex': 11,
+            '.fine': 11.5,
+            '.note': 12.5,
+            '.ctx': 12.5,
+            '.warn': 12.5,
+            '.pub': 12.5,
+        };
+        // Only the named blocks are resolved: `fontSizePx` refuses a size it
+        // cannot read statically, and a `clamp()` elsewhere is not this rule's.
+        const sizes = new Map<string, number>();
+        for (const block of css.split('}')) {
+            const [selector, body] = block.split('{');
+            if (selector === undefined || body === undefined) continue;
+            const key = selector.trim().replace(/\s+/g, ' ');
+            if (!(key in scale)) continue;
+            const px = fontSizePx(body);
+            if (px !== undefined) sizes.set(key, px);
+        }
+        const off: string[] = [];
+        for (const [selector, px] of Object.entries(scale)) {
+            if (sizes.get(selector) !== px) off.push(`${selector}: ${sizes.get(selector) ?? 'unset'} (wants ${px})`);
+        }
+        expect(off, 'one scale for the small text').toEqual([]);
+        expect(css).toMatch(/\.publish-hex\s*\{[^}]*color:\s*var\(--s-muted\)/);
+    });
+});
+
 describe('a-shop-row-pointer-switches-tabs', () => {
     /**
      * The one line a Shop row carries about the other rail. It used to scroll
