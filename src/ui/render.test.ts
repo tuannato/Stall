@@ -106,12 +106,22 @@ import {
     resetIconsForTests,
     sheetMounts,
     stallBaseUrl,
+    tokenName,
+    tokenTicker,
 } from './render';
 import { satsForQuote } from '../domain/fiat';
 import { formatXec,
     formatXecUngrouped,
 } from '../domain/money';
-import { cashtabPayUrl, payBip21, payECashPayUrl } from '../domain/cashtab';
+import {
+    cashtabPayUrl,
+    cashtabPublishUrl,
+    payBip21,
+    payECashPayUrl,
+    payECashPublishUrl,
+    publishBip21,
+} from '../domain/cashtab';
+import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { itemTitle } from '../domain/text';
@@ -5378,6 +5388,12 @@ describe('a-broadcast-carries-no-controls', () => {
      * a control a viewer cannot click, and the QR is the only path off
      * the frame — to the shop, never back into the overlay.
      */
+    it('scans the quote card, which is the other rail on the same plate', () => {
+        const { root } = paint(quoteCardView());
+        expect(root.querySelector('[data-role="seller-price"]'), 'the card is there').not.toBeNull();
+        expect(root.querySelectorAll(BROADCAST_NO_CONTROLS)).toHaveLength(0);
+    });
+
     it('has no interactive element, and the QR is the shop without a query', () => {
         const before = window.location.href;
         window.history.replaceState(
@@ -9533,5 +9549,163 @@ describe('an-xec-quote-mounts-no-tolerance-line', () => {
         ).root;
         expect(xec.querySelector('[data-role="pay-tolerance"]')).toBeNull();
         expect(xec.textContent).not.toContain(copy.PAY_TOLERANCE_NONE);
+    });
+});
+
+describe('a-quote-is-refused-at-the-hex-not-in-css', () => {
+    /**
+     * `.hidden` on the price field is CSS; the record is the hex. The one
+     * guard between a hidden field's value and the encoder is a single
+     * expression, and the state is reachable: a token with no quote opens as
+     * `unknown`, the seller types, the genesis answers `not-attributed`, and
+     * the in-place refresh keeps the typed value in the field it just hid.
+     */
+    const PRICE_999 = '0d027573640200000000000003e7';
+
+    it('drops a typed figure from the record the moment the genesis says not ours', async () => {
+        let answer: (a: { attribution: 'not-attributed' }) => void = () => {};
+        const pending = new Promise<{ attribution: 'not-attributed' }>((resolve) => {
+            answer = resolve;
+        });
+        const root = document.createElement('div');
+        const h = { ...handlers(), onLookupToken: vi.fn(() => pending) };
+        renderStall(
+            root,
+            quoteView({ overlay: { kind: 'describe' }, prices: undefined, genesis: undefined }),
+            h,
+        );
+        expect(h.onLookupToken).toHaveBeenCalledWith(TOKEN_ID);
+        expect(describeField(root, 'describe-price-field').hidden).toBe(false);
+        const amount = describeField(root, 'describe-price') as HTMLInputElement;
+        amount.value = '9.99';
+        amount.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-hex').textContent).toContain(PRICE_999);
+
+        answer({ attribution: 'not-attributed' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(describeField(root, 'describe-price-field').hidden).toBe(true);
+        expect(amount.value, 'the field still holds what was typed').toBe('9.99');
+        expect(describeField(root, 'describe-hex').textContent).not.toContain(PRICE_999);
+        expect(describeField(root, 'describe-hex').textContent).not.toContain('0d02757364');
+    });
+});
+
+describe('a-price-field-hidden-and-shown-again-keeps-the-published-quote', () => {
+    /**
+     * A quoted-but-unlisted token opens with no metadata, so it is not
+     * priceable and the field is hidden while the published figure rides the
+     * record as a carried price. When the metadata lands the field is shown
+     * and becomes the source of truth — so whatever it holds at that moment
+     * is what a publish restates, and an empty field there would delete a
+     * permanent `0x02` as a side effect of the seller fixing a typo.
+     */
+    const PRICE_500 = '0d027573640200000000000001f4';
+
+    it('shows the published figure in the field once the token becomes priceable', async () => {
+        let answer: (a: { meta: TokenMeta; attribution: 'attributed' }) => void = () => {};
+        const pending = new Promise<{ meta: TokenMeta; attribution: 'attributed' }>(
+            (resolve) => {
+                answer = resolve;
+            },
+        );
+        const root = document.createElement('div');
+        const h = { ...handlers(), onLookupToken: vi.fn(() => pending) };
+        renderStall(
+            root,
+            quoteView({ overlay: { kind: 'describe' }, tokens: new Map(), genesis: undefined }),
+            h,
+        );
+        expect(describeField(root, 'describe-price-field').hidden).toBe(true);
+        expect(describeField(root, 'describe-hex').textContent, 'carried').toContain(PRICE_500);
+
+        answer({ meta: BEANS, attribution: 'attributed' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(describeField(root, 'describe-price-field').hidden).toBe(false);
+        expect((describeField(root, 'describe-price') as HTMLInputElement).value).toBe('5.00');
+        expect(describeField(root, 'describe-hex').textContent, 'restated').toContain(PRICE_500);
+    });
+});
+
+describe('a-painted-qr-encodes-the-same-bip21-as-the-link', () => {
+    /**
+     * Three sheets paint a code a phone wallet scans, and until now each was
+     * asserted to exist and nothing more. One string is read off the screen
+     * — the record hex the sheet itself painted — and the code and both
+     * links are proved against it, so an error in which arguments the sheet
+     * chose cannot pass by being repeated in the test.
+     */
+    const pathOf = (root: HTMLElement, role: string): string | null =>
+        root.querySelector(`[data-role="${role}"] path`)?.getAttribute('d') ?? null;
+
+    it('name sheet: the code is the hex the sheet painted, and so are both links', () => {
+        const { root } = paint(
+            idlePubkey({ overlay: { kind: 'publish-name' }, stallName: 'Riverside Goods' }),
+        );
+        const hex = root.querySelector('[data-role="publish-hex"]')!.textContent!.trim();
+        expect(hex.length).toBeGreaterThan(8);
+        expect(pathOf(root, 'publish-qr')).toBe(qrPathOf(publishBip21(ADDR, hex)!));
+        expect((root.querySelector('[data-role="publish-cashtab"]') as HTMLAnchorElement).href).toBe(
+            cashtabPublishUrl(ADDR, hex),
+        );
+        expect((root.querySelector('[data-role="publish-pay"]') as HTMLAnchorElement).href).toBe(
+            payECashPublishUrl(ADDR, hex),
+        );
+    });
+
+    it('describe sheet: the same, over the token record', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                descriptions: new Map([[TOKEN_ID, 'Existing words']]),
+            }),
+        );
+        const hex = root.querySelector('[data-role="describe-hex"]')!.textContent!.trim();
+        expect(hex.length).toBeGreaterThan(8);
+        expect(pathOf(root, 'describe-qr')).toBe(qrPathOf(publishBip21(ADDR, hex)!));
+        expect((root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement).href).toBe(
+            cashtabPublishUrl(ADDR, hex),
+        );
+        expect((root.querySelector('[data-role="describe-pay"]') as HTMLAnchorElement).href).toBe(
+            payECashPublishUrl(ADDR, hex),
+        );
+    });
+
+    it('pay sheet: the code carries the figure the wallet is handed', () => {
+        const { root } = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
+        );
+        const sats = satsForQuote(QUOTE_USD, 1n, PAY_RATE.rate)!;
+        const memo = encodePaymentMemoHex(TOKEN_ID, 1n)!;
+        expect(pathOf(root, 'pay-qr')).toBe(qrPathOf(payBip21(ADDR, sats, memo)!));
+        const handed = pressForUrl(root, 'pay-cashtab')!;
+        expect(handed).toContain(`amount=${formatXecUngrouped(sats)}`);
+        expect(handed).toContain(memo);
+    });
+});
+
+describe('a-long-genesis-name-is-cut-without-splitting-a-character', () => {
+    /**
+     * A genesis name has no wire cap, and `isLegibleText` is a screen, not a
+     * length rule. The cut is by code points — `slice` splits a surrogate
+     * pair — and it covers the ticker too, since a 300-character ticker
+     * reaches the same rows; the ticker's duplicate check compares cut forms.
+     */
+    const id = 'ab'.repeat(32);
+    const long = 'A'.repeat(TOKEN_NAME_MAX_CHARS - 1) + '😀' + 'B'.repeat(200);
+
+    it('cuts the name at the ceiling and keeps the last character whole', () => {
+        const tokens = new Map([[id, { ...BEANS, tokenId: id, name: long, ticker: 'T' }]]);
+        const shown = tokenName(tokens, id);
+        expect([...shown]).toHaveLength(TOKEN_NAME_MAX_CHARS);
+        expect(shown.endsWith('😀')).toBe(true);
+    });
+
+    it('cuts the ticker the same way, and drops it when it equals the cut name', () => {
+        const tokens = new Map([[id, { ...BEANS, tokenId: id, name: long, ticker: long }]]);
+        expect(tokenTicker(tokens, id)).toBeUndefined();
+        const other = new Map([[id, { ...BEANS, tokenId: id, name: 'Short', ticker: long }]]);
+        expect([...tokenTicker(other, id)!]).toHaveLength(TOKEN_NAME_MAX_CHARS);
     });
 });

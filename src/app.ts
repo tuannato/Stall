@@ -61,8 +61,10 @@ import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions, type DescriptionLookup } from './net/descriptions';
 import {
     attributionFromAuthPubkey,
-    mergeAttribution,
     type GenesisAttribution,
+    rankDecision,
+    type AttributionStrength,
+    type GenesisDecision,
 } from './domain/genesis';
 import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
 import type { TokenPrice } from './domain/description';
@@ -200,7 +202,7 @@ const sessionThemes = new Map<string, DecodedTheme>();
  * permanent, so an answer about one cannot go stale. The merge is monotonic,
  * so a later read that learned nothing leaves what an earlier one decided.
  */
-const sessionGenesis = new Map<string, GenesisAttribution>();
+const sessionGenesis = new Map<string, GenesisDecision>();
 
 /**
  * `chronik.tx()` concatenates whatever it is handed into a request path and
@@ -241,6 +243,13 @@ export type AppState = {
     pubkeyHex?: string;
     /** Present only on the screens that painted before their facts arrived. */
     pendingFacts?: PendingFacts;
+    /**
+     * The quoted tokens the free half of the attribution could not decide,
+     * for the capped `chronik.tx` reads that run after the paint. Set by the
+     * loader that read the stall, so a loader handed to `boot` for a test
+     * starts no read — the same discipline `pendingFacts` keeps.
+     */
+    genesisPending?: { pubkeyHex: string; hash: string; tokenIds: readonly string[] };
 };
 
 export function boot(
@@ -422,6 +431,7 @@ export function boot(
             fiatRate,
             payRate,
             payQuantity,
+            genesisPending: state.genesisPending?.tokenIds,
             shopTab,
         };
         renderStall(root, view, {
@@ -1070,6 +1080,11 @@ export function boot(
         syncBroadcastTimers();
         if (next.pendingFacts !== undefined) {
             applyPendingFacts(claimed, next.pendingFacts);
+        } else if (next.genesisPending !== undefined) {
+            // The capped genesis reads, off the first paint: they land through
+            // the same generation-guarded live paint a facts answer does.
+            const pending = next.genesisPending;
+            void fillQuotedGenesis(claimed, pending.pubkeyHex, pending.hash);
         }
     };
 
@@ -1380,7 +1395,7 @@ export function boot(
         } catch {
             // Undecided warns; it never refuses.
         }
-        return { meta, attribution: sessionGenesis.get(key) ?? 'unknown' };
+        return { meta, attribution: sessionGenesis.get(key)?.state ?? 'unknown' };
     };
 
     /** The stall's hash160, from the key the route resolved to. */
@@ -1646,7 +1661,7 @@ export function boot(
         const pubkeyHex = state.pubkeyHex;
         if (pubkeyHex !== undefined) {
             for (const [tokenId, attribution] of lookup.genesis) {
-                rememberGenesis(pubkeyHex, tokenId, attribution);
+                rememberGenesis(pubkeyHex, tokenId, decisionOf(attribution, 'paid'));
             }
         }
         const nextFacts: StallView = {
@@ -2302,10 +2317,11 @@ async function loadCurrent(): Promise<AppState> {
      * id, its picture and whatever it stands for off-chain — so the reader
      * says so under the row and the editor refuses to write a new one.
      */
-    await decideGenesis(
-        chronik,
+    // The free half only: the capped `chronik.tx` reads run after the paint,
+    // through `fillQuotedGenesis`, because the Listings rail needs none of
+    // them and every one is a request behind a fresh failover client.
+    const genesisUndecided = decideGenesisFree(
         route.pubkeyHex,
-        hash,
         [...descriptionLookup.prices.keys()],
         (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)),
         descriptionLookup.genesis,
@@ -2376,6 +2392,10 @@ async function loadCurrent(): Promise<AppState> {
         },
         offers,
         pubkeyHex: route.pubkeyHex,
+        genesisPending:
+            genesisUndecided.length > 0
+                ? { pubkeyHex: route.pubkeyHex, hash, tokenIds: genesisUndecided }
+                : undefined,
     });
 }
 
@@ -2478,12 +2498,17 @@ function cacheKey(pubkeyHex: string, tokenId: string): string {
 function rememberGenesis(
     pubkeyHex: string,
     tokenId: string,
-    next: GenesisAttribution,
-): GenesisAttribution {
+    next: GenesisDecision,
+): GenesisDecision {
     const key = cacheKey(pubkeyHex, tokenId);
-    const merged = mergeAttribution(sessionGenesis.get(key), next);
+    const merged = rankDecision(sessionGenesis.get(key), next);
     sessionGenesis.set(key, merged);
     return merged;
+}
+
+/** A state with no strength of its own, at the strength its source earns. */
+function decisionOf(state: GenesisAttribution, strength: AttributionStrength): GenesisDecision {
+    return state === 'unknown' ? { state } : { state, strength };
 }
 
 /** What this session knows about these tokens, for the view. */
@@ -2493,12 +2518,48 @@ function genesisFor(
 ): Map<string, GenesisAttribution> {
     const out = new Map<string, GenesisAttribution>();
     for (const tokenId of tokenIds) {
-        const state = sessionGenesis.get(cacheKey(pubkeyHex, tokenId));
-        if (state !== undefined) {
-            out.set(tokenId, state);
+        const decision = sessionGenesis.get(cacheKey(pubkeyHex, tokenId));
+        if (decision !== undefined) {
+            out.set(tokenId, decision.state);
         }
     }
     return out;
+}
+
+/**
+ * The free half of an attribution: the descriptions walk's own answers (a
+ * genesis it passed — the transaction was read, so `paid` strength) and every
+ * ALP `authPubkey` compare (`claimed`). Synchronous, and what the first paint's
+ * chips come from. Returns the tokens the capped read should still ask about:
+ * still `unknown`, or decided **against** the stall by a claim alone — an
+ * agreeing claim already yields what the reader paints, and re-reading it
+ * would spend one of the lookups to change a label nothing prints.
+ */
+function decideGenesisFree(
+    pubkeyHex: string,
+    tokenIds: readonly string[],
+    metaOf: (tokenId: string) => TokenMeta | undefined,
+    walked?: ReadonlyMap<string, GenesisAttribution>,
+): string[] {
+    for (const [tokenId, state] of walked ?? []) {
+        rememberGenesis(pubkeyHex, tokenId, decisionOf(state, 'paid'));
+    }
+    const undecided: string[] = [];
+    for (const tokenId of tokenIds) {
+        const meta = metaOf(tokenId);
+        const decision = rememberGenesis(
+            pubkeyHex,
+            tokenId,
+            decisionOf(attributionFromAuthPubkey(meta?.authPubkey, pubkeyHex), 'claimed'),
+        );
+        if (
+            decision.state === 'unknown' ||
+            (decision.state === 'not-attributed' && decision.strength === 'claimed')
+        ) {
+            undecided.push(tokenId);
+        }
+    }
+    return undecided;
 }
 
 /**
@@ -2530,26 +2591,12 @@ async function decideGenesis(
     metaOf: (tokenId: string) => TokenMeta | undefined,
     walked?: ReadonlyMap<string, GenesisAttribution>,
 ): Promise<void> {
-    for (const [tokenId, state] of walked ?? []) {
-        rememberGenesis(pubkeyHex, tokenId, state);
-    }
-    const undecided: string[] = [];
-    for (const tokenId of tokenIds) {
-        const meta = metaOf(tokenId);
-        const state = rememberGenesis(
-            pubkeyHex,
-            tokenId,
-            attributionFromAuthPubkey(meta?.authPubkey, pubkeyHex),
-        );
-        if (state === 'unknown') {
-            undecided.push(tokenId);
-        }
-    }
+    const undecided = decideGenesisFree(pubkeyHex, tokenIds, metaOf, walked);
     if (undecided.length === 0) {
         return;
     }
     const lookup = await loadGenesisAttribution(chronik, undecided, hash);
-    for (const [tokenId, state] of lookup.attributions) {
-        rememberGenesis(pubkeyHex, tokenId, state);
+    for (const [tokenId, decision] of lookup.attributions) {
+        rememberGenesis(pubkeyHex, tokenId, decision);
     }
 }

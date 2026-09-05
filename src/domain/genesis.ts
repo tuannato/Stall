@@ -51,13 +51,11 @@ export function attributionFromAuthPubkey(
 }
 
 /**
- * One token's attribution, merged with what was already known — **monotonic**.
- *
- * A genesis is permanent, so a decided state is permanent too: `unknown` never
- * overwrites one, and one decided state never flips to the other. Without
- * that, a live re-read whose walk took the lokad branch would downgrade every
- * token this load had already attributed, and the editor would start refusing
- * quotes on the seller's own tokens a few seconds after opening.
+ * One token's attribution, merged with what was already known — **monotonic
+ * on the state alone**. `unknown` never overwrites a decision and a decision
+ * never flips. This is the merge for a map that carries no strength (the
+ * descriptions walk's); the session cache ranks with `rankDecision` instead,
+ * because the three sources behind a decision are not equal.
  */
 export function mergeAttribution(
     prev: GenesisAttribution | undefined,
@@ -67,4 +65,42 @@ export function mergeAttribution(
         return next;
     }
     return prev;
+}
+
+/**
+ * How strong the evidence behind a decision is. `signed`: the stall's key on
+ * the genesis input — proof of a mint. `paid`: the genesis transaction was
+ * read and the mint output paid (or did not pay) the stall's script —
+ * something anyone can send. `claimed`: an ALP `authPubkey`, the minter's own
+ * unchecked claim, forgeable in either direction.
+ */
+export type AttributionStrength = 'signed' | 'paid' | 'claimed';
+
+export type GenesisDecision =
+    | { readonly state: 'attributed' | 'not-attributed'; readonly strength: AttributionStrength }
+    | { readonly state: 'unknown' };
+
+const RANK: Record<AttributionStrength, number> = { claimed: 1, paid: 2, signed: 3 };
+
+/**
+ * One token's decision, ranked against what was already known.
+ *
+ * `unknown` never overwrites a decision. A stronger source overturns a weaker
+ * one in either direction — a well-formed `authPubkey` that is not the
+ * stall's key used to freeze `not-attributed` for the session and block the
+ * genesis read that would have said otherwise. **At equal strength the
+ * earlier decision stands**: a re-read at the same strength must not flip a
+ * decision, or the live downgrade the monotonic rule closed would reopen.
+ */
+export function rankDecision(
+    prev: GenesisDecision | undefined,
+    next: GenesisDecision,
+): GenesisDecision {
+    if (prev === undefined || prev.state === 'unknown') {
+        return next;
+    }
+    if (next.state === 'unknown') {
+        return prev;
+    }
+    return RANK[next.strength] > RANK[prev.strength] ? next : prev;
 }

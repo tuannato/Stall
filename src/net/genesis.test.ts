@@ -139,7 +139,7 @@ describe('genesis-lookups-are-capped-and-say-so', () => {
         );
         expect(asked).toEqual([TOKEN]);
         expect(lookup.truncated).toBe(false);
-        expect(lookup.attributions.get(TOKEN)).toBe('attributed');
+        expect(lookup.attributions.get(TOKEN)?.state).toBe('attributed');
     });
 
     it('never throws, and a read that failed leaves the token undecided', async () => {
@@ -154,6 +154,6 @@ describe('genesis-lookups-are-capped-and-say-so', () => {
         };
         const lookup = await loadGenesisAttribution(chronik, [TOKEN, other], HASH);
         expect(lookup.attributions.has(TOKEN)).toBe(false);
-        expect(lookup.attributions.get(other)).toBe('attributed');
+        expect(lookup.attributions.get(other)?.state).toBe('attributed');
     });
 });

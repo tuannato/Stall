@@ -37,7 +37,7 @@ import {
     RATE_TOO_SMALL,
 } from '../domain/money';
 import { parseSellerParam, stallPath } from '../domain/route';
-import { isLegibleText, itemTitle } from '../domain/text';
+import { isLegibleText, itemTitle, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
 import {
@@ -3279,21 +3279,53 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // where a buyer is looking when they decide, and a note further down the
     // sheet is a note read after the decision.
     card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
+    // Whose genesis this is, said here as well as on the row: a scanned link
+    // opens this sheet without the row ever being on screen. One node, painted
+    // in place, because the answer can land after the sheet did.
+    const provenance = el('p', 'fine', '');
+    provenance.hidden = true;
+    card.append(provenance);
+    const paintProvenance = (mintedBy: GenesisAttribution | undefined): void => {
+        if (mintedBy === 'not-attributed') {
+            // The id, the picture and whatever the token stands for off-chain
+            // are all borrowed.
+            provenance.hidden = false;
+            provenance.textContent = copy.QUOTE_NOT_MINTED_HERE;
+            provenance.setAttribute('data-role', 'quote-not-minted');
+        } else if (mintedBy === 'attributed') {
+            // Its positive half: what the genesis points at, never who signed.
+            provenance.hidden = false;
+            provenance.textContent = copy.QUOTE_MINTED_HERE;
+            provenance.setAttribute('data-role', 'quote-minted');
+        } else {
+            provenance.hidden = true;
+            provenance.textContent = '';
+            provenance.removeAttribute('data-role');
+        }
+    };
     const mintedBy = view.genesis?.get(tokenId);
-    if (mintedBy === 'not-attributed') {
-        // The id, the picture and whatever the token stands for off-chain are
-        // all borrowed. Said here as well as on the row: a scanned link opens
-        // this sheet without the row ever being on screen.
-        const borrowed = el('p', 'fine', copy.QUOTE_NOT_MINTED_HERE);
-        borrowed.setAttribute('data-role', 'quote-not-minted');
-        card.append(borrowed);
-    } else if (mintedBy === 'attributed') {
-        // Its positive half, on the same surface for the same reason. It names
-        // the minter and vouches for nothing about the name, which is the only
-        // half of this a chain can prove.
-        const here = el('p', 'fine', copy.QUOTE_MINTED_HERE);
-        here.setAttribute('data-role', 'quote-minted');
-        card.append(here);
+    paintProvenance(mintedBy);
+    if (
+        (mintedBy === undefined || mintedBy === 'unknown') &&
+        view.genesisPending?.includes(tokenId) === true &&
+        handlers.onLookupToken !== undefined
+    ) {
+        // The capped genesis read lands after the first paint, and a live
+        // paint waits while a sheet is open — so a sheet a scanned link opened
+        // on that first paint would never learn the answer. It asks itself
+        // (cached once decided) and paints the line in place — only for a
+        // token the loader said it is reading, and only while this is still
+        // the sheet on screen: a repaint detaches this tree.
+        void handlers
+            .onLookupToken(tokenId)
+            .then((answer) => {
+                if (wrap.parentNode !== null) {
+                    paintProvenance(answer.attribution);
+                }
+            })
+            .catch(() => {
+                // Undecided says nothing, which is what the sheet already shows.
+            });
     }
     // Beside the quote it is about, on the surface a scanned link opens first.
     const age = quoteAgeNode(view, tokenId, 'p', 'fine');
@@ -6044,11 +6076,13 @@ export function tokenName(tokens: StallView['tokens'], tokenId: string): string 
     if (!meta) {
         return tokenId;
     }
+    // Cut by code points after the screen: a genesis string has no wire cap
+    // and the screen is not a length rule.
     if (isLegibleText(meta.name)) {
-        return meta.name;
+        return cutAtCodePoints(meta.name, TOKEN_NAME_MAX_CHARS);
     }
     if (isLegibleText(meta.ticker)) {
-        return meta.ticker;
+        return cutAtCodePoints(meta.ticker, TOKEN_NAME_MAX_CHARS);
     }
     return tokenId;
 }
@@ -6063,10 +6097,13 @@ export function tokenTicker(tokens: StallView['tokens'], tokenId: string): strin
     if (ticker === undefined || !isLegibleText(ticker)) {
         return undefined;
     }
-    if (ticker === tokenName(tokens, tokenId)) {
+    const cut = cutAtCodePoints(ticker, TOKEN_NAME_MAX_CHARS);
+    // Compared in cut form: a ticker the name repeats is dropped, and a long
+    // ticker reaches the same row as a long name.
+    if (cut === tokenName(tokens, tokenId)) {
         return undefined;
     }
-    return ticker;
+    return cut;
 }
 
 function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {

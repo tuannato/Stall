@@ -77,6 +77,23 @@ describe('directory-walls', () => {
         const keys = readdirSync(join(SRC, 'keys'));
         expect(keys).toEqual(['.gitkeep']);
     });
+
+    it('keeps the edge functions off the DOM, off the wasm barrel and off the ui', () => {
+        // `functions/lib/resolve.ts` exists to avoid the `ecash-lib` barrel
+        // (its wasm hasher), and nothing at the edge has a document. A wall
+        // that walked `src/` alone never saw this directory.
+        const files = walk(join(ROOT, 'functions'));
+        expect(files.length, 'the edge directory was walked').toBeGreaterThan(0);
+        for (const file of files) {
+            const rel = relative(ROOT, file).replaceAll('\\', '/');
+            const text = read(file);
+            expect(text, rel).not.toMatch(/\bdocument\b/);
+            expect(text, rel).not.toMatch(/from ['"]ecash-lib['"]/);
+            expect(text, rel).not.toMatch(/from ['"]chronik-client['"]/);
+            expect(text, rel).not.toMatch(/src\/ui\//);
+            expect(text, rel).not.toMatch(/from ['"]ecash-wallet['"]/);
+        }
+    });
 });
 
 describe('directory-walls-still-sees-code', () => {

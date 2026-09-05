@@ -9,6 +9,7 @@ import {
     resolveManifestTextByHash,
 } from '../functions/lib/resolve';
 import { decodeTxHistoryPage } from '../functions/lib/pb';
+import { MAX_PAGE_BYTES, chronikFetcher } from '../functions/lib/resolve';
 import { TxHistoryPage as ProtoHistoryPage } from '../node_modules/chronik-client/dist/proto/chronik.js';
 import { decodeCashAddress, encodeCashAddress } from 'ecashaddrjs';
 import { getStackArray } from 'ecash-lib';
@@ -286,5 +287,88 @@ describe('the-edge-reader-mirrors-the-app', () => {
         // Finalized-and-unmined outranks every height; a bare mempool record
         // never wins — the same rule, the same words, as the app's winner.
         expect(text?.name).toBe('Finalized Unmined');
+    });
+});
+
+describe('a-field-past-the-buffer-throws-instead-of-reading-it', () => {
+    /**
+     * A length-delimited field's length comes from the page, and a page is
+     * whatever a host sent. Reading `start..end` with `end` past the buffer
+     * built a string of "undefined"s the length the attacker declared — a
+     * seven-byte page could ask for eighty megabytes. A truncated field is a
+     * corrupt page and throws like a varint that ran off the end.
+     */
+    const bytes = (...b: number[]): Uint8Array => Uint8Array.from(b);
+
+    it('throws on a txid whose declared length runs past the page', () => {
+        // page: field 1 (tx), len 6 → tx: field 1 (txid), len 0x7fffffff, two bytes.
+        const page = bytes(0x0a, 0x06, 0x0a, 0xff, 0xff, 0xff, 0xff, 0x07, 0x00, 0x00);
+        expect(() => decodeTxHistoryPage(page)).toThrow(/ran off the buffer/);
+    });
+
+    it('throws on an input script that runs past its transaction', () => {
+        // page: tx of len 6 → tx: field 3 (input), len 4 → input: field 2 (inputScript), len 0x40, two bytes.
+        const page = bytes(0x0a, 0x06, 0x1a, 0x04, 0x12, 0x40, 0x00, 0x00);
+        expect(() => decodeTxHistoryPage(page)).toThrow(/ran off the buffer/);
+    });
+
+    it('still reads a page whose fields end exactly at the buffer', () => {
+        // tx with an empty txid field and isFinal = 1 (field 16, varint 1).
+        const page = bytes(0x0a, 0x05, 0x0a, 0x00, 0x80, 0x01, 0x01);
+        expect(decodeTxHistoryPage(page).txs[0]!.isFinal).toBe(true);
+    });
+});
+
+describe('a-page-over-the-ceiling-is-not-read', () => {
+    /**
+     * `arrayBuffer()` had no ceiling, and the content-length header is the
+     * host's to write. The body is read as a stream and abandoned past
+     * `MAX_PAGE_BYTES`; a page over the ceiling yields the identity card,
+     * which the edge already calls acceptable.
+     */
+    const okResponse = (body: ReadableStream<Uint8Array> | null, contentLength?: string) =>
+        ({
+            ok: true,
+            headers: new Headers(contentLength === undefined ? {} : { 'content-length': contentLength }),
+            body,
+        }) as unknown as Response;
+
+    it('refuses a declared length over the ceiling without reading the body', async () => {
+        // A stream pulls once on its own to fill its queue, so the read is
+        // proved by the lock: taking a reader locks the stream, and the
+        // header path must never take one.
+        const body = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                controller.enqueue(new Uint8Array(1024));
+            },
+        });
+        const fetchFn = (async () => okResponse(body, String(MAX_PAGE_BYTES + 1))) as unknown as typeof fetch;
+        expect(await chronikFetcher(fetchFn)('/x')).toBeUndefined();
+        expect(body.locked, 'the body was read').toBe(false);
+    });
+
+    it('stops reading a stream that keeps yielding, and answers nothing', async () => {
+        let pulled = 0;
+        const body = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                pulled += 1;
+                controller.enqueue(new Uint8Array(65_536));
+            },
+        });
+        const fetchFn = (async () => okResponse(body)) as unknown as typeof fetch;
+        expect(await chronikFetcher(fetchFn)('/x')).toBeUndefined();
+        expect(pulled).toBeLessThan(MAX_PAGE_BYTES / 65_536 + 4);
+    });
+
+    it('reads a small body whole', async () => {
+        const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(Uint8Array.from([1, 2, 3]));
+                controller.enqueue(Uint8Array.from([4]));
+                controller.close();
+            },
+        });
+        const fetchFn = (async () => okResponse(body)) as unknown as typeof fetch;
+        expect([...(await chronikFetcher(fetchFn)('/x'))!]).toEqual([1, 2, 3, 4]);
     });
 });

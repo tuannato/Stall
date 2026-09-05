@@ -1,3 +1,5 @@
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
@@ -220,4 +222,33 @@ describe('built-bundle-times-out-a-chronik-request', () => {
         // And nothing in the chronik path is left waiting forever.
         expect(code).not.toMatch(/timeout:\s*0\s*,\s*responseType:\s*["']arraybuffer["']/);
     }, 120_000);
+});
+
+describe('public-weight-has-a-ceiling', () => {
+    /**
+     * `served-weight-has-a-ceiling` builds with `write: false`, so nothing in
+     * `public/` is counted — Pages serves every file there whether or not
+     * anything links it (`_redirects` names no assets). Measured 947,955
+     * bytes on 2026-09-05; the ceiling leaves about 52 KB of headroom on
+     * purpose, so the next hero image is noticed the day it lands.
+     */
+    const PUBLIC_CEILING_BYTES = 1_000_000;
+
+    function sizeOf(dir: string): number {
+        let total = 0;
+        for (const name of readdirSync(dir)) {
+            const p = join(dir, name);
+            total += statSync(p).isDirectory() ? sizeOf(p) : statSync(p).size;
+        }
+        return total;
+    }
+
+    it(`keeps public/ under ${PUBLIC_CEILING_BYTES} bytes`, () => {
+        const total = sizeOf(join(import.meta.dirname, '..', 'public'));
+        expect(total, 'nothing was measured').toBeGreaterThan(100_000);
+        expect(
+            total,
+            `public/ weighs ${total} bytes against a ceiling of ${PUBLIC_CEILING_BYTES}`,
+        ).toBeLessThan(PUBLIC_CEILING_BYTES);
+    });
 });

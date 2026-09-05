@@ -1,4 +1,4 @@
-import type { GenesisAttribution } from '../domain/genesis';
+import type { GenesisAttribution, GenesisDecision } from '../domain/genesis';
 import type { ChainTx } from './chain';
 import { txSignedByStall } from './manifest';
 import { p2pkhHashFromOutputScript } from './script';
@@ -22,8 +22,11 @@ export type GenesisChronik = {
 };
 
 export type GenesisLookup = {
-    /** tokenId → what this read decided. A token we could not read is absent. */
-    readonly attributions: ReadonlyMap<string, GenesisAttribution>;
+    /**
+     * tokenId → what this read decided, with the strength of the branch that
+     * decided it. A token we could not read is absent.
+     */
+    readonly attributions: ReadonlyMap<string, GenesisDecision>;
     /** The cap stopped us short, so some quoted tokens stay undecided. */
     readonly truncated: boolean;
 };
@@ -54,8 +57,18 @@ export function attributionFromGenesisTx(
     tokenId: string,
     hash: string,
 ): GenesisAttribution {
+    return decisionFromGenesisTx(tx, tokenId, hash).state;
+}
+
+/**
+ * The same two tests, and which of them decided: a signed input is proof of a
+ * mint; a paying output is something anyone can send. The reader paints one
+ * sentence for both this round, but the session cache ranks them, so a
+ * claim against the stall cannot outlast a read that proved otherwise.
+ */
+export function decisionFromGenesisTx(tx: ChainTx, tokenId: string, hash: string): GenesisDecision {
     if (txSignedByStall(tx, hash)) {
-        return 'attributed';
+        return { state: 'attributed', strength: 'signed' };
     }
     for (const output of tx.outputs) {
         // The output has to carry *this* token: without the token field the
@@ -65,10 +78,10 @@ export function attributionFromGenesisTx(
             continue;
         }
         if (p2pkhHashFromOutputScript(output.outputScript) === hash) {
-            return 'attributed';
+            return { state: 'attributed', strength: 'paid' };
         }
     }
-    return 'not-attributed';
+    return { state: 'not-attributed', strength: 'paid' };
 }
 
 /**
@@ -100,17 +113,17 @@ export async function loadGenesisAttribution(
 
     const truncated = wanted.length > MAX_GENESIS_LOOKUPS;
     const asked = wanted.slice(0, MAX_GENESIS_LOOKUPS);
-    const attributions = new Map<string, GenesisAttribution>();
+    const attributions = new Map<string, GenesisDecision>();
 
     const settled = await Promise.allSettled(
         asked.map(async (tokenId) => {
             const tx = await chronik.tx(tokenId);
-            return { tokenId, state: attributionFromGenesisTx(tx, tokenId, hash) } as const;
+            return { tokenId, decision: decisionFromGenesisTx(tx, tokenId, hash) } as const;
         }),
     );
     for (const result of settled) {
         if (result.status === 'fulfilled') {
-            attributions.set(result.value.tokenId, result.value.state);
+            attributions.set(result.value.tokenId, result.value.decision);
         }
         // A read that failed is absent, never a decision: our own gap must not
         // be printed as a claim about who minted somebody's token.

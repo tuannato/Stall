@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { rankDecision } from './genesis';
 import {
     attributionFromAuthPubkey,
     mergeAttribution,
@@ -66,5 +67,46 @@ describe('an-unknown-answer-never-downgrades-an-attribution', () => {
         expect(states.reduce<GenesisAttribution | undefined>(mergeAttribution, undefined)).toBe(
             'attributed',
         );
+    });
+});
+
+describe('a-signed-genesis-outranks-a-claim-against-it', () => {
+    /**
+     * Three sources decide an attribution and they are not equal: the stall's
+     * key on the genesis input proves a mint; a mint output paying the stall
+     * is something anyone can send; an ALP `authPubkey` is the minter's own
+     * unchecked claim. First-decided-wins let a well-formed claim against
+     * the stall freeze `not-attributed` for the session and block the read
+     * that would have proved otherwise.
+     */
+    it('lets a signed answer overturn a claim, and never the reverse', () => {
+        const claim = { state: 'not-attributed', strength: 'claimed' } as const;
+        const signed = { state: 'attributed', strength: 'signed' } as const;
+        expect(rankDecision(claim, signed)).toEqual(signed);
+        expect(rankDecision(signed, claim)).toEqual(signed);
+        const paid = { state: 'attributed', strength: 'paid' } as const;
+        expect(rankDecision(claim, paid)).toEqual(paid);
+        expect(rankDecision(paid, claim)).toEqual(paid);
+        expect(rankDecision(paid, signed)).toEqual(signed);
+    });
+
+    it('never lets unknown overwrite a decision, and takes any decision over nothing', () => {
+        const paid = { state: 'attributed', strength: 'paid' } as const;
+        expect(rankDecision(paid, { state: 'unknown' })).toEqual(paid);
+        expect(rankDecision(undefined, { state: 'unknown' })).toEqual({ state: 'unknown' });
+        expect(rankDecision({ state: 'unknown' }, paid)).toEqual(paid);
+    });
+});
+
+describe('equal-strength-keeps-the-earlier-decision', () => {
+    /**
+     * Ranking without a tie rule reopens the live downgrade the monotonic
+     * rule closed: a re-read at the same strength must not flip a decision.
+     */
+    it('keeps the first of two answers at one strength, whichever way they disagree', () => {
+        const yes = { state: 'attributed', strength: 'paid' } as const;
+        const no = { state: 'not-attributed', strength: 'paid' } as const;
+        expect(rankDecision(yes, no)).toEqual(yes);
+        expect(rankDecision(no, yes)).toEqual(no);
     });
 });

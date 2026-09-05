@@ -35,6 +35,9 @@ export type LitePage = { txs: LiteTx[]; numPages: number; numTxs: number };
 const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
 
 function toHexBytes(bytes: Uint8Array, start: number, end: number): string {
+    if (end > bytes.length) {
+        throw new Error('field ran off the buffer');
+    }
     let out = '';
     for (let i = start; i < end; i += 1) {
         out += HEX[bytes[i]!];
@@ -43,6 +46,9 @@ function toHexBytes(bytes: Uint8Array, start: number, end: number): string {
 }
 
 function toHexReversed(bytes: Uint8Array, start: number, end: number): string {
+    if (end > bytes.length) {
+        throw new Error('field ran off the buffer');
+    }
     let out = '';
     for (let i = end - 1; i >= start; i -= 1) {
         out += HEX[bytes[i]!];
@@ -51,6 +57,22 @@ function toHexReversed(bytes: Uint8Array, start: number, end: number): string {
 }
 
 type Cursor = { pos: number };
+
+/**
+ * Where a length-delimited field ends — checked against the buffer, because
+ * the length came from the page and the page came from a host. Read past the
+ * end, `bytes[i]` is `undefined` and a hex loop builds a string of
+ * "undefined"s the length the sender declared: a seven-byte page asking for
+ * eighty megabytes. A field that runs off the buffer is a corrupt page and
+ * throws like a varint that did.
+ */
+function fieldEnd(bytes: Uint8Array, cur: Cursor, len: number): number {
+    const end = cur.pos + len;
+    if (end > bytes.length) {
+        throw new Error('field ran off the buffer');
+    }
+    return end;
+}
 
 function varint(bytes: Uint8Array, cur: Cursor): number {
     let shift = 0;
@@ -85,7 +107,7 @@ function skip(bytes: Uint8Array, cur: Cursor, wireType: number): void {
     }
     if (wireType === 2) {
         const len = varint(bytes, cur);
-        cur.pos += len;
+        cur.pos = fieldEnd(bytes, cur, len);
         return;
     }
     if (wireType === 5) {
@@ -104,11 +126,11 @@ function decodeInput(bytes: Uint8Array, start: number, end: number): LiteInput {
         const wire = tag & 7;
         if (field === 2 && wire === 2) {
             const len = varint(bytes, cur);
-            input.inputScript = toHexBytes(bytes, cur.pos, cur.pos + len);
+            input.inputScript = toHexBytes(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
         } else if (field === 3 && wire === 2) {
             const len = varint(bytes, cur);
-            input.outputScript = toHexBytes(bytes, cur.pos, cur.pos + len);
+            input.outputScript = toHexBytes(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
         } else {
             skip(bytes, cur, wire);
@@ -126,7 +148,7 @@ function decodeOutput(bytes: Uint8Array, start: number, end: number): LiteOutput
         const wire = tag & 7;
         if (field === 2 && wire === 2) {
             const len = varint(bytes, cur);
-            output.outputScript = toHexBytes(bytes, cur.pos, cur.pos + len);
+            output.outputScript = toHexBytes(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
         } else {
             skip(bytes, cur, wire);
@@ -164,19 +186,19 @@ function decodeTx(bytes: Uint8Array, start: number, end: number): LiteTx {
             const len = varint(bytes, cur);
             // Chronik sends txid bytes little-endian; every display and every
             // comparison in this repo uses the reversed hex, so reverse here.
-            tx.txid = toHexReversed(bytes, cur.pos, cur.pos + len);
+            tx.txid = toHexReversed(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
         } else if (field === 3 && wire === 2) {
             const len = varint(bytes, cur);
-            tx.inputs.push(decodeInput(bytes, cur.pos, cur.pos + len));
+            tx.inputs.push(decodeInput(bytes, cur.pos, fieldEnd(bytes, cur, len)));
             cur.pos += len;
         } else if (field === 4 && wire === 2) {
             const len = varint(bytes, cur);
-            tx.outputs.push(decodeOutput(bytes, cur.pos, cur.pos + len));
+            tx.outputs.push(decodeOutput(bytes, cur.pos, fieldEnd(bytes, cur, len)));
             cur.pos += len;
         } else if (field === 8 && wire === 2) {
             const len = varint(bytes, cur);
-            tx.height = decodeBlockHeight(bytes, cur.pos, cur.pos + len);
+            tx.height = decodeBlockHeight(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
         } else if (field === 16 && wire === 0) {
             tx.isFinal = varint(bytes, cur) !== 0;
@@ -196,7 +218,7 @@ export function decodeTxHistoryPage(bytes: Uint8Array): LitePage {
         const wire = tag & 7;
         if (field === 1 && wire === 2) {
             const len = varint(bytes, cur);
-            page.txs.push(decodeTx(bytes, cur.pos, cur.pos + len));
+            page.txs.push(decodeTx(bytes, cur.pos, fieldEnd(bytes, cur, len)));
             cur.pos += len;
         } else if (field === 2 && wire === 0) {
             page.numPages = varint(bytes, cur);

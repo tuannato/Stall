@@ -16,6 +16,7 @@ import {
     OPENING_BODY,
     PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
+    QUOTE_NOT_MINTED_HERE,
     UNRESOLVABLE_TITLE,
 } from './ui/copy';
 
@@ -288,6 +289,22 @@ type State = import('./app').AppState;
 async function flush(times = 8): Promise<void> {
     for (let i = 0; i < times; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+/**
+ * Wait for a condition rather than a count of ticks. A burst is a real timer,
+ * and a fixed number of `setTimeout(0)` turns reached it on an idle box and
+ * missed it on a busy one — measured as a red that came and went. Bounded,
+ * so a condition that never comes still fails rather than hangs.
+ */
+async function until(cond: () => boolean, ms = 3_000): Promise<void> {
+    const deadline = Date.now() + ms;
+    while (!cond()) {
+        if (Date.now() > deadline) {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
     }
 }
 
@@ -2070,7 +2087,7 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
             outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
         });
         watches[0]!.hooks.onBurst?.([txid]);
-        await flush(20);
+        await until(() => painted.view?.events?.[0]?.book === 'consumed');
         expect(painted.view?.events?.[0]?.book).toBe('consumed');
 
         chain.historyPages = [
@@ -2828,5 +2845,132 @@ describe('a-quantity-typed-before-the-rate-lands-survives-it', () => {
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
             'the figure is three items at the rate that landed',
         ).toBe('750,000');
+    });
+});
+
+/** The loader's own list of undecided quoted tokens, on the state it answers with. */
+function withGenesisPending(state: State, tokenIds: string[]): State {
+    return { ...state, genesisPending: { pubkeyHex: PK, hash: HASH, tokenIds } };
+}
+
+describe('a-claim-against-the-stall-does-not-block-the-genesis-read', () => {
+    /**
+     * An ALP `authPubkey` is the minter's own claim. A well-formed one that
+     * was not the stall's key used to decide `not-attributed` at once, and the
+     * genesis transaction — which proves who signed — was never read. A claim
+     * against the stall is exactly the case that read exists for.
+     */
+    const CLAIMED_BY_ANOTHER: TokenMeta = {
+        tokenId: TOKEN,
+        name: 'Roasted Beans',
+        ticker: 'BEAN',
+        decimals: 0,
+        tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+        authPubkey: `02${'ee'.repeat(32)}`,
+    };
+
+    it('reads the genesis, and the stall’s own signature outranks the claim', async () => {
+        publish({
+            txid: TOKEN,
+            inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
+            outputs: [{ outputScript: STALL_SCRIPT, token: { tokenId: TOKEN } }],
+        });
+        const { root } = bootStall(
+            withGenesisPending(
+                stallEmpty({
+                tokens: new Map([[TOKEN, CLAIMED_BY_ANOTHER]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+                }),
+                [TOKEN],
+            ),
+        );
+        await flush();
+        expect(chain.calls.tx, 'the genesis was read').toBeGreaterThan(0);
+        const row = root.querySelector('[data-role="pay-row"]') as HTMLElement;
+        expect(row.querySelector('[data-role="quote-minted"]')).not.toBeNull();
+        expect(row.querySelector('[data-role="quote-not-minted"]')).toBeNull();
+    });
+});
+
+describe('the-first-paint-does-not-wait-for-the-genesis-read', () => {
+    /**
+     * Up to `MAX_GENESIS_LOOKUPS` transaction reads, each behind a fresh
+     * failover client, sat in front of the first paint — which the Listings
+     * rail never needed. A read that never answers must not hold the stall.
+     */
+    // Its own token: the session cache in `app.ts` outlives a test, and an
+    // id another test decided would never be read again.
+    const HUNG = 'b7'.repeat(32);
+    const META: TokenMeta = {
+        tokenId: HUNG,
+        name: 'Roasted Beans',
+        ticker: 'BEAN',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('paints the quote as undecided while the read hangs', async () => {
+        const hang = vi.spyOn(fakeChronik, 'tx').mockImplementation(() => new Promise(() => {}));
+        try {
+            const { root } = bootStall(
+                withGenesisPending(
+                    stallEmpty({
+                    tokens: new Map([[HUNG, META]]),
+                    prices: new Map([[HUNG, { code: 'usd', exponent: 2, amount: 500n }]]),
+                    }),
+                    [HUNG],
+                ),
+            );
+            await flush();
+            expect(hang, 'the read was asked for').toHaveBeenCalled();
+            const row = root.querySelector('[data-role="pay-row"]');
+            expect(row, 'the stall painted').not.toBeNull();
+            expect(row!.querySelector('[data-role="quote-minted"]')).toBeNull();
+            expect(row!.querySelector('[data-role="quote-not-minted"]')).toBeNull();
+        } finally {
+            hang.mockRestore();
+        }
+    });
+});
+
+describe('a-pay-sheet-opened-cold-learns-its-attribution-in-place', () => {
+    /**
+     * A scanned link opens the pay sheet on the first paint, and a live paint
+     * waits while a sheet is open — so the genesis read that lands afterwards
+     * would never reach the one surface money is composed on. The sheet asks
+     * for its own answer and paints the line in place.
+     */
+    const COLD = 'c0'.repeat(32);
+    const META: TokenMeta = {
+        tokenId: COLD,
+        name: 'Roasted Beans',
+        ticker: 'BEAN',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const STRANGER_PK = Uint8Array.from([0x02, ...new Array<number>(32).fill(0xee)]);
+
+    it('carries “minted by another wallet” on a sheet that opened before the read', async () => {
+        publish({
+            txid: COLD,
+            inputs: [{ inputScript: p2pkhScriptSig(STRANGER_PK), outputScript: STRANGER_SCRIPT }],
+            outputs: [{ outputScript: STRANGER_SCRIPT, token: { tokenId: COLD } }],
+        });
+        const { root } = bootStall(
+            withGenesisPending(
+                stallEmpty({
+                tokens: new Map([[COLD, META]]),
+                prices: new Map([[COLD, { code: 'usd', exponent: 2, amount: 500n }]]),
+                payHint: COLD.slice(0, 12),
+                }),
+                [COLD],
+            ),
+        );
+        await flush();
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet, 'the link opened the sheet').not.toBeNull();
+        expect(sheet!.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(
+            QUOTE_NOT_MINTED_HERE,
+        );
     });
 });

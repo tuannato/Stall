@@ -376,6 +376,17 @@ const PAGE_SIZE = 50;
  */
 const MAX_EDGE_PAGES = 3;
 const FETCH_TIMEOUT_MS = 3_000;
+/**
+ * The most a history page may weigh before it is abandoned unread. Fifty
+ * transactions at the network's 100,000-byte standard ceiling is a five
+ * megabyte page that is legitimate and rare; a real stall page is tens of
+ * kilobytes. One mebibyte is a stated trade: a page over it yields the
+ * identity card, which this file already calls acceptable, and a host that
+ * streams forever cannot hold the worker's memory open. The content-length
+ * header is the host's to write, so the body is read as a stream and
+ * abandoned past the ceiling whatever the header said.
+ */
+export const MAX_PAGE_BYTES = 1_048_576;
 
 export type PageFetcher = (path: string) => Promise<Uint8Array | undefined>;
 
@@ -390,13 +401,52 @@ export function chronikFetcher(fetchFn: typeof fetch): PageFetcher {
                 if (!res.ok) {
                     continue;
                 }
-                return new Uint8Array(await res.arrayBuffer());
+                const declared = Number(res.headers.get('content-length') ?? '');
+                if (Number.isFinite(declared) && declared > MAX_PAGE_BYTES) {
+                    continue;
+                }
+                const body = await readUpTo(res, MAX_PAGE_BYTES);
+                if (body === undefined) {
+                    continue;
+                }
+                return body;
             } catch {
                 continue;
             }
         }
         return undefined;
     };
+}
+
+/** The whole body, or undefined the moment it passes `ceiling` bytes. */
+async function readUpTo(res: Response, ceiling: number): Promise<Uint8Array | undefined> {
+    const stream = res.body;
+    if (stream === null) {
+        const whole = new Uint8Array(await res.arrayBuffer());
+        return whole.byteLength > ceiling ? undefined : whole;
+    }
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+        total += value.byteLength;
+        if (total > ceiling) {
+            await reader.cancel();
+            return undefined;
+        }
+        chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, at);
+        at += chunk.byteLength;
+    }
+    return out;
 }
 
 function bestInLitePage(

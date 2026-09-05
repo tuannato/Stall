@@ -425,6 +425,13 @@ export type StallView = {
      */
     payQuantity?: bigint;
     /**
+     * Quoted tokens whose genesis the load is still reading, named by the
+     * loader. The pay sheet asks for its own answer only for one of these —
+     * a sheet on a stall whose loader named nothing has nothing to wait for,
+     * and a loader handed in by a test must start no read.
+     */
+    genesisPending?: readonly string[];
+    /**
      * The rate the open pay sheet was composed against, and when it was read.
      *
      * **Its own field, never `fiatRate`.** That one is the glance beside a

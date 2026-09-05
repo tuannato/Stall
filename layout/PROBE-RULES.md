@@ -202,6 +202,15 @@ copied past the press-time valve), one `fine` line joined the pay sheet
 matches `.buy`/`.mini` by class, so the buttons are sampled where the
 anchors were.
 
+Round 5, part 2 (2026-09-05): the pay sheet's provenance line became one
+node painted in place, the tolerance line left the xec sheet, nothing else
+on a measured screen moved. Measured **alone, cold: 2,602 boxes and
+148.0s** — and **160.5s straight after three `pnpm test` runs**, which is
+the hot-box reading the ledger already warns about, not a change in the
+matrix. The contrast pass has drifted from 108s to 115s across the day on
+the same box; the next screen added to the matrix pays for itself in prunes
+first.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels
