@@ -432,6 +432,9 @@ export function boot(
             payQuantity,
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
+            // From the entry's own state, at paint time: a loader never fills
+            // it in, so a refresh cannot lose it and a shared link cannot gain it.
+            pasted: (history.state as { pasted?: boolean } | null)?.pasted === true,
         };
         renderStall(root, view, {
             onChangeFiat: (code: string): void => {
@@ -455,8 +458,8 @@ export function boot(
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
-            onOpenStall: (raw) => {
-                onOpenStall(raw);
+            onOpenStall: (raw, pasted) => {
+                onOpenStall(raw, pasted);
             },
             onGoHome: () => {
                 onGoHome();
@@ -803,11 +806,14 @@ export function boot(
         return payRate;
     };
 
-    const onOpenStall = (raw: string): void => {
+    const onOpenStall = (raw: string, pasted = false): void => {
         if (parseSellerParam(raw).kind === 'invalid') {
             return;
         }
-        history.pushState(null, '', stallPath(raw));
+        // The paste submit stamps the entry; `history.state` survives a reload
+        // of it, so a seller who reloads their new stall keeps the invites,
+        // and a demo press or a pinned open (no stamp) does not.
+        history.pushState(pasted ? { pasted: true } : null, '', stallPath(raw));
         void refresh();
     };
 

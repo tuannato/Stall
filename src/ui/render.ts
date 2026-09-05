@@ -105,7 +105,7 @@ export type StallHandlers = {
     onRetry: () => void;
     onCloseSheet: () => void;
     /** Apex paste. Optional so a render-only test need not invent navigation. */
-    onOpenStall?: (raw: string) => void;
+    onOpenStall?: (raw: string, pasted?: boolean) => void;
     /** Stall → apex. Optional so a render-only test need not invent navigation. */
     onGoHome?: () => void;
     /** Toggle whether the bare domain opens this stall. */
@@ -569,13 +569,42 @@ function paintHome(
     brand.append(el('h1', 'door-word', copy.HOME_TITLE));
     brand.append(el('p', 'door-value', copy.HOME_LEDE));
     body.append(brand);
-    body.append(pasteForm(handlers));
-    const chips = el('ul', 'door-chips');
-    for (const chip of copy.HOME_CHIPS) {
-        chips.append(el('li', undefined, chip));
+    // Two beats, in reading order on every width: the seller's three steps,
+    // then the paste box. The grid on a wide screen moves paint, never order.
+    const beats = el('div', 'beats');
+    const open = el('section', 'card beat');
+    open.setAttribute('data-role', 'door-open');
+    open.append(el('h2', 'beat-h', copy.HOME_BEAT_OPEN));
+    open.append(stepsList(copy.HOME_STEPS.map((step) => ({ step }))));
+    beats.append(open);
+    const mine = el('section', 'card beat');
+    mine.setAttribute('data-role', 'door-mine');
+    mine.append(el('h2', 'beat-h', copy.HOME_BEAT_MINE));
+    mine.append(pasteForm(handlers));
+    mine.append(el('p', 'fine', copy.HOME_PASTE_FINE));
+    beats.append(mine);
+    beats.append(doorPreview());
+    body.append(beats);
+    const pinned = pinnedDoor(view, handlers);
+    if (pinned !== null) {
+        body.append(pinned);
     }
-    body.append(chips);
-    body.append(el('p', 'fine door-chips-fine', copy.HOME_CHIPS_FINE));
+    // A real route into a real stall, and still no fetch here: the apex never
+    // reads the chain, so this is a link and not a preview — the door cannot
+    // promise what that shop has in it, only that it is one. A button, since
+    // it is a pushState and not a document navigation.
+    const demo = el('p', 'fine door-demo');
+    demo.append(copy.HOME_DEMO_LEAD);
+    const openDemo = el('button', 'linkish', copy.HOME_DEMO_LINK);
+    openDemo.type = 'button';
+    openDemo.setAttribute('data-role', 'open-demo');
+    openDemo.setAttribute('data-focus-key', 'open-demo');
+    if (handlers.onOpenStall !== undefined) {
+        const go = handlers.onOpenStall;
+        openDemo.addEventListener('click', () => go(copy.DEMO_STALL_ADDRESS));
+    }
+    demo.append(openDemo, '.');
+    body.append(demo);
     // One quiet line for streamers. A plain link to a document path: the
     // guide is static and outside the app's router (§9), so this is a real
     // navigation, not a pushState.
@@ -586,15 +615,35 @@ function paintHome(
     streamLink.setAttribute('data-role', 'door-stream-link');
     stream.append(streamLink);
     body.append(stream);
-    const pinned = pinnedDoor(view, handlers);
-    if (pinned !== null) {
-        body.append(pinned);
-    }
-    const yours = el('p', 'fine door-yours', copy.HOME_SELLER);
-    body.append(yours);
-    body.append(demoSoon(handlers));
-    body.append(doorPreview());
     stall.append(body);
+}
+
+/**
+ * A numbered checklist: the number is a real `<i>` node, never a `::before`
+ * counter the layout probe refuses. `now` marks the step the reader is on
+ * (`aria-current="step"`); a `status` line under a step says what this page
+ * is waiting for or will do — a fact about the page, never a time.
+ */
+function stepsList(
+    rows: ReadonlyArray<{ step: string; status?: string }>,
+    now?: number,
+): HTMLOListElement {
+    const list = el('ol', 'steps');
+    rows.forEach((row, i) => {
+        const li = el('li', i === now ? 'now' : undefined);
+        if (i === now) {
+            li.setAttribute('aria-current', 'step');
+        }
+        li.append(el('i', undefined, String(i + 1)));
+        const words = el('span');
+        words.append(row.step);
+        if (row.status !== undefined) {
+            words.append(el('span', 'st', row.status));
+        }
+        li.append(words);
+        list.append(li);
+    });
+    return list;
 }
 
 /*
@@ -704,31 +753,6 @@ function shortStallToken(raw: string): string {
     return body.length <= 14 ? body : `${body.slice(0, 6)}…${body.slice(-4)}`;
 }
 
-/**
- * A signpost for the live demo stall, not the stall itself: the apex never
- * fetches. It waits on the owner listing from a real maker; until then this is
- * copy, never an empty shop dressed as a demo.
- */
-function demoSoon(handlers: StallHandlers): HTMLElement {
-    const wrap = el('div', 'demo-soon');
-    wrap.setAttribute('data-role', 'demo-soon');
-    wrap.append(el('div', 'mid-t', copy.HOME_DEMO_TITLE));
-    wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
-    // A real route into a real stall. Still no fetch here: the apex never reads
-    // the chain, so this is a link, not a preview — the door cannot promise
-    // what that shop has in it, only that it is one.
-    const open = el('button', 'mini', copy.HOME_DEMO_OPEN);
-    open.type = 'button';
-    open.setAttribute('data-role', 'open-demo');
-    open.setAttribute('data-focus-key', 'open-demo');
-    if (handlers.onOpenStall !== undefined) {
-        const go = handlers.onOpenStall;
-        open.addEventListener('click', () => go(copy.DEMO_STALL_ADDRESS));
-    }
-    wrap.append(open);
-    return wrap;
-}
-
 function paintInvalid(
     stall: HTMLElement,
     raw: string,
@@ -752,25 +776,28 @@ function paintUnresolvable(
     handlers: StallHandlers,
 ): void {
     const address = view.route.kind === 'unresolvable' ? view.route.address : undefined;
-    stall.append(header(copy.UNRESOLVABLE_HEADER, copy.UNRESOLVABLE_SUB, address));
+    stall.append(header(copy.FIRST_STALL_HEADER, copy.FIRST_STALL_SUB, address));
     const body = el('main', 'stall-body');
-    // A waiting state, not a shop. The seller pasted the address they sell from
-    // before listing, which is the order the apex invites, so this is the first
-    // screen a new seller sees — not a rare case. Give them the way forward: a
-    // link to list, and a retry, because a listing is a new spend on page 0 and
-    // resolves this address the next time it is read.
-    body.append(
-        mid(copy.UNRESOLVABLE_TITLE, [
-            copy.UNRESOLVABLE_NEXT,
-            copy.UNRESOLVABLE_BODY,
-            copy.UNRESOLVABLE_HINT,
-        ]),
-    );
+    // A waiting state, not a shop, and for a new seller the first screen: they
+    // pasted the address they sell from before listing, which is the order
+    // the door invites. A checklist with the stuck step marked, one control
+    // for that step, a retry — a listing is a new spend on page 0 and
+    // resolves this address the next time it is read — and the one fact
+    // about this page: it is watching (`waiting-address-resolves-on-its-own`).
+    // No timing is promised: the wrong wallet, a silent node or a dropped
+    // socket each break the promise a "seconds" would make.
     appendPayHintNote(body, view);
-    body.append(listInCashtab());
-    body.append(retryControl(handlers));
+    const card = el('section', 'card beat first-stall');
+    card.setAttribute('data-role', 'first-stall');
+    card.append(stepsList(copy.FIRST_STALL_STEPS, 0));
+    const acts = el('div', 'acts');
+    acts.setAttribute('data-role', 'first-stall-acts');
+    acts.append(listInCashtab(), retryControl(handlers, copy.CHECK_AGAIN));
+    card.append(acts);
+    card.append(el('p', 'fine', copy.FIRST_STALL_WATCHING));
+    body.append(card);
     stall.append(body);
-    // No share: the link here opens "this address has never sent."
+    // No share: the link here opens this screen.
     stall.append(stallFooter(address, view, handlers, { share: false }));
 }
 
@@ -814,15 +841,13 @@ export function qrSvg(text: string, title: string): SVGSVGElement {
 
 /** A real link to list, for a seller who has not listed yet. */
 function listInCashtab(): HTMLElement {
-    const wrap = el('p', 'mid-p');
     const link = el('a', 'buy', copy.LIST_IN_CASHTAB_LINK);
     link.href = CASHTAB_LIST_URL;
     link.rel = 'noopener noreferrer';
     link.target = '_blank';
     link.setAttribute('data-role', 'list-in-cashtab');
     link.setAttribute('data-focus-key', 'list-in-cashtab');
-    wrap.append(link);
-    return wrap;
+    return link;
 }
 
 function paintUnresolved(
@@ -912,8 +937,8 @@ function paintOpening(
  * the empty one it is what makes a genuine sell-out clear, now that a live
  * empty answer is no longer applied over a painted book.
  */
-function retryControl(handlers: StallHandlers): HTMLElement {
-    const retry = el('button', 'mini', copy.TRY_AGAIN);
+function retryControl(handlers: StallHandlers, label = copy.TRY_AGAIN): HTMLElement {
+    const retry = el('button', 'mini', label);
     retry.type = 'button';
     retry.setAttribute('data-role', 'retry');
     retry.setAttribute('data-focus-key', 'retry');
@@ -952,7 +977,7 @@ function announcementNote(view: StallView): HTMLElement | null {
  * publish sheet — they are honest wayfinding, not controls of their own.
  */
 function taglineInvite(view: StallView, handlers: StallHandlers): HTMLElement | null {
-    if ((view.tagline ?? '') !== '' || handlers.onOpenPublish === undefined) {
+    if (view.pasted !== true || (view.tagline ?? '') !== '' || handlers.onOpenPublish === undefined) {
         return null;
     }
     const theme = view.theme ?? DEFAULT_THEME;
@@ -969,7 +994,7 @@ function taglineInvite(view: StallView, handlers: StallHandlers): HTMLElement | 
 }
 
 function noticeInvite(view: StallView, handlers: StallHandlers): HTMLElement | null {
-    if ((view.announcement ?? '') !== '' || handlers.onOpenPublish === undefined) {
+    if (view.pasted !== true || (view.announcement ?? '') !== '' || handlers.onOpenPublish === undefined) {
         return null;
     }
     const theme = view.theme ?? DEFAULT_THEME;
@@ -6406,7 +6431,7 @@ function applyTitle(view: StallView): void {
                     : copy.LINK_UNREADABLE_TITLE;
             return;
         case 'unresolvable':
-            document.title = copy.UNRESOLVABLE_HEADER;
+            document.title = copy.FIRST_STALL_HEADER;
             return;
         default: {
             // A stall's own address, not the site name. stallName only exists
@@ -6429,17 +6454,14 @@ function applyTitle(view: StallView): void {
  */
 function pasteForm(handlers: StallHandlers): HTMLFormElement {
     const form = el('form', 'paste door-paste');
-    const label = el('label', 'door-display', copy.HOME_PASTE_LABEL);
-    label.htmlFor = 'seller-input';
     const unit = el('div', 'door-unit');
-    const pfx = el('span', 'door-pfx', 's/');
-    pfx.setAttribute('aria-hidden', 'true');
     const input = el('input', 'paste-in door-paste-in');
     input.type = 'text';
     input.id = 'seller-input';
     input.name = 'seller';
     input.autocomplete = 'off';
     input.spellcheck = false;
+    input.placeholder = copy.HOME_PASTE_PLACEHOLDER;
     // A phone keyboard capitalises the first character, and cashaddr is
     // case-strict: `Ecash:qq…` fails validation for an address that is correct.
     // Not fixed by lowercasing in the parser — mixed case is a real cashaddr
@@ -6449,20 +6471,10 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     input.setAttribute('aria-label', copy.HOME_PASTE_LABEL);
     const submit = el('button', 'buy door-open', copy.HOME_PASTE_SUBMIT);
     submit.type = 'submit';
-    unit.append(pfx, input, submit);
-    const slab = el('div', 'door-slab');
-    // The counter's legs are a real node, not a positioned ::after: the
-    // layout probe refuses positioned pseudo-elements outright — no box to
-    // measure against the protected ones — and the door is measured
-    // decorated like every screen.
-    const legs = el('div', 'door-legs');
-    legs.setAttribute('aria-hidden', 'true');
-    slab.append(legs);
-    const hint = el('p', 'fine door-hint', copy.HOME_PASTE_HINT);
+    unit.append(input, submit);
     const err = el('p', 'ctx', '');
     err.hidden = true;
     err.setAttribute('data-role', 'paste-invalid');
-    slab.append(hint, err);
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         const raw = input.value.trim();
@@ -6476,9 +6488,11 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
             return;
         }
         err.hidden = true;
-        handlers.onOpenStall?.(raw);
+        // The one road that stamps the navigation: the seller invites paint
+        // on a stall reached from here and on no other (see `view.pasted`).
+        handlers.onOpenStall?.(raw, true);
     });
-    form.append(label, unit, slab);
+    form.append(unit, err);
     return form;
 }
 

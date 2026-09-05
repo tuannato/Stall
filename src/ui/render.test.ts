@@ -39,11 +39,8 @@ import {
     HANDOFF_MAY_PRESELECT,
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     HOME_LEDE,
-    HOME_SELLER,
     HOME_STREAM_LINK,
     DEMO_STALL_ADDRESS,
-    HOME_DEMO_SOON,
-    UNRESOLVABLE_NEXT,
     SHARE_LEDE,
     STUDIO_DEFAULT_HINT,
     STUDIO_SEC_RECORD,
@@ -80,7 +77,6 @@ import {
     TRY_AGAIN,
     UNREACHABLE_BODY,
     UNREADABLE_BODY,
-    UNRESOLVABLE_TITLE,
     tokenRate,
     tokenRateBound,
 } from './copy';
@@ -384,7 +380,7 @@ describe('unresolvable', () => {
             tokens: new Map(),
         });
         const text = root.textContent ?? '';
-        expect(text).toContain(UNRESOLVABLE_TITLE);
+        expect(text).toContain(copy.FIRST_STALL_HEADER);
         expect(text).toContain(ADDR);
         // Listing is now a link, not a sentence to read and act on separately.
         expect(root.querySelector('[data-role="list-in-cashtab"]')).not.toBeNull();
@@ -419,7 +415,7 @@ describe('unresolved-without-fetch-is-not-no-index-answered', () => {
         expect(text).toContain(UNRESOLVED_BODY);
         expect(text, 'the index answered').not.toContain(UNREACHABLE_BODY);
         expect(text, 'this is not a seller who never spent').not.toContain(
-            UNRESOLVABLE_TITLE,
+            copy.FIRST_STALL_HEADER,
         );
         expect(text, 'and not a seller with nothing for sale').not.toContain(
             EMPTY_TITLE,
@@ -447,7 +443,7 @@ describe('unresolved address is unreachable not unresolvable', () => {
         });
         const text = root.textContent ?? '';
         expect(text).toContain(UNREACHABLE_BODY);
-        expect(text).not.toContain(UNRESOLVABLE_TITLE);
+        expect(text).not.toContain(copy.FIRST_STALL_HEADER);
         expect(text).not.toContain(EMPTY_TITLE);
         expect(text).toContain(ADDR);
         expect(text).toContain(TRY_AGAIN);
@@ -584,10 +580,8 @@ describe('home is not an unreadable link', () => {
         expect(text).toContain(HOME_LEDE);
         // The two intro paragraphs became three chips and one trust line
         // (Stall Design, direction D) — the same facts, scannable.
-        expect(text).toContain(copy.HOME_CHIPS_FINE);
-        for (const chip of copy.HOME_CHIPS) {
-            expect(text).toContain(chip);
-        }
+        expect(text).toContain(copy.HOME_BEAT_OPEN);
+        expect(text).toContain(copy.HOME_BEAT_MINE);
         expect(text).toContain(HOME_PASTE_SUBMIT);
         expect(text).not.toContain(LINK_UNREADABLE_TITLE);
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
@@ -619,7 +613,7 @@ describe('home is not an unreadable link', () => {
         input.value = `  ${ADDR}  `;
         form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         expect(h.onOpenStall).toHaveBeenCalledTimes(1);
-        expect(h.onOpenStall).toHaveBeenCalledWith(ADDR);
+        expect(h.onOpenStall).toHaveBeenCalledWith(ADDR, true);
         expect(root.textContent).not.toContain(HOME_PASTE_INVALID);
     });
 });
@@ -652,7 +646,7 @@ describe('opening-is-not-empty-or-unreachable', () => {
         const text = root.textContent ?? '';
         expect(text).toContain(OPENING_BODY);
         expect(text).toContain(ADDR);
-        expect(text).not.toContain(UNRESOLVABLE_TITLE);
+        expect(text).not.toContain(copy.FIRST_STALL_HEADER);
         expect(text).not.toContain(UNREACHABLE_BODY);
         expect(text).not.toContain(EMPTY_TITLE);
     });
@@ -2014,11 +2008,11 @@ describe('publish-sheet', () => {
 describe('apex directs the seller to their own address', () => {
     it('names the receive address, not a public key they cannot see', () => {
         const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
-        expect(root.textContent).toContain(HOME_SELLER);
+        expect(root.textContent).toContain(copy.HOME_STEPS[1]);
         // A seller can copy their address out of Cashtab; the pubkey is shown
         // nowhere, so the seller line must not send them looking for one.
-        expect(HOME_SELLER.toLowerCase()).toContain('address');
-        expect(HOME_SELLER.toLowerCase()).not.toContain('public key');
+        expect(copy.HOME_STEPS[1].toLowerCase()).toContain('address');
+        expect(copy.HOME_STEPS[1].toLowerCase()).not.toContain('public key');
     });
 });
 
@@ -2113,13 +2107,13 @@ describe('expanded-card-shows-a-large-token-image', () => {
 });
 
 describe('apex signposts a demo without becoming a shop', () => {
-    it('shows a coming-soon placeholder, not a fetched stall', () => {
+    it('links a real stall in one line and fetches nothing', () => {
         const h = handlers();
         const root = document.createElement('div');
         renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
-        const demo = root.querySelector('[data-role="demo-soon"]');
+        const demo = root.querySelector('.door-demo');
         expect(demo).not.toBeNull();
-        expect(demo!.textContent).toContain(HOME_DEMO_SOON);
+        expect(demo!.textContent).toContain(copy.HOME_DEMO_LINK);
         // A real route now, not a "coming soon". Still a link: the apex never
         // fetches, so it cannot promise what that shop has in it.
         const open = demo!.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
@@ -2145,7 +2139,9 @@ describe('unresolvable narrates the journey forward', () => {
             address: ADDR,
             tokens: new Map(),
         });
-        expect(root.textContent).toContain(UNRESOLVABLE_NEXT);
+        // The forward half is the checklist: the next two steps say what opens here.
+        expect(root.textContent).toContain(copy.FIRST_STALL_STEPS[1].status);
+        expect(root.textContent).toContain(copy.FIRST_STALL_STEPS[2].status);
     });
 });
 
@@ -3492,7 +3488,7 @@ describe('a script address is told the true thing', () => {
         // by this suite, which was reading `root.textContent` alone.
         expect(document.title).toBe(copy.SCRIPT_ADDRESS_TITLE);
         // The never-sent screen's promise is a loop for an address like this.
-        expect(text).not.toContain(copy.UNRESOLVABLE_SUB);
+        expect(text).not.toContain(copy.FIRST_STALL_SUB);
     });
 
     it('leaves an ordinary unreadable link exactly as it was', () => {
@@ -10164,5 +10160,97 @@ describe('the-quotes-row-keeps-pay-straight-to-the-sheet', () => {
         expect(h.onOpenItem).not.toHaveBeenCalled();
         (root.querySelector('[data-role="pay-row"] [data-role="item-open"]') as HTMLButtonElement).click();
         expect(h.onOpenItem).toHaveBeenCalledWith(TOKEN_ID, 'quotes');
+    });
+});
+
+/*
+ * The door is two beats. "Open a stall" is the seller's three steps in the
+ * order the apex invites; "This is my stall" is the paste box and the one
+ * fine line saying nothing is sent. The illustration and the real-stall link
+ * follow; the streamer line stays. Nothing else stands before the box.
+ */
+describe('the-door-is-two-beats', () => {
+    const home = (): StallView => ({
+        route: { kind: 'home' },
+        overlay: { kind: 'idle' },
+        tokens: new Map(),
+    });
+
+    it('paints the three steps, then the paste box, in that order', () => {
+        const { root } = paint(home());
+        const open = root.querySelector('[data-role="door-open"]') as HTMLElement;
+        const mine = root.querySelector('[data-role="door-mine"]') as HTMLElement;
+        expect(open, 'the first beat').not.toBeNull();
+        expect(mine, 'the second beat').not.toBeNull();
+        expect(open.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(open.textContent).toContain(copy.HOME_BEAT_OPEN);
+        const steps = [...open.querySelectorAll('ol.steps > li')].map((li) => li.textContent);
+        expect(steps).toEqual(copy.HOME_STEPS.map((step, i) => `${i + 1}${step}`));
+        expect(mine.textContent).toContain(copy.HOME_BEAT_MINE);
+        expect(mine.querySelector('form.paste'), 'the paste box is the second beat').not.toBeNull();
+        expect(mine.textContent).toContain(copy.HOME_PASTE_FINE);
+        // The form still submits into the same handler with the same value.
+        expect(root.querySelector('.paste-in')).not.toBeNull();
+    });
+
+    it('keeps the illustration, the real-stall link and the streamer line, and shares nothing', () => {
+        const { root, h } = paint(home());
+        expect(root.querySelector('[data-role="door-preview"]')).not.toBeNull();
+        const demo = root.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
+        expect(demo.textContent).toBe(copy.HOME_DEMO_LINK);
+        expect(demo.tagName).toBe('BUTTON');
+        demo.click();
+        expect(h.onOpenStall).toHaveBeenCalledWith(copy.DEMO_STALL_ADDRESS);
+        const stream = root.querySelector('[data-role="door-stream-link"]') as HTMLAnchorElement;
+        expect(stream.getAttribute('href')).toBe('/stream');
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        expect(root.querySelector('svg.qr')).toBeNull();
+    });
+});
+
+/*
+ * An address that never spent is the first screen a new seller sees. It is a
+ * checklist with the stuck step marked, one control for that step, a retry,
+ * and the fact that the page is watching — no timing promised, no link to
+ * share, because the link would open this screen.
+ */
+describe('the-first-stall-checklist-marks-the-stuck-step', () => {
+    const waiting = (): StallView => ({
+        route: { kind: 'unresolvable', address: ADDR },
+        overlay: { kind: 'idle' },
+        address: ADDR,
+        tokens: new Map(),
+    });
+
+    it('paints three steps with the first marked current, the two controls and the watching line', () => {
+        const { root } = paint(waiting());
+        expect(root.textContent).toContain(copy.FIRST_STALL_HEADER);
+        expect(root.textContent).toContain(copy.FIRST_STALL_SUB);
+        expect(root.textContent).toContain(ADDR);
+        const list = root.querySelector('[data-role="first-stall"]') as HTMLElement;
+        expect(list).not.toBeNull();
+        const steps = [...list.querySelectorAll('ol.steps > li')];
+        expect(steps).toHaveLength(3);
+        copy.FIRST_STALL_STEPS.forEach((row, i) => {
+            expect(steps[i]!.textContent).toContain(row.step);
+            expect(steps[i]!.textContent).toContain(row.status);
+        });
+        expect(steps[0]!.getAttribute('aria-current')).toBe('step');
+        expect(steps[1]!.getAttribute('aria-current')).toBeNull();
+        expect(steps[2]!.getAttribute('aria-current')).toBeNull();
+        const acts = list.querySelector('[data-role="first-stall-acts"]') as HTMLElement;
+        expect(acts.querySelector('[data-role="list-in-cashtab"]')).not.toBeNull();
+        expect(acts.querySelector('[data-role="retry"]')?.textContent).toBe(copy.CHECK_AGAIN);
+        expect(list.textContent).toContain(copy.FIRST_STALL_WATCHING);
+        expect(root.textContent).not.toContain('Nothing to read from this address');
+        expect(root.textContent).not.toContain('never sent');
+    });
+
+    it('the-first-stall-screen-shares-nothing', () => {
+        const { root } = paint(waiting());
+        expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
+        expect(root.querySelector('svg.qr')).toBeNull();
+        expect(root.querySelector('[data-role="poster"]')).toBeNull();
+        expect(root.textContent).not.toContain(copy.COPY_LINK);
     });
 });

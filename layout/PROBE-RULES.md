@@ -91,7 +91,8 @@ nothing.
   inside the pay sheet, and a covered one reads as nothing — the same rule the
   covenant's price has. Two screens, `pay` and `pay-xec`, put the sheet's own
   figures over the scrim; `pay-xec` is in `STATE_SCREENS` because its decoration
-  variants would be `pay`'s painted twice. Both keep `prices` for the sheet they
+  variants would be `pay`'s painted twice, and since 2026-09-05 it is geometry
+  only — its figure is `pay`'s in another unit, on the same ground. Both keep `prices` for the sheet they
   open, one quote on a listed token and one on a token the stall does not list,
   because the pay set is not gated on listings.
 
@@ -137,8 +138,8 @@ nothing.
 - **The rail's buyer note moved inside the amount card**, under the figure —
   which re-measures `.pay-amt`, a certified box. It is a `.note` on the card's
   own `--s-surface` ground, adding a block between the figure and the quantity
-  row on `pay` and `pay-xec` at every width and every look, and nothing above
-  it may be covered by it. Re-measured with this change: no rule moved.
+  row on `pay` and `pay-xec` at every width and every look (the contrast half
+  on `pay` alone since 2026-09-05), and nothing above it may be covered by it. Re-measured with this change: no rule moved.
 
 - **Both quote-naming shapes are on the fixtures, and so is a borrowed
   token.** `offers`, `pay` and `pay-xec` carry `genesis` and `descriptions`:
@@ -158,7 +159,7 @@ nothing.
   `T1` being `attributed` now puts a **second** `.chip` in the row's name
   column beside the quote chip, and `QUOTE_TIMES` dates `T1` and not `QUOTED`
   — so `plugin-missing-quotes`, `pay` and `pay-xec` measure the dated row and
-  card against the undated ones, and a two-chip name column against a track
+  card against the undated ones (`pay-xec` by geometry alone since 2026-09-05), and a two-chip name column against a track
   `minmax(0, 1fr)` is free to shrink. That is why the row's chip is the short
   `QUOTE_MINTED_CHIP` and the sentence stays in the sheet: a `.chip` is
   uppercase and `white-space: nowrap`, and the whole sentence at that size is
@@ -792,6 +793,18 @@ string. Both keep their geometry rules. The face's back control is a
 `<button>` with no chrome of its own at a 44px hit target, which the
 no-controls rule on the broadcast never sees because the broadcast mounts no
 overlay at all.
+
+**2026-09-05, the door and the first stall: 131.6s, contrast 98.0s over 2,032
+boxes** (−3 on 2,035), every rule green, run alone. The door became two beats
+— the seller's three steps, then the paste box — with the illustration
+upright and small on every width instead of the tilted desktop-only card,
+and the never-spent screen became a checklist with the stuck step marked. No
+new protected box: the door still mounts no price, no QR and no copy-link,
+and the first-stall screen's two controls are the shipped `list-in-cashtab`
+anchor and the retry. The checklist numbers are `<i>` nodes, like the OBS
+recipe's, so `positionedPseudos` has nothing to refuse. The two door screens
+and `unresolvable` are still in the contrast pass; three fewer boxes is the
+old door's chips and seller paragraph leaving the sampled set.
 
 ## What this guard still cannot see
 

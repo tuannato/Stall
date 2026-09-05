@@ -17,7 +17,7 @@ import {
     PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
     QUOTE_NOT_MINTED_HERE,
-    UNRESOLVABLE_TITLE,
+    FIRST_STALL_HEADER,
     WITHHELD_ALL_LISTINGS,
     EVENT_BOOK,
 } from './ui/copy';
@@ -891,7 +891,7 @@ describe('waiting-address-resolves-on-its-own', () => {
         let loads = 0;
         boot(root, async () => states[Math.min(loads++, states.length - 1)]!);
         await flush();
-        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).toContain(FIRST_STALL_HEADER);
 
         const watch = watches[0]!;
         expect(watch.stall.hash, 'the address is what there is to watch').toBe(HASH);
@@ -909,7 +909,7 @@ describe('waiting-address-resolves-on-its-own', () => {
         await flush();
 
         expect(loads, 'the resolve was worth a reload of the page state').toBe(2);
-        expect(root.textContent).not.toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).not.toContain(FIRST_STALL_HEADER);
     });
 
     it('a re-establish asks again, because nothing announces a spend twice', async () => {
@@ -957,7 +957,7 @@ describe('a-failed-live-resolve-does-not-repaint-the-waiting-screen', () => {
         await flush();
 
         expect(loads, 'nothing was reloaded').toBe(1);
-        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).toContain(FIRST_STALL_HEADER);
         expect(root.textContent).not.toContain(OPENING_BODY);
         expect(root.textContent).not.toContain(UNREACHABLE_BODY);
     });
@@ -976,7 +976,7 @@ describe('a-failed-live-resolve-does-not-repaint-the-waiting-screen', () => {
         await flush();
 
         expect(loads).toBe(1);
-        expect(root.textContent).toContain(UNRESOLVABLE_TITLE);
+        expect(root.textContent).toContain(FIRST_STALL_HEADER);
         expect(root.textContent).not.toContain(UNREACHABLE_BODY);
     });
 });

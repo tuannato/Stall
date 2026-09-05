@@ -1277,3 +1277,68 @@ describe('a-withheld-quote-does-not-open-the-quotes-rail', () => {
         expect(pressed?.textContent).toContain(SHOP_TAB_LISTINGS);
     });
 });
+
+/*
+ * The seller invites (the tagline and announcement prompts on an empty or
+ * quiet stall) paint only on a navigation that began at the door's paste
+ * submit. A shared link, the real-stall control and a pinned open carry no
+ * stamp: a buyer holding a link to a sold-out shop must not read "write a
+ * tagline" as meant for them.
+ */
+describe('a-shared-link-does-not-show-the-seller-prompts', () => {
+    const invites = (root: HTMLElement) =>
+        root.querySelectorAll('[data-role="edit-tagline"], [data-role="announcement-invite"]').length;
+    const loader = () => async (): Promise<AppState> =>
+        location.pathname === '/' ? homeState() : stallNamed('Quiet Stall');
+
+    afterEach(() => {
+        localStorage.clear();
+        window.history.replaceState(null, '', '/');
+    });
+
+    it('a cold shared link paints no invite', async () => {
+        window.history.replaceState(null, '', stallPath(ADDR));
+        const root = document.createElement('div');
+        boot(root, loader());
+        await flush();
+        expect(root.textContent).toContain('Quiet Stall');
+        expect(invites(root)).toBe(0);
+    });
+
+    it('the real-stall control and a pinned open paint no invite', async () => {
+        window.history.replaceState({ door: true }, '', '/');
+        const root = document.createElement('div');
+        boot(root, loader());
+        await flush();
+        (root.querySelector('[data-role="open-demo"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.textContent).toContain('Quiet Stall');
+        expect(invites(root)).toBe(0);
+
+        // The pins are read from storage at paint time, never from a loader.
+        localStorage.setItem('stall.pins', JSON.stringify([ADDR]));
+        window.history.replaceState({ door: true }, '', '/');
+        const again = document.createElement('div');
+        boot(again, loader());
+        await flush();
+        (again.querySelector('[data-role="pinned-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(again.textContent).toContain('Quiet Stall');
+        expect(invites(again)).toBe(0);
+    });
+
+    it('the paste submit stamps the navigation and the invites paint', async () => {
+        window.history.replaceState({ door: true }, '', '/');
+        const root = document.createElement('div');
+        boot(root, loader());
+        await flush();
+        const input = root.querySelector('.paste-in') as HTMLInputElement;
+        const form = root.querySelector('form.paste') as HTMLFormElement;
+        input.value = ADDR;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        await flush();
+        expect(root.textContent).toContain('Quiet Stall');
+        expect((history.state as { pasted?: boolean } | null)?.pasted).toBe(true);
+        expect(invites(root)).toBeGreaterThan(0);
+    });
+});

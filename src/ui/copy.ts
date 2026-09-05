@@ -15,22 +15,6 @@ export const SCRIPT_ADDRESS_BODY =
 export const HOME_PASTE_SCRIPT_ADDRESS =
     'That is a script address. A stall needs the address Cashtab shows on its Receive screen.';
 
-export const UNRESOLVABLE_HEADER = 'Stall not readable yet';
-export const UNRESOLVABLE_SUB = 'This address has never sent';
-export const UNRESOLVABLE_TITLE = 'Nothing to read from this address';
-export const UNRESOLVABLE_BODY =
-    'Offers are indexed by public key, and an address only reveals its key once it has sent a transaction. This one never has.';
-/**
- * The forward half of the seller journey. A new seller who pastes before
- * listing lands here and can read "never sent" as broken; this says it is the
- * expected first step and what the address becomes once they list.
- */
-export const UNRESOLVABLE_NEXT =
-    'This is the first step, not a dead end. Once you list, come back and this page is your shop — with a link to share and a name you can set.';
-
-export const UNRESOLVABLE_HINT =
-    'Listing anything on Agora is a send, so a stall becomes readable the moment its first offer goes up.';
-
 export const SETTINGS_TRUNCATED =
     "We stopped reading this seller's history before the end, so their stall settings may be newer than what is shown.";
 
@@ -678,22 +662,10 @@ export function tokenTypeLabel(type: string, protocol: string): string | undefin
 
 /** The apex. No identity, because Stall has no account to show. */
 export const HOME_TITLE = 'Stall';
-export const HOME_LEDE = "A shop page for one seller's listings on eCash Agora.";
+export const HOME_LEDE = 'A seller’s window on eCash — read from the chain, shared by link.';
 
 export const OPENING_SUB = 'Opening this stall';
 export const OPENING_BODY = 'Reading the chain for this seller.';
-
-/**
- * The door's three chips — the two intro paragraphs compressed to the three
- * facts a visitor actually scans for (Stall Design, direction D). The one
- * sentence kept in prose is the trust line under them.
- */
-export const HOME_CHIPS = [
-    'One link: /s/ + your address',
-    'Prices straight from the chain',
-    'No signup, no install',
-] as const;
-export const HOME_CHIPS_FINE = 'Stall reads the chain and holds no keys.';
 
 /**
  * The tilted storefront preview on the wide door. Fixture words, painted
@@ -716,38 +688,17 @@ export const HOME_PREVIEW = {
     caption: 'Every stall opens as a page like this.',
 } as const;
 
-export const HOME_PASTE_LABEL = 'Open a stall';
-export const HOME_PASTE_HINT =
-    'Paste the seller’s eCash address, or their compressed public key.';
-export const HOME_PASTE_SUBMIT = 'Open stall';
+export const HOME_PASTE_LABEL = 'Your eCash address';
+export const HOME_PASTE_PLACEHOLDER = 'ecash:qr…';
+export const HOME_PASTE_SUBMIT = 'Open';
 export const HOME_PASTE_INVALID =
     'That is not an eCash address or a compressed public key.';
-export const HOME_SELLER =
-    'If this is your stall: list your token in Cashtab, then paste your own eCash address here — the one Cashtab shows on its Receive screen. Your shop opens at a link that is yours to share.';
-
-/**
- * A placeholder for the live demo stall, which needs the owner to list from a
- * real maker first. Copy only — no fetch, no fake shop. The apex stays a door.
- */
 /** The door's one line for streamers: the guide is a page of its own (§9). */
 export const HOME_STREAM_LEAD = 'Streaming?';
 export const HOME_STREAM_LINK = 'Put your stall on stream';
 
-export const HOME_DEMO_TITLE = 'See a real stall';
-/**
- * The promise is the page, not the inventory. Stall cannot watch this stall any
- * more than it can watch a purchase (§2), so if its last offer sells the link
- * opens an empty shop — and copy that promised "one in action" would have been
- * lying by then, silently. "Not a demo" is the honest part: it is a real seller
- * with real listings, and the buy control there hands to Cashtab like any other.
- */
-export const HOME_DEMO_SOON =
-    'A real seller’s shop, listed on Agora — not a demo. Open it to see what a stall looks like.';
-
 /** Where "See a real stall" goes. The owner's own stall, decided by the owner. */
 export const DEMO_STALL_ADDRESS = 'ecash:qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r';
-export const HOME_DEMO_OPEN = 'Open this stall';
-
 /**
  * Conditional, because an empty stall is a link anyone can hold — a buyer who
  * bookmarked a shop that has since sold out reads an unconditional "list the
@@ -758,6 +709,48 @@ export const HOME_DEMO_OPEN = 'Open this stall';
 
 /** The clickable form, for a screen where the seller has not listed yet. */
 export const LIST_IN_CASHTAB_LINK = 'List a token in Cashtab';
+
+/**
+ * The door is two beats and one illustration. "Open a stall" is the seller's
+ * three steps, in the order the apex invites (list, paste, get the link);
+ * "This is my stall" is the paste box. Nothing else stands before it: the
+ * chips, the trust line and the paragraph addressed to sellers folded into
+ * these three lines and one fine print, because a door that explains itself
+ * at length is a door nobody reads.
+ */
+export const HOME_BEAT_OPEN = 'Open a stall';
+export const HOME_STEPS = [
+    'List a token in Cashtab',
+    'Paste your address here',
+    'Get your link',
+] as const;
+export const HOME_BEAT_MINE = 'This is my stall';
+/** Under the paste box: what pressing Open does, and does not, do. */
+export const HOME_PASTE_FINE =
+    'Nothing is sent. The page reads what this address has put on the chain.';
+/** "Or see a real seller's shop." — the lead and the control's own words. */
+export const HOME_DEMO_LEAD = 'Or ';
+export const HOME_DEMO_LINK = 'see a real seller’s shop';
+
+/**
+ * The first-stall screen — an address that has never spent, which for a new
+ * seller is the first screen and not a rare case (§3). A three-step
+ * checklist with the stuck step marked, one control for that step, a retry,
+ * and one fact: the page is watching. It promises no timing — the wrong
+ * wallet, a silent node or a dropped socket each break the promise a
+ * "seconds" would make — and shares no link, because the link opens this
+ * screen. The address stays on the sign, as on every screen.
+ */
+export const FIRST_STALL_HEADER = 'Your first stall';
+export const FIRST_STALL_SUB = 'Nothing on the chain yet';
+export const FIRST_STALL_STEPS = [
+    { step: 'List a token in Cashtab', status: 'Waiting for a listing from this address' },
+    { step: 'Name your stall', status: 'Opens here once the listing is read' },
+    { step: 'Share your link', status: 'Appears when the stall resolves' },
+] as const;
+export const FIRST_STALL_WATCHING =
+    'This page is watching the address. If nothing shows after a listing confirms, check the address you pasted.';
+export const CHECK_AGAIN = 'Check again';
 
 /** Says what the link is for, so a resolved stall reads as the thing to send. */
 /**

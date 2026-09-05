@@ -449,6 +449,15 @@ export type StallView = {
      */
     payRate?: { rate: bigint; atMs: number };
     /**
+     * Whether this navigation began at the door's paste submit. Written onto
+     * the view at paint time from `history.state` (like `fiatCode`), never by
+     * a loader: the seller invites paint only when it is true, because a
+     * buyer holding a shared link to a quiet shop must not read "write a
+     * tagline" as meant for them. A demo press, a pinned open and a shared
+     * link carry no stamp.
+     */
+    pasted?: boolean;
+    /**
      * What the press-time valve found, so a fixture can stage what only a
      * press produces: the rate row's line and a Pay control that restates
      * the figure it will open. The sheet seeds its own state from this.
