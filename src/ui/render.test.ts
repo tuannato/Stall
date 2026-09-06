@@ -9545,6 +9545,46 @@ describe('small-text-is-one-scale', () => {
     });
 });
 
+/*
+ * A quantity the field cannot read used to become 1 in silence — "1,000"
+ * pasted or autofilled fails the whole-number rule, and the readout was
+ * hidden behind the Edit press, so the buyer saw the XEC total for one item
+ * with nothing saying why. A refused count is said, and the count that stood
+ * before it stands still.
+ */
+describe('a-quantity-this-field-refuses-is-said-and-not-clamped', () => {
+    it('keeps the last count and says why, then takes a whole number', () => {
+        const h = { ...handlers(), onPayQuantity: vi.fn() };
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, payQuantity: 2n }),
+            h,
+        );
+        (root.querySelector('[data-role="pay-quantity-edit"]') as HTMLElement).click();
+        const field = root.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+        const why = root.querySelector('[data-role="pay-quantity-why"]') as HTMLElement;
+        expect(why.hidden).toBe(true);
+        for (const bad of ['1,000', '1.5', 'three', '0']) {
+            field.value = bad;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            expect(why.hidden, bad).toBe(false);
+            expect(why.textContent).toBe(copy.PAY_QUANTITY_REFUSED);
+            expect(h.onPayQuantity, bad).not.toHaveBeenCalled();
+        }
+        // Emptying the field mid-edit is not a refusal worth a sentence.
+        field.value = '';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(why.hidden).toBe(true);
+        expect(h.onPayQuantity).not.toHaveBeenCalled();
+        field.value = '3';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(why.hidden).toBe(true);
+        expect(h.onPayQuantity).toHaveBeenCalledWith(TOKEN_ID, 3n);
+        expect(why.closest('[data-role="pay"]'), 'the sentence lives inside the sheet').not.toBeNull();
+    });
+});
+
 describe('a-shop-row-pointer-switches-tabs', () => {
     /**
      * The one line a Shop row carries about the other rail. It used to scroll

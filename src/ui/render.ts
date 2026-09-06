@@ -3615,7 +3615,12 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     qtyField.setAttribute('aria-label', copy.PAY_QUANTITY_LABEL);
     qtyField.setAttribute('data-role', 'pay-quantity');
     qtyField.setAttribute('data-focus-key', 'pay-quantity');
-    qtyValue.append(qtyShown, qtyEdit, qtyField);
+    // A refused count is said, inside the row: the sheet's children before
+    // Pay are fenced, and a sentence about the quantity belongs to it.
+    const qtyWhy = el('p', 'ctx', copy.PAY_QUANTITY_REFUSED);
+    qtyWhy.hidden = true;
+    qtyWhy.setAttribute('data-role', 'pay-quantity-why');
+    qtyValue.append(qtyShown, qtyEdit, qtyField, qtyWhy);
     qtyRow.append(qtyValue);
     wrap.append(qtyRow);
     qtyEdit.addEventListener('click', () => {
@@ -3628,9 +3633,18 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // Whole items only, at least one, and no larger than the memo's own
         // field holds — eight unsigned bytes. Read as a `bigint`, never a
         // `Number`: the ceiling is past where a double keeps every digit.
+        // A count the field cannot read is said and never substituted:
+        // "1,000" used to become 1 in silence, behind a hidden readout, and
+        // the buyer read the total for one item. An emptied field mid-edit
+        // says nothing; the count that stood before still stands either way.
         const typed = qtyField.value.trim();
-        const asked = /^\d{1,20}$/.test(typed) ? BigInt(typed) : 0n;
-        quantity = asked >= 1n && asked <= MAX_PAY_QUANTITY ? asked : 1n;
+        const asked = /^\d{1,20}$/.test(typed) ? BigInt(typed) : undefined;
+        const accepted = asked !== undefined && asked >= 1n && asked <= MAX_PAY_QUANTITY;
+        qtyWhy.hidden = typed === '' || accepted;
+        if (!accepted) {
+            return;
+        }
+        quantity = asked;
         qtyShown.textContent = copy.payQuantityShown(quantity.toString());
         handlers.onPayQuantity?.(tokenId, quantity);
         refresh();

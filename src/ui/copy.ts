@@ -1276,6 +1276,9 @@ export const PAY_SUB_DUST =
     'This total is under the smallest amount the network will relay. Raise the quantity, or ask the seller.';
 export const PAY_QUANTITY_LABEL = 'Quantity';
 export const PAY_QUANTITY_EDIT = 'Edit';
+/** A count the field could not read; the count that stood before it still stands. */
+export const PAY_QUANTITY_REFUSED =
+    'A quantity is a whole number \u2014 \u201c3\u201d, never \u201c1,000\u201d or \u201c1.5\u201d. The count above stands.';
 export const payQuantityShown = (count: string): string => `\u00d7 ${count}`;
 /**
  * The two hand-offs, named for what they do. **Pay, never Buy**: on this rail

@@ -4750,9 +4750,16 @@ details.fold.fold-cta[open] > .fold-sum {
  */
 .pay-qty dd {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
+}
+
+/* The refused-count sentence takes the whole cell under the field. */
+.pay-qty dd .ctx {
+    flex-basis: 100%;
+    text-align: left;
 }
 
 .pay-qty-in {
