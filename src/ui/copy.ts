@@ -759,7 +759,11 @@ export const FIRST_STALL_SUB = 'Nothing on the chain yet';
 export const FIRST_STALL_STEPS = [
     { step: 'List a token in Cashtab', status: 'Waiting for a listing from this address' },
     { step: 'Name your stall', status: 'Opens here once the listing is read' },
-    { step: 'Share your link', status: 'Appears when the stall resolves' },
+    // Names the place, never an arrival. A resolved stall mounts no share
+    // control of its own — `stallFooter` withholds it wherever there is a
+    // Studio — so "appears when the stall resolves" promised a control that
+    // never appears, on the one screen a new seller reads as instructions.
+    { step: 'Share your link', status: 'In Studio → Share, once the stall resolves' },
 ] as const;
 export const FIRST_STALL_WATCHING =
     'This page is watching the address. If nothing shows after a listing confirms, check the address you pasted.';

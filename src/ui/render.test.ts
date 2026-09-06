@@ -10591,6 +10591,23 @@ describe('the-first-stall-checklist-marks-the-stuck-step', () => {
         expect(root.querySelector('[data-role="poster"]')).toBeNull();
         expect(root.textContent).not.toContain(copy.COPY_LINK);
     });
+
+    /**
+     * The third step said the link would appear when the stall resolves, and
+     * nothing appears: `stallFooter` mounts the share control only where there
+     * is no Studio (`hasStudio` is `route.kind === 'pubkey'`), which is exactly
+     * the screen this step is waiting for. So the step names the place instead
+     * of promising an arrival. The **whole sentence** is pinned, not a
+     * substring, because a substring lets the promise back in beside the place.
+     */
+    it('the-first-stall-checklist-names-where-the-link-is', () => {
+        expect(copy.FIRST_STALL_STEPS[2].status).toBe(
+            'In Studio → Share, once the stall resolves',
+        );
+        const { root } = paint(waiting());
+        const steps = [...root.querySelectorAll('[data-role="first-stall"] ol.steps > li')];
+        expect(steps[2]!.textContent).toContain(copy.FIRST_STALL_STEPS[2].status);
+    });
 });
 
 /*
