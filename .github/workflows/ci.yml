@@ -30,6 +30,13 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # setup-node v5 turns dependency caching on by default and
+          # detects pnpm from `packageManager` — then runs `pnpm store
+          # path` before pnpm exists on the runner ("Unable to locate
+          # executable file: pnpm"). pnpm arrives from corepack in the
+          # next step, so the cache is off; an install from the registry
+          # costs a minute and pins nothing twice.
+          package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
@@ -48,6 +55,13 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # setup-node v5 turns dependency caching on by default and
+          # detects pnpm from `packageManager` — then runs `pnpm store
+          # path` before pnpm exists on the runner ("Unable to locate
+          # executable file: pnpm"). pnpm arrives from corepack in the
+          # next step, so the cache is off; an install from the registry
+          # costs a minute and pins nothing twice.
+          package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:layout
