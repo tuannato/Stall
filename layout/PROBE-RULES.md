@@ -541,21 +541,21 @@ identity nobody holds, at the production origin.
 | link | route form | chars | data modules | px/module |
 |---|---|---|---|---|
 | share (`/s/<seller>`) | pubkey | 87 | 41 | 4.16 |
-| share | address (`%3A`) | 71 | 37 | 4.53 |
-| share | address (bare `:`) | 69 | 37 | 4.53 |
+| share | address (`%3A`, before 2026-09-06) | 71 | 37 | 4.53 |
+| share | address (no prefix, shipped) | 63 | 37 | 4.53 |
 | landing (`?pay=<12 hex>`) | pubkey | 104 | 41 | 4.16 |
-| landing | address (`%3A`) | 88 | 41 | 4.16 |
-| landing | address (bare `:`) | 86 | 41 | 4.16 |
+| landing | address (`%3A`, before 2026-09-06) | 88 | 41 | 4.16 |
+| landing | address (no prefix, shipped) | 80 | 37 | 4.53 |
 
-**The landing link is 41 modules in every form, which is parity with the
-pubkey share link and one version above the address one.** The proposal
-expected 37 for the address form; the measurement says otherwise, because
-byte-mode capacity at ECC `M` version 5 is 84 characters and the address
-landing link is 86–88 — the `%3A` a path encoder writes for the `:` costs two
-of those. So an address-route stall's overlay code is denser than its share
-code, at a density this app already ships on every pubkey-route stall. It is
-nowhere near the BIP21-plus-memo shape this rail refused (156 chars, 53
-modules, 3.34 px/module).
+**Re-measured 2026-09-06, when `stallPath` dropped the `ecash:` prefix from
+the address form.** Before it, the landing link was 41 modules in every
+form — byte-mode capacity at ECC `M` version 5 is 84 characters and the
+prefixed address landing link was 86–88, the `%3A` costing two of those. The
+bare form is 80, inside version 5, so an address-route stall's overlay code
+is now the same 37 modules as its share code; the pubkey forms are unchanged
+at 41, a density this app ships on every pubkey-route stall. Nowhere near
+the BIP21-plus-memo shape this rail refused (156 chars, 53 modules, 3.34
+px/module).
 
 Not enforced by a test: it is a property of the vendored encoder and the link
 shapes, and both are pinned elsewhere. Re-measure when either moves.
