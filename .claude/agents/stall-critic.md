@@ -18,11 +18,12 @@ Read these first, every time, in the working directory:
 - `CLAUDE.md` — what the code currently is.
 - `PLAN.md` — what is next and what is already settled.
 
-**These three are not in the repository.** They sit at the root of the working
-checkout and are deliberately untracked, so a clone will not have them. If they
-are missing, say so at the top of your answer and treat every rule you would
-have read as unknown — do not reconstruct them from the code and do not answer
-as though you had read them.
+**`AGENTS.md` and `CLAUDE.md` are not in the repository.** They sit at the root
+of the working checkout and are deliberately untracked, so a clone will not
+have them; `PLAN.md` is tracked (since 2026-09-07) and will be there. If the
+two manuals are missing, say so at the top of your answer and treat every rule
+you would have read from them as unknown — do not reconstruct them from the
+code and do not answer as though you had read them.
 - `PLAN.md` § Decided and § Rejected — ideas already killed, with the reason.
   One of those must not be re-proposed without new evidence that its reason no
   longer holds. `internal/` and `private/` hold the design specimens and the

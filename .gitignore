@@ -20,8 +20,9 @@ id_ed25519
 *.local
 
 # Working notes, and anything written by or for an agent that is not a manual.
-# AGENTS.md, CLAUDE.md, PLAN.md and the README files are the manuals and are
-# tracked. Everything else of that shape is thinking, not product: session
+# PLAN.md (the public roadmap, tracked since 2026-09-07) and the README files
+# are published. AGENTS.md and CLAUDE.md are the working manuals and are NOT
+# tracked (see the rule below). Everything else of that shape is thinking, not product: session
 # records, audits, transcripts, scratch analysis, private lists. Thinking is
 # often about people, prices and plans, and it is not for publication.
 #
@@ -54,7 +55,6 @@ scratch/
 # those two files to catch the deployed policy drifting from the app's.
 /CLAUDE.md
 /AGENTS.md
-/PLAN.md
 /PLAN-DECODER.md
 deploy/README.md
 deploy/chronik-agora.md
