@@ -415,10 +415,10 @@ describe('a-strangers-record-shaped-dust-walks-nothing', () => {
 
 describe('history-verifies-authorship-of-a-settings-row', () => {
     /**
-     * The live path deliberately does not check authorship — `loadManifest`
-     * and `loadDescriptions` do it themselves, and a stranger's `STL1`-shaped
-     * dust there costs one walk that finds nothing. A history **row** is
-     * different: it is a sentence on screen about what happened at this
+     * `classifyTx` names the shape and nothing else — `walkableFacts` is where
+     * the live path asks authorship before it walks, and since 2026-09-07 the
+     * live row is labelled with the same predicate too. A history **row** is
+     * a sentence on screen about what happened at this
      * stall, and "Stall settings published" over a stranger's dust is a claim
      * nothing checked. So the walk verifies the input script with the same
      * `txSignedByStall` the readers use, and labels what it finds.

@@ -20,6 +20,8 @@ import {
     FIRST_STALL_SUB,
     WITHHELD_ALL_LISTINGS,
     EVENT_BOOK,
+    EVENT_SETTINGS,
+    EVENT_SETTINGS_STRANGER,
 } from './ui/copy';
 
 /**
@@ -540,6 +542,71 @@ describe('a-strangers-record-shaped-dust-walks-nothing', () => {
         await flush();
         expect(chain.calls.stl1, 'the seller’s own still walks').toBe(1);
         expect(chain.calls.stld).toBe(0);
+    });
+});
+
+describe('a-live-settings-row-from-a-stranger-says-so', () => {
+    /**
+     * The walk already labels a stranger's settings row. The live path
+     * used to delete `signedByStall` before the ring, so the same dust
+     * printed "Stall settings published" — the sentence the constant's
+     * own docblock calls a claim nothing checked.
+     */
+    function openActivity(root: HTMLElement): void {
+        (root.querySelector('[data-role="tab-activity"]') as HTMLButtonElement).click();
+    }
+
+    it('labels a stranger’s live STL1 as another wallet’s', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const txid = 'c9'.repeat(32);
+        chain.txs.set(txid, {
+            txid,
+            inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+            outputs: [
+                { outputScript: STALL_SCRIPT },
+                { outputScript: stl1Output('Spoofed') },
+            ],
+        });
+        watches[0]!.hooks.onBurst?.([txid]);
+        await until(() => painted.view?.events?.[0]?.txid === txid);
+
+        const row = painted.view?.events?.[0];
+        expect(row?.kind).toBe('settings');
+        expect(row?.signedByStall).toBe(false);
+
+        openActivity(root);
+        await until(
+            () => root.querySelector('.event-kind')?.textContent === EVENT_SETTINGS_STRANGER,
+        );
+        expect(root.textContent).toContain(EVENT_SETTINGS_STRANGER);
+        expect(root.textContent).not.toContain(EVENT_SETTINGS);
+    });
+
+    it('labels the seller’s own live STL1 as published settings', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const txid = publish(
+            signedTx({
+                txid: 'ca'.repeat(32),
+                outputs: [STALL_SCRIPT, stl1Output('Ripe Beans')],
+                height: 800_000,
+            }),
+        );
+        watches[0]!.hooks.onBurst?.([txid]);
+        await until(() => painted.view?.events?.[0]?.txid === txid);
+        // The walk this publish starts must finish before the test ends, or a
+        // late paint writes `painted.view` under a later test.
+        await until(() => (root.textContent ?? '').includes('Ripe Beans'));
+
+        const row = painted.view?.events?.[0];
+        expect(row?.kind).toBe('settings');
+        expect(row?.signedByStall).toBe(true);
+
+        openActivity(root);
+        await until(() => root.querySelector('.event-kind')?.textContent === EVENT_SETTINGS);
+        expect(root.textContent).toContain(EVENT_SETTINGS);
+        expect(root.textContent).not.toContain(EVENT_SETTINGS_STRANGER);
     });
 });
 

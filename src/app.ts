@@ -58,6 +58,7 @@ import {
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions, type DescriptionLookup } from './net/descriptions';
+import { txSignedByStall } from './net/manifest';
 import {
     attributionFromAuthPubkey,
     type GenesisAttribution,
@@ -1801,11 +1802,14 @@ export function boot(
             // The state comes from the **frame** as well as the fetch: chronik
             // has just told this page a transaction is finalized, and the
             // stronger of the two answers is the one that stands.
-            // Authorship is the walk's question, not the live path's:
-            // `loadManifest` and `loadDescriptions` verify it themselves, so a
-            // label in the ring would decide in a second place what counts as
-            // the seller's signature (`classifyTx`'s own note).
-            delete row.signedByStall;
+            // A record row is labelled with the same imported
+            // `txSignedByStall` the walk already applies, so this is not a
+            // second opinion on what counts as the seller's signature.
+            if (row.kind === 'settings' || row.kind === 'description') {
+                row.signedByStall = txSignedByStall(tx, stall.hash);
+            } else {
+                delete row.signedByStall;
+            }
             row.status = strongerStatus(row.status, statusFromMessage(said?.get(txid)));
             recordEvent(txid, row);
             ringMoved = true;
