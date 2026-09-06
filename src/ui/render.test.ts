@@ -3011,14 +3011,12 @@ describe('genesis-link-arms-before-it-leaves', () => {
         const block = root.querySelector('[data-role="token-link"]') as HTMLElement;
         expect(block).not.toBeNull();
 
-        const link = block.querySelector('[data-role="token-link-url"]') as HTMLAnchorElement;
-        // The real destination from the start, so what is read is what is
-        // followed — the raw genesis string is never displayed.
+        const link = block.querySelector('[data-role="token-link-url"]') as HTMLElement;
+        // The whole destination is read from the start, so what is read is what
+        // is followed — the raw genesis string is never displayed. It is read
+        // and not held: whether the node carries one is
+        // `a-genesis-link-holds-no-destination-until-it-is-armed`.
         expect(link.textContent).toBe('https://example.com/beans');
-        expect(link.getAttribute('href')).toBe('https://example.com/beans');
-        expect(link.target, 'a stranger’s page never replaces the stall').toBe('_blank');
-        expect(link.rel).toContain('noopener');
-        expect(link.rel).toContain('noreferrer');
 
         const warning = block.querySelector('[data-role="token-link-warning"]') as HTMLElement;
         expect(warning.hidden, 'nothing is said until it is touched').toBe(true);
@@ -3070,6 +3068,111 @@ describe('genesis-link-arms-before-it-leaves', () => {
             for (const a of root.querySelectorAll('a')) {
                 expect(a.getAttribute('href') ?? '').not.toContain('javascript:');
             }
+        }
+    });
+});
+
+/*
+ * The inline node's `click` listener calls `preventDefault()` on every click,
+ * armed or not, so the `href` it used to carry served no path this page ever
+ * designed — the exit is the `go` anchor in the confirmation. What it did
+ * serve was middle-click, "open in new tab", "copy link address" and a drag
+ * to the address bar: four roads to a minter-written URL that reach no
+ * `click` listener, with no warning and no host named. So the node holds no
+ * destination at all until the reader has confirmed, and stays a focusable,
+ * announced control by `tabindex` and `role` instead of by an `href`.
+ *
+ * No `auxclick` or `contextmenu` assertion here: neither mounts the
+ * confirmation on the hole either, so both would be green against the defect
+ * this pins. What is load-bearing is that no `[href]` exists in the block
+ * before the confirmation mounts.
+ */
+describe('a-genesis-link-holds-no-destination-until-it-is-armed', () => {
+    const IN_GENESIS = 'https://example.com/beans';
+
+    const withUrl = () =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            tokens: new Map([[TOKEN_ID, { ...BEANS, url: IN_GENESIS }]]),
+        });
+
+    const blockOf = (root: HTMLElement): HTMLElement =>
+        root.querySelector('[data-role="token-link"]') as HTMLElement;
+    const controlOf = (root: HTMLElement): HTMLElement =>
+        blockOf(root).querySelector('[data-role="token-link-url"]') as HTMLElement;
+    const press = (node: HTMLElement): void => {
+        node.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    };
+
+    it('carries no href before the first touch, and none once armed', () => {
+        const { root } = paint(withUrl());
+        const block = blockOf(root);
+        const control = controlOf(root);
+        expect(control.tagName).toBe('A');
+        // Focusable and announced without a destination.
+        expect(control.getAttribute('tabindex')).toBe('0');
+        expect(control.getAttribute('role')).toBe('link');
+        expect(block.querySelectorAll('[href]'), 'inert text, not a destination').toHaveLength(0);
+
+        press(control);
+        expect(control.classList.contains('token-link-live'), 'armed').toBe(true);
+        expect(
+            block.querySelectorAll('[href]'),
+            'armed is still not addressed: the confirmation has not been asked for',
+        ).toHaveLength(0);
+    });
+
+    it('puts the one destination in the confirmation and nowhere else', () => {
+        const { root } = paint(withUrl());
+        const control = controlOf(root);
+        press(control);
+        press(control);
+
+        const hrefs = [...blockOf(root).querySelectorAll('[href]')];
+        expect(hrefs, 'exactly one destination in the whole block').toHaveLength(1);
+        const go = hrefs[0] as HTMLAnchorElement;
+        expect(go.closest('[data-role="leave-confirm"]')).not.toBeNull();
+        expect(go.getAttribute('data-role')).toBe('leave-confirm-go');
+        expect(go.getAttribute('href')).toBe(IN_GENESIS);
+        expect(go.target, 'a stranger’s page never replaces the stall').toBe('_blank');
+        expect(go.rel).toContain('noopener');
+        expect(go.rel).toContain('noreferrer');
+    });
+
+    it('arms from the keyboard the way a press does', () => {
+        for (const key of ['Enter', ' ']) {
+            const { root } = paint(withUrl());
+            document.body.append(root);
+            const control = controlOf(root);
+            control.focus();
+            expect(document.activeElement, `${key}: an href-less anchor still takes focus`).toBe(
+                control,
+            );
+
+            const stroke = (): void => {
+                control.dispatchEvent(
+                    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+                );
+            };
+            stroke();
+            expect(control.classList.contains('token-link-live'), `${key} arms it`).toBe(true);
+            expect(
+                (blockOf(root).querySelector('[data-role="token-link-warning"]') as HTMLElement)
+                    .hidden,
+                `${key}: the first stroke explains`,
+            ).toBe(false);
+            expect(
+                root.querySelector('[data-role="leave-confirm"]'),
+                `${key}: arming is not leaving`,
+            ).toBeNull();
+
+            stroke();
+            expect(
+                root.querySelector('[data-role="leave-confirm"]'),
+                `${key}: the second stroke asks`,
+            ).not.toBeNull();
+            root.remove();
         }
     });
 });

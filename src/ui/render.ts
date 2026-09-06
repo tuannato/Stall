@@ -5012,10 +5012,23 @@ function tokenDescription(view: StallView, tokenId: string): HTMLElement | undef
  * take the accent colour — the colour change *is* the signal that it is now
  * live, which is why the arming step does not also move it.
  *
+ * And it is text all the way down: **this node holds no `href` until the
+ * confirmation mounts.** The listener answered every click the same way, armed
+ * or not, so an inline `href` served no road this page ever designed — the exit
+ * is the `go` anchor below. What it did serve was middle-click, "open in new
+ * tab", "copy link address" and a drag to the address bar: four ways to a
+ * minter-written URL, none of which reaches a `click` listener, none of which
+ * had seen the warning or the host. It stays an `<a>` — the ellipsis, the
+ * shared `.token-link-url` dress the confirmation's own line wears, and no 44 px
+ * floor a button would owe — and stays focusable and announced by `tabindex`
+ * and `role="link"`, with Enter and Space doing what a press does.
+ *
  * Following it then asks once more, naming the host, because a link a reader
  * did not choose to follow, from a source nobody verified, on a page about
- * money, is a phishing surface. The confirm is an anchor, not `window.open`:
- * the navigation stays a user gesture, so no popup blocker eats it.
+ * money, is a phishing surface. The confirm's `go` is the only `[href]` in the
+ * block (`a-genesis-link-holds-no-destination-until-it-is-armed`), and it is an
+ * anchor rather than `window.open`: the navigation stays a user gesture, so no
+ * popup blocker eats it.
  */
 function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
     const href = tokenUrl(meta?.url);
@@ -5026,14 +5039,14 @@ function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
     wrap.setAttribute('data-role', 'token-link');
     wrap.append(el('div', 'token-link-label', copy.TOKEN_LINK_LABEL));
 
-    // One node throughout: an anchor carrying the real destination from the
-    // start, so what is read is what is followed. Before it is armed it is
-    // styled inert and its click arms instead of navigating.
+    // One node throughout, and it is the destination in full as *text*: read
+    // whole, held nowhere. No `href`, `target` or `rel` until the reader has
+    // confirmed, so there is nothing here to middle-click, copy or drag; the
+    // `tabindex` and the role give back what the missing `href` took away.
     const link = el('a', 'token-link-url');
     link.textContent = href;
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
+    link.tabIndex = 0;
+    link.setAttribute('role', 'link');
     link.setAttribute('data-role', 'token-link-url');
     link.setAttribute('data-focus-key', `token-link:${meta?.tokenId ?? 'unknown'}`);
     link.setAttribute('aria-describedby', 'token-link-warning');
@@ -5044,8 +5057,7 @@ function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
     warning.hidden = true;
 
     let armed = false;
-    link.addEventListener('click', (ev) => {
-        ev.preventDefault();
+    const activate = (): void => {
         if (!armed) {
             // First touch: say who wrote it, and let the colour say it is live.
             armed = true;
@@ -5054,6 +5066,21 @@ function tokenLink(meta: TokenMeta | undefined): HTMLElement | undefined {
             return;
         }
         wrap.append(confirmLeaving(href));
+    };
+    // No `preventDefault` here: an anchor with no `href` has no navigation to
+    // prevent, and that it has none is pinned by
+    // `a-genesis-link-holds-no-destination-until-it-is-armed`.
+    link.addEventListener('click', () => activate());
+    // A `role="link"` is a promise to a keyboard, and this one is not a native
+    // link any more: Enter and Space are the two strokes that keep it. Space
+    // scrolls the page on anything that is not a button, so it is prevented.
+    link.addEventListener('keydown', (ev) => {
+        const key = (ev as KeyboardEvent).key;
+        if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') {
+            return;
+        }
+        ev.preventDefault();
+        activate();
     });
 
     wrap.append(link);

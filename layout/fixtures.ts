@@ -71,7 +71,10 @@ export const meta = (tokenId: string, name: string, type?: string): TokenMeta =>
 });
 
 export const tokens = new Map<string, TokenMeta>([
-    [T1, meta(T1, 'Roasted Beans', 'SLP_TOKEN_TYPE_FUNGIBLE')],
+    // T1 carries a genesis `url` so the item face mounts `tokenLink` and the
+    // probe measures that block (a 12px nowrap line with an ellipsis) — no
+    // fixture carried one before 2026-09-07, so it had never been measured.
+    [T1, { ...meta(T1, 'Roasted Beans', 'SLP_TOKEN_TYPE_FUNGIBLE'), url: 'https://example.com/beans' }],
     [T2, meta(T2, 'Green Tea', 'SLP_TOKEN_TYPE_FUNGIBLE')],
     [NFT, meta(NFT, 'Pixel #1', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
     [GROUP, meta(GROUP, 'Pixel Set')],
