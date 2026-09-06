@@ -33,16 +33,29 @@ export function readSavedStall(): string | undefined {
     if (raw === null || raw.length > MAX_SAVED) {
         return undefined;
     }
-    // Storage is user-writable. Treat it exactly like a pasted address.
-    return parseSellerParam(raw).kind === 'invalid' ? undefined : raw;
+    // Storage is user-writable. Treat it exactly like a pasted address, and
+    // answer the canonical form: a stall saved from a link in capitals is
+    // the same stall as one opened in lower case.
+    return canonicalStall(raw);
+}
+
+/** The one string one stall is stored and compared as, or nothing. */
+export function canonicalStall(raw: string): string | undefined {
+    const parsed = parseSellerParam(raw);
+    return parsed.kind === 'address'
+        ? parsed.address
+        : parsed.kind === 'pubkey'
+          ? parsed.pubkeyHex
+          : undefined;
 }
 
 export function saveStall(raw: string): void {
-    if (raw.length > MAX_SAVED || parseSellerParam(raw).kind === 'invalid') {
+    const canonical = raw.length > MAX_SAVED ? undefined : canonicalStall(raw);
+    if (canonical === undefined) {
         return;
     }
     try {
-        localStorage.setItem(KEY, raw);
+        localStorage.setItem(KEY, canonical);
     } catch {
         // Nothing to tell the seller: the stall they are looking at is unchanged.
     }
@@ -62,7 +75,7 @@ export function isSavedStall(raw: string | undefined): boolean {
         return false;
     }
     const saved = readSavedStall();
-    return saved !== undefined && saved === raw;
+    return saved !== undefined && saved === canonicalStall(raw);
 }
 
 /**
@@ -106,10 +119,11 @@ export function readPinnedStalls(): string[] {
         if (typeof entry !== 'string' || entry.length > MAX_SAVED) {
             continue;
         }
-        if (parseSellerParam(entry).kind === 'invalid' || pins.includes(entry)) {
+        const canonical = canonicalStall(entry);
+        if (canonical === undefined || pins.includes(canonical)) {
             continue;
         }
-        pins.push(entry);
+        pins.push(canonical);
         if (pins.length === MAX_PINNED_STALLS) {
             break;
         }
@@ -130,24 +144,30 @@ function writePins(pins: readonly string[]): void {
 }
 
 export function pinStall(raw: string): void {
-    if (raw.length > MAX_SAVED || parseSellerParam(raw).kind === 'invalid') {
+    const canonical = raw.length > MAX_SAVED ? undefined : canonicalStall(raw);
+    if (canonical === undefined) {
         return;
     }
     const pins = readPinnedStalls();
-    if (pins.includes(raw) || pins.length >= MAX_PINNED_STALLS) {
+    if (pins.includes(canonical) || pins.length >= MAX_PINNED_STALLS) {
         // Full is a refusal, never an eviction — the copy in the studio says
         // so, which keeps this silent return from being a silent failure.
         return;
     }
-    writePins([...pins, raw]);
+    writePins([...pins, canonical]);
 }
 
 export function unpinStall(raw: string): void {
-    writePins(readPinnedStalls().filter((pin) => pin !== raw));
+    const canonical = canonicalStall(raw);
+    writePins(readPinnedStalls().filter((pin) => pin !== canonical));
 }
 
 export function isPinnedStall(raw: string | undefined): boolean {
-    return raw !== undefined && readPinnedStalls().includes(raw);
+    if (raw === undefined) {
+        return false;
+    }
+    const canonical = canonicalStall(raw);
+    return canonical !== undefined && readPinnedStalls().includes(canonical);
 }
 
 /** True when one more pin would be refused. */

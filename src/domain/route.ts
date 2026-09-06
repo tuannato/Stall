@@ -1,12 +1,16 @@
 import { decodeCashAddress, isValidCashAddress } from 'ecashaddrjs';
-import type { BroadcastParams, PubKeyHex, RouteParse } from './state';
+import type { BroadcastParams, RouteParse } from './state';
 
 const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 
 export function parseSellerParam(raw: string): RouteParse {
-    const trimmed = raw.trim();
+    // Lower-cased first: cashaddr is case-insensitive while single-case, and
+    // a QR code or a wallet's copy presents it in capitals — measured live,
+    // `/s/QPJQ…` read as "unreadable" while the same address in lower case
+    // opened the stall. A pubkey is hex, which lowers the same way.
+    const trimmed = raw.trim().toLowerCase();
     if (PUBKEY_RE.test(trimmed)) {
-        return { kind: 'pubkey', pubkeyHex: trimmed.toLowerCase() };
+        return { kind: 'pubkey', pubkeyHex: trimmed };
     }
     const withPrefix = trimmed.includes(':') ? trimmed : `ecash:${trimmed}`;
     // The prefix is demanded here, where a refusal has a screen. Left
@@ -40,10 +44,6 @@ export function parseSellerParam(raw: string): RouteParse {
     } catch {
         return { kind: 'invalid', raw };
     }
-}
-
-export function isCompressedPubKeyHex(value: string): value is PubKeyHex {
-    return PUBKEY_RE.test(value);
 }
 
 /** The apex and nothing else. `/s/...` is a stall; anything else is unreadable. */

@@ -338,3 +338,30 @@ describe('a-foreign-prefix-is-not-a-stall-address', () => {
         expect(parseSellerParam(own.slice('ecash:'.length)).kind).toBe('address');
     });
 });
+
+/*
+ * Cashaddr is case-insensitive as long as it is single-case, and a QR code
+ * or a wallet's copy often presents it in capitals. Measured live
+ * 2026-09-06: `/s/QPJQ…` and `/s/ecash:QPJQ…` painted "This link is
+ * unreadable" while the lower-case form opened the stall.
+ */
+describe('an-upper-case-address-is-the-same-stall', () => {
+    const own = encodeCashAddress('ecash', 'p2pkh', '22'.repeat(20));
+
+    it('resolves the bare and the prefixed capitals to the lower-case address', () => {
+        for (const raw of [own.toUpperCase(), own.slice('ecash:'.length).toUpperCase(), `ecash:${own.slice('ecash:'.length).toUpperCase()}`]) {
+            const parsed = parseSellerParam(raw);
+            expect(parsed.kind, raw).toBe('address');
+            expect(parsed.kind === 'address' && parsed.address).toBe(own);
+        }
+        expect(stallPath(own.toUpperCase())).toBe(stallPath(own));
+    });
+
+    it('still refuses a foreign prefix in capitals and a pubkey in capitals stays a pubkey', () => {
+        const foreign = encodeCashAddress('etoken', 'p2pkh', '22'.repeat(20));
+        expect(parseSellerParam(foreign.toUpperCase()).kind).toBe('invalid');
+        const pk = `02${'ab'.repeat(32)}`;
+        expect(parseSellerParam(pk.toUpperCase())).toEqual({ kind: 'pubkey', pubkeyHex: pk });
+    });
+});
+

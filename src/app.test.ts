@@ -279,6 +279,16 @@ describe('default-stall-does-not-trap-the-door', () => {
         expect(location.pathname).toContain('/s/');
     });
 
+    it('a-link-in-capitals-is-rewritten-to-the-canonical-path, search and state kept', () => {
+        const lower = 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09';
+        const upper = `ecash:${lower.slice('ecash:'.length).toUpperCase()}`;
+        window.history.replaceState({ pasted: true }, '', `/s/${upper}?pay=abcdef012345`);
+        boot(document.createElement('div'), async () => homeState());
+        expect(location.pathname).toBe(`/s/${encodeURIComponent(lower)}`);
+        expect(location.search).toBe('?pay=abcdef012345');
+        expect((history.state as { pasted?: boolean }).pasted).toBe(true);
+    });
+
     it('reloading a door reached via open-another stays on the door', () => {
         localStorage.setItem('stall.default', ADDR);
         // onGoHome stamps the entry; the stamp survives a reload of it, which a

@@ -2045,6 +2045,19 @@ export function boot(
     if (saved !== undefined && isHomePath(location.pathname) && !choseTheDoor) {
         history.replaceState(null, '', stallPath(saved));
     }
+    // A stall path in capitals, or with a literal colon, is the same stall;
+    // the share field, the share QR and every landing link read
+    // `location.pathname` verbatim, so a visitor who arrived by such a link
+    // would print it onward. Rewritten in place, search and state kept: the
+    // `?pay=` hint is still applied once from this load, and the entry's own
+    // `pasted` / `door` stamp survives.
+    const here = sellerFromPath(location.pathname);
+    if (here !== undefined) {
+        const canonical = stallPath(here);
+        if (canonical !== location.pathname) {
+            history.replaceState(history.state, '', `${canonical}${location.search}`);
+        }
+    }
     void refresh();
     // Independent of the offer read: a feed that is slow or down must not hold
     // up the shop, and a shop that fails to load still has no use for a rate.

@@ -179,3 +179,33 @@ describe('a-saved-currency-that-is-not-usd-is-cleared', () => {
         expect(readSavedFiat()).toBe('usd');
     });
 });
+
+/*
+ * The route lower-cases an address before it reads it (a QR code or a
+ * wallet's copy presents cashaddr in capitals), so storage must hold and
+ * compare the same canonical string: a stall saved from a link in capitals
+ * is the stall opened in lower case, not a second one.
+ */
+describe('a-stall-saved-in-capitals-is-the-same-saved-stall', () => {
+    const UPPER = `ecash:${ADDRESS.slice('ecash:'.length).toUpperCase()}`;
+
+    it('reads a default stall stored in capitals as the canonical address', () => {
+        localStorage.setItem(KEY, UPPER);
+        expect(readSavedStall()).toBe(ADDRESS);
+        expect(isSavedStall(ADDRESS)).toBe(true);
+        expect(isSavedStall(UPPER)).toBe(true);
+        saveStall(UPPER);
+        expect(localStorage.getItem(KEY)).toBe(ADDRESS);
+    });
+
+    it('pins one stall once whatever case it arrived in', () => {
+        pinStall(UPPER);
+        pinStall(ADDRESS);
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+        expect(isPinnedStall(UPPER)).toBe(true);
+        unpinStall(UPPER);
+        expect(readPinnedStalls()).toEqual([]);
+        localStorage.setItem('stall.pins', JSON.stringify([UPPER, ADDRESS]));
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+    });
+});
