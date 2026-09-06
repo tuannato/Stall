@@ -5,6 +5,7 @@ import {
     hash160Hex,
     liteManifestText,
     liteSignedByStall,
+    opReturnPushes as edgeOpReturnPushes,
     p2pkhHashFromCashaddr,
     resolveManifestTextByHash,
 } from '../functions/lib/resolve';
@@ -15,6 +16,7 @@ import { decodeCashAddress, encodeCashAddress } from 'ecashaddrjs';
 import { getStackArray } from 'ecash-lib';
 import { decodeManifestPushes, encodeManifestHex } from './domain/manifest';
 import { txSignedByStall } from './net/manifest';
+import { opReturnPushes } from './net/script';
 
 /**
  * The pure half of the per-stall unfurl (`functions/lib/unfurl.ts`). The
@@ -112,6 +114,7 @@ describe('the-edge-reader-mirrors-the-app', () => {
     function protoTx(opts: {
         txidByte: number;
         stl1Hex?: string;
+        outputScriptHex?: string;
         signed?: boolean;
         height?: number;
         isFinal?: boolean;
@@ -136,10 +139,12 @@ describe('the-edge-reader-mirrors-the-app', () => {
             outputs: [
                 {
                     sats: 0n,
-                    outputScript:
-                        opts.stl1Hex === undefined
-                            ? hexBytes(STALL_SCRIPT_HEX)
-                            : hexBytes(`6a${opts.stl1Hex}`),
+                    outputScript: hexBytes(
+                        opts.outputScriptHex ??
+                            (opts.stl1Hex === undefined
+                                ? STALL_SCRIPT_HEX
+                                : `6a${opts.stl1Hex}`),
+                    ),
                     spentBy: undefined,
                     token: undefined,
                     plugins: {},
@@ -230,6 +235,59 @@ describe('the-edge-reader-mirrors-the-app', () => {
             expect(liteSignedByStall(tx, HASH)).toBe(want);
             expect(txSignedByStall(tx as never, HASH)).toBe(want);
         }
+    });
+
+    it('the-edge-and-the-app-extract-the-same-pushes', () => {
+        /**
+         * Both real extractors, fed output-script hex — never a pre-split
+         * array. `manifest-lite-agrees-with-the-app` compares decode on
+         * pushes `getStackArray` already split, so it cannot see this drift.
+         */
+        const record = encodeManifestHex('Ripe Beans', 1)!;
+        const rows: readonly { name: string; hex: string }[] = [
+            { name: 'a real minimal record', hex: `6a${record}` },
+            { name: 'OP_PUSHDATA1', hex: '6a4c03aabbcc' },
+            { name: 'OP_PUSHDATA2', hex: '6a4d0300aabbcc' },
+            { name: 'OP_PUSHDATA4', hex: '6a4e03000000aabbcc' },
+            { name: 'OP_0', hex: '6a00' },
+            { name: 'a push running off the end', hex: '6a04aabbcc' },
+            { name: 'a non-6a script', hex: '5101aa' },
+            { name: 'an odd-length hex', hex: '6a0' },
+            { name: 'a non-hex string', hex: '6axx' },
+        ];
+        for (const row of rows) {
+            const app = opReturnPushes(row.hex);
+            const edge = edgeOpReturnPushes(row.hex);
+            expect(edge, row.name).toEqual(app);
+        }
+    });
+
+    it('a-record-the-app-cannot-read-never-titles-its-own-card', async () => {
+        /**
+         * A well-formed `STL1` whose pushes are `OP_PUSHDATA2` — opcode 77,
+         * which the app's reader refuses. The edge used to accept it and
+         * crown a name the page would never paint.
+         */
+        const pushdata2 = (data: Uint8Array): string => {
+            const lo = (data.length & 0xff).toString(16).padStart(2, '0');
+            const hi = ((data.length >> 8) & 0xff).toString(16).padStart(2, '0');
+            return `4d${lo}${hi}${bytesToHex(data)}`;
+        };
+        const script = `6a${pushdata2(hexBytes('53544c31'))}${pushdata2(hexBytes('53686f70'))}${pushdata2(hexBytes('01'))}`;
+        expect(opReturnPushes(script), 'the app cannot read this encoding').toBeUndefined();
+        const pageBytes = protoPage([
+            protoTx({
+                txidByte: 0x11,
+                outputScriptHex: script,
+                height: 9,
+                isFinal: true,
+            }),
+        ]);
+        const fetcher = async (path: string) =>
+            path.includes('/script/') || path.includes('/lokad-id/')
+                ? pageBytes
+                : undefined;
+        expect(await resolveManifestTextByHash(HASH, fetcher)).toBeUndefined();
     });
 
     it('manifest-lite-agrees-with-the-app', () => {

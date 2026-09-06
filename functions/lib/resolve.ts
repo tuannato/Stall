@@ -205,7 +205,7 @@ const MAX_NAME = 32;
 const MAX_TAGLINE = 64;
 
 /** OP_RETURN pushes, mirroring `opReturnPushes` for the shapes STL1 uses. */
-function opReturnPushes(outputScriptHex: string): Uint8Array[] | undefined {
+export function opReturnPushes(outputScriptHex: string): Uint8Array[] | undefined {
     const bytes = hexToBytes(outputScriptHex);
     if (bytes === undefined || bytes.length === 0 || bytes[0] !== 0x6a) {
         return undefined;
@@ -224,12 +224,6 @@ function opReturnPushes(outputScriptHex: string): Uint8Array[] | undefined {
             }
             len = bytes[i]!;
             i += 1;
-        } else if (op === 77) {
-            if (i + 1 >= bytes.length) {
-                return undefined;
-            }
-            len = bytes[i]! | (bytes[i + 1]! << 8);
-            i += 2;
         } else {
             return undefined;
         }
