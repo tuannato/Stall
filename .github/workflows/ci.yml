@@ -5,6 +5,10 @@
 # here first. The layout probe is not in this job: it needs a Chrome and a
 # box whose speed is part of its 150 s ceiling (layout/PROBE-RULES.md
 # "Budget"), so it runs on demand below and never blocks a push.
+#
+# pnpm comes from corepack, pinned by `packageManager` in package.json — no
+# third-party action for it, and nothing pinned twice. The two GitHub actions
+# are the v5 lines, which target the Node 24 runtime the runners now force.
 name: ci
 
 on:
@@ -22,13 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        # Version comes from package.json "packageManager"; nothing pinned twice.
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+      - run: corepack enable && corepack prepare --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
@@ -42,11 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+      - run: corepack enable && corepack prepare --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:layout
