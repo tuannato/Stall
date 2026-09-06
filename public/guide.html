@@ -67,7 +67,9 @@
               <span class="step-copy">
                 The one Cashtab shows on its Receive screen. Your stall opens at
                 <b class="mono">stall.cash/s/</b> + your address. That link is
-                yours to share; nothing is sent, nothing is stored.
+                yours to share. Nothing is sent to us; what this browser keeps
+                — the stall you open by default and the ones you pinned — stays
+                in your own browser.
               </span>
             </p>
           </li>
@@ -122,8 +124,8 @@
         <h2 class="section-title">Quotes — name a price, get paid directly</h2>
         <p class="lede-sm">
           A quote is a small record your wallet signs onto the chain: your price
-          for one token you minted, in USD or XEC. Buyers tap Pay and their
-          wallet pays your address. You deliver the item yourself.
+          for a token your wallet minted, in USD or XEC. Buyers tap Pay and
+          their wallet pays your address. You deliver the item yourself.
         </p>
 
         <h3 class="sub-title">Seller — set a price</h3>
@@ -205,14 +207,19 @@
             <p class="truth-title">Yours.</p>
             <p class="truth-copy">
               Your price per whole token, in USD or XEC, signed by your stall’s
-              wallet. It stays until you change it.
+              wallet. The record stays on chain until you publish over it.
             </p>
           </div>
           <div class="truth">
             <p class="truth-title">Your token.</p>
             <p class="truth-copy">
-              Only a token your stall minted can take a quote. A quote on
-              somebody else’s token would borrow its name and its picture.
+              The editor refuses a new quote on a token another wallet minted
+              — it would borrow that token’s name and picture — warns when it
+              cannot tell who minted one, refuses the price field on a token
+              this page does not carry, and keeps a quote already published.
+              On a row, “Genesis names this stall” says where the token came
+              from and never who owns its name; “Token minted by another
+              wallet” is the warning a buyer sees.
             </p>
           </div>
           <div class="truth">
@@ -221,6 +228,10 @@
               Payment goes to your address. No escrow, no middleman. The page
               shows <em>paid</em>, never <em>delivered</em> — delivery is the
               seller’s promise, as with any seller you reach through a chat.
+              Trust the seller as you would there; this page cannot vouch for
+              them. Stall is not a party to the sale: it holds no account and
+              no funds, takes no cut of a payment, and cannot reverse or
+              mediate one.
             </p>
           </div>
           <div class="truth">
@@ -233,9 +244,14 @@
           <div class="truth">
             <p class="truth-title">Converted once.</p>
             <p class="truth-copy">
-              A USD quote becomes XEC at the moment of paying. An XEC quote
-              never converts. A seller may allow a shortfall of 1–100%, and a
-              payment within it counts as paid in full.
+              A USD quote becomes XEC at the moment of paying, at CoinGecko’s
+              rate as this page read it; the seller receives XEC and checks it
+              against their own reckoning. An XEC quote never converts. A
+              seller may publish a tolerance of 1–100%: their record says a
+              payment short by up to that much still counts as paid in full.
+              The page prints the tolerance and never judges whether a payment
+              covered a quote — the seller decides. With none published it
+              says “The seller has not stated a tolerance.”
             </p>
           </div>
           <div class="truth">
@@ -248,15 +264,18 @@
           <div class="truth">
             <p class="truth-title">Public.</p>
             <p class="truth-copy">
-              Quotes, payments and the memo that names the item are chain data
-              anyone can read. The memo is the payer’s claim, not a receipt.
+              Quotes, payments, the memo that names the item and the address a
+              payment was sent from are chain data anyone can read, on the
+              Activity tab of the seller’s page. The memo is the payer’s claim,
+              not a receipt.
             </p>
           </div>
           <div class="truth">
             <p class="truth-title">Not shown.</p>
             <p class="truth-copy">
               Firma, fCHF, fEUR, XECX and tokens named after well-known coins
-              never appear on a stall, listed or quoted.
+              are not painted as a listing or a quote. The list is a snapshot
+              this page ships, and it can fall behind.
             </p>
           </div>
         </div>

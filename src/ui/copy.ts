@@ -1320,7 +1320,7 @@ export const PAY_FINE_MEMO =
     'The memo names the item and quantity \u2014 both are public parts of the transaction.';
 export const PAY_FINE_SOME_WALLETS = 'Some wallets pay without the memo.';
 export const PAY_FINE_DELIVERY =
-    'Arrange delivery with the seller off-chain. This page cannot tell that a payment happened, and never that anything was delivered.';
+    'Arrange delivery with the seller off-chain. This page cannot tell that a payment was for this item \u2014 the memo is the payer\u2019s own claim \u2014 and never that anything was delivered.';
 /**
  * That the money cannot come back. Below the card, which keeps its one
  * sentence; no refund verb, because this page composes no refund and must
@@ -1336,8 +1336,9 @@ export const PAY_FINE_WHOLE_ITEMS =
  * Never a verdict and never a check mark: this says what the seller wrote,
  * and whether a particular payment covered it is the seller's call.
  */
+/** The seller's own published byte, attributed to them: the page prints it and rules on nothing. */
 export const payTolerance = (pct: number): string =>
-    `The seller accepts within ${pct}% of this quote.`;
+    `The seller\u2019s record says a payment short by up to ${pct}% still counts as paid in full.`;
 export const PAY_TOLERANCE_WIDE = 'The seller accepts more than the app shows.';
 export const PAY_TOLERANCE_NONE = 'The seller has not stated a tolerance.';
 
@@ -1360,7 +1361,7 @@ export const DESC_TOLERANCE_LABEL = 'Tolerance';
 /** A preset on the segment, and the same figure inside the summary line. */
 export const tolerancePreset = (pct: number): string => `${pct}%`;
 export const DESC_TOLERANCE_HINT =
-    'A payment within this margin of your quote still counts as paid in full \u2014 rates move between glance and signature.';
+    'A payment within this margin of your quote is one you accept as paid in full \u2014 rates move between glance and signature.';
 export const DESC_TOLERANCE_NONE = 'No tolerance is stated on this quote yet.';
 /**
  * A published value none of the presets can express. Shown, disabled, and

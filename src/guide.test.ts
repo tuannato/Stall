@@ -10,6 +10,9 @@ import {
     HANDOFF_PRICE_IS_NOT_THE_ROW,
     PAY_NOTE_DIRECT,
     PAY_NOTE_FINAL,
+    PAY_TOLERANCE_NONE,
+    QUOTE_MINTED_CHIP,
+    QUOTE_NOT_MINTED_HERE,
     STUDIO_CARD_ITEMS,
     STUDIO_DESCRIBE_ROW,
 } from './ui/copy';
@@ -72,6 +75,13 @@ describe('the-guide-quotes-the-apps-own-sentences', () => {
             PAY_NOTE_DIRECT,
             PAY_NOTE_FINAL,
             DESC_PRICE_LEDE,
+            // The quote chapter's own three: the provenance chip, the
+            // borrowed-id warning and the missing-tolerance line, so a copy
+            // move in the app turns this page red rather than leaving a
+            // second truth standing.
+            QUOTE_MINTED_CHIP,
+            QUOTE_NOT_MINTED_HERE,
+            PAY_TOLERANCE_NONE,
         ]) {
             expect(html, sentence).toContain(flat(sentence));
         }
@@ -89,6 +99,37 @@ describe('the-guide-quotes-the-apps-own-sentences', () => {
         for (const name of ['Firma', 'fCHF', 'fEUR', 'XECX']) {
             expect(html).toContain(name);
         }
+    });
+});
+
+/*
+ * The tolerance is the seller's published byte. The page prints it and
+ * never rules on whether a payment covered a quote — PLAN § D: "the
+ * seller's stated tolerance informs, and the seller decides". A guide that
+ * said a payment "counts as paid in full" in its own voice was this page
+ * adjudicating, on the one sentence a dispute would quote.
+ */
+describe('the-guide-does-not-say-a-payment-counts-as-paid-in-full', () => {
+    it('attributes the tolerance to the seller and leaves the verdict to them', () => {
+        const html = flat(read('public', 'guide.html'));
+        expect(html).not.toMatch(/a payment within it counts as paid in full/i);
+        expect(html).toContain('the seller decides');
+        expect(html).toContain('record says');
+    });
+});
+
+/*
+ * The rate a USD quote is converted through comes from one host the policy
+ * allows and nothing else; the guide names it, read from the same policy
+ * file the app ships, so a change of feed turns this page red.
+ */
+describe('the-guide-names-the-rate-source-the-csp-allows', () => {
+    it('names CoinGecko because _headers allows api.coingecko.com', () => {
+        const headers = read('public', '_headers');
+        const csp = headers.split('\n').find((line) => line.includes('Content-Security-Policy'))!;
+        const connect = csp.split(';').find((part) => part.trim().startsWith('connect-src'))!;
+        expect(connect).toContain('https://api.coingecko.com');
+        expect(flat(read('public', 'guide.html'))).toContain('CoinGecko');
     });
 });
 
