@@ -30,11 +30,13 @@ import { opReturnPushes, p2pkhHashFromOutputScript } from './script';
  * consistently — and a miss is a delay until the next event or the retry
  * control, never a wrong screen.
  *
- * **Authorship is deliberately not checked here.** `loadManifest` and
- * `loadDescriptions` verify the input script themselves, and doing it twice
- * would mean this module deciding what counts as the seller's signature in a
- * second place. A stranger's `STL1`-shaped dust therefore costs one walk that
- * finds nothing — never a painted lie.
+ * **Authorship is deliberately not checked here.** `historyEventOf` labels
+ * a walked record from this shape, and a stranger's `STL1` must stay
+ * `kind === 'settings'` so Activity can print `EVENT_SETTINGS_STRANGER`.
+ * The live path asks `walkableFacts` instead, which applies the same
+ * imported `txSignedByStall` the walks already use, so nothing a walk
+ * would accept is refused. The filter is negative for that reason, and
+ * there is no floor.
  */
 export type FactsToRead = {
     /** An `STL1` record: the stall's name, look and attachment flags. */
@@ -104,6 +106,34 @@ export function classifyTx(
         settings,
         descriptions,
         holdings: movesAWantedToken(tx, stallOutputScript.toLowerCase(), wantedTokenIds),
+    };
+}
+
+/**
+ * Whether the live path should walk the facts `classifyTx` named.
+ *
+ * Shape stays on `classifyTx` so a stranger's record is still a settings
+ * (or description) event. This is the one place the live path asks
+ * authorship: the same imported `txSignedByStall` the walks apply
+ * (`recordFromTx`, `collectTx` both return early when unsigned), so
+ * nothing a walk would accept is refused. The filter is negative for
+ * that reason — unsigned clears `settings` and `descriptions`, signed
+ * keeps them — and there is no floor: a flood past the burst ceiling
+ * still asks everything rather than drop a real record. Holdings are
+ * not a record and are untouched.
+ */
+export function walkableFacts(
+    facts: FactsToRead,
+    tx: ChainTx,
+    hash: string,
+): FactsToRead {
+    if (txSignedByStall(tx, hash)) {
+        return facts;
+    }
+    return {
+        settings: false,
+        descriptions: false,
+        holdings: facts.holdings,
     };
 }
 

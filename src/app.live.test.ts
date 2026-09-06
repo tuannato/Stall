@@ -502,6 +502,47 @@ describe('a-sale-does-not-walk-the-settings', () => {
     });
 });
 
+describe('a-strangers-record-shaped-dust-walks-nothing', () => {
+    /**
+     * Anyone can pay this address an `STL1`-shaped output. `classifyTx`
+     * names the shape so the Activity row stays a settings record; the
+     * walk is `walkableFacts`'s question, and a stranger's dust must not
+     * start two capped history walks in every open tab.
+     */
+    it('calls neither loader for a stranger’s STL1, and still walks the seller’s own', async () => {
+        bootStall(stallEmpty());
+        await flush();
+
+        const stranger = 'c3'.repeat(32);
+        chain.txs.set(stranger, {
+            txid: stranger,
+            inputs: [{ inputScript: '00', outputScript: STRANGER_SCRIPT }],
+            outputs: [
+                { outputScript: STALL_SCRIPT },
+                { outputScript: stl1Output('Spoofed') },
+            ],
+        });
+        watches[0]!.hooks.onBurst?.([stranger]);
+        await flush();
+        expect(chain.calls.stl1, 'a stranger’s STL1 is not a settings walk').toBe(
+            0,
+        );
+        expect(chain.calls.stld, 'nor a descriptions walk').toBe(0);
+
+        const mine = publish(
+            signedTx({
+                txid: 'c4'.repeat(32),
+                outputs: [STALL_SCRIPT, stl1Output('Ripe Beans')],
+                height: 800_000,
+            }),
+        );
+        watches[0]!.hooks.onBurst?.([mine]);
+        await flush();
+        expect(chain.calls.stl1, 'the seller’s own still walks').toBe(1);
+        expect(chain.calls.stld).toBe(0);
+    });
+});
+
 describe('an-unclassifiable-event-asks-everything', () => {
     /**
      * A transaction we could not fetch is one we cannot rule out. Asking costs

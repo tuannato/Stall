@@ -17,6 +17,7 @@ import {
     paymentMemoOf,
     touchesAgora,
     unionFacts,
+    walkableFacts,
     bookShapeOf,
 } from './classify';
 import { p2pkhOutputScript } from './script';
@@ -377,6 +378,40 @@ function walked(opts: {
         tokenEntries: opts.tokens?.map((tokenId) => ({ tokenId })),
     };
 }
+
+describe('a-strangers-record-shaped-dust-walks-nothing', () => {
+    /**
+     * `classifyTx` stays shape-only — a stranger's `STL1` is still a
+     * settings-shaped event so Activity can label it. The live path asks
+     * `walkableFacts` instead, with the same `txSignedByStall` the walks
+     * apply, so a walk that would find nothing is not started.
+     */
+    it('clears record flags on an unsigned tx and keeps them on a signed one', () => {
+        const unsigned = tx({ outputs: [STALL, stl1()], tokens: [TOKEN_WORN] });
+        const shape = classifyTx(unsigned, STALL, WANTED);
+        expect(shape.settings, 'shape is still a settings record').toBe(true);
+        expect(shape.holdings, 'a wanted token at the script is holdings').toBe(true);
+
+        const gated = walkableFacts(shape, unsigned, HASH);
+        expect(gated.settings).toBe(false);
+        expect(gated.descriptions).toBe(false);
+        expect(gated.holdings, 'holdings are not a record').toBe(true);
+
+        const signed = walked({ signedBy: SELLER_PK, outputs: [STALL, stl1()] });
+        const signedShape = classifyTx(signed, STALL, WANTED);
+        expect(signedShape.settings).toBe(true);
+        expect(walkableFacts(signedShape, signed, HASH)).toEqual(signedShape);
+
+        const unsignedDesc = tx({
+            outputs: [STALL, stld(TOKEN_OTHER, 'Grown on the hill')],
+        });
+        const descShape = classifyTx(unsignedDesc, STALL, WANTED);
+        expect(descShape.descriptions).toBe(true);
+        expect(walkableFacts(descShape, unsignedDesc, HASH).descriptions).toBe(
+            false,
+        );
+    });
+});
 
 describe('history-verifies-authorship-of-a-settings-row', () => {
     /**

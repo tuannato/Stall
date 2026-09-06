@@ -76,6 +76,7 @@ import {
     statusFromMessage,
     strongerStatus,
     unionFacts,
+    walkableFacts,
     type EventContext,
 } from './net/classify';
 
@@ -1808,7 +1809,7 @@ export function boot(
             row.status = strongerStatus(row.status, statusFromMessage(said?.get(txid)));
             recordEvent(txid, row);
             ringMoved = true;
-            facts = unionFacts(facts, classified);
+            facts = unionFacts(facts, walkableFacts(classified, tx, stall.hash));
         }
         if (claimed !== generation) {
             return;
