@@ -850,14 +850,20 @@ describe('an-overlay-that-cannot-mount-does-not-stop-the-live-paint', () => {
      * how an overlay the render gate refuses and the paint gate honours stops a
      * stall updating for good, with nothing on screen to say why.
      *
-     * The poster is the reachable case: past the QR ceiling `posterControl`
-     * paints no launcher and `posterSheet` mounts nothing, which is exactly
-     * what `onOpenPoster`'s own comment has always warned about.
+     * The broadcast is the reachable case: `overlayMounts` refuses every
+     * overlay on a stream overlay (nothing on a stream can be clicked), so a
+     * poster overlay set on a broadcast view mounts nothing. The poster's own
+     * refusal — a share link past the QR ceiling — used to be the case here,
+     * until `shareUrl()` stopped carrying the address bar's junk (2026-09-07);
+     * that gate stays as insurance and is no longer reachable from a URL.
      */
     it('paints while an overlay that mounts nothing is set', async () => {
-        window.history.replaceState(null, '', `${stallPath(PK)}?m=${'a'.repeat(2600)}`);
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast`);
         const { root } = bootStall(
-            stallEmpty({ overlay: { kind: 'poster', format: 'print' } }),
+            stallEmpty({
+                overlay: { kind: 'poster', format: 'print' },
+                broadcast: BROADCAST_FIXED,
+            }),
         );
         await flush();
         expect(root.querySelector('.sheet-scrim'), 'no sheet is on screen').toBeNull();

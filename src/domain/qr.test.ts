@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { qrMatrix } from './qr';
+import { qrMatrix, fitsQr, MAX_QR_CHARS } from './qr';
 
 describe('qrMatrix', () => {
     it('returns a square matrix of booleans', () => {
@@ -31,5 +31,18 @@ describe('qrMatrix', () => {
                 '0453544c31'.repeat(20),
         ).length;
         expect(long).toBeGreaterThan(short);
+    });
+});
+
+describe('a-link-past-the-scan-cap-is-refused-before-the-matrix', () => {
+    /**
+     * `shareUrl()` now keeps only a well-formed `?m=`, so no share link reaches
+     * this cap from the address bar any more — the guard stays as insurance,
+     * and this is the one place it is pinned directly.
+     */
+    it('fits at the cap, refuses one over, and the matrix throws rather than paints', () => {
+        expect(fitsQr('a'.repeat(MAX_QR_CHARS))).toBe(true);
+        expect(fitsQr('a'.repeat(MAX_QR_CHARS + 1))).toBe(false);
+        expect(() => qrMatrix('a'.repeat(MAX_QR_CHARS + 1))).toThrow(RangeError);
     });
 });

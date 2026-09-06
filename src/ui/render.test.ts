@@ -2335,10 +2335,11 @@ describe('unscannable-link-drops-the-qr-not-the-page', () => {
      * again, so the retry control could not rescue it. Reproduced: a 2,603
      * character search string, `root.childElementCount === 0`.
      *
-     * The cap is scannability, not the library's ceiling: at 2,272 characters
-     * the matrix is 177 modules inside a 168px box, unreadable long before it
-     * overflows. So the rule is that a link too long to scan keeps its copy
-     * field and loses its code, and says so.
+     * Since 2026-09-07 the junk never reaches the link at all: `shareUrl()`
+     * keeps only a well-formed `?m=`, so the share link is short whatever the
+     * address bar carries, and the code always paints. The `fitsQr` guard and
+     * `SHARE_QR_TOO_LONG` stay as insurance behind it (`fitsQr` is pinned in
+     * `qr.test.ts`); this test now asserts the prevention one layer up.
      */
     const longSearch = `?m=${'a'.repeat(2600)}`;
 
@@ -2353,16 +2354,20 @@ describe('unscannable-link-drops-the-qr-not-the-page', () => {
         }
     }
 
-    it('still paints the stall, and swaps the code for a reason', () => {
+    it('still paints the stall, and a junk query never reaches the link', () => {
         const { root } = paintWithSearch(longSearch);
         expect(root.childElementCount, 'the page is not blank').toBeGreaterThan(0);
         expect(root.querySelector('.stall')).not.toBeNull();
         const share = root.querySelector('[data-role="copy-link"]');
         expect(share, 'the copy control survives').not.toBeNull();
-        expect(share!.querySelector('svg.qr'), 'no unscannable code').toBeNull();
-        const why = root.querySelector('[data-role="qr-too-long"]');
-        expect(why, 'the page says why').not.toBeNull();
-        expect(why!.textContent).toBe(SHARE_QR_TOO_LONG);
+        const field = share!.querySelector('.share-url') as HTMLInputElement;
+        expect(field.value, 'a malformed hint is dropped, not carried').toBe(
+            `${window.location.origin}/s/x`,
+        );
+        expect(share!.querySelector('svg.qr'), 'the code paints').not.toBeNull();
+        expect(root.querySelector('[data-role="qr-too-long"]')).toBeNull();
+        // The insurance behind it still exists and still says its sentence.
+        expect(SHARE_QR_TOO_LONG.length).toBeGreaterThan(0);
     });
 
     it('a normal link still gets its code', () => {
@@ -2370,6 +2375,50 @@ describe('unscannable-link-drops-the-qr-not-the-page', () => {
         const share = root.querySelector('[data-role="copy-link"]');
         expect(share!.querySelector('svg.qr')).not.toBeNull();
         expect(root.querySelector('[data-role="qr-too-long"]')).toBeNull();
+    });
+});
+
+describe('a-shared-link-carries-only-the-params-this-app-honours', () => {
+    /**
+     * `shareUrl()` passed `location.search` through whole, so a seller who
+     * opened their stall from its own `?view=broadcast` link copied, scanned
+     * and **printed** a code that opened the stream overlay — a screen with
+     * no control on it — and a few kilobytes of junk query took the poster
+     * away with no sentence. A share link is a claim about where the stall
+     * lives: only the `?m=` hint this app honours rides on it, gated the way
+     * `loadManifest` gates it, and the code is the link.
+     */
+    const HINT = 'ab'.repeat(32);
+
+    function shareWith(search: string) {
+        const before = window.location.href;
+        window.history.replaceState({}, '', `/s/x${search}`);
+        try {
+            const { root } = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }));
+            const share = root.querySelector('[data-role="copy-link"]')!;
+            const field = share.querySelector('.share-url') as HTMLInputElement;
+            const qr = share.querySelector('svg.qr path') as SVGPathElement | null;
+            return { value: field.value, qrPath: qr?.getAttribute('d') ?? null };
+        } finally {
+            window.history.replaceState({}, '', before);
+        }
+    }
+
+    it('drops the broadcast options and anything else, and keeps a well-formed hint', () => {
+        const origin = window.location.origin;
+        const junk = shareWith('?view=broadcast&preset=rail&cards=quotes&junk=1&pay=abcdef123456');
+        expect(junk.value).toBe(`${origin}/s/x`);
+        const hinted = shareWith(`?view=broadcast&m=${HINT}&junk=1`);
+        expect(hinted.value).toBe(`${origin}/s/x?m=${HINT}`);
+        const malformed = shareWith(`?m=${HINT.slice(0, 63)}`);
+        expect(malformed.value, 'a hint that is not a txid is not a hint').toBe(`${origin}/s/x`);
+    });
+
+    it('the code is the link, and stays scannable under a long junk query', () => {
+        const hinted = shareWith(`?m=${HINT}&junk=${'z'.repeat(2600)}`);
+        expect(hinted.value).toBe(`${window.location.origin}/s/x?m=${HINT}`);
+        expect(hinted.qrPath, 'the code paints').not.toBeNull();
+        expect(hinted.qrPath).toBe(qrPathOf(hinted.value));
     });
 });
 

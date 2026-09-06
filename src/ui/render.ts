@@ -6773,15 +6773,33 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     return form;
 }
 
+/**
+ * The link this stall is shared as: the origin, the path, and `?m=` when the
+ * URL carries a well-formed manifest hint — **and nothing else**.
+ *
+ * It used to pass `location.search` through whole. That put whatever URL a
+ * seller happened to open their stall from into the copy field, the share
+ * code and the printed poster: a stall reached through its own
+ * `?view=broadcast` link produced a poster whose code opened the stream
+ * overlay, a screen with no control on it (§4's DOM contract), and a few
+ * kilobytes of junk query took the poster control away with no sentence
+ * (`fitsQr` refused the whole thing). A share link is a claim about where
+ * this stall lives; only the hint this app honours rides on it, and the
+ * hint is gated the way `loadManifest` gates it — 64 hex, or dropped.
+ * Test: `a-shared-link-carries-only-the-params-this-app-honours`.
+ */
 function shareUrl(): string {
-    return `${location.origin}${location.pathname}${location.search}`;
+    const m = new URLSearchParams(location.search).get('m');
+    const hint = m !== null && /^[0-9a-fA-F]{64}$/.test(m) ? `?m=${m}` : '';
+    return `${location.origin}${location.pathname}${hint}`;
 }
 
 /**
  * The stall's own page, with the **search dropped**.
  *
- * `shareUrl()` keeps it, so a printed link carrying `?m=` still hints at the
- * settings record when somebody shares it. A landing link must not: on a
+ * `shareUrl()` keeps only a well-formed `?m=`, so a printed link carrying the
+ * hint still points at the settings record when somebody shares it. A
+ * landing link must not carry even that: on a
  * `?view=broadcast&cards=quotes` URL that would compose
  * `…&cards=quotes?pay=…`, which is a link into the stream overlay rather than
  * to the page with the note on it.
