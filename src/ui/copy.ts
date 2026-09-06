@@ -1013,7 +1013,7 @@ export const priceUnitGlyph = (code: string): string =>
 export const DESC_PRICE_LEDE =
     'Your own asking figure, published as you write it. Nothing here converts it.';
 export const DESC_PRICE_REFUSED =
-    'A price is a figure above zero, with up to two decimal places and no separators — “12.50”, not “1,200” or “0”.';
+    'A price is a figure above zero with up to two decimal places — “12.50” or “12,50” — never a thousands separator (“1,200”) and never “0”.';
 /**
  * A price is per whole token, so a token whose kind this page has not read is
  * not one it may write a permanent record about. Affirmative, never a

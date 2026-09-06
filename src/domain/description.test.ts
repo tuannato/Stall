@@ -555,6 +555,34 @@ describe('a-published-price-does-not-depend-on-the-display-table', () => {
     });
 });
 
+/*
+ * On a phone the decimal key is the locale's: iOS shows "," for Vietnamese
+ * and most of Europe under `inputmode="decimal"`, so a seller there could
+ * not type "12.50" at all and the sheet refused "12,50". One comma is the
+ * decimal point. A thousands group is still refused — three fraction digits
+ * exceed the editor's two — so "1,200" cannot publish as either reading.
+ */
+describe('a-comma-is-a-decimal-point', () => {
+    it('reads one comma as the point and refuses two separators', () => {
+        expect(parsePriceFigure('12,50', 'usd', 2)).toEqual({ code: 'usd', exponent: 2, amount: 1250n });
+        expect(parsePriceFigure('0,05', 'usd', 2)?.amount).toBe(5n);
+        expect(parsePriceFigure('7,', 'usd', 2)?.amount).toBe(700n);
+        expect(parsePriceFigure('1,200', 'usd', 2)).toBeUndefined();
+        expect(parsePriceFigure('12,000', 'xec', 2)).toBeUndefined();
+        // The refusal is the function's own, not the caller's exponent: at
+        // exponent 3 or 8 a thousands group would otherwise parse as a
+        // fraction a thousand times off, into a permanent record.
+        expect(parsePriceFigure('1,200', 'usd', 3)).toBeUndefined();
+        expect(parsePriceFigure('12,000', 'usd', 8)).toBeUndefined();
+        expect(parsePriceFigure('1,234', 'usd', 8)).toBeUndefined();
+        expect(parsePriceFigure('12,50', 'usd', 3)?.amount).toBe(12_500n);
+        expect(parsePriceFigure('1,2.5', 'usd', 2)).toBeUndefined();
+        expect(parsePriceFigure('1.2,5', 'usd', 2)).toBeUndefined();
+        expect(parsePriceFigure('1,2,5', 'usd', 2)).toBeUndefined();
+        expect(parsePriceFigure(',5', 'usd', 2)).toBeUndefined();
+    });
+});
+
 describe('no-words-priced-is-a-tombstone-with-a-tag', () => {
     /**
      * A price with no words is a real record — the same shape "no words,

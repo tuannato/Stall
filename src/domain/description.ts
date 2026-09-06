@@ -440,7 +440,18 @@ export function parsePriceFigure(
     if (!Number.isInteger(exponent) || exponent < 0 || exponent > MAX_PRICE_EXPONENT) {
         return undefined;
     }
-    const text = figure.trim();
+    // One comma is the decimal point: on a phone the decimal key is the
+    // locale's, and iOS offers "," where the seller lives. Two separators of
+    // any kind are refused below. A comma followed by exactly three digits
+    // is a thousands group and is refused HERE, whatever the exponent — at
+    // exponent 3 "1,200" would otherwise sign one and a fifth, a permanent
+    // record a thousand times off; the price this refuses (a three-decimal
+    // comma figure) is one nothing here can write today.
+    const typed = figure.trim();
+    if (/,\d{3}$/.test(typed)) {
+        return undefined;
+    }
+    const text = typed.includes('.') || typed.split(',').length > 2 ? typed : typed.replace(',', '.');
     if (!/^\d{1,20}(\.\d{0,8})?$/.test(text)) {
         return undefined;
     }
