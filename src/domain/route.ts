@@ -63,13 +63,21 @@ export function sellerFromPath(pathname: string): string | undefined {
     }
 }
 
+/**
+ * The canonical link for one stall. An address travels **without** its
+ * `ecash:` prefix (owner's call, 2026-09-06): the parse re-adds it, every old
+ * prefixed link still opens, and the landing code a poster or a stream
+ * carries drops one QR version — 41 modules to 37 in the 204px box, measured
+ * through `qrMatrix`; the share code was 37 either way. `view.address` and
+ * every composer keep the prefixed form — this is the path's shape only.
+ */
 export function stallPath(raw: string): string {
     const parsed = parseSellerParam(raw);
     const token =
         parsed.kind === 'pubkey'
             ? parsed.pubkeyHex
             : parsed.kind === 'address'
-              ? parsed.address
+              ? parsed.address.slice('ecash:'.length)
               : raw.trim();
     return `/s/${encodeURIComponent(token)}`;
 }

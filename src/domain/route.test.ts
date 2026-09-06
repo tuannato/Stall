@@ -59,14 +59,20 @@ describe('sellerFromPath', () => {
 });
 
 describe('stallPath', () => {
+    /*
+     * Amended 2026-09-06: the round trip is a parse round trip, not a string
+     * one — the canonical path carries the address without its prefix, and
+     * the parse puts the prefix back.
+     */
     it('stall-path-round-trips-cashaddr', () => {
         const path = stallPath(SAMPLE_P2PKH);
-        expect(sellerFromPath(path)).toBe(SAMPLE_P2PKH);
-        expect(parseSellerParam(sellerFromPath(path)!).kind).toBe('address');
+        const back = parseSellerParam(sellerFromPath(path)!);
+        expect(back.kind).toBe('address');
+        expect(back.kind === 'address' && back.address).toBe(SAMPLE_P2PKH);
 
         const prefixless = SAMPLE_P2PKH.replace(/^ecash:/, '');
         const prefixlessPath = stallPath(prefixless);
-        expect(sellerFromPath(prefixlessPath)).toBe(SAMPLE_P2PKH);
+        expect(prefixlessPath).toBe(path);
         expect(parseSellerParam(sellerFromPath(prefixlessPath)!).kind).toBe(
             'address',
         );
@@ -83,6 +89,27 @@ describe('stallPath', () => {
         expect(parseSellerParam(sellerFromPath(stallPath(invalid))!).kind).toBe(
             'invalid',
         );
+    });
+});
+
+/*
+ * The canonical link carries an address bare: shorter to type, and the
+ * landing code on a poster or a stream drops one QR version (41 → 37
+ * modules, measured through `qrMatrix`). Old prefixed links keep opening,
+ * and `view.address` keeps its prefix — only the path changed shape.
+ */
+describe('the-canonical-link-carries-no-prefix', () => {
+    it('writes /s/<payload> and reads the prefixed link back to the same stall', () => {
+        const bare = SAMPLE_P2PKH.slice('ecash:'.length);
+        expect(stallPath(SAMPLE_P2PKH)).toBe(`/s/${bare}`);
+        expect(stallPath(`ECASH:${bare.toUpperCase()}`)).toBe(`/s/${bare}`);
+        for (const old of [`/s/ecash%3A${bare}`, `/s/ecash:${bare}`, `/s/${bare}`]) {
+            const parsed = parseSellerParam(sellerFromPath(old)!);
+            expect(parsed.kind === 'address' && parsed.address, old).toBe(SAMPLE_P2PKH);
+        }
+        // A pubkey link is what it was.
+        const pk = `03${'aa'.repeat(32)}`;
+        expect(stallPath(pk)).toBe(`/s/${pk}`);
     });
 });
 

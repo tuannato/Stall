@@ -15,7 +15,7 @@ import { boot, type AppState } from './app';
 vi.mock('./net/price', () => ({
     fetchXecPrice: async () => undefined,
 }));
-import { sellerFromPath, stallPath } from './domain/route';
+import { parseSellerParam, sellerFromPath, stallPath } from './domain/route';
 import type { StallOffer } from './domain/state';
 import {
     HOME_LEDE,
@@ -157,7 +157,9 @@ describe('open-stall-from-apex', () => {
         input.value = ADDR;
         form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
-        expect(sellerFromPath(location.pathname)).toBe(ADDR);
+        // A parse round trip: the canonical path carries the address bare.
+        const back = parseSellerParam(sellerFromPath(location.pathname)!);
+        expect(back.kind === 'address' && back.address).toBe(ADDR);
         expect(location.pathname).toBe(stallPath(ADDR));
         expect(pending).toHaveLength(2);
         expect(root.textContent).toContain(OPENING_BODY);
@@ -284,7 +286,7 @@ describe('default-stall-does-not-trap-the-door', () => {
         const upper = `ecash:${lower.slice('ecash:'.length).toUpperCase()}`;
         window.history.replaceState({ pasted: true }, '', `/s/${upper}?pay=abcdef012345`);
         boot(document.createElement('div'), async () => homeState());
-        expect(location.pathname).toBe(`/s/${encodeURIComponent(lower)}`);
+        expect(location.pathname).toBe(`/s/${lower.slice('ecash:'.length)}`);
         expect(location.search).toBe('?pay=abcdef012345');
         expect((history.state as { pasted?: boolean }).pasted).toBe(true);
     });
