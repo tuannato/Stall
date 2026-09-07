@@ -6280,6 +6280,17 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     }
     dl.append(el('dt', 'event-dt', copy.EVENT_KIND_LABEL));
     dl.append(el('dd', 'event-dd', eventLabel(event)));
+    // A record-shaped row the stall did not sign: say what that means and what
+    // to do, because the failure is silent — the record never lands, and the
+    // seller who signed from a second wallet sees nothing else.
+    if (
+        (event.kind === 'settings' || event.kind === 'description') &&
+        event.signedByStall === false
+    ) {
+        const hint = el('dd', 'event-dd fine', copy.EVENT_STRANGER_HINT);
+        hint.setAttribute('data-role', 'event-stranger-hint');
+        dl.append(el('dt', 'event-dt', ''), hint);
+    }
 
     // Only when every output to the stall carried a figure and the stall was
     // not on the input side. Absent is absent: a zero here would be a number,

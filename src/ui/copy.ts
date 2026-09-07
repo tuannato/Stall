@@ -416,6 +416,15 @@ export const EVENT_DESCRIPTION = 'A token description published';
  */
 export const EVENT_SETTINGS_STRANGER = 'A settings record from another wallet';
 export const EVENT_DESCRIPTION_STRANGER = 'A description record from another wallet';
+/**
+ * Under a stranger's record row. Twice on one evening the "stranger" was
+ * the seller: a second Cashtab wallet signing the stall's own publish link
+ * (2026-09-07). The row says whose it is not; this says what that means and
+ * what to do, because the failure is otherwise silent — the record simply
+ * never lands.
+ */
+export const EVENT_STRANGER_HINT =
+    'Signed by a wallet that is not this stall’s, so it changes nothing here. If that was you, open the stall’s own wallet in Cashtab and sign again from there.';
 export const EVENT_TOKEN_MOVE = 'A decoration token moved';
 export const EVENT_OTHER = 'A transaction at this address';
 

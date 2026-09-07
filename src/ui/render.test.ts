@@ -10004,6 +10004,40 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
     });
 });
 
+describe('a-strangers-record-row-says-what-to-do-if-it-was-you', () => {
+    /**
+     * "A description record from another wallet" is true and unhelpful to
+     * the seller who signed it from their second Cashtab wallet: the record
+     * never lands and nothing says why. The fold says what it means and what
+     * to do; a signed record row and a payment row carry no such line.
+     */
+    const row = (over: Partial<StallEvent>): StallEvent => ({
+        txid: 'ab'.repeat(32),
+        kind: 'description',
+        chainTimeS: 1_756_400_000,
+        ...over,
+    });
+    const hint = (event: StallEvent) =>
+        paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'activity', events: [event] })).root.querySelector(
+            '[data-role="event-stranger-hint"]',
+        );
+
+    it('carries the hint under a record the stall did not sign', () => {
+        const node = hint(row({ signedByStall: false }));
+        expect(node).not.toBeNull();
+        expect(node!.textContent).toBe(copy.EVENT_STRANGER_HINT);
+        expect(hint(row({ kind: 'settings', signedByStall: false }))).not.toBeNull();
+    });
+
+    it('carries none under the stall’s own record, an unverified one, or a payment', () => {
+        expect(hint(row({ signedByStall: true }))).toBeNull();
+        expect(hint(row({}))).toBeNull();
+        expect(
+            hint(row({ kind: 'payment', sats: 1_000n, payment: { tokenId: TOKEN_ID, quantity: 1n } })),
+        ).toBeNull();
+    });
+});
+
 describe('a-transaction-is-shown-once-across-both-clocks', () => {
     /**
      * The ring shows what arrived while this page was open, on the page
