@@ -252,6 +252,14 @@ working accept, and there is no accept.
   ever refused the check goes absent and the pay rail does not notice.
   Privacy: one more host sees a visitor's IP at those moments — no referrer,
   no cookie, and a URL that names the asset, never the stall.
+- **Listings is the product sentence, provisionally** (owner, 2026-09-07).
+  The door, the first-stall checklist, the guide's chapter order and the
+  stream picker's default stay as they are: a shop page for one seller's
+  Agora listings, with the quotes rail one press away. Quotes was the
+  window's recommendation — the one rail Stall owns the money path of —
+  and the owner chose to keep Listings first until the five-seller walk
+  (§ Next action) says where a seller of real goods actually stops. Reopen
+  with that evidence; a swap is copy only, one commit, reversible.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -516,8 +524,9 @@ the shared skeleton everywhere else.
    sellers walked through a stall by hand, with the token minted for them, so
    the question "is the mint requirement the constraint or is demand" gets an
    answer instead of an argument.
-2. **Choose the sentence.** Listings or Quotes is the product; the door, the
-   dock and the guides follow from that choice. The owner's call.
+2. **Walk the five sellers with the sentence as it stands** (Listings,
+   provisional — § Decided) and let them answer whether the mint step or the
+   listing step is where a seller of real goods stops.
 
 Deploying needs nothing: a push to `main` builds and ships, and CI runs the
 build and the suite on the same push. What that does **not** cover are the
