@@ -43,10 +43,11 @@ export const PUBLISH_THEME_LABEL = 'Look';
 export const PUBLISH_OPEN_CASHTAB = 'Sign with Cashtab';
 /**
  * "App", because "another wallet" alone collides head-on with
- * PUBLISH_MUST_SIGN two lines under it: there "another wallet" is the thing
- * that buys a worthless record, here it meant another *application* holding
- * the same stall wallet. One phrase carrying both meanings on one sheet is a
- * trap; the label now names the app and MUST_SIGN legitimizes it outright.
+ * PUBLISH_MUST_SIGN, the line directly above the controls: there "another
+ * wallet" is the thing that buys a worthless record, here it meant another
+ * *application* holding the same stall wallet. One phrase carrying both
+ * meanings on one sheet is a trap; the label now names the app and MUST_SIGN
+ * legitimizes it outright.
  */
 export const PUBLISH_OPEN_PAY = 'Sign with another wallet app';
 /**

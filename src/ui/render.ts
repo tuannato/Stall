@@ -2896,6 +2896,14 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 
     wrap.append(form);
 
+    // The one condition that decides whether this publish lands at all, and
+    // the failure is silent — a record signed by any other wallet is never
+    // this stall's. So it stands directly above the controls, never under a
+    // fold below them (owner, 2026-09-07).
+    const mustSign = el('p', 'fine', copy.PUBLISH_MUST_SIGN);
+    mustSign.setAttribute('data-role', 'describe-must-sign');
+    wrap.append(mustSign);
+
     const acts = el('div', 'acts');
     const web = el('a', 'buy', copy.PUBLISH_OPEN_CASHTAB);
     web.setAttribute('data-role', 'describe-cashtab');
@@ -3374,7 +3382,6 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     });
     form.addEventListener('submit', (event) => event.preventDefault());
 
-    wrap.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
     wrap.append(sheetFoot(handlers));
     loadToken();
@@ -4499,17 +4506,22 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     renderDecor(painted);
     paintLooks();
     // Name, tagline, the "Publishes:" line and the sentence that refused a
-    // field stand before the sign controls, and nothing else does. The look,
-    // the announcement, the decorations, the meter, the bytes and the phone
-    // QR fold under "More": the record carries them, a seller renaming a
-    // stall does not read them. The pay.e.cash road never folds.
+    // field stand before the sign controls, then one line: the condition that
+    // decides whether the publish lands at all (a record signed by any other
+    // wallet is never this stall's — a silent failure, so it is not folded
+    // below the controls; owner, 2026-09-07). Nothing else. The look, the
+    // announcement, the decorations, the meter, the bytes and the phone QR
+    // fold under "More": the record carries them, a seller renaming a stall
+    // does not read them. The pay.e.cash road never folds.
     form.append(label, taglineLabel, summary, err, sameLook);
     wrap.append(form);
+    const mustSign = el('p', 'fine', copy.PUBLISH_MUST_SIGN);
+    mustSign.setAttribute('data-role', 'publish-must-sign');
+    wrap.append(mustSign);
     wrap.append(acts);
     const more = el('div', 'sheet-more');
     more.append(el('p', 'fine', copy.PUBLISH_LEDE));
     more.append(themeGroup, announceLabel, decorWrap, meter.wrap);
-    more.append(el('p', 'fine', copy.PUBLISH_MUST_SIGN));
     more.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
     more.append(hexFold, qrFold);
     wrap.append(sheetFold('publish-more', copy.SHEET_MORE, more));

@@ -10769,7 +10769,7 @@ describe('the-first-stall-checklist-marks-the-stuck-step', () => {
  * paragraph in the form.
  */
 describe('nothing-stands-between-the-name-and-the-sign-control', () => {
-    it('allows the head, then a form of name · tagline · summary · invalid · same-look, then the controls', () => {
+    it('allows the head, then a form of name · tagline · summary · invalid · same-look, then the sign condition, then the controls', () => {
         const { root } = paint(
             offersView([OFFER], undefined, { overlay: { kind: 'publish-name' } }),
         );
@@ -10781,7 +10781,10 @@ describe('nothing-stands-between-the-name-and-the-sign-control', () => {
             }
             before.push(child);
         }
-        expect(before.map((node) => node.className)).toEqual(['sheet-head', 'paste']);
+        expect(before.map((node) => node.className)).toEqual(['sheet-head', 'paste', 'fine']);
+        // The one line allowed between the form and the controls is the sign
+        // condition, by name — a second `fine` line here fails the equality.
+        expect(before[2]!.getAttribute('data-role')).toBe('publish-must-sign');
         const form = before[1]!;
         const allowed = new Set(['stall-name', 'publish-tagline', 'publish-summary', 'publish-invalid', 'publish-same-look']);
         for (const child of form.children) {
@@ -10796,6 +10799,59 @@ describe('nothing-stands-between-the-name-and-the-sign-control', () => {
         expect(pay.closest('details')).toBeNull();
         const more = sheet.querySelector('details[data-role="publish-more"]') as HTMLDetailsElement;
         expect(pay.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
+describe('the-sign-condition-stands-above-both-sign-controls', () => {
+    /**
+     * `PUBLISH_MUST_SIGN` is the one condition that decides whether a publish
+     * lands at all, and the failure is silent: a record signed by any other
+     * wallet never becomes this stall's. It sat under the closed "More" fold
+     * below the name sheet's controls, and last on the describe sheet. It is
+     * one named `fine` line directly above the controls on both, never folded
+     * and said once — and the describe sheet gains the same containment fence
+     * the name sheet has (owner, 2026-09-07, D2).
+     */
+    const beforeControls = (control: Element): Element[] => {
+        const sheet = control.closest('.sheet') as HTMLElement;
+        const before: Element[] = [];
+        for (const child of sheet.children) {
+            if (child.contains(control)) {
+                break;
+            }
+            before.push(child);
+        }
+        return before;
+    };
+    const occurrences = (text: string, needle: string): number =>
+        text.split(needle).length - 1;
+
+    it('name sheet: head · form · the sign condition · controls, said once', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'publish-name' } }),
+        );
+        const control = root.querySelector('[data-role="publish-cashtab"]')!;
+        const before = beforeControls(control);
+        expect(before.map((node) => node.className)).toEqual(['sheet-head', 'paste', 'fine']);
+        const line = before[2]!;
+        expect(line.getAttribute('data-role')).toBe('publish-must-sign');
+        expect(line.textContent).toBe(copy.PUBLISH_MUST_SIGN);
+        expect(line.closest('details')).toBeNull();
+        expect(occurrences(control.closest('.sheet')!.textContent ?? '', copy.PUBLISH_MUST_SIGN)).toBe(1);
+    });
+
+    it('describe sheet: head · picker · form · the sign condition · controls, said once', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay: { kind: 'describe' } }),
+        );
+        const control = root.querySelector('[data-role="describe-cashtab"]')!;
+        const before = beforeControls(control);
+        expect(before.map((node) => node.className)).toEqual(['sheet-head', 'paste', 'paste', 'fine']);
+        const line = before[3]!;
+        expect(line.getAttribute('data-role')).toBe('describe-must-sign');
+        expect(line.textContent).toBe(copy.PUBLISH_MUST_SIGN);
+        expect(line.closest('details')).toBeNull();
+        expect(occurrences(control.closest('.sheet')!.textContent ?? '', copy.PUBLISH_MUST_SIGN)).toBe(1);
     });
 });
 
