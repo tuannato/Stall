@@ -6424,6 +6424,66 @@ describe('an-agora-row-never-carries-the-sellers-quote', () => {
     });
 });
 
+describe('an-emptied-price-field-takes-the-quote-off-and-says-so', () => {
+    /**
+     * The road off the Quotes rail: over a published, editable quote, an
+     * emptied price field publishes the words without a figure. The encoder
+     * already did that; nothing on the sheet said so, and the owner concluded
+     * a quoted item could not be removed (2026-09-07). One `fine` line, only
+     * while the field is empty and the record still has words — the bare
+     * tombstone has its own lede, and removal mode restates the price.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+                prices: new Map([[TOKEN_ID, { code: 'usd', exponent: 2, amount: 1250n }]]),
+                ...over,
+            }),
+        );
+    const line = (root: HTMLElement) =>
+        root.querySelector('[data-role="describe-price-cleared"]') as HTMLElement;
+    const clear = (root: HTMLElement, value = '') => {
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = value;
+        amount.dispatchEvent(new Event('input'));
+    };
+
+    it('says so over a quote with words, and the record carries no price', () => {
+        const { root } = sheet({ descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]) });
+        expect(line(root).hidden, 'silent while the published figure stands').toBe(true);
+        clear(root);
+        expect(line(root).hidden).toBe(false);
+        expect(line(root).textContent).toBe(copy.DESC_PRICE_CLEARED);
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.'),
+        );
+        expect(copy.SUMMARY_QUOTE.length).toBeGreaterThan(0);
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toContain(
+            copy.SUMMARY_QUOTE,
+        );
+        clear(root, '9.99');
+        expect(line(root).hidden, 'a retyped figure is a quote again').toBe(true);
+    });
+
+    it('yields to the clear-everything lede when nothing else is left', () => {
+        const { root } = sheet();
+        clear(root);
+        expect(line(root).hidden).toBe(true);
+        expect(root.textContent).toContain(copy.DESC_CLEAR_ALL_LEDE);
+    });
+
+    it('is silent in removal mode, which restates the price', () => {
+        const { root } = sheet({ descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]) });
+        (root.querySelector('[data-role="describe-remove"]') as HTMLButtonElement).click();
+        expect(line(root).hidden).toBe(true);
+        expect(root.textContent).toContain(copy.DESC_REMOVE_LEDE);
+    });
+});
+
 describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
     /**
      * Its own role, never `fiat`. The fiat node is a conversion of the

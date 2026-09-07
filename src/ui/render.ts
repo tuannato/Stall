@@ -2867,8 +2867,13 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     warnListed.hidden = true;
     const warnNoWords = el('p', 'fine', copy.DESC_QUOTE_NO_WORDS);
     warnNoWords.setAttribute('data-role', 'describe-warn-no-words');
+    // Not a warning: the one line that says what an emptied price field does.
+    const priceCleared = el('p', 'fine');
+    priceCleared.textContent = copy.DESC_PRICE_CLEARED;
+    priceCleared.setAttribute('data-role', 'describe-price-cleared');
+    priceCleared.hidden = true;
     warnNoWords.hidden = true;
-    form.append(warnUnattributed, warnListed, warnNoWords);
+    form.append(warnUnattributed, warnListed, warnNoWords, priceCleared);
     /*
      * The seller's own figure, read back from the record they signed — its own
      * role, never `fiat`. That node is a conversion of the covenant's asked
@@ -3110,6 +3115,11 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // page in one record. Over nothing it is still nothing asked.
         const clearing = blank && existing !== undefined;
         const empty = blank && existing === undefined;
+        // A published, editable quote with the field emptied — and not the
+        // clear-everything case, which has its own lede, nor removal mode,
+        // which restates the price.
+        priceCleared.hidden =
+            noToken || !editable || figure !== '' || removing || clearing || priceRefused;
 
         // The removal record: the words taken away and every other field
         // restated. One record is the whole truth about one token, so a

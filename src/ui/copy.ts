@@ -977,6 +977,15 @@ export const DESC_REMOVE_LEDE =
  * bare tombstone. Said before signing, because the remove control beside it
  * keeps the shelf and the price and this one does not.
  */
+/**
+ * The road off the Quotes rail that nobody found: an emptied price field
+ * over a published quote publishes the words without a figure, and the
+ * summary simply stops naming a price. Said in place, so a seller who wants
+ * the quote gone knows this is the way, and one who emptied it by accident
+ * knows what they are about to sign (owner, 2026-09-07).
+ */
+export const DESC_PRICE_CLEARED =
+    'Price left empty: publishing takes this quote off the Quotes rail. The words and the shelf stay.';
 export const DESC_CLEAR_ALL_LEDE =
     'Every field is empty: publishing this removes the words, the shelf and the price for this token.';
 /**
