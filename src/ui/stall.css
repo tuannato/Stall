@@ -3021,9 +3021,17 @@ textarea.share-embed {
     max-width: 36ch;
 }
 
+/*
+ * The signing code carries a whole record — token id, up to 180 bytes of
+ * words, a price, a shelf — so it is 57 to 85 modules across (measured
+ * 2026-09-07, error level M). At 320px the densest record was 3.8px a
+ * module and the owner's phone would not read it; at 460px it is 5.4, and
+ * the smallest record 8. The box takes the sheet's width up to 460px.
+ */
 .publish-qr .qr {
     box-shadow: 0 1px 3px color-mix(in srgb, var(--s-shade) 18%, transparent);
-    max-width: min(100%, 320px);
+    width: 100%;
+    max-width: min(100%, 460px);
     padding: 10px;
 }
 
