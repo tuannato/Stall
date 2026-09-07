@@ -2698,8 +2698,21 @@ details.fold.fold-cta[open] > .fold-sum {
  * the one screen the apex exists to serve. It applies to the theme `<select>`
  * for the same reason.
  */
+/*
+ * The embed code is a readonly textarea on the same floor and the same
+ * dress as the link field: shaded ground, dashed edge, never a smaller
+ * face. It wraps its one long line and clips inside itself, so nothing
+ * spills under the copy control.
+ */
+.share-embed {
+    resize: vertical;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .paste-in,
-.share-url {
+.share-url,
+.share-embed {
     font: inherit;
     font-family: var(--s-font);
     font-size: 16px;
@@ -2711,6 +2724,12 @@ details.fold.fold-cta[open] > .fold-sum {
     background: var(--s-surface);
     color: var(--s-text);
     width: 100%;
+}
+
+/* Code reads at 13px in the mono-ish wrap; the field keeps the 44px floor above. */
+textarea.share-embed {
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /*

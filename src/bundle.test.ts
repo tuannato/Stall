@@ -117,10 +117,14 @@ describe('served-weight-has-a-ceiling', () => {
     // Measured 564,858 the day the two Inter subsets landed, 649,559 the day
     // the three design stylesheets applied directly (the owner's ruling), and
     // 710,198 the day the direct-payment rail shipped — 691,199 the commit
-    // before it, so the whole rail is about 19 KB of code, copy and CSS. The
-    // margin is for ordinary growth; an 85 KB latin-ext subset re-added by
-    // accident still lands past this and fails.
-    const CEILING_BYTES = 760_000;
+    // before it, so the whole rail is about 19 KB of code, copy and CSS —
+    // and 760,548 on the evening of 2026-09-07, when the D round, the
+    // second price feed with its sentence tables, and the embed box landed
+    // together and crossed the 760,000 line by 548 bytes. Raised to 800,000
+    // as the deliberate diff this docblock asks for; the margin is for
+    // ordinary growth, and an 85 KB latin-ext subset re-added by accident
+    // still lands past this and fails.
+    const CEILING_BYTES = 800_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

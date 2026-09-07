@@ -1,4 +1,5 @@
 
+import { embedImagePath, embedSnippet } from '../domain/embed';
 import {
     CASHTAB_LIST_URL,
     cashtabPayUrl,
@@ -5698,6 +5699,7 @@ function paintStudio(
 
     const share = studioCard('share', copy.STUDIO_CARD_SHARE);
     share.card.append(shareControl());
+    share.card.append(embedControl(view));
     posterControl(share.card, view, handlers);
     // The stream overlay's recipe, folded: its strings live in the module
     // itself, and it never navigates or stores.
@@ -6861,6 +6863,58 @@ function shareUrl(): string {
  */
 export function stallBaseUrl(): string {
     return `${location.origin}${location.pathname}`;
+}
+
+/**
+ * The embed box: one line of HTML, a picture that opens the stall. The
+ * picture is the painted look's card (the try-on outranks the record, as
+ * everywhere in the studio) at this origin, and the link is the stall's
+ * bare address — `stallBaseUrl()`, the search dropped. Readonly field,
+ * copy control with the same fallback the link's has.
+ */
+function embedControl(view: StallView): HTMLElement {
+    const wrap = el('div', 'share-embed-box');
+    wrap.setAttribute('data-role', 'embed');
+    wrap.append(el('p', 'fine', copy.SHARE_EMBED_LEDE));
+    const code = embedSnippet({
+        stallUrl: stallBaseUrl(),
+        imageUrl: `${location.origin}${embedImagePath(paintedThemeId(view))}`,
+        alt: copy.embedAlt(view.stallName),
+    });
+    const row = el('div', 'share-row');
+    const field = el('textarea', 'share-embed');
+    field.readOnly = true;
+    field.rows = 3;
+    field.value = code;
+    field.setAttribute('aria-label', copy.COPY_EMBED);
+    field.setAttribute('data-role', 'embed-code');
+    const btn = el('button', 'mini');
+    const say = glyphLabel(btn, 'copy', copy.COPY_EMBED);
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'embed-copy');
+    const fallback = (): void => {
+        field.focus();
+        field.select();
+        say(copy.COPY_EMBED_FALLBACK);
+    };
+    btn.addEventListener('click', () => {
+        const clipboard = navigator.clipboard;
+        if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
+            void clipboard.writeText(code).then(
+                () => {
+                    say(copy.EMBED_COPIED, 'check');
+                },
+                () => {
+                    fallback();
+                },
+            );
+            return;
+        }
+        fallback();
+    });
+    row.append(field, btn);
+    wrap.append(row);
+    return wrap;
 }
 
 function shareControl(): HTMLElement {

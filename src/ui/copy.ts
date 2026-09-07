@@ -814,6 +814,20 @@ export const PUBLISH_QR_ALT = 'QR code for the settings transaction';
 export const PUBLISH_QR_LEDE =
     'On a phone, scan this with the wallet that holds this stall to sign the same transaction.';
 
+/**
+ * The embed box on the Share card: the cheapest widget, a picture that opens
+ * the stall, for a seller with a site of their own. It says what the picture
+ * is and is not — the look's card, unchanging — so nobody reads a still as a
+ * live shop (owner, 2026-09-07; PLAN § Open, the widget).
+ */
+export const SHARE_EMBED_LEDE =
+    'To put this stall on a site of your own, paste this where the site takes HTML. The picture is this look\u2019s card and does not change; the link is what opens the stall.';
+export const COPY_EMBED = 'Copy the code';
+export const EMBED_COPIED = 'Code copied';
+export const COPY_EMBED_FALLBACK = 'Select and copy this code.';
+/** The picture's alt text: the stall's name when it has one. */
+export const embedAlt = (name: string | undefined): string =>
+    name === undefined || name === '' ? 'A stall on stall.cash' : `${name} on Stall`;
 export const COPY_LINK = 'Copy link';
 export const LINK_COPIED = 'Link copied';
 export const COPY_LINK_FALLBACK = 'Select and copy this stall’s link.';

@@ -848,6 +848,35 @@ describe('copy-link', () => {
     });
 });
 
+describe('the-share-card-carries-an-embed-snippet', () => {
+    /**
+     * The cheapest widget: one line of HTML, a picture that opens the stall,
+     * on the Share card beside the link. The picture is the painted look's
+     * card at this origin, the link is the bare stall URL, the name is
+     * attribute-escaped, and the field is readonly with a copy control.
+     */
+    it('paints a readonly field holding one anchor around the look’s card, name escaped', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'studio',
+                stallName: 'Riverside & "Co" <x>',
+            }),
+        );
+        const card = root.querySelector('[data-role="studio-card-share"]') as HTMLElement;
+        const field = card.querySelector('[data-role="embed-code"]') as HTMLTextAreaElement;
+        expect(field).not.toBeNull();
+        expect(field.readOnly).toBe(true);
+        expect(field.value).toBe(
+            `<a href="${stallBaseUrl()}"><img src="${location.origin}/og/stall-modern.png" alt="Riverside &amp; &quot;Co&quot; &lt;x&gt; on Stall" width="600" height="315"></a>`,
+        );
+        expect(card.querySelector('[data-role="embed-copy"]')).not.toBeNull();
+        expect(card.textContent).toContain(copy.SHARE_EMBED_LEDE);
+        // The lede says the picture does not change: a still is not a shop.
+        expect(copy.SHARE_EMBED_LEDE).toContain('does not change');
+    });
+});
+
 describe('the-studio-is-three-cards-and-a-preference', () => {
     /**
      * Name & look, Items & prices, Share — then the browser preference with
@@ -9704,7 +9733,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.paste-in, .share-url'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.paste-in, .share-url, .share-embed'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
