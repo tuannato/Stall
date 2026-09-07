@@ -351,6 +351,11 @@ function collectTx(
             height: tx.block?.height,
             isFinal: tx.isFinal === true,
             txid: tx.txid,
+            // The in-block tiebreak (`compareManifestRank`): four edits in one
+            // block interval are made in an order the node saw and txid did not.
+            ...(typeof tx.timeFirstSeen === 'number' && tx.timeFirstSeen > 0
+                ? { firstSeen: tx.timeFirstSeen }
+                : {}),
             // Carried per record and read only off the winner. The one reader
             // of the chain's clock, so a record whose stamp is unknown stays
             // undated rather than borrowing another record's.

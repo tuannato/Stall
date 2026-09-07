@@ -12,7 +12,7 @@
  *
  *   TxHistoryPage: 1 txs (Tx), 2 numPages, 3 numTxs
  *   Tx:            1 txid (bytes, reversed for display), 3 inputs,
- *                  4 outputs, 8 block, 16 isFinal
+ *                  4 outputs, 8 block, 9 timeFirstSeen, 16 isFinal
  *   TxInput:       2 inputScript, 3 outputScript
  *   TxOutput:      2 outputScript
  *   BlockMetadata: 1 height
@@ -29,6 +29,8 @@ export type LiteTx = {
     outputs: LiteOutput[];
     height?: number;
     isFinal: boolean;
+    /** Tx field 9, `timeFirstSeen`, seconds; absent when 0 — the app's in-block tiebreak. */
+    firstSeen?: number;
 };
 export type LitePage = { txs: LiteTx[]; numPages: number; numTxs: number };
 
@@ -200,6 +202,11 @@ function decodeTx(bytes: Uint8Array, start: number, end: number): LiteTx {
             const len = varint(bytes, cur);
             tx.height = decodeBlockHeight(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
+        } else if (field === 9 && wire === 0) {
+            const seen = varint(bytes, cur);
+            if (seen > 0) {
+                tx.firstSeen = seen;
+            }
         } else if (field === 16 && wire === 0) {
             tx.isFinal = varint(bytes, cur) !== 0;
         } else {

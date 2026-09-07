@@ -260,6 +260,17 @@ working accept, and there is no accept.
   and the owner chose to keep Listings first until the five-seller walk
   (§ Next action) says where a seller of real goods actually stops. Reopen
   with that evidence; a swap is copy only, one commit, reversible.
+- **A block's records rank by the node's first sighting, then txid**
+  (2026-09-07). The rule was txid alone within a block; a seller who edited
+  a quote four times in one block interval saw the edit with the highest
+  txid win over their removal. chronik's `timeFirstSeen` decides when both
+  stamps are known and differ — one node's clock, never alone. Not a wire
+  change; a reader rule, mirrored at the edge.
+- **A copycat stall is not a bug this app can fix** (2026-09-07). A stranger
+  signed the owner's public publish link with their own wallet: the owner's
+  stall labelled the dust correctly, and the stranger's address became a
+  stall wearing the owner's name and look. Names are not adjudicated
+  (§ Rejected); the address, the link and the code are what name a stall.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 

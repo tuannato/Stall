@@ -118,6 +118,7 @@ describe('the-edge-reader-mirrors-the-app', () => {
         signed?: boolean;
         height?: number;
         isFinal?: boolean;
+        timeFirstSeen?: number;
     }) {
         return {
             txid: new Uint8Array(32).fill(opts.txidByte),
@@ -160,7 +161,7 @@ describe('the-edge-reader-mirrors-the-app', () => {
                           timestamp: 0n,
                           isFinal: true,
                       },
-            timeFirstSeen: 0n,
+            timeFirstSeen: BigInt(opts.timeFirstSeen ?? 0),
             size: 200,
             isCoinbase: false,
             tokenEntries: [],
@@ -345,6 +346,33 @@ describe('the-edge-reader-mirrors-the-app', () => {
         // Finalized-and-unmined outranks every height; a bare mempool record
         // never wins — the same rule, the same words, as the app's winner.
         expect(text?.name).toBe('Finalized Unmined');
+    });
+
+    it('the-walk-crowns-the-same-winner-inside-a-block', async () => {
+        // Four edits in one block interval, measured 2026-09-07: the app now
+        // breaks the tie on chronik's first sighting, then txid. The edge
+        // reads proto field 9 and ranks the same way, so the social card
+        // crowns the record the page paints — here the later-seen one with
+        // the *lower* txid byte, which txid alone would have lost.
+        const first = encodeManifestHex('Seen First', 1)!;
+        const last = encodeManifestHex('Seen Last', 1)!;
+        const pageBytes = protoPage([
+            protoTx({ txidByte: 0x09, stl1Hex: first, height: 100, isFinal: true, timeFirstSeen: 1_757_254_801 }),
+            protoTx({ txidByte: 0x01, stl1Hex: last, height: 100, isFinal: true, timeFirstSeen: 1_757_255_117 }),
+        ]);
+        const fetcher = async (path: string) =>
+            path.includes('/script/') || path.includes('/lokad-id/')
+                ? pageBytes
+                : undefined;
+        const text = await resolveManifestTextByHash(HASH, fetcher);
+        expect(text?.name).toBe('Seen Last');
+        // And with no stamps the old rule stands: highest txid.
+        const bare = protoPage([
+            protoTx({ txidByte: 0x09, stl1Hex: first, height: 100, isFinal: true }),
+            protoTx({ txidByte: 0x01, stl1Hex: last, height: 100, isFinal: true }),
+        ]);
+        const bareText = await resolveManifestTextByHash(HASH, async () => bare);
+        expect(bareText?.name).toBe('Seen First');
     });
 });
 

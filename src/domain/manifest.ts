@@ -381,6 +381,17 @@ export type ManifestRank = {
     /** Avalanche pre-consensus finality, as chronik reports it on the tx. */
     isFinal: boolean;
     txid: string;
+    /**
+     * chronik's `timeFirstSeen`, seconds; absent or 0 is unknown. The tiebreak
+     * inside one block, and between two finalized unmined records: a seller
+     * who edits a record four times in one block interval made those edits in
+     * an order, and txid knows nothing of it — measured 2026-09-07, when the
+     * seller's removal lost to the edit with the highest txid. One node's
+     * clock, so it decides only when both stamps are known and differ; a node
+     * that restarted stamps the block time on everything and the tie falls
+     * through to txid as before.
+     */
+    firstSeen?: number;
 };
 
 /** Ranks above every real block height, because it is newer than all of them. */
@@ -406,7 +417,17 @@ export function compareManifestRank(a: ManifestRank, b: ManifestRank): number {
     if (ah !== bh) {
         return ah - bh;
     }
+    const af = knownSeen(a.firstSeen);
+    const bf = knownSeen(b.firstSeen);
+    if (af !== undefined && bf !== undefined && af !== bf) {
+        return af - bf;
+    }
     return a.txid < b.txid ? -1 : a.txid > b.txid ? 1 : 0;
+}
+
+/** chronik's `timeFirstSeen: 0` means unknown, and unknown does not rank. */
+function knownSeen(seen: number | undefined): number | undefined {
+    return typeof seen === 'number' && Number.isFinite(seen) && seen > 0 ? seen : undefined;
 }
 
 function rankHeight(record: ManifestRank): number {
@@ -427,8 +448,11 @@ function rankHeight(record: ManifestRank): number {
  * `isFinal` accepts the weaker guarantee and turns down the stronger one.
  *
  * So a finalized record that is not yet mined is the newest thing that exists,
- * and it wins. Two of them tie on txid, exactly as two records in one block
- * already do, because chronik exposes no order within a block either.
+ * and it wins. Two of them, and two records in one block, rank by chronik's
+ * `timeFirstSeen` when both are known — the order the node saw them, which is
+ * the order the seller made them far more often than txid is — and only then
+ * on txid. chronik exposes no order within a block; its clock is the closest
+ * thing to one, and it is one node's, so it never decides alone.
  *
  * What still does not compete: unfinalized and unmined. Two browsers reading
  * different nodes see different mempools, and letting that decide means one

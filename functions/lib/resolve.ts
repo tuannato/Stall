@@ -324,6 +324,8 @@ type Candidate = LiteManifestText & {
     height?: number;
     isFinal: boolean;
     txid: string;
+    /** chronik's first sighting, the in-block tiebreak; absent is unknown. */
+    firstSeen?: number;
 };
 
 const FINALIZED_UNMINED = Number.MAX_SAFE_INTEGER;
@@ -349,6 +351,15 @@ function betterOf(a: Candidate | undefined, b: Candidate): Candidate | undefined
     const bh = rankHeight(b);
     if (bh !== ah) {
         return bh > ah ? b : a;
+    }
+    // Same block (or both finalized unmined): the node's own first sighting
+    // orders them when both are known — mirrors `compareManifestRank`.
+    if (
+        a.firstSeen !== undefined &&
+        b.firstSeen !== undefined &&
+        a.firstSeen !== b.firstSeen
+    ) {
+        return b.firstSeen > a.firstSeen ? b : a;
     }
     return b.txid > a.txid ? b : a;
 }
@@ -462,6 +473,7 @@ function bestInLitePage(
             height: tx.height,
             isFinal: tx.isFinal,
             txid: tx.txid,
+            ...(tx.firstSeen === undefined ? {} : { firstSeen: tx.firstSeen }),
         });
     }
     return out;

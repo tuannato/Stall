@@ -182,6 +182,11 @@ function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
         height: tx.block?.height,
         isFinal: tx.isFinal === true,
         txid: tx.txid,
+        // The in-block tiebreak. Only the node's own first sighting: the
+        // block's timestamp is one value for every record in it.
+        ...(typeof tx.timeFirstSeen === 'number' && tx.timeFirstSeen > 0
+            ? { firstSeen: tx.timeFirstSeen }
+            : {}),
     };
 }
 

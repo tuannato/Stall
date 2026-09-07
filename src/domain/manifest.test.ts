@@ -136,6 +136,63 @@ describe('prefers-higher-block-then-txid', () => {
     });
 });
 
+describe('same-block-records-rank-by-first-seen-then-txid', () => {
+    /**
+     * Measured 2026-09-07 on a live stall: four STLD edits in one block —
+     * a price change, two unit changes, then the removal — and the winner was
+     * the edit with the highest txid, not the seller's last action. Within a
+     * block, chronik's `timeFirstSeen` is the order the node saw them, which
+     * is the order the seller made them; it decides when both stamps are known
+     * and differ, and unknown (0) falls through to txid as before.
+     */
+    it('lets the record seen last win a block, whatever its txid', () => {
+        const winner = pickManifestWinner([
+            { height: 965742, isFinal: true, txid: 'dde0', firstSeen: 1_757_254_801 },
+            { height: 965742, isFinal: true, txid: 'c241', firstSeen: 1_757_254_920 },
+            { height: 965742, isFinal: true, txid: '0b26', firstSeen: 1_757_255_001 },
+            { height: 965742, isFinal: true, txid: 'a7c1', firstSeen: 1_757_255_117 },
+        ]);
+        expect(winner?.txid).toBe('a7c1');
+    });
+
+    it('a higher block still beats a later sighting in a lower one', () => {
+        const winner = pickManifestWinner([
+            { height: 11, isFinal: true, txid: 'aa', firstSeen: 100 },
+            { height: 10, isFinal: true, txid: 'zz', firstSeen: 900 },
+        ]);
+        expect(winner?.txid).toBe('aa');
+    });
+
+    it('falls through to txid when a stamp is unknown or the stamps tie', () => {
+        expect(
+            pickManifestWinner([
+                { height: 5, isFinal: true, txid: 'aa', firstSeen: 500 },
+                { height: 5, isFinal: true, txid: 'cc' },
+            ])?.txid,
+        ).toBe('cc');
+        expect(
+            pickManifestWinner([
+                { height: 5, isFinal: true, txid: 'aa', firstSeen: 500 },
+                { height: 5, isFinal: true, txid: 'cc', firstSeen: 0 },
+            ])?.txid,
+        ).toBe('cc');
+        expect(
+            pickManifestWinner([
+                { height: 5, isFinal: true, txid: 'cc', firstSeen: 500 },
+                { height: 5, isFinal: true, txid: 'aa', firstSeen: 500 },
+            ])?.txid,
+        ).toBe('cc');
+    });
+
+    it('orders two finalized unmined records the same way', () => {
+        const winner = pickManifestWinner([
+            { height: undefined, isFinal: true, txid: 'cc', firstSeen: 100 },
+            { height: undefined, isFinal: true, txid: 'aa', firstSeen: 200 },
+        ]);
+        expect(winner?.txid).toBe('aa');
+    });
+});
+
 describe('finalized-unmined-beats-mined', () => {
     /**
      * A record avalanche has finalized is newer than anything already in a
