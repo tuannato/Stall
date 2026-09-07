@@ -123,13 +123,33 @@ describe('the-guide-does-not-say-a-payment-counts-as-paid-in-full', () => {
  * allows and nothing else; the guide names it, read from the same policy
  * file the app ships, so a change of feed turns this page red.
  */
-describe('the-guide-names-the-rate-source-the-csp-allows', () => {
-    it('names CoinGecko because _headers allows api.coingecko.com', () => {
+describe('the-guide-names-every-rate-source-the-csp-allows', () => {
+    /**
+     * Derived from the policy, not from memory: every non-chronik host in
+     * `connect-src` is a price feed the money path may consult, and the guide
+     * must name each one — a host added to the policy with the guide left
+     * alone turns this red, where "contains CoinGecko" stayed green.
+     */
+    it('names each price feed the policy lets the page reach', () => {
         const headers = read('public', '_headers');
         const csp = headers.split('\n').find((line) => line.includes('Content-Security-Policy'))!;
         const connect = csp.split(';').find((part) => part.trim().startsWith('connect-src'))!;
-        expect(connect).toContain('https://api.coingecko.com');
-        expect(flat(read('public', 'guide.html'))).toContain('CoinGecko');
+        const names: Record<string, string> = {
+            'https://api.coingecko.com': 'CoinGecko',
+            'https://api.coinpaprika.com': 'CoinPaprika',
+        };
+        const feeds = connect
+            .trim()
+            .split(/\s+/)
+            .slice(1)
+            .filter((src) => src.startsWith('https://') && !src.includes('chronik'));
+        expect(feeds.length).toBeGreaterThanOrEqual(2);
+        const guide = flat(read('public', 'guide.html'));
+        for (const host of feeds) {
+            const name = names[host];
+            expect(name, `a price feed this test has no name for: ${host}`).toBeDefined();
+            expect(guide, host).toContain(name!);
+        }
     });
 });
 

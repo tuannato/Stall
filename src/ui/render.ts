@@ -3408,6 +3408,14 @@ export const PAY_RATE_MAX_AGE_MS = 120_000;
 export const PAY_RATE_TIMEOUT_MS = 8_000;
 
 /**
+ * The second feed's budget, strictly shorter than the first's: it rides
+ * beside the primary under `withDeadline`, so the figure a buyer waits for
+ * is bounded by the primary's own ceiling and a hung check answers
+ * "unchecked" rather than holding anything up.
+ */
+export const PAY_CHECK_TIMEOUT_MS = 3_000;
+
+/**
  * The valve's own threshold when the seller stated none.
  *
  * **Never painted as the seller's.** A tolerance on screen is something they
@@ -3738,8 +3746,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * result: the figure on screen, both links and the code are that same
      * `bigint`, so a buyer cannot be shown one number and handed another.
      */
-    /** What the valve last found; seeded from the view so a fixture can stage it. */
-    let outcome: StallView['payRateOutcome'] = view.payRateOutcome;
+    /**
+     * What the valve last found; seeded from the view so a fixture can stage
+     * it. A check that disagreed at the open is the same fact on the same
+     * node: said, and the figure restated — never refused.
+     */
+    let outcome: StallView['payRateOutcome'] =
+        view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
 
     const refresh = (): void => {
         clearPayQrTimer();
@@ -3773,15 +3786,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             rateLabel.textContent =
                 glance === undefined || rate === undefined
                     ? ''
-                    : copy.payRateLine(glance, formatTriedAt(rate.atMs));
+                    : copy.payRateLine(glance, formatTriedAt(rate.atMs), copy.rateSources(rate.check));
         }
         why.hidden = sats !== undefined && !subDust;
         why.textContent = subDust
             ? copy.PAY_SUB_DUST
             : sats === undefined
-              ? payWhy === 'implausible'
-                  ? copy.PAY_RATE_IMPLAUSIBLE_WHY
-                  : copy.PAY_NO_RATE_WHY
+              ? copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
 
         const linked = cashtab !== undefined && pay !== undefined;
@@ -3792,18 +3803,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // After the price moved the control restates the figure it will open,
         // composed from the same satoshis as the figure and both URLs.
         web.textContent =
-            outcome === 'moved' && sats !== undefined ? copy.payFigure(formatXec(sats)) : copy.PAY_CASHTAB;
+            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+                ? copy.payFigure(formatXec(sats))
+                : copy.PAY_CASHTAB;
         valve.hidden = outcome === undefined;
-        valve.textContent =
-            outcome === 'implausible'
-                ? copy.PAY_RATE_IMPLAUSIBLE
-                : outcome === 'unavailable'
-                  ? copy.PAY_RATE_UNAVAILABLE
-                  : outcome === 'moved'
-                  ? copy.PAY_RATE_MOVED
-                  : outcome === 'refreshed'
-                    ? copy.PAY_RATE_REFRESHED
-                    : '';
+        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -3876,14 +3880,18 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 const after = satsForQuote(price, quantity, answered?.rate);
                 // A refused answer is its own outcome: the same collapse the
                 // mount path refuses must not come back on the press.
+                // Two feeds disagreeing outranks a move: it is the stronger
+                // doubt about the one figure the buyer is about to sign.
                 outcome =
                     answered === undefined || after === undefined
                         ? payWhy === 'implausible'
                             ? 'implausible'
                             : 'unavailable'
-                        : movedPastTolerance(before, after, price.tolerancePct)
-                          ? 'moved'
-                          : 'refreshed';
+                        : answered.check === 'disagree'
+                          ? 'disagree'
+                          : movedPastTolerance(before, after, price.tolerancePct)
+                            ? 'moved'
+                            : 'refreshed';
                 refresh();
             })();
         });
@@ -3902,7 +3910,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     ? payWhy === 'implausible'
                         ? 'implausible'
                         : 'unavailable'
-                    : 'refreshed';
+                    : answered.check === 'disagree'
+                      ? 'disagree'
+                      : 'refreshed';
             refresh();
         })();
     });

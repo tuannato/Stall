@@ -17,7 +17,7 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
-import { DEFAULT_FIAT_CODE, isPlausibleRate } from './domain/fiat';
+import { DEFAULT_FIAT_CODE, judgeRates, type RateCheck } from './domain/fiat';
 import {
     clearSavedStall,
     isPinnedStall,
@@ -133,7 +133,9 @@ import {
     renderStall,
     holdsLivePaint,
 } from './ui';
-import { PAY_RATE_TIMEOUT_MS } from './ui/render';
+import { PAY_CHECK_TIMEOUT_MS, PAY_RATE_TIMEOUT_MS } from './ui/render';
+import { fetchXecPriceCheck } from './net/priceCheck';
+import { withDeadline } from './domain/deadline';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -315,7 +317,7 @@ export function boot(
      * — it holds the typed quantity in a closure and cannot be repainted for a
      * rate — so this exists to seed the sheet when it opens.
      */
-    let payRate: { rate: bigint; atMs: number } | undefined;
+    let payRate: { rate: bigint; atMs: number; check?: RateCheck } | undefined;
     /** Why there is none — a feed that did not answer, or an answer refused (CLAUDE §8). */
     let payRateWhy: PayRateWhy | undefined;
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
@@ -822,22 +824,31 @@ export function boot(
      * would throw away what they typed. The sheet refreshes itself in place.
      */
     const readPayRate = async (timeoutMs?: number): Promise<PayRateAnswer> => {
-        const rate = await fetchXecPrice(
-            DEFAULT_FIAT_CODE,
-            timeoutMs === undefined ? undefined : { timeoutMs },
-        );
-        // The window is the domain's (`isPlausibleRate`, in the feed's own
-        // scaled unit) and applies here, on the figure a wallet signs — not
-        // in `refreshFiat`: the glance is `≈`, off the money path, and has no
-        // sentence for absence, so refusing it silently would make one
-        // silence mean two things (CLAUDE §8).
+        // Two feeds, asked together, wherever this runs (the open, the `?pay=`
+        // landing, the press-time valve, the refresh control). The second
+        // rides under its own, shorter budget, so a hung check cannot hold
+        // the figure past the primary's ceiling; at its deadline it is simply
+        // "unchecked". Everything about what the two answers mean — the
+        // window, the disagreement line, and that the check can only speak
+        // and never price — is the domain's (`judgeRates`), not this file's.
+        // Neither feed judges the glance (`refreshFiat`): that is `≈`, off
+        // the money path, and has no sentence for absence (CLAUDE §8).
+        const [primary, check] = await Promise.all([
+            fetchXecPrice(DEFAULT_FIAT_CODE, timeoutMs === undefined ? undefined : { timeoutMs }),
+            withDeadline(
+                fetchXecPriceCheck(DEFAULT_FIAT_CODE, { timeoutMs: PAY_CHECK_TIMEOUT_MS }),
+                PAY_CHECK_TIMEOUT_MS,
+            ),
+        ]);
+        const judged = judgeRates(DEFAULT_FIAT_CODE, primary, check);
         const answer: PayRateAnswer =
-            rate === undefined
-                ? { why: 'no-answer' }
-                : !isPlausibleRate(DEFAULT_FIAT_CODE, rate)
-                  ? { why: 'implausible' }
-                  : { rate, atMs: Date.now() };
-        payRate = answer.rate === undefined ? undefined : { rate: answer.rate, atMs: answer.atMs };
+            judged.kind === 'refused'
+                ? { why: judged.why }
+                : { rate: judged.rate, atMs: Date.now(), check: judged.check };
+        payRate =
+            answer.rate === undefined
+                ? undefined
+                : { rate: answer.rate, atMs: answer.atMs, check: answer.check };
         payRateWhy = answer.rate === undefined ? answer.why : undefined;
         state = { ...state, view: { ...state.view, payRate, payRateWhy } };
         return answer;
@@ -994,9 +1005,11 @@ export function boot(
                 ) {
                     void (async () => {
                         const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
+                        // The same gate `onOpenPay` keeps: a feed that did not
+                        // answer changes nothing on screen; a refused answer does.
                         if (
                             claimed !== generation ||
-                            fresh === undefined ||
+                            (fresh.rate === undefined && fresh.why === 'no-answer') ||
                             state.view.overlay.kind !== 'pay' ||
                             state.view.overlay.tokenId !== tokenId
                         ) {

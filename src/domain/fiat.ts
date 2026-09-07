@@ -291,3 +291,67 @@ function groupSubUnits(subUnits: bigint, digits: number): string {
     const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return frac === '' ? grouped : `${grouped}.${frac}`;
 }
+
+/** What the second feed said about the first's answer, or that it said nothing. */
+export type RateCheck = 'agree' | 'disagree' | 'none';
+
+/**
+ * The line past which two feeds are said to disagree: five per cent of the
+ * larger, as a whole figure. **Not the seller's tolerance and not the
+ * valve's 2 %** (`PAY_VALVE_DEFAULT_PCT`): that one is a move over time on
+ * one feed between two presses; this one is a gap between two feeds at one
+ * moment. They answer different questions and are not to be harmonised.
+ *
+ * Unmeasured beyond one sample — 0.08 % at rest on 2026-09-07 — and two
+ * aggregators with different cache ages disagree by about the size of a
+ * move inside the staleness window, so the gap is largest exactly when
+ * people transact. That is why crossing it only **says** so (a valve
+ * sentence and the figure restated) and never refuses a figure: a refusal
+ * would be an outage generator on an unmeasured number. `scripts/rate-gap.mjs`
+ * samples both feeds; re-pin this when the day's maximum exists.
+ */
+export const RATE_DISAGREE_PCT = 5n;
+
+/** Whether two scaled rates are further apart than `RATE_DISAGREE_PCT` of the larger. Symmetric. */
+export function ratesDisagree(a: bigint, b: bigint): boolean {
+    if (a <= 0n || b <= 0n) {
+        return true;
+    }
+    const gap = a > b ? a - b : b - a;
+    const larger = a > b ? a : b;
+    return gap * 100n > larger * RATE_DISAGREE_PCT;
+}
+
+export type RateJudgement =
+    | { kind: 'rate'; rate: bigint; check: RateCheck }
+    | { kind: 'refused'; why: 'no-answer' | 'implausible' };
+
+/**
+ * One figure from two feeds. **The first feed prices; the second can only
+ * speak about it.** The check's rate never leaves this function — it is
+ * not in the return type — so no caller can be handed it, fall back to it,
+ * or paint it: a wrong answer from the check costs at most a sentence, and
+ * a wrong answer from the primary is what the sentence is for.
+ *
+ * The primary absent or outside the window is refused exactly as before,
+ * whatever the check said. A check that is absent, or itself outside the
+ * window, is `none` — today's shipped behaviour, said out loud on the rate
+ * line — because a second third party must not be able to take the pay
+ * rail down (`src/net/price.ts`: a price feed may not take the shop down).
+ */
+export function judgeRates(
+    code: string,
+    primary: bigint | undefined,
+    check: bigint | undefined,
+): RateJudgement {
+    if (primary === undefined) {
+        return { kind: 'refused', why: 'no-answer' };
+    }
+    if (!isPlausibleRate(code, primary)) {
+        return { kind: 'refused', why: 'implausible' };
+    }
+    if (check === undefined || !isPlausibleRate(code, check)) {
+        return { kind: 'rate', rate: primary, check: 'none' };
+    }
+    return { kind: 'rate', rate: primary, check: ratesDisagree(primary, check) ? 'disagree' : 'agree' };
+}

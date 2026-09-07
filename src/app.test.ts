@@ -15,6 +15,9 @@ import { boot, type AppState } from './app';
 vi.mock('./net/price', () => ({
     fetchXecPrice: async () => undefined,
 }));
+vi.mock('./net/priceCheck', () => ({
+    fetchXecPriceCheck: async () => undefined,
+}));
 import { parseSellerParam, sellerFromPath, stallPath } from './domain/route';
 import type { StallOffer } from './domain/state';
 import {

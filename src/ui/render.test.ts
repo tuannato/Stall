@@ -10617,6 +10617,105 @@ describe('an-implausible-rate-is-said-and-never-called-no-answer', () => {
     });
 });
 
+describe('every-rate-refusal-has-its-own-sentence', () => {
+    /**
+     * The sheet reads two lookup tables, one per union, and the compiler
+     * holds each table to its union — a new member cannot ship without a
+     * sentence. Ternaries with an `else` let `disagree` fall through to
+     * "CoinGecko did not answer", the exact collapse D9(a) shipped to fix.
+     */
+    it('keeps every sentence distinct and non-empty', () => {
+        const whys = Object.values(copy.PAY_RATE_WHY_TEXT);
+        const valves = Object.values(copy.PAY_VALVE_TEXT);
+        expect(Object.keys(copy.PAY_RATE_WHY_TEXT).sort()).toEqual(['implausible', 'no-answer']);
+        expect(Object.keys(copy.PAY_VALVE_TEXT).sort()).toEqual(
+            ['disagree', 'implausible', 'moved', 'refreshed', 'unavailable'],
+        );
+        for (const list of [whys, valves]) {
+            expect(new Set(list).size).toBe(list.length);
+            for (const sentence of list) expect(sentence.length).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe('a-disagreeing-check-is-said-and-the-figure-stands', () => {
+    /**
+     * The second feed can only speak: a disagreement is a valve sentence and
+     * the figure restated on the control — the moved-rate shape — never a
+     * refusal. The rate line names both feeds; the press still opens, on the
+     * first feed's figure, because the buyer decides with the fact in view.
+     */
+    it('paints the valve, names both feeds, restates the figure, and opens on press', () => {
+        const rate = { rate: PAY_RATE.rate, atMs: Date.now(), check: 'disagree' as const };
+        const { root } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: rate }));
+        const sats = satsForQuote(QUOTE_USD, 1n, rate.rate)!;
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_RATE_DISAGREE);
+        const line = root.querySelector('[data-role="rate"]')?.textContent ?? '';
+        expect(line).toContain(copy.RATE_SOURCE_PRIMARY);
+        expect(line).toContain(copy.RATE_SOURCE_CHECK);
+        expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(
+            copy.payFigure(formatXec(sats)),
+        );
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(formatXec(sats));
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        expect(open).toHaveBeenCalledOnce();
+        open.mockRestore();
+    });
+
+    it('an unchecked figure names one feed and no valve', () => {
+        const { root } = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...PAY_RATE, check: 'none' } }),
+        );
+        const line = root.querySelector('[data-role="rate"]')?.textContent ?? '';
+        expect(line).toContain(copy.RATE_SOURCE_PRIMARY);
+        expect(line).not.toContain(copy.RATE_SOURCE_CHECK);
+        expect((root.querySelector('[data-role="pay-valve"]') as HTMLElement).hidden).toBe(true);
+        // A fixture that says nothing about the check reads the same way.
+        const { root: bare } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }));
+        expect(bare.querySelector('[data-role="rate"]')?.textContent).toBe(line);
+    });
+
+    it('a refresh that disagrees does not say no fresh price', async () => {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({ rate: PAY_RATE.rate, atMs: Date.now(), check: 'disagree' as const })),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }), h);
+        (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_RATE_DISAGREE);
+    });
+});
+
+describe('an-xec-quote-says-nothing-about-a-price-source', () => {
+    /**
+     * No rate is involved in an XEC quote (`PAY_XEC_QUOTE_NOTE`), so no feed
+     * is named and no disagreement can be said there — even when a fixture
+     * carries a check, as `an-xec-quote-mounts-no-tolerance-line` already
+     * guards the tolerance.
+     */
+    it('mounts no rate line and no valve for a staged disagreement', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                payRate: { ...PAY_RATE, check: 'disagree' },
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).not.toContain(copy.RATE_SOURCE_PRIMARY);
+        expect(sheet.textContent).not.toContain(copy.RATE_SOURCE_CHECK);
+        expect(sheet.textContent).not.toContain(copy.PAY_RATE_DISAGREE);
+        expect((sheet.querySelector('[data-role="pay-valve"]') as HTMLElement).hidden).toBe(true);
+    });
+});
+
 describe('a-moved-rate-on-the-view-paints-the-moved-state', () => {
     /**
      * The valve's outcome rides the view so a fixture can stage what only a

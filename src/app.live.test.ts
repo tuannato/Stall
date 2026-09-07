@@ -23,9 +23,13 @@ import {
     EVENT_SETTINGS,
     EVENT_SETTINGS_STRANGER,
     PAY_NO_RATE_WHY,
+    PAY_RATE_DISAGREE,
     PAY_RATE_IMPLAUSIBLE_WHY,
+    RATE_SOURCE_CHECK,
+    RATE_SOURCE_PRIMARY,
 } from './ui/copy';
 import { scaleRate } from './domain/fiat';
+import { PAY_CHECK_TIMEOUT_MS } from './ui/render';
 
 /**
  * The live half of `app.ts`, against real readers and a fake chain.
@@ -260,12 +264,20 @@ vi.mock('./net/live', async (importOriginal) => {
 const { priceControl } = vi.hoisted(() => ({
     priceControl: {
         fetch: async (_code: string): Promise<bigint | undefined> => undefined,
+        check: async (_code: string, _opts?: { timeoutMs?: number }): Promise<bigint | undefined> =>
+            undefined,
     },
 }));
 
 vi.mock('./net/price', () => ({
     fetchXecPrice: (code: string, _opts?: { timeoutMs?: number }) =>
         priceControl.fetch(code),
+}));
+// The second feed is mocked beside the first, or five pay-sheet tests would
+// make a real request to api.coinpaprika.com under happy-dom's fetch.
+vi.mock('./net/priceCheck', () => ({
+    fetchXecPriceCheck: (code: string, opts?: { timeoutMs?: number }) =>
+        priceControl.check(code, opts),
 }));
 
 /**
@@ -400,6 +412,7 @@ beforeEach(() => {
     painted.view = undefined;
     localStorage.clear();
     priceControl.fetch = async () => undefined;
+    priceControl.check = async () => undefined;
 });
 
 describe('a-settings-publish-lands-without-a-reload', () => {
@@ -3229,5 +3242,106 @@ describe('an-implausible-feed-answer-is-refused-and-said', () => {
         await flush();
         expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
         expect(painted.view?.payRateWhy).toBeUndefined();
+    });
+});
+
+describe('the-pay-sheet-asks-both-feeds', () => {
+    /**
+     * The second feed is asked beside the first wherever `readPayRate` runs,
+     * under its own shorter budget — and a mock that is never called would
+     * pass every other test here, so the call is counted.
+     */
+    const META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const quoted = () =>
+        stallEmpty({
+            tokens: new Map([[TOKEN, META]]),
+            prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+        });
+
+    it('asks the check once per read, with its own budget, and names both feeds when they agree', async () => {
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        const check = vi.fn(async (_code: string, _opts?: { timeoutMs?: number }) => scaleRate(0.0000301)!);
+        priceControl.check = check;
+        const { root } = bootStall(quoted());
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(check).toHaveBeenCalledTimes(1);
+        expect(check.mock.calls[0]![1]).toEqual({ timeoutMs: PAY_CHECK_TIMEOUT_MS });
+        expect(painted.view?.payRate?.check).toBe('agree');
+        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
+        expect(rate).toContain(RATE_SOURCE_PRIMARY);
+        expect(rate).toContain(RATE_SOURCE_CHECK);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
+    });
+
+    it('prices with the first feed and never the check', async () => {
+        // Distinct but agreeing, so an argument swap would show in the figure.
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        priceControl.check = async () => scaleRate(0.0000301)!;
+        const { root } = bootStall(quoted());
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
+            '166,666.67',
+        );
+    });
+
+    it('a check that disagrees is said on the valve, and the figure stands', async () => {
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        priceControl.check = async () => scaleRate(0.00006)!;
+        const { root } = bootStall(quoted());
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(painted.view?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
+        expect(painted.view?.payRate?.check).toBe('disagree');
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_RATE_DISAGREE);
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
+            '166,666.67',
+        );
+    });
+
+    it('a check that did not answer leaves the figure resting on one named feed', async () => {
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        priceControl.check = async () => undefined;
+        const { root } = bootStall(quoted());
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(painted.view?.payRate?.check).toBe('none');
+        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
+        expect(rate).toContain(RATE_SOURCE_PRIMARY);
+        expect(rate).not.toContain(RATE_SOURCE_CHECK);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
+    });
+
+    it('a slow check does not hold up the figure', async () => {
+        vi.useFakeTimers();
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        // Never answers inside the budget; the deadline answers "unchecked".
+        priceControl.check = () => new Promise(() => {});
+        const { root } = bootStall(quoted());
+        for (let i = 0; i < 8; i += 1) {
+            await vi.advanceTimersByTimeAsync(0);
+        }
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await vi.advanceTimersByTimeAsync(PAY_CHECK_TIMEOUT_MS - 1);
+        expect(painted.view?.payRate, 'still waiting on the check inside its budget').toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        for (let i = 0; i < 4; i += 1) {
+            await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        expect(painted.view?.payRate?.check).toBe('none');
+        vi.useRealTimers();
     });
 });

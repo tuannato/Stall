@@ -7,7 +7,10 @@ import {
     formatXecRate,
     isPlausibleRate,
     isSupportedFiat,
+    judgeRates,
+    RATE_DISAGREE_PCT,
     RATE_WINDOWS,
+    ratesDisagree,
     satsForQuote,
     scaleRate,
 } from './fiat';
@@ -251,5 +254,49 @@ describe('a-rate-outside-the-window-is-implausible', () => {
     it('judges no code that has no window', () => {
         expect(RATE_WINDOWS['vnd']).toBeUndefined();
         expect(isPlausibleRate('vnd', scaleRate(5)!)).toBe(true);
+    });
+});
+
+describe('two-feeds-that-disagree-past-the-line-are-said-to', () => {
+    /**
+     * Five per cent of the larger, symmetric, in bigint — `Number()` on a
+     * scaled rate is banned on the money path (CLAUDE §8). Either side of the
+     * line, either order of the arguments.
+     */
+    it('draws the line at five per cent of the larger, either way round', () => {
+        expect(RATE_DISAGREE_PCT).toBe(5n);
+        const p = scaleRate(0.00003)!;
+        const under = (p * 951n) / 1000n; // 4.9 % below
+        const over = (p * 949n) / 1000n; // 5.1 % below
+        expect(ratesDisagree(p, under)).toBe(false);
+        expect(ratesDisagree(under, p)).toBe(false);
+        expect(ratesDisagree(p, over)).toBe(true);
+        expect(ratesDisagree(over, p)).toBe(true);
+        expect(ratesDisagree(p, p * 2n), 'a doubled answer').toBe(true);
+        expect(ratesDisagree(p, p)).toBe(false);
+        expect(ratesDisagree(p, 0n), 'nothing is not agreement').toBe(true);
+    });
+});
+
+describe('the-figure-comes-from-the-first-feed-and-never-the-check', () => {
+    /**
+     * The check's rate is not in the judge's return type, so no caller can be
+     * handed it. Distinct but agreeing rates make an argument swap visible;
+     * a check present while the primary is absent must not become a figure.
+     */
+    const primary = scaleRate(0.0000300)!;
+    const agreeing = scaleRate(0.0000301)!;
+
+    it('prices with the first feed and only speaks with the second', () => {
+        expect(judgeRates('usd', primary, agreeing)).toEqual({ kind: 'rate', rate: primary, check: 'agree' });
+        expect(judgeRates('usd', primary, primary * 2n)).toEqual({ kind: 'rate', rate: primary, check: 'disagree' });
+        expect(judgeRates('usd', primary, undefined)).toEqual({ kind: 'rate', rate: primary, check: 'none' });
+        // A check outside the window is no check, not a disagreement.
+        expect(judgeRates('usd', primary, scaleRate(5)!)).toEqual({ kind: 'rate', rate: primary, check: 'none' });
+    });
+
+    it('refuses on the first feed alone, whatever the second said', () => {
+        expect(judgeRates('usd', undefined, agreeing)).toEqual({ kind: 'refused', why: 'no-answer' });
+        expect(judgeRates('usd', scaleRate(5)!, agreeing)).toEqual({ kind: 'refused', why: 'implausible' });
     });
 });

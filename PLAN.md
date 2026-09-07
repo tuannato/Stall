@@ -211,10 +211,12 @@ working accept, and there is no accept.
   for the first time in a dispute. A quote with no byte prints "no
   tolerance stated", and the page's own 2 % valve (`PAY_VALVE_DEFAULT_PCT`)
   is this page's comparison, never the seller's promise.
-- **No wider `connect-src` and no two-tier client now** (D5, 2026-09-07).
-  Every host added is a party that sees which stall a visitor opens and
-  that can lie to them — chronik is a trusted indexer — and nobody has yet
-  met the failure this would answer. The long path is the owner's own node
+- **No wider chronik host list and no two-tier client now** (D5,
+  2026-09-07). Every chronik host added is a party that sees which stall a
+  visitor opens and that can lie to them — chronik is a trusted indexer —
+  and nobody has yet met the failure this would answer. The one
+  `connect-src` widening the same day is the second price feed below: a
+  host that learns a payment is being composed, not which stall. The long path is the owner's own node
   with the plugin (`deploy/chronik-agora.md`); a second operator worth
   trusting would reopen two tiers.
 - **A non-minimal push is not this app's record** (D6, 2026-09-07). The
@@ -224,6 +226,32 @@ working accept, and there is no accept.
   unreadable become readable — while tightening later is not, so strictness
   keeps the option. The known cost: a wallet that emits a non-minimal push
   reads as never published, with no sentence saying why.
+- **The first-open check is a second price feed, not a comparison with
+  ourselves** (D9(b), decided 2026-09-07, owner: "Ok sử dụng coinpaprika",
+  "Chốt cách dùng luôn"). The movement check D9(b) first asked for —
+  CoinGecko against a boot glance, or against itself twice — is **declined**:
+  the glance has no clock, and one feed's answer is cached for a minute or
+  two, so asking it twice reads the same number. What ships instead asks
+  CoinPaprika beside CoinGecko wherever `readPayRate` runs, under a shorter
+  budget, and lets it **speak and never price**: the figure is always
+  CoinGecko's (`judgeRates`, the check's rate is not in its return type), the
+  rate line names the feeds consulted, and past `RATE_DISAGREE_PCT` (5 %,
+  one sample at rest measured 0.08 %; `scripts/rate-gap.mjs` is how the
+  line gets a number) the valve says the two disagree and restates the
+  figure — the moved-rate shape, never a refusal, because a refusal on an
+  unmeasured line is an outage generator during the moves people transact
+  in. A check that does not answer leaves today's behaviour, said as "one
+  feed" on the rate line. What it catches: a unit bug, a stale cache during
+  a move, one hijacked host. What it does not: a bad print on the dominant
+  venue both feeds draw from, or a network-position attacker who can lie
+  through one feed and suppress the other. USD only — for any other unit a
+  second source still does not exist (§ Rejected).
+  **The Free plan.** CoinPaprika's pricing page calls its keyless tier
+  "personal and non-commercial"; Stall takes no cut, holds no funds and
+  has no account, and the owner chose to use it as is (2026-09-07). If it is
+  ever refused the check goes absent and the pay rail does not notice.
+  Privacy: one more host sees a visitor's IP at those moments — no referrer,
+  no cookie, and a URL that names the asset, never the stall.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -264,7 +292,10 @@ that is still true:
 - **Any painted unit beyond `usd` and `xec`.** A *display* rule, never a wire
   one: the decoder keeps every code a record carries and the editor restates
   an unwritable one untouched on republish. Reopen on **both** of two
-  conditions: a second rate source, and a seller asking.
+  conditions: a second rate source, and a seller asking. (Since
+  2026-09-07 a second source exists **for USD only** — `fetchXecPriceCheck`
+  answers nothing for any other code, and `RATE_WINDOWS` judges none — so
+  the first condition is not met for any other unit.)
 - **Browsing every quote on chain.** A cross-stall index against the
   per-seller identity: Stall has no directory, no ranking and no takedown; the
   lokad index is floodable and its order is not chain order. A quote is found
@@ -289,7 +320,8 @@ that is still true:
   open of the pay sheet, not only on the aged refetch — see **Open**. What shipped instead on 2026-09-07 is a wide window in the feed's own
   unit (`isPlausibleRate`, two orders of magnitude outside anything XEC has
   traded at) that refuses only a unit-scale error, said in its own
-  sentence (`CLAUDE.md` §8); the glance is not judged.
+  sentence (`CLAUDE.md` §8); the glance is not judged. The same evening a
+  second feed took the first-open check (D9(b), § Decided).
 
 ---
 
@@ -454,16 +486,6 @@ have sent revenue to an output nobody can spend.
   **Decided**). Still open: the working manuals into version control (the
   owner's remote), D9(b) below, and the edge unfurl's page cap (3) against
   the app's (10).
-- **A "price moved" check on the first open of the pay sheet** (D9(b),
-  2026-09-07): approved, then held at the critic. The mechanism proposed —
-  compare the sheet's rate with the boot glance — has no clock: `fiatRate`
-  is fetched once in `boot`, never refreshed, and carries no timestamp, so
-  it would block a legitimate first press for every buyer whose tab outlived
-  a market move past the tolerance, and it would read `view.fiatRate` inside
-  the sheet against a rule written twice in code. Two honest shapes, the
-  owner's call: two fresh reads at open (one more CoinGecko call per sheet,
-  on a feed that already answers 429), or a clocked glance compared only
-  while younger than `PAY_RATE_MAX_AGE_MS`, which rarely applies.
 - **A Cashtab patch** that preselects a maker on the token market is not on
   Stall's buy path. It remains optional help for people who buy in Cashtab
   from somewhere else, never a blocker.

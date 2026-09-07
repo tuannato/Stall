@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import appConfig, { CSP } from '../vite.config';
 import { ICON_HOST } from './domain/icons';
-import { CHRONIK_HOSTS, PRICE_HOST } from './net/hosts';
+import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST } from './net/hosts';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -96,14 +96,23 @@ describe('script-src-and-connect-src-are-pinned', () => {
         }
     });
 
-    it('allows nothing in connect-src but self and the chronik hosts', () => {
+    it('allows nothing in connect-src but self, the chronik hosts and the two price feeds, by literal', () => {
+        // Pinned as literals the way `img-src-is-self-and-the-icon-host` pins
+        // the icon host: a constant compared with itself is lockstep-loosenable
+        // (change the constant, change three copies, green).
+        expect(PRICE_HOST).toBe('https://api.coingecko.com');
+        expect(PRICE_CHECK_HOST).toBe('https://api.coinpaprika.com');
         const expected = [
             "'self'",
             ...CHRONIK_HOSTS,
             ...CHRONIK_HOSTS.map((host) => host.replace('https://', 'wss://')),
-            // The price feed. One origin, and the only non-chronik host here:
-            // the fiat line is supplementary, and this is what it costs.
-            PRICE_HOST,
+            // The price feed, and since 2026-09-07 the second feed that is
+            // asked beside it and can only refuse a figure, never supply one
+            // (`judgeRates`). Two non-chronik hosts, and this is what a
+            // checked figure costs: one more party that learns a payment is
+            // being composed.
+            'https://api.coingecko.com',
+            'https://api.coinpaprika.com',
         ].sort();
         for (const [label, policy] of policyCopies()) {
             expect([...sources(policy, 'connect-src')].sort(), label).toEqual(expected);

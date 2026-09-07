@@ -1,3 +1,4 @@
+import type { RateCheck } from './fiat';
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
 import type { GenesisAttribution } from './genesis';
@@ -389,12 +390,20 @@ export type StallHistory = {
 export type PayRateWhy = 'no-answer' | 'implausible';
 
 /**
- * What one ask of the price feed yields for the pay sheet: a rate with its
- * stamp, or the reason there is none. Two reasons, because a refused answer
- * must never be painted as a feed that did not answer.
+ * What the press-time valve, or the check at the open, found. Every member
+ * has its own sentence in `PAY_VALVE_TEXT`, and the compiler holds it to that.
+ */
+export type PayRateOutcome = 'moved' | 'refreshed' | 'unavailable' | 'implausible' | 'disagree';
+
+/**
+ * What one ask of the price feeds yields for the pay sheet: a rate with its
+ * stamp and what the second feed said about it (`RateCheck`, absent in a
+ * fixture and read as `none`), or the reason there is none. Two reasons,
+ * because a refused answer must never be painted as a feed that did not
+ * answer. The rate is always the first feed's (`judgeRates`).
  */
 export type PayRateAnswer =
-    | { rate: bigint; atMs: number; why?: undefined }
+    | { rate: bigint; atMs: number; check?: RateCheck; why?: undefined }
     | { rate?: undefined; why: PayRateWhy };
 
 export type StallView = {
@@ -471,7 +480,7 @@ export type StallView = {
      * figure they are about to sign must not move under their cursor. The
      * stamp is what the press-time valve compares against.
      */
-    payRate?: { rate: bigint; atMs: number };
+    payRate?: { rate: bigint; atMs: number; check?: RateCheck };
     /**
      * Why there is no `payRate`: the feed did not answer, or it answered with
      * a rate outside the window this page will compose a payment from
@@ -493,7 +502,7 @@ export type StallView = {
      * press produces: the rate row's line and a Pay control that restates
      * the figure it will open. The sheet seeds its own state from this.
      */
-    payRateOutcome?: 'moved' | 'refreshed' | 'unavailable' | 'implausible';
+    payRateOutcome?: PayRateOutcome;
     /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never

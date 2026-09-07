@@ -1,6 +1,8 @@
 /** Load-bearing stall copy. Screens quote these; do not paraphrase at the call site. */
 
 import type { RecordAge } from '../domain/age';
+import type { RateCheck } from '../domain/fiat';
+import type { PayRateOutcome, PayRateWhy } from '../domain/state';
 
 export const LINK_UNREADABLE_TITLE = 'This link is unreadable';
 
@@ -1258,9 +1260,22 @@ export const payQuoteEquals = (figure: string): string =>
 /** An XEC quote is the figure itself: no rate is involved anywhere in it. */
 export const PAY_XEC_QUOTE_NOTE =
     'Seller\u2019s quote, written in XEC \u2014 no rate involved';
+/**
+ * The two feeds by name. The first prices the figure; the second is asked
+ * beside it and can only speak about it (`judgeRates`). The rate line names
+ * the feeds that were consulted, so "one feed" and "two feeds agreed" are
+ * both visible on the node that already carries the rate — no new line on
+ * the amount card, and no silence to interpret.
+ */
+export const RATE_SOURCE_PRIMARY = 'CoinGecko';
+export const RATE_SOURCE_CHECK = 'CoinPaprika';
+export const rateSources = (check: RateCheck | undefined): string =>
+    check === 'agree' || check === 'disagree'
+        ? `${RATE_SOURCE_PRIMARY} \u00b7 ${RATE_SOURCE_CHECK}`
+        : RATE_SOURCE_PRIMARY;
 /** Where the converted figure came from. `\u2248`: a glance, never a second price. */
-export const payRateLine = (rate: string, at: string): string =>
-    `\u2248 at 1 ${XEC} = ${rate} \u00b7 CoinGecko \u00b7 ${at}`;
+export const payRateLine = (rate: string, at: string, sources = RATE_SOURCE_PRIMARY): string =>
+    `\u2248 at 1 ${XEC} = ${rate} \u00b7 ${sources} \u00b7 ${at}`;
 export const PAY_RATE_REFRESH = 'Get a fresh price';
 /**
  * The rail's remaining fine print under one closed summary: memo, wallets
@@ -1325,6 +1340,32 @@ export const PAY_RATE_REFRESHED = 'Rate refreshed \u2014 press Pay again';
 export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
+/**
+ * The second feed disagrees with the first past `RATE_DISAGREE_PCT`. Said,
+ * never refused: the figure stands (it is the first feed's), the control
+ * restates it, and the buyer decides with the fact in front of them — the
+ * same shape as a moved rate. No timing is promised; nothing here knows
+ * when two caches re-converge.
+ */
+export const PAY_RATE_DISAGREE = 'Two price sources disagree \u2014 check the figure before you pay';
+/**
+ * Every reason a figure is missing, and every valve outcome, has its own
+ * sentence — and the compiler holds the tables to the unions, so a new
+ * member cannot be added without one. Ternaries with an `else` let a new
+ * `disagree` fall through to "CoinGecko did not answer", the exact collapse
+ * D9(a) shipped to fix.
+ */
+export const PAY_RATE_WHY_TEXT: Readonly<Record<PayRateWhy, string>> = {
+    'no-answer': PAY_NO_RATE_WHY,
+    implausible: PAY_RATE_IMPLAUSIBLE_WHY,
+};
+export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
+    unavailable: PAY_RATE_UNAVAILABLE,
+    implausible: PAY_RATE_IMPLAUSIBLE,
+    moved: PAY_RATE_MOVED,
+    refreshed: PAY_RATE_REFRESHED,
+    disagree: PAY_RATE_DISAGREE,
+};
 export const PAY_QR_FOLD = 'Scan with a phone wallet';
 export const PAY_QR_ALT = 'QR code of the payment';
 export const PAY_QR_LEDE = 'Opens the same payment in the phone\u2019s wallet.';
