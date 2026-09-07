@@ -31,8 +31,8 @@ apex keeping path and query.
   (`/guide`, `/stream`), a public activity feed of what the page saw arrive,
   a per-stall social card composed at the edge, and a token-icon proxy.
 - A whole-product evaluation (2026-09-06, five critics, two meta-critics)
-  and the first fix round after it (2026-09-07). Its open decisions are
-  listed under **Open** below.
+  the first fix round after it and the owner's D round, both 2026-09-07.
+  What is still open is under **Open** below.
 
 **The pivot, in one line:** Stall stopped trying to become the wallet and
 became a shop window that links out. What that costs is recorded honestly
@@ -211,6 +211,19 @@ working accept, and there is no accept.
   for the first time in a dispute. A quote with no byte prints "no
   tolerance stated", and the page's own 2 % valve (`PAY_VALVE_DEFAULT_PCT`)
   is this page's comparison, never the seller's promise.
+- **No wider `connect-src` and no two-tier client now** (D5, 2026-09-07).
+  Every host added is a party that sees which stall a visitor opens and
+  that can lie to them — chronik is a trusted indexer — and nobody has yet
+  met the failure this would answer. The long path is the owner's own node
+  with the plugin (`deploy/chronik-agora.md`); a second operator worth
+  trusting would reopen two tiers.
+- **A non-minimal push is not this app's record** (D6, 2026-09-07). The
+  reader takes direct pushes and `OP_PUSHDATA1` only, the edge mirrors it,
+  and nothing this app writes emits anything else; no record on chain needs
+  more. Loosening later is backward-compatible — records that were
+  unreadable become readable — while tightening later is not, so strictness
+  keeps the option. The known cost: a wallet that emits a non-minimal push
+  reads as never published, with no sentence saying why.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -422,7 +435,8 @@ have sent revenue to an output nobody can spend.
   on whatever page hosts the frame). A script that renders into the host
   page, or a server-rendered card, should be priced before an iframe is
   assumed.
-- **A chronik node of our own with the `agora` plugin.** Until then Stall
+- **A chronik node of our own with the `agora` plugin.** (Decided 2026-09-07 that
+  nothing is widened now — see **Decided**; this stays the long path.) Until then Stall
   depends on three community nodes run by one operator — one point of failure
   wearing three hostnames — and the CSP pins the whole app to them, so the
   quotes rail dies with the book even though it needs no plugin. The plugin
@@ -433,11 +447,13 @@ have sent revenue to an output nobody can spend.
 - **The three record counts on chain**: `STL1` 8, `STLD` 2, `STLP` 0 on
   2026-09-04. A fact with a date, not a standing property — re-measure before
   claiming, and read them as a product number from now on.
-- **The owner's decisions left by the 2026-09-06 evaluation**, none built:
-  the "sign with this stall's own wallet" sentence under the fold below
-  the sign control; the working manuals into version control; the app
-  accepting `OP_PUSHDATA2` in a record; the door chip "No signup, no install";
-  the edge unfurl's page cap (3) against the app's (10).
+- **The owner's decisions left by the 2026-09-06 evaluation** were taken on
+  2026-09-07 and built the same day (D1 tolerance default, D2 the sign
+  condition, D7 the door chip, D8 the provenance chip, D9(a) the rate
+  window, D10 the genesis link's floor — `git log`; D5 and D6 are under
+  **Decided**). Still open: the working manuals into version control (the
+  owner's remote), D9(b) below, and the edge unfurl's page cap (3) against
+  the app's (10).
 - **A "price moved" check on the first open of the pay sheet** (D9(b),
   2026-09-07): approved, then held at the critic. The mechanism proposed —
   compare the sheet's rate with the boot glance — has no clock: `fiatRate`
