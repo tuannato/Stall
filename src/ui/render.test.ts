@@ -9941,6 +9941,60 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
     });
 });
 
+describe('a-transaction-is-shown-once-across-both-clocks', () => {
+    /**
+     * The ring shows what arrived while this page was open, on the page
+     * clock; the walk shows the address's history on the chain's clock. A
+     * transaction in both was painted twice, and the owner read the same
+     * payment under two clocks as two payments (2026-09-07). The walked list
+     * omits what the ring already shows; the ring's row is the one that says
+     * this page saw it arrive, and once the ring drops it the walk paints it.
+     */
+    const seen: StallEvent = {
+        txid: 'ab'.repeat(32),
+        kind: 'payment',
+        seenAtMs: 1_756_400_000_000,
+        sats: 25_000_000n,
+        payment: { tokenId: TOKEN_ID, quantity: 1n },
+    };
+    const walkedTwin: StallEvent = { ...seen, seenAtMs: undefined, chainTimeS: 1_756_399_999 };
+    const older: StallEvent = {
+        txid: 'cd'.repeat(32),
+        kind: 'payment',
+        chainTimeS: 1_756_300_000,
+        sats: 10_000_000n,
+        payment: { tokenId: TOKEN_ID, quantity: 1n },
+    };
+
+    it('paints the ring row once and leaves the walked twin out of the history list', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'activity',
+                events: [seen],
+                history: { rows: [walkedTwin, older], pagesRead: 1, done: true },
+            }),
+        );
+        expect([...root.querySelectorAll('[data-role="events"] li')]).toHaveLength(1);
+        const walked = [...root.querySelectorAll('[data-role="history"] li')];
+        expect(walked).toHaveLength(1);
+        expect(root.textContent!.split('ab'.repeat(32)).length - 1, 'the txid appears once').toBe(1);
+        expect(walked[0]!.textContent).toContain('cd'.repeat(32));
+    });
+
+    it('paints the walked row once the ring no longer holds it', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'activity',
+                events: [],
+                history: { rows: [walkedTwin, older], pagesRead: 1, done: true },
+            }),
+        );
+        expect([...root.querySelectorAll('[data-role="history"] li')]).toHaveLength(2);
+    });
+});
+
 describe('the-payers-address-is-offered-as-a-citation', () => {
     /**
      * The Activity panel is public and this app has no seller session, so a

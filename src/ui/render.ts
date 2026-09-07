@@ -6104,16 +6104,24 @@ function historySection(
     wrap.setAttribute('data-role', 'activity-history');
     wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_LEDE));
     const history: StallHistory = view.history ?? { rows: [], pagesRead: 0 };
-    if (history.rows.length > 0) {
+    // A transaction is painted once. The ring above already shows what arrived
+    // while this page was open, on the page clock; a walked page holding the
+    // same txid says nothing the reader needs twice, and the same payment
+    // printed under two clocks read as two payments (owner, 2026-09-07). The
+    // walk still holds the row — `mergeWithRing` carries the ring's facts into
+    // it — so once the ring drops it (its cap) it is painted here from then on.
+    const inRing = new Set((view.events ?? []).map((event) => event.txid));
+    const rows = history.rows.filter((row) => !inRing.has(row.txid));
+    if (rows.length > 0) {
         const list = el('ol', 'events');
         list.setAttribute('data-role', 'history');
-        for (const row of history.rows) {
+        for (const row of rows) {
             list.append(eventRow(row, view));
         }
         wrap.append(list);
         // Only where a row could carry the label: a note about decorations on
         // a list holding none is chrome explaining a case that is not there.
-        if (history.rows.some((row) => row.kind === 'token-move')) {
+        if (rows.some((row) => row.kind === 'token-move')) {
             wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_DECOR_NOTE));
         }
     }
