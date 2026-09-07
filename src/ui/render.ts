@@ -3121,17 +3121,11 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         priceCleared.hidden =
             noToken || !editable || figure !== '' || removing || clearing || priceRefused;
 
-        // The removal record: the words taken away and every other field
-        // restated. One record is the whole truth about one token, so a
-        // removal carrying only the empty push would take the shelf and the
-        // figure off the chain with the words.
-        const removalHex =
-            existing === undefined
-                ? undefined
-                : encodeRemovalHex(tokenId, {
-                      shelf: publishedShelf,
-                      price: published,
-                  });
+        // The removal record is the bare tombstone: the words, the shelf and
+        // the price go together (owner, 2026-09-07 — a removal that restated
+        // the price read as a removal that did nothing). Words alone come off
+        // through the field, over a priced record.
+        const removalHex = existing === undefined ? undefined : encodeRemovalHex(tokenId);
         const canRemove = removalHex !== undefined;
         if (removing && !canRemove) {
             // The token changed under the mode, or there is nothing left to

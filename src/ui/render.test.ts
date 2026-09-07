@@ -3840,7 +3840,7 @@ describe('removal-is-signable-from-a-phone', () => {
         ).toBe(true);
     });
 
-    it('keeps-the-words-comes-back', () => {
+    it('keeps-this-item-comes-back', () => {
         // The way out of the mode, and the form it hands back: enabled fields
         // with the seller's own words still in them.
         const { root } = open({ descriptions: new Map([[TOKEN_ID, 'Existing words']]) });
@@ -6696,20 +6696,23 @@ describe('editing-words-does-not-drop-the-price', () => {
         );
     });
 
-    it('removing-words-does-not-remove-the-price', () => {
-        // Amended 2026-09-04: removal is a mode, so the record is read off the
-        // sheet's own sign control once the mode is on. What it carries is the
-        // rule and it has not moved — the words go, the shelf and the figure
-        // are restated.
+    it('the-remove-control-signs-the-bare-tombstone', () => {
+        // Since 2026-09-07 the remove control takes the whole item off: the
+        // words, the shelf and the price in one record, the bare tombstone.
+        // It restated the shelf and the price before, and a seller who pressed
+        // it to take an item off the rail saw the price stand. The words-only
+        // record the encoder still writes is reached through the field.
         const { root } = sheet();
         const toggle = root.querySelector('[data-role="describe-remove"]') as HTMLButtonElement;
         expect(toggle.hidden).toBe(false);
         toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        const removal = encodeRemovalHex(TOKEN_ID, { shelf: 'Coffee', price: PRICE });
+        const removal = encodeRemovalHex(TOKEN_ID, {});
         expect(removal).toBeDefined();
+        expect(removal).not.toBe(encodeRemovalHex(TOKEN_ID, { shelf: 'Coffee', price: PRICE }));
         expect(root.querySelector('[data-role="describe-hex"]')!.textContent).toBe(removal);
         const pay = root.querySelector('[data-role="describe-pay"]') as HTMLAnchorElement;
         expect(pay.getAttribute('href')).toContain(encodeURIComponent(removal!));
+        expect(root.textContent).toContain(copy.DESC_REMOVE_LEDE);
     });
 
     it('offers removal over a price alone', () => {

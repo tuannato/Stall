@@ -952,7 +952,7 @@ export const DESC_REFUSED =
 export const DESC_ONE_LINE =
     'A description is one line. Remove the line break, and the rest is fine.';
 
-export const DESC_REMOVE = 'Remove this description';
+export const DESC_REMOVE = 'Remove this item';
 /**
  * The removal's second road wore PUBLISH_OPEN_PAY verbatim, so two identical
  * pills signed two different records a few lines apart. Every control is
@@ -968,14 +968,22 @@ export const DESC_REMOVE_PAY = 'Remove with another wallet app';
  * go disabled, because a form a seller can type into while it publishes
  * something else is a form that lies.
  */
-export const DESC_REMOVE_OPEN = 'Remove the words…';
-export const DESC_KEEP = 'Keep the words';
+export const DESC_REMOVE_OPEN = 'Remove this item…';
+export const DESC_KEEP = 'Keep this item';
+/**
+ * The removal is the whole item since 2026-09-07 — words, shelf and price in
+ * one record, the bare tombstone. It was the words alone, restating the
+ * shelf and the price, and a seller who pressed it to take an item off the
+ * rail saw the price stand and read the removal as doing nothing. Words
+ * alone still come off through the field: empty them over a priced record
+ * and the quote stays (`no-words-priced-is-a-tombstone-with-a-tag`).
+ */
 export const DESC_REMOVE_LEDE =
-    'This publishes a record that erases what you wrote; the shelf and the price stay. It is another transaction, and the words stay in the chain’s history — removing them takes them off this page, not off the chain.';
+    'This publishes a record that takes this item off the stall: the words, the shelf and the price go. It is another transaction, and the record stays in the chain’s history — removing it takes it off this page, not off the chain.';
 /**
  * Every field empty over a record that exists is a request, not silence: the
- * bare tombstone. Said before signing, because the remove control beside it
- * keeps the shelf and the price and this one does not.
+ * bare tombstone — the same record the remove control signs, reached by
+ * clearing the fields by hand.
  */
 /**
  * The road off the Quotes rail that nobody found: an emptied price field
