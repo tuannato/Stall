@@ -22,7 +22,10 @@ import {
     EVENT_BOOK,
     EVENT_SETTINGS,
     EVENT_SETTINGS_STRANGER,
+    PAY_NO_RATE_WHY,
+    PAY_RATE_IMPLAUSIBLE_WHY,
 } from './ui/copy';
+import { scaleRate } from './domain/fiat';
 
 /**
  * The live half of `app.ts`, against real readers and a fake chain.
@@ -3174,5 +3177,57 @@ describe('a-token-whose-baton-the-wallet-holds-reaches-the-studio', () => {
         expect(row, 'the minted token has a row').not.toBeNull();
         expect(row?.textContent).toContain('Fresh Mint');
         expect(row?.querySelector('[data-role="studio-item-describe"]')).not.toBeNull();
+    });
+});
+
+describe('an-implausible-feed-answer-is-refused-and-said', () => {
+    /**
+     * The window is the domain's (`isPlausibleRate`) and `readPayRate` applies
+     * it to the figure a wallet signs: a refused answer leaves no `payRate`
+     * on the view, names its reason in `payRateWhy`, and the sheet says so
+     * in its own sentence — never "CoinGecko did not answer", which is a
+     * different fact. The glance is not judged (CLAUDE §8).
+     */
+    const META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('leaves no pay rate on the view, names the reason, and paints the refusal', async () => {
+        // Five dollars per XEC: the kind of factor a mixed-up unit produces.
+        priceControl.fetch = async () => scaleRate(5)!;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(painted.view?.payRate).toBeUndefined();
+        expect(painted.view?.payRateWhy).toBe('implausible');
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).toContain(PAY_RATE_IMPLAUSIBLE_WHY);
+        expect(sheet.textContent).not.toContain(PAY_NO_RATE_WHY);
+        expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe('');
+    });
+
+    it('a plausible answer still lands as the frozen rate', async () => {
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        expect(painted.view?.payRateWhy).toBeUndefined();
     });
 });

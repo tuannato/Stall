@@ -385,6 +385,18 @@ export type StallHistory = {
     capped?: boolean;
 };
 
+/** Why the pay sheet holds no rate: the feed did not answer, or its answer was refused. */
+export type PayRateWhy = 'no-answer' | 'implausible';
+
+/**
+ * What one ask of the price feed yields for the pay sheet: a rate with its
+ * stamp, or the reason there is none. Two reasons, because a refused answer
+ * must never be painted as a feed that did not answer.
+ */
+export type PayRateAnswer =
+    | { rate: bigint; atMs: number; why?: undefined }
+    | { rate?: undefined; why: PayRateWhy };
+
 export type StallView = {
     route: RouteResolution;
     fetch?: FetchStatus;
@@ -461,6 +473,13 @@ export type StallView = {
      */
     payRate?: { rate: bigint; atMs: number };
     /**
+     * Why there is no `payRate`: the feed did not answer, or it answered with
+     * a rate outside the window this page will compose a payment from
+     * (`isPlausibleRate`). Two facts, two sentences on the sheet. Closure
+     * state in `boot`, written onto the view at paint time like `payRate`.
+     */
+    payRateWhy?: PayRateWhy;
+    /**
      * Whether this navigation began at the door's paste submit. Written onto
      * the view at paint time from `history.state` (like `fiatCode`), never by
      * a loader: the seller invites paint only when it is true, because a
@@ -474,7 +493,7 @@ export type StallView = {
      * press produces: the rate row's line and a Pay control that restates
      * the figure it will open. The sheet seeds its own state from this.
      */
-    payRateOutcome?: 'moved' | 'refreshed' | 'unavailable';
+    payRateOutcome?: 'moved' | 'refreshed' | 'unavailable' | 'implausible';
     /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never

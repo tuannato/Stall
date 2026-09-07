@@ -5,7 +5,9 @@ import {
     fiatFractionDigits,
     formatFiat,
     formatXecRate,
+    isPlausibleRate,
     isSupportedFiat,
+    RATE_WINDOWS,
     satsForQuote,
     scaleRate,
 } from './fiat';
@@ -216,5 +218,38 @@ describe('the-rate-a-pay-sheet-shows-is-a-glance', () => {
         expect(formatXecRate(scaleRate(1), 'usd')).toBe('$1.00');
         expect(formatXecRate(undefined, 'usd')).toBeUndefined();
         expect(formatXecRate(scaleRate(0.00002), 'not-a-code')).toBeUndefined();
+    });
+});
+
+describe('a-rate-outside-the-window-is-implausible', () => {
+    /**
+     * The window is written in the module's own unit — the scaled `bigint`
+     * `scaleRate` returns — and the inputs here go through `scaleRate` too,
+     * so the test and `app.ts` speak one unit. A window in floats compared
+     * against a scaled integer passes `tsc` and refuses every real rate.
+     */
+    it('refuses a unit-scale error at either end and keeps every real rate', () => {
+        expect(isPlausibleRate('usd', scaleRate(0.00003)!)).toBe(true);
+        expect(isPlausibleRate('usd', scaleRate(0.00001)!)).toBe(true);
+        expect(isPlausibleRate('usd', scaleRate(0.001)!)).toBe(true);
+        // A price in sats-per-XEC, or in another currency by a thousand.
+        expect(isPlausibleRate('usd', scaleRate(1)!)).toBe(false);
+        expect(isPlausibleRate('usd', scaleRate(5)!)).toBe(false);
+        expect(isPlausibleRate('usd', scaleRate(0.00000001)!)).toBe(false);
+    });
+
+    it('is inclusive at both ends, and the ends are scaled', () => {
+        const window = RATE_WINDOWS['usd']!;
+        expect(window.min).toBe(scaleRate(1e-7)!);
+        expect(window.max).toBe(scaleRate(1e-1)!);
+        expect(isPlausibleRate('usd', window.min)).toBe(true);
+        expect(isPlausibleRate('usd', window.max)).toBe(true);
+        expect(isPlausibleRate('usd', window.min - 1n)).toBe(false);
+        expect(isPlausibleRate('usd', window.max + 1n)).toBe(false);
+    });
+
+    it('judges no code that has no window', () => {
+        expect(RATE_WINDOWS['vnd']).toBeUndefined();
+        expect(isPlausibleRate('vnd', scaleRate(5)!)).toBe(true);
     });
 });

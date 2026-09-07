@@ -17,7 +17,7 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
-import { DEFAULT_FIAT_CODE } from './domain/fiat';
+import { DEFAULT_FIAT_CODE, isPlausibleRate } from './domain/fiat';
 import {
     clearSavedStall,
     isPinnedStall,
@@ -31,7 +31,12 @@ import {
     saveStall,
     unpinStall,
 } from './saved';
-import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from './domain/state';
+import {
+    MAX_ACTIVITY_PAGES,
+    MAX_STALL_EVENTS,
+    type PayRateAnswer,
+    type PayRateWhy,
+} from './domain/state';
 import type {
     EventStatus,
     FetchStatus,
@@ -311,6 +316,8 @@ export function boot(
      * rate — so this exists to seed the sheet when it opens.
      */
     let payRate: { rate: bigint; atMs: number } | undefined;
+    /** Why there is none — a feed that did not answer, or an answer refused (CLAUDE §8). */
+    let payRateWhy: PayRateWhy | undefined;
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
@@ -437,6 +444,7 @@ export function boot(
             fiatCode,
             fiatRate,
             payRate,
+            payRateWhy,
             payQuantity,
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
@@ -785,16 +793,19 @@ export function boot(
     const onOpenPay = (tokenId: string): void => {
         const claimed = generation;
         payRate = undefined;
+        payRateWhy = undefined;
         payQuantity = undefined;
         state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
         paint();
         void (async () => {
             const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
             // Only for the sheet that asked: a buyer who closed it, or moved
-            // to another item, must not have it repainted under them.
+            // to another item, must not have it repainted under them. A feed
+            // that did not answer changes nothing on screen; a refused answer
+            // does — it has its own sentence.
             if (
                 claimed !== generation ||
-                fresh === undefined ||
+                (fresh.rate === undefined && fresh.why === 'no-answer') ||
                 state.view.overlay.kind !== 'pay' ||
                 state.view.overlay.tokenId !== tokenId
             ) {
@@ -810,16 +821,26 @@ export function boot(
      * `renderStall` opens with `replaceChildren()` — so a paint from this path
      * would throw away what they typed. The sheet refreshes itself in place.
      */
-    const readPayRate = async (
-        timeoutMs?: number,
-    ): Promise<{ rate: bigint; atMs: number } | undefined> => {
+    const readPayRate = async (timeoutMs?: number): Promise<PayRateAnswer> => {
         const rate = await fetchXecPrice(
             DEFAULT_FIAT_CODE,
             timeoutMs === undefined ? undefined : { timeoutMs },
         );
-        payRate = rate === undefined ? undefined : { rate, atMs: Date.now() };
-        state = { ...state, view: { ...state.view, payRate } };
-        return payRate;
+        // The window is the domain's (`isPlausibleRate`, in the feed's own
+        // scaled unit) and applies here, on the figure a wallet signs — not
+        // in `refreshFiat`: the glance is `≈`, off the money path, and has no
+        // sentence for absence, so refusing it silently would make one
+        // silence mean two things (CLAUDE §8).
+        const answer: PayRateAnswer =
+            rate === undefined
+                ? { why: 'no-answer' }
+                : !isPlausibleRate(DEFAULT_FIAT_CODE, rate)
+                  ? { why: 'implausible' }
+                  : { rate, atMs: Date.now() };
+        payRate = answer.rate === undefined ? undefined : { rate: answer.rate, atMs: answer.atMs };
+        payRateWhy = answer.rate === undefined ? answer.why : undefined;
+        state = { ...state, view: { ...state.view, payRate, payRateWhy } };
+        return answer;
     };
 
     const onOpenStall = (raw: string, pasted = false): void => {

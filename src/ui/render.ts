@@ -67,6 +67,8 @@ import type {
     StallView,
     TokenMeta,
     Overlay,
+    PayRateAnswer,
+    PayRateWhy,
 } from '../domain/state';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
 import { EXPLORER_TX_URL } from '../domain/explorer';
@@ -142,9 +144,12 @@ export type StallHandlers = {
      * it rather than at one. Answers nothing and paints nothing.
      */
     onPayQuantity?: (tokenId: string, quantity: bigint) => void;
-    onPayRate?: (
-        timeoutMs?: number,
-    ) => Promise<{ rate: bigint; atMs: number } | undefined>;
+    /**
+     * One fresh rate for the pay sheet, or the reason there is none — a feed
+     * that did not answer, or an answer this page refuses (CLAUDE §8). Bare
+     * `undefined` is tolerated and read as no answer.
+     */
+    onPayRate?: (timeoutMs?: number) => Promise<PayRateAnswer | undefined>;
     /**
      * One token, on the seller's own ask: its genesis facts, and whether this
      * stall's own wallet minted it.
@@ -3506,6 +3511,8 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     let quantity = view.payQuantity ?? 1n;
     /** The rate this sheet froze, and when. Never `view.fiatRate`. */
     let rate = usesRate ? view.payRate : undefined;
+    /** Why there is none, for the sentence: the feed did not answer, or was refused. */
+    let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -3772,7 +3779,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         why.textContent = subDust
             ? copy.PAY_SUB_DUST
             : sats === undefined
-              ? copy.PAY_NO_RATE_WHY
+              ? payWhy === 'implausible'
+                  ? copy.PAY_RATE_IMPLAUSIBLE_WHY
+                  : copy.PAY_NO_RATE_WHY
               : '';
 
         const linked = cashtab !== undefined && pay !== undefined;
@@ -3786,9 +3795,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             outcome === 'moved' && sats !== undefined ? copy.payFigure(formatXec(sats)) : copy.PAY_CASHTAB;
         valve.hidden = outcome === undefined;
         valve.textContent =
-            outcome === 'unavailable'
-                ? copy.PAY_RATE_UNAVAILABLE
-                : outcome === 'moved'
+            outcome === 'implausible'
+                ? copy.PAY_RATE_IMPLAUSIBLE
+                : outcome === 'unavailable'
+                  ? copy.PAY_RATE_UNAVAILABLE
+                  : outcome === 'moved'
                   ? copy.PAY_RATE_MOVED
                   : outcome === 'refreshed'
                     ? copy.PAY_RATE_REFRESHED
@@ -3859,11 +3870,17 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             const before = satsForQuote(price, quantity, rate.rate);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-                rate = fresh;
-                const after = satsForQuote(price, quantity, fresh?.rate);
+                const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
+                rate = answered;
+                payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
+                const after = satsForQuote(price, quantity, answered?.rate);
+                // A refused answer is its own outcome: the same collapse the
+                // mount path refuses must not come back on the press.
                 outcome =
-                    fresh === undefined || after === undefined
-                        ? 'unavailable'
+                    answered === undefined || after === undefined
+                        ? payWhy === 'implausible'
+                            ? 'implausible'
+                            : 'unavailable'
                         : movedPastTolerance(before, after, price.tolerancePct)
                           ? 'moved'
                           : 'refreshed';
@@ -3876,8 +3893,16 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
 
     refreshRate.addEventListener('click', () => {
         void (async () => {
-            rate = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            outcome = rate === undefined ? 'unavailable' : 'refreshed';
+            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
+            rate = answered;
+            payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
+            outcome =
+                answered === undefined
+                    ? payWhy === 'implausible'
+                        ? 'implausible'
+                        : 'unavailable'
+                    : 'refreshed';
             refresh();
         })();
     });

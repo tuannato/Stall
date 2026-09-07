@@ -10557,6 +10557,66 @@ describe('nothing-stands-between-the-figure-and-the-pay-control', () => {
     });
 });
 
+describe('an-implausible-rate-is-said-and-never-called-no-answer', () => {
+    /**
+     * Two facts, two sentences. A feed that did not answer and a feed that
+     * answered with a rate this page refuses to turn into an amount are
+     * different things, and "CoinGecko did not answer" said about the second
+     * is the empty-versus-unreachable collapse on the money path. The window
+     * lives in the domain (`isPlausibleRate`, in the feed's own scaled unit);
+     * `app.ts` applies it and writes `payRateWhy` onto the view; the sheet
+     * paints the sentence for the fact it was handed, on the mount path and
+     * on the press path alike (owner decision D9(a), 2026-09-07).
+     */
+    it('paints the refusal on the card, no link and no code', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: undefined,
+                payRateWhy: 'implausible',
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).toContain(copy.PAY_RATE_IMPLAUSIBLE_WHY);
+        expect(sheet.textContent).not.toContain(copy.PAY_NO_RATE_WHY);
+        // A control with no destination is not a control: the role comes
+        // off with the destination (CLAUDE §8), so absent or hidden both pass.
+        const control = sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement | null;
+        expect(control === null || control.hidden).toBe(true);
+        expect(sheet.querySelector('svg.qr')).toBeNull();
+    });
+
+    it('a press whose refetch is refused says so on the valve, and opens nothing', async () => {
+        const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({ why: 'implausible' as const })),
+        };
+        renderStall(
+            root,
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }),
+            h,
+        );
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        const control = root.querySelector('[data-role="pay-cashtab"]') as HTMLElement;
+        control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(open).not.toHaveBeenCalled();
+        expect(h.onPayRate).toHaveBeenCalledTimes(1);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
+            copy.PAY_RATE_IMPLAUSIBLE,
+        );
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).not.toBe(
+            copy.PAY_RATE_UNAVAILABLE,
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).toContain(copy.PAY_RATE_IMPLAUSIBLE_WHY);
+        expect(sheet.textContent).not.toContain(copy.PAY_NO_RATE_WHY);
+        open.mockRestore();
+    });
+});
+
 describe('a-moved-rate-on-the-view-paints-the-moved-state', () => {
     /**
      * The valve's outcome rides the view so a fixture can stage what only a

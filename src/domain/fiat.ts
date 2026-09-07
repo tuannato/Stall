@@ -109,6 +109,38 @@ export function fiatFractionDigits(code: string): number {
     return ZERO_DECIMAL_CODES.has(code) ? 0 : 2;
 }
 
+/**
+ * The rates this page will turn into an amount a wallet signs, per code, in
+ * the module's own unit — `RATE_SCALE` sub-units per XEC, the same `bigint`
+ * `scaleRate` returns and `satsForQuote` takes, so a window written in floats
+ * and compared against a scaled integer (which `tsc` permits) cannot happen
+ * here. It is a **unit-error fence, not a market opinion**: XEC has traded
+ * between about 1e-5 and 1e-3 USD, and the window sits two orders of
+ * magnitude outside that range at each end, so it refuses only an answer
+ * that is off by the kind of factor a mixed-up unit produces (sats for XEC,
+ * a price in another currency) and never a market move. A ×100 band around
+ * a shipped constant was rejected (PLAN § Rejected): it lets a 99× lie
+ * through and goes stale. A code with no window is not judged — the day a
+ * picker returns, a non-USD rate must not be refused by a USD table.
+ */
+export const RATE_WINDOWS: Readonly<
+    Partial<Record<string, { readonly min: bigint; readonly max: bigint }>>
+> = {
+    usd: { min: scaleRate(1e-7)!, max: scaleRate(1e-1)! },
+};
+
+/**
+ * Whether a scaled rate is one this page will compose a payment from.
+ * `true` for a code with no window; inclusive at both ends.
+ */
+export function isPlausibleRate(code: string, scaledRate: bigint): boolean {
+    const window = RATE_WINDOWS[code];
+    if (window === undefined) {
+        return true;
+    }
+    return scaledRate >= window.min && scaledRate <= window.max;
+}
+
 /** A feed rate as an integer of `RATE_SCALE` sub-units per XEC, or undefined. */
 export function scaleRate(xecPriceInFiat: number): bigint | undefined {
     if (!Number.isFinite(xecPriceInFiat) || xecPriceInFiat <= 0) {

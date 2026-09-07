@@ -273,7 +273,10 @@ that is still true:
   lets a 99× lie through, the constant goes stale, and applied to every
   currency it would refuse non-USD rates the day a picker returns. The
   cheaper honest step is to run the "price moved" comparison on the first
-  open of the pay sheet, not only on the aged refetch — see **Open**.
+  open of the pay sheet, not only on the aged refetch — see **Open**. What shipped instead on 2026-09-07 is a wide window in the feed's own
+  unit (`isPlausibleRate`, two orders of magnitude outside anything XEC has
+  traded at) that refuses only a unit-scale error, said in its own
+  sentence (`CLAUDE.md` §8); the glance is not judged.
 
 ---
 
@@ -434,9 +437,17 @@ have sent revenue to an output nobody can spend.
   the "sign with this stall's own wallet" sentence under the fold below
   the sign control; the working manuals into version control; the app
   accepting `OP_PUSHDATA2` in a record; the door chip "No signup, no install";
-  the "price moved" comparison
-  on the first open of the pay sheet; a 44 px floor for the genesis link
-  control; the edge unfurl's page cap (3) against the app's (10).
+  the edge unfurl's page cap (3) against the app's (10).
+- **A "price moved" check on the first open of the pay sheet** (D9(b),
+  2026-09-07): approved, then held at the critic. The mechanism proposed —
+  compare the sheet's rate with the boot glance — has no clock: `fiatRate`
+  is fetched once in `boot`, never refreshed, and carries no timestamp, so
+  it would block a legitimate first press for every buyer whose tab outlived
+  a market move past the tolerance, and it would read `view.fiatRate` inside
+  the sheet against a rule written twice in code. Two honest shapes, the
+  owner's call: two fresh reads at open (one more CoinGecko call per sheet,
+  on a feed that already answers 429), or a clocked glance compared only
+  while younger than `PAY_RATE_MAX_AGE_MS`, which rarely applies.
 - **A Cashtab patch** that preselects a maker on the token market is not on
   Stall's buy path. It remains optional help for people who buy in Cashtab
   from somewhere else, never a blocker.

@@ -1287,6 +1287,16 @@ export const payFigure = (xec: string): string => `Pay ${xec} ${XEC}`;
 export const PAY_NO_RATE_WHY =
     'CoinGecko did not answer, so the wallet cannot be told how much XEC to send. There is no link and no code until a price arrives.';
 /**
+ * The other fact. CoinGecko answered, and the answer is outside the window
+ * this page will compose a payment from (`isPlausibleRate`: a unit-error
+ * fence two orders of magnitude outside anything XEC has traded at, never a
+ * market opinion). Its own sentence, because a refused answer painted as a
+ * feed that did not answer is the empty-versus-unreachable collapse on the
+ * money path.
+ */
+export const PAY_RATE_IMPLAUSIBLE_WHY =
+    'CoinGecko answered with a rate far outside anything XEC has traded at, so this page will not turn it into an amount. There is no link and no code until a plausible price arrives.';
+/**
  * Under the dust floor the network will not relay the output at all, so
  * nothing is composed and the sheet says which way out there is.
  */
@@ -1313,6 +1323,8 @@ export const PAY_OTHER_WALLET = 'Pay with another wallet app';
 export const PAY_RATE_MOVED = 'Price updated \u2014 review and pay again';
 export const PAY_RATE_REFRESHED = 'Rate refreshed \u2014 press Pay again';
 export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
+/** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
+export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 export const PAY_QR_FOLD = 'Scan with a phone wallet';
 export const PAY_QR_ALT = 'QR code of the payment';
 export const PAY_QR_LEDE = 'Opens the same payment in the phone\u2019s wallet.';
