@@ -434,7 +434,7 @@ have sent revenue to an output nobody can spend.
   the "sign with this stall's own wallet" sentence under the fold below
   the sign control; the working manuals into version control; the app
   accepting `OP_PUSHDATA2` in a record; the door chip "No signup, no install";
-  the provenance chip's wording and placement; the "price moved" comparison
+  the "price moved" comparison
   on the first open of the pay sheet; a 44 px floor for the genesis link
   control; the edge unfurl's page cap (3) against the app's (10).
 - **A Cashtab patch** that preselects a maker on the token market is not on

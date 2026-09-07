@@ -1177,12 +1177,18 @@ export const QUOTE_NOT_MINTED_HERE = 'Token minted by another wallet';
  * paying this stall's script is something anyone can send. Only the third —
  * the stall's key on the genesis input — proves this stall minted it, and the
  * reader cannot tell which of the three it has. So the sentence is the
- * weakest true one: the genesis names this stall. It vouches for nothing
+ * weakest true one: the token names this stall. It vouches for nothing
  * else — not that the name is not somebody's brand, and no reader of a chain
  * can. A chip on the row, where the space is a name column's; the whole
  * sentence in the sheet, which a scanned link can open with no row on screen.
+ *
+ * Plain words since 2026-09-07 ("Genesis" was jargon a buyer cannot parse),
+ * same strength. "Token issued to this stall" was proposed and refused: a
+ * `signed` genesis can send its whole supply elsewhere, and a `claimed` one
+ * names an authority, not a recipient — "issued to" is a stronger claim than
+ * two of the three sources can carry.
  */
-export const QUOTE_MINTED_CHIP = 'Genesis names this stall';
+export const QUOTE_MINTED_CHIP = 'Token names this stall';
 export const QUOTE_MINTED_HERE =
     'This token’s genesis names this stall — as the minter’s own claim, or by paying the minted supply here. It says where the token came from, not who owns its name.';
 /** The units `recordAge` counts in, as a reader says them. */
