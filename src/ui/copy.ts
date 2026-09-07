@@ -668,10 +668,17 @@ export const OPENING_BODY = 'Reading the chain for this seller.';
  * facts a visitor actually scans for (Stall Design, direction D). The one
  * sentence kept in prose is the trust line under them.
  */
+/**
+ * The third chip said "No signup, no install", which is true of a reader and
+ * false of a seller (Cashtab lists, mints and signs) and of a buyer (a wallet
+ * holding XEC pays). Since 2026-09-07 it says what is true of all three:
+ * there is no account here, and a wallet the visitor already holds does the
+ * signing.
+ */
 export const HOME_CHIPS = [
     'One link: /s/ + your address',
     'Prices straight from the chain',
-    'No signup, no install',
+    'No account here \u2014 your wallet signs',
 ] as const;
 export const HOME_CHIPS_FINE = 'Stall reads the chain and holds no keys.';
 
