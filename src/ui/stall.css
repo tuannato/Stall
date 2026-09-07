@@ -1557,10 +1557,17 @@ textarea.paste-in {
  * that happens to be a destination, not an invitation. `direction: rtl` on an
  * ellipsis would flip the host to the wrong end, so it truncates on the right
  * and the host is named in full at the confirmation.
+ *
+ * A control since the `href` left it (`fa52f8d`): a press arms it, a second
+ * press opens the confirmation. So it keeps the 44px floor every tappable
+ * control declares in its own block (§6) — as padding around a block, because
+ * a flex box would lose the ellipsis. The text stays 12px.
  */
 .token-link-url {
     display: block;
     max-width: 100%;
+    min-height: 44px;
+    padding: 13px 0;
     font-family: var(--s-font);
     font-size: 12px;
     line-height: 1.45;
@@ -1583,8 +1590,16 @@ textarea.paste-in {
     word-break: break-all;
 }
 
-/* In the confirmation the destination is never shortened. */
-.sheet .token-link-url {
+/*
+ * In the confirmation the destination is never shortened, and it is not a
+ * control, so the floor comes off. Keyed on its own class and never on
+ * `.sheet`: a rule on `.sheet .token-link-url` would strip the floor from any
+ * control painted inside a sheet later, and the 44px guard reads blocks by
+ * selector and cannot see a cascade.
+ */
+.token-link-url.token-link-full {
+    min-height: 0;
+    padding: 0;
     color: var(--s-text);
     white-space: normal;
     word-break: break-all;

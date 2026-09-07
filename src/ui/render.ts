@@ -5019,9 +5019,12 @@ function tokenDescription(view: StallView, tokenId: string): HTMLElement | undef
  * tab", "copy link address" and a drag to the address bar: four ways to a
  * minter-written URL, none of which reaches a `click` listener, none of which
  * had seen the warning or the host. It stays an `<a>` — the ellipsis, the
- * shared `.token-link-url` dress the confirmation's own line wears, and no 44 px
- * floor a button would owe — and stays focusable and announced by `tabindex`
- * and `role="link"`, with Enter and Space doing what a press does.
+ * shared `.token-link-url` dress the confirmation's own line wears — and stays
+ * focusable and announced by `tabindex` and `role="link"`, with Enter and Space
+ * doing what a press does. It is a control now, so it keeps the 44 px floor
+ * every tappable control declares (§6, `every-tappable-control-keeps-a-44px-floor`);
+ * the confirmation's copy of the URL is text, not a control, and wears
+ * `token-link-full` to take the floor off again.
  *
  * Following it then asks once more, naming the host, because a link a reader
  * did not choose to follow, from a source nobody verified, on a page about
@@ -5105,7 +5108,7 @@ function confirmLeaving(href: string): HTMLElement {
     if (host !== undefined) {
         box.append(el('div', 'token-link-host', copy.tokenLinkHost(host)));
     }
-    box.append(el('div', 'token-link-url', href));
+    box.append(el('div', 'token-link-url token-link-full', href));
     box.append(el('p', 'note', copy.TOKEN_LINK_WARNING));
 
     const go = el('a', 'buy');
