@@ -3345,3 +3345,44 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         vi.useRealTimers();
     });
 });
+
+describe('an-xec-quote-asks-no-price-feed', () => {
+    /**
+     * An XEC quote is the figure itself — no rate is involved anywhere in it
+     * (`PAY_XEC_QUOTE_NOTE`) — so opening its sheet must ask neither feed:
+     * two requests to two third parties, spent from a monthly budget, to
+     * learn a number the sheet never reads, and two parties told a payment
+     * is being composed. The USD road is untouched (owner, 2026-09-07).
+     */
+    const META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('opens the sheet with the figure and calls neither feed', async () => {
+        const fetch = vi.fn(async () => scaleRate(0.00003)!);
+        const check = vi.fn(async () => scaleRate(0.00003)!);
+        priceControl.fetch = fetch;
+        priceControl.check = check;
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, META]]),
+                prices: new Map([[TOKEN, { code: 'xec', exponent: 2, amount: 900n }]]),
+            }),
+        );
+        await flush();
+        // The boot glance (`refreshFiat`) asks the first feed once, for the
+        // listings' ≈ line; opening an XEC sheet must add nothing to that.
+        const before = fetch.mock.calls.length;
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('9');
+        expect(fetch.mock.calls.length, 'the first feed was not asked for the sheet').toBe(before);
+        expect(check, 'nor the second').not.toHaveBeenCalled();
+        expect(painted.view?.payRate).toBeUndefined();
+        expect(painted.view?.payRateWhy).toBeUndefined();
+    });
+});

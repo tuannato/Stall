@@ -72,7 +72,7 @@ import {
     type GenesisDecision,
 } from './domain/genesis';
 import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
-import type { TokenPrice } from './domain/description';
+import { XEC_PRICE_CODE, type TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
     NO_FACTS,
@@ -799,6 +799,13 @@ export function boot(
         payQuantity = undefined;
         state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
         paint();
+        // An XEC quote is the figure itself: no rate is read anywhere on its
+        // sheet, so neither feed is asked — two requests to two third parties
+        // for a number nobody uses, and two parties told a payment is being
+        // composed (owner, 2026-09-07).
+        if (quoteNeedsNoRate(tokenId)) {
+            return;
+        }
         void (async () => {
             const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
             // Only for the sheet that asked: a buyer who closed it, or moved
@@ -816,6 +823,10 @@ export function boot(
             paint();
         })();
     };
+
+    /** True for a quote written in XEC: its sheet reads no rate, so no feed is asked. */
+    const quoteNeedsNoRate = (tokenId: string): boolean =>
+        state.view.prices?.get(tokenId)?.code === XEC_PRICE_CODE;
 
     /**
      * One fresh rate for the pay sheet: remembered here and handed back, with
@@ -1001,7 +1012,8 @@ export function boot(
                 if (
                     state.view.route.kind === 'pubkey' &&
                     state.view.overlay.kind === 'pay' &&
-                    state.view.overlay.tokenId === tokenId
+                    state.view.overlay.tokenId === tokenId &&
+                    !quoteNeedsNoRate(tokenId)
                 ) {
                     void (async () => {
                         const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
