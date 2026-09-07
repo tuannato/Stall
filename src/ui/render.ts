@@ -2790,12 +2790,16 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     /**
      * What the sheet will write, and how it got there.
      *
-     * `pressed` is the seller's own choice on this screen; it starts at the
-     * default so a **typed** figure carries one without a second press. A
-     * carried price is different: an untouched one is restated verbatim, byte
-     * or no byte, so nothing is pressed until the seller presses it.
+     * `pressed` is the seller's own choice on this screen, and **nothing is
+     * pressed until they press it** — a typed figure alone carries no byte.
+     * 2% was pressed by default onto a new quote for three days, from under
+     * the closed "More" fold: a byte nobody chose on a permanent record
+     * (owner, 2026-09-07). A carried price is the same rule from the other
+     * side: an untouched one is restated verbatim, byte or no byte. The
+     * initial value here is the one `refresh()` recomputes on every paint
+     * while the seller has not touched the segment; `loadToken` resets it.
      */
-    let tolerancePressed: number | undefined = TOLERANCE_PRESETS[1];
+    let tolerancePressed: number | undefined;
     let toleranceTouched = false;
     const paintTolerance = (): void => {
         for (const button of toleranceButtons) {
@@ -3016,11 +3020,11 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const priceRefused = figure !== '' && typedPrice === undefined;
         /*
          * Which margin the record carries, and the whole rule in one place:
-         * a **typed** figure takes the pressed preset (2% by default), a
-         * preset **pressed over a carried price** republishes that price with
-         * the byte, and an **untouched carried price is restated verbatim**,
-         * byte or no byte. The encoder writes what it is handed and invents
-         * nothing.
+         * a **typed** figure takes the pressed preset and **none by default**,
+         * a preset **pressed over a carried price** republishes that price
+         * with the byte, and an **untouched carried price is restated
+         * verbatim**, byte or no byte. The encoder writes what it is handed
+         * and invents nothing.
          *
          * The carried value is offered back only when a preset can say it. One
          * this sheet cannot express is shown disabled and carried forward
@@ -3042,13 +3046,10 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             button.disabled = removing || (carriedTolerance !== undefined && !carriedIsPreset);
         }
         if (!toleranceTouched) {
-            tolerancePressed = carriedIsPreset
-                ? carriedTolerance
-                : carriedTolerance !== undefined
-                  ? undefined
-                  : published === undefined
-                    ? TOLERANCE_PRESETS[1]
-                    : undefined;
+            // A carried preset is offered back; anything else — a value no
+            // preset can say, a quote with no byte, no quote at all — presses
+            // nothing. There is no default.
+            tolerancePressed = carriedIsPreset ? carriedTolerance : undefined;
             paintTolerance();
         }
         toleranceNote.textContent =

@@ -6510,14 +6510,14 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
         expect(units.map((u) => u.getAttribute('aria-label'))).toEqual(['USD', 'XEC']);
         expect(units[0]!.getAttribute('aria-pressed'), 'opens on USD').toBe('true');
 
-        // Amended: a typed USD figure now carries the tolerance byte as well,
-        // at the preset the segment opens on. The rule this test guards has
-        // not moved — two units, two decimal places, and nothing else — and
-        // the margin is a field of the quote, written where the quote is.
+        // A typed USD figure carries no tolerance byte until a preset is
+        // pressed (2026-09-07; it carried 2% by default for three days). The
+        // rule this test guards has not moved — two units, two decimal
+        // places, and nothing else.
         const hex = typePrice(root, '12.50');
         expect(hex.textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, '', {
-                price: { code: 'usd', exponent: 2, amount: 1250n, tolerancePct: 2 },
+                price: { code: 'usd', exponent: 2, amount: 1250n },
             }),
         );
         // `xec` is the chain's own unit and takes the same two decimals, so a
@@ -6552,8 +6552,11 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
         field.dispatchEvent(new Event('input'));
         typePrice(root, '12.50');
         expect(err.hidden).toBe(false);
-        // Amended: a typed figure carries a margin, so the ladder names the
-        // pair that includes it. Both pairs are still stated, not implied.
+        // A typed figure alone carries no margin, so the ladder names the
+        // priced pair; pressing a preset moves it to the pair that includes
+        // the byte. Both pairs are stated, not implied.
+        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_PRICED);
+        (root.querySelector('[data-role="describe-tolerance-2"]') as HTMLButtonElement).click();
         expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_TOLERANCE);
         expect(copy.DESC_OVER_BUDGET_PRICED).toContain(
             String(MAX_PRICED_DESCRIPTION_BYTES),
@@ -8184,7 +8187,7 @@ describe('the-editor-writes-presets-only-and-reads-anything', () => {
             }),
         );
 
-    it('offers four presets, opens on 2%, and writes it with a typed figure', () => {
+    it('offers four presets, opens on none, and writes one only once it is pressed', () => {
         const { root } = sheet();
         const seg = root.querySelector('[data-role="describe-tolerance"]') as HTMLElement;
         expect(seg).not.toBeNull();
@@ -8192,13 +8195,28 @@ describe('the-editor-writes-presets-only-and-reads-anything', () => {
             b.getAttribute('data-pct'),
         );
         expect(presets).toEqual(['1', '2', '5', '10']);
-        expect(seg.querySelector('[aria-pressed="true"]')?.getAttribute('data-pct')).toBe('2');
-        expect(root.textContent).toContain(copy.DESC_TOLERANCE_HINT);
+        // Nothing pressed by default (owner, 2026-09-07): the presets sit under
+        // a closed fold, and a byte pressed there onto a permanent record was
+        // a byte nobody chose.
+        expect(seg.querySelector('[aria-pressed="true"]')).toBeNull();
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_NONE);
         expect(root.textContent).toContain(copy.DESC_TWO_PRICES);
 
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
         amount.value = '12.50';
         amount.dispatchEvent(new Event('input'));
+        expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 1250n },
+            }),
+        );
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toContain(
+            copy.SUMMARY_TOLERANCE,
+        );
+
+        (seg.querySelector('[data-pct="2"]') as HTMLButtonElement).click();
+        expect(seg.querySelector('[aria-pressed="true"]')?.getAttribute('data-pct')).toBe('2');
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_HINT);
         expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, '', {
                 price: { code: 'usd', exponent: 2, amount: 1250n, tolerancePct: 2 },
@@ -8260,6 +8278,45 @@ describe('the-editor-writes-presets-only-and-reads-anything', () => {
                 price: { ...carried, tolerancePct: 5 },
             }),
         );
+    });
+});
+
+describe('a-typed-figure-carries-no-tolerance-until-one-is-pressed', () => {
+    /**
+     * A permanent record carries only what the seller chose. 2% was pressed
+     * by default onto a new quote from under the closed "More" fold — a byte
+     * nobody chose, which the seller met for the first time in a dispute. A
+     * typed figure alone writes no `0x03`; the presets are the only road to
+     * one, and the sheet says none is stated until then (owner, 2026-09-07).
+     */
+    it('writes no 0x03 for a typed figure, and one after a press', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+            }),
+        );
+        const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
+        amount.value = '9.99';
+        amount.dispatchEvent(new Event('input'));
+        const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+        const summary = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 999n },
+            }),
+        );
+        expect(summary.textContent).not.toContain(copy.SUMMARY_TOLERANCE);
+        expect(root.textContent).toContain(copy.DESC_TOLERANCE_NONE);
+
+        (root.querySelector('[data-role="describe-tolerance-5"]') as HTMLButtonElement).click();
+        expect(hex.textContent).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'usd', exponent: 2, amount: 999n, tolerancePct: 5 },
+            }),
+        );
+        expect(summary.textContent).toContain(copy.SUMMARY_TOLERANCE);
     });
 });
 
@@ -8438,7 +8495,7 @@ describe('an-unknown-genesis-warns-and-writes', () => {
         field.dispatchEvent(new Event('input'));
         expect(describeField(root, 'describe-hex').textContent).toBe(
             encodeDescriptionHex(TOKEN_ID, 'Roasted weekly.', {
-                price: { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 },
+                price: { code: 'usd', exponent: 2, amount: 500n },
             }),
         );
     });

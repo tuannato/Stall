@@ -205,6 +205,12 @@ working accept, and there is no accept.
   wallet that holds XEC; the "stopped reading" screen keeps its share link;
   the empty shop's "List your first item" stays for every visitor. Reopen
   with new evidence — a stranger who fell out on one of them.
+- **The tolerance has no default, and the presets stay under "More"**
+  (2026-09-07). A permanent record carries only what the seller chose: 2 %
+  pressed by default from under a closed fold was a byte nobody chose, met
+  for the first time in a dispute. A quote with no byte prints "no
+  tolerance stated", and the page's own 2 % valve (`PAY_VALVE_DEFAULT_PCT`)
+  is this page's comparison, never the seller's promise.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -425,8 +431,7 @@ have sent revenue to an output nobody can spend.
   2026-09-04. A fact with a date, not a standing property — re-measure before
   claiming, and read them as a product number from now on.
 - **The owner's decisions left by the 2026-09-06 evaluation**, none built:
-  the tolerance preset's 2 % default and its place under the closed "More"
-  fold; the "sign with this stall's own wallet" sentence under the fold below
+  the "sign with this stall's own wallet" sentence under the fold below
   the sign control; the working manuals into version control; the app
   accepting `OP_PUSHDATA2` in a record; the door chip "No signup, no install";
   the provenance chip's wording and placement; the "price moved" comparison
