@@ -374,7 +374,7 @@ export const STUDIO_ITEMS_HINT =
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';
 export const activitySince = (time: string): string =>
-    `Watching since ${time} — what this page has seen arrive, newest first. Nothing is stored.`;
+    `Watching since ${time} — what this page has seen arrive, newest first. This list is not saved; leave the page and it is gone.`;
 export const ACTIVITY_GAPS =
     'Some activity may be missing: the connection dropped or a transaction could not be read.';
 export const ACTIVITY_NOT_WATCHING =
@@ -1096,7 +1096,7 @@ export const PAY_SEC_TITLE = 'Pay the seller directly';
  * is the thing that is true of any seller reached through a chat window.
  */
 export const PAY_SEC_LEDE =
-    'Items the seller has quoted on-chain. Your wallet pays them, in the amount they wrote — you receive no token; they deliver off-chain. You are trusting the seller, as with any seller you reach through a chat.';
+    'Items the seller has quoted on-chain. Your wallet pays them in XEC for the figure they quoted — you receive no token; delivery is the seller’s, off-chain. You are trusting the seller, as with any seller you reach through a chat.';
 /*
  * The Shop panel's two rails. A segmented control, never a second tab bar and
  * never a tablist: the dock below it is the only bar that switches panels, and
@@ -1130,7 +1130,7 @@ export const withheldListingsLine = (n: number): string =>
 export const withheldQuotesLine = (n: number): string =>
     `${n} ${n === 1 ? 'quote is' : 'quotes are'} not shown here.`;
 export const WITHHELD_WHY =
-    'This page does not carry tokens on eCash’s impersonation blacklist, nor FIRMA, fCHF, fEUR or XECX.';
+    'This page does not carry a token Cashtab’s blacklist names, one whose name or ticker Cashtab refuses to mint, nor FIRMA, fCHF, fEUR or XECX.';
 export const WITHHELD_ALL_LISTINGS = 'Everything listed here is a token this page does not carry.';
 export const WITHHELD_ALL_QUOTES = 'Everything quoted here is a token this page does not carry.';
 /** The shop header when a number would be a floor. */

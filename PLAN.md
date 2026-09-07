@@ -112,8 +112,8 @@ product complete at craft and unmeasured at use. Before any new surface:
 read the three record counts on chain (`STL1`, `STLD`, `STLP` — 8 / 2 / 0
 on 2026-09-04) and the distinct signers among them; read the CDN's own
 request counts for the unfurl function and the icon Worker; walk five real
-sellers through a stall by hand. Then the honesty one-liners the evaluation
-left open (its §9), then the owner's decisions under **Open**.
+sellers through a stall by hand. Then the owner's decisions under **Open**
+(the honesty one-liners the evaluation left open landed on 2026-09-07).
 
 **Recommended, not yet decided:** no new LOKAD and no new tag for 90 days —
 every tag is permanent, and one has already been burned after a day — and
@@ -462,10 +462,7 @@ the shared skeleton everywhere else.
    sellers walked through a stall by hand, with the token minted for them, so
    the question "is the mint requirement the constraint or is demand" gets an
    answer instead of an argument.
-2. **The honesty one-liners** the evaluation left open, none of which changes
-   a ruling: the quotes lede's "in the amount they wrote", the withheld line's
-   reason, "Nothing is stored." on Activity, the 404's internal note.
-3. **Choose the sentence.** Listings or Quotes is the product; the door, the
+2. **Choose the sentence.** Listings or Quotes is the product; the door, the
    dock and the guides follow from that choice. The owner's call.
 
 Deploying needs nothing: a push to `main` builds and ships, and CI runs the
