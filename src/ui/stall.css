@@ -1933,12 +1933,21 @@ textarea.paste-in {
     justify-self: center;
 }
 
-/* The token on a row: a 24px tile, letters until the picture lands. */
-.event-ic {
+/*
+ * The token on a row: a 24px tile, letters until the picture lands. Three
+ * classes deep on purpose — the desktop block's `.item-ic { width:
+ * var(--s-icon-d) }` and the looks' `.t-* .item-ic` both out-ranked a bare
+ * `.event-ic`, and a 56px tile sat over the first letters of every line at
+ * 1280px (measured 2026-09-08; the probe's "a row tile covers its own line"
+ * rule is the incident). The guard reads blocks by selector and cannot see
+ * a cascade, so the reason is written here.
+ */
+.event-sum .item-ic.event-ic {
     width: 24px;
     height: 24px;
     font-size: 9px;
     border-radius: 6px;
+    border-width: 1px;
     clip-path: none;
 }
 

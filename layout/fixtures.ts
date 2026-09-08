@@ -440,6 +440,24 @@ export const SCREENS: Record<string, StallView> = {
                 book: 'consumed',
                 status: { kind: 'finalized', avalanche: true },
             },
+            // Two rows wearing a tile: a description naming its token (the
+            // picture, or letters until it lands) and a payment claim on a
+            // token the seller never named (letters). The tile rule measures
+            // both against the line beside them.
+            {
+                txid: 'ac'.repeat(32),
+                kind: 'description',
+                seenAtMs: TRIED_AT_MS - 30_000,
+                tokenId: T1,
+                recordAuthority: 'stalls',
+            },
+            {
+                txid: 'ad'.repeat(32),
+                kind: 'payment',
+                seenAtMs: TRIED_AT_MS - 45_000,
+                sats: 1_000_000n,
+                payment: { tokenId: T2, quantity: 2n },
+            },
             {
                 txid: 'cd'.repeat(32),
                 kind: 'settings',

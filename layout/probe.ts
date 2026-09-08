@@ -501,6 +501,32 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
     }
 
+    /*
+     * An Activity row's tile sits in its own 24px grid column; the kind and
+     * the time start in the next. Measured on the live origin at 1280px,
+     * 2026-09-08: the desktop block's `.item-ic { width: var(--s-icon-d) }`
+     * and the looks' own `.t-* .item-ic` rules out-ranked the tile's 24px,
+     * so a 56px tile sat over the first letters of every line — an in-flow
+     * overlap no protected box names, which is why it has its own rule.
+     */
+    for (const tile of surface.querySelectorAll<HTMLElement>('.event-sum .event-ic')) {
+        const box = tile.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) {
+            continue;
+        }
+        const line = tile.parentElement?.querySelector<HTMLElement>('.event-kind');
+        if (line === null || line === undefined) {
+            continue;
+        }
+        const text = line.getBoundingClientRect();
+        if (box.right > text.left + 0.5) {
+            fail(
+                'a row tile covers its own line',
+                `${describe(tile)} is ${Math.round(box.width)}px wide and ends at ${Math.round(box.right)}, the kind starts at ${Math.round(text.left)}`,
+            );
+        }
+    }
+
     for (const pseudo of positionedPseudos(surface)) {
         fail(
             'a positioned pseudo-element cannot be measured',

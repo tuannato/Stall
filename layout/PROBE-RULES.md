@@ -53,6 +53,16 @@ nothing.
   sheet bounded and scrollable; covering the stall behind is what the seller
   opened it to do. The first run reported the scrim covering the price
   behind it — the boundary that had never been written down.
+- **A row tile covers its own line.** An Activity row's token tile sits in
+  its own 24px grid column, and the kind and time start in the next. On the
+  live origin at 1280px (owner, 2026-09-08) the desktop block's `.item-ic {
+  width: var(--s-icon-d) }` and the looks' `.t-* .item-ic` out-ranked the
+  tile's bare `.event-ic`, and a 56px tile sat over the first letters of
+  every line — an in-flow overlap no protected box names, and the mobile
+  pass could not see because the base `.item-ic` is 44px only past 680px.
+  Every `.event-sum .event-ic` must end before the `.event-kind` beside it
+  begins; the `activity` fixture carries a description row and a payment
+  claim so both tile shapes are measured.
 - **The poster's scrim is a modal surface too.** It carries the class
   `sheet-scrim` and the role `poster`, not the sheets' role, so the first
   poster screen (`pay-tag`, 2026-09-08) measured the shop behind it and
