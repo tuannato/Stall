@@ -32,7 +32,15 @@ const TOKEN_ID_RE = /^[0-9a-f]{64}$/;
  * Dust in XEC. 546 sats is 5.46 XEC; BIP21 `amount` is XEC, so writing
  * 546 would send 546 XEC.
  */
-const DUST_XEC = '5.46';
+/**
+ * The publish amount, composed from the one dust constant the reader also
+ * holds. A record counts as a stall's only when it pays the stall itself
+ * exactly `DUST_SATS` (`recordAddressedToStall`, since 2026-09-07), so the
+ * figure this link writes and the figure the walks demand must be one
+ * number — two literals stating it would drift green, and every record this
+ * app wrote would turn unreadable to this app.
+ */
+const DUST_XEC = formatXecUngrouped(DUST_SATS);
 const OP_RETURN_RAW_RE = /^([0-9a-f]{2})+$/;
 /** BIP21 `op_return_raw` is the payload without `6a`, capped at 222 bytes. */
 const OP_RETURN_RAW_MAX_BYTES = 222;

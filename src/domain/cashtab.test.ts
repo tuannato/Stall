@@ -1,6 +1,6 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { describe, expect, it } from 'vitest';
-import { DUST_SATS } from './money';
+import { DUST_SATS, formatXecUngrouped } from './money';
 import {
     cashtabPayUrl,
     cashtabPublishUrl,
@@ -47,6 +47,24 @@ describe('pay-e-cash-bip21-is-encoded-in-the-query', () => {
         expect(url).toContain('?bip21=ecash%3A');
         expect(url).not.toMatch(/\?bip21=ecash:/);
         expect(url).not.toContain('addr=');
+    });
+});
+
+describe('the-publish-amount-is-the-amount-the-reader-requires', () => {
+    /**
+     * `publishBip21` writes the dust the reader demands back on a record
+     * (`recordAddressedToStall`: exactly `DUST_SATS` to the stall's own
+     * script). Derived from `DUST_SATS` on both sides, never two literals —
+     * an edit to either would make every record this app writes invisible
+     * to this app, with the suite green.
+     */
+    it('writes DUST_SATS as XEC, and it parses back to DUST_SATS', () => {
+        const uri = publishBip21(P2PKH, HEX)!;
+        const amount = new URL(uri.replace('ecash:', 'http://x/')).searchParams.get('amount')!;
+        expect(amount).toBe(formatXecUngrouped(DUST_SATS));
+        const [whole, frac = ''] = amount.split('.');
+        expect(frac).toHaveLength(2);
+        expect(BigInt(whole) * 100n + BigInt(frac)).toBe(DUST_SATS);
     });
 });
 
