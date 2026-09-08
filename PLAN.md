@@ -260,12 +260,16 @@ working accept, and there is no accept.
   and the owner chose to keep Listings first until the five-seller walk
   (§ Next action) says where a seller of real goods actually stops. Reopen
   with that evidence; a swap is copy only, one commit, reversible.
-- **A block's records rank by the node's first sighting, then txid**
-  (2026-09-07). The rule was txid alone within a block; a seller who edited
-  a quote four times in one block interval saw the edit with the highest
-  txid win over their removal. chronik's `timeFirstSeen` decides when both
-  stamps are known and differ — one node's clock, never alone. Not a wire
-  change; a reader rule, mirrored at the edge.
+- **Settled records rank by the node's first sighting, then by the old
+  ladder** (2026-09-07, widened 2026-09-08). The rule was txid alone within
+  a block; a seller who edited a quote four times in one block interval saw
+  the edit with the highest txid win over their removal. chronik's
+  `timeFirstSeen` now orders any two settled records when both stamps are
+  known and differ — across blocks too, which closes the one case height
+  gets backwards, a newer edit mined a block before an older one. Without
+  stamps: finalized-and-unmined, then height, then txid. One node's clock,
+  never alone, and no extra request: the stamp rides every transaction the
+  page already reads. Not a wire change; mirrored at the edge.
 - **A record is the stall's only if it pays the stall itself** (D14,
   2026-09-07, the owner's own proposal). An `STL1`/`STLD` record counts when
   the stall's key signed it **and** the transaction pays the stall's own
@@ -523,6 +527,25 @@ have sent revenue to an output nobody can spend.
   **Decided**). Still open: the working manuals into version control (the
   owner's remote), D9(b) below, and the edge unfurl's page cap (3) against
   the app's (10).
+- **The audit of 2026-09-08** (`internal/AUDIT-2026-09-08.html`, two critics
+  in `private/agent-output/audit-0908/`): done the same day — F3 the pay
+  sheet's asking state, F2 one fact read at a time, the two D14 holes (a
+  refused record newer than the winner is said; the `?m=` hint reports what
+  it refused), the copy corrections (F4, F5, F11), the disclosure's vector
+  paragraph. **F1 declined**: a stranger cannot put a ONESHOT into another
+  key's group for dust (the ad script signs for `cancel_pk` under P2SH
+  consensus), so a payout-script filter would only hide a seller's own
+  listing paying a cold wallet, silently. Recorded, not fixed: F6
+  (`loadTokenMeta` fans out one request per token, the seller's own count),
+  F7 (the unfurl walks two head requests per fabricated address, bounded by
+  Cloudflare), F10 (four session caches grow per stall opened in a tab,
+  bytes).
+- **Decided by the owner on 2026-09-08 from the open list**: no
+  same-name alert in the eCash-Live bot (cancelled); the bot's payment
+  alert and the ecash-herald LOKAD registration are deferred; a third rate
+  feed (Binance) waits for a day of `scripts/rate-gap.mjs` — it is the same
+  venue the two aggregators draw on, quotes USDT, and blocks whole regions,
+  so it buys a tiebreak between the two feeds and little else.
 - **A Cashtab patch** that preselects a maker on the token market is not on
   Stall's buy path. It remains optional help for people who buy in Cashtab
   from somewhere else, never a blocker.
