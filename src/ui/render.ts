@@ -6441,11 +6441,41 @@ function historyControl(
  * kept and made stricter — a row must not grow a control the visitor did not
  * ask for, so every control lives behind the disclosure they opened.
  */
+/**
+ * Which token a row wears on its glance, and whether it may wear the token's
+ * picture. A description names its token and a token move moved it — facts
+ * of the transaction, so the icon paints. A payment's token is the payer's
+ * own memo, and a logo is louder than the word "claim" beside it: the
+ * picture paints only where the seller's own record names that token (a
+ * quote or a description), and letters otherwise. Book and other rows name
+ * no token at all.
+ */
+function eventIcon(event: StallEvent, view: StallView): { tokenId: string; picture: boolean } | undefined {
+    if (event.kind === 'description' || event.kind === 'token-move') {
+        return event.tokenId === undefined ? undefined : { tokenId: event.tokenId, picture: true };
+    }
+    if (event.kind === 'payment' && event.payment !== undefined) {
+        const id = event.payment.tokenId;
+        const named = view.prices?.has(id) === true || view.descriptions?.has(id) === true;
+        return { tokenId: id, picture: named };
+    }
+    return undefined;
+}
+
 function eventRow(event: StallEvent, view: StallView): HTMLElement {
     const row = el('li', 'event');
     const fold = el('details', 'event-fold');
     fold.setAttribute('data-role', 'event-detail');
     const glance = el('summary', 'event-sum');
+    const icon = eventIcon(event, view);
+    if (icon !== undefined) {
+        // Letters from the genesis name when this page read it; an empty tile
+        // otherwise — two hex characters of an id are not initials.
+        const name = view.tokens.has(icon.tokenId) ? tokenName(view.tokens, icon.tokenId) : '';
+        const tile = itemIcon(icon.tokenId, name, 'event-ic', ICON_ROW_SIZE, icon.picture);
+        tile.setAttribute('data-role', 'event-icon');
+        glance.append(tile);
+    }
     const at = eventTime(event);
     if (at !== undefined) {
         glance.append(el('span', 'event-time', at.text));

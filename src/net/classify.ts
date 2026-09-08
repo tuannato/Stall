@@ -578,6 +578,37 @@ function payerAddressField(tx: ChainTx): { payerAddress?: string } {
     return payerAddress === undefined ? {} : { payerAddress };
 }
 
+/**
+ * The token an `STLD` output names — shape only, the way `classifyTx` reads
+ * it: a stranger's record still names a token, and the row's authority
+ * label already says whose record it is. Nothing here is decoded further.
+ */
+function stldTokenIdOf(tx: ChainTx): string | undefined {
+    for (const output of tx.outputs) {
+        const pushes = opReturnPushes(output.outputScript);
+        if (pushes === undefined || !isStld(pushes)) {
+            continue;
+        }
+        const id = pushes[1];
+        if (id === undefined || id.length !== 32) {
+            continue;
+        }
+        return Array.from(id, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return undefined;
+}
+
+/** The first wanted token the transaction's entries name. */
+function movedTokenIdOf(tx: ChainTx, wantedTokenIds: ReadonlySet<string>): string | undefined {
+    for (const entry of tx.tokenEntries ?? []) {
+        const id = entry?.tokenId;
+        if (typeof id === 'string' && wantedTokenIds.has(id)) {
+            return id;
+        }
+    }
+    return undefined;
+}
+
 export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
     const facts = classifyTx(tx, ctx.script, ctx.wantedTokenIds);
     const memo = paymentMemoOf(tx, ctx.script);
@@ -586,6 +617,14 @@ export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
     const chainTimeS = chainTimeOf(tx);
     const sats = receivedSats(tx, ctx);
     const isRecord = kind === 'settings' || kind === 'description';
+    // The token the transaction itself names, for the row's icon. A
+    // payment's token is the memo's and rides `payment`, labelled a claim.
+    const tokenId =
+        kind === 'description'
+            ? stldTokenIdOf(tx)
+            : kind === 'token-move'
+              ? movedTokenIdOf(tx, ctx.wantedTokenIds)
+              : undefined;
     return {
         txid: tx.txid,
         kind,
@@ -596,5 +635,6 @@ export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
         ...(kind === 'payment' && memo !== undefined ? { payment: memo } : {}),
         ...(kind === 'payment' ? payerAddressField(tx) : {}),
         ...(isRecord ? { recordAuthority: recordAuthorityOf(tx, ctx.hash) } : {}),
+        ...(tokenId === undefined ? {} : { tokenId }),
     };
 }

@@ -350,6 +350,14 @@ export type StallEvent = {
      * is never a second opinion on what counts as the seller's record.
      */
     recordAuthority?: RecordAuthority;
+    /**
+     * The token a `description` row's record names, or the wanted token a
+     * `token-move` row moved — a fact of the transaction, read from its own
+     * bytes, so the row can wear the token's icon. A `payment` row's token
+     * is the memo's (`payment.tokenId`) and stays there: that one is the
+     * payer's claim, not the transaction's.
+     */
+    tokenId?: string;
 };
 
 /**

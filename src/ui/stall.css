@@ -1902,10 +1902,12 @@ textarea.paste-in {
  */
 .event-sum {
     display: grid;
-    grid-template-columns: 15px minmax(0, 1fr) auto auto;
+    /* The icon column is fixed whether or not a row wears one, so every
+       kind starts on the same line. */
+    grid-template-columns: 15px 24px minmax(0, 1fr) auto auto;
     grid-template-areas:
-        'dot kind txid caret'
-        'dot time txid caret';
+        'dot ic kind txid caret'
+        'dot ic time txid caret';
     column-gap: 10px;
     row-gap: 2px;
     align-items: center;
@@ -1929,6 +1931,15 @@ textarea.paste-in {
     border: 2px solid var(--s-bg);
     box-sizing: content-box;
     justify-self: center;
+}
+
+/* The token on a row: a 24px tile, letters until the picture lands. */
+.event-ic {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+    border-radius: 6px;
+    clip-path: none;
 }
 
 .event-caret {

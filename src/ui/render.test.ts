@@ -12008,3 +12008,69 @@ describe('the-describe-sheet-offers-a-tag-only-over-an-unchanged-published-quote
         expect(describeField(borrowed.root, 'describe-tag').hidden).toBe(false);
     });
 });
+
+describe('an-activity-row-wears-the-token-the-transaction-names', () => {
+    /**
+     * A description and a token move name a token in their own bytes, so the
+     * row wears its picture. A payment's token is the payer's memo — a logo
+     * is louder than the word "claim" beside it — so the picture paints only
+     * where the seller's own record names that token, and letters otherwise.
+     * Book and other rows name no token. The tile is data on the glance,
+     * never a control.
+     */
+    const AT = 1_756_400_000_000;
+    const OTHER = 'ef'.repeat(32);
+    const rows = (over: Partial<StallView> = {}) =>
+        paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                events: [
+                    { txid: 'a1'.repeat(32), kind: 'description', seenAtMs: AT, tokenId: TOKEN_ID, recordAuthority: 'stalls' },
+                    { txid: 'a2'.repeat(32), kind: 'token-move', seenAtMs: AT - 1, tokenId: TOKEN_ID },
+                    { txid: 'a3'.repeat(32), kind: 'payment', seenAtMs: AT - 2, sats: 25_000_000n, payment: { tokenId: TOKEN_ID, quantity: 1n } },
+                    { txid: 'a4'.repeat(32), kind: 'payment', seenAtMs: AT - 3, sats: 25_000_000n, payment: { tokenId: OTHER } },
+                    { txid: 'a5'.repeat(32), kind: 'book', seenAtMs: AT - 4, book: 'consumed' },
+                    { txid: 'a6'.repeat(32), kind: 'settings', seenAtMs: AT - 5, recordAuthority: 'stalls' },
+                ],
+                ...over,
+            }),
+        ).root;
+
+    it('paints the picture on a description and a token move, and on a claim only over a token the seller named', () => {
+        const root = rows({ prices: new Map([[TOKEN_ID, QUOTE_USD]]) });
+        const tiles = [...root.querySelectorAll('li.event')].map((row) =>
+            row.querySelector<HTMLElement>('summary [data-role="event-icon"]'),
+        );
+        expect(tiles.map((t) => t?.getAttribute('data-token-id') ?? null)).toEqual([
+            TOKEN_ID,
+            TOKEN_ID,
+            TOKEN_ID,
+            null,
+            null,
+            null,
+        ]);
+        // The claim on a token nobody here named: a tile of letters, no picture.
+        expect(tiles[3]).not.toBeNull();
+        expect(tiles[3]!.textContent).toBe('');
+        expect(tiles[3]!.querySelector('img')).toBeNull();
+        expect(tiles[4]).toBeNull();
+        expect(tiles[5]).toBeNull();
+        expect(tiles[0]!.classList.contains('event-ic')).toBe(true);
+        expect(tiles[0]!.textContent).toBe('RB');
+        // Data, not a control.
+        for (const tile of tiles) {
+            expect(tile?.querySelector('button, a') ?? null).toBeNull();
+        }
+    });
+
+    it('a claim on a token the seller never quoted or described wears letters even when the genesis is known', () => {
+        const root = rows({ tokens: new Map([[TOKEN_ID, BEANS]]), prices: undefined });
+        const claim = [...root.querySelectorAll('li.event')][2]!.querySelector<HTMLElement>('summary [data-role="event-icon"]')!;
+        expect(claim.getAttribute('data-token-id')).toBeNull();
+        expect(claim.textContent).toBe('RB');
+        // And a description names it, so the seller's own record makes the picture allowed.
+        const named = rows({ descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]) });
+        const claimNamed = [...named.querySelectorAll('li.event')][2]!.querySelector<HTMLElement>('summary [data-role="event-icon"]')!;
+        expect(claimNamed.getAttribute('data-token-id')).toBe(TOKEN_ID);
+    });
+});

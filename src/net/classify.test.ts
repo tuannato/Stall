@@ -787,3 +787,28 @@ describe('the-payers-address-is-a-citation-not-a-payment', () => {
         ).toBeUndefined();
     });
 });
+
+describe('a-row-carries-the-token-the-transaction-names', () => {
+    /**
+     * A description names its token in its own bytes and a token move moved
+     * one this stall wanted: both are facts of the transaction, carried on
+     * the row so it can wear the token's icon. A payment's token is the
+     * payer's memo and rides `payment` alone, labelled a claim.
+     */
+    it('a description row names the record’s token', () => {
+        const words = tx({ outputs: [STALL, stld(TOKEN_WORN, 'Sun dried')] });
+        expect(historyEventOf(words, CTX).tokenId).toBe(TOKEN_WORN);
+    });
+
+    it('a token move names the wanted token that moved', () => {
+        const moved = tx({ outputs: [STALL], tokens: [TOKEN_WORN] });
+        const row = historyEventOf(moved, CTX);
+        expect(row.kind).toBe('token-move');
+        expect(row.tokenId).toBe(TOKEN_WORN);
+    });
+
+    it('a settings row and an ordinary payment name none', () => {
+        expect(historyEventOf(tx({ outputs: [STALL, stl1('Shop')] }), CTX).tokenId).toBeUndefined();
+        expect(historyEventOf(tx({ outputs: [STALL] }), CTX).tokenId).toBeUndefined();
+    });
+});
