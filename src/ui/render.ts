@@ -1547,8 +1547,17 @@ function collectionHead(groupTokenId: string, count: number, view: StallView): H
 
 function settingsNotes(body: HTMLElement, view: StallView): void {
     if (view.settingsUnreadable === true) {
-        // They did publish. Silence here would say they never did.
-        body.append(el('p', 'fine', copy.SETTINGS_UNREADABLE));
+        // They did publish. Silence here would say they never did — and
+        // "the default look" would be false over an older record that won.
+        body.append(
+            el(
+                'p',
+                'fine',
+                view.settingsRefusedNewer === true
+                    ? copy.SETTINGS_UNREADABLE_NEWER
+                    : copy.SETTINGS_UNREADABLE,
+            ),
+        );
     }
     if (view.settingsUnaddressed === true) {
         // They signed one, not from this stall's own publish link. Same rule.

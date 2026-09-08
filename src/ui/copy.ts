@@ -29,6 +29,9 @@ export const SETTINGS_UNADDRESSED =
     'This stall signed a settings record that was not made from this stall\u2019s publish link, so this page does not apply it.';
 export const SETTINGS_UNREADABLE =
     'This seller published stall settings that this page could not read, so it is showing the default look.';
+/** The same fact over an older record that did win: the look on screen is the earlier one, not the default. */
+export const SETTINGS_UNREADABLE_NEWER =
+    'This seller published newer stall settings that this page could not read, so it is showing the earlier ones.';
 
 /**
  * Distinct from SETTINGS_UNREADABLE on purpose. The record read perfectly; we

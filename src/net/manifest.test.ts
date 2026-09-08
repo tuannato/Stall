@@ -679,14 +679,75 @@ describe('a-signed-record-we-refused-is-not-a-stall-that-never-published', () =>
         outputs: [{ outputScript: stl1OutputScript('Elsewhere') }, { outputScript: p2pkhOutputScript(hash), sats: 9_000n }],
     };
 
-    it('says so when nothing else won, and not when a proper record did', async () => {
+    it('says so when nothing else won, and not when a newer proper record did', async () => {
         const alone = await loadManifest(fakeChronik({ addressTxs: [unaddressed], lokadTxs: [unaddressed] }), { address: 'ecash:stall', hash });
         expect(alone.manifest).toBeUndefined();
         expect(alone.unaddressed).toBe(true);
         expect(alone.unreadable).toBe(false);
+        expect(alone.refusedNewer).toBe(false);
         const proper = stallTx({ txid: 'ef'.repeat(32), pk, hash, name: 'Proper', height: 101 });
         const both = await loadManifest(fakeChronik({ addressTxs: [unaddressed, proper], lokadTxs: [unaddressed, proper] }), { address: 'ecash:stall', hash });
         expect(both.manifest?.name).toBe('Proper');
         expect(both.unaddressed).toBe(false);
+        expect(both.refusedNewer).toBe(false);
+    });
+
+    it('a-record-that-did-not-pay-the-stall-is-said-even-when-an-older-one-wins', async () => {
+        // The seller's newer republish was refused; the old look stays on
+        // screen. Saying nothing here read as "changing my settings does
+        // nothing" (audit 2026-09-08, M1).
+        const older = stallTx({ txid: 'ef'.repeat(32), pk, hash, name: 'Older', height: 99 });
+        const lookup = await loadManifest(fakeChronik({ addressTxs: [older, unaddressed], lokadTxs: [older, unaddressed] }), { address: 'ecash:stall', hash });
+        expect(lookup.manifest?.name).toBe('Older');
+        expect(lookup.unaddressed).toBe(true);
+        expect(lookup.refusedNewer).toBe(true);
+        // The same refused record reached through the ?m= hint says so too.
+        const hinted = await loadManifest(
+            fakeChronik({ addressTxs: [older], lokadTxs: [older], byTxid: { [unaddressed.txid]: unaddressed } }),
+            { address: 'ecash:stall', hash },
+            unaddressed.txid,
+        );
+        expect(hinted.manifest?.name).toBe('Older');
+        expect(hinted.unaddressed).toBe(true);
+    });
+
+    it('an unmined, unfinalized refused record does not claim to be newer', async () => {
+        const older = stallTx({ txid: 'ef'.repeat(32), pk, hash, name: 'Older', height: 99 });
+        const floating: ChainTx = { ...unaddressed, block: undefined, isFinal: false };
+        const lookup = await loadManifest(fakeChronik({ addressTxs: [older, floating], lokadTxs: [older, floating] }), { address: 'ecash:stall', hash });
+        expect(lookup.manifest?.name).toBe('Older');
+        expect(lookup.unaddressed).toBe(false);
+    });
+});
+
+describe('a-newer-record-we-could-not-read-is-said-over-an-older-winner', () => {
+    /**
+     * `unreadable` used to speak only with no winner at all — "the broken
+     * one is simply older" was assumed, not checked. A seller who republished
+     * and got a record this page cannot decode saw their old look and no
+     * sentence; the descriptions walk had always counted such a record.
+     */
+    const pk = compressedPk(0x44);
+    const hash = toHex(shaRmd160(pk));
+    const broken = (txid: string, height: number): ChainTx => ({
+        txid,
+        block: { height },
+        inputs: [{ inputScript: p2pkhScriptSig(pk), outputScript: p2pkhOutputScript(hash) }],
+        outputs: [
+            { outputScript: `6a${pushHex(Uint8Array.from(STL1_ASCII, (c) => c.charCodeAt(0)))}${pushHex(new TextEncoder().encode('Broken'))}` },
+            { outputScript: p2pkhOutputScript(hash), sats: DUST_SATS },
+        ],
+    });
+
+    it('says the earlier look is showing when the broken record is newer, and stays quiet when it is older', async () => {
+        const good = stallTx({ txid: 'ab'.repeat(32), pk, hash, name: 'Good', height: 100 });
+        const newer = await loadManifest(fakeChronik({ addressTxs: [good, broken('cd'.repeat(32), 101)], lokadTxs: [good, broken('cd'.repeat(32), 101)] }), { address: 'ecash:stall', hash });
+        expect(newer.manifest?.name).toBe('Good');
+        expect(newer.unreadable).toBe(true);
+        expect(newer.refusedNewer).toBe(true);
+        const older = await loadManifest(fakeChronik({ addressTxs: [good, broken('cd'.repeat(32), 99)], lokadTxs: [good, broken('cd'.repeat(32), 99)] }), { address: 'ecash:stall', hash });
+        expect(older.manifest?.name).toBe('Good');
+        expect(older.unreadable).toBe(false);
+        expect(older.refusedNewer).toBe(false);
     });
 });

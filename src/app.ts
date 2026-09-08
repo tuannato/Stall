@@ -1606,6 +1606,7 @@ export function boot(
             settingsTruncated: lookup.truncated,
             settingsUnreadable: lookup.unreadable,
             settingsUnaddressed: lookup.unaddressed,
+            settingsRefusedNewer: lookup.refusedNewer,
         };
         const manifest = lookup.manifest;
         if (manifest !== undefined) {
@@ -2400,6 +2401,7 @@ async function loadCurrent(): Promise<AppState> {
     let settingsTruncated = false;
     let settingsUnreadable = false;
     let settingsUnaddressed = false;
+    let settingsRefusedNewer = false;
     let attachmentFlags = 0;
     {
         const lookup = await manifestSoon;
@@ -2407,6 +2409,7 @@ async function loadCurrent(): Promise<AppState> {
             settingsTruncated = lookup.truncated;
             settingsUnreadable = lookup.unreadable;
             settingsUnaddressed = lookup.unaddressed;
+            settingsRefusedNewer = lookup.refusedNewer;
             const manifest = lookup.manifest;
             if (manifest) {
                 stallName = manifest.name;
@@ -2581,6 +2584,7 @@ async function loadCurrent(): Promise<AppState> {
             settingsTruncated,
             settingsUnreadable,
             settingsUnaddressed,
+            settingsRefusedNewer,
         },
         offers,
         pubkeyHex: route.pubkeyHex,

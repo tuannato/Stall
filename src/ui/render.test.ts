@@ -10004,6 +10004,28 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
     });
 });
 
+describe('a-newer-refused-record-says-the-earlier-look-is-showing', () => {
+    /**
+     * Over a winner, "showing the default look" would be false: the sign says
+     * the earlier settings are showing instead. The unaddressed sentence is
+     * true either way and does not change.
+     */
+    it('picks the sentence by whether a winner is painted', () => {
+        const noWinner = paint(idlePubkey({ fetch: { kind: 'empty' }, settingsUnreadable: true })).root;
+        expect(noWinner.textContent).toContain(copy.SETTINGS_UNREADABLE);
+        expect(noWinner.textContent).not.toContain(copy.SETTINGS_UNREADABLE_NEWER);
+        const newer = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, settingsUnreadable: true, settingsRefusedNewer: true }),
+        ).root;
+        expect(newer.textContent).toContain(copy.SETTINGS_UNREADABLE_NEWER);
+        expect(newer.textContent).not.toContain(copy.SETTINGS_UNREADABLE);
+        const unaddressed = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, settingsUnaddressed: true, settingsRefusedNewer: true }),
+        ).root;
+        expect(unaddressed.textContent).toContain(copy.SETTINGS_UNADDRESSED);
+    });
+});
+
 describe('a-record-signed-but-not-addressed-is-labelled-so', () => {
     /**
      * The third state. A record this stall's key signed that does not pay the

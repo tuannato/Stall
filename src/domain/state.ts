@@ -463,6 +463,8 @@ export type StallView = {
      * published, the same lie `unreadable` and `truncated` exist to refuse.
      */
     settingsUnaddressed?: boolean;
+    /** The refused record is newer than the painted winner: the sign says the earlier settings are showing. */
+    settingsRefusedNewer?: boolean;
     /** True when the bare domain opens this stall for this browser. */
     isDefaultStall?: boolean;
     /**

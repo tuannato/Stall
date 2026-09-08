@@ -1,14 +1,7 @@
 import { DUST_SATS } from '../domain/money';
 import type { RecordAuthority } from '../domain/state';
 import { extractP2pkhPubKey, pubKeyMatchesHash } from '../domain/pubkey';
-import {
-    decodeManifestPushes,
-    isStl1,
-    pickManifestWinner,
-    STL1_HEX,
-    type ManifestRank,
-    type StallManifest,
-} from '../domain/manifest';
+import { decodeManifestPushes, isStl1, pickManifestWinner, STL1_HEX, type ManifestRank, type StallManifest, compareManifestRank } from '../domain/manifest';
 import {
     HISTORY_PAGE_SIZE,
     MAX_HISTORY_PAGES,
@@ -25,11 +18,20 @@ export type ManifestLookup = {
     /**
      * An `STL1` record signed by this stall was refused only by the output
      * test — it does not pay the stall back `DUST_SATS`, so it was not made
-     * from this stall's own publish link — and nothing else won. The seller
-     * did sign something; painting the shipped default in silence would say
-     * they never published.
+     * from this stall's own publish link — and either nothing else won, or the
+     * refused record ranks **above** the winner. The seller did sign
+     * something newer than what is painted; silence would say they never did.
      */
     unaddressed: boolean;
+    /**
+     * `unreadable` or `unaddressed` is true **and** a winner is painted: the
+     * refused record is newer than the look on screen, so the sign says the
+     * earlier settings are showing rather than the shipped default. Since
+     * 2026-09-08 — both flags used to speak only with no winner at all, so a
+     * seller whose republish was refused saw the old look and no sentence
+     * (the descriptions walk always counted; the settings walk did not).
+     */
+    refusedNewer: boolean;
     /**
      * The walk stopped at its page cap. A newer record may sit beyond it, so
      * the look on screen is not known to be current — and an unthemed stall is
@@ -37,10 +39,11 @@ export type ManifestLookup = {
      */
     truncated: boolean;
     /**
-     * An `STL1` record signed by this stall was found and could not be read.
-     * The seller did publish settings; we failed to decode them. Painting the
-     * shipped default in silence would say they never published, which is the
-     * same lie `truncated` exists to refuse.
+     * An `STL1` record signed by this stall was found and could not be read,
+     * and either nothing else won or it ranks above the winner. The seller
+     * did publish settings; we failed to decode them. Painting the shipped
+     * default — or an older look — in silence would say they never published,
+     * which is the same lie `truncated` exists to refuse.
      */
     unreadable: boolean;
 };
@@ -79,22 +82,33 @@ export async function loadManifest(
     addrFirstPage?: Promise<HistoryPage>,
 ): Promise<ManifestLookup> {
     const hash = stall.hash.toLowerCase();
-    const broken = { seen: false, unaddressed: false };
+    const broken: WalkFlags = { seen: false, unaddressed: false };
     let best: LoadedManifest | undefined;
 
     const hint = txidOrNothing(hintTxid);
     if (hint !== undefined) {
+        // Hint is a candidate, never an authority. A node that did not answer,
+        // or a txid that is not theirs, is ours and stays quiet.
+        let hinted: ChainTx | undefined;
         try {
-            best = better(best, recordFromTx(await chronik.tx(hint), hash));
-        } catch (err) {
-            // Hint is a candidate, never an authority — but a record of this
-            // seller's that will not decode is a fact about them either way,
-            // and swallowing it here let a printed `?m=` pointing at their own
-            // broken record paint the shipped default in silence. Anything
-            // else (a node that did not answer, a txid that is not theirs) is
-            // ours and stays quiet.
-            if (err instanceof Stl1Unreadable) {
-                broken.seen = true;
+            hinted = await chronik.tx(hint);
+        } catch {
+            hinted = undefined;
+        }
+        if (hinted !== undefined) {
+            try {
+                // The same flags the walk fills: a hinted record refused by the
+                // output test is said like any other (it used to pass none).
+                best = better(best, recordFromTx(hinted, hash, broken));
+            } catch (err) {
+                // A record of this seller's that will not decode is a fact
+                // about them either way, and swallowing it here let a printed
+                // `?m=` pointing at their own broken record paint the shipped
+                // default in silence.
+                if (err instanceof Stl1Unreadable) {
+                    broken.seen = true;
+                    noteRefused(broken, 'brokenBest', hinted);
+                }
             }
         }
     }
@@ -111,14 +125,50 @@ export async function loadManifest(
     }
 
     const manifest = better(best, walked.best);
+    // Said when nothing else won, or when the refused record ranks above the
+    // winner: a readable record wins on its own terms only when it is the
+    // newer one. "The broken one is simply older" was assumed, not checked,
+    // and a seller whose republish was refused saw the old look in silence.
+    const newerThanWinner = (refused: ManifestRank | undefined): boolean =>
+        manifest === undefined ||
+        (refused !== undefined && compareManifestRank(refused, manifest) > 0);
+    const unreadable = broken.seen && newerThanWinner(broken.brokenBest);
+    const unaddressed = broken.unaddressed && newerThanWinner(broken.unaddressedBest);
     return {
         manifest,
         truncated: walked.truncated,
-        // Only worth saying when there is nothing to show instead. A readable
-        // record wins on its own terms and the broken one is simply older.
-        unreadable: manifest === undefined && broken.seen,
-        unaddressed: manifest === undefined && broken.unaddressed,
+        unreadable,
+        unaddressed,
+        refusedNewer: manifest !== undefined && (unreadable || unaddressed),
     };
+}
+
+/**
+ * Remember the highest-ranking refused record of a kind, so the walk can say
+ * whether what it refused is newer than what won. Settled records only — a
+ * record that is unmined and unfinalized never ranks, as `pickManifestWinner`
+ * never lets one win.
+ */
+function noteRefused(
+    flags: WalkFlags,
+    key: 'brokenBest' | 'unaddressedBest',
+    tx: ChainTx,
+): void {
+    if (tx.block?.height === undefined && tx.isFinal !== true) {
+        return;
+    }
+    const rank: ManifestRank = {
+        height: tx.block?.height,
+        isFinal: tx.isFinal === true,
+        txid: tx.txid,
+        ...(typeof tx.timeFirstSeen === 'number' && tx.timeFirstSeen > 0
+            ? { firstSeen: tx.timeFirstSeen }
+            : {}),
+    };
+    const held = flags[key];
+    if (held === undefined || compareManifestRank(rank, held) > 0) {
+        flags[key] = rank;
+    }
 }
 
 /** One winner is all this returns, so one is all it holds. */
@@ -175,13 +225,23 @@ function bestInPage(
         } catch {
             // Ours, signed by this stall, and undecodable.
             broken.seen = true;
+            noteRefused(broken, 'brokenBest', tx);
         }
     }
     return out;
 }
 
-/** What a walk found besides a winner: an undecodable record, or one refused only by the output test. */
-type WalkFlags = { seen: boolean; unaddressed: boolean };
+/**
+ * What a walk found besides a winner: an undecodable record, or one refused
+ * only by the output test — and the highest rank of each, so the caller can
+ * say whether the refused record is newer than what won.
+ */
+type WalkFlags = {
+    seen: boolean;
+    unaddressed: boolean;
+    brokenBest?: ManifestRank;
+    unaddressedBest?: ManifestRank;
+};
 
 function recordFromTx(tx: ChainTx, hash: string, flags?: WalkFlags): LoadedManifest | undefined {
     if (!txSignedByStall(tx, hash)) {
@@ -196,6 +256,7 @@ function recordFromTx(tx: ChainTx, hash: string, flags?: WalkFlags): LoadedManif
         // stall's record — and said, when nothing else wins.
         if (flags !== undefined) {
             flags.unaddressed = true;
+            noteRefused(flags, 'unaddressedBest', tx);
         }
         return undefined;
     }
