@@ -20,6 +20,13 @@ export const HOME_PASTE_SCRIPT_ADDRESS =
 export const SETTINGS_TRUNCATED =
     "We stopped reading this seller's history before the end, so their stall settings may be newer than what is shown.";
 
+/**
+ * The stall's own sign, when a settings record signed here was refused only
+ * because it was not made from this stall's publish link and nothing else
+ * won. The seller did sign something; silence would say they never did.
+ */
+export const SETTINGS_UNADDRESSED =
+    'This stall signed a settings record that was not made from this stall\u2019s publish link, so this page does not apply it.';
 export const SETTINGS_UNREADABLE =
     'This seller published stall settings that this page could not read, so it is showing the default look.';
 
@@ -416,6 +423,18 @@ export const EVENT_DESCRIPTION = 'A token description published';
  */
 export const EVENT_SETTINGS_STRANGER = 'A settings record from another wallet';
 export const EVENT_DESCRIPTION_STRANGER = 'A description record from another wallet';
+/**
+ * The third state (since 2026-09-07): this stall's key signed it, but it does
+ * not pay the stall back the publish dust, so it was not made from this
+ * stall's own publish link and no reader applies it. Not "from another
+ * wallet" — that would be false — and no instruction, because Activity is
+ * public and the one place this state has appeared so far was a copycat's
+ * own stall; the seller who needs the road has the Studio one press away.
+ */
+export const EVENT_SETTINGS_UNADDRESSED =
+    'A settings record this stall signed, not made from this stall\u2019s publish link';
+export const EVENT_DESCRIPTION_UNADDRESSED =
+    'A description record this stall signed, not made from this stall\u2019s publish link';
 /**
  * Under a stranger's record row. Twice on one evening the "stranger" was
  * the seller: a second Cashtab wallet signing the stall's own publish link

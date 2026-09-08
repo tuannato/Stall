@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { DUST_SATS } from '../domain/money';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -67,6 +68,8 @@ function tx(opts: {
     /** The chain's own clock, in the two places chronik reports it. */
     timeFirstSeen?: number;
     blockTimeS?: number;
+    /** `null` leaves the publish dust out — a record not made from the stall's link. */
+    dustTo?: string | null;
 }): ChainTx {
     const input = opts.foreign
         ? {
@@ -83,7 +86,15 @@ function tx(opts: {
         timeFirstSeen: opts.timeFirstSeen,
         isFinal: opts.isFinal,
         inputs: [input],
-        outputs: opts.outputs.map((outputScript) => ({ outputScript })),
+        // The publish link's own dust back to the stall — keyed on the stall's
+        // hash whatever the input, so a foreign record is refused for the
+        // reason a test names.
+        outputs: [
+            ...opts.outputs.map((outputScript) => ({ outputScript })),
+            ...(opts.dustTo === null
+                ? []
+                : [{ outputScript: p2pkhOutputScript(opts.dustTo ?? HASH), sats: DUST_SATS }]),
+        ],
     };
 }
 
@@ -542,7 +553,10 @@ describe('description-does-not-cross-stalls', () => {
                 txid: '21'.repeat(32),
                 block: { height: 6 },
                 inputs: [{ inputScript: otherSig, outputScript: p2pkhOutputScript(otherHash) }],
-                outputs: [{ outputScript: stld(TOKEN_A, 'theirs') }],
+                outputs: [
+                    { outputScript: stld(TOKEN_A, 'theirs') },
+                    { outputScript: p2pkhOutputScript(otherHash), sats: DUST_SATS },
+                ],
             },
         ];
         const chronik = chronikWith({ lokadTxs: shared });
@@ -810,5 +824,23 @@ describe('a-genesis-on-the-address-branch-costs-no-extra-read', () => {
             }),
         );
         expect(out.genesis.size).toBe(0);
+    });
+});
+
+describe('an-unaddressed-quote-is-counted-not-forgotten', () => {
+    /**
+     * A description record this stall's key signed that does not pay the
+     * stall back the publish dust was not made from this stall's link: not
+     * applied, and counted among the records this page could not read, so the
+     * rail says so rather than that the seller wrote nothing.
+     */
+    it('leaves the token out of the maps and in the unreadable count', async () => {
+        const stray = tx({ txid: '30'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'stray')], dustTo: null });
+        const lookup = await loadDescriptions(chronikWith({ lokadTxs: [stray] }), { address: 'ecash:qq', hash: HASH });
+        expect(lookup.descriptions.get(TOKEN_A)).toBeUndefined();
+        expect(lookup.unreadable.has(TOKEN_A)).toBe(true);
+        const proper = tx({ txid: '31'.repeat(32), height: 6, outputs: [stld(TOKEN_A, 'proper')] });
+        const both = await loadDescriptions(chronikWith({ lokadTxs: [stray, proper] }), { address: 'ecash:qq', hash: HASH });
+        expect(both.descriptions.get(TOKEN_A)).toBe('proper');
     });
 });

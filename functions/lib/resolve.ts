@@ -178,6 +178,29 @@ function extractPubKey(inputScriptHex: string): Uint8Array | undefined {
  * same hash. Both halves, exactly as the app demands them — a record nobody
  * proved the seller signed is a record anyone can publish *for* them.
  */
+/**
+ * Mirrors `recordAddressedToStall`: exactly this many sats paid back to the
+ * stall's own script, which is what the stall's own publish link writes. A
+ * literal here, pinned to the app's `DUST_SATS` by
+ * `ownership-lite-agrees-with-the-app`.
+ */
+const RECORD_DUST_SATS = 546n;
+
+export function liteAddressedToStall(tx: LiteTx, hash: string): boolean {
+    for (const output of tx.outputs) {
+        if (isP2sh(output.outputScript)) {
+            continue;
+        }
+        if (p2pkhHashOf(output.outputScript) !== hash) {
+            continue;
+        }
+        if (output.sats === RECORD_DUST_SATS) {
+            return true;
+        }
+    }
+    return false;
+}
+
 export function liteSignedByStall(tx: LiteTx, hash: string): boolean {
     for (const input of tx.inputs) {
         if (input.outputScript === undefined) {
@@ -461,7 +484,9 @@ function bestInLitePage(
 ): Candidate | undefined {
     let out = best;
     for (const tx of page.txs) {
-        if (!liteSignedByStall(tx, hash)) {
+        // Both, or it is nobody's: signed by the stall and paying it the
+        // publish dust — the app's `recordIsStalls`.
+        if (!liteSignedByStall(tx, hash) || !liteAddressedToStall(tx, hash)) {
             continue;
         }
         const text = liteStl1Of(tx);

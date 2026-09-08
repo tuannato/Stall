@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { DUST_SATS } from '../domain/money';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import { encodeDescriptionHex } from '../domain/description';
@@ -379,6 +380,30 @@ function walked(opts: {
     };
 }
 
+describe('a-signed-record-that-does-not-pay-its-stall-is-unaddressed', () => {
+    /**
+     * The readers' second conjunct: a record counts only when it pays the
+     * stall back `DUST_SATS` — what the stall's own publish link writes. A
+     * record the stall signed without it wakes no walk and is labelled
+     * `unaddressed`, not `stalls` and not `unsigned`.
+     */
+    it('wakes no walk, and the row says which of the three it is', () => {
+        const unaddressed = walked({ signedBy: SELLER_PK, outputs: [STALL, stl1()] });
+        const shape = classifyTx(unaddressed, STALL, WANTED);
+        expect(shape.settings, 'shape is still a settings record').toBe(true);
+        const gated = walkableFacts(shape, unaddressed, HASH);
+        expect(gated.settings).toBe(false);
+        expect(gated.descriptions).toBe(false);
+        expect(historyEventOf(unaddressed, CTX).recordAuthority).toBe('unaddressed');
+        // The dust to the stall, but 1 sat short: still not this stall's record.
+        const short = walked({ signedBy: SELLER_PK, outputs: [{ script: STALL, sats: DUST_SATS - 1n }, stl1()] });
+        expect(historyEventOf(short, CTX).recordAuthority).toBe('unaddressed');
+        const mine = walked({ signedBy: SELLER_PK, outputs: [{ script: STALL, sats: DUST_SATS }, stl1()] });
+        expect(historyEventOf(mine, CTX).recordAuthority).toBe('stalls');
+        expect(walkableFacts(classifyTx(mine, STALL, WANTED), mine, HASH).settings).toBe(true);
+    });
+});
+
 describe('a-strangers-record-shaped-dust-walks-nothing', () => {
     /**
      * `classifyTx` stays shape-only — a stranger's `STL1` is still a
@@ -397,7 +422,7 @@ describe('a-strangers-record-shaped-dust-walks-nothing', () => {
         expect(gated.descriptions).toBe(false);
         expect(gated.holdings, 'holdings are not a record').toBe(true);
 
-        const signed = walked({ signedBy: SELLER_PK, outputs: [STALL, stl1()] });
+        const signed = walked({ signedBy: SELLER_PK, outputs: [{ script: STALL, sats: DUST_SATS }, stl1()] });
         const signedShape = classifyTx(signed, STALL, WANTED);
         expect(signedShape.settings).toBe(true);
         expect(walkableFacts(signedShape, signed, HASH)).toEqual(signedShape);
@@ -425,23 +450,23 @@ describe('history-verifies-authorship-of-a-settings-row', () => {
      */
     it('names the seller’s own record, and labels a stranger’s copy', () => {
         const mine = historyEventOf(
-            walked({ signedBy: SELLER_PK, outputs: [STALL, stl1()] }),
+            walked({ signedBy: SELLER_PK, outputs: [{ script: STALL, sats: DUST_SATS }, stl1()] }),
             CTX,
         );
         expect(mine.kind).toBe('settings');
-        expect(mine.signedByStall).toBe(true);
+        expect(mine.recordAuthority).toBe('stalls');
 
         const theirs = historyEventOf(
             walked({
                 txid: '22'.repeat(32),
                 signedBy: STRANGER_PK,
                 from: STRANGER,
-                outputs: [STALL, stl1()],
+                outputs: [{ script: STALL, sats: DUST_SATS }, stl1()],
             }),
             CTX,
         );
         expect(theirs.kind, 'still the shape it is').toBe('settings');
-        expect(theirs.signedByStall, 'but not this seller’s').toBe(false);
+        expect(theirs.recordAuthority, 'but not this seller’s').toBe('unsigned');
     });
 
     it('holds the same line for a description record', () => {
@@ -449,12 +474,12 @@ describe('history-verifies-authorship-of-a-settings-row', () => {
             walked({
                 signedBy: STRANGER_PK,
                 from: STRANGER,
-                outputs: [STALL, stld(TOKEN_OTHER, 'Grown on the hill')],
+                outputs: [{ script: STALL, sats: DUST_SATS }, stld(TOKEN_OTHER, 'Grown on the hill')],
             }),
             CTX,
         );
         expect(theirs.kind).toBe('description');
-        expect(theirs.signedByStall).toBe(false);
+        expect(theirs.recordAuthority).toBe('unsigned');
     });
 
     it('says nothing about authorship for a row that is not a record', () => {
@@ -462,7 +487,7 @@ describe('history-verifies-authorship-of-a-settings-row', () => {
         // `false` there would read as "somebody else's payment".
         const payment = historyEventOf(walked({ outputs: [STALL] }), CTX);
         expect(payment.kind).toBe('other');
-        expect(payment.signedByStall).toBeUndefined();
+        expect(payment.recordAuthority).toBeUndefined();
     });
 });
 

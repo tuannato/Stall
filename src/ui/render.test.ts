@@ -7164,9 +7164,9 @@ describe('the activity panel’s two lists and the row detail', () => {
             activity({
                 history: {
                     rows: [
-                        { txid: TXID_A, kind: 'settings', signedByStall: true },
-                        { txid: TXID_B, kind: 'settings', signedByStall: false },
-                        { txid: TXID_C, kind: 'description', signedByStall: false },
+                        { txid: TXID_A, kind: 'settings', recordAuthority: 'stalls' },
+                        { txid: TXID_B, kind: 'settings', recordAuthority: 'unsigned' },
+                        { txid: TXID_C, kind: 'description', recordAuthority: 'unsigned' },
                     ],
                     pagesRead: 1,
                 },
@@ -10004,6 +10004,37 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
     });
 });
 
+describe('a-record-signed-but-not-addressed-is-labelled-so', () => {
+    /**
+     * The third state. A record this stall's key signed that does not pay the
+     * stall back the publish dust was not made from this stall's own publish
+     * link and no reader applies it — "from another wallet" would be false,
+     * and "published" would be a claim nothing checked. One field with three
+     * members, so the label cannot default to the false one.
+     */
+    it('labels the row, on both kinds, and paints the sign’s note', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'activity',
+                events: [
+                    { txid: 'ab'.repeat(32), kind: 'settings', recordAuthority: 'unaddressed' },
+                    { txid: 'cd'.repeat(32), kind: 'description', recordAuthority: 'unaddressed' },
+                ],
+            }),
+        );
+        expect(root.textContent).toContain(copy.EVENT_SETTINGS_UNADDRESSED);
+        expect(root.textContent).toContain(copy.EVENT_DESCRIPTION_UNADDRESSED);
+        expect(root.textContent).not.toContain(copy.EVENT_SETTINGS_STRANGER);
+        expect(root.textContent).not.toContain(copy.EVENT_SETTINGS);
+        const sign = paint(idlePubkey({ fetch: { kind: 'empty' }, settingsUnaddressed: true })).root;
+        expect(sign.textContent).toContain(copy.SETTINGS_UNADDRESSED);
+        expect(sign.textContent).not.toContain(copy.SETTINGS_UNREADABLE);
+        const quiet = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
+        expect(quiet.textContent).not.toContain(copy.SETTINGS_UNADDRESSED);
+    });
+});
+
 describe('a-strangers-record-row-says-what-to-do-if-it-was-you', () => {
     /**
      * "A description record from another wallet" is true and unhelpful to
@@ -10023,14 +10054,15 @@ describe('a-strangers-record-row-says-what-to-do-if-it-was-you', () => {
         );
 
     it('carries the hint under a record the stall did not sign', () => {
-        const node = hint(row({ signedByStall: false }));
+        const node = hint(row({ recordAuthority: 'unsigned' }));
         expect(node).not.toBeNull();
         expect(node!.textContent).toBe(copy.EVENT_STRANGER_HINT);
-        expect(hint(row({ kind: 'settings', signedByStall: false }))).not.toBeNull();
+        expect(hint(row({ kind: 'settings', recordAuthority: 'unsigned' }))).not.toBeNull();
     });
 
     it('carries none under the stall’s own record, an unverified one, or a payment', () => {
-        expect(hint(row({ signedByStall: true }))).toBeNull();
+        expect(hint(row({ recordAuthority: 'stalls' }))).toBeNull();
+        expect(hint(row({ recordAuthority: 'unaddressed' })), 'not a stranger: no stranger hint').toBeNull();
         expect(hint(row({}))).toBeNull();
         expect(
             hint(row({ kind: 'payment', sats: 1_000n, payment: { tokenId: TOKEN_ID, quantity: 1n } })),

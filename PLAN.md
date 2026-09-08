@@ -266,11 +266,19 @@ working accept, and there is no accept.
   txid win over their removal. chronik's `timeFirstSeen` decides when both
   stamps are known and differ — one node's clock, never alone. Not a wire
   change; a reader rule, mirrored at the edge.
-- **A copycat stall is not a bug this app can fix** (2026-09-07). A stranger
-  signed the owner's public publish link with their own wallet: the owner's
-  stall labelled the dust correctly, and the stranger's address became a
-  stall wearing the owner's name and look. Names are not adjudicated
-  (§ Rejected); the address, the link and the code are what name a stall.
+- **A record is the stall's only if it pays the stall itself** (D14,
+  2026-09-07, the owner's own proposal). An `STL1`/`STLD` record counts when
+  the stall's key signed it **and** the transaction pays the stall's own
+  script exactly `DUST_SATS` — what the stall's publish link writes, so
+  nobody's publish link can be signed into somebody else's stall by
+  accident. Measured before it shipped: every legitimate record on chain
+  self-pays 546; the only two that did not were foreign-signed replays of
+  the owner's link, one of which had become a copycat stall. A mistake
+  filter, not an attacker filter: deliberate copying from one's own Studio
+  is untouched, and names stay unadjudicated (§ Rejected). The cost: a
+  record composed outside this app's links with any other self-output is
+  nobody's — said on the sign and counted on the rail, never swallowed.
+  Reader rule, mirrored at the edge; no wire change.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 

@@ -1,21 +1,14 @@
+import { DUST_SATS } from './domain/money';
 import { describe, expect, it } from 'vitest';
 import { ogImageFor, sellerIdentity, unfurlText, usableName } from '../functions/lib/unfurl';
-import {
-    bytesToHex,
-    hash160Hex,
-    liteManifestText,
-    liteSignedByStall,
-    opReturnPushes as edgeOpReturnPushes,
-    p2pkhHashFromCashaddr,
-    resolveManifestTextByHash,
-} from '../functions/lib/resolve';
+import { bytesToHex, hash160Hex, liteManifestText, liteSignedByStall, opReturnPushes as edgeOpReturnPushes, p2pkhHashFromCashaddr, resolveManifestTextByHash, liteAddressedToStall } from '../functions/lib/resolve';
 import { decodeTxHistoryPage } from '../functions/lib/pb';
 import { MAX_PAGE_BYTES, chronikFetcher } from '../functions/lib/resolve';
 import { TxHistoryPage as ProtoHistoryPage } from '../node_modules/chronik-client/dist/proto/chronik.js';
 import { decodeCashAddress, encodeCashAddress } from 'ecashaddrjs';
 import { getStackArray } from 'ecash-lib';
 import { decodeManifestPushes, encodeManifestHex } from './domain/manifest';
-import { txSignedByStall } from './net/manifest';
+import { txSignedByStall, recordAddressedToStall } from './net/manifest';
 import { opReturnPushes } from './net/script';
 
 /**
@@ -119,6 +112,9 @@ describe('the-edge-reader-mirrors-the-app', () => {
         height?: number;
         isFinal?: boolean;
         timeFirstSeen?: number;
+        /** Where the publish dust goes; the stall's own script unless a test says otherwise. */
+        dustTo?: string;
+        dustSats?: bigint;
     }) {
         return {
             txid: new Uint8Array(32).fill(opts.txidByte),
@@ -146,6 +142,13 @@ describe('the-edge-reader-mirrors-the-app', () => {
                                 ? STALL_SCRIPT_HEX
                                 : `6a${opts.stl1Hex}`),
                     ),
+                    spentBy: undefined,
+                    token: undefined,
+                    plugins: {},
+                },
+                {
+                    sats: opts.dustSats ?? 546n,
+                    outputScript: hexBytes(opts.dustTo ?? STALL_SCRIPT_HEX),
                     spentBy: undefined,
                     token: undefined,
                     plugins: {},
@@ -199,6 +202,31 @@ describe('the-edge-reader-mirrors-the-app', () => {
         expect(tx.isFinal).toBe(true);
         expect(tx.inputs[0]!.outputScript).toBe(STALL_SCRIPT_HEX);
         expect(tx.outputs[0]!.outputScript).toBe(`6a${record}`);
+        // Field 1, read whole: the record test compares it exactly.
+        expect(tx.outputs[1]!.sats).toBe(546n);
+        expect(tx.outputs[1]!.outputScript).toBe(STALL_SCRIPT_HEX);
+    });
+
+    it('ownership-lite-agrees-with-the-app', () => {
+        // Both predicates over one fixture list, so the edge's dust literal
+        // and the app's DUST_SATS cannot drift apart unseen.
+        const dust = (sats: bigint, script = STALL_SCRIPT_HEX) => ({ outputScript: script, sats });
+        const base = {
+            txid: 'ab'.repeat(32),
+            inputs: [{ inputScript: scriptSigHex(PK_BYTES), outputScript: STALL_SCRIPT_HEX }],
+            isFinal: false,
+        };
+        for (const [label, outputs, want] of [
+            ['the stall’s own link', [dust(DUST_SATS)], true],
+            ['dust to a stranger', [dust(DUST_SATS, `76a914${'ff'.repeat(20)}88ac`)], false],
+            ['one sat short', [dust(DUST_SATS - 1n)], false],
+            ['no dust at all', [], false],
+            ['no sats on the output', [{ outputScript: STALL_SCRIPT_HEX }], false],
+        ] as const) {
+            const tx = { ...base, outputs: [...outputs] };
+            expect(liteAddressedToStall(tx, HASH), label).toBe(want);
+            expect(recordAddressedToStall(tx as never, HASH), label).toBe(want);
+        }
     });
 
     it('authorship-lite-agrees-with-the-app', () => {
@@ -373,6 +401,23 @@ describe('the-edge-reader-mirrors-the-app', () => {
         ]);
         const bareText = await resolveManifestTextByHash(HASH, async () => bare);
         expect(bareText?.name).toBe('Seen First');
+    });
+
+    it('the-edge-refuses-a-replayed-record-like-the-app', async () => {
+        // Signed by the stall but the dust went elsewhere: not this stall's
+        // record on the page, and not on the card.
+        const stray = encodeManifestHex('Stray', 1)!;
+        const own = encodeManifestHex('Own', 1)!;
+        const strayPage = protoPage([
+            protoTx({ txidByte: 0x05, stl1Hex: stray, height: 200, isFinal: true, dustTo: `76a914${'ff'.repeat(20)}88ac` }),
+            protoTx({ txidByte: 0x04, stl1Hex: own, height: 100, isFinal: true }),
+        ]);
+        const text = await resolveManifestTextByHash(HASH, async () => strayPage);
+        expect(text?.name).toBe('Own');
+        const onlyStray = protoPage([
+            protoTx({ txidByte: 0x05, stl1Hex: stray, height: 200, isFinal: true, dustSats: 545n }),
+        ]);
+        expect((await resolveManifestTextByHash(HASH, async () => onlyStray))?.name).toBeUndefined();
     });
 });
 

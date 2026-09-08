@@ -22,7 +22,8 @@
  */
 
 export type LiteInput = { inputScript: string; outputScript?: string };
-export type LiteOutput = { outputScript: string };
+/** `sats` is TxOutput field 1; proto3 omits a zero, so absent reads as 0, never unknown. */
+export type LiteOutput = { outputScript: string; sats?: bigint };
 export type LiteTx = {
     txid: string;
     inputs: LiteInput[];
@@ -148,7 +149,12 @@ function decodeOutput(bytes: Uint8Array, start: number, end: number): LiteOutput
         const tag = varint(bytes, cur);
         const field = tag >>> 3;
         const wire = tag & 7;
-        if (field === 2 && wire === 2) {
+        if (field === 1 && wire === 0) {
+            // The record test compares this exactly, so it is read whole: the
+            // number-returning `varint` drops bits past 2^53 and would turn
+            // "exactly 546" into "546 modulo 2^53" on a hostile page.
+            output.sats = varintBig(bytes, cur);
+        } else if (field === 2 && wire === 2) {
             const len = varint(bytes, cur);
             output.outputScript = toHexBytes(bytes, cur.pos, fieldEnd(bytes, cur, len));
             cur.pos += len;
@@ -157,6 +163,25 @@ function decodeOutput(bytes: Uint8Array, start: number, end: number): LiteOutput
         }
     }
     return output;
+}
+
+/** A varint as a `bigint`, every bit kept; more than ten bytes is a broken page. */
+function varintBig(bytes: Uint8Array, cur: Cursor): bigint {
+    let value = 0n;
+    for (let i = 0; ; i += 1) {
+        if (cur.pos >= bytes.length) {
+            throw new Error('varint ran off the buffer');
+        }
+        if (i >= 10) {
+            throw new Error('varint longer than ten bytes');
+        }
+        const byte = bytes[cur.pos]!;
+        cur.pos += 1;
+        value |= BigInt(byte & 0x7f) << BigInt(7 * i);
+        if ((byte & 0x80) === 0) {
+            return value;
+        }
+    }
 }
 
 function decodeBlockHeight(

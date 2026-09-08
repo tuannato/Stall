@@ -283,6 +283,18 @@ export type EventStatus =
  * `chainTimeS` carries that row's own clock instead, and a row with neither
  * prints no time at all rather than borrowing `Date.now()`.
  */
+/**
+ * Whose a record-shaped transaction is, as the readers decide it — one field
+ * with three members, set in one place (`historyEventOf`), because two
+ * optional booleans default to "Stall settings published" over a record
+ * that will never be applied, which is a claim nothing checked.
+ * `stalls`: signed by the stall and paying it `DUST_SATS` back — this app's
+ * own publish link. `unsigned`: another wallet signed it. `unaddressed`: the
+ * stall signed it but it does not pay the stall the dust — not made from this
+ * stall's publish link, so no reader applies it.
+ */
+export type RecordAuthority = 'stalls' | 'unsigned' | 'unaddressed';
+
 export type StallEvent = {
     txid: string;
     kind: StallEventKind;
@@ -325,17 +337,13 @@ export type StallEvent = {
      */
     payment?: PaymentMemo;
     /**
-     * For a `settings` or `description` row: did the stall's own key sign it.
-     *
-     * Absent for every other kind, because the question does not arise — a
-     * `false` on an ordinary payment would read as "somebody else's payment".
-     * The live path leaves it absent too: `loadManifest` and `loadDescriptions`
-     * verify authorship themselves, and a stranger's record-shaped dust costs
-     * one walk that finds nothing. A **row** is different — it is a sentence on
-     * screen about what happened here — so the walk verifies it with the same
-     * `txSignedByStall` the readers use and labels what it found.
+     * Whose record this is, for `settings` and `description` rows only —
+     * absent for every other kind, because the question does not arise. Set
+     * by `historyEventOf` on both the walk and the live path with the same
+     * predicates the readers use (`recordAuthorityOf`), so a row's sentence
+     * is never a second opinion on what counts as the seller's record.
      */
-    signedByStall?: boolean;
+    recordAuthority?: RecordAuthority;
 };
 
 /**
@@ -448,6 +456,13 @@ export type StallView = {
     settingsTruncated?: boolean;
     /** The seller published settings this page could not read. */
     settingsUnreadable?: boolean;
+    /**
+     * An `STL1` record signed by this stall was refused only because it does
+     * not pay the stall back `DUST_SATS` — not made from this stall's own
+     * publish link — and nothing else won. Silence would say the seller never
+     * published, the same lie `unreadable` and `truncated` exist to refuse.
+     */
+    settingsUnaddressed?: boolean;
     /** True when the bare domain opens this stall for this browser. */
     isDefaultStall?: boolean;
     /**

@@ -1,3 +1,4 @@
+import { DUST_SATS } from '../domain/money';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import { decodeManifestPushes, STL1_ASCII, STL1_HEX } from '../domain/manifest';
@@ -67,7 +68,14 @@ function txWith(outputScripts: readonly string[], pk: Uint8Array, hash: string):
                 outputScript: p2pkhOutputScript(hash),
             },
         ],
-        outputs: outputScripts.map((outputScript) => ({ outputScript })),
+        // The publish link's own dust back to the stall: what makes a signed
+        // record this stall's (`recordAddressedToStall`). Keyed on the stall's
+        // hash whatever the input, so a stranger's record is refused for the
+        // reason a test names.
+        outputs: [
+            ...outputScripts.map((outputScript) => ({ outputScript })),
+            { outputScript: p2pkhOutputScript(hash), sats: DUST_SATS },
+        ],
     };
 }
 
@@ -92,7 +100,10 @@ function stallTx(opts: {
         txid: opts.txid,
         block: opts.height === undefined ? undefined : { height: opts.height },
         inputs: [input],
-        outputs: [{ outputScript: stl1OutputScript(opts.name) }],
+        outputs: [
+            { outputScript: stl1OutputScript(opts.name) },
+            { outputScript: p2pkhOutputScript(opts.hash), sats: DUST_SATS },
+        ],
     };
 }
 
@@ -507,7 +518,10 @@ describe('extra-pushes-are-ignored', () => {
             txid: 'ab'.repeat(32),
             block: { height: 800000 },
             inputs: [{ inputScript: p2pkhScriptSig(pk), outputScript: p2pkhOutputScript(hash) }],
-            outputs: [{ outputScript: script }],
+            outputs: [
+                { outputScript: script },
+                { outputScript: p2pkhOutputScript(hash), sats: DUST_SATS },
+            ],
         };
         const lookup = await loadManifest(
             fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }),
@@ -602,5 +616,77 @@ describe('hex-vector-is-not-the-builder', () => {
         const manifest = decodeManifestPushes(pushes);
         expect(manifest.name).toBe('Nato');
         expect(manifest.theme.id).toBe(0xfe);
+    });
+});
+
+describe('a-record-that-does-not-pay-its-stall-is-not-its-record', () => {
+    /**
+     * The second conjunct (owner, 2026-09-07). A stranger who signs this
+     * stall's public publish link makes a transaction that pays *this* stall
+     * the dust and returns change to themselves: refused here (the input is
+     * theirs) and refused on their own stall (the dust went elsewhere). The
+     * same record with the dust to themselves is theirs. Exactly `DUST_SATS`,
+     * and a dust output with no `sats` is refused — fail closed.
+     */
+    const pkO = compressedPk(0x11);
+    const hashO = toHex(shaRmd160(pkO));
+    const pkS = compressedPk(0x22);
+    const hashS = toHex(shaRmd160(pkS));
+    const record = (opts: { signer: Uint8Array; signerHash: string; dustTo?: string; dustSats?: bigint | null }): ChainTx => ({
+        txid: 'ab'.repeat(32),
+        block: { height: 100 },
+        inputs: [{ inputScript: p2pkhScriptSig(opts.signer), outputScript: p2pkhOutputScript(opts.signerHash) }],
+        outputs: [
+            { outputScript: stl1OutputScript('Copy') },
+            {
+                outputScript: p2pkhOutputScript(opts.dustTo ?? opts.signerHash),
+                ...(opts.dustSats === null ? {} : { sats: opts.dustSats ?? DUST_SATS }),
+            },
+            { outputScript: p2pkhOutputScript(opts.signerHash), sats: 924_069n },
+        ],
+    });
+    const walkFor = (hash: string, tx: ChainTx) =>
+        loadManifest(fakeChronik({ addressTxs: [tx], lokadTxs: [tx] }), { address: 'ecash:stall', hash });
+
+    it('refuses the replay on both stalls, and accepts the self-addressed record', async () => {
+        const replay = record({ signer: pkS, signerHash: hashS, dustTo: hashO });
+        expect((await walkFor(hashS, replay)).manifest, 'the signer’s stall: dust went to the victim').toBeUndefined();
+        expect((await walkFor(hashO, replay)).manifest, 'the victim’s stall: not their input').toBeUndefined();
+        const own = record({ signer: pkS, signerHash: hashS });
+        expect((await walkFor(hashS, own)).manifest?.name).toBe('Copy');
+    });
+
+    it('is exactly DUST_SATS, and a dust output with no sats fails closed', async () => {
+        expect((await walkFor(hashS, record({ signer: pkS, signerHash: hashS, dustSats: DUST_SATS - 1n }))).manifest).toBeUndefined();
+        expect((await walkFor(hashS, record({ signer: pkS, signerHash: hashS, dustSats: DUST_SATS + 1n }))).manifest).toBeUndefined();
+        expect((await walkFor(hashS, record({ signer: pkS, signerHash: hashS, dustSats: null }))).manifest).toBeUndefined();
+    });
+});
+
+describe('a-signed-record-we-refused-is-not-a-stall-that-never-published', () => {
+    /**
+     * Refusing a record the stall's own key signed must not paint the shipped
+     * default in silence — the same lie `unreadable` and `truncated` refuse.
+     * Said only when nothing else wins: a proper record on top makes the
+     * refused one merely older.
+     */
+    const pk = compressedPk(0x33);
+    const hash = toHex(shaRmd160(pk));
+    const unaddressed: ChainTx = {
+        txid: 'cd'.repeat(32),
+        block: { height: 100 },
+        inputs: [{ inputScript: p2pkhScriptSig(pk), outputScript: p2pkhOutputScript(hash) }],
+        outputs: [{ outputScript: stl1OutputScript('Elsewhere') }, { outputScript: p2pkhOutputScript(hash), sats: 9_000n }],
+    };
+
+    it('says so when nothing else won, and not when a proper record did', async () => {
+        const alone = await loadManifest(fakeChronik({ addressTxs: [unaddressed], lokadTxs: [unaddressed] }), { address: 'ecash:stall', hash });
+        expect(alone.manifest).toBeUndefined();
+        expect(alone.unaddressed).toBe(true);
+        expect(alone.unreadable).toBe(false);
+        const proper = stallTx({ txid: 'ef'.repeat(32), pk, hash, name: 'Proper', height: 101 });
+        const both = await loadManifest(fakeChronik({ addressTxs: [unaddressed, proper], lokadTxs: [unaddressed, proper] }), { address: 'ecash:stall', hash });
+        expect(both.manifest?.name).toBe('Proper');
+        expect(both.unaddressed).toBe(false);
     });
 });

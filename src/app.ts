@@ -63,7 +63,6 @@ import {
 import { isNftChild } from './domain/category';
 import { groupIdsToName, loadNftGroups } from './net/groups';
 import { loadDescriptions, type DescriptionLookup } from './net/descriptions';
-import { txSignedByStall } from './net/manifest';
 import {
     attributionFromAuthPubkey,
     type GenesisAttribution,
@@ -1599,6 +1598,7 @@ export function boot(
             // just as true now as they are on a full load.
             settingsTruncated: lookup.truncated,
             settingsUnreadable: lookup.unreadable,
+            settingsUnaddressed: lookup.unaddressed,
         };
         const manifest = lookup.manifest;
         if (manifest !== undefined) {
@@ -1847,15 +1847,9 @@ export function boot(
             //
             // The state comes from the **frame** as well as the fetch: chronik
             // has just told this page a transaction is finalized, and the
-            // stronger of the two answers is the one that stands.
-            // A record row is labelled with the same imported
-            // `txSignedByStall` the walk already applies, so this is not a
-            // second opinion on what counts as the seller's signature.
-            if (row.kind === 'settings' || row.kind === 'description') {
-                row.signedByStall = txSignedByStall(tx, stall.hash);
-            } else {
-                delete row.signedByStall;
-            }
+            // stronger of the two answers is the one that stands. The row's
+            // authority (`recordAuthority`) was set by `historyEventOf` with
+            // the readers' own predicates — it is not re-derived here.
             row.status = strongerStatus(row.status, statusFromMessage(said?.get(txid)));
             recordEvent(txid, row);
             ringMoved = true;
@@ -2331,12 +2325,14 @@ async function loadCurrent(): Promise<AppState> {
     let announcement: string | undefined;
     let settingsTruncated = false;
     let settingsUnreadable = false;
+    let settingsUnaddressed = false;
     let attachmentFlags = 0;
     {
         const lookup = await manifestSoon;
         if (lookup !== undefined) {
             settingsTruncated = lookup.truncated;
             settingsUnreadable = lookup.unreadable;
+            settingsUnaddressed = lookup.unaddressed;
             const manifest = lookup.manifest;
             if (manifest) {
                 stallName = manifest.name;
@@ -2508,6 +2504,7 @@ async function loadCurrent(): Promise<AppState> {
             ),
             settingsTruncated,
             settingsUnreadable,
+            settingsUnaddressed,
         },
         offers,
         pubkeyHex: route.pubkeyHex,

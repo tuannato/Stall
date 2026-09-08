@@ -909,6 +909,7 @@ function settingsNaming(name: string): ManifestLookup {
         },
         truncated: false,
         unreadable: false,
+        unaddressed: false,
     };
 }
 

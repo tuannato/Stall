@@ -1550,6 +1550,10 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
         // They did publish. Silence here would say they never did.
         body.append(el('p', 'fine', copy.SETTINGS_UNREADABLE));
     }
+    if (view.settingsUnaddressed === true) {
+        // They signed one, not from this stall's own publish link. Same rule.
+        body.append(el('p', 'fine', copy.SETTINGS_UNADDRESSED));
+    }
     if (view.settingsTruncated === true) {
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
@@ -6285,7 +6289,7 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     // seller who signed from a second wallet sees nothing else.
     if (
         (event.kind === 'settings' || event.kind === 'description') &&
-        event.signedByStall === false
+        event.recordAuthority === 'unsigned'
     ) {
         const hint = el('dd', 'event-dd fine', copy.EVENT_STRANGER_HINT);
         hint.setAttribute('data-role', 'event-stranger-hint');
@@ -6472,15 +6476,19 @@ function eventLabel(event: StallEvent): string {
             }
             return copy.EVENT_BOOK;
         case 'settings':
-            // `false` only where the walk actually checked. The live path
-            // leaves it absent, and absent must not read as a stranger's.
-            return event.signedByStall === false
+            // One three-valued field set by `historyEventOf` on both clocks;
+            // absent (an unverified row) must not read as a stranger's.
+            return event.recordAuthority === 'unsigned'
                 ? copy.EVENT_SETTINGS_STRANGER
-                : copy.EVENT_SETTINGS;
+                : event.recordAuthority === 'unaddressed'
+                  ? copy.EVENT_SETTINGS_UNADDRESSED
+                  : copy.EVENT_SETTINGS;
         case 'description':
-            return event.signedByStall === false
+            return event.recordAuthority === 'unsigned'
                 ? copy.EVENT_DESCRIPTION_STRANGER
-                : copy.EVENT_DESCRIPTION;
+                : event.recordAuthority === 'unaddressed'
+                  ? copy.EVENT_DESCRIPTION_UNADDRESSED
+                  : copy.EVENT_DESCRIPTION;
         case 'token-move':
             return copy.EVENT_TOKEN_MOVE;
         case 'other':

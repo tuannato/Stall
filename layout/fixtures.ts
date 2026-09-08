@@ -469,7 +469,7 @@ export const SCREENS: Record<string, StallView> = {
                     txid: '99'.repeat(32),
                     kind: 'settings',
                     chainTimeS: Math.floor(TRIED_AT_MS / 1000) - 200_000,
-                    signedByStall: false,
+                    recordAuthority: 'unsigned',
                     status: { kind: 'in-block', height: 799_002 },
                 },
             ],

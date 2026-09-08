@@ -11,7 +11,7 @@ import {
     TX_FINALIZED,
     type LiveTxStatus,
 } from './live';
-import { txSignedByStall } from './manifest';
+import { txSignedByStall, recordIsStalls, recordAuthorityOf } from './manifest';
 import { opReturnPushes, p2pkhHashFromOutputScript } from './script';
 
 /**
@@ -127,7 +127,7 @@ export function walkableFacts(
     tx: ChainTx,
     hash: string,
 ): FactsToRead {
-    if (txSignedByStall(tx, hash)) {
+    if (recordIsStalls(tx, hash)) {
         return facts;
     }
     return {
@@ -594,6 +594,6 @@ export function historyEventOf(tx: ChainTx, ctx: EventContext): StallEvent {
         ...(book === undefined ? {} : { book }),
         ...(kind === 'payment' && memo !== undefined ? { payment: memo } : {}),
         ...(kind === 'payment' ? payerAddressField(tx) : {}),
-        ...(isRecord ? { signedByStall: txSignedByStall(tx, ctx.hash) } : {}),
+        ...(isRecord ? { recordAuthority: recordAuthorityOf(tx, ctx.hash) } : {}),
     };
 }

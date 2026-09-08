@@ -1,3 +1,5 @@
+import { DUST_SATS } from '../domain/money';
+import type { RecordAuthority } from '../domain/state';
 import { extractP2pkhPubKey, pubKeyMatchesHash } from '../domain/pubkey';
 import {
     decodeManifestPushes,
@@ -20,6 +22,14 @@ export type LoadedManifest = StallManifest & ManifestRank;
 
 export type ManifestLookup = {
     manifest?: LoadedManifest;
+    /**
+     * An `STL1` record signed by this stall was refused only by the output
+     * test — it does not pay the stall back `DUST_SATS`, so it was not made
+     * from this stall's own publish link — and nothing else won. The seller
+     * did sign something; painting the shipped default in silence would say
+     * they never published.
+     */
+    unaddressed: boolean;
     /**
      * The walk stopped at its page cap. A newer record may sit beyond it, so
      * the look on screen is not known to be current — and an unthemed stall is
@@ -69,7 +79,7 @@ export async function loadManifest(
     addrFirstPage?: Promise<HistoryPage>,
 ): Promise<ManifestLookup> {
     const hash = stall.hash.toLowerCase();
-    const broken = { seen: false };
+    const broken = { seen: false, unaddressed: false };
     let best: LoadedManifest | undefined;
 
     const hint = txidOrNothing(hintTxid);
@@ -107,6 +117,7 @@ export async function loadManifest(
         // Only worth saying when there is nothing to show instead. A readable
         // record wins on its own terms and the broken one is simply older.
         unreadable: manifest === undefined && broken.seen,
+        unaddressed: manifest === undefined && broken.unaddressed,
     };
 }
 
@@ -128,7 +139,7 @@ async function walkShorter(
     chronik: ManifestChronik,
     address: string,
     hash: string,
-    broken: { seen: boolean },
+    broken: WalkFlags,
     addrFirstPage?: Promise<HistoryPage>,
 ): Promise<{ best?: LoadedManifest; truncated: boolean }> {
     const addrEp = chronik.address(address);
@@ -155,12 +166,12 @@ function bestInPage(
     page: HistoryPage,
     hash: string,
     best: LoadedManifest | undefined,
-    broken: { seen: boolean },
+    broken: WalkFlags,
 ): LoadedManifest | undefined {
     let out = best;
     for (const tx of page.txs) {
         try {
-            out = better(out, recordFromTx(tx, hash));
+            out = better(out, recordFromTx(tx, hash, broken));
         } catch {
             // Ours, signed by this stall, and undecodable.
             broken.seen = true;
@@ -169,12 +180,23 @@ function bestInPage(
     return out;
 }
 
-function recordFromTx(tx: ChainTx, hash: string): LoadedManifest | undefined {
+/** What a walk found besides a winner: an undecodable record, or one refused only by the output test. */
+type WalkFlags = { seen: boolean; unaddressed: boolean };
+
+function recordFromTx(tx: ChainTx, hash: string, flags?: WalkFlags): LoadedManifest | undefined {
     if (!txSignedByStall(tx, hash)) {
         return undefined;
     }
     const decoded = firstStl1(tx);
     if (decoded === undefined) {
+        return undefined;
+    }
+    if (!recordAddressedToStall(tx, hash)) {
+        // Signed here, but not made from this stall's publish link. Not this
+        // stall's record — and said, when nothing else wins.
+        if (flags !== undefined) {
+            flags.unaddressed = true;
+        }
         return undefined;
     }
     return {
@@ -221,6 +243,51 @@ export function txSignedByStall(tx: ChainTx, hash: string): boolean {
         }
     }
     return false;
+}
+
+/**
+ * Does this transaction pay the stall itself exactly `DUST_SATS`? The stall's
+ * own publish link does (`publishBip21`, amount composed from the same
+ * constant), so a record that does not was not made from it. **Exactly**
+ * `DUST_SATS`, never "any output to the stall": change goes back to the
+ * signer too, so a replay — a stranger signing this stall's link, dust to
+ * this stall and change to themselves — would pass an "any" test on their
+ * own stall and fails this one. Absent `sats` is "not addressed": chronik
+ * always carries the value, and a node that omitted it refuses a record
+ * rather than admitting a spoof.
+ *
+ * This is a mistake filter, not an attacker filter: it makes signing
+ * somebody else's publish link produce a record no stall accepts, and it
+ * does nothing against a wallet that composes its own record naming another
+ * stall. Applies to `STL1` and `STLD` records only — a genesis is not a
+ * record, and `decisionFromGenesisTx` keeps the input test alone.
+ */
+export function recordAddressedToStall(tx: ChainTx, hash: string): boolean {
+    for (const output of tx.outputs) {
+        if (isP2shOutputScript(output.outputScript)) {
+            continue;
+        }
+        if (p2pkhHashFromOutputScript(output.outputScript) !== hash) {
+            continue;
+        }
+        if (typeof output.sats === 'bigint' && output.sats === DUST_SATS) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Both, or it is nobody's record: the input signed by the stall, the dust paid back to it. */
+export function recordIsStalls(tx: ChainTx, hash: string): boolean {
+    return txSignedByStall(tx, hash) && recordAddressedToStall(tx, hash);
+}
+
+/** The three-valued answer a row is labelled with — one place, the readers' own predicates. */
+export function recordAuthorityOf(tx: ChainTx, hash: string): RecordAuthority {
+    if (!txSignedByStall(tx, hash)) {
+        return 'unsigned';
+    }
+    return recordAddressedToStall(tx, hash) ? 'stalls' : 'unaddressed';
 }
 
 /** A record addressed to us that we could not decode. */

@@ -10,7 +10,7 @@ import { chainTimeOf } from './classify';
 import { attributionFromGenesisTx } from './genesis';
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGES, type ChainTx, type HistoryPage } from './chain';
 import type { ManifestChronik } from './chain';
-import { txSignedByStall } from './manifest';
+import { txSignedByStall, recordAddressedToStall } from './manifest';
 import { opReturnPushes } from './script';
 
 /**
@@ -302,6 +302,23 @@ function collectTx(
     if (!txSignedByStall(tx, hash)) {
         // Anyone can put an STLD output on chain naming anyone's token. Without
         // this, anyone can write a description *for* a seller.
+        return;
+    }
+    if (!recordAddressedToStall(tx, hash)) {
+        // Signed here, but not made from this stall's publish link (no dust
+        // paid back to the stall — `recordAddressedToStall`). Not this stall's
+        // record; counted as one this page could not read, so the rail says
+        // so rather than that the seller wrote nothing.
+        for (const output of tx.outputs) {
+            const pushes = opReturnPushes(output.outputScript);
+            if (pushes === undefined || !isOurs(pushes)) {
+                continue;
+            }
+            const tokenId = tokenIdOf(pushes);
+            if (tokenId !== undefined) {
+                unreadable.add(tokenId);
+            }
+        }
         return;
     }
     const seenHere = new Set<string>();

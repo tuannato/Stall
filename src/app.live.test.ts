@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { DUST_SATS } from './domain/money';
 import { encodeCashAddress } from 'ecashaddrjs';
 import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
@@ -22,6 +23,7 @@ import {
     EVENT_BOOK,
     EVENT_SETTINGS,
     EVENT_SETTINGS_STRANGER,
+    EVENT_SETTINGS_UNADDRESSED,
     PAY_NO_RATE_WHY,
     PAY_RATE_DISAGREE,
     PAY_RATE_IMPLAUSIBLE_WHY,
@@ -367,7 +369,12 @@ function signedTx(opts: {
         block: opts.height === undefined ? undefined : { height: opts.height },
         isFinal: opts.isFinal,
         inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
-        outputs: opts.outputs.map((outputScript) => ({ outputScript })),
+        // The publish link's own dust back to the stall: what makes a signed
+        // record this stall's (`recordAddressedToStall`).
+        outputs: [
+            ...opts.outputs.map((outputScript) => ({ outputScript })),
+            { outputScript: STALL_SCRIPT, sats: DUST_SATS },
+        ],
         tokenEntries: opts.tokens?.map((tokenId) => ({ tokenId })),
     };
 }
@@ -589,7 +596,7 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
 
         const row = painted.view?.events?.[0];
         expect(row?.kind).toBe('settings');
-        expect(row?.signedByStall).toBe(false);
+        expect(row?.recordAuthority).toBe('unsigned');
 
         openActivity(root);
         await until(
@@ -597,6 +604,39 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
         );
         expect(root.textContent).toContain(EVENT_SETTINGS_STRANGER);
         expect(root.textContent).not.toContain(EVENT_SETTINGS);
+    });
+
+    it('labels a live STL1 the stall signed without paying itself as unaddressed', async () => {
+        // The third state, on the live path — where the last two label
+        // regressions came through. Signed here, no dust back to the stall:
+        // not made from this stall's publish link, so no walk wakes and the
+        // row says which of the three it is.
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        const before = chain.calls.stl1;
+        const txid = 'cb'.repeat(32);
+        chain.txs.set(txid, {
+            txid,
+            inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
+            outputs: [
+                { outputScript: STALL_SCRIPT, sats: 9_000n },
+                { outputScript: stl1Output('Elsewhere') },
+            ],
+        });
+        watches[0]!.hooks.onBurst?.([txid]);
+        await until(() => painted.view?.events?.[0]?.txid === txid);
+
+        const row = painted.view?.events?.[0];
+        expect(row?.kind).toBe('settings');
+        expect(row?.recordAuthority).toBe('unaddressed');
+        expect(chain.calls.stl1, 'no settings walk was woken').toBe(before);
+
+        openActivity(root);
+        await until(
+            () => root.querySelector('.event-kind')?.textContent === EVENT_SETTINGS_UNADDRESSED,
+        );
+        expect(root.textContent).not.toContain(EVENT_SETTINGS_STRANGER);
+        expect(root.textContent).not.toContain('Elsewhere');
     });
 
     it('labels the seller’s own live STL1 as published settings', async () => {
@@ -617,7 +657,7 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
 
         const row = painted.view?.events?.[0];
         expect(row?.kind).toBe('settings');
-        expect(row?.signedByStall).toBe(true);
+        expect(row?.recordAuthority).toBe('stalls');
 
         openActivity(root);
         await until(() => root.querySelector('.event-kind')?.textContent === EVENT_SETTINGS);
