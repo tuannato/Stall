@@ -11946,3 +11946,65 @@ describe('the-printed-tag-is-ink-on-white', () => {
         expect(offenders).toEqual([]);
     });
 });
+
+describe('the-describe-sheet-offers-a-tag-only-over-an-unchanged-published-quote', () => {
+    /**
+     * The poster replaces the sheet, so the link is offered only when nothing
+     * typed would be lost — judged as the record: the hex this sheet would
+     * sign against the published record's. A preset pressed onto the value
+     * the record already carries is not an edit; a word typed is.
+     */
+    const QUOTE_WITH_MARGIN = { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 } as const;
+    const sheet = (over: Partial<StallView> = {}) =>
+        describeSheetOf({
+            descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]),
+            prices: new Map([[TOKEN_ID, QUOTE_WITH_MARGIN]]),
+            genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+            overlay: { kind: 'describe', tokenId: TOKEN_ID },
+            ...over,
+        });
+
+    it('is on screen over the published record, outside every fold, and opens the tag on that token', () => {
+        const { root, h } = sheet();
+        const link = describeField(root, 'describe-tag') as HTMLButtonElement;
+        expect(link.hidden).toBe(false);
+        expect(link.textContent).toBe(copy.DESC_TAG_OPEN);
+        expect(link.closest('details')).toBeNull();
+        link.click();
+        expect(h.onOpenPoster).toHaveBeenCalledWith('tag', TOKEN_ID, 'describe');
+    });
+
+    it('hides the moment a word is typed, and comes back when the words are restored', () => {
+        const { root } = sheet();
+        const field = describeField(root, 'describe-text') as HTMLTextAreaElement;
+        field.value = 'Roasted weekly. Now with tea.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-tag').hidden).toBe(true);
+        field.value = 'Roasted weekly.';
+        field.dispatchEvent(new Event('input'));
+        expect(describeField(root, 'describe-tag').hidden).toBe(false);
+    });
+
+    it('stays over the preset the record already carries, and hides under another', () => {
+        const { root } = sheet();
+        (describeField(root, 'describe-tolerance-2') as HTMLButtonElement).click();
+        expect(describeField(root, 'describe-tag').hidden, 'the carried preset is not an edit').toBe(false);
+        (describeField(root, 'describe-tolerance-5') as HTMLButtonElement).click();
+        expect(describeField(root, 'describe-tag').hidden, 'another margin is').toBe(true);
+    });
+
+    it('hides in removal mode, over a token with no quote, and over a not-attributed quote it still shows', () => {
+        const removing = sheet();
+        (describeField(removing.root, 'describe-remove') as HTMLButtonElement).click();
+        expect(describeField(removing.root, 'describe-tag').hidden).toBe(true);
+
+        const unquoted = sheet({ prices: undefined });
+        expect(describeField(unquoted.root, 'describe-tag').hidden).toBe(true);
+
+        // A published quote on a borrowed token is still a quote this page
+        // paints (the reader refuses nothing the seller signed), restated
+        // verbatim by the carried price: the tag is offered.
+        const borrowed = sheet({ genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]) });
+        expect(describeField(borrowed.root, 'describe-tag').hidden).toBe(false);
+    });
+});

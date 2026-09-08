@@ -2960,6 +2960,26 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // Never inside the fold: a phone reaches its wallet by this link.
     wrap.append(acts);
 
+    // The road to this item's tag, shown only over a published quote the
+    // form restates verbatim: the poster replaces this sheet, so the link is
+    // offered only when nothing typed would be lost, and closing the poster
+    // comes back here on the same token. Compared as the record — the hex
+    // this sheet would sign against the hex the published record encodes to
+    // — never as the controls: a preset pressed onto the value the record
+    // already carries is not an edit.
+    const tagOpen = el('button', 'mini another link-mute', copy.DESC_TAG_OPEN);
+    tagOpen.type = 'button';
+    tagOpen.setAttribute('data-role', 'describe-tag');
+    tagOpen.setAttribute('data-focus-key', 'describe-tag');
+    tagOpen.hidden = true;
+    const openTag = handlers.onOpenPoster;
+    if (openTag !== undefined) {
+        tagOpen.addEventListener('click', () => {
+            openTag('tag', picker.value, 'describe');
+        });
+    }
+    wrap.append(tagOpen);
+
     const removeToggle = el('button', 'mini another link-mute', copy.DESC_REMOVE_OPEN);
     removeToggle.type = 'button';
     removeToggle.setAttribute('data-role', 'describe-remove');
@@ -3254,6 +3274,17 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // is a disclosure of nothing.
         bytes.hidden = !ready;
         hexFold.hidden = !ready;
+
+        const publishedHex =
+            existing === undefined
+                ? undefined
+                : encodeDescriptionHex(tokenId, view.descriptions?.get(tokenId) ?? '', {
+                      shelf: publishedShelf,
+                      price: published,
+                  });
+        const quotedHere = quotedItems(view).some((item) => item.tokenId === tokenId);
+        tagOpen.hidden =
+            removing || !quotedHere || hex === undefined || hex !== publishedHex;
         const cashtab = ready ? cashtabPublishUrl(address, hex) : undefined;
         const pay = ready ? payECashPublishUrl(address, hex) : undefined;
         const linked = cashtab !== undefined && pay !== undefined;

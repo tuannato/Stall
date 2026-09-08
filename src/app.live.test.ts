@@ -3533,3 +3533,58 @@ describe('overlapping-bursts-do-not-overlap-their-walks', () => {
         expect(root.querySelector('[data-role="tab-activity"]')).not.toBeNull();
     });
 });
+
+describe('a-tag-opened-from-the-describe-sheet-closes-back-onto-it', () => {
+    /**
+     * The describe sheet's link replaces the sheet with the poster on that
+     * token's tag; closing the poster returns to the sheet on the same
+     * token, not to the studio. The Share card's own control keeps closing
+     * to idle.
+     */
+    it('opens the tag on the token and comes back to the sheet', async () => {
+        const { root } = bootStall(
+            stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                // A fungible genesis: a quote is painted only on a token
+                // `isPriceable` says yes to, and the bare meta has no kind.
+                tokens: new Map([
+                    [
+                        TOKEN,
+                        {
+                            ...TOKEN_META,
+                            tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+                        },
+                    ],
+                ]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+                descriptions: new Map([[TOKEN, 'Roasted weekly.']]),
+            }),
+        );
+        await flush();
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="studio-open-describe"]') as HTMLButtonElement).click();
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        expect(picker, 'the describe sheet is open').not.toBeNull();
+        const link = root.querySelector('[data-role="describe-tag"]') as HTMLButtonElement;
+        expect(link.hidden, 'the record on screen is the published one').toBe(false);
+        link.click();
+        const dialog = root.querySelector('[data-role="poster"] [role="dialog"]') as HTMLElement;
+        expect(dialog, 'the poster replaced the sheet').not.toBeNull();
+        expect(dialog.getAttribute('data-format')).toBe('tag');
+        expect(root.querySelector('.poster-tag .tag-name')?.textContent).toBe(TOKEN_META.name);
+        expect(root.querySelector('[data-role="describe-text"]')).toBeNull();
+
+        (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="poster"]')).toBeNull();
+        const back = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        expect(back, 'the sheet is back').not.toBeNull();
+        expect(back.value).toBe(TOKEN);
+
+        // The Share card's own poster still closes to nothing.
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="describe-token"]')).toBeNull();
+        expect(root.querySelector('[data-role="poster"]')).toBeNull();
+    });
+});

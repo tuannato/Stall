@@ -629,6 +629,12 @@ export const POSTER_FORMAT_TAG = 'Item tag';
 export const POSTER_ITEM_LABEL = 'Which item';
 export const TAG_SCAN = 'Scan to open this item';
 export const TAG_SNAPSHOT = 'This paper is a snapshot — scan for the quote as it stands.';
+/**
+ * On the describe sheet, over a published quote the form restates verbatim:
+ * the road to that item's tag. Only then — the poster replaces the sheet, so
+ * the link is offered only when nothing typed would be lost.
+ */
+export const DESC_TAG_OPEN = 'Make a tag for this item';
 export const TAG_LEDE =
     'A tag for one quoted item: the token, your words, your figure and a code that opens this stall at that item. The code carries no amount — the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate, so quote in XEC for a tag. Paper cannot prove who printed it; the page a scan opens shows the stall’s own address.';
 
