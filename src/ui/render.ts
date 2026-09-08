@@ -6240,9 +6240,9 @@ function paintActivity(
         scroller.append(body);
         return;
     }
-    // Said once, before the rows: this tab is public, and a panel that read
-    // like the seller's own ledger would invite somebody to treat it as one.
-    body.append(el('p', 'fine', copy.ACTIVITY_PUBLIC));
+    // The note above already said it once: public, not a ledger, the same
+    // rows for everyone. Six blocks of copy stood above the first row on a
+    // phone (owner, 2026-09-08); the head is that one line now.
     body.append(watchingSection(view));
     body.append(historySection(view, handlers, scroller));
     scroller.append(body);

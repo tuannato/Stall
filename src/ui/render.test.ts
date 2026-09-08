@@ -7134,7 +7134,14 @@ describe('the activity panel’s two lists and the row detail', () => {
         expect(link.target).toBe('_blank');
         expect(link.rel).toBe('noopener noreferrer');
         expect(rows[1]!.querySelector('[data-role="event-explorer"]')).toBeNull();
-        expect(root.textContent).toContain(copy.ACTIVITY_PUBLIC);
+        // Said once, in the one head line: public, not a ledger, the same
+        // rows for everyone.
+        const head = root.querySelector('[data-role="studio-activity-note"]');
+        expect(head?.textContent).toBe(copy.STUDIO_ACTIVITY_NOTE);
+        expect(copy.STUDIO_ACTIVITY_NOTE).toMatch(/every visitor|same rows/);
+        expect(copy.STUDIO_ACTIVITY_NOTE).toContain('not a ledger');
+        // And nothing repeats it: the words appear once above the rows.
+        expect(root.textContent!.split('not a ledger').length - 1).toBe(1);
     });
 
     it('a-receipt-never-says-sold', () => {

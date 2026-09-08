@@ -350,7 +350,7 @@ export const STUDIO_LEDE =
  * neither list can back.
  */
 export const STUDIO_ACTIVITY_NOTE =
-    'Activity is what this page read, not a ledger — keep your own records.';
+    'Public chain data this page read — not a ledger, and the same rows for every visitor.';
 /*
  * The browser preference carries no heading — one toggle is not a section —
  * and this line says where the preference lives, in the register of the
@@ -387,12 +387,12 @@ export const STUDIO_ITEMS_HINT =
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';
 export const activitySince = (time: string): string =>
-    `Watching since ${time} — what this page has seen arrive, newest first. This list is not saved; leave the page and it is gone.`;
+    `Watching since ${time} — newest first, not saved.`;
 export const ACTIVITY_GAPS =
-    'Some activity may be missing: the connection dropped or a transaction could not be read.';
+    'Some rows may be missing: a dropped connection, or a transaction this page could not read.';
 export const ACTIVITY_NOT_WATCHING =
     'Not watching. This screen has no live connection — activity starts once the stall’s offers can be read.';
-export const ACTIVITY_QUIET = 'Nothing has arrived yet. New activity appears here on its own.';
+export const ACTIVITY_QUIET = 'Nothing yet — new activity appears here on its own.';
 /**
  * Event rows say only what a transaction provably was. `book` deliberately
  * never says "sold": a cancel and a fully-taken offer are the same shape on
@@ -480,14 +480,15 @@ export const EVENT_PAYMENT_NOT_PROOF =
     'Written by the payer — not a proof of what was delivered.';
 
 /**
- * The Activity tab is public — anyone can open it — so it says so once,
- * before the rows. Nothing here is private to the seller, and a panel that
- * looked like a seller's own ledger would invite someone to treat it as one.
+ * The walk's own lede: the one sentence between the two lists, because the
+ * clock changing is the one thing worth a line. The head above it is one
+ * line since 2026-09-08 (owner: six blocks of copy stood above the first
+ * row on a phone) — public data, not a ledger, the same rows for everyone,
+ * said once in `STUDIO_ACTIVITY_NOTE`; a panel that looked like a seller's
+ * own ledger would invite someone to treat it as one.
  */
-export const ACTIVITY_PUBLIC =
-    'Everything here is public chain data. Anyone opening this stall sees the same rows.';
 export const ACTIVITY_HISTORY_LEDE =
-    'Read from this address’s history when you ask for it, newest first, on the chain’s clock.';
+    'Older rows come from this address’s history when you ask, newest first, on the chain’s clock.';
 /**
  * A row naming a decoration is named against what the stall wears **today**.
  * A walk cannot know what it wore a year ago, and inventing that is worse
