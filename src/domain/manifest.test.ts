@@ -155,12 +155,30 @@ describe('same-block-records-rank-by-first-seen-then-txid', () => {
         expect(winner?.txid).toBe('a7c1');
     });
 
-    it('a higher block still beats a later sighting in a lower one', () => {
+    it('a later sighting in a lower block wins when both stamps are known', () => {
+        // The one case height gets backwards: a newer edit mined a block
+        // before an older one. The node saw them in the order the seller made
+        // them; that order stands (since 2026-09-08).
         const winner = pickManifestWinner([
             { height: 11, isFinal: true, txid: 'aa', firstSeen: 100 },
             { height: 10, isFinal: true, txid: 'zz', firstSeen: 900 },
         ]);
-        expect(winner?.txid).toBe('aa');
+        expect(winner?.txid).toBe('zz');
+        // And a mined record seen later still beats a finalized unmined one
+        // seen earlier — the stamp orders settled records, whatever their block.
+        expect(
+            pickManifestWinner([
+                { height: undefined, isFinal: true, txid: 'aa', firstSeen: 100 },
+                { height: 10, isFinal: true, txid: 'bb', firstSeen: 200 },
+            ])?.txid,
+        ).toBe('bb');
+        // Without a stamp on one side the older ladder stands: height decides.
+        expect(
+            pickManifestWinner([
+                { height: 11, isFinal: true, txid: 'aa' },
+                { height: 10, isFinal: true, txid: 'zz', firstSeen: 900 },
+            ])?.txid,
+        ).toBe('aa');
     });
 
     it('falls through to txid when a stamp is unknown or the stamps tie', () => {

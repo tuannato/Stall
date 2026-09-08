@@ -370,19 +370,19 @@ function betterOf(a: Candidate | undefined, b: Candidate): Candidate | undefined
     if (a === undefined) {
         return b;
     }
-    const ah = rankHeight(a);
-    const bh = rankHeight(b);
-    if (bh !== ah) {
-        return bh > ah ? b : a;
-    }
-    // Same block (or both finalized unmined): the node's own first sighting
-    // orders them when both are known — mirrors `compareManifestRank`.
+    // The node's own first sighting first, when both are known and differ —
+    // mirrors `compareManifestRank`, across blocks as well as inside one.
     if (
         a.firstSeen !== undefined &&
         b.firstSeen !== undefined &&
         a.firstSeen !== b.firstSeen
     ) {
         return b.firstSeen > a.firstSeen ? b : a;
+    }
+    const ah = rankHeight(a);
+    const bh = rankHeight(b);
+    if (bh !== ah) {
+        return bh > ah ? b : a;
     }
     return b.txid > a.txid ? b : a;
 }

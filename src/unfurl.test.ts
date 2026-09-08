@@ -401,6 +401,13 @@ describe('the-edge-reader-mirrors-the-app', () => {
         ]);
         const bareText = await resolveManifestTextByHash(HASH, async () => bare);
         expect(bareText?.name).toBe('Seen First');
+        // Across blocks too: a later sighting in a lower block wins when both
+        // stamps are known (2026-09-08), exactly as the app's comparator says.
+        const acrossBlocks = protoPage([
+            protoTx({ txidByte: 0x09, stl1Hex: first, height: 101, isFinal: true, timeFirstSeen: 1_757_254_801 }),
+            protoTx({ txidByte: 0x01, stl1Hex: last, height: 100, isFinal: true, timeFirstSeen: 1_757_255_117 }),
+        ]);
+        expect((await resolveManifestTextByHash(HASH, async () => acrossBlocks))?.name).toBe('Seen Last');
     });
 
     it('the-edge-refuses-a-replayed-record-like-the-app', async () => {

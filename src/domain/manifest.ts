@@ -382,14 +382,16 @@ export type ManifestRank = {
     isFinal: boolean;
     txid: string;
     /**
-     * chronik's `timeFirstSeen`, seconds; absent or 0 is unknown. The tiebreak
-     * inside one block, and between two finalized unmined records: a seller
-     * who edits a record four times in one block interval made those edits in
-     * an order, and txid knows nothing of it — measured 2026-09-07, when the
-     * seller's removal lost to the edit with the highest txid. One node's
-     * clock, so it decides only when both stamps are known and differ; a node
-     * that restarted stamps the block time on everything and the tie falls
-     * through to txid as before.
+     * chronik's `timeFirstSeen`, seconds; absent or 0 is unknown. When both
+     * stamps are known and differ it orders two settled records outright —
+     * inside one block, between two finalized unmined ones, and across blocks
+     * (since 2026-09-08; it was the in-block tiebreak alone from 09-07): a
+     * seller who edits a record four times in one block interval made those
+     * edits in an order, and txid knows nothing of it — measured 2026-09-07,
+     * when the seller's removal lost to the edit with the highest txid. One
+     * node's clock, so it decides only when both stamps are known; a node
+     * that restarted stamps the block time on everything, which is the block
+     * order again, and the ladder falls through to height, then txid.
      */
     firstSeen?: number;
 };
@@ -412,15 +414,24 @@ const FINALIZED_UNMINED = Number.MAX_SAFE_INTEGER;
  * records get.
  */
 export function compareManifestRank(a: ManifestRank, b: ManifestRank): number {
-    const ah = rankHeight(a);
-    const bh = rankHeight(b);
-    if (ah !== bh) {
-        return ah - bh;
-    }
+    // The node's own first sighting first, when both stamps are known and
+    // differ (since 2026-09-08): it is the order the seller made their
+    // records in, and it also decides the one case height gets backwards —
+    // a newer edit mined a block *before* an older one, which "higher block
+    // wins" would then hand to the older edit for good. Without stamps the
+    // older ladder stands: finalized-and-unmined above every height, then
+    // height, then txid. Both records are settled by the time they are
+    // compared (`pickManifestWinner` filters), so a stamp never lifts a
+    // mempool opinion over a mined record.
     const af = knownSeen(a.firstSeen);
     const bf = knownSeen(b.firstSeen);
     if (af !== undefined && bf !== undefined && af !== bf) {
         return af - bf;
+    }
+    const ah = rankHeight(a);
+    const bh = rankHeight(b);
+    if (ah !== bh) {
+        return ah - bh;
     }
     return a.txid < b.txid ? -1 : a.txid > b.txid ? 1 : 0;
 }
