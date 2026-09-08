@@ -109,8 +109,8 @@ measures every screen in headless Chrome; CI on push.
 
 **Next — measure before building.** The evaluation of 2026-09-06 found the
 product complete at craft and unmeasured at use. Before any new surface:
-read the three record counts on chain (`STL1`, `STLD`, `STLP` — 8 / 2 / 0
-on 2026-09-04) and the distinct signers among them; read the CDN's own
+read the three record counts on chain (`STL1`, `STLD`, `STLP` — 9 / 11 / 2
+on 2026-09-08, 8 / 2 / 0 on 2026-09-04) and the distinct signers among them; read the CDN's own
 request counts for the unfurl function and the icon Worker; walk five real
 sellers through a stall by hand. Then the owner's decisions under **Open**
 (the honesty one-liners the evaluation left open landed on 2026-09-07).
@@ -503,9 +503,17 @@ have sent revenue to an output nobody can spend.
   forces a full reindex. A two-tier client (plugin-free reads through a wider
   host list, offers through the plugin hosts) is the alternative; both are
   trust-boundary changes for the owner.
-- **The three record counts on chain**: `STL1` 8, `STLD` 2, `STLP` 0 on
-  2026-09-04. A fact with a date, not a standing property — re-measure before
-  claiming, and read them as a product number from now on.
+- **The three record counts on chain**, measured 2026-09-08 over the lokad
+  index (all pages walked, deduped by txid): `STL1` 9 by 4 keys, `STLD` 11
+  by 3 keys, `STLP` 2 by 1 key. Read as a product number, honestly: of the
+  four `STL1` keys, one is the owner's Fittings stall, one the owner's "1st"
+  test stall, one a stranger's replay of the owner's link (the copycat), and
+  one a stall nobody here knows ("JardineCash", two records on 08-31); of
+  the `STLD` keys, one is the owner, one the owner's second wallet signing
+  by mistake, one that same stranger's stall; both `STLP` payments are the
+  owner paying their own quotes from their second wallet. **Adoption outside
+  the owner: one stall, no payment.** A fact with a date, not a standing
+  property — re-measure before claiming (8 / 2 / 0 on 2026-09-04).
 - **The owner's decisions left by the 2026-09-06 evaluation** were taken on
   2026-09-07 and built the same day (D1 tolerance default, D2 the sign
   condition, D7 the door chip, D8 the provenance chip, D9(a) the rate
