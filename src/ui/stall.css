@@ -46,11 +46,20 @@
  * margin, and `min-height: 100%` resolves to nothing because no ancestor has a
  * definite height. Measured in a real browser at 375x812 with a dark theme: an
  * 8px border and 42% of the screen left unthemed below the stall.
+ *
+ * `100dvh` after `100%`, on purpose and in that order: on an iPhone `100%`
+ * of `html` is the initial containing block, which WebKit sizes to the
+ * viewport with the browser's toolbars showing, while the visible area is
+ * taller once they collapse — the frame then ends a toolbar's height above
+ * the bottom edge and the ground shows through as a band (owner, Chrome on
+ * iOS after a resume, 2026-09-08). The dynamic viewport unit tracks the
+ * toolbars; a browser without it keeps the percentage.
  */
 html,
 body,
 #app {
     height: 100%;
+    height: 100dvh;
 }
 
 body {

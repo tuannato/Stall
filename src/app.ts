@@ -133,7 +133,7 @@ import {
     renderStall,
     holdsLivePaint,
 } from './ui';
-import { PAY_CHECK_TIMEOUT_MS, PAY_RATE_TIMEOUT_MS } from './ui/render';
+import { FIAT_GLANCE_TIMEOUT_MS, PAY_CHECK_TIMEOUT_MS, PAY_RATE_TIMEOUT_MS } from './ui/render';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { withDeadline } from './domain/deadline';
 
@@ -401,7 +401,10 @@ export function boot(
      */
     const refreshFiat = async (): Promise<void> => {
         const asked = fiatCode;
-        const rate = await fetchXecPrice(asked);
+        // Bounded: this starts before the document has finished loading, and
+        // an unbounded request there keeps the browser's progress bar alive
+        // for as long as the OS waits on a dead connection.
+        const rate = await fetchXecPrice(asked, { timeoutMs: FIAT_GLANCE_TIMEOUT_MS });
         // The visitor may have changed currency while this was in flight.
         if (asked !== fiatCode) {
             return;

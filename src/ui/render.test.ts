@@ -12143,3 +12143,25 @@ describe('the-activity-notes-fold-under-one-press', () => {
         expect(root.querySelector('[data-role="activity-watching"] li.event')).not.toBeNull();
     });
 });
+
+describe('the-frame-follows-the-dynamic-viewport', () => {
+    /**
+     * On an iPhone `100%` of `html` is the initial containing block — the
+     * viewport with the toolbars showing — while the visible area is taller
+     * once they collapse: the frame ended a toolbar's height above the bottom
+     * edge and the ground showed through as a band (owner, Chrome on iOS
+     * after a resume, 2026-09-08). `100dvh` tracks the toolbars, and the
+     * percentage stays first as the fallback a browser without it keeps.
+     * Static, because the probe emulates a fixed viewport where dvh = vh.
+     */
+    it('declares 100% and then 100dvh on html, body and #app', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const block = css.match(/html,\s*body,\s*#app\s*\{([^}]+)\}/);
+        expect(block, 'the shell height block').not.toBeNull();
+        const body = block![1]!;
+        const percent = body.indexOf('height: 100%');
+        const dynamic = body.indexOf('height: 100dvh');
+        expect(percent).toBeGreaterThanOrEqual(0);
+        expect(dynamic).toBeGreaterThan(percent);
+    });
+});

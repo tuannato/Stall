@@ -32,7 +32,10 @@ import {
     RATE_SOURCE_PRIMARY,
 } from './ui/copy';
 import { scaleRate } from './domain/fiat';
-import { PAY_CHECK_TIMEOUT_MS } from './ui/render';
+import {
+    PAY_CHECK_TIMEOUT_MS,
+    FIAT_GLANCE_TIMEOUT_MS,
+} from './ui/render';
 
 /**
  * The live half of `app.ts`, against real readers and a fake chain.
@@ -283,15 +286,16 @@ vi.mock('./net/live', async (importOriginal) => {
 
 const { priceControl } = vi.hoisted(() => ({
     priceControl: {
-        fetch: async (_code: string): Promise<bigint | undefined> => undefined,
+        fetch: async (_code: string, _opts?: { timeoutMs?: number }): Promise<bigint | undefined> =>
+            undefined,
         check: async (_code: string, _opts?: { timeoutMs?: number }): Promise<bigint | undefined> =>
             undefined,
     },
 }));
 
 vi.mock('./net/price', () => ({
-    fetchXecPrice: (code: string, _opts?: { timeoutMs?: number }) =>
-        priceControl.fetch(code),
+    fetchXecPrice: (code: string, opts?: { timeoutMs?: number }) =>
+        priceControl.fetch(code, opts),
 }));
 // The second feed is mocked beside the first, or five pay-sheet tests would
 // make a real request to api.coinpaprika.com under happy-dom's fetch.
@@ -3586,5 +3590,29 @@ describe('a-tag-opened-from-the-describe-sheet-closes-back-onto-it', () => {
         (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="describe-token"]')).toBeNull();
         expect(root.querySelector('[data-role="poster"]')).toBeNull();
+    });
+});
+
+describe('the-boot-glance-fetch-is-bounded', () => {
+    /**
+     * The glance fetch starts before the document has finished loading, and
+     * WebKit's progress bar stays alive until every request started then has
+     * ended — on a connection that died during a sleep, that is the OS's own
+     * TCP timeout, minutes of "loading" over a shop that had painted (owner,
+     * Chrome on iOS after a resume, 2026-09-08). Bounded, so a slow feed is no
+     * rate and never a page that never finishes loading.
+     */
+    it('asks the feed with a deadline', async () => {
+        let seen: { timeoutMs?: number } | undefined;
+        let asked = 0;
+        priceControl.fetch = async (_code, opts) => {
+            asked += 1;
+            seen = opts;
+            return undefined;
+        };
+        bootStall(stallEmpty());
+        await flush();
+        expect(asked).toBeGreaterThan(0);
+        expect(seen?.timeoutMs).toBe(FIAT_GLANCE_TIMEOUT_MS);
     });
 });

@@ -3468,6 +3468,16 @@ export const PAY_RATE_MAX_AGE_MS = 120_000;
 
 /** A refetch that has not answered by here is "no fresh price", not a wait. */
 export const PAY_RATE_TIMEOUT_MS = 8_000;
+/**
+ * The boot-time glance fetch's ceiling. It ran with none, and a request
+ * started while the document is still loading holds WebKit's progress bar
+ * until it ends — on a connection that died during a sleep, that is the OS's
+ * own TCP timeout, minutes of "loading" over a shop that had painted (owner,
+ * Chrome on iOS after a resume, 2026-09-08). The glance is `≈` and has a
+ * sentence for absence; a slow feed is no rate, never a page that never
+ * finishes loading.
+ */
+export const FIAT_GLANCE_TIMEOUT_MS = 8_000;
 
 /**
  * The second feed's budget, strictly shorter than the first's: it rides
