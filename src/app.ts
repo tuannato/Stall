@@ -1788,13 +1788,79 @@ export function boot(
      * unknown length of time, and a settings record that arrived while it was
      * down is not going to be announced again.
      */
+    /**
+     * The reconnect's catch-up: everything, through the same one-at-a-time
+     * road a burst takes, so a reconnect landing mid-walk queues rather than
+     * doubling the walks.
+     */
     const refreshAllFacts = async (
         claimed: number,
         stall: { address: string; hash: string },
     ): Promise<void> => {
-        // Reads the holdings itself, so there is no third call here.
-        await refreshSettings(claimed, stall);
-        await refreshDescriptions(claimed, stall);
+        await readFacts(claimed, stall, [], undefined, true);
+    };
+
+    /**
+     * One fact read at a time (audit 2026-09-08, F2). A burst arriving while
+     * the previous one is still fetching and walking used to start a second
+     * `readFacts` beside it, and a stall busy enough to overflow the burst
+     * ceiling every block — nine of its own transactions in one block is
+     * enough — stacked "ask everything" walks in every open tab. Now what
+     * arrives mid-read is **merged and run once after**: the txids (so their
+     * rows and finality frames still reach the ring), the statuses the socket
+     * said, and the "ask everything" intent. Deferred, never dropped — the
+     * floor §4 refuses is one that drops. A queued batch from a stall the
+     * reader has since left is dropped by the generation guard, as any late
+     * answer is.
+     */
+    let factsInFlight = false;
+    let factsQueued:
+        | {
+              claimed: number;
+              txids: string[];
+              said: Map<string, LiveTxStatus>;
+              all: boolean;
+          }
+        | undefined;
+
+    const readFacts = async (
+        claimed: number,
+        stall: { address: string; hash: string },
+        txids: readonly string[],
+        said?: ReadonlyMap<string, LiveTxStatus>,
+        all = false,
+    ): Promise<void> => {
+        if (factsInFlight) {
+            const queued =
+                factsQueued !== undefined && factsQueued.claimed === claimed
+                    ? factsQueued
+                    : { claimed, txids: [], said: new Map<string, LiveTxStatus>(), all: false };
+            for (const txid of txids) {
+                if (!queued.txids.includes(txid)) {
+                    queued.txids.push(txid);
+                }
+            }
+            for (const [txid, status] of said ?? []) {
+                queued.said.set(txid, status);
+            }
+            queued.all = queued.all || all;
+            factsQueued = queued;
+            return;
+        }
+        factsInFlight = true;
+        try {
+            await readFactsNow(claimed, stall, txids, said, all);
+            while (factsQueued !== undefined) {
+                const next = factsQueued;
+                factsQueued = undefined;
+                if (next.claimed !== generation) {
+                    continue;
+                }
+                await readFactsNow(next.claimed, stall, next.txids, next.said, next.all);
+            }
+        } finally {
+            factsInFlight = false;
+        }
     };
 
     /**
@@ -1811,15 +1877,16 @@ export function boot(
      * asking costs two capped walks, and guessing "nothing" costs the seller a
      * settings publish that never lands.
      */
-    const readFacts = async (
+    const readFactsNow = async (
         claimed: number,
         stall: { address: string; hash: string },
         txids: readonly string[],
         said?: ReadonlyMap<string, LiveTxStatus>,
+        all = false,
     ): Promise<void> => {
         const ctx = eventContext(stall.hash);
         const chronik = createChronik();
-        let facts = NO_FACTS;
+        let facts = all ? ALL_FACTS : NO_FACTS;
         let ringMoved = false;
         for (const txid of txids) {
             if (!TXID.test(txid)) {

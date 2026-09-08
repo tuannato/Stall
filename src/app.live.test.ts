@@ -107,6 +107,9 @@ const chain = {
     calls: { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 },
     /** Paged address history, when a test drives the activity walk. */
     historyPages: undefined as ChainTx[][] | undefined,
+    gate: undefined as Promise<void> | undefined,
+    walksInFlight: 0,
+    walksInFlightMax: 0,
     /** Page numbers whose read throws once asked for. */
     historyPageThrows: new Set<number>(),
     /** Every page number the walk asked for, in order. */
@@ -127,6 +130,9 @@ function resetChain(): void {
     chain.utxosThrow = false;
     chain.calls = { stl1: 0, stld: 0, addressHistory: 0, tx: 0, utxos: 0 };
     chain.historyPages = undefined;
+    chain.gate = undefined;
+    chain.walksInFlight = 0;
+    chain.walksInFlightMax = 0;
     chain.historyPageThrows = new Set();
     chain.historyPageCalls = [];
     chain.book = undefined;
@@ -150,6 +156,17 @@ const fakeChronik = {
         return {
             history: async (page = 0): Promise<HistoryPage> => {
                 chain.calls.addressHistory += 1;
+                // Overlap seam: a walk held open by `chain.gate`, and the most
+                // walks ever in flight at once, for the one-at-a-time guard.
+                chain.walksInFlight += 1;
+                chain.walksInFlightMax = Math.max(chain.walksInFlightMax, chain.walksInFlight);
+                try {
+                    if (chain.gate !== undefined) {
+                        await chain.gate;
+                    }
+                } finally {
+                    chain.walksInFlight -= 1;
+                }
                 if (chain.historyThrows) {
                     throw new Error('no index answered');
                 }
@@ -3467,5 +3484,52 @@ describe('an-unanswered-feed-replaces-the-asking-line', () => {
         expect(painted.view?.payRateAsking).toBe(false);
         expect(sheet().textContent).toContain(PAY_NO_RATE_WHY);
         expect(sheet().textContent).not.toContain(PAY_RATE_ASKING);
+    });
+});
+
+describe('overlapping-bursts-do-not-overlap-their-walks', () => {
+    /**
+     * A burst past the ceiling asks everything: two capped walks and a
+     * holdings read. A second such burst arriving mid-walk used to start a
+     * second set beside the first — a busy stall overflowed the ceiling
+     * every block and stacked walks in every open tab (audit 2026-09-08,
+     * F2). Now one read runs at a time and what arrives meanwhile is merged
+     * and run once after: never more than one walk in flight, nothing
+     * dropped — the deferred burst's rows still reach the ring.
+     */
+    it('runs one read at a time, and the deferred burst still lands', async () => {
+        const { root } = bootStall(stallEmpty());
+        await flush();
+        chain.walksInFlightMax = 0;
+        let open: () => void = () => {};
+        chain.gate = new Promise<void>((resolve) => { open = resolve; });
+        const flood = Array.from({ length: 9 }, (_, i) => `${(0x40 + i).toString(16).padStart(2, '0')}`.repeat(32));
+        // Every txid is fetchable, so the overflow — not a fetch failure — is
+        // what turns the burst into "ask everything".
+        for (const txid of flood) {
+            chain.txs.set(txid, { txid, inputs: [], outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }] });
+        }
+        const late = 'ee'.repeat(32);
+        chain.txs.set(late, { txid: late, inputs: [], outputs: [{ outputScript: STALL_SCRIPT, sats: 2_000n }] });
+
+        watches[0]!.hooks.onBurst?.([...flood.slice(0, 8), UNKNOWN_TXID]);
+        await flush();
+        expect(chain.walksInFlight, 'the first walk is held open').toBe(1);
+        // A second overflowing burst, and an ordinary one, while the walk is held.
+        watches[0]!.hooks.onBurst?.([...flood.slice(0, 8), UNKNOWN_TXID]);
+        watches[0]!.hooks.onBurst?.([late]);
+        await flush();
+        expect(chain.walksInFlightMax, 'nothing started beside the held walk').toBe(1);
+
+        // Release the held walk; the queued read runs after it, on the same
+        // road, and its row lands. No fixed wait: the condition is the row.
+        chain.gate = undefined;
+        open();
+        await until(() => painted.view?.events?.some((e) => e.txid === late) === true, 8_000);
+        await flush();
+        expect(chain.walksInFlight, 'every walk finished').toBe(0);
+        expect(chain.walksInFlightMax, 'the deferred read ran after, not beside').toBe(1);
+        expect(painted.view?.events?.some((e) => e.txid === late), 'the deferred burst’s row reached the ring').toBe(true);
+        expect(root.querySelector('[data-role="tab-activity"]')).not.toBeNull();
     });
 });
