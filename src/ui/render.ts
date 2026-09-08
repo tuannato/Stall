@@ -6229,20 +6229,36 @@ function paintActivity(
         ),
     );
     const body = el('main', 'stall-body');
-    // What this panel is, said on the panel: a ring on the page clock and a
-    // capped walk on the chain's, neither of which can back the word "ledger".
-    const note = el('p', 'fine', copy.STUDIO_ACTIVITY_NOTE);
-    note.setAttribute('data-role', 'studio-activity-note');
-    body.append(note);
     const watching = view.fetch?.kind === 'offers' || view.fetch?.kind === 'empty';
     if (!watching) {
         body.append(el('p', 'note', copy.ACTIVITY_NOT_WATCHING));
         scroller.append(body);
         return;
     }
-    // The note above already said it once: public, not a ledger, the same
-    // rows for everyone. Six blocks of copy stood above the first row on a
-    // phone (owner, 2026-09-08); the head is that one line now.
+    // The panel's notes fold under one press, closed, so the rows lead
+    // (owner, 2026-09-08 — six blocks of copy stood above the first row on a
+    // phone, then five, then this): what this panel is (a ring on the page
+    // clock and a capped walk on the chain's, public, never a ledger), the
+    // gap warning when a gap happened, the empty line while nothing has
+    // arrived, and the walk's lede. Every fact stays; none of it leads.
+    const about = el('div', 'activity-about');
+    const note = el('p', 'fine', copy.STUDIO_ACTIVITY_NOTE);
+    note.setAttribute('data-role', 'studio-activity-note');
+    about.append(note);
+    if ((view.activityGaps ?? 0) > 0) {
+        const gaps = el('p', 'note', copy.ACTIVITY_GAPS);
+        gaps.setAttribute('data-role', 'activity-gaps');
+        about.append(gaps);
+    }
+    if ((view.events ?? []).length === 0) {
+        const quiet = el('p', 'fine', copy.ACTIVITY_QUIET);
+        quiet.setAttribute('data-role', 'activity-quiet');
+        about.append(quiet);
+    }
+    const lede = el('p', 'fine', copy.ACTIVITY_HISTORY_LEDE);
+    lede.setAttribute('data-role', 'activity-history-lede');
+    about.append(lede);
+    body.append(sheetFold('activity-about', copy.ACTIVITY_ABOUT_FOLD, about));
     body.append(watchingSection(view));
     body.append(historySection(view, handlers, scroller));
     scroller.append(body);
@@ -6260,19 +6276,11 @@ function paintActivity(
 function watchingSection(view: StallView): HTMLElement {
     const wrap = el('section', 'activity-sec');
     wrap.setAttribute('data-role', 'activity-watching');
-    if (view.watchedSinceMs !== undefined) {
-        // Its own class, never `:first-child`: the design's live chip must not
-        // leak onto whatever paragraph happens to lead another screen's body.
-        wrap.append(
-            el('p', 'fine activity-lede', copy.activitySince(formatTriedAt(view.watchedSinceMs))),
-        );
-    }
-    if ((view.activityGaps ?? 0) > 0) {
-        wrap.append(el('p', 'note', copy.ACTIVITY_GAPS));
-    }
+    // No "watching since" line (owner, 2026-09-08): each row's fold names
+    // the clock it is dated by, and the gap warning and the empty line sit
+    // under the panel's one fold. An empty ring is an empty section.
     const events = view.events ?? [];
     if (events.length === 0) {
-        wrap.append(el('p', 'mid-p', copy.ACTIVITY_QUIET));
         return wrap;
     }
     // An <ol>, because the feed IS an ordered list — a reader hears
@@ -6307,7 +6315,7 @@ function historySection(
 ): HTMLElement {
     const wrap = el('section', 'activity-sec');
     wrap.setAttribute('data-role', 'activity-history');
-    wrap.append(el('p', 'fine', copy.ACTIVITY_HISTORY_LEDE));
+    // The lede is under the panel's fold with the other notes.
     const history: StallHistory = view.history ?? { rows: [], pagesRead: 0 };
     // A transaction is painted once. The ring above already shows what arrived
     // while this page was open, on the page clock; a walked page holding the

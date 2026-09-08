@@ -7081,8 +7081,14 @@ describe('the activity panel’s two lists and the row detail', () => {
         const history = panel.querySelector('[data-role="activity-history"]')!;
         expect(watching.querySelector('ol.events')).not.toBeNull();
         expect(history.querySelector('ol.events')).not.toBeNull();
-        expect(watching.querySelector('.activity-lede'), 'the live line leads').not.toBeNull();
-        expect(history.textContent).toContain(copy.ACTIVITY_HISTORY_LEDE);
+        // The rows lead: no "watching since" line, and the walk's lede is
+        // under the panel's one fold, not between the lists.
+        expect(root.querySelector('.activity-lede')).toBeNull();
+        expect(root.textContent).not.toContain('Watching since');
+        const about = panel.querySelector('details[data-role="activity-about"]') as HTMLDetailsElement;
+        expect(about.open).toBe(false);
+        expect(about.textContent).toContain(copy.ACTIVITY_HISTORY_LEDE);
+        expect(history.textContent).not.toContain(copy.ACTIVITY_HISTORY_LEDE);
         expect(history.textContent).toContain(copy.ACTIVITY_HISTORY_END);
         expect(history.textContent).not.toContain(copy.activityHistoryCapped(1).slice(0, 12));
     });
@@ -7134,10 +7140,11 @@ describe('the activity panel’s two lists and the row detail', () => {
         expect(link.target).toBe('_blank');
         expect(link.rel).toBe('noopener noreferrer');
         expect(rows[1]!.querySelector('[data-role="event-explorer"]')).toBeNull();
-        // Said once, in the one head line: public, not a ledger, the same
+        // Said once, under the panel's fold: public, not a ledger, the same
         // rows for everyone.
         const head = root.querySelector('[data-role="studio-activity-note"]');
         expect(head?.textContent).toBe(copy.STUDIO_ACTIVITY_NOTE);
+        expect(head?.closest('details')?.getAttribute('data-role')).toBe('activity-about');
         expect(copy.STUDIO_ACTIVITY_NOTE).toMatch(/every visitor|same rows/);
         expect(copy.STUDIO_ACTIVITY_NOTE).toContain('not a ledger');
         // And nothing repeats it: the words appear once above the rows.
@@ -12079,5 +12086,60 @@ describe('an-activity-row-wears-the-token-the-transaction-names', () => {
         const named = rows({ descriptions: new Map([[TOKEN_ID, 'Roasted weekly.']]) });
         const claimNamed = [...named.querySelectorAll('li.event')][2]!.querySelector<HTMLElement>('summary [data-role="event-icon"]')!;
         expect(claimNamed.getAttribute('data-token-id')).toBe(TOKEN_ID);
+    });
+});
+
+describe('the-activity-notes-fold-under-one-press', () => {
+    /**
+     * Owner, 2026-09-08: the panel's four notes — what it is, the gap
+     * warning, the empty line, the walk's lede — hide under one press, closed,
+     * so the rows lead; the "watching since" line is gone, because each
+     * row's fold already names the clock it is dated by. A closed `<details>`
+     * keeps its text, so the fold is asserted as a fold and the four lines
+     * as its descendants, with none of them outside it.
+     */
+    const AT = 1_756_400_000_000;
+    const panelOf = (over: Partial<StallView>) =>
+        paint(offersView([OFFER], undefined, { panel: 'activity', watchedSinceMs: AT, ...over })).root;
+    const FOUR = () => [
+        copy.STUDIO_ACTIVITY_NOTE,
+        copy.ACTIVITY_GAPS,
+        copy.ACTIVITY_QUIET,
+        copy.ACTIVITY_HISTORY_LEDE,
+    ];
+
+    it('folds all four, closed, with a caret, and prints no watching-since line', () => {
+        const root = panelOf({ activityGaps: 1, events: [] });
+        const fold = root.querySelector('details[data-role="activity-about"]') as HTMLDetailsElement;
+        expect(fold).not.toBeNull();
+        expect(fold.open).toBe(false);
+        expect(fold.querySelector('summary')?.textContent).toBe(copy.ACTIVITY_ABOUT_FOLD);
+        expect(fold.querySelector('summary svg.fold-caret')).not.toBeNull();
+        for (const line of FOUR()) {
+            expect(fold.textContent, line).toContain(line);
+        }
+        const outside = [...root.querySelectorAll('main *')].filter(
+            (node) => node.closest('details[data-role="activity-about"]') === null,
+        );
+        for (const line of FOUR()) {
+            expect(outside.some((node) => node.childNodes.length === 1 && node.textContent === line), `${line} outside the fold`).toBe(false);
+        }
+        expect(root.textContent).not.toContain('Watching since');
+        expect(root.querySelector('.activity-lede')).toBeNull();
+        // The two sections still exist as two lists' homes.
+        expect(root.querySelector('[data-role="activity-watching"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="activity-history"]')).not.toBeNull();
+    });
+
+    it('drops the gap and empty lines when there is no gap and there are rows', () => {
+        const root = panelOf({
+            events: [{ txid: 'ab'.repeat(32), kind: 'other', seenAtMs: AT }],
+        });
+        const fold = root.querySelector('details[data-role="activity-about"]')!;
+        expect(fold.textContent).toContain(copy.STUDIO_ACTIVITY_NOTE);
+        expect(fold.textContent).toContain(copy.ACTIVITY_HISTORY_LEDE);
+        expect(fold.textContent).not.toContain(copy.ACTIVITY_GAPS);
+        expect(fold.textContent).not.toContain(copy.ACTIVITY_QUIET);
+        expect(root.querySelector('[data-role="activity-watching"] li.event')).not.toBeNull();
     });
 });

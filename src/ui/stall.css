@@ -1817,43 +1817,9 @@ textarea.paste-in {
 
 /* The activity feed: watched transactions, newest first. */
 /*
- * The "watching" line as a live chip (owner's design, 2026-09-01): a small
- * pulse dot says the page is listening. Its own class, never `:first-child`
- * — a positional selector would decorate whatever paragraph happens to lead
- * another screen's body.
+ * The "watching" chip left on 2026-09-08 (owner): each row's fold names the
+ * clock it is dated by, and the panel's notes sit under one closed fold.
  */
-.activity-lede {
-    padding: 10px 12px;
-    background: var(--s-surface);
-    border: var(--s-card-border);
-    border-radius: var(--s-radius);
-    color: var(--s-text);
-    font-size: 12px;
-}
-
-.activity-lede::before {
-    content: '';
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--s-accent);
-    margin-right: 8px;
-    animation: pnl-pulse 2.2s ease-in-out infinite;
-}
-
-@keyframes pnl-pulse {
-    50% {
-        opacity: 0.3;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .activity-lede::before {
-        animation: none;
-    }
-}
-
 /*
  * The feed as a timeline (owner's design, 2026-09-01): a rail behind accent
  * dots, rows unboxed. The rail is a background layer on the list itself —

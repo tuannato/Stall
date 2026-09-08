@@ -386,8 +386,13 @@ export const STUDIO_ITEMS_HINT =
 
 /** The activity panel: what this page watched arrive, said honestly. */
 export const ACTIVITY_SUB = 'Live activity';
-export const activitySince = (time: string): string =>
-    `Watching since ${time} — newest first, not saved.`;
+/**
+ * The one press that opens the panel's four notes (owner, 2026-09-08): the
+ * not-a-ledger line, the gap warning, the empty line and the walk's lede
+ * fold under it, closed, so the rows lead. The "watching since" line is gone
+ * — each row's fold names its own clock.
+ */
+export const ACTIVITY_ABOUT_FOLD = 'About this list';
 export const ACTIVITY_GAPS =
     'Some rows may be missing: a dropped connection, or a transaction this page could not read.';
 export const ACTIVITY_NOT_WATCHING =
