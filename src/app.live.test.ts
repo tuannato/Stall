@@ -25,6 +25,7 @@ import {
     EVENT_SETTINGS_STRANGER,
     EVENT_SETTINGS_UNADDRESSED,
     PAY_NO_RATE_WHY,
+    PAY_RATE_ASKING,
     PAY_RATE_DISAGREE,
     PAY_RATE_IMPLAUSIBLE_WHY,
     RATE_SOURCE_CHECK,
@@ -3424,5 +3425,47 @@ describe('an-xec-quote-asks-no-price-feed', () => {
         expect(check, 'nor the second').not.toHaveBeenCalled();
         expect(painted.view?.payRate).toBeUndefined();
         expect(painted.view?.payRateWhy).toBeUndefined();
+    });
+});
+
+describe('an-unanswered-feed-replaces-the-asking-line', () => {
+    /**
+     * The open paints "asking" before the feeds are asked, and every answer
+     * repaints — a feed that did not answer included, because the sheet was
+     * saying "asking" and that sentence has to go. The old road skipped the
+     * repaint on no answer, which with an asking line would have left the
+     * sheet asking forever.
+     */
+    const META = {
+        tokenId: TOKEN,
+        name: 'Ripe Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('asks, then says no answer, then a figure on a later answer', async () => {
+        let answer: (rate: bigint | undefined) => void = () => {};
+        priceControl.fetch = () => new Promise<bigint | undefined>((resolve) => { answer = resolve; });
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[TOKEN, META]]),
+                prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            }),
+        );
+        await flush();
+        // The boot glance is in flight too; let it be, and answer the sheet's own ask.
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        const sheet = () => root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(painted.view?.payRateAsking).toBe(true);
+        expect(sheet().textContent).toContain(PAY_RATE_ASKING);
+        expect(sheet().textContent).not.toContain(PAY_NO_RATE_WHY);
+
+        answer(undefined);
+        await flush();
+        expect(painted.view?.payRateAsking).toBe(false);
+        expect(sheet().textContent).toContain(PAY_NO_RATE_WHY);
+        expect(sheet().textContent).not.toContain(PAY_RATE_ASKING);
     });
 });

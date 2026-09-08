@@ -319,6 +319,8 @@ export function boot(
     let payRate: { rate: bigint; atMs: number; check?: RateCheck } | undefined;
     /** Why there is none — a feed that did not answer, or an answer refused (CLAUDE §8). */
     let payRateWhy: PayRateWhy | undefined;
+    /** The feeds are being asked for the open sheet; painted as "asking", never as no answer. */
+    let payRateAsking = false;
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
@@ -446,6 +448,7 @@ export function boot(
             fiatRate,
             payRate,
             payRateWhy,
+            payRateAsking,
             payQuantity,
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
@@ -796,24 +799,26 @@ export function boot(
         payRate = undefined;
         payRateWhy = undefined;
         payQuantity = undefined;
-        state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
-        paint();
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
         // composed (owner, 2026-09-07).
-        if (quoteNeedsNoRate(tokenId)) {
+        const asks = !quoteNeedsNoRate(tokenId);
+        payRateAsking = asks;
+        state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
+        paint();
+        if (!asks) {
             return;
         }
         void (async () => {
-            const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
+            await readPayRate(PAY_RATE_TIMEOUT_MS);
+            payRateAsking = false;
             // Only for the sheet that asked: a buyer who closed it, or moved
-            // to another item, must not have it repainted under them. A feed
-            // that did not answer changes nothing on screen; a refused answer
-            // does — it has its own sentence.
+            // to another item, must not have it repainted under them. Every
+            // answer repaints, a feed that did not answer included — the sheet
+            // was saying "asking", and that sentence has to be replaced.
             if (
                 claimed !== generation ||
-                (fresh.rate === undefined && fresh.why === 'no-answer') ||
                 state.view.overlay.kind !== 'pay' ||
                 state.view.overlay.tokenId !== tokenId
             ) {
@@ -1014,13 +1019,15 @@ export function boot(
                     state.view.overlay.tokenId === tokenId &&
                     !quoteNeedsNoRate(tokenId)
                 ) {
+                    payRateAsking = true;
+                    paint();
                     void (async () => {
-                        const fresh = await readPayRate(PAY_RATE_TIMEOUT_MS);
-                        // The same gate `onOpenPay` keeps: a feed that did not
-                        // answer changes nothing on screen; a refused answer does.
+                        await readPayRate(PAY_RATE_TIMEOUT_MS);
+                        payRateAsking = false;
+                        // The same gate `onOpenPay` keeps; every answer repaints,
+                        // because the sheet is saying "asking" until it does.
                         if (
                             claimed !== generation ||
-                            (fresh.rate === undefined && fresh.why === 'no-answer') ||
                             state.view.overlay.kind !== 'pay' ||
                             state.view.overlay.tokenId !== tokenId
                         ) {

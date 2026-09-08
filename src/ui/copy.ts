@@ -1368,6 +1368,14 @@ export const PAY_NO_RATE_WHY =
  * feed that did not answer is the empty-versus-unreachable collapse on the
  * money path.
  */
+/**
+ * While the feeds are being asked. Its own sentence, because "asking" and
+ * "did not answer" printed as one sentence is the empty-versus-unreachable
+ * collapse on the money path — a buyer read a failure that had not happened
+ * and could close the sheet on it.
+ */
+export const PAY_RATE_ASKING =
+    'Asking the price feeds for a rate\u2026 The link and the code appear when one arrives.';
 export const PAY_RATE_IMPLAUSIBLE_WHY =
     'CoinGecko answered with a rate far outside anything XEC has traded at, so this page will not turn it into an amount. There is no link and no code until a plausible price arrives.';
 /**

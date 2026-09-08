@@ -10769,6 +10769,40 @@ describe('nothing-stands-between-the-figure-and-the-pay-control', () => {
     });
 });
 
+describe('a-pay-sheet-says-it-is-asking-before-it-says-no-answer', () => {
+    /**
+     * The sheet opens before the feeds answer, and for up to eight seconds it
+     * used to print "CoinGecko did not answer" — a failure asserted before it
+     * happened, on the money screen (audit 2026-09-08, F3). "Asking" is its
+     * own flag on the view, never a member of the answer type.
+     */
+    it('paints the asking line while the flag is up, and the no-answer line once it is down', () => {
+        const asking = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: undefined, payRateAsking: true }),
+        ).root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(asking.textContent).toContain(copy.PAY_RATE_ASKING);
+        expect(asking.textContent).not.toContain(copy.PAY_NO_RATE_WHY);
+        const answered = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: undefined, payRateAsking: false }),
+        ).root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(answered.textContent).toContain(copy.PAY_NO_RATE_WHY);
+        expect(answered.textContent).not.toContain(copy.PAY_RATE_ASKING);
+    });
+
+    it('says nothing of the kind on an XEC quote, which asks no feed', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                payRateAsking: true,
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet.textContent).not.toContain(copy.PAY_RATE_ASKING);
+        expect(sheet.textContent).not.toContain(copy.PAY_NO_RATE_WHY);
+    });
+});
+
 describe('an-implausible-rate-is-said-and-never-called-no-answer', () => {
     /**
      * Two facts, two sentences. A feed that did not answer and a feed that

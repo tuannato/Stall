@@ -504,6 +504,15 @@ export type StallView = {
      */
     payRateWhy?: PayRateWhy;
     /**
+     * The feeds have been asked and have not answered yet. Its own flag on the
+     * view, never a member of `PayRateWhy` — that is the *answer* type, and
+     * "asking" is not an answer. Without it the sheet painted "CoinGecko did
+     * not answer" for up to `PAY_RATE_TIMEOUT_MS` while the request was in
+     * flight: a failure asserted before it happened, on the money screen
+     * (audit 2026-09-08, F3). Closure state in `boot`, like `payRate`.
+     */
+    payRateAsking?: boolean;
+    /**
      * Whether this navigation began at the door's paste submit. Written onto
      * the view at paint time from `history.state` (like `fiatCode`), never by
      * a loader: the seller invites paint only when it is true, because a

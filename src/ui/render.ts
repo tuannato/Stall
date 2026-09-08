@@ -3530,6 +3530,8 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     let rate = usesRate ? view.payRate : undefined;
     /** Why there is none, for the sentence: the feed did not answer, or was refused. */
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
+    /** The feeds are still being asked: say that, never "did not answer". */
+    let asking = usesRate && view.payRateAsking === true;
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -3801,7 +3803,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         why.textContent = subDust
             ? copy.PAY_SUB_DUST
             : sats === undefined
-              ? copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
+              ? asking
+                  ? copy.PAY_RATE_ASKING
+                  : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
 
         const linked = cashtab !== undefined && pay !== undefined;
@@ -3885,6 +3889,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
                 const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
                 rate = answered;
+                asking = false;
                 payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
                 const after = satsForQuote(price, quantity, answered?.rate);
                 // A refused answer is its own outcome: the same collapse the
@@ -3913,6 +3918,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
             const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
             rate = answered;
+            asking = false;
             payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
             outcome =
                 answered === undefined
