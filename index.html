@@ -33,7 +33,9 @@
          deliberately not preloaded: only Modern's stack downloads Inter, and
          an unconditional preload would tax every Neo and Rural stall 48KB. -->
     <link rel="preconnect" href="https://chronik-native1.fabien.cash" crossorigin />
-    <link rel="preconnect" href="https://api.coingecko.com" crossorigin />
+    <!-- No preconnect to a price feed: the door needs no rate, and a static
+         preconnect told a third party every visitor's IP before any screen
+         asked it for a number (audit 2026-09-08, F4). -->
     <link rel="preconnect" href="https://icons.stall.cash" />
     <!-- Open Graph / Twitter. Without a wallet the shared link is the whole
          product (CLAUDE.md §9), so the unfurl has to say what the page is.

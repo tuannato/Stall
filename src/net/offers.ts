@@ -27,9 +27,12 @@ export type AgoraOfferView = {
  *
  * Two members rather than the library's one `activeOffersByPubKey`, because
  * that call fetches and parses in a single `flatMap` and a parse that throws
- * takes the whole call down with it. `agora.py` binds nothing to the ad
- * script's `cancel_pk`, so **any stranger can put a utxo in any seller's
- * group** for the price of dust: a PARTIAL with no enforced locktime makes
+ * takes the whole call down with it. The pubkey group is signed for — the ad
+ * script checks `cancel_pk`'s signature under P2SH consensus, so a stranger
+ * cannot list under a seller's key without it (corrected 2026-09-08; this
+ * comment claimed the opposite) — but a **token** group is anyone's, a
+ * plugin can skew from this library, and the eMPP ALP PARTIAL road needs no
+ * signature: a PARTIAL with no enforced locktime makes
  * `_parsePartialOfferUtxo` throw `Outdated plugin`, and a ONESHOT with a
  * truncated `outputsSer` makes `readTxOutput` underflow. Either one used to be
  * painted as `unreachable` with all three hosts listed as failed — our failure
@@ -147,13 +150,13 @@ export async function loadOffers(
             continue;
         }
         if (parsed === undefined) {
-            // **Silent, deliberately.** Nothing binds a group entry to the
-            // seller — `cancel_pk` and `maker_pk` are whatever bytes an ad
-            // script wrote — so anyone can drop junk covenants into any
-            // seller's group for dust. Counting those would let a stranger
-            // paint "listings this page could not read" onto a stall that is
-            // simply empty, which is the empty-versus-unreadable collapse
-            // arriving from outside. The library ignores them today; so do we.
+            // **Silent, deliberately.** A utxo the library does not recognise
+            // as an offer is a plugin/library skew or a covenant shape this
+            // build never wrote — not the seller's stock, and (since the ad
+            // script signs for the pubkey group) not a stranger's either.
+            // Counting it would print "listings this page could not read" on
+            // a stall that is simply empty, the empty-versus-unreachable
+            // collapse arriving from outside. The library ignores them; so do we.
             continue;
         }
         attempted += 1;

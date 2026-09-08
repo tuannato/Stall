@@ -2357,11 +2357,13 @@ async function loadCurrent(): Promise<AppState> {
     }
 
     /*
-     * The entitlement, asked only when there is something to entitle. A stall
-     * wearing nothing never makes this request, which is the majority of them;
-     * one that does pays a single round after the manifest. It fails closed and
-     * silently for a visitor — a missing beetle is not a lie about money — and
-     * the picker is where a seller is told, because that is where we know a
+     * The holdings read: the entitlement for a worn decoration, and — since
+     * the picker lists the tokens this wallet can still mint — the mint
+     * batons, so every stall open makes this one request, a single round
+     * after the manifest (the comment that said a stall wearing nothing never
+     * asks was stale from 2026-09-05 to 09-08). It fails closed and silently
+     * for a visitor — a missing beetle is not a lie about money — and the
+     * picker is where a seller is told, because that is where we know a
      * seller is looking.
      */
     let heldTokens: ReadonlySet<string> | undefined;

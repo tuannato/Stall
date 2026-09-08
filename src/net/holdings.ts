@@ -1,10 +1,12 @@
 /**
  * Which attachment tokens a stall address actually holds.
  *
- * The entitlement half of §7's rule, and it is asked **only when the manifest
- * carries a flag** — the majority who wear nothing pay nothing for this. What
- * it costs when it is asked is one round after the manifest, on the same axis
- * the page already waits on.
+ * The entitlement half of §7's rule — and, since the describe picker learned
+ * to list the tokens this wallet can still mint (2026-09-05), the same read
+ * answers which mint batons the address holds. So it is asked on **every**
+ * stall open, one round after the manifest, on the axis the page already
+ * waits on; a comment that said the majority pay nothing for it was true
+ * until then and false after (corrected 2026-09-08).
  *
  * Read narrowly on purpose. `chronik.address(a).utxos()` takes no page argument
  * and has no truncation signal, which is the opposite of the treatment every

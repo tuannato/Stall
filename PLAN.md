@@ -313,9 +313,11 @@ that is still true:
   spec documents a front-running attack.
 - **Themes as code, CSS, or fetched assets** (`CLAUDE.md` §6).
 - **Revenue share enforced by covenant.** Only oneshot carries multiple
-  enforced outputs, and a oneshot is grouped under `cancel_pk` while its
-  payout is an arbitrary output list — an offer grouped under your key can pay
-  someone else.
+  enforced outputs, and its payout is an arbitrary output list the covenant
+  does not tie to any key — so a covenant cannot enforce a split. (The group
+  key itself *is* signed for: the ad script checks `cancel_pk`'s signature, so
+  a stranger cannot list under your key — corrected 2026-09-08, `CLAUDE.md`
+  §10.)
 - **Any painted unit beyond `usd` and `xec`.** A *display* rule, never a wire
   one: the decoder keeps every code a record carries and the editor restates
   an unwritable one untouched on republish. Reopen on **both** of two

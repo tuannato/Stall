@@ -15,7 +15,8 @@ wallet signs. That shape sets what a security report here can be about.
   or from a URL reaches a payee, an amount or a memo.
 - **A strict Content-Security-Policy**, sent as a response header:
   `script-src 'self'`, no inline script, no `unsafe-*`, `connect-src` pinned
-  to the named chronik hosts and the rate feed. Three copies of the policy
+  to the named chronik hosts and the two rate feeds (CoinGecko, and CoinPaprika
+  as a check that can refuse a figure and never supply one). Three copies of the policy
   are kept in agreement by a test (`src/csp.test.ts`).
 - **Chain-derived text never reaches `innerHTML`.** Every string from a
   transaction is screened (`isLegibleText`) and lands through `textContent`.
@@ -33,7 +34,7 @@ wallet signs. That shape sets what a security report here can be about.
 
 ## What is out of scope
 
-- The chronik nodes, Cashtab, the Agora plugin, CoinGecko and Cloudflare are
+- The chronik nodes, Cashtab, the Agora plugin, CoinGecko, CoinPaprika and Cloudflare are
   other people's software; report their defects to them. Stall does treat
   a lying indexer as a threat it must not amplify, so a report showing Stall
   *repeating* a bad answer as a fact is in scope.

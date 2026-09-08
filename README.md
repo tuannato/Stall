@@ -106,8 +106,10 @@ the layout probe runs on manual dispatch.
 Those boundaries are enforced by a test, not by convention — see
 `directory-walls` in `src/walls.test.ts`.
 
-The CSP is derived from one constant, `CHRONIK_HOSTS`, and `src/csp.test.ts`
-fails when the deployed copies drift from it. That is why `deploy/*.conf` is in
+The CSP's chronik hosts are derived from one constant, `CHRONIK_HOSTS`; the
+two price-feed hosts are pinned as literals in `src/csp.test.ts`, on purpose,
+so that a constant edited alongside three policy copies cannot loosen the
+policy unnoticed. The test fails when the deployed copies drift. That is why `deploy/*.conf` is in
 the repository: it is a fixture, not decoration.
 
 ## Security

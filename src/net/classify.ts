@@ -114,11 +114,12 @@ export function classifyTx(
  *
  * Shape stays on `classifyTx` so a stranger's record is still a settings
  * (or description) event. This is the one place the live path asks
- * authorship: the same imported `txSignedByStall` the walks apply
- * (`recordFromTx`, `collectTx` both return early when unsigned), so
- * nothing a walk would accept is refused. The filter is negative for
- * that reason — unsigned clears `settings` and `descriptions`, signed
- * keeps them — and there is no floor: a flood past the burst ceiling
+ * authorship: the same imported `recordIsStalls` the walks apply
+ * (`recordFromTx`, `collectTx` both return early unless the stall signed
+ * it and it pays the stall the publish dust), so nothing a walk would
+ * accept is refused. The filter is negative for that reason — anything
+ * else clears `settings` and `descriptions`, the stall's own record keeps
+ * them — and there is no floor: a flood past the burst ceiling
  * still asks everything rather than drop a real record. Holdings are
  * not a record and are untouched.
  */
