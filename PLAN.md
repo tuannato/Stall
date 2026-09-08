@@ -260,6 +260,19 @@ working accept, and there is no accept.
   and the owner chose to keep Listings first until the five-seller walk
   (§ Next action) says where a seller of real goods actually stops. Reopen
   with that evidence; a swap is copy only, one commit, reversible.
+- **The item tag is a landing link on paper, never a BIP21** (2026-09-08,
+  the owner's three answers): the poster sheet's fifth format, offered only
+  where there is a quoted item, prints one item per A4 sheet with the real
+  icon and saves a 1080×1350 PNG with the initials on a disc — the canvas
+  draws no image and the Worker grants no CORS. It carries rule 5's chip
+  and line, the borrowed-id line, the stall's name, the whole link, and a
+  snapshot sentence said about the paper; **no age** (a relative time
+  printed once is wrong for ever) and no promise that this page is
+  current. Its one shortcut is the describe sheet's foot, over a published
+  quote the form restates verbatim, and closing the poster returns to the
+  sheet. Not on the quote face (one overlay at a time: it would lose the
+  face and hold the live paint on a buyer's decision surface), not on the
+  items row (one control per row) — both rejected, do not re-argue.
 - **Settled records rank by the node's first sighting, then by the old
   ladder** (2026-09-07, widened 2026-09-08). The rule was txid alone within
   a block; a seller who edited a quote four times in one block interval saw
@@ -540,6 +553,14 @@ have sent revenue to an output nobody can spend.
   F7 (the unfurl walks two head requests per fabricated address, bounded by
   Cloudflare), F10 (four session caches grow per stall opened in a tab,
   bytes).
+- **The tag's follow-ups**: a real icon on the PNG needs the icon Worker
+  to allow this origin (header set after the cache read, so cached entries
+  gain it at deploy) and a separate cache key for the CORS load, never the
+  display path — a week of cached header-less 200s otherwise turns every
+  icon into letters; a sheet of several tags per A4; a "print every tag"
+  road; the quote row's wider press (the old Part A). Print media is
+  measured by hand (`scripts/print-measure.mjs`), not by the probe, and
+  the owner's printer has not seen a tag yet.
 - **Decided by the owner on 2026-09-08 from the open list**: no
   same-name alert in the eCash-Live bot (cancelled); the bot's payment
   alert and the ecash-herald LOKAD registration are deferred; a third rate
