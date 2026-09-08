@@ -324,6 +324,26 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay', tokenId: T1 },
     }),
     /*
+     * The item tag on the poster sheet: one quoted item's print page — the
+     * ink-on-white tile, the name, the chip, the figure under the seller's
+     * own role, the words, the code that opens this page at the item — with
+     * the PNG block under it. Named `pay-` so the pay-screens audit binds;
+     * the positive assertion (the page mounts `seller-price`) is the render
+     * test's, since the audit reads the whole document and the shop behind
+     * the scrim carries quotes too. On the state and geometry-only lists:
+     * the sheet's decorations sit outside the scrim, so every worn variant
+     * measures the same tree, and its ground is black on white, sampled on
+     * the record sheets already.
+     */
+    'pay-tag': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'poster', format: 'tag', tokenId: T1 },
+    }),
+    /*
      * The quote rail's face: the seller's words as the title, the genesis
      * name under it, the figure in the unit they wrote, Pay, and the fold.
      * In-flow where the rows were, no scrim. The listings' face is
@@ -828,6 +848,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'studio',
     'activity',
     'hostile-name',
+    // The poster sheet's tag: its decorations sit outside the scrim.
+    'pay-tag',
     'emoji-name',
     'offers-changed',
     // Exists for the tools row and the flat sorted run; the decoration
@@ -859,6 +881,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'nothing-quoted',
     'quotes-failed',
     'quotes-truncated',
+    // Black ink on a white page inside a sheet: no ground the record sheets
+    // and the stall poster's own page do not already put a figure on.
+    'pay-tag',
     /*
      * These two were pruned to pay for the panel's segmented control, which
      * joined the sampled set on every page screen at once (`.seg-b` was

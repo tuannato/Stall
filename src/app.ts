@@ -48,6 +48,7 @@ import type {
     StallOffer,
     StallView,
     TokenMeta,
+    Overlay,
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
 import {
@@ -517,21 +518,59 @@ export function boot(
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
-            onOpenPoster: () => {
+            onOpenPoster: (format = 'print', tokenId, from) => {
                 state = {
                     ...state,
-                    view: { ...state.view, overlay: { kind: 'poster', format: 'print' } },
+                    view: {
+                        ...state.view,
+                        overlay: { kind: 'poster', format, tokenId, from },
+                    },
                 };
                 paint();
             },
             onClosePoster: () => {
-                state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
+                // A poster opened from the describe sheet closes back onto
+                // it, on the same token: the sheet was where the seller was
+                // working, and "idle" would eject them to the studio.
+                const over = state.view.overlay;
+                const back: Overlay =
+                    over.kind === 'poster' && over.from === 'describe'
+                        ? { kind: 'describe', tokenId: over.tokenId }
+                        : { kind: 'idle' };
+                state = { ...state, view: { ...state.view, overlay: back } };
                 paint();
             },
             onChoosePosterFormat: (format) => {
+                const over = state.view.overlay;
+                const kept = over.kind === 'poster' ? over : undefined;
                 state = {
                     ...state,
-                    view: { ...state.view, overlay: { kind: 'poster', format } },
+                    view: {
+                        ...state.view,
+                        overlay: {
+                            kind: 'poster',
+                            format,
+                            tokenId: kept?.tokenId,
+                            from: kept?.from,
+                        },
+                    },
+                };
+                paint();
+            },
+            onChoosePosterItem: (tokenId) => {
+                const over = state.view.overlay;
+                const kept = over.kind === 'poster' ? over : undefined;
+                state = {
+                    ...state,
+                    view: {
+                        ...state.view,
+                        overlay: {
+                            kind: 'poster',
+                            format: kept?.format ?? 'tag',
+                            tokenId,
+                            from: kept?.from,
+                        },
+                    },
                 };
                 paint();
             },

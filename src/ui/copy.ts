@@ -603,7 +603,7 @@ export const PIN_DOOR_FULL =
  */
 export const POSTER_TITLE = 'Poster & images';
 export const POSTER_LEDE =
-    'A page to print, or an image to save: your name and a code that opens this shop.';
+    'A page to print, or an image to save: your name and a code that opens this shop — or a tag for one quoted item.';
 export const POSTER_OPEN = 'Poster & images';
 export const POSTER_PRINT = 'Print';
 export const POSTER_CLOSE = 'Close';
@@ -615,6 +615,22 @@ export const POSTER_FORMAT_PRINT = 'Print';
 export const POSTER_FORMAT_SQUARE = 'Square 1080×1080';
 export const POSTER_FORMAT_STORY = 'Story 1080×1920';
 export const POSTER_FORMAT_STREAM = 'Stream card';
+/**
+ * The item tag: one quoted item on paper or as a PNG, with a code that opens
+ * this stall at that item. The code is a link and never a payment URI (§3), so
+ * the caption says the scan opens, as every other code's caption does; what
+ * paying does is `BROADCAST_QUOTE_LINE` beneath it. `TAG_SNAPSHOT` is the one
+ * sentence paper needs and no screen does: the figure on it is the record as
+ * it stood when printed, and the page is where the current one is — said
+ * about the paper, never as a promise about this page, which may itself be
+ * reading a walk that failed.
+ */
+export const POSTER_FORMAT_TAG = 'Item tag';
+export const POSTER_ITEM_LABEL = 'Which item';
+export const TAG_SCAN = 'Scan to open this item';
+export const TAG_SNAPSHOT = 'This paper is a snapshot — scan for the quote as it stands.';
+export const TAG_LEDE =
+    'A tag for one quoted item: the token, your words, your figure and a code that opens this stall at that item. The code carries no amount — the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate, so quote in XEC for a tag. Paper cannot prove who printed it; the page a scan opens shows the stall’s own address.';
 
 /**
  * The big-shop tools. The sort options name the figure they order by — the

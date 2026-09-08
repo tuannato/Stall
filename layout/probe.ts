@@ -381,7 +381,11 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
     }
 
-    const scrim = root.querySelector('[data-role="sheet-scrim"]');
+    // The poster's scrim carries the class and its own role, not the
+    // sheets' role — measured 2026-09-08 when the first poster screen was
+    // added: read against `root`, every price behind the modal reported the
+    // scrim covering it, and nothing inside the sheet was measured at all.
+    const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"]');
     const surface: ParentNode = scrim ?? root;
 
     // A closed <details> lays out nothing, so every check below it would pass
@@ -1337,7 +1341,7 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
     // read, and everything behind its scrim is deliberately dimmed — sampling
     // there compares an undimmed text colour against scrimmed paint, which
     // reported the address behind the publish sheet at 1.00:1.
-    const scrim = document.querySelector('[data-role="sheet-scrim"]');
+    const scrim = document.querySelector('[data-role="sheet-scrim"], [data-role="poster"]');
     const scope: ParentNode = scrim ?? document;
     // Open every fold first, exactly as `measure()` does, and for the mirror
     // image of its reason. A closed `<details>` still hands back boxes for its

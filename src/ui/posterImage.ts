@@ -12,7 +12,16 @@
  * here already resolved — a colour string, a radius in pixels, a case — so no
  * shorthand and no unit parsing happens on the paint path.
  */
-import { BROADCAST_BRAND, BROADCAST_CAPTION, POSTER_SCAN } from './copy';
+import {
+    BROADCAST_BRAND,
+    BROADCAST_CAPTION,
+    BROADCAST_QUOTE_LINE,
+    POSTER_SCAN,
+    QUOTE_NOT_MINTED_HERE,
+    SELLER_QUOTE_CHIP,
+    TAG_SCAN,
+    TAG_SNAPSHOT,
+} from './copy';
 
 export const QR_QUIET_ZONE = 4;
 
@@ -24,6 +33,11 @@ export const STORY_SIZE = { width: 1080, height: 1920 } as const;
  * `nameLines` alone — see `streamCardHeight`.
  */
 export const STREAM_CARD_WIDTH = 504;
+/**
+ * The item tag, 4:5 — a phone and a printer both take it, and at 300 dpi it
+ * is about 9 × 11 cm. Its QR is 480, above the third-of-short-side floor.
+ */
+export const TAG_SIZE = { width: 1080, height: 1350 } as const;
 
 /**
  * The link line's face. Its own stack, not the look's: a cashaddr is read
@@ -32,7 +46,25 @@ export const STREAM_CARD_WIDTH = 504;
  */
 const MONO_STACK = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
 
-export type PosterKind = 'square' | 'story' | 'stream';
+export type PosterKind = 'square' | 'story' | 'stream' | 'tag';
+
+/**
+ * One quoted item, resolved by the caller into strings: the canvas reads no
+ * view, no record and no bitmap. `initials` are the letters on the disc
+ * where an icon would be — this module draws none (its own docblock), so
+ * the icon is the print page's alone. `figure` is the seller's own figure in
+ * the seller's own unit, exactly as the pay rail prints it; nothing here
+ * derives, converts or rates. `borrowed` paints the borrowed-id line.
+ */
+export type PosterItem = {
+    name: string;
+    ticker?: string;
+    words?: string;
+    figure: string;
+    initials: string;
+    borrowed: boolean;
+    stall: string;
+};
 
 /** `--s-sign-case`, resolved: the two values the shipped table holds. */
 export type PosterCase = 'uppercase' | 'none';
@@ -59,6 +91,8 @@ export type PosterPaint = {
     url: string;
     matrix: boolean[][];
     nameLines: 2 | 3;
+    /** The tag's item. On a tag `url` and `matrix` are the item's landing link. */
+    item?: PosterItem;
 };
 
 export type PosterSpec = {
@@ -85,6 +119,8 @@ export type PosterSpec = {
     url?: string;
     matrix: boolean[][];
     nameLines: 2 | 3;
+    /** Set on the tag alone; never on the stream card's key set. */
+    item?: PosterItem;
 };
 
 export type QrModuleRect = {
@@ -289,6 +325,52 @@ const STORY = {
     url: 32,
 } as const;
 
+/**
+ * The tag's own metrics. The foot is the Square's shape — QR left, the
+ * caption column right, the link across the bottom — and the head is the
+ * item: the disc, the token's name, its ticker, the chip, the figure, the
+ * words. The figure never wraps: it steps down through `FIGURE_TIERS` and
+ * past the last one it spills, the overlay's accepted limit.
+ */
+const TAG = {
+    pad: 64,
+    bar: 16,
+    barGap: 8,
+    bar2: 4,
+    headGap: 32,
+    brand: 28,
+    brandGap: 24,
+    disc: 144,
+    mark: 60,
+    discGap: 24,
+    name: 64,
+    nameGap: 12,
+    ticker: 30,
+    tickerGap: 20,
+    chip: 24,
+    chipGap: 12,
+    figure: 84,
+    figureGap: 20,
+    words: 36,
+    wordsLines: 3,
+    wordsGap: 16,
+    borrowed: 30,
+    borrowedGap: 12,
+    stall: 28,
+    /* Above the 360 floor; 480 left no room for the words under a ticker. */
+    qr: 420,
+    qrGap: 40,
+    caption: 44,
+    line: 30,
+    snapshot: 26,
+    colGap: 12,
+    colLift: 12,
+    url: 28,
+    urlGap: 20,
+} as const;
+
+const FIGURE_TIERS = [1, 0.8, 0.64] as const;
+
 const STREAM = {
     pad: 40,
     bar: 8,
@@ -333,7 +415,14 @@ function streamCardHeight(nameLines: 2 | 3): number {
  * that, and the floor is what stops a later trim from crossing it.
  */
 function qrSideFor(kind: PosterKind, width: number, height: number): number {
-    const drawn = kind === 'square' ? SQUARE.qr : kind === 'story' ? STORY.qr : STREAM.qr;
+    const drawn =
+        kind === 'square'
+            ? SQUARE.qr
+            : kind === 'story'
+              ? STORY.qr
+              : kind === 'tag'
+                ? TAG.qr
+                : STREAM.qr;
     return Math.max(drawn, Math.ceil(Math.min(width, height) / 3));
 }
 
@@ -364,6 +453,21 @@ export function posterSpec(kind: PosterKind, paint: PosterPaint): PosterSpec {
             ...shared,
             brand: BROADCAST_BRAND,
             caption: BROADCAST_CAPTION,
+        };
+    }
+    if (kind === 'tag') {
+        // The item rides the tag's spec alone — `shared` is the stream card's
+        // key set too, and a field must not reach the sticker by accident.
+        return {
+            kind,
+            width: TAG_SIZE.width,
+            height: TAG_SIZE.height,
+            qrSide: qrSideFor(kind, TAG_SIZE.width, TAG_SIZE.height),
+            ...shared,
+            brand: BROADCAST_BRAND,
+            caption: TAG_SCAN,
+            url: paint.url,
+            item: paint.item,
         };
     }
     const size = kind === 'square' ? SQUARE_SIZE : STORY_SIZE;
@@ -757,6 +861,185 @@ function paintStory(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
     }
 }
 
+/**
+ * The item tag. Total: a spec with no item paints the ground and nothing
+ * else — `posterSpec` is public and `renderStall` empties the root before it
+ * paints, so a throw here would leave a blank page that every repaint blanks
+ * again (the `MAX_QR_CHARS` lesson). The foot is measured up from the bottom
+ * as Square's is; the head is painted against the row it must clear, and
+ * yields from the bottom up: the stall line, the borrowed line and the words
+ * drop before the figure, and the figure and the name always paint.
+ */
+function paintTag(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
+    const item = spec.item;
+    if (item === undefined) {
+        return;
+    }
+    const m = TAG;
+    const contentW = spec.width - m.pad * 2;
+    const measure = (s: string): number => ctx.measureText(s).width;
+
+    // The foot first, from the bottom: the link (whole or nothing), the QR
+    // box on the left, the caption column on the right.
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.font = `400 ${m.url}px ${MONO_STACK}`;
+    const urlLines = spec.url === undefined ? [] : urlLinesOrNone(spec.url, contentW, measure);
+    const urlLead = Math.ceil(m.url * URL_LEAD);
+    const urlBlock = urlLines.length * urlLead;
+    const rowBottom = spec.height - m.pad - (urlBlock > 0 ? urlBlock + m.urlGap : 0);
+    const rowTop = rowBottom - spec.qrSide;
+    const limit = rowTop - m.nameGap;
+
+    // The head: bars, brand, the disc with the initials, the name.
+    let y = m.pad + paintBars(ctx, spec, m.pad, m.pad, contentW, m.bar, m.barGap, m.bar2) + m.headGap;
+    ctx.fillStyle = spec.accent;
+    ctx.font = `700 ${m.brand}px ${spec.font}`;
+    setTracking(ctx, m.brand * BRAND_TRACK);
+    ctx.fillText(spec.brand.toUpperCase(), m.pad, y);
+    setTracking(ctx, 0);
+    y += m.brand + m.brandGap;
+
+    roundRectPath(ctx, m.pad, y, m.disc, m.disc, m.disc / 2);
+    ctx.fillStyle = spec.accent;
+    ctx.fill();
+    ctx.fillStyle = spec.bg;
+    ctx.font = `800 ${m.mark}px ${spec.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item.initials, m.pad + m.disc / 2, y + m.disc / 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    y += m.disc + m.discGap;
+
+    ctx.fillStyle = spec.text;
+    let lines: string[] = [];
+    let nameLead = 0;
+    for (const tier of NAME_TIERS) {
+        const size = Math.round(m.name * tier);
+        ctx.font = `${spec.nameWeight} ${size}px ${spec.font}`;
+        nameLead = Math.ceil(size * NAME_LEAD);
+        lines = wrapLines(item.name, contentW, measure, 2);
+        if (y + lines.length * nameLead <= limit) {
+            break;
+        }
+    }
+    for (const line of lines) {
+        ctx.fillText(line, m.pad, y);
+        y += nameLead;
+    }
+    y += m.nameGap;
+
+    if (item.ticker !== undefined && item.ticker !== '') {
+        ctx.fillStyle = spec.muted;
+        ctx.font = `600 ${m.ticker}px ${spec.font}`;
+        ctx.fillText(item.ticker, m.pad, y);
+        y += m.ticker + m.tickerGap;
+    }
+
+    ctx.fillStyle = spec.accent;
+    ctx.font = `700 ${m.chip}px ${spec.font}`;
+    setTracking(ctx, m.chip * BRAND_TRACK);
+    ctx.fillText(SELLER_QUOTE_CHIP.toUpperCase(), m.pad, y);
+    setTracking(ctx, 0);
+    y += m.chip + m.chipGap;
+
+    // The figure: one line, stepping down, never wrapped and never clipped.
+    let figureSize: number = m.figure;
+    for (const tier of FIGURE_TIERS) {
+        figureSize = Math.round(m.figure * tier);
+        ctx.font = `800 ${figureSize}px ${spec.font}`;
+        if (measure(item.figure) <= contentW) {
+            break;
+        }
+    }
+    ctx.fillStyle = spec.accent;
+    ctx.fillText(item.figure, m.pad, y);
+    y += Math.ceil(figureSize * NAME_LEAD) + m.figureGap;
+
+    // The words, as many lines as the row leaves room for, at most three —
+    // with the borrowed-id line's room reserved first: where a buyer decides,
+    // that line outranks a third line of the seller's words.
+    const reserve = item.borrowed ? m.borrowed + m.borrowedGap : 0;
+    if (item.words !== undefined && item.words !== '') {
+        const lead = Math.ceil(m.words * TAGLINE_LEAD);
+        const room = Math.min(m.wordsLines, Math.floor((limit - reserve - y) / lead));
+        if (room >= 1) {
+            ctx.fillStyle = spec.muted;
+            ctx.font = `400 ${m.words}px ${spec.font}`;
+            for (const line of wrapLines(item.words, contentW, measure, room)) {
+                ctx.fillText(line, m.pad, y);
+                y += lead;
+            }
+            y += m.wordsGap;
+        }
+    }
+    if (item.borrowed && y + m.borrowed <= limit) {
+        ctx.fillStyle = spec.text;
+        ctx.font = `600 ${m.borrowed}px ${spec.font}`;
+        ctx.fillText(QUOTE_NOT_MINTED_HERE, m.pad, y);
+        y += m.borrowed + m.borrowedGap;
+    }
+    if (item.stall !== '' && y + m.stall <= limit) {
+        ctx.fillStyle = spec.muted;
+        ctx.font = `400 ${m.stall}px ${spec.font}`;
+        ctx.fillText(item.stall, m.pad, y);
+    }
+
+    paintQrBox(ctx, spec, m.pad, rowTop);
+
+    // The caption column, stacked up from the row's foot: the snapshot line,
+    // the line about what paying does, the caption.
+    const colX = m.pad + spec.qrSide + m.qrGap;
+    const colW = spec.width - m.pad - colX;
+    ctx.font = `400 ${m.snapshot}px ${spec.font}`;
+    const snapLines = wrapLines(TAG_SNAPSHOT, colW, measure);
+    const snapLead = Math.ceil(m.snapshot * TAGLINE_LEAD);
+    ctx.font = `600 ${m.line}px ${spec.font}`;
+    const payLines = wrapLines(BROADCAST_QUOTE_LINE, colW, measure);
+    const payLead = Math.ceil(m.line * CAPTION_LEAD);
+    ctx.font = `700 ${m.caption}px ${spec.font}`;
+    const capLines = wrapLines(spec.caption, colW, measure);
+    const capLead = Math.ceil(m.caption * CAPTION_LEAD);
+    let cy =
+        rowBottom -
+        m.colLift -
+        snapLines.length * snapLead -
+        m.colGap -
+        payLines.length * payLead -
+        m.colGap -
+        capLines.length * capLead;
+    ctx.fillStyle = spec.text;
+    ctx.font = `700 ${m.caption}px ${spec.font}`;
+    for (const line of capLines) {
+        ctx.fillText(line, colX, cy);
+        cy += capLead;
+    }
+    cy += m.colGap;
+    ctx.font = `600 ${m.line}px ${spec.font}`;
+    for (const line of payLines) {
+        ctx.fillText(line, colX, cy);
+        cy += payLead;
+    }
+    cy += m.colGap;
+    ctx.fillStyle = spec.muted;
+    ctx.font = `400 ${m.snapshot}px ${spec.font}`;
+    for (const line of snapLines) {
+        ctx.fillText(line, colX, cy);
+        cy += snapLead;
+    }
+
+    if (urlLines.length > 0) {
+        let uy = spec.height - m.pad - urlBlock;
+        ctx.fillStyle = spec.muted;
+        ctx.font = `400 ${m.url}px ${MONO_STACK}`;
+        for (const line of urlLines) {
+            ctx.fillText(line, m.pad, uy);
+            uy += urlLead;
+        }
+    }
+}
+
 let lastDrawn: PosterSpec | undefined;
 
 /** The spec `drawPoster` was last handed — tests pin this, not a fixture they built. */
@@ -782,6 +1065,10 @@ export function drawPoster(canvas: HTMLCanvasElement, spec: PosterSpec): void {
     ctx.fillRect(0, 0, spec.width, spec.height);
     if (spec.kind === 'square') {
         paintSquare(ctx, spec);
+        return;
+    }
+    if (spec.kind === 'tag') {
+        paintTag(ctx, spec);
         return;
     }
     paintStory(ctx, spec);

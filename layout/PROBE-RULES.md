@@ -53,6 +53,20 @@ nothing.
   sheet bounded and scrollable; covering the stall behind is what the seller
   opened it to do. The first run reported the scrim covering the price
   behind it — the boundary that had never been written down.
+- **The poster's scrim is a modal surface too.** It carries the class
+  `sheet-scrim` and the role `poster`, not the sheets' role, so the first
+  poster screen (`pay-tag`, 2026-09-08) measured the shop behind it and
+  reported the scrim covering every price there, while nothing inside the
+  sheet was measured. Both scrim selectors name it now.
+- **Print media is not measured by anything.** The probe emulates a device
+  width under screen media; the `@media print` block — A4 at 794×1123 CSS
+  px, `position: fixed`, no pagination — is read only by
+  `the-print-poster-stays-black-on-white` and its siblings, which read
+  declarations, never a layout. The tag's fifteen nodes were sized by
+  arithmetic and then checked once under `Emulation.setEmulatedMedia`
+  (`scripts/print-measure.mjs`, 2026-09-08); the measurement is recorded
+  in `private/MANUAL-CHECKS.md`, and a change to the print block owes a
+  rerun, not a test.
 - **The viewport comes from CDP, not `--window-size`.** New headless clamps
   below ~500px: asking for 390 measured 500 while the runner printed 390.
   The runner fails when the page's own measurement disagrees with the ask.

@@ -4,7 +4,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+    BROADCAST_QUOTE_LINE,
+    QUOTE_NOT_MINTED_HERE,
+    SELLER_QUOTE_CHIP,
+    TAG_SCAN,
+    TAG_SNAPSHOT,
+} from './copy';
+import {
     QR_QUIET_ZONE,
+    TAG_SIZE,
+    type PosterItem,
     type PosterKind,
     type PosterPaint,
     drawPoster,
@@ -286,6 +295,18 @@ function draw(kind: PosterKind, p: PosterPaint, glyph?: Glyph): Recorder {
     return rec;
 }
 
+/** One quoted item, the way the sheet resolves it: strings only. */
+const ITEM: PosterItem = {
+    name: 'Ripe Beans',
+    ticker: 'BEAN',
+    words: 'Half kilo of beans, roasted on the day it ships',
+    figure: '$5.00',
+    initials: 'RB',
+    borrowed: false,
+    stall: 'Riverside Goods',
+};
+const TAG_LINK = `${LINK}?pay=cdcdcdcdcdcd`;
+
 /** `paintQr` opens with one white square: that is the box, quiet zone included. */
 function qrBox(rec: Recorder): DrawnRect {
     const box = rec.rects.find((r) => r.fill === '#ffffff' && r.w === r.h && r.w > 0);
@@ -351,11 +372,12 @@ describe('the-head-yields-to-the-qr-row', () => {
 
 describe('every-format-keeps-the-qr-at-a-third-of-the-short-side', () => {
     it('reserves and paints a QR box no smaller than a third of the format', () => {
-        for (const kind of ['square', 'story', 'stream'] as const) {
-            const spec = posterSpec(kind, paint());
+        for (const kind of ['square', 'story', 'stream', 'tag'] as const) {
+            const p = kind === 'tag' ? paint({ item: ITEM, url: TAG_LINK }) : paint();
+            const spec = posterSpec(kind, p);
             const floor = Math.min(spec.width, spec.height) / 3;
             expect(spec.qrSide, `${kind} reserved`).toBeGreaterThanOrEqual(floor);
-            expect(qrBox(draw(kind, paint())).w, `${kind} painted`).toBeGreaterThanOrEqual(floor);
+            expect(qrBox(draw(kind, p)).w, `${kind} painted`).toBeGreaterThanOrEqual(floor);
         }
     });
 });
@@ -379,6 +401,11 @@ describe('a-saved-poster-names-the-stall-the-qr-opens', () => {
             const huge = `https://stall.test/s/${'a'.repeat(400)}`;
             expect(monoTexts(draw(kind, paint({ url: huge }))), `${kind} overlong`).toEqual([]);
         }
+        // The tag draws the link it was handed — the item's landing link, as
+        // the sheet resolves it — whole or not at all, like the sheets.
+        expect(monoTexts(draw('tag', paint({ item: ITEM, url: TAG_LINK }))).join('')).toBe(TAG_LINK);
+        const huge = `https://stall.test/s/${'a'.repeat(400)}?pay=cdcdcdcdcdcd`;
+        expect(monoTexts(draw('tag', paint({ item: ITEM, url: huge })))).toEqual([]);
     });
 
     it('never puts a link on the stream card', () => {
@@ -434,5 +461,92 @@ describe('the-stream-plate-is-the-surface-and-the-page-is-the-ground', () => {
         const rec = draw('square', paint());
         expect(rec.rects[0]).toEqual({ fill: '#111111', x: 0, y: 0, w: 1080, h: 1080 });
         expect(rec.rects.some((r) => r.fill === '#222222')).toBe(false);
+    });
+});
+
+/*
+ * The item tag. Its canvas is the item's strings on the look's ground — the
+ * disc with the initials where a bitmap would be, since this module draws
+ * none — and the foot is the Square's: the code, the caption column, the
+ * link. What paper needs that no screen does is said on it: the chip, the
+ * line about what paying does, and the snapshot line. No age: a relative
+ * time evaluated once at print reads "3 days ago" for as long as the sticker
+ * is on the jar, in the dangerous direction.
+ */
+describe('a-tag-paints-the-item-and-what-paying-it-does', () => {
+    const texts = (p: PosterPaint): string[] => draw('tag', p).texts.map((t) => t.text);
+
+    it('draws the name, ticker, initials, chip, figure, words, stall, caption, the pay line and the snapshot line', () => {
+        const drawn = texts(paint({ item: ITEM, url: TAG_LINK }));
+        const all = drawn.join(' ');
+        expect(drawn).toContain('Ripe Beans');
+        expect(drawn).toContain('BEAN');
+        expect(drawn).toContain('RB');
+        expect(drawn).toContain(SELLER_QUOTE_CHIP.toUpperCase());
+        expect(drawn).toContain('$5.00');
+        expect(all).toContain('Half kilo of beans');
+        expect(drawn).toContain('Riverside Goods');
+        // The caption column wraps: read the joined text for the sentences.
+        expect(all).toContain(TAG_SCAN);
+        expect(all).toContain(BROADCAST_QUOTE_LINE);
+        expect(all.replace(/\s+/g, ' ')).toContain(TAG_SNAPSHOT.replace(/\s+/g, ' '));
+        expect(drawn).not.toContain(QUOTE_NOT_MINTED_HERE);
+        expect(all).not.toMatch(/\bago\b/);
+        // The figure is the seller's, in the accent, one line.
+        const figure = draw('tag', paint({ item: ITEM, url: TAG_LINK })).texts.find((t) => t.text === '$5.00')!;
+        expect(figure.fill).toBe('#555555');
+    });
+
+    it('paints the borrowed-id line for another wallet\u2019s token', () => {
+        const drawn = texts(paint({ item: { ...ITEM, borrowed: true }, url: TAG_LINK }));
+        expect(drawn).toContain(QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('is 1080 by 1350 with a 480 code', () => {
+        const spec = posterSpec('tag', paint({ item: ITEM, url: TAG_LINK }));
+        expect([spec.width, spec.height]).toEqual([TAG_SIZE.width, TAG_SIZE.height]);
+        expect(spec.qrSide).toBe(420);
+        expect(spec.caption).toBe(TAG_SCAN);
+    });
+});
+
+describe('a-tag-spec-with-no-item-does-not-throw', () => {
+    /**
+     * `posterSpec` is public and `renderStall` empties the root before it
+     * paints: a throw here would leave a blank page that every repaint blanks
+     * again. A tag with no item paints the ground and nothing else.
+     */
+    it('paints the ground and nothing else', () => {
+        const rec = draw('tag', paint({ item: undefined, url: TAG_LINK }));
+        expect(rec.texts).toEqual([]);
+        expect(rec.rects).toHaveLength(1);
+        expect(rec.rects[0]!.fill).toBe('#111111');
+    });
+});
+
+describe('a-long-figure-on-the-tag-steps-down-before-it-spills', () => {
+    /**
+     * The figure never wraps and never clips. Under the recorder's linear
+     * glyph model every tier is distinguishable, so this proves the step-down
+     * and the anchoring — never kerning, the recorder's own stated limit.
+     */
+    it('shrinks the figure until it fits the content width', () => {
+        const long = '1,000,000,000,000,000 XEC';
+        const rec = draw('tag', paint({ item: { ...ITEM, figure: long }, url: TAG_LINK }));
+        const figure = rec.texts.find((t) => t.text === long)!;
+        const size = Number(/(\d+)px/.exec(figure.font)![1]);
+        expect(size).toBeLessThan(84);
+        expect(figure.x + long.length * size * 0.55).toBeLessThanOrEqual(TAG_SIZE.width - 64);
+        // And a short figure keeps the full size.
+        const short = draw('tag', paint({ item: ITEM, url: TAG_LINK })).texts.find((t) => t.text === '$5.00')!;
+        expect(short.font).toContain('84px');
+    });
+});
+
+describe('the-item-rides-the-tag-spec-alone', () => {
+    it('never reaches the stream card or the sheets', () => {
+        for (const kind of ['square', 'story', 'stream'] as const) {
+            expect('item' in posterSpec(kind, paint({ item: ITEM })), kind).toBe(false);
+        }
     });
 });

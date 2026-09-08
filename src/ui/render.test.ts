@@ -107,6 +107,8 @@ import {
     overlayMounts,
     describableTokenIds,
     holdsLivePaint,
+    qrSvg,
+    quoteFigure,
 } from './render';
 import { satsForQuote } from '../domain/fiat';
 import { formatXec,
@@ -173,6 +175,7 @@ function handlers() {
         onOpenPoster: vi.fn(),
         onClosePoster: vi.fn(),
         onChoosePosterFormat: vi.fn(),
+        onChoosePosterItem: vi.fn(),
         onSwitchPanel: vi.fn(),
         onTogglePin: vi.fn(),
         onChangeSort: vi.fn(),
@@ -4616,7 +4619,12 @@ function drivePoster(root: HTMLElement, view: StallView, h: ReturnType<typeof ha
         paintNow();
     });
     h.onChoosePosterFormat.mockImplementation((format: PosterFormat) => {
-        current = { ...current, overlay: { kind: 'poster', format } };
+        const kept = current.overlay.kind === 'poster' ? current.overlay.tokenId : undefined;
+        current = { ...current, overlay: { kind: 'poster', format, tokenId: kept } };
+        paintNow();
+    });
+    h.onChoosePosterItem.mockImplementation((tokenId: string) => {
+        current = { ...current, overlay: { kind: 'poster', format: 'tag', tokenId } };
         paintNow();
     });
     paintNow();
@@ -11634,5 +11642,307 @@ describe('a-token-this-wallet-can-still-mint-is-on-the-items-card', () => {
         const rows = [...root.querySelectorAll('[data-role="studio-item"]')].map((r) => r.getAttribute('data-token-id'));
         expect(rows).toEqual([TOKEN_ID, MINTED]);
         expect(describableTokenIds(idlePubkey({ fetch: { kind: 'empty' }, mintedHere: new Set([MINTED]) }))).toEqual([MINTED]);
+    });
+});
+
+/*
+ * The item tag (2026-09-08). One quoted item on the poster sheet: a fifth
+ * format offered only where there is an item to tag, an item picker, and a
+ * print page that is the item's — the ink-on-white tile, the token's name
+ * and ticker, the chip, the figure under the seller's own role, the words,
+ * the code that opens this page at that item, the caption, the line about
+ * what paying does and the snapshot line. The canvas draws the same link.
+ */
+function tagView(over: Partial<StallView> = {}): StallView {
+    return offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+        panel: 'studio',
+        stallName: 'Riverside Goods',
+        prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+        descriptions: new Map([[TOKEN_ID, 'Half kilo of beans, roasted on the day it ships']]),
+        genesis: new Map([[TOKEN_ID, 'attributed' as const]]),
+        ...over,
+    });
+}
+
+function landingOf(tokenId: string): string {
+    return `${location.origin}${location.pathname}?pay=${tokenId.slice(0, 12)}`;
+}
+
+describe('the-poster-sheet-offers-a-tag-per-quoted-item', () => {
+    it('lists the tag only with a quote, picks the item, and the page and the canvas are that item', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            drivePoster(root, tagView(), h);
+            (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+            const chooser = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
+            expect([...chooser.options].map((o) => o.value)).toContain('tag');
+            chooser.value = 'tag';
+            chooser.dispatchEvent(new Event('change'));
+
+            const dialog = root.querySelector('[role="dialog"]') as HTMLElement;
+            expect(dialog.getAttribute('data-format')).toBe('tag');
+            const format = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
+            expect(format.value).toBe('tag');
+            const pick = root.querySelector('[data-role="poster-item"]') as HTMLSelectElement;
+            expect(pick, 'the item picker').not.toBeNull();
+            expect([...pick.options].map((o) => o.value)).toEqual([TOKEN_ID]);
+            expect(pick.options[0]!.textContent).toBe('Roasted Beans');
+            expect(root.querySelector('[data-role="tag-lede"]')?.textContent).toBe(copy.TAG_LEDE);
+
+            const pages = root.querySelectorAll('.poster-page');
+            expect(pages, 'one page, and it is the tag').toHaveLength(1);
+            const page = pages[0] as HTMLElement;
+            expect(page.classList.contains('poster-tag')).toBe(true);
+            expect(page.querySelector('.tag-ic')).not.toBeNull();
+            expect(page.querySelector('.tag-name')?.textContent).toBe('Roasted Beans');
+            expect(page.querySelector('[data-role="seller-price"]')?.textContent).toBe(
+                quoteFigure(QUOTE_USD),
+            );
+            expect(page.querySelector('.tag-words')?.textContent).toBe(
+                'Half kilo of beans, roasted on the day it ships',
+            );
+            // The code and the link are the item's landing link, never the
+            // stall's share link and never a payment URI.
+            const landing = landingOf(TOKEN_ID);
+            expect(page.querySelector('.poster-url')?.textContent).toBe(landing);
+            expect(page.querySelector('.poster-url')?.textContent).not.toMatch(/^(ecash|bitcoincash):/);
+            expect(page.querySelector('svg.poster-qr path')?.getAttribute('d')).toBe(
+                qrSvg(landing, '').querySelector('path')!.getAttribute('d'),
+            );
+            const spec = lastDrawnPosterSpec()!;
+            expect(spec.kind).toBe('tag');
+            expect(spec.url).toBe(landing);
+            expect(spec.matrix).toEqual(qrMatrix(landing));
+            expect(spec.item?.figure).toBe(quoteFigure(QUOTE_USD));
+            expect(spec.item?.name).toBe('Roasted Beans');
+            // Both roads on screen: the page that prints and the PNG to save.
+            expect(root.querySelector('[data-role="poster-save"]')).not.toBeNull();
+            expect(root.querySelector('[data-role="poster-print"]')).not.toBeNull();
+
+            pick.dispatchEvent(new Event('change'));
+            expect(h.onChoosePosterItem).toHaveBeenCalledWith(TOKEN_ID);
+        } finally {
+            root.remove();
+        }
+    });
+
+    it('offers no tag without a quote', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        try {
+            drivePoster(root, tagView({ prices: undefined }), h);
+            (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+            const chooser = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
+            expect([...chooser.options].map((o) => o.value)).toEqual([
+                'print',
+                'square',
+                'story',
+                'stream',
+            ]);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('a-tag-with-no-item-is-not-a-blank-page', () => {
+    /**
+     * The state may say `tag` after the quote it named was removed under it,
+     * or on a stall that never quoted. Either is the stall poster — never a
+     * throw (`renderStall` empties the root first), and never another item: a
+     * tag for item B printed when the seller asked for A is paper.
+     */
+    const OTHER = 'ef'.repeat(32);
+
+    it('a tag state over a stall with no quote paints the stall page as print', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({ prices: undefined, overlay: { kind: 'poster', format: 'tag' } }),
+        );
+        expect(root.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe('print');
+        expect((root.querySelector('[data-role="poster-format"]') as HTMLSelectElement).value).toBe('print');
+        expect(root.querySelector('.poster-tag')).toBeNull();
+        expect(root.querySelector('.poster-page .poster-name')?.textContent).toBe('Riverside Goods');
+        expect(root.querySelector('[data-role="poster-item"]')).toBeNull();
+    });
+
+    it('a named token that is no longer quoted is the stall page, never another item', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({ overlay: { kind: 'poster', format: 'tag', tokenId: OTHER } }),
+        );
+        expect(root.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe('print');
+        expect(root.querySelector('.poster-tag')).toBeNull();
+        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+    });
+
+    it('an unnamed tag is the first quoted item, and a named one is that item', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const second = OTHER;
+        const two = tagView({
+            tokens: new Map([
+                [TOKEN_ID, BEANS],
+                [second, { ...BEANS, name: 'Green Tea', ticker: 'TEA' }],
+            ]),
+            prices: new Map([
+                [TOKEN_ID, QUOTE_USD],
+                [second, { code: 'xec', exponent: 2, amount: 500_000n }],
+            ]),
+            genesis: new Map([
+                [TOKEN_ID, 'attributed' as const],
+                [second, 'attributed' as const],
+            ]),
+        });
+        const first = paint({ ...two, overlay: { kind: 'poster', format: 'tag' } });
+        expect(first.root.querySelector('.tag-name')?.textContent).toBe('Roasted Beans');
+        const named = paint({ ...two, overlay: { kind: 'poster', format: 'tag', tokenId: second } });
+        expect(named.root.querySelector('.tag-name')?.textContent).toBe('Green Tea');
+        expect(named.root.querySelector('.poster-url')?.textContent).toBe(landingOf(second));
+        expect((named.root.querySelector('[data-role="poster-item"]') as HTMLSelectElement).value).toBe(second);
+    });
+});
+
+describe('a-printed-tag-says-what-paying-it-does', () => {
+    /**
+     * PLAN § D rule 5: a quote card carries the quote, the chip, one line
+     * about what paying it does, and a code that opens this page at that
+     * item. Paper adds the snapshot line and carries no age: a relative time
+     * evaluated once at print reads "3 days ago" for as long as the sticker
+     * is on the jar.
+     */
+    it('carries the chip, the pay line, the caption and the snapshot line, and no age', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({
+                quoteTimes: new Map([[TOKEN_ID, 1_748_000_000]]),
+                overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
+            }),
+        );
+        const page = root.querySelector('.poster-tag') as HTMLElement;
+        expect(page.querySelector('.tag-chip')?.textContent).toBe(copy.SELLER_QUOTE_CHIP);
+        expect(page.querySelector('.tag-line')?.textContent).toBe(copy.BROADCAST_QUOTE_LINE);
+        expect(page.querySelector('.poster-scan')?.textContent).toBe(copy.TAG_SCAN);
+        expect(page.querySelector('.tag-snapshot')?.textContent).toBe(copy.TAG_SNAPSHOT);
+        expect(page.querySelector('.tag-stall')?.textContent).toBe('Riverside Goods');
+        expect(page.textContent).not.toMatch(/\bago\b/);
+        expect(page.querySelector('[data-role="quote-age"]')).toBeNull();
+        // Nothing derived: no rate node, no covenant price node.
+        expect(page.querySelector('[data-role="rate"]')).toBeNull();
+        expect(page.querySelector('[data-role="price"]')).toBeNull();
+    });
+});
+
+describe('a-borrowed-token-tag-says-the-id-is-borrowed', () => {
+    it('paints initials and the borrowed-id line for another wallet’s token, and neither for this stall’s own', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const borrowed = paint(
+            tagView({
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+                overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
+            }),
+        );
+        const page = borrowed.root.querySelector('.poster-tag') as HTMLElement;
+        expect(page.querySelector('.tag-borrowed')?.textContent).toBe(copy.QUOTE_NOT_MINTED_HERE);
+        const tile = page.querySelector('.tag-ic') as HTMLElement;
+        expect(tile.querySelector('img')).toBeNull();
+        expect(tile.textContent).toBe('RB');
+        expect(lastDrawnPosterSpec()?.item?.borrowed).toBe(true);
+
+        const own = paint(tagView({ overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID } }));
+        expect(own.root.querySelector('.tag-borrowed')).toBeNull();
+        expect(lastDrawnPosterSpec()?.item?.borrowed).toBe(false);
+    });
+});
+
+describe('the-tag-format-prints-one-page-and-it-is-the-tag', () => {
+    it('mounts the tag page alone, in the printed order', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({
+                tokens: new Map([[TOKEN_ID, { ...BEANS, ticker: 'BEAN' }]]),
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+                overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
+            }),
+        );
+        const pages = root.querySelectorAll('.poster-page');
+        expect(pages).toHaveLength(1);
+        expect([...pages[0]!.children].map((n) => n.getAttribute('class'))).toEqual([
+            'poster-rule',
+            'poster-brand',
+            'tag-ic',
+            'tag-name',
+            'tag-ticker',
+            'tag-chip',
+            'tag-figure',
+            'tag-words',
+            'tag-borrowed',
+            'tag-stall',
+            'qr poster-qr',
+            'poster-scan',
+            'tag-line',
+            'tag-snapshot',
+            'poster-url',
+        ]);
+    });
+});
+
+describe('the-tag-caption-says-the-code-opens-and-never-that-it-pays', () => {
+    it('keeps the scan verb the other two codes use', () => {
+        expect(copy.TAG_SCAN.startsWith('Scan to open')).toBe(true);
+        expect(copy.TAG_SCAN.toLowerCase()).not.toContain('pay');
+        expect(copy.TAG_SNAPSHOT).not.toMatch(/current quote|this page shows/i);
+    });
+});
+
+describe('the-printed-tag-is-ink-on-white', () => {
+    /**
+     * The derived form of `the-print-poster-stays-black-on-white`: paint the
+     * tag page, take every class its nodes actually wear, and refuse a theme
+     * token as ink or ground in any block that styles one of them. A browser
+     * prints background graphics off by default, so reversed-out letters on
+     * a themed gradient print white on white. `.poster-rule` is the one
+     * themed mark on the page, stated rather than waived.
+     */
+    it('styles every class on the page with literal ink and ground', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({
+                tokens: new Map([[TOKEN_ID, { ...BEANS, ticker: 'BEAN' }]]),
+                genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+                overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
+            }),
+        );
+        const page = root.querySelector('.poster-tag') as HTMLElement;
+        const classes = new Set<string>();
+        for (const node of [page, ...page.querySelectorAll('*')]) {
+            for (const cls of node.classList) {
+                classes.add(cls);
+            }
+        }
+        classes.delete('poster-rule');
+        expect(classes.size).toBeGreaterThan(10);
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+        const offenders: string[] = [];
+        for (const cls of classes) {
+            const token = new RegExp(`\\.${cls}(?![\\w-])`);
+            let seen = 0;
+            for (const [, selector, body] of blocks) {
+                if (!token.test(selector!)) {
+                    continue;
+                }
+                seen += 1;
+                if (/(?:^|;)\s*(?:color|background[\w-]*)\s*:[^;]*var\(--s-/.test(body!)) {
+                    offenders.push(`${selector!.trim()} { ${body!.trim()} }`);
+                }
+            }
+            expect(seen, `a block styles .${cls}`).toBeGreaterThan(0);
+        }
+        expect(offenders).toEqual([]);
     });
 });

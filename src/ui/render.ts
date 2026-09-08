@@ -37,7 +37,12 @@ import {
     isUnbuyable,
     RATE_TOO_SMALL,
 } from '../domain/money';
-import { parseSellerParam, stallPath } from '../domain/route';
+import {
+    parseSellerParam,
+    PAY_PARAM_PREFIX,
+    payLandingUrl,
+    stallPath,
+} from '../domain/route';
 import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
 import { glyph, glyphLabel, SVG_NS } from './glyphs';
 import { isWithheldToken } from '../domain/withheld';
@@ -93,6 +98,7 @@ import {
     drawPoster,
     posterSpec,
     savePng,
+    type PosterItem,
     type PosterKind,
     type PosterPaint,
 } from './posterImage';
@@ -166,9 +172,16 @@ export type StallHandlers = {
     ) => Promise<{ meta?: TokenMeta; attribution: GenesisAttribution }>;
     /** Close whichever sheet is open. They all wear the same way out. */
     onClosePublish?: () => void;
-    onOpenPoster?: () => void;
+    /**
+     * Open the poster sheet. Bare, it is the Share card's control (`print`);
+     * the describe sheet asks for a `tag` on one token and names itself as
+     * `from`, so closing the poster returns to it.
+     */
+    onOpenPoster?: (format?: PosterFormat, tokenId?: string, from?: 'describe') => void;
     onClosePoster?: () => void;
     onChoosePosterFormat?: (format: PosterFormat) => void;
+    /** The tag's item picker: one quoted token. */
+    onChoosePosterItem?: (tokenId: string) => void;
     /** Switch the shell's panel. UI state only: no navigation, no load. */
     onSwitchPanel?: (panel: PanelKind) => void;
     /** Pin or unpin this stall on the browser's front door. */
@@ -5810,7 +5823,12 @@ function posterControl(body: HTMLElement, view: StallView, handlers: StallHandle
  * (650 / 700 / 600); the poster's name is 108px and the design cuts it at 800,
  * Rural 700. Two jobs, two numbers.
  */
-function posterPaintFromStall(stall: HTMLElement, view: StallView, url: string): PosterPaint {
+function posterPaintFromStall(
+    stall: HTMLElement,
+    view: StallView,
+    url: string,
+    item?: PosterItem,
+): PosterPaint {
     const fallbackFont = FONT_STACKS[0] ?? 'sans-serif';
     const bg = stall.style.getPropertyValue('--s-bg');
     const surface = stall.style.getPropertyValue('--s-surface');
@@ -5843,46 +5861,87 @@ function posterPaintFromStall(stall: HTMLElement, view: StallView, url: string):
         url,
         matrix: qrMatrix(url),
         nameLines: neo ? 3 : 2,
+        item,
     };
 }
 
-function posterSheet(
-    view: StallView,
-    url: string,
-    stall: HTMLElement,
-    handlers: StallHandlers,
-): HTMLElement {
-    const format: PosterFormat =
-        view.overlay.kind === 'poster' ? view.overlay.format : 'print';
-    const paint = posterPaintFromStall(stall, view, url);
-    const scrim = el('div', 'sheet-scrim poster-scrim');
-    scrim.setAttribute('data-role', 'poster');
-    const box = el('div', 'sheet poster-box');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-label', copy.POSTER_TITLE);
-    box.setAttribute('data-format', format);
-    box.tabIndex = -1;
-
-    const chooser = el('div', 'poster-chooser');
-    const select = el('select', 'paste-in');
-    select.setAttribute('data-role', 'poster-format');
-    select.setAttribute('aria-label', copy.POSTER_TITLE);
-    const formats: Array<[PosterFormat, string]> = [
-        ['print', copy.POSTER_FORMAT_PRINT],
-        ['square', copy.POSTER_FORMAT_SQUARE],
-        ['story', copy.POSTER_FORMAT_STORY],
-        ['stream', copy.POSTER_FORMAT_STREAM],
-    ];
-    for (const [value, text] of formats) {
-        const opt = el('option', undefined, text);
-        opt.value = value;
-        select.append(opt);
+/**
+ * The quoted item a tag is about, or nothing. An unnamed tag is the first
+ * quoted item (the Share card's control re-selected to the tag format); a
+ * named token that is no longer quoted — removed, withheld, or dropped by a
+ * re-read — is **nothing**, never another item: a tag for item B printed
+ * under the seller's own name when they asked for A is paper, and "the item
+ * you named is not quoted" and "here is an item" are two sentences.
+ */
+function posterItemOf(view: StallView): QuotedItem | undefined {
+    const items = quotedItems(view);
+    const asked = view.overlay.kind === 'poster' ? view.overlay.tokenId : undefined;
+    if (asked === undefined) {
+        return items[0];
     }
-    select.value = format;
-    chooser.append(select);
-    box.append(chooser);
+    return items.find((item) => item.tokenId === asked);
+}
 
+/** The tag's strings, resolved here so the canvas reads no view. */
+function tagItemOf(view: StallView, item: QuotedItem): PosterItem {
+    const named = quoteNaming(view, item.tokenId);
+    return {
+        name: named.title,
+        ticker: tokenTicker(view.tokens, item.tokenId),
+        words: named.words,
+        figure: quoteFigure(item.price),
+        initials: initials(named.title),
+        borrowed: view.genesis?.get(item.tokenId) === 'not-attributed',
+        stall: displayName(view) ?? '',
+    };
+}
+
+/**
+ * The tag's print page. Node order is the printed order, and it is the
+ * stream quote card's content with the two truths paper needs added: the
+ * icon (a real one — the print road is a plain `<img>`, no canvas and no
+ * CORS), the token's name and ticker, the chip, the figure under the
+ * seller's own role, the words, the borrowed-id line where the genesis is
+ * another wallet's, the stall's name, the code that opens this page at the
+ * item, the caption, the line about what paying does, the snapshot line,
+ * and the whole link. Ink on white by its own classes — a browser prints
+ * background graphics off by default, so `.item-ic`'s reversed-out letters
+ * would print white on white; `.tag-ic` carries its own literals.
+ */
+function tagPage(item: QuotedItem, paintItem: PosterItem, landing: string): HTMLElement {
+    const page = el('div', 'poster-page poster-tag');
+    page.append(el('div', 'poster-rule'));
+    page.append(el('p', 'poster-brand', copy.BROADCAST_BRAND));
+    const tile = itemIcon(item.tokenId, paintItem.name, undefined, ICON_HERO_SIZE, !paintItem.borrowed);
+    tile.className = 'tag-ic';
+    page.append(tile);
+    page.append(el('div', 'tag-name', paintItem.name));
+    if (paintItem.ticker !== undefined && paintItem.ticker !== '') {
+        page.append(el('p', 'tag-ticker', paintItem.ticker));
+    }
+    page.append(el('span', 'tag-chip', copy.SELLER_QUOTE_CHIP));
+    const figure = el('div', 'tag-figure', paintItem.figure);
+    figure.setAttribute('data-role', 'seller-price');
+    page.append(figure);
+    page.append(el('p', 'tag-words', paintItem.words ?? copy.QUOTE_NO_WORDS_LINE));
+    if (paintItem.borrowed) {
+        page.append(el('p', 'tag-borrowed', copy.QUOTE_NOT_MINTED_HERE));
+    }
+    if (paintItem.stall !== '') {
+        page.append(el('p', 'tag-stall', paintItem.stall));
+    }
+    const qr = qrSvg(landing, copy.BROADCAST_QUOTE_QR_ALT);
+    qr.classList.add('poster-qr');
+    page.append(qr);
+    page.append(el('p', 'poster-scan', copy.TAG_SCAN));
+    page.append(el('p', 'tag-line', copy.BROADCAST_QUOTE_LINE));
+    page.append(el('p', 'tag-snapshot', copy.TAG_SNAPSHOT));
+    page.append(el('p', 'poster-url', landing));
+    return page;
+}
+
+/** The stall's own print page: rule, brand, name, tagline, QR, caption, link. */
+function stallPage(view: StallView, url: string): HTMLElement {
     // The page itself — the print stylesheet shows exactly this subtree. Node
     // order is the printed order: rule, brand, name, tagline, QR, caption,
     // link. The rule is the one themed mark on a black-on-white sheet, and the
@@ -5902,7 +5961,91 @@ function posterSheet(
     page.append(qr);
     page.append(el('p', 'poster-scan', copy.POSTER_SCAN));
     page.append(el('p', 'poster-url', url));
-    box.append(page);
+    return page;
+}
+
+function posterSheet(
+    view: StallView,
+    url: string,
+    stall: HTMLElement,
+    handlers: StallHandlers,
+): HTMLElement {
+    const asked: PosterFormat =
+        view.overlay.kind === 'poster' ? view.overlay.format : 'print';
+    const items = quotedItems(view);
+    // A tag with nothing to draw is the stall poster, never a throw and never
+    // another item: the state may say `tag` after the quote it named was
+    // removed under it. One binding decides the select, the page, the
+    // canvas, the CSS hook and the filename, so they cannot disagree.
+    const item = asked === 'tag' ? posterItemOf(view) : undefined;
+    const landing = item === undefined ? undefined : payLandingUrl(stallBaseUrl(), item.tokenId);
+    const tagReady = item !== undefined && landing !== undefined && fitsQr(landing);
+    const format: PosterFormat = asked === 'tag' && !tagReady ? 'print' : asked;
+    const tagItem = format === 'tag' && item !== undefined ? tagItemOf(view, item) : undefined;
+    const paint =
+        format === 'tag' && landing !== undefined
+            ? posterPaintFromStall(stall, view, landing, tagItem)
+            : posterPaintFromStall(stall, view, url);
+    const scrim = el('div', 'sheet-scrim poster-scrim');
+    scrim.setAttribute('data-role', 'poster');
+    const box = el('div', 'sheet poster-box');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-label', copy.POSTER_TITLE);
+    box.setAttribute('data-format', format);
+    box.tabIndex = -1;
+
+    const chooser = el('div', 'poster-chooser');
+    const select = el('select', 'paste-in');
+    select.setAttribute('data-role', 'poster-format');
+    select.setAttribute('aria-label', copy.POSTER_TITLE);
+    const formats: Array<[PosterFormat, string]> = [
+        ['print', copy.POSTER_FORMAT_PRINT],
+        ['square', copy.POSTER_FORMAT_SQUARE],
+        ['story', copy.POSTER_FORMAT_STORY],
+        ['stream', copy.POSTER_FORMAT_STREAM],
+    ];
+    // The tag is offered only where there is an item to tag.
+    if (items.length > 0) {
+        formats.push(['tag', copy.POSTER_FORMAT_TAG]);
+    }
+    for (const [value, text] of formats) {
+        const opt = el('option', undefined, text);
+        opt.value = value;
+        select.append(opt);
+    }
+    select.value = format;
+    chooser.append(select);
+    if (format === 'tag' && item !== undefined) {
+        const pick = el('select', 'paste-in');
+        pick.setAttribute('data-role', 'poster-item');
+        pick.setAttribute('aria-label', copy.POSTER_ITEM_LABEL);
+        for (const quoted of items) {
+            const opt = el('option', undefined, tokenName(view.tokens, quoted.tokenId));
+            opt.value = quoted.tokenId;
+            pick.append(opt);
+        }
+        pick.value = item.tokenId;
+        const chooseItem = handlers.onChoosePosterItem;
+        if (chooseItem !== undefined) {
+            pick.addEventListener('change', () => {
+                chooseItem(pick.value);
+            });
+        }
+        chooser.append(pick);
+        const lede = el('p', 'fine', copy.TAG_LEDE);
+        lede.setAttribute('data-role', 'tag-lede');
+        chooser.append(lede);
+    }
+    box.append(chooser);
+
+    // One page at a time: the tag's or the stall's, never both — two
+    // `.poster-page`s print two sheets.
+    box.append(
+        format === 'tag' && item !== undefined && tagItem !== undefined && landing !== undefined
+            ? tagPage(item, tagItem, landing)
+            : stallPage(view, url),
+    );
 
     const png = el('div', 'poster-png');
     png.setAttribute('data-role', 'poster-png');
@@ -5917,12 +6060,19 @@ function posterSheet(
     box.append(png);
 
     const pngKind: PosterKind = format === 'print' ? 'square' : format;
+    // A tag's file names its item by the landing link's own prefix — a
+    // ticker is chain text and not a filename, and three tags saved as one
+    // name overwrite each other.
+    const filename =
+        format === 'tag' && item !== undefined
+            ? `stall-tag-${item.tokenId.slice(0, PAY_PARAM_PREFIX)}.png`
+            : `stall-${pngKind}.png`;
     save.addEventListener('click', () => {
         if (save.disabled) {
             return;
         }
         save.disabled = true;
-        savePng(canvas, `stall-${pngKind}.png`, () => {
+        savePng(canvas, filename, () => {
             save.disabled = false;
         });
     });
@@ -5939,7 +6089,8 @@ function posterSheet(
                 value === 'print' ||
                 value === 'square' ||
                 value === 'story' ||
-                value === 'stream'
+                value === 'stream' ||
+                value === 'tag'
             ) {
                 choose(value);
             }

@@ -130,7 +130,7 @@ export type FetchStatus =
     | { kind: 'unreachable'; triedAtMs: number; hosts: HostAttempt[] }
     | { kind: 'plugin-missing'; triedAtMs: number; hosts: HostAttempt[] };
 
-export type PosterFormat = 'print' | 'square' | 'story' | 'stream';
+export type PosterFormat = 'print' | 'square' | 'story' | 'stream' | 'tag';
 
 export type Overlay =
     | { kind: 'idle' }
@@ -166,8 +166,14 @@ export type Overlay =
      * BIP21 the wallet signs, exactly as the publish sheets do.
      */
     | { kind: 'pay'; tokenId: string }
-    /** Printable poster and PNG formats. Same live-paint wait as the sheets. */
-    | { kind: 'poster'; format: PosterFormat };
+    /**
+     * Printable poster and PNG formats. Same live-paint wait as the sheets.
+     * `tokenId` names the quoted item a `tag` is about (absent: the first
+     * quoted item; named but no longer quoted: no tag, never another item),
+     * and `from` is the sheet the poster was opened from, which closing it
+     * returns to.
+     */
+    | { kind: 'poster'; format: PosterFormat; tokenId?: string; from?: 'describe' };
 
 /**
  * Query that selects the stream overlay. Parsed by `parseBroadcastParams`.

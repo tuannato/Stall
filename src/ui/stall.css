@@ -3434,11 +3434,108 @@ textarea.share-embed {
     border-radius: 8px;
 }
 
+/*
+ * The item tag's page. Ink on white by its own classes and never by a theme
+ * token — a browser prints "background graphics" off by default, so a tile
+ * of reversed-out letters on a themed gradient prints white on white, and
+ * the whole page is the one thing here that has to work as ink. The tile
+ * resets the row icon's clip and radius: a notched, theme-shaped tile is a
+ * theme on a page that inherits none. Two scales, like `.poster-name`: this
+ * one is the sheet's, the print block below is A4's.
+ */
+.poster-tag {
+    gap: 10px;
+}
+
+.tag-ic {
+    width: 64px;
+    height: 64px;
+    border-radius: 0;
+    clip-path: none;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 22px;
+    overflow: hidden;
+}
+
+.tag-ic img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.tag-name {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.tag-ticker {
+    margin: 0;
+    font-size: 13px;
+    color: #555555;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.tag-chip {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid #000000;
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: #000000;
+    background: #ffffff;
+}
+
+.tag-figure {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.tag-words {
+    margin: 0;
+    font-size: 14px;
+    color: #444444;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+
+.tag-borrowed,
+.tag-line {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.tag-stall,
+.tag-snapshot {
+    margin: 0;
+    font-size: 12.5px;
+    color: #555555;
+    overflow-wrap: anywhere;
+}
+
 @media screen {
     .poster-box[data-format='square'] .poster-page,
     .poster-box[data-format='story'] .poster-page,
     .poster-box[data-format='stream'] .poster-page {
         display: none;
+    }
+
+    /* The tag shows both roads: the page that prints and the PNG to save. */
+    .poster-box[data-format='tag'] .poster-png {
+        display: flex;
     }
 
     .poster-box[data-format='square'] .poster-png,
@@ -3728,6 +3825,66 @@ textarea.share-embed {
     body:has(.poster-scrim) .poster-chooser,
     body:has(.poster-scrim) .poster-png {
         display: none;
+    }
+
+    /*
+     * The tag on A4: fifteen nodes where the stall poster has seven, so the
+     * sizes are its own and the gap is tighter — the page is `position:
+     * fixed` and does not paginate, and `justify-content: center` throws a
+     * surplus off both ends, the rule and the link first. Measured under
+     * emulated print media (see PROBE-RULES, "Print media is not measured").
+     */
+    body:has(.poster-scrim) .poster-tag {
+        gap: 10px;
+        padding: 48px 64px;
+    }
+
+    body:has(.poster-scrim) .poster-tag .poster-qr {
+        max-width: 220px;
+    }
+
+    body:has(.poster-scrim) .tag-ic {
+        width: 88px;
+        height: 88px;
+        font-size: 32px;
+    }
+
+    body:has(.poster-scrim) .tag-name {
+        font-size: 44px;
+    }
+
+    body:has(.poster-scrim) .tag-ticker {
+        font-size: 20px;
+    }
+
+    body:has(.poster-scrim) .tag-chip {
+        font-size: 15px;
+    }
+
+    body:has(.poster-scrim) .tag-figure {
+        font-size: 50px;
+    }
+
+    body:has(.poster-scrim) .tag-words {
+        font-size: 22px;
+    }
+
+    body:has(.poster-scrim) .tag-borrowed,
+    body:has(.poster-scrim) .tag-line {
+        font-size: 22px;
+    }
+
+    body:has(.poster-scrim) .tag-stall,
+    body:has(.poster-scrim) .tag-snapshot {
+        font-size: 19px;
+    }
+
+    body:has(.poster-scrim) .poster-tag .poster-scan {
+        font-size: 30px;
+    }
+
+    body:has(.poster-scrim) .poster-tag .poster-url {
+        font-size: 18px;
     }
 }
 
