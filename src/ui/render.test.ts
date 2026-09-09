@@ -12197,3 +12197,48 @@ describe('a-strangers-record-shaped-dust-does-not-fetch-an-icon', () => {
         expect(tileFor('stalls')!.getAttribute('data-token-id')).toBe(TOKEN_ID);
     });
 });
+
+describe('the-listing-face-says-the-sellers-words-on-the-card', () => {
+    /**
+     * The seller's words lived under the listing face's closed fold, three
+     * taps from the row, and a description that was on the page could not
+     * be found (a stranger's stall, 2026-09-09). They stand on the card now,
+     * under the figure and before the handoff, still under their label —
+     * a signature proves who wrote a sentence, not that it is true, and the
+     * words sit beside the covenant's own figure. Said once: the fold keeps
+     * the token's facts and the minter's link and no words.
+     */
+    it('mounts the labelled words outside the fold, on the buyable and the unbuyable face', () => {
+        const faces = [
+            paint(
+                offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                    overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                    descriptions: new Map([[TOKEN_ID, 'Roasted the morning it ships.']]),
+                }),
+            ).root,
+            paint(
+                offersView([{ ...OFFER, askedAtoms: 0n, minAcceptedAtoms: OFFER.atoms + 1n }], new Map([[TOKEN_ID, BEANS]]), {
+                    overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                    descriptions: new Map([[TOKEN_ID, 'Roasted the morning it ships.']]),
+                }),
+            ).root,
+        ];
+        for (const root of faces) {
+            const block = root.querySelector('[data-role="token-description"]') as HTMLElement;
+            expect(block, 'the words are on the face').not.toBeNull();
+            expect(block.closest('details'), 'and not under the fold').toBeNull();
+            expect(block.textContent).toContain(copy.TOKEN_DESCRIPTION_LABEL);
+            expect(block.textContent).toContain('Roasted the morning it ships.');
+            const fold = root.querySelector('[data-role="item-how"]')!;
+            expect(fold.querySelector('[data-role="token-description"]'), 'said once').toBeNull();
+            // Under the figure, before the handoff: the words precede the first control.
+            const card = block.parentElement!;
+            const kids = [...card.children];
+            const control = kids.findIndex((n) => n.matches('a.buy, button.buy, .ctx'));
+            expect(kids.indexOf(block)).toBeGreaterThan(0);
+            if (control >= 0 && kids[control]!.matches('a.buy, button.buy')) {
+                expect(kids.indexOf(block)).toBeLessThan(control);
+            }
+        }
+    });
+});

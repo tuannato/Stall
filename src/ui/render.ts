@@ -4925,11 +4925,14 @@ function itemFace(
                 ),
             ),
         );
-        how.append(tokenFacts(offer, meta, ticker));
+        // The seller's words on the card, labelled as theirs (2026-09-09: a
+        // description that was on the page could not be found under the
+        // fold). The token's facts and the minter's link stay folded.
         const described = tokenDescription(view, offer.tokenId);
         if (described !== undefined) {
-            how.append(described);
+            card.append(described);
         }
+        how.append(tokenFacts(offer, meta, ticker));
         const link = tokenLink(meta);
         if (link !== undefined) {
             how.append(link);
@@ -4958,6 +4961,15 @@ function itemFace(
         const stock = el('div', 'face-stock', copy.remainingAtoms(formatAtoms(totalAtoms, known)));
         stock.setAttribute('data-role', 'item-stock');
         card.append(stock);
+    }
+    // The seller's words on the card, under the figure and before the
+    // handoff, labelled as theirs — a signature proves who wrote a sentence,
+    // not that it is true, and it sits beside the covenant's own figure. It
+    // lived under the closed fold, three taps from the row, and a
+    // description that was on the page could not be found (2026-09-09).
+    const described = tokenDescription(view, offer.tokenId);
+    if (described !== undefined) {
+        card.append(described);
     }
     const href = cashtabTokenUrl(offer.tokenId);
     if (href !== undefined) {
@@ -4999,10 +5011,6 @@ function itemFace(
         how.append(listingsBlock(listing, view));
     }
     how.append(tokenFacts(offer, meta, ticker));
-    const described = tokenDescription(view, offer.tokenId);
-    if (described !== undefined) {
-        how.append(described);
-    }
     const link = tokenLink(meta);
     if (link !== undefined) {
         how.append(link);
