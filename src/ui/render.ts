@@ -102,6 +102,13 @@ import {
     type PosterKind,
     type PosterPaint,
 } from './posterImage';
+import {
+    ROW_SPEED_PX_PER_S,
+    STREAM_SPEED_PX_PER_S,
+    applyMarquees,
+    marqueeNode,
+    remeasureWhenFontsReady,
+} from './marquee';
 import mingoIcon from './mingo-icon.png';
 import './stall.css';
 import './theme-modern.css';
@@ -344,6 +351,7 @@ export function renderStall(
     view: StallView,
     handlers: StallHandlers,
 ): void {
+    const serial = ++paintSerial;
     paintedIconCells.clear();
     // A timer from the paint before this one would fire against a tree that
     // no longer exists; the sheet that wants one arms it again below.
@@ -401,6 +409,10 @@ export function renderStall(
         stall.append(renderBroadcastView(view));
         frame.append(stall);
         root.append(frame);
+        // The cards' lines run at the stream's pace; measured now, and again
+        // when the real faces land.
+        applyMarquees(root, STREAM_SPEED_PX_PER_S);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_SPEED_PX_PER_S);
         overlayWasOpen = overlayOpen;
         return;
     }
@@ -484,6 +496,10 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
+    // The rows' cut lines: measured on the connected tree (one layout, all
+    // reads before all writes), and again when the real faces land.
+    applyMarquees(root, ROW_SPEED_PX_PER_S);
+    remeasureWhenFontsReady(root, () => paintSerial === serial, ROW_SPEED_PX_PER_S);
     const scroller = stall.querySelector('.stall-scroll') as HTMLElement | null;
     if (sameScreen && keptScroll > 0 && scroller !== null) {
         // After the tree is connected: a browser does not keep `scrollTop`
@@ -2203,7 +2219,7 @@ function payRow(
     const words = el('div', 'pay-b');
     // The name opens the face; the row's Pay control still opens the pay
     // sheet in one press, so no press is added to the money path.
-    const openFace = el('button', 'item-n item-open', named.title);
+    const openFace = marqueeNode(el('button', 'item-n item-open', named.title), 'name', item.tokenId);
     openFace.type = 'button';
     openFace.setAttribute('data-role', 'item-open');
     openFace.setAttribute('data-focus-key', `item-open:${item.tokenId}`);
@@ -2217,7 +2233,7 @@ function payRow(
     // the title, which is what a quote with no words falls back to.
     if (named.words !== undefined) {
         // One line, an ellipsis at the end: the face and the sheet show it whole.
-        const under = el('span', 'pay-sub pay-words-line', named.words);
+        const under = marqueeNode(el('span', 'pay-sub pay-words-line', named.words), 'words', item.tokenId);
         under.setAttribute('data-role', 'quote-words');
         words.append(under);
     }
@@ -4674,7 +4690,7 @@ function offerRow(
     // items either way. The invalid markup also meant the button's accessible
     // name was one unbroken run of name, ticker, stock, "from", figure and rate.
     const info = el('span', 'item-b');
-    info.append(el('span', 'item-n', name));
+    info.append(marqueeNode(el('span', 'item-n', name), 'name', offer.tokenId));
     // Which rail this row is on. The ticker and the stock moved to the face,
     // where the fold has room to say what each means.
     const rail = el('span', 'item-q rail-label', copy.ROW_LABEL_AGORA);
@@ -6206,6 +6222,9 @@ function posterSheet(
  * persisted.
  */
 let lastScreenKey: string | undefined;
+
+/** Which paint is current, for the marquee's late re-measure: a paint since replaced measures nothing. */
+let paintSerial = 0;
 
 function screenKey(view: StallView): string {
     const item = view.overlay.kind === 'item' ? `${view.overlay.tokenId}/${view.overlay.rail}` : '';

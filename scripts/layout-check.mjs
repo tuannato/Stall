@@ -571,7 +571,10 @@ try {
         // two record sheets, and both are measured — they share `.sheet`'s
         // transition but not their contents, and a still page is only proved
         // still for the tree that was actually painted.
-        { vp: VIEWPORTS[0], screens: 'offers,publish-name,describe,pay' },
+        // `plugin-missing-quotes` since 2026-09-09: the populated quote rail,
+        // whose name button and words line carry the marquee — without it the
+        // kill for those two would be proved on no screen at all.
+        { vp: VIEWPORTS[0], screens: 'offers,plugin-missing-quotes,publish-name,describe,pay' },
         { vp: CANVAS, screens: 'broadcast,broadcast-quotes' },
     ];
     for (const pass of REDUCED) {

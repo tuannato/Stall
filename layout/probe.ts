@@ -527,6 +527,22 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
     }
 
+    /*
+     * A marquee never paints outside its cell. The moving span is a
+     * `transform` inside a cell that must clip — with `overflow` visible
+     * the run would slide over the figure beside it, and the spill rule
+     * above skips exactly the clipped case this depends on (2026-09-09).
+     */
+    for (const cell of surface.querySelectorAll<HTMLElement>('[data-marquee]')) {
+        const cs = getComputedStyle(cell);
+        if (cs.overflowX === 'visible') {
+            fail('a marquee cell does not clip', `${describe(cell)} has overflow-x visible`);
+        }
+        if (cell.querySelector('.mq-run') === null) {
+            fail('a marquee with nothing to move', describe(cell));
+        }
+    }
+
     for (const pseudo of positionedPseudos(surface)) {
         fail(
             'a positioned pseudo-element cannot be measured',

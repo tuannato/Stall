@@ -1176,20 +1176,61 @@ body {
 }
 
 /*
- * A token's name gets two lines before it is cut (design review 2026-08-30:
- * one nowrap line turned "The Sign Hums" into "THE SIGN H…" on Neo). Two,
- * not unbounded: a hostile 32-byte name must not stretch every card.
+ * A token's name is one line (owner, 2026-09-09; it was a two-line clamp
+ * from the 2026-08-30 review, when one nowrap line turned "The Sign Hums"
+ * into "THE SIGN H…" on Neo). A name wider than the line runs once and
+ * rests cut — the marquee below — and the face prints it whole.
  */
 .item-n {
     font-size: var(--s-item-name);
     font-weight: var(--s-name-weight);
     letter-spacing: var(--s-track);
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+}
+
+/*
+ * The marquee (`src/ui/marquee.ts`). The cell clips; the inner span is the
+ * one text node and the one thing that moves — `transform`, never
+ * `position`, because the probe reads every positioned node as a
+ * decoration and would refuse it over the asked amount. The holds are the
+ * delay before and the fill after; `animationend` takes the attribute off
+ * and the line rests at its start, cut with the ellipsis.
+ */
+[data-mq] {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
     overflow: hidden;
-    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+}
+
+[data-mq] > .mq-run {
+    display: inline-block;
+    white-space: nowrap;
+    max-width: none;
+    /* The rest values: a line that fits never moves, and a var read at
+       rest must resolve at rest (`a-var-read-at-rest-resolves-at-rest`).
+       `applyMarquees` writes the measured ones inline on a cut line. */
+    --mq-shift: 0px;
+    --mq-ms: 0ms;
+    --mq-delay: 0ms;
+}
+
+[data-marquee] {
+    text-overflow: clip;
+}
+
+[data-marquee] > .mq-run {
+    animation: mq-run var(--mq-ms) linear var(--mq-delay) 1 both;
+}
+
+@keyframes mq-run {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(var(--mq-shift));
+    }
 }
 
 .item-q {
@@ -2527,7 +2568,8 @@ details.fold > .fold-sum {
 }
 
 .item-open {
-    white-space: normal;
+    /* `white-space: normal` lived here and re-won over the one-line rule
+       at the same specificity (2026-09-09): the marquee's cell decides. */
     overflow-wrap: anywhere;
 }
 
@@ -4610,69 +4652,6 @@ textarea.share-embed {
     }
 }
 
-/*
- * Reduced motion: things stand still — and stay visible. A beetle that has
- * stopped is a beetle, and page-wide rain that has stopped is streaked
- * glass, a texture like the scanline beside it. (The old 50px strip *was* a
- * smear when stopped and used to be removed; the billboard check now insists
- * a paid decoration never vanishes for a reduced-motion buyer.)
- */
-/*
- * THIS BLOCK STAYS LAST IN THE FILE. Its rules win by order, not
- * specificity — the round-3 base motion consumers (.stall-name,
- * .item-head) were appended *below* the old position of this block, so
- * same-specificity base rules re-won and Neo kept flickering for every
- * reduced-motion visitor. `reduced motion left something running` in the
- * layout probe is the guard; per-theme animations still need the reduce
- * block inside their own theme file, which out-specifies this one.
- */
-@media (prefers-reduced-motion: reduce) {
-    .item-p {
-        animation: none;
-    }
-
-
-    .att-beetle-bug {
-        animation: none;
-    }
-
-    .stall.att-rainfall {
-        animation: none;
-    }
-
-    /* Round 3's movers, stilled in place — visible, never gone. The
-       composed full-dress rules carry higher specificity than their
-       single-row parents, so they are named here too — the stillness
-       guard caught exactly this the day they were written. */
-    .stall.att-aurora,
-    .stall.att-confetti,
-    .stall.att-rainfall.att-aurora,
-    .stall.att-sunburst.att-confetti,
-    .att-bunting,
-    .att-sunburst,
-    .stall.att-sunburst {
-        animation: none;
-    }
-
-    .stall-name {
-        animation: none;
-    }
-
-    .item-head {
-        animation: none;
-        background-position: 50% 0;
-    }
-
-    /* The sheet's slide is declared twice — once near the top of the file
-       where the mid-file reduce block still killed it, and again beside
-       `.sheet-scrim`, BELOW that block, where the base rule re-won by
-       order. The armed-transition probe check caught the second copy the
-       day it was written; the kill lives here, in the block whose whole
-       job is winning by order. */
-    .sheet {
-        transition: none;
-    }
-}
 
 
 /*
@@ -5092,4 +5071,78 @@ textarea.share-embed {
 }
 .warn {
     color: var(--s-danger);
+}
+
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE — `the-reduce-block-is-the-last-rule-in-its-sheet`
+ * holds it there since 2026-09-09; it had 470 lines after it when the marquee
+ * landed, with nothing moving among them, which is luck and not a rule.
+ * Reduced motion: things stand still — and stay visible. A beetle that has
+ * stopped is a beetle, and page-wide rain that has stopped is streaked
+ * glass, a texture like the scanline beside it. (The old 50px strip *was* a
+ * smear when stopped and used to be removed; the billboard check now insists
+ * a paid decoration never vanishes for a reduced-motion buyer.)
+ */
+/*
+ * THIS BLOCK STAYS LAST IN THE FILE. Its rules win by order, not
+ * specificity — the round-3 base motion consumers (.stall-name,
+ * .item-head) were appended *below* the old position of this block, so
+ * same-specificity base rules re-won and Neo kept flickering for every
+ * reduced-motion visitor. `reduced motion left something running` in the
+ * layout probe is the guard; per-theme animations still need the reduce
+ * block inside their own theme file, which out-specifies this one.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .item-p {
+        animation: none;
+    }
+
+
+    .att-beetle-bug {
+        animation: none;
+    }
+
+    .stall.att-rainfall {
+        animation: none;
+    }
+
+    /* Round 3's movers, stilled in place — visible, never gone. The
+       composed full-dress rules carry higher specificity than their
+       single-row parents, so they are named here too — the stillness
+       guard caught exactly this the day they were written. */
+    .stall.att-aurora,
+    .stall.att-confetti,
+    .stall.att-rainfall.att-aurora,
+    .stall.att-sunburst.att-confetti,
+    .att-bunting,
+    .att-sunburst,
+    .stall.att-sunburst {
+        animation: none;
+    }
+
+    .stall-name {
+        animation: none;
+    }
+
+    .item-head {
+        animation: none;
+        background-position: 50% 0;
+    }
+
+    /* The sheet's slide is declared twice — once near the top of the file
+       where the mid-file reduce block still killed it, and again beside
+       `.sheet-scrim`, BELOW that block, where the base rule re-won by
+       order. The armed-transition probe check caught the second copy the
+       day it was written; the kill lives here, in the block whose whole
+       job is winning by order. */
+    .sheet {
+        transition: none;
+    }
+
+    /* The marquee (2026-09-09): a cut line rests at its start, with the
+       ellipsis, and nothing moves. The kill is here at the file's end
+       because the base rule is above it at the same specificity. */
+    [data-marquee] > .mq-run {
+        animation: none;
+    }
 }

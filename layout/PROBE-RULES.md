@@ -53,6 +53,17 @@ nothing.
   sheet bounded and scrollable; covering the stall behind is what the seller
   opened it to do. The first run reported the scrim covering the price
   behind it — the boundary that had never been written down.
+- **A marquee never paints outside its cell** (2026-09-09). A cut name or
+  words line runs once inside a cell that clips (`[data-mq]`, `overflow:
+  hidden`); the moving part is a `transform` on the inner `.mq-run` span,
+  never a positioned node — the decoration sweep reads every positioned
+  node and would refuse it over the asked amount, and `text-spills` skips
+  clipped overflow, which is what this rule relies on. Every
+  `[data-marquee]` cell must have `overflow-x` other than `visible` and an
+  inner `.mq-run`. The reduce pass gained `plugin-missing-quotes` the same
+  day, so the kill for the quote row's name and words is proved on a screen
+  that has them; the 1.5 s start hold keeps the contrast sampler's 400 ms
+  freeze on whole glyphs.
 - **A row tile covers its own line.** An Activity row's token tile sits in
   its own 24px grid column, and the kind and time start in the next. On the
   live origin at 1280px (owner, 2026-09-08) the desktop block's `.item-ic {

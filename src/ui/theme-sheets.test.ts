@@ -235,3 +235,34 @@ describe('a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground', () => {
         expect(offences, offences.join('\n')).toEqual([]);
     });
 });
+
+describe('the-reduce-block-is-the-last-rule-in-its-sheet', () => {
+    /**
+     * PROBE-RULES: a sheet's reduced-motion block must be its last rule, or
+     * a same-specificity mover appended below it re-wins and runs for every
+     * reduced-motion visitor. stall.css's block said "STAYS LAST" and had
+     * 470 lines after it when the marquee landed (2026-09-09) — nothing
+     * moving among them, which is luck. Enforced now, for every sheet that
+     * declares one.
+     */
+    it('ends every sheet that has a reduce block with that block', () => {
+        for (const sheet of SHEETS) {
+            const css = readFileSync(join(UI_DIR, sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+            const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
+            if (at < 0) {
+                continue;
+            }
+            // Walk the block's braces to its end; only whitespace may follow.
+            let depth = 0;
+            let i = css.indexOf('{', at);
+            for (; i < css.length; i += 1) {
+                if (css[i] === '{') depth += 1;
+                if (css[i] === '}') {
+                    depth -= 1;
+                    if (depth === 0) break;
+                }
+            }
+            expect(css.slice(i + 1).trim(), `${sheet}: rules after its reduce block`).toBe('');
+        }
+    });
+});

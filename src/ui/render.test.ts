@@ -110,6 +110,15 @@ import {
     qrSvg,
     quoteFigure,
 } from './render';
+import {
+    MARQUEE_HOLD_MS,
+    MARQUEE_MAX_RUN_MS,
+    ROW_SPEED_PX_PER_S,
+    marqueeRunMs,
+    resetMarqueesForTests,
+    setMarqueeClock,
+    setMarqueeMeasure,
+} from './marquee';
 import { satsForQuote } from '../domain/fiat';
 import { formatXec,
     formatXecUngrouped,
@@ -12240,5 +12249,107 @@ describe('the-listing-face-says-the-sellers-words-on-the-card', () => {
                 expect(kids.indexOf(block)).toBeLessThan(control);
             }
         }
+    });
+});
+
+/*
+ * The marquee (2026-09-09): a cut line runs once, then rests at its start.
+ * happy-dom lays out nothing, so the measure is injected; the layout probe
+ * judges the real one.
+ */
+describe('a-cut-name-runs-once-and-a-fitting-one-stands', () => {
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    const listing = () =>
+        paint(offersView([OFFER], new Map([[TOKEN_ID, { ...BEANS, name: 'A name far too long for its line' }]]))).root;
+
+    it('leaves a fitting name still and arms a cut one with its distance and pace', () => {
+        setMarqueeMeasure(() => 0);
+        const still = listing().querySelector('.item-n') as HTMLElement;
+        expect(still.getAttribute('data-mq')).toBe('name');
+        expect(still.hasAttribute('data-marquee')).toBe(false);
+
+        setMarqueeMeasure(() => 120);
+        const cut = listing().querySelector('.item-n') as HTMLElement;
+        expect(cut.hasAttribute('data-marquee')).toBe(true);
+        const run = cut.querySelector('.mq-run') as HTMLElement;
+        expect(run.style.getPropertyValue('--mq-shift')).toBe('-120px');
+        expect(run.style.getPropertyValue('--mq-ms')).toBe(`${marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)}ms`);
+        expect(marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)).toBe(3000);
+        expect(run.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS}ms`);
+    });
+
+    it('a rounding overflow is not a run', () => {
+        setMarqueeMeasure(() => 2);
+        expect(listing().querySelector('.item-n')!.hasAttribute('data-marquee')).toBe(false);
+    });
+
+    it('caps the longest run', () => {
+        expect(marqueeRunMs(100_000, 'name', ROW_SPEED_PX_PER_S)).toBe(MARQUEE_MAX_RUN_MS);
+    });
+});
+
+describe('the-quote-rows-words-run-faster-than-its-name', () => {
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    it('arms the name and the words at their own paces, one text node each', () => {
+        setMarqueeMeasure(() => 300);
+        const root = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                descriptions: new Map([[TOKEN_ID, 'A sentence long enough to be cut on any phone']]),
+                shopTab: 'quotes',
+            }),
+        ).root;
+        const name = root.querySelector('[data-role="pay-row"] .item-n') as HTMLElement;
+        const words = root.querySelector('[data-role="quote-words"]') as HTMLElement;
+        expect(name.getAttribute('data-mq')).toBe('name');
+        expect(words.getAttribute('data-mq')).toBe('words');
+        const nameMs = Number.parseInt(name.querySelector<HTMLElement>('.mq-run')!.style.getPropertyValue('--mq-ms'), 10);
+        const wordsMs = Number.parseInt(words.querySelector<HTMLElement>('.mq-run')!.style.getPropertyValue('--mq-ms'), 10);
+        expect(wordsMs).toBeLessThan(nameMs);
+        // One text node: the name and the words read exactly as they did.
+        expect(name.textContent).toBe('Roasted Beans');
+        expect(words.textContent).toBe('A sentence long enough to be cut on any phone');
+        expect(name.querySelectorAll('.mq-run')).toHaveLength(1);
+        expect(name.childNodes).toHaveLength(1);
+    });
+});
+
+describe('a-repaint-mid-run-continues-the-run-and-a-finished-one-rests', () => {
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    it('owes less of the hold after a second, and nothing once the run is over', () => {
+        setMarqueeMeasure(() => 120);
+        let now = 1_000_000;
+        setMarqueeClock(() => now);
+        const view = offersView([OFFER], new Map([[TOKEN_ID, { ...BEANS, name: 'A name far too long for its line' }]]));
+        const first = paint(view).root.querySelector<HTMLElement>('.item-n .mq-run')!;
+        expect(first.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS}ms`);
+        now += 1_000;
+        const second = paint(view).root.querySelector<HTMLElement>('.item-n .mq-run')!;
+        expect(second.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS - 1_000}ms`);
+        // Past the whole run (hold + 3 s + hold): it rests, cut, and nothing moves.
+        now += MARQUEE_HOLD_MS + 3_000 + MARQUEE_HOLD_MS;
+        const third = paint(view).root.querySelector<HTMLElement>('.item-n')!;
+        expect(third.hasAttribute('data-marquee')).toBe(false);
+    });
+});
+
+describe('reduced-motion-stills-the-marquee', () => {
+    it('names the moving span in the last reduce block of stall.css', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{/g)];
+        const last = blocks[blocks.length - 1]!;
+        const tail = css.slice(last.index!);
+        expect(tail).toMatch(/\[data-marquee\] > \.mq-run\s*\{[^}]*animation:\s*none/);
+        // The moving rule sits above the kill, at the same specificity.
+        expect(css.indexOf('[data-marquee] > .mq-run {')).toBeLessThan(last.index!);
     });
 });
