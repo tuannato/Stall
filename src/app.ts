@@ -322,6 +322,20 @@ export function boot(
     let payRateWhy: PayRateWhy | undefined;
     /** The feeds are being asked for the open sheet; painted as "asking", never as no answer. */
     let payRateAsking = false;
+    /**
+     * Which open of the pay sheet an in-flight rate read belongs to (since
+     * 2026-09-09). `readPayRate` wrote the view before any guard, so a sheet
+     * closed and reopened within the feeds' deadline had two reads in flight
+     * over one slot: the first ask's timeout printed "did not answer" over
+     * the sheet still asking — or, worse, wiped the figure and both Pay
+     * controls the second ask had already painted. An answer from a session
+     * that is no longer current writes nothing and paints nothing; it is
+     * still handed back to its caller. The valve and the refresh control run
+     * while their own sheet is on screen and take the current session by
+     * default. Never bumped on close: a close with no reopen leaves nothing
+     * to guard, and a fourth site to keep in step is one too many.
+     */
+    let paySession = 0;
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
@@ -846,6 +860,7 @@ export function boot(
         // for a number nobody uses, and two parties told a payment is being
         // composed (owner, 2026-09-07).
         const asks = !quoteNeedsNoRate(tokenId);
+        const session = ++paySession;
         payRateAsking = asks;
         state = { ...state, view: { ...state.view, overlay: { kind: 'pay', tokenId } } };
         paint();
@@ -853,7 +868,11 @@ export function boot(
             return;
         }
         void (async () => {
-            await readPayRate(PAY_RATE_TIMEOUT_MS);
+            await readPayRate(PAY_RATE_TIMEOUT_MS, session);
+            if (session !== paySession) {
+                // A later open owns the flag and the sheet now.
+                return;
+            }
             payRateAsking = false;
             // Only for the sheet that asked: a buyer who closed it, or moved
             // to another item, must not have it repainted under them. Every
@@ -880,7 +899,10 @@ export function boot(
      * `renderStall` opens with `replaceChildren()` — so a paint from this path
      * would throw away what they typed. The sheet refreshes itself in place.
      */
-    const readPayRate = async (timeoutMs?: number): Promise<PayRateAnswer> => {
+    const readPayRate = async (
+        timeoutMs?: number,
+        session: number = paySession,
+    ): Promise<PayRateAnswer> => {
         // Two feeds, asked together, wherever this runs (the open, the `?pay=`
         // landing, the press-time valve, the refresh control). The second
         // rides under its own, shorter budget, so a hung check cannot hold
@@ -902,6 +924,11 @@ export function boot(
             judged.kind === 'refused'
                 ? { why: judged.why }
                 : { rate: judged.rate, atMs: Date.now(), check: judged.check };
+        if (session !== paySession) {
+            // A superseded ask: the sheet that asked is gone or reopened.
+            // Answered to its caller, written nowhere.
+            return answer;
+        }
         payRate =
             answer.rate === undefined
                 ? undefined
@@ -1061,10 +1088,14 @@ export function boot(
                     state.view.overlay.tokenId === tokenId &&
                     !quoteNeedsNoRate(tokenId)
                 ) {
+                    const session = ++paySession;
                     payRateAsking = true;
                     paint();
                     void (async () => {
-                        await readPayRate(PAY_RATE_TIMEOUT_MS);
+                        await readPayRate(PAY_RATE_TIMEOUT_MS, session);
+                        if (session !== paySession) {
+                            return;
+                        }
                         payRateAsking = false;
                         // The same gate `onOpenPay` keeps; every answer repaints,
                         // because the sheet is saying "asking" until it does.
@@ -1165,6 +1196,9 @@ export function boot(
         events = [];
         activityGaps = 0;
         walked = undefined;
+        // Belt and braces beside the generation guard: a batch queued for the
+        // stall just left must not carry its txids and statuses across.
+        factsQueued = undefined;
         // Paint the parsed route before the index is asked, so a paste is not
         // a no-op while Chronik is in flight. Home is local; still cheap.
         state = openingFromLocation();
@@ -1857,9 +1891,21 @@ export function boot(
      * answer is.
      */
     let factsInFlight = false;
+    /**
+     * The queued batch carries **its own stall** (since 2026-09-09): the queue
+     * shipped a day earlier keeping only the generation, and the drain ran
+     * the next batch with the in-flight call's `stall` — so a burst at stall
+     * B, queued behind a walk the reader started at stall A, was classified
+     * against A's script (B's own record read "from another wallet" on the
+     * public panel) and, on the "ask everything" road, painted A's name,
+     * look and quotes over B's address. One `stall` per generation, so the
+     * merge key stays `claimed`; the generation guard drops a batch from a
+     * stall the reader left, and the field does the identity job.
+     */
     let factsQueued:
         | {
               claimed: number;
+              stall: { address: string; hash: string };
               txids: string[];
               said: Map<string, LiveTxStatus>;
               all: boolean;
@@ -1877,7 +1923,13 @@ export function boot(
             const queued =
                 factsQueued !== undefined && factsQueued.claimed === claimed
                     ? factsQueued
-                    : { claimed, txids: [], said: new Map<string, LiveTxStatus>(), all: false };
+                    : {
+                          claimed,
+                          stall,
+                          txids: [],
+                          said: new Map<string, LiveTxStatus>(),
+                          all: false,
+                      };
             for (const txid of txids) {
                 if (!queued.txids.includes(txid)) {
                     queued.txids.push(txid);
@@ -1892,14 +1944,27 @@ export function boot(
         }
         factsInFlight = true;
         try {
-            await readFactsNow(claimed, stall, txids, said, all);
+            // Each read under its own catch: a throw out of one (a paint over
+            // a hostile string is the realistic source, and there is no
+            // logger to hear it) must not strand what is queued behind it
+            // until some later burst — "deferred, never dropped" has to hold
+            // on the quiet stall too, where no later burst comes.
+            try {
+                await readFactsNow(claimed, stall, txids, said, all);
+            } catch {
+                // The queue still drains.
+            }
             while (factsQueued !== undefined) {
                 const next = factsQueued;
                 factsQueued = undefined;
                 if (next.claimed !== generation) {
                     continue;
                 }
-                await readFactsNow(next.claimed, stall, next.txids, next.said, next.all);
+                try {
+                    await readFactsNow(next.claimed, next.stall, next.txids, next.said, next.all);
+                } catch {
+                    // As above.
+                }
             }
         } finally {
             factsInFlight = false;
@@ -2020,11 +2085,23 @@ export function boot(
         }
         const hash = toHex(shaRmd160(fromHex(pubkeyHex)));
         const stall = { address: state.view.address ?? p2pkhAddress(pubkeyHex), hash };
+        /**
+         * Which book re-read is the newest (since 2026-09-09). `onChanged`
+         * fires one read per trigger with no guard between them, and two in
+         * flight can land out of order when the first host's latency
+         * differs by more than a burst between two requests: the older book
+         * then painted over the newer — a row that had just sold came back.
+         * Only the newest read applies; an older definite answer landing
+         * after a newer failed one is dropped too, which is §4's direction
+         * (our failure never paints, the last good book stands).
+         */
+        let bookSeq = 0;
         live = watchStall(
             createChronik() as never,
             { pubkeyHex, hash },
             {
                 onChanged: (trigger) => {
+                    const seq = ++bookSeq;
                     void (async () => {
                         let status: FetchStatus;
                         try {
@@ -2042,7 +2119,7 @@ export function boot(
                             markBroadcastStale();
                             return;
                         }
-                        if (claimed !== generation) {
+                        if (claimed !== generation || seq !== bookSeq) {
                             return;
                         }
                         if (!isDefiniteResult(status)) {

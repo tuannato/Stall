@@ -12165,3 +12165,35 @@ describe('the-frame-follows-the-dynamic-viewport', () => {
         expect(dynamic).toBeGreaterThan(percent);
     });
 });
+
+describe('a-strangers-record-shaped-dust-does-not-fetch-an-icon', () => {
+    /**
+     * The picture only for a record this stall applied. A stranger's
+     * record-shaped dust names any 32 bytes, and a picture for it was our
+     * origin fetching a third party's bytes on a stranger's instruction
+     * (audit 2026-09-09, N3); a refused record wears letters, as its label
+     * already says whose it is not. The paint-side twin of
+     * `a-strangers-record-shaped-dust-walks-nothing`.
+     */
+    const AT = 1_756_400_000_000;
+    const tileFor = (recordAuthority: 'stalls' | 'unsigned' | 'unaddressed') =>
+        paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                events: [
+                    { txid: 'a1'.repeat(32), kind: 'description', seenAtMs: AT, tokenId: TOKEN_ID, recordAuthority },
+                ],
+            }),
+        ).root.querySelector<HTMLElement>('summary [data-role="event-icon"]');
+
+    it('paints letters for a refused record and the picture for the stall’s own', () => {
+        for (const authority of ['unsigned', 'unaddressed'] as const) {
+            const tile = tileFor(authority)!;
+            expect(tile, authority).not.toBeNull();
+            expect(tile.getAttribute('data-token-id'), authority).toBeNull();
+            expect(tile.querySelector('img'), authority).toBeNull();
+            expect(tile.textContent, authority).toBe('RB');
+        }
+        expect(tileFor('stalls')!.getAttribute('data-token-id')).toBe(TOKEN_ID);
+    });
+});

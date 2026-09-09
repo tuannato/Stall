@@ -121,6 +121,8 @@ const chain = {
     book: undefined as import('./domain/state').FetchStatus | undefined,
     /** A live re-read that throws rather than answering. */
     bookThrows: false,
+    /** A live re-read held open: it captures its answer at the call and waits here. */
+    bookGate: undefined as Promise<void> | undefined,
 };
 
 function resetChain(): void {
@@ -140,6 +142,7 @@ function resetChain(): void {
     chain.historyPageCalls = [];
     chain.book = undefined;
     chain.bookThrows = false;
+    chain.bookGate = undefined;
 }
 
 const addressPage = (): HistoryPage => ({
@@ -254,10 +257,17 @@ vi.mock('./net', async (importOriginal) => {
         // one against the fake chronik throws before loadOffers is reached.
         agoraOfferReader: () => ({}) as never,
         loadOffers: async () => {
+            // The answer is what the book said when the read was *made*, and
+            // a held read returns it late — the out-of-order seam.
+            const answer = chain.book ?? ({ kind: 'empty' as const });
+            const gate = chain.bookGate;
+            if (gate !== undefined) {
+                await gate;
+            }
             if (chain.bookThrows) {
                 throw new Error('index threw');
             }
-            return chain.book ?? ({ kind: 'empty' as const });
+            return answer;
         },
     };
 });
@@ -3614,5 +3624,201 @@ describe('the-boot-glance-fetch-is-bounded', () => {
         await flush();
         expect(asked).toBeGreaterThan(0);
         expect(seen?.timeoutMs).toBe(FIAT_GLANCE_TIMEOUT_MS);
+    });
+});
+
+describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall', () => {
+    /**
+     * The one-at-a-time queue (`1655475`) kept the generation and dropped the
+     * stall: a burst at stall B, queued behind a walk the reader started at
+     * stall A, ran with A's script — B's own record read "from another
+     * wallet" on the public Activity panel, and on the ask-everything road
+     * A's name and quotes were painted over B's address (audit 2026-09-09,
+     * N1). The queued batch carries its own stall now. Two stalls, one
+     * queue: the existing overlap test uses one stall and cannot go red here.
+     */
+    const PK_B_BYTES = Uint8Array.from([0x02, ...new Array<number>(32).fill(0xbb)]);
+    const PK_B = toHex(PK_B_BYTES);
+    const HASH_B = toHex(shaRmd160(PK_B_BYTES));
+    const ADDR_B = encodeCashAddress('ecash', 'p2pkh', HASH_B);
+    const STALL_B_SCRIPT = p2pkhOutputScript(HASH_B);
+
+    it('classifies the deferred burst against the stall it arrived at', async () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        const stateA = stallEmpty();
+        const stateB: State = {
+            ...stallEmpty({
+                route: { kind: 'pubkey', pubkeyHex: PK_B, address: ADDR_B },
+                address: ADDR_B,
+            }),
+            pubkeyHex: PK_B,
+        };
+        // Every instance booted earlier in this file still listens for
+        // `popstate`, so the watches and the last paint are shared: this
+        // test finds its own watch by the key it watches.
+        const before = watches.length;
+        boot(root, async () => (location.pathname === stallPath(PK_B) ? stateB : stateA));
+        await flush();
+        const watchA = watches[before];
+        expect(watchA, 'A is watched').toBeDefined();
+
+        // Hold A's ask-everything walk open.
+        let open: () => void = () => {};
+        chain.gate = new Promise<void>((resolve) => { open = resolve; });
+        const flood = Array.from({ length: 9 }, (_, i) => `${(0x50 + i).toString(16).padStart(2, '0')}`.repeat(32));
+        for (const txid of flood) {
+            chain.txs.set(txid, { txid, inputs: [], outputs: [{ outputScript: STALL_SCRIPT, sats: 1_000n }] });
+        }
+        watchA!.hooks.onBurst?.([...flood.slice(0, 8), UNKNOWN_TXID]);
+        await flush();
+        expect(chain.walksInFlight, 'A’s walk is held open').toBe(1);
+
+        // Leave for B while it runs.
+        window.history.pushState(null, '', stallPath(PK_B));
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await until(() => watches.some((w) => w.stall.pubkeyHex === PK_B), 3_000);
+        const watchB = watches.find((w) => w.stall.pubkeyHex === PK_B);
+        expect(watchB, 'B is watched').toBeDefined();
+
+        // B's own description record, signed by B and paying B the dust.
+        const txB: ChainTx = {
+            txid: 'b1'.repeat(32),
+            inputs: [{ inputScript: p2pkhScriptSig(PK_B_BYTES), outputScript: STALL_B_SCRIPT }],
+            outputs: [
+                { outputScript: stldOutput(TOKEN, 'Grown on the hill') },
+                { outputScript: STALL_B_SCRIPT, sats: DUST_SATS },
+            ],
+        };
+        chain.txs.set(txB.txid, txB);
+        watchB!.hooks.onBurst?.([txB.txid]);
+        await flush();
+
+        // Release A's walk; the queued batch drains after it.
+        chain.gate = undefined;
+        open();
+        await until(() => painted.view?.events?.some((e) => e.txid === txB.txid) === true, 8_000);
+        const row = painted.view?.events?.find((e) => e.txid === txB.txid);
+        expect(row, 'the deferred burst’s row reached B’s ring').toBeDefined();
+        expect(row?.kind).toBe('description');
+        expect(row?.recordAuthority, 'B’s own record is B’s, not “from another wallet”').toBe('stalls');
+        root.remove();
+    });
+});
+
+describe('an-older-book-read-does-not-overwrite-a-newer-one', () => {
+    /**
+     * `onChanged` fires one read per trigger with nothing between them, and
+     * two in flight could land out of order: the older book painted over the
+     * newer, and a row that had just sold came back until the next message
+     * (audit 2026-09-09, N6). Only the newest read applies now.
+     */
+    it('drops a read that answers after a newer one already painted', async () => {
+        bootStall(stallEmpty({ fetch: { kind: 'offers', offers: [OFFER] } }));
+        await flush();
+        const older = { kind: 'offers' as const, offers: [{ ...OFFER, askedSats: 111_000n }] };
+        const newer = { kind: 'offers' as const, offers: [{ ...OFFER, askedSats: 222_000n }] };
+        let release: () => void = () => {};
+        chain.bookGate = new Promise<void>((resolve) => { release = resolve; });
+        chain.book = older;
+        watches[0]!.hooks.onChanged?.('message');
+        chain.bookGate = undefined;
+        chain.book = newer;
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+        const asked = () =>
+            painted.view?.fetch?.kind === 'offers' ? painted.view.fetch.offers[0]?.askedSats : undefined;
+        expect(asked(), 'the newer read painted').toBe(222_000n);
+        release();
+        await flush();
+        await flush();
+        expect(asked(), 'the older read landing late does not un-say it').toBe(222_000n);
+    });
+});
+
+describe('reopening-the-pay-sheet-does-not-let-the-first-ask-say-no-answer', () => {
+    /**
+     * `readPayRate` wrote the view before any guard, and the open kept no
+     * id: a sheet closed and reopened within the feeds' deadline had two
+     * asks in flight over one slot. The first ask's timeout printed "did not
+     * answer" over the sheet still asking — or wiped the figure and both Pay
+     * controls the second ask had already painted (audit 2026-09-09, N4).
+     * An answer from a superseded open writes nothing now.
+     */
+    const quoted = () =>
+        stallEmpty({
+            tokens: new Map([
+                [TOKEN, { ...TOKEN_META, tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' } }],
+            ]),
+            prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+        });
+    const closeSheet = (root: HTMLElement): void => {
+        const close =
+            root.querySelector<HTMLButtonElement>('[data-role="pay"] [data-role="pay-close"]') ??
+            root.querySelector<HTMLButtonElement>('[data-role="pay"] [data-role="publish-close"]');
+        expect(close, 'the sheet’s close control').not.toBeNull();
+        close!.click();
+    };
+
+    it('the first ask’s timeout is written nowhere once the sheet was reopened', async () => {
+        const answers: Array<(v: bigint | undefined) => void> = [];
+        const { root } = bootStall(quoted());
+        await flush();
+        // After the boot's own glance fetch: every ask from here is the sheet's.
+        priceControl.fetch = () => new Promise<bigint | undefined>((resolve) => { answers.push(resolve); });
+        const open = () => (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        open();
+        await flush();
+        expect(answers).toHaveLength(1);
+        closeSheet(root);
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        open();
+        await flush();
+        expect(answers).toHaveLength(2);
+
+        // The first ask gives up: nothing may change on the sheet still asking.
+        answers[0]!(undefined);
+        await flush();
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(sheet, 'the reopened sheet is on screen').not.toBeNull();
+        expect(sheet.textContent).toContain(PAY_RATE_ASKING);
+        expect(sheet.textContent).not.toContain(PAY_NO_RATE_WHY);
+        expect(painted.view?.payRateAsking).toBe(true);
+
+        // Its own ask lands: the figure.
+        answers[1]!(10_000_000n);
+        await flush();
+        const after = root.querySelector('[data-role="pay"]') as HTMLElement;
+        expect(after.textContent).not.toContain(PAY_RATE_ASKING);
+        expect(after.querySelector('[data-role="price"]')).not.toBeNull();
+    });
+
+    it('a figure the reopened sheet painted stands when the superseded ask times out', async () => {
+        const answers: Array<(v: bigint | undefined) => void> = [];
+        const { root } = bootStall(quoted());
+        await flush();
+        priceControl.fetch = () => new Promise<bigint | undefined>((resolve) => { answers.push(resolve); });
+        const open = () => (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        open();
+        await flush();
+        closeSheet(root);
+        await flush();
+        open();
+        await flush();
+        expect(answers).toHaveLength(2);
+        answers[1]!(10_000_000n);
+        await flush();
+        const figure = () => root.querySelector('[data-role="pay"] [data-role="price"]');
+        const cashtab = () => root.querySelector<HTMLElement>('[data-role="pay"] [data-role="pay-cashtab"]');
+        expect(figure(), 'the reopened sheet painted its figure').not.toBeNull();
+        expect(cashtab()?.hidden).toBe(false);
+
+        answers[0]!(undefined);
+        await flush();
+        expect(figure(), 'the superseded ask did not wipe it').not.toBeNull();
+        expect(cashtab()?.hidden).toBe(false);
+        expect(root.querySelector('[data-role="pay"]')?.textContent).not.toContain(PAY_NO_RATE_WHY);
+        expect(painted.view?.payRate).toBeDefined();
     });
 });

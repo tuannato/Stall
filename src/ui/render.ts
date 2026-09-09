@@ -6469,7 +6469,19 @@ function historyControl(
  * no token at all.
  */
 function eventIcon(event: StallEvent, view: StallView): { tokenId: string; picture: boolean } | undefined {
-    if (event.kind === 'description' || event.kind === 'token-move') {
+    if (event.kind === 'description') {
+        // The picture only for a record this stall applied: a stranger's
+        // record-shaped dust names any 32 bytes, and a picture for it is our
+        // origin fetching a third party's bytes on a stranger's instruction
+        // (2026-09-09). A refused record wears letters, as its label already
+        // says whose it is not.
+        return event.tokenId === undefined
+            ? undefined
+            : { tokenId: event.tokenId, picture: event.recordAuthority === 'stalls' };
+    }
+    if (event.kind === 'token-move') {
+        // A moved token is one this app ships in the decorations table
+        // (`wantedTokenIds`); a stranger cannot name one.
         return event.tokenId === undefined ? undefined : { tokenId: event.tokenId, picture: true };
     }
     if (event.kind === 'payment' && event.payment !== undefined) {
