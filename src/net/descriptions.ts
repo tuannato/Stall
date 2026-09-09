@@ -40,10 +40,12 @@ export type LoadedDescription = TokenDescription &
          * in seconds, or nothing — `chainTimeOf`'s rule, which is the rule
          * every dated row on this page already keeps.
          *
-         * **Beside the rank, never inside it.** `compareManifestRank` orders
-         * records by finality, height and txid, and a clock in that type would
-         * invite a reader — or a later edit — to sort by a number two nodes can
-         * disagree about. This is read only after a winner exists.
+         * **Beside the rank, not the rank.** `compareManifestRank` orders
+         * settled records by the node's first sighting when both stamps are
+         * known (`ManifestRank.firstSeen`, since 2026-09-07), then by the
+         * ladder; this is the winner's clock carried out for the age line
+         * and read only after a winner exists — a display value, never an
+         * input to the ordering.
          */
         readonly timeS?: number;
     };

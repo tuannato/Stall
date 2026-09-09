@@ -34,7 +34,7 @@ import { opReturnPushes, p2pkhHashFromOutputScript } from './script';
  * a walked record from this shape, and a stranger's `STL1` must stay
  * `kind === 'settings'` so Activity can print `EVENT_SETTINGS_STRANGER`.
  * The live path asks `walkableFacts` instead, which applies the same
- * imported `txSignedByStall` the walks already use, so nothing a walk
+ * imported `recordIsStalls` the walks already use, so nothing a walk
  * would accept is refused. The filter is negative for that reason, and
  * there is no floor.
  */

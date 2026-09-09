@@ -294,8 +294,14 @@ working accept, and there is no accept.
   filter, not an attacker filter: deliberate copying from one's own Studio
   is untouched, and names stay unadjudicated (§ Rejected). The cost: a
   record composed outside this app's links with any other self-output is
-  nobody's — said on the sign and counted on the rail, never swallowed.
-  Reader rule, mirrored at the edge; no wire change.
+  nobody's — said on the sign (settings) and on the Activity row (both
+  records); **not yet counted on the rail** for a quote (STLD): the walk
+  collects the refused tokens but nothing lifts them to the view, so the
+  quotes rail prints "nothing quoted" and a zero over a refused quote
+  (corrected 2026-09-09; the sentence read "counted on the rail" for a day
+  and a fix was built on it). A foreign-signed record is refused before the
+  count on both records and is said on Activity alone. Reader rule,
+  mirrored at the edge; no wire change.
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -332,9 +338,10 @@ that is still true:
 - **Revenue share enforced by covenant.** Only oneshot carries multiple
   enforced outputs, and its payout is an arbitrary output list the covenant
   does not tie to any key — so a covenant cannot enforce a split. (The group
-  key itself *is* signed for: the ad script checks `cancel_pk`'s signature, so
-  a stranger cannot list under your key — corrected 2026-09-08, `CLAUDE.md`
-  §10.)
+  key is signed for by a ONESHOT alone: the plugin checks `cancel_pk`'s
+  signature there and nothing for a PARTIAL, so a PARTIAL can be placed under
+  any key as a gift listing — corrected 2026-09-08 and again 2026-09-09,
+  `CLAUDE.md` §10.)
 - **Any painted unit beyond `usd` and `xec`.** A *display* rule, never a wire
   one: the decoder keeps every code a record carries and the editor restates
   an unwritable one untouched on republish. Reopen on **both** of two
@@ -548,11 +555,57 @@ have sent revenue to an output nobody can spend.
   paragraph. **F1 declined**: a stranger cannot put a ONESHOT into another
   key's group for dust (the ad script signs for `cancel_pk` under P2SH
   consensus), so a payout-script filter would only hide a seller's own
-  listing paying a cold wallet, silently. Recorded, not fixed: F6
+  listing paying a cold wallet, silently — and a PARTIAL *can* be placed
+  under any key on either road (2026-09-09), which the reader cannot tell
+  from a genuine row and which pays the seller: a gift, recorded, not
+  filtered. Recorded, not fixed: F6
   (`loadTokenMeta` fans out one request per token, the seller's own count),
   F7 (the unfurl walks two head requests per fabricated address, bounded by
   Cloudflare), F10 (four session caches grow per stall opened in a tab,
   bytes).
+- **Deferred by the owner on 2026-09-09, after the audit's two critics
+  (`private/agent-output/audit-0909/CRITIC-1.md`, `CRITIC-2.md`)** — four
+  behaviour decisions, each with its cost written so it is not re-derived:
+  1. *N7, the refused quote on the rail.* The walk collects tokens whose
+     record was signed by the stall but not self-paid 546, or could not be
+     decoded; nothing lifts them to the view, so the rail prints "nothing
+     quoted" and `Quotes · 0` over them (a false zero under §4's floor rule).
+     Options: leave; count only (~35 lines, reusing `quotedUnreadable(n)`,
+     label loses its number) — but a token can be in the set *and* have a
+     good winning record, which then prints "1 could not read" beside its
+     own row for ever; count with a per-token rank compare like STL1's
+     `noteRefused` (~60 lines) — the only shape with no permanent false
+     line. Recommended: the third. A foreign-signed record is not in the
+     set on either record and is said on Activity alone.
+  2. *N3-B, the withheld token's picture on Activity.* The gate shipped
+     (picture only for the stall's own record) does not cover a seller's own
+     record about a withheld token: its logo paints. §4's "Activity is not
+     filtered" is about printing a *name*; the payment row already draws the
+     picture/name line ("a logo is louder than the word claim"). Options:
+     leave; add `!isWithheldToken` to the picture (one predicate, one line
+     in CLAUDE §4 saying the picture is not the name). Recommended: add.
+  3. *B8, the first-sighting rule across blocks.* chronik stores 0 for a
+     transaction the node never saw in its mempool (never the block time),
+     so in the one case the rule fixes a reader that missed one sighting
+     crowns the older record by height while another crowns the newer:
+     two hosts, two winners, until a republish. Options: keep and carry the
+     cost (status quo, written in CLAUDE §5); retreat to same-height (the
+     09-07 rule already has the gap at the txid level, so it shrinks and
+     does not close it); drop `firstSeen` (re-opens the measured 09-07
+     incident: four edits in one block, the removal lost to the highest
+     txid). Recommended: keep.
+  4. *F6, `loadTokenMeta` fans out one request per listed token, uncapped
+     and unwindowed, and the first paint waits on all of them.* A stranger
+     inflates N through gift PARTIAL listings at ~1,000–1,500 sats per
+     distinct token (a genesis, a listing, 546 of dust; the fiat price is
+     unrecorded here). Options: a bare cap of 24 — six of thirty honest
+     tokens paint hex ids, and `isWithheldToken(id, undefined)` is false, so
+     the name fence is *off* past the cap (do not do this alone); an 8-wide
+     concurrency window — nothing visible changes, honest latency grows
+     (thirty tokens: four waves); cap what the first paint waits on and read
+     the rest after it, the `fillQuotedGenesis` pattern — display complete,
+     fence intact, the tail a paint nobody waits for. Recommended: the
+     third, the window if it must be cheap.
 - **The tag's follow-ups**: a real icon on the PNG needs the icon Worker
   to allow this origin (header set after the cache read, so cached entries
   gain it at deploy) and a separate cache key for the CORS load, never the

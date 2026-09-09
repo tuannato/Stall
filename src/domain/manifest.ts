@@ -390,8 +390,9 @@ export type ManifestRank = {
      * edits in an order, and txid knows nothing of it — measured 2026-09-07,
      * when the seller's removal lost to the edit with the highest txid. One
      * node's clock, so it decides only when both stamps are known; a node
-     * that restarted stamps the block time on everything, which is the block
-     * order again, and the ladder falls through to height, then txid.
+     * that never saw the transaction in its mempool stores **0** (chronik's
+     * `indexer.rs`, never the block time), which `knownSeen` reads as
+     * unknown, and the ladder falls through to height, then txid.
      */
     firstSeen?: number;
 };

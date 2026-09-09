@@ -27,13 +27,18 @@ export type AgoraOfferView = {
  *
  * Two members rather than the library's one `activeOffersByPubKey`, because
  * that call fetches and parses in a single `flatMap` and a parse that throws
- * takes the whole call down with it. The pubkey group is signed for — the ad
- * script checks `cancel_pk`'s signature under P2SH consensus, so a stranger
- * cannot list under a seller's key without it (corrected 2026-09-08; this
- * comment claimed the opposite) — but a **token** group is anyone's, a
- * plugin can skew from this library, and the eMPP ALP PARTIAL road needs no
- * signature: a PARTIAL with no enforced locktime makes
- * `_parsePartialOfferUtxo` throw `Outdated plugin`, and a ONESHOT with a
+ * takes the whole call down with it. **Only a ONESHOT is signed for**
+ * (corrected twice: 2026-09-08 said the opposite, 2026-09-09 said "signed
+ * for" of the whole group): `AgoraOneshot.parse_redeem_script` in the plugin
+ * requires `OP_CHECKSIGVERIFY` over `cancel_pk`, which P2SH consensus
+ * executes. `AgoraPartial.parse_redeem_script` takes the first push and
+ * parses it, asserting no opcode — so a PARTIAL lands in any `P + pubkey`
+ * group on either road, the SLP ad-input one and the ALP eMPP one, with no
+ * key of that pubkey; the covenant pays `hash160(maker_pk)`, so it is a
+ * gift listing, never theft. A token group is anyone's either way. A plugin
+ * can also skew from this library: a PARTIAL whose data lacks the enforced
+ * locktime this library always writes makes `_parsePartialOfferUtxo` throw
+ * `Outdated plugin` (a version skew, not a payload), and a ONESHOT with a
  * truncated `outputsSer` makes `readTxOutput` underflow. Either one used to be
  * painted as `unreachable` with all three hosts listed as failed — our failure
  * reported as the network's, on a shop that was answering.
@@ -152,11 +157,13 @@ export async function loadOffers(
         if (parsed === undefined) {
             // **Silent, deliberately.** A utxo the library does not recognise
             // as an offer is a plugin/library skew or a covenant shape this
-            // build never wrote — not the seller's stock, and (since the ad
-            // script signs for the pubkey group) not a stranger's either.
-            // Counting it would print "listings this page could not read" on
-            // a stall that is simply empty, the empty-versus-unreachable
-            // collapse arriving from outside. The library ignores them; so do we.
+            // build never wrote — not the seller's stock. It may be a
+            // stranger's (a PARTIAL lands in any pubkey group, 2026-09-09),
+            // but so may a utxo the library *does* recognise, and this app
+            // cannot tell the two apart either way. Counting it would print
+            // "listings this page could not read" on a stall that is simply
+            // empty, the empty-versus-unreachable collapse arriving from
+            // outside. The library ignores them; so do we.
             continue;
         }
         attempted += 1;

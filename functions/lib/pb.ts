@@ -30,7 +30,7 @@ export type LiteTx = {
     outputs: LiteOutput[];
     height?: number;
     isFinal: boolean;
-    /** Tx field 9, `timeFirstSeen`, seconds; absent when 0 — the app's in-block tiebreak. */
+    /** Tx field 9, `timeFirstSeen`, seconds; absent when 0 — the app's first-sighting order (`compareManifestRank`). */
     firstSeen?: number;
 };
 export type LitePage = { txs: LiteTx[]; numPages: number; numTxs: number };

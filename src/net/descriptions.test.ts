@@ -831,8 +831,11 @@ describe('an-unaddressed-quote-is-counted-not-forgotten', () => {
     /**
      * A description record this stall's key signed that does not pay the
      * stall back the publish dust was not made from this stall's link: not
-     * applied, and counted among the records this page could not read, so the
-     * rail says so rather than that the seller wrote nothing.
+     * applied, and counted in the walk's `unreadable` set. **This pins the
+     * net layer only**: nothing lifts that set onto the view yet, so the
+     * rail does not say so (PLAN § Decided D14, corrected 2026-09-09; the
+     * rail half is in § Open). A record another key signed is refused before
+     * this count and is not in the set.
      */
     it('leaves the token out of the maps and in the unreadable count', async () => {
         const stray = tx({ txid: '30'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'stray')], dustTo: null });
