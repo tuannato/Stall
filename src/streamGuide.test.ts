@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BROADCAST_RAIL_LIVE_MS, BROADCAST_RAIL_REST_MS } from './app';
+import {
+    BROADCAST_RAIL_LIVE_MS,
+    BROADCAST_RAIL_REST_MS,
+    BROADCAST_AFTER_RUN_MS,
+} from './app';
+import { OBS_TRUTH_RAIL_RESTS } from './ui/obsGuide';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -48,10 +53,16 @@ describe('the-stream-guide-figures-are-the-apps-own', () => {
         const corner = `${OBS_STICKER_WIDTH} × ${OBS_STICKER_HEIGHT}`;
         const rail = `${OBS_STICKER_WIDTH} × ${OBS_RAIL_STICKER_HEIGHT}`;
         const rest = BROADCAST_RAIL_REST_MS / 1000;
-        const cycle = (BROADCAST_RAIL_REST_MS + BROADCAST_RAIL_LIVE_MS) / 1000;
+        const live = BROADCAST_RAIL_LIVE_MS / 1000;
+        const after = BROADCAST_AFTER_RUN_MS / 1000;
         expect(html).toContain(corner);
         expect(html).toContain(rail);
-        expect(html).toContain(`${rest} seconds of every ${cycle}`);
+        // The rhythm, and the run: a card whose lines are cut waits for them
+        // and then `after` seconds more (2026-09-09), said where the numbers are.
+        expect(html).toContain(`rests ${rest} seconds, then shows a card for ${live}`);
+        expect(html).toContain(`then stays ${after} seconds more`);
+        expect(OBS_TRUTH_RAIL_RESTS).toContain(`${rest} seconds, then shows a card for ${live}`);
+        expect(OBS_TRUTH_RAIL_RESTS).toContain(`run through plus ${after}`);
 
         const stickerRe = new RegExp(
             `${OBS_STICKER_WIDTH} × ${OBS_STICKER_HEIGHT}[\\s\\S]*?${OBS_STICKER_WIDTH} × ${OBS_RAIL_STICKER_HEIGHT}`,

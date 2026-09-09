@@ -85,7 +85,7 @@ export const OBS_TRUTH_PHONE_VIEWERS =
 export const OBS_TRUTH_QR_SCAN =
     'The QR is 204 px at 1× — scale the source to grow it. Whether it scans for viewers watching at 720p is not measured.';
 export const OBS_TRUTH_RAIL_RESTS =
-    `“${OBS_MODE_RAIL}” rests without a price for 3 seconds of every 8 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
+    `“${OBS_MODE_RAIL}” rests without a price for 3 seconds, then shows a card for 5 — or, when a cut name or words are running, until they have run through plus 5 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
 export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
     'Side rail never shows a price — it is the name and the QR only.';
 /**

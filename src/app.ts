@@ -134,6 +134,7 @@ import {
     holdsLivePaint,
 } from './ui';
 import { FIAT_GLANCE_TIMEOUT_MS, PAY_CHECK_TIMEOUT_MS, PAY_RATE_TIMEOUT_MS } from './ui/render';
+import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { withDeadline } from './domain/deadline';
 
@@ -144,6 +145,12 @@ import { withDeadline } from './domain/deadline';
 const BROADCAST_RETRY_MS = 30_000;
 /** `mode=fixed` advances the cursor on this interval. */
 const BROADCAST_FIXED_MS = 8_000;
+/**
+ * After a card's cut name or words have run through, it stays this long
+ * before the next card (owner, 2026-09-09): the run first, then the wait,
+ * then the next item. A card with nothing running keeps the fixed dwell.
+ */
+export const BROADCAST_AFTER_RUN_MS = 5_000;
 /** Rail mode rests this long, then lives `BROADCAST_RAIL_LIVE_MS`. */
 export const BROADCAST_RAIL_REST_MS = 3_000;
 export const BROADCAST_RAIL_LIVE_MS = 5_000;
@@ -695,6 +702,19 @@ export function boot(
         paint();
     };
 
+    /**
+     * How long the card just painted stays. When one of its lines is cut
+     * and running, the run through (holds included) and then
+     * `BROADCAST_AFTER_RUN_MS`; otherwise the fixed dwell. Read from the
+     * tree the paint just measured, so the wait is the run the viewer sees.
+     */
+    const cardDwell = (fixedMs: number): number => {
+        const run = lastMarqueeRunAheadMs();
+        return run > 0 ? run + BROADCAST_AFTER_RUN_MS : fixedMs;
+    };
+    /** A live apply put a different card at the cursor: the armed dwell is the old card's. */
+    let cardReplaced = false;
+
     const carouselTick = (): void => {
         carousel = undefined;
         const params = state.view.broadcast;
@@ -716,7 +736,7 @@ export function boot(
                 },
             };
             paint();
-            carousel = setTimeout(carouselTick, BROADCAST_FIXED_MS);
+            carousel = setTimeout(carouselTick, cardDwell(BROADCAST_FIXED_MS));
             return;
         }
         if (state.view.broadcastState === 'live') {
@@ -741,13 +761,17 @@ export function boot(
             },
         };
         paint();
-        carousel = setTimeout(carouselTick, BROADCAST_RAIL_LIVE_MS);
+        carousel = setTimeout(carouselTick, cardDwell(BROADCAST_RAIL_LIVE_MS));
     };
 
     const syncCarousel = (): void => {
         const params = state.view.broadcast;
         const n = broadcastCards(state.view).length;
         const want = params !== undefined && params.preset === 'corner' && n >= 2;
+        // A card replaced under an armed timer takes its own dwell: the
+        // armed one was measured on the card that left (2026-09-09).
+        const rearm = cardReplaced;
+        cardReplaced = false;
         if (!want) {
             if (carousel !== undefined) {
                 clearTimeout(carousel);
@@ -756,9 +780,16 @@ export function boot(
             return;
         }
         if (carousel !== undefined) {
-            return;
+            if (!rearm) {
+                return;
+            }
+            clearTimeout(carousel);
+            carousel = undefined;
         }
-        const delay = params.mode === 'fixed' ? BROADCAST_FIXED_MS : BROADCAST_RAIL_REST_MS;
+        const live = params.mode === 'fixed' || state.view.broadcastState === 'live';
+        const delay = live
+            ? cardDwell(params.mode === 'fixed' ? BROADCAST_FIXED_MS : BROADCAST_RAIL_LIVE_MS)
+            : BROADCAST_RAIL_REST_MS;
         carousel = setTimeout(carouselTick, delay);
     };
 
@@ -836,6 +867,7 @@ export function boot(
         }
         if (prevCard.tokenId !== nextCard.tokenId) {
             next.broadcastStepped = true;
+            cardReplaced = true;
         } else if (prevCard.figure !== nextCard.figure) {
             next.broadcastPulse = true;
         }

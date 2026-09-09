@@ -68,6 +68,12 @@ export function setMarqueeMeasure(next: Measure | undefined): void {
 }
 
 type Run = { startedAtMs: number; totalMs: number };
+/** What the last `applyMarquees` found still ahead: the carousel's wait. */
+let lastRunAhead = 0;
+
+export function lastMarqueeRunAheadMs(): number {
+    return lastRunAhead;
+}
 /** Runs in flight or finished, by key and overflow; entries leave once over. */
 const runs = new Map<string, Run>();
 let clock: () => number = () => Date.now();
@@ -78,6 +84,7 @@ export function setMarqueeClock(next: (() => number) | undefined): void {
 
 export function resetMarqueesForTests(): void {
     runs.clear();
+    lastRunAhead = 0;
     measure = realMeasure;
     clock = () => Date.now();
 }
@@ -154,6 +161,7 @@ export function applyMarquees(root: ParentNode, speeds: MarqueeSpeeds = ROW_SPEE
             runs.delete(key);
         }
     }
+    lastRunAhead = longest;
     return longest;
 }
 

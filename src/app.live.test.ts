@@ -3822,3 +3822,46 @@ describe('reopening-the-pay-sheet-does-not-let-the-first-ask-say-no-answer', () 
         expect(painted.view?.payRate).toBeDefined();
     });
 });
+
+describe('a-new-card-under-an-armed-timer-gets-its-own-dwell', () => {
+    /**
+     * `syncCarousel` returned while a timer was armed, so a live apply that
+     * put a different card at the cursor kept the dwell measured on the card
+     * that left — and a longer card advanced mid-run (CRITIC-1 on the
+     * marquee, 2026-09-09). A replaced card re-arms with its own dwell.
+     */
+    it('re-arms the carousel when a live apply replaces the card at the cursor', async () => {
+        const A = { ...OFFER, tokenId: 'a1'.repeat(32), outpoint: { txid: 'a1'.repeat(32), outIdx: 1 } };
+        const B = { ...OFFER, tokenId: 'b2'.repeat(32), outpoint: { txid: 'b2'.repeat(32), outIdx: 1 } };
+        const C = { ...OFFER, tokenId: 'c3'.repeat(32), outpoint: { txid: 'c3'.repeat(32), outIdx: 1 } };
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed`);
+        const timeouts: number[] = [];
+        const spy = vi.spyOn(globalThis, 'setTimeout');
+        try {
+            bootStall(
+                stallEmpty({
+                    fetch: { kind: 'offers', offers: [A, B] },
+                    broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings' },
+                }),
+            );
+            await flush();
+            const armed = () =>
+                spy.mock.calls.filter((call) => call[1] === 8_000).length;
+            const before = armed();
+            expect(before, 'the carousel is armed once on open').toBeGreaterThan(0);
+            const shown = painted.view?.broadcastCursor ?? 0;
+            // A book that drops the shown card: the cursor lands on a different token.
+            chain.book = { kind: 'offers', offers: [B, C] };
+            watches[0]!.hooks.onChanged?.('message');
+            await flush();
+            expect(painted.view?.fetch?.kind).toBe('offers');
+            expect(painted.view?.broadcastStepped, 'the card at the cursor changed').toBe(true);
+            expect(armed(), 'the carousel was re-armed for the new card').toBe(before + 1);
+            void timeouts;
+            void shown;
+        } finally {
+            spy.mockRestore();
+            window.history.replaceState(null, '', stallPath(PK));
+        }
+    });
+});

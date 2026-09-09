@@ -3,7 +3,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { boot, type AppState } from './app';
+import {
+    boot,
+    type AppState,
+    BROADCAST_AFTER_RUN_MS,
+} from './app';
+import { resetMarqueesForTests, setMarqueeMeasure } from './ui/marquee';
 
 /*
  * The price feed answers instantly and never touches the network: every
@@ -595,6 +600,42 @@ describe('the-rail-preset-starts-no-timer', () => {
             'the rail preset does not run the rest/live cycle',
         ).toBe('rest');
         expect(root.querySelector('.bc-ext')).toBeNull();
+    });
+
+    it('the-carousel-waits-for-the-run-then-five-seconds', async () => {
+        // A card whose name is cut runs it through first (600 px at the
+        // stream's 60 px/s is 10 s, with a 1.5 s hold at each end), then
+        // stays BROADCAST_AFTER_RUN_MS more; the fixed 8 s does not advance it.
+        setMarqueeMeasure(() => 600);
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed`);
+        const root = document.createElement('div');
+        boot(root, async () => overlayState());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('.bc-nm')?.hasAttribute('data-marquee'), 'the name runs').toBe(true);
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in'), 'not advanced at the fixed dwell').toBe(false);
+        const run = 1_500 + 10_000 + 1_500;
+        await vi.advanceTimersByTimeAsync(run + BROADCAST_AFTER_RUN_MS - BROADCAST_FIXED_MS - 1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in'), 'not yet').toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in'), 'advanced after the run and the wait').toBe(true);
+        resetMarqueesForTests();
+    });
+
+    it('a-card-with-nothing-running-keeps-the-fixed-dwell', async () => {
+        setMarqueeMeasure(() => 0);
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed`);
+        const root = document.createElement('div');
+        boot(root, async () => overlayState());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('.bc-nm')?.hasAttribute('data-marquee')).toBe(false);
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS - 1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
+        resetMarqueesForTests();
     });
 
     it('preset=corner mode=fixed advances the cursor and fades the card, not the price', async () => {
