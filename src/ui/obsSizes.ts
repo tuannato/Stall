@@ -13,12 +13,14 @@ export const OBS_STICKER_WIDTH = 372;
 /**
  * Corner card (bottom-right anchored): the card's box plus both insets.
  *
- * 810 measured on the tallest card there is — a quote card under a 32-byte
- * name on Neo, which clamps the name at three lines where the other looks
- * stop at two. A quote card is a line taller than a listing card (the chip,
- * and the line under its rule), and the two stresses stack: neither alone
- * reaches this, which is why the fixture carries both.
+ * 839 measured 2026-09-09 on the tallest card there is — a quote card under
+ * a 32-byte name on Neo, which clamps the name at three lines where the
+ * other looks stop at two, now carrying the seller's words line under the
+ * chip (`bc-words`, one line). It was 820 before the words; a quote card is
+ * two lines taller than a listing card (the chip and the words, and the
+ * line under its rule), and the stresses stack: none alone reaches this,
+ * which is why the fixture carries them all.
  */
-export const OBS_STICKER_HEIGHT = 820;
+export const OBS_STICKER_HEIGHT = 839;
 /** Side rail (mid-right, centred): the rail's box plus both insets. */
 export const OBS_RAIL_STICKER_HEIGHT = 580;

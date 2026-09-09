@@ -741,6 +741,10 @@ export const SCREENS: Record<string, StallView> = {
     'broadcast-quotes': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
+        // The seller's words on the quote card (2026-09-09): without them the
+        // sticker-height rule measured a card a line shorter than the one a
+        // streamer gets, and `OBS_STICKER_HEIGHT` is set by that measurement.
+        descriptions: QUOTE_WORDS,
         broadcast: bc('corner', 'fixed', false, 'quotes'),
         broadcastState: 'live',
         broadcastCursor: 0,
@@ -759,6 +763,10 @@ export const SCREENS: Record<string, StallView> = {
     'broadcast-quotes-long-name': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
+        // The seller's words on the quote card (2026-09-09): without them the
+        // sticker-height rule measured a card a line shorter than the one a
+        // streamer gets, and `OBS_STICKER_HEIGHT` is set by that measurement.
+        descriptions: QUOTE_WORDS,
         broadcast: bc('corner', 'fixed', false, 'quotes'),
         broadcastState: 'live',
         broadcastCursor: 0,

@@ -412,7 +412,8 @@ quote never wears "≈": that mark belongs to computed glances.
    memo beside it is the payer's claim, labelled as one. Never "sold".
 5. **A card carries one rail, never both.** On the overlay and the poster the
    streamer chooses which rail a card shows; a quote card carries the quote,
-   the chip, one line about what paying it does, and a code that opens **this
+   the chip, the seller's words when they wrote any (since 2026-09-09, under
+   the chip), one line about what paying it does, and a code that opens **this
    page at that item** — no rate, no derived XEC, nothing a viewer could scan
    into a wallet holding a figure nobody explained. Quote in XEC for a stream
    nobody is watching.
@@ -425,9 +426,16 @@ quote never wears "≈": that mark belongs to computed glances.
    and says where the token came from. Wire unchanged.
 8. **The token's name titles every quote surface and the seller's words
    follow** (owner, 2026-09-05; the reverse shipped for two days). The words
-   are shown whole where there is room and on one line with an ellipsis where
-   there is not; nothing is cut mid-word. The stream card keeps the genesis
-   name. Agora rows are untouched — there the token *is* the thing.
+   are shown whole where there is room and on one line where there is not —
+   and since 2026-09-09 a cut line **runs once** rather than being cut with
+   an ellipsis (`src/ui/marquee.ts`: the shop rows' name and words, the
+   stream card's name and words); nothing is cut mid-word. The stream card
+   keeps the genesis name as its title, and the **quote** card carries the
+   seller's words under the chip (owner, 2026-09-09, reversing the clause
+   that kept them off the plate while the plate could only cut them); the
+   listing card carries none, because there the words would sit beside the
+   covenant's figure with no label between. Agora rows are untouched —
+   there the token *is* the thing.
 
 **What this rail is not.** Not an escrow, not a checkout, not a receipt: Stall
 composes a BIP21 and a wallet signs it. There is no cart, no fiat or rate in

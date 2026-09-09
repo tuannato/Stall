@@ -11,6 +11,7 @@ import { payLandingUrl, stallPath } from '../domain/route';
 import type { StallView } from '../domain/state';
 import { overlayTierCharCeilings } from '../domain/theme';
 import * as copy from './copy';
+import { marqueeNode } from './marquee';
 import type { TokenListing } from './render';
 import {
     cheapestOf,
@@ -224,7 +225,8 @@ export function renderBroadcastView(view: StallView): HTMLElement {
 function listingCard(view: StallView, listing: TokenListing): HTMLElement {
     const offer = cheapestOf(listing);
     const item = el('div', 'bc-item');
-    item.append(el('span', 'bc-nm', tokenName(view.tokens, listing.tokenId)));
+    // The name runs once when it is cut (`marquee.ts`), at the stream's pace.
+    item.append(marqueeNode(el('span', 'bc-nm', tokenName(view.tokens, listing.tokenId)), 'name', listing.tokenId));
     const ticker = tokenTicker(view.tokens, listing.tokenId);
     const known = knownDecimals(view.tokens, listing.tokenId);
     const totalAtoms = listing.offers.reduce((sum, o) => sum + o.atoms, 0n);
@@ -280,8 +282,16 @@ function listingCard(view: StallView, listing: TokenListing): HTMLElement {
  */
 function quoteCard(view: StallView, price: TokenPrice, tokenId: string): HTMLElement {
     const item = el('div', 'bc-item bc-q-item');
-    item.append(el('span', 'bc-nm', tokenName(view.tokens, tokenId)));
+    item.append(marqueeNode(el('span', 'bc-nm', tokenName(view.tokens, tokenId)), 'name', tokenId));
     item.append(el('span', 'bc-chip', copy.SELLER_QUOTE_CHIP));
+    // The seller's words, under the chip that says whose they are (owner,
+    // 2026-09-09 — PLAN § D rule 8's stream clause reversed): one line that
+    // runs once when it is cut. The quote card alone; on a listing card the
+    // words would sit beside the covenant's figure with no label between.
+    const words = view.descriptions?.get(tokenId);
+    if (words !== undefined && words !== '') {
+        item.append(marqueeNode(el('span', 'bc-words', words), 'words', tokenId));
+    }
     const row = el('div', 'bc-p');
     const figure = quoteFigure(price);
     const node = el('span', 'bc-q', figure);

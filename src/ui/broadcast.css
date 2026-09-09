@@ -186,6 +186,15 @@
     color: var(--s-muted);
 }
 
+/* The seller's words on a quote card, under the chip: one line, and it runs
+   once when it is cut (`[data-mq]` in stall.css does the clipping). */
+.stall.broadcast .bc-words {
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--s-muted);
+    margin-top: 2px;
+}
+
 .stall.broadcast .bc-l {
     font-size: 22px;
     line-height: 1.25;

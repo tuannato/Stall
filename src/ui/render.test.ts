@@ -114,6 +114,7 @@ import {
     MARQUEE_HOLD_MS,
     MARQUEE_MAX_RUN_MS,
     ROW_SPEED_PX_PER_S,
+    STREAM_SPEED_PX_PER_S,
     marqueeRunMs,
     resetMarqueesForTests,
     setMarqueeClock,
@@ -9258,11 +9259,13 @@ describe('no-words-names-the-token-and-says-so', () => {
 
 describe('the-stream-card-keeps-the-genesis-name', () => {
     /**
-     * The overlay plate is 216px and `.bc-nm` is nowrap with an ellipsis — a
-     * cut no probe rule can see. The genesis name is the short, stable string
-     * on that plate; words-first naming binds the pay row and the pay sheet.
+     * The genesis name titles the card. Until 2026-09-09 the words were kept
+     * off the plate because its 216px cut them with an ellipsis no probe
+     * rule could see; a cut line runs now (`marquee.ts`), and the owner
+     * reversed PLAN § D rule 8's stream clause: the seller's words sit under
+     * the chip that says whose they are, on the quote card alone.
      */
-    it('titles a quote card with the token name, not the words', () => {
+    it('titles a quote card with the token name, and carries the words under the chip', () => {
         const { root } = paint(
             quoteView({
                 broadcast: {
@@ -9277,7 +9280,56 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
         );
         const card = root.querySelector('.bc-q-item') as HTMLElement;
         expect(card.querySelector('.bc-nm')?.textContent).toBe('Roasted Beans');
+        const words = card.querySelector('.bc-words') as HTMLElement;
+        expect(words?.textContent).toBe('Half kilo of beans');
+        expect(words.getAttribute('data-mq')).toBe('words');
+        // Name, chip, words, figure, the line about what paying does.
+        expect([...card.children].map((n) => n.className)).toEqual([
+            'bc-nm',
+            'bc-chip',
+            'bc-words',
+            'bc-p',
+            'bc-l',
+        ]);
+        // No node the pulse could mistake for money.
+        expect(words.getAttribute('data-role')).toBeNull();
+    });
+
+    it('a listing card carries no words', () => {
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings' },
+                broadcastState: 'live',
+                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
+            }),
+        );
+        const card = root.querySelector('.bc-item') as HTMLElement;
+        expect(card).not.toBeNull();
+        expect(card.querySelector('.bc-words')).toBeNull();
         expect(card.textContent).not.toContain('Half kilo of beans');
+        expect(card.querySelector('.bc-nm')?.getAttribute('data-mq')).toBe('name');
+    });
+
+    it('a cut stream line runs once, at the stream’s pace', () => {
+        resetMarqueesForTests();
+        setMarqueeMeasure(() => 300);
+        const { root } = paint(
+            quoteView({
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+                broadcastState: 'live',
+                descriptions: new Map([[TOKEN_ID, 'A sentence long enough to be cut on the plate']]),
+            }),
+        );
+        const words = root.querySelector('.bc-words') as HTMLElement;
+        expect(words.hasAttribute('data-marquee')).toBe(true);
+        expect(words.querySelector<HTMLElement>('.mq-run')!.style.getPropertyValue('--mq-ms')).toBe(
+            `${marqueeRunMs(300, 'words', STREAM_SPEED_PX_PER_S)}ms`,
+        );
+        // Once: the animation shorthand says so, and no sheet says `infinite`.
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        expect(css).toMatch(/\[data-marquee\] > \.mq-run \{[^}]*animation: mq-run [^;]* 1 both;/);
+        expect(css).not.toMatch(/mq-run[^;]*infinite/);
+        resetMarqueesForTests();
     });
 });
 
