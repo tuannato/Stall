@@ -54,8 +54,11 @@ nothing.
   opened it to do. The first run reported the scrim covering the price
   behind it — the boundary that had never been written down.
 - **A marquee never paints outside its cell** (2026-09-09). A cut name or
-  words line runs once inside a cell that clips (`[data-mq]`, `overflow:
-  hidden`); the moving part is a `transform` on the inner `.mq-run` span,
+  words line runs inside a cell that clips (`[data-mq]`, `overflow:
+  hidden`) — three passes on a shop row and one on a stream card since
+  2026-09-12, `--mq-runs` written per surface, which changes how long it
+  moves and nothing about where; the moving part is a `transform` on the
+  inner `.mq-run` span,
   never a positioned node — the decoration sweep reads every positioned
   node and would refuse it over the asked amount, and `text-spills` skips
   clipped overflow, which is what this rule relies on. Every

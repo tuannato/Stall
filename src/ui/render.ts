@@ -103,8 +103,8 @@ import {
     type PosterPaint,
 } from './posterImage';
 import {
-    ROW_SPEED_PX_PER_S,
-    STREAM_SPEED_PX_PER_S,
+    ROW_MARQUEE,
+    STREAM_MARQUEE,
     applyMarquees,
     marqueeNode,
     remeasureWhenFontsReady,
@@ -411,8 +411,8 @@ export function renderStall(
         root.append(frame);
         // The cards' lines run at the stream's pace; measured now, and again
         // when the real faces land.
-        applyMarquees(root, STREAM_SPEED_PX_PER_S);
-        remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_SPEED_PX_PER_S);
+        applyMarquees(root, STREAM_MARQUEE);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_MARQUEE);
         overlayWasOpen = overlayOpen;
         return;
     }
@@ -498,8 +498,8 @@ export function renderStall(
     root.append(frame);
     // The rows' cut lines: measured on the connected tree (one layout, all
     // reads before all writes), and again when the real faces land.
-    applyMarquees(root, ROW_SPEED_PX_PER_S);
-    remeasureWhenFontsReady(root, () => paintSerial === serial, ROW_SPEED_PX_PER_S);
+    applyMarquees(root, ROW_MARQUEE);
+    remeasureWhenFontsReady(root, () => paintSerial === serial, ROW_MARQUEE);
     const scroller = stall.querySelector('.stall-scroll') as HTMLElement | null;
     if (sameScreen && keptScroll > 0 && scroller !== null) {
         // After the tree is connected: a browser does not keep `scrollTop`
@@ -2136,17 +2136,18 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
  * What a quoted item is called on the two pay surfaces, and what is said
  * beside it.
  *
- * **The seller's own words name the item.** A genesis name names a *token*,
- * which is true and is rarely the thing a buyer is paying for — a stall
- * selling half-kilo bags through one fungible token would put the token's name
- * on every row. So the words take the title, cut at `ITEM_NAME_MAX_CHARS`, and
- * the token's name takes a small line under it.
+ * **The token's own name is the title, and the seller's words follow**
+ * (owner, 2026-09-05). The reverse shipped for two days — the words as the
+ * title, cut at a character count — and a seller who wrote a sentence rather
+ * than a name got "paid strai" where a name should be. A name is short and
+ * screened; a sentence is read, not glanced at.
  *
- * With no words the token's name is the title, and the row says the seller
- * wrote nothing rather than letting a token name read as a description. The
- * stream overlay is deliberately not on this rule: its plate is 216px of
- * nowrap with an ellipsis, a cut no probe rule can see, so it keeps the short
- * stable string.
+ * So the title is always the genesis name. The words come after it, whole on
+ * the face and in the pay sheet, and on the row as one line that runs when it
+ * is cut (`marqueeNode`). With no words there is no second line and the row
+ * says the seller wrote nothing, rather than letting a token name read as a
+ * description. The stream overlay keeps the genesis name too: its plate is
+ * 216px of nowrap with an ellipsis, a cut no probe rule can see.
  */
 function quoteNaming(
     view: StallView,

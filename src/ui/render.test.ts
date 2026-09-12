@@ -113,8 +113,12 @@ import {
 import {
     MARQUEE_HOLD_MS,
     MARQUEE_MAX_RUN_MS,
+    ROW_MARQUEE,
     ROW_SPEED_PX_PER_S,
+    STREAM_MARQUEE,
     STREAM_SPEED_PX_PER_S,
+    applyMarquees,
+    lastMarqueeRunAheadMs,
     marqueeRunMs,
     resetMarqueesForTests,
     setMarqueeClock,
@@ -9322,12 +9326,20 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
         );
         const words = root.querySelector('.bc-words') as HTMLElement;
         expect(words.hasAttribute('data-marquee')).toBe(true);
-        expect(words.querySelector<HTMLElement>('.mq-run')!.style.getPropertyValue('--mq-ms')).toBe(
+        const run = words.querySelector<HTMLElement>('.mq-run')!;
+        expect(run.style.getPropertyValue('--mq-ms')).toBe(
             `${marqueeRunMs(300, 'words', STREAM_SPEED_PX_PER_S)}ms`,
         );
-        // Once: the animation shorthand says so, and no sheet says `infinite`.
+        // Once, on the node itself: the count is per surface now, and the
+        // stream's is the one inside `/stream`'s published rhythm.
+        expect(run.style.getPropertyValue('--mq-runs')).toBe('1');
+        expect(STREAM_MARQUEE.runs).toBe(1);
+        // The sheet reads the count and resolves it at rest; no sheet loops.
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
-        expect(css).toMatch(/\[data-marquee\] > \.mq-run \{[^}]*animation: mq-run [^;]* 1 both;/);
+        expect(css).toMatch(
+            /\[data-marquee\] > \.mq-run \{[^}]*animation: mq-run [^;]*var\(--mq-runs\) both;/,
+        );
+        expect(css).toMatch(/\[data-mq\] > \.mq-run \{[^}]*--mq-runs: 1;/);
         expect(css).not.toMatch(/mq-run[^;]*infinite/);
         resetMarqueesForTests();
     });
@@ -12309,7 +12321,7 @@ describe('the-listing-face-says-the-sellers-words-on-the-card', () => {
  * happy-dom lays out nothing, so the measure is injected; the layout probe
  * judges the real one.
  */
-describe('a-cut-name-runs-once-and-a-fitting-one-stands', () => {
+describe('a-cut-row-name-runs-three-times-and-a-fitting-one-stands', () => {
     beforeEach(() => {
         resetMarqueesForTests();
     });
@@ -12329,8 +12341,16 @@ describe('a-cut-name-runs-once-and-a-fitting-one-stands', () => {
         const run = cut.querySelector('.mq-run') as HTMLElement;
         expect(run.style.getPropertyValue('--mq-shift')).toBe('-120px');
         expect(run.style.getPropertyValue('--mq-ms')).toBe(`${marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)}ms`);
-        expect(marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)).toBe(3000);
+        // One pass, at the rows' pace: 120px at 30px/s (owner, 2026-09-12 —
+        // ten slower on both kinds).
+        expect(marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)).toBe(4000);
         expect(run.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS}ms`);
+        // Three passes on a row, written on the node — the count is the
+        // surface's, and `--mq-ms` stays one pass.
+        expect(run.style.getPropertyValue('--mq-runs')).toBe('3');
+        expect(ROW_MARQUEE.runs).toBe(3);
+        // The words stay quicker than the name at the same distance.
+        expect(ROW_SPEED_PX_PER_S.words).toBeGreaterThan(ROW_SPEED_PX_PER_S.name);
     });
 
     it('a rounding overflow is not a run', () => {
@@ -12377,7 +12397,7 @@ describe('a-repaint-mid-run-continues-the-run-and-a-finished-one-rests', () => {
         resetMarqueesForTests();
     });
 
-    it('owes less of the hold after a second, and nothing once the run is over', () => {
+    it('owes less of the hold after a second, and nothing once every pass is over', () => {
         setMarqueeMeasure(() => 120);
         let now = 1_000_000;
         setMarqueeClock(() => now);
@@ -12387,10 +12407,20 @@ describe('a-repaint-mid-run-continues-the-run-and-a-finished-one-rests', () => {
         now += 1_000;
         const second = paint(view).root.querySelector<HTMLElement>('.item-n .mq-run')!;
         expect(second.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS - 1_000}ms`);
-        // Past the whole run (hold + 3 s + hold): it rests, cut, and nothing moves.
-        now += MARQUEE_HOLD_MS + 3_000 + MARQUEE_HOLD_MS;
-        const third = paint(view).root.querySelector<HTMLElement>('.item-n')!;
-        expect(third.hasAttribute('data-marquee')).toBe(false);
+        // Still owing, one pass in: three is the row's count, so the cycle is
+        // not over at the end of the first pass. Derived from the constants,
+        // never a literal — a pace change must not quietly retune this.
+        const onePass = marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S);
+        const cycle = MARQUEE_HOLD_MS + ROW_MARQUEE.runs * onePass + MARQUEE_HOLD_MS;
+        now += MARQUEE_HOLD_MS + onePass;
+        expect(
+            paint(view).root.querySelector<HTMLElement>('.item-n')!.hasAttribute('data-marquee'),
+            'rested after one pass of three',
+        ).toBe(true);
+        // Past the whole cycle: it rests, cut, and nothing moves.
+        now = 1_000_000 + cycle;
+        const last = paint(view).root.querySelector<HTMLElement>('.item-n')!;
+        expect(last.hasAttribute('data-marquee')).toBe(false);
     });
 });
 
@@ -12403,5 +12433,106 @@ describe('reduced-motion-stills-the-marquee', () => {
         expect(tail).toMatch(/\[data-marquee\] > \.mq-run\s*\{[^}]*animation:\s*none/);
         // The moving rule sits above the kill, at the same specificity.
         expect(css.indexOf('[data-marquee] > .mq-run {')).toBeLessThan(last.index!);
+    });
+});
+
+describe('a-finished-run-does-not-start-again-on-a-later-repaint', () => {
+    /**
+     * The bound is the rule, so the bound has to survive the paint that
+     * follows it. `applyMarquees` used to drop a finished entry on a time
+     * horizon, and the next paint — which every socket message causes —
+     * found nothing and armed the line again. `renderStall` also measures
+     * twice per paint (`remeasureWhenFontsReady`, whose `document.fonts.ready`
+     * is already resolved after the first load), so the two halves of ONE
+     * paint were enough: the first rested the line and evicted it, the
+     * second re-armed it. happy-dom ships no `document.fonts`, which is why
+     * no test could see this — the second measure is spelled out here.
+     */
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    it('rests through both halves of a paint long after the run, and through the next', () => {
+        setMarqueeMeasure(() => 120);
+        let now = 1_000_000;
+        setMarqueeClock(() => now);
+        const view = offersView([OFFER], new Map([[TOKEN_ID, { ...BEANS, name: 'A name far too long for its line' }]]));
+        paint(view);
+        // Past the whole armed cycle, and past any horizon an eviction could use.
+        now += 120_000;
+        for (const label of ['first paint', 'second paint', 'third paint']) {
+            const root = paint(view).root;
+            const line = root.querySelector<HTMLElement>('.item-n')!;
+            expect(line.hasAttribute('data-marquee'), `${label}: armed again`).toBe(false);
+            // The fonts-ready measure of the same paint, on the same tree.
+            applyMarquees(root, ROW_MARQUEE);
+            expect(line.hasAttribute('data-marquee'), `${label}: re-armed by the second measure`).toBe(
+                false,
+            );
+            now += 60_000;
+        }
+    });
+});
+
+describe('a-card-back-at-the-cursor-runs-its-name-again', () => {
+    /**
+     * The stream's count is one pass, and the carousel is what brings a card
+     * back — so "once" has to mean once per **appearance**, not once per page
+     * load. `cardDwell` in `app.ts` sizes a card's stay from the run still
+     * ahead (`lastMarqueeRunAheadMs`), so a card that came back rested would
+     * report nothing to wait for, fall to the fixed dwell, and never show the
+     * tail of a cut name again — the regression a permanent "already ran"
+     * flag would have shipped (critic, 2026-09-12).
+     *
+     * It comes free from the rule the rows need: an entry leaves when the
+     * paint stops carrying its line, and a card away at the cursor is not
+     * painted.
+     */
+    const TWIN = '22'.repeat(32);
+    const TWIN_META: TokenMeta = {
+        tokenId: TWIN,
+        name: 'A stream card name far too long for its plate',
+        ticker: 'TWIN',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const twoCards = (cursor: number): StallView =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            tokens: new Map([
+                [TOKEN_ID, { ...BEANS, name: 'A first card name far too long for its plate' }],
+                [TWIN, TWIN_META],
+            ]),
+            prices: new Map([
+                [TOKEN_ID, QUOTE_USD],
+                [TWIN, QUOTE_USD],
+            ]),
+            stallName: 'Riverside Goods',
+            broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+            broadcastState: 'live',
+            broadcastCursor: cursor,
+        });
+
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    it('runs again on its next appearance, and the rows do not', () => {
+        setMarqueeMeasure(() => 300);
+        let now = 5_000_000;
+        setMarqueeClock(() => now);
+
+        const armed = (root: HTMLElement): boolean =>
+            root.querySelector('.bc-nm')!.hasAttribute('data-marquee');
+
+        expect(armed(paint(twoCards(0)).root), 'first appearance').toBe(true);
+        // Long past its single pass, with the other card at the cursor.
+        now += 120_000;
+        expect(armed(paint(twoCards(1)).root), 'the other card').toBe(true);
+        now += 120_000;
+        expect(armed(paint(twoCards(0)).root), 'back at the cursor').toBe(true);
+        // And the run it reports is a whole one, which is what the dwell reads.
+        const onePass = marqueeRunMs(300, 'name', STREAM_SPEED_PX_PER_S);
+        expect(lastMarqueeRunAheadMs()).toBe(MARQUEE_HOLD_MS + onePass + MARQUEE_HOLD_MS);
     });
 });

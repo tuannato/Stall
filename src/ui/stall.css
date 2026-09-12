@@ -1214,14 +1214,19 @@ body {
     --mq-shift: 0px;
     --mq-ms: 0ms;
     --mq-delay: 0ms;
+    --mq-runs: 1;
 }
 
 [data-marquee] {
     text-overflow: clip;
 }
 
+/* The passes are the compositor's: one animation, `--mq-runs` iterations,
+   written inline per surface by `applyMarquees` (the shop's rows take three
+   since 2026-09-12, the stream card one). Each pass snaps back to the start,
+   the same cut the line makes when the whole run ends. */
 [data-marquee] > .mq-run {
-    animation: mq-run var(--mq-ms) linear var(--mq-delay) 1 both;
+    animation: mq-run var(--mq-ms) linear var(--mq-delay) var(--mq-runs) both;
 }
 
 @keyframes mq-run {
