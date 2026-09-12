@@ -9,6 +9,7 @@ import {
     BROADCAST_AFTER_RUN_MS,
 } from './app';
 import { resetMarqueesForTests, setMarqueeMeasure } from './ui/marquee';
+import { FIAT_GLANCE_MAX_AGE_MS } from './ui/render';
 
 /*
  * The price feed answers instantly and never touches the network: every
@@ -17,11 +18,26 @@ import { resetMarqueesForTests, setMarqueeMeasure } from './ui/marquee';
  * view and rewrote the global document.title after the next test's
  * assertion — a cross-test flake that only showed under load.
  */
+const { glanceFeed } = vi.hoisted(() => ({
+    glanceFeed: vi.fn(async (): Promise<bigint | undefined> => undefined),
+}));
 vi.mock('./net/price', () => ({
-    fetchXecPrice: async () => undefined,
+    fetchXecPrice: glanceFeed,
 }));
 vi.mock('./net/priceCheck', () => ({
     fetchXecPriceCheck: async () => undefined,
+}));
+/*
+ * The socket is stubbed for the same reason the feed is, and the reason is in
+ * `MIN_REREAD_MS`'s own docblock: chronik-client reconnects with no backoff,
+ * so a sandbox that refuses connections spins as fast as it can refuse them
+ * and every spin asks for the offers again. A test that advances a clock by
+ * minutes then collects that storm as unhandled rejections. What the socket
+ * does is `src/net/live.test.ts`'s subject; nothing here asserts it.
+ */
+vi.mock('./net/live', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./net/live')>()),
+    watchStall: () => ({ close: () => {}, pause: () => {}, resume: () => {} }),
 }));
 import { parseSellerParam, sellerFromPath, stallPath } from './domain/route';
 import type { StallOffer } from './domain/state';
@@ -1423,5 +1439,140 @@ describe('a-repaint-does-not-empty-the-paste-box', () => {
         expect(again).not.toBe(input);
         expect(again.value).toBe('ecash:qq');
         expect(again.getAttribute('data-focus-key')).toBe('seller-input');
+    });
+});
+
+/**
+ * The glance is the one figure on this origin that a third party supplies, and
+ * for nine days it was read once per document load and never again: the two
+ * reads that refreshed it — the currency picker and the seller's currency hint
+ * — were both removed on 2026-09-03 by one commit about which currency wins.
+ * So `fetchXecPrice`'s "absent, never stale" was true for one second of a
+ * tab's life, and a stall left open painted a rate from hours earlier under a
+ * line that promises never to.
+ *
+ * What it is asked for now is what the pay rail already did: a feed is asked
+ * when a figure on screen needs the number, and never on a page that shows
+ * none.
+ */
+describe('the glance is asked for when it is on screen, and kept fresh while it is', () => {
+    const USD_RATE = 20_000_000n; // 0.00002 USD per XEC, scaled by RATE_SCALE
+
+    /**
+     * Every `boot` adds its own `visibilitychange` listener to the one
+     * `document` this file shares, and they outlive the test that made them.
+     * A face left open in an earlier test would answer the next test's wake
+     * on the same spy — so each root is closed back to an idle overlay here,
+     * which is what takes its glance off screen.
+     */
+    const roots: HTMLElement[] = [];
+
+    beforeEach(() => {
+        glanceFeed.mockClear();
+        glanceFeed.mockResolvedValue(undefined);
+        window.history.replaceState(null, '', stallPath(PK));
+    });
+
+    afterEach(() => {
+        for (const root of roots) {
+            root.querySelector<HTMLButtonElement>('[data-role="item-back"]')?.click();
+        }
+        roots.length = 0;
+        vi.useRealTimers();
+        setVisibility('visible');
+    });
+
+    function setVisibility(state: 'visible' | 'hidden'): void {
+        Object.defineProperty(document, 'visibilityState', {
+            value: state,
+            configurable: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+    }
+
+    async function openStall(): Promise<HTMLElement> {
+        const root = document.createElement('div');
+        boot(root, async () => overlayState({ broadcast: undefined }));
+        roots.push(root);
+        await vi.advanceTimersByTimeAsync(0);
+        return root;
+    }
+
+    /** The three presses that put the glance on screen: row, face, fold. */
+    async function openTheFold(root: HTMLElement): Promise<void> {
+        root.querySelector<HTMLButtonElement>('.item-head')?.click();
+        await vi.advanceTimersByTimeAsync(0);
+        const fold = root.querySelector<HTMLDetailsElement>('[data-role="item-how"]');
+        expect(fold, 'the face mounts its fold').not.toBeNull();
+        fold!.open = true;
+        fold!.dispatchEvent(new Event('toggle'));
+        await vi.advanceTimersByTimeAsync(0);
+    }
+
+    it('a-stall-that-shows-no-glance-asks-no-price-feed', async () => {
+        vi.useFakeTimers();
+        const root = await openStall();
+        expect(glanceFeed, 'nothing is asked for a painted shop').not.toHaveBeenCalled();
+
+        // The face alone is not the glance: the line lives under a fold that
+        // opens closed.
+        root.querySelector<HTMLButtonElement>('.item-head')?.click();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(glanceFeed, 'nor for a face whose fold is shut').not.toHaveBeenCalled();
+
+        const fold = root.querySelector<HTMLDetailsElement>('[data-role="item-how"]')!;
+        fold.open = true;
+        fold.dispatchEvent(new Event('toggle'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(glanceFeed, 'the fold that shows it is what asks').toHaveBeenCalledTimes(1);
+    });
+
+    it('a-glance-older-than-five-minutes-is-read-again', async () => {
+        vi.useFakeTimers();
+        const root = await openStall();
+        await openTheFold(root);
+        expect(glanceFeed).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(FIAT_GLANCE_MAX_AGE_MS - 1);
+        expect(glanceFeed, 'not before the window is up').toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(glanceFeed, 'read again once it is').toHaveBeenCalledTimes(2);
+    });
+
+    it('a-wake-re-reads-the-glance', async () => {
+        vi.useFakeTimers();
+        const root = await openStall();
+        await openTheFold(root);
+        expect(glanceFeed).toHaveBeenCalledTimes(1);
+
+        setVisibility('hidden');
+        await vi.advanceTimersByTimeAsync(FIAT_GLANCE_MAX_AGE_MS * 3);
+        expect(glanceFeed, 'a hidden tab asks nothing, however long').toHaveBeenCalledTimes(1);
+
+        setVisibility('visible');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(glanceFeed, 'a tab coming back asks for what it is missing').toHaveBeenCalledTimes(2);
+    });
+
+    it('a-failed-re-read-clears-the-glance-rather-than-freezing-it', async () => {
+        vi.useFakeTimers();
+        glanceFeed.mockResolvedValue(USD_RATE);
+        const root = await openStall();
+        await openTheFold(root);
+        expect(
+            root.querySelector('[data-role="fiat"]'),
+            'the answer paints the line',
+        ).not.toBeNull();
+
+        // The feed goes down. The held rate is not kept: a figure nobody can
+        // check is worse than no figure, which is what `fetchXecPrice` says
+        // and what this could not honour while it was read once.
+        glanceFeed.mockResolvedValue(undefined);
+        await vi.advanceTimersByTimeAsync(FIAT_GLANCE_MAX_AGE_MS);
+        expect(glanceFeed).toHaveBeenCalledTimes(2);
+        expect(
+            root.querySelector('[data-role="fiat"]'),
+            'and the line goes with it',
+        ).toBeNull();
     });
 });

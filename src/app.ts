@@ -133,7 +133,12 @@ import {
     renderStall,
     holdsLivePaint,
 } from './ui';
-import { FIAT_GLANCE_TIMEOUT_MS, PAY_CHECK_TIMEOUT_MS, PAY_RATE_TIMEOUT_MS } from './ui/render';
+import {
+    FIAT_GLANCE_MAX_AGE_MS,
+    FIAT_GLANCE_TIMEOUT_MS,
+    PAY_CHECK_TIMEOUT_MS,
+    PAY_RATE_TIMEOUT_MS,
+} from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { withDeadline } from './domain/deadline';
@@ -306,14 +311,34 @@ export function boot(
      */
     let fiatCode = readSavedFiat();
     /**
-     * The fiat rate for this page load. Absent until the feed answers, and
-     * absent again the moment it fails — never a last-known value, because a
-     * stale rate renders a two-dollar item at two cents and nobody would find
-     * out. Deliberately not refreshed on a timer: the offers are what this page
-     * watches, and a fiat figure that quietly rewrites itself is worse than one
-     * that is honestly a few minutes old at a glance.
+     * The glance rate. Absent until the feed answers, and absent again the
+     * moment it fails — never a last-known value, because a stale rate renders
+     * a two-dollar item at two cents and nobody would find out.
+     *
+     * **It is asked for when the line that shows it is on screen, and not
+     * before** (`syncGlance`). Every read but the first one lived in two
+     * places that were both removed on 2026-09-03 by one commit about which
+     * currency wins — the picker, and the seller's currency hint — so from
+     * that day this was read once per document load and never again, and
+     * "never a last-known value" was true for one second of a tab's life.
+     * The rule the pay rail already followed is the one applied here: ask
+     * when a figure needs the number, never on a page that shows none.
      */
     let fiatRate: bigint | undefined;
+    /**
+     * When the held rate was read — `0` for never asked. Stamped on a failure
+     * too, so a feed that is down is not asked again inside the window.
+     */
+    let fiatRateAt = 0;
+    /** One glance read in flight at a time. */
+    let fiatAsking = false;
+    /**
+     * The glance's own re-read timer. **Not** a broadcast timer: those belong
+     * to one painted stall and `refresh` clears them, while a rate belongs to
+     * no stall at all. This one is owned by `syncGlance`, which arms it only
+     * while the line is on screen and the tab is showing.
+     */
+    let glanceTimer: ReturnType<typeof setTimeout> | undefined;
     /**
      * The rate the open pay sheet is composing against, and when it was read.
      *
@@ -419,25 +444,93 @@ export function boot(
      * never rejects and never throws: the asked amount is on chain and does not
      * need a price feed to be right, so a feed that is down or rate-limited
      * costs the fiat line and nothing else.
+     *
+     * **A failure clears the held rate rather than keeping it.** That is the
+     * absent-never-stale rule, and until the glance was read more than once it
+     * had nothing to act on.
      */
     const refreshFiat = async (): Promise<void> => {
+        if (fiatAsking) {
+            return;
+        }
         const asked = fiatCode;
-        // Bounded: this starts before the document has finished loading, and
-        // an unbounded request there keeps the browser's progress bar alive
-        // for as long as the OS waits on a dead connection.
-        const rate = await fetchXecPrice(asked, { timeoutMs: FIAT_GLANCE_TIMEOUT_MS });
+        fiatAsking = true;
+        let rate: bigint | undefined;
+        try {
+            // Bounded: an unbounded request keeps a browser's progress bar
+            // alive for as long as the OS waits on a dead connection.
+            rate = await fetchXecPrice(asked, { timeoutMs: FIAT_GLANCE_TIMEOUT_MS });
+        } finally {
+            fiatAsking = false;
+        }
         // The visitor may have changed currency while this was in flight.
         if (asked !== fiatCode) {
             return;
         }
+        const moved = rate !== fiatRate;
         fiatRate = rate;
-        // The door paints no fiat, and a repaint there rebuilds the paste box
-        // under whoever is typing an address into it. The rate is kept for
-        // the stall the door opens next.
-        if (state.view.route.kind === 'home') {
+        // Stamped before the paint, and stamped on a failure too: the next
+        // read is a window away either way, and `syncGlance` below must not
+        // read a stamp this call has not written yet.
+        fiatRateAt = Date.now();
+        // A number that did not move is not a reason to rebuild the face under
+        // a reader — and neither is the door, which paints no fiat: a read
+        // still in flight when someone navigates back to it would repaint the
+        // paste box under whoever is typing an address into it.
+        if (moved && state.view.route.kind !== 'home') {
+            livePaint();
+        }
+        syncGlance();
+    };
+
+    /**
+     * Whether a rate is on screen right now.
+     *
+     * One node in the whole app reads `view.fiatRate` — the fiat line inside
+     * the listing face's `how` fold, which is closed until a reader opens it.
+     * The quotes rail never converts a figure the seller signed, and its pay
+     * sheet holds its own `payRate` with its own stamp and its own valve. So
+     * this predicate is the complete answer to "does anything on screen need
+     * the feed".
+     */
+    const glanceOnScreen = (): boolean => {
+        const overlay = state.view.overlay;
+        return (
+            overlay.kind === 'item' && overlay.rail === 'listings' && overlay.how === true
+        );
+    };
+
+    /**
+     * The glance's whole schedule, in one idempotent call: ask only while the
+     * line is on screen and the tab is showing, re-read once the held rate is
+     * older than its window, and hold nothing running otherwise.
+     *
+     * Called from the paint, from the fold's own toggle (which deliberately
+     * does not paint) and from both sides of `visibilitychange` — so a tab
+     * that was hidden or asleep asks again on the way back, and a hidden one
+     * asks nothing at all.
+     *
+     * The delay is computed from the stamp rather than from now, so calling
+     * this on every paint re-arms for the same moment instead of pushing the
+     * re-read out for ever on a busy stall.
+     */
+    const syncGlance = (): void => {
+        if (glanceTimer !== undefined) {
+            clearTimeout(glanceTimer);
+            glanceTimer = undefined;
+        }
+        if (!glanceOnScreen() || document.visibilityState === 'hidden') {
             return;
         }
-        livePaint();
+        const age = Date.now() - fiatRateAt;
+        if (fiatRateAt === 0 || age >= FIAT_GLANCE_MAX_AGE_MS) {
+            void refreshFiat();
+            return;
+        }
+        glanceTimer = setTimeout(() => {
+            glanceTimer = undefined;
+            syncGlance();
+        }, FIAT_GLANCE_MAX_AGE_MS - age);
     };
 
     /**
@@ -489,8 +582,11 @@ export function boot(
                 // goes immediately: a figure in the wrong currency is a worse
                 // lie than no figure at all.
                 fiatRate = undefined;
+                // The stamp goes with the value, or the new currency's read
+                // would be held back by the old one's window.
+                fiatRateAt = 0;
                 paint();
-                void refreshFiat();
+                syncGlance();
             },
             onOpenItem: (tokenId, rail) => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'item', tokenId, rail } } };
@@ -503,6 +599,11 @@ export function boot(
                     // paint here would rebuild the face under the reader.
                     state = { ...state, view: { ...state.view, overlay: { ...overlay, how: open } } };
                 }
+                // This fold is the only thing on this origin that shows the
+                // glance, so opening it is what asks the feed and closing it
+                // is what stops. Not on the paint alone: the line above is
+                // deliberately paintless.
+                syncGlance();
             },
             onRetry: () => {
                 void refresh();
@@ -669,6 +770,11 @@ export function boot(
                 },
             };
         }
+        // Every other way the glance comes and goes — a face opened or closed,
+        // a cross-link to the other rail, a stall navigated to, a refresh.
+        // Idempotent, and its delay is measured from the read's own stamp, so
+        // a busy stall repainting cannot postpone the re-read.
+        syncGlance();
     };
 
     /**
@@ -2305,6 +2411,11 @@ export function boot(
         } else {
             live?.resume();
         }
+        // A hidden tab asks no feed; a tab coming back — a device waking, a
+        // window fronted — asks again if what it holds is past its window.
+        // This is the only road for a sleep: the timer does not run while
+        // hidden, and a browser throttles it there anyway.
+        syncGlance();
     });
     // Cold start only. Someone who typed the bare domain gets the stall they
     // chose; `replaceState` rather than `pushState` so Back leaves the site
@@ -2330,9 +2441,6 @@ export function boot(
         }
     }
     void refresh();
-    // Independent of the offer read: a feed that is slow or down must not hold
-    // up the shop, and a shop that fails to load still has no use for a rate.
-    void refreshFiat();
 }
 
 async function loadCurrent(): Promise<AppState> {

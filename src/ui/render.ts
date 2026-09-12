@@ -3496,6 +3496,18 @@ export const PAY_RATE_TIMEOUT_MS = 8_000;
 export const FIAT_GLANCE_TIMEOUT_MS = 8_000;
 
 /**
+ * How old the glance may be while it is on screen.
+ *
+ * Not the pay sheet's `PAY_RATE_MAX_AGE_MS`, and deliberately longer: that one
+ * guards a figure a wallet is about to sign and is checked at the press, while
+ * this is the `≈` beside a covenant's own asked amount. What it buys is that
+ * the line is never a number from a tab opened this morning — which is what
+ * `fetchXecPrice`'s "absent, never stale" always claimed and could not deliver
+ * while the rate was read once per document load.
+ */
+export const FIAT_GLANCE_MAX_AGE_MS = 300_000;
+
+/**
  * The second feed's budget, strictly shorter than the first's: it rides
  * beside the primary under `withDeadline`, so the figure a buyer waits for
  * is bounded by the primary's own ceiling and a hung check answers

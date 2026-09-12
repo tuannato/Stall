@@ -196,6 +196,18 @@ working accept, and there is no accept.
   near $0.006, so a two-decimal format renders it `$0.00` — pick a format that
   does not lie about a small number; and the page calls CoinGecko directly,
   which is an acceptable shape.
+- **The glance is asked for when it is on screen** (owner, 2026-09-12). The
+  fiat line under a listing face's fold is the only node in the app that reads
+  the glance rate, so nothing else asks the feed: not the door, not a painted
+  shop, not a broadcast, not the quotes rail. It is the pay rail's own rule
+  (2026-09-07, "two requests to two third parties for a number nobody uses")
+  applied to the one place it had not been. While the line is on screen and
+  the tab is showing, the rate is re-read past five minutes and on the way
+  back from a hidden tab or a sleeping device. Found by an outside review;
+  the archaeology is in `CLAUDE.md` §8 — `14295e1` (2026-09-03) retired the
+  currency picker and the seller's currency hint, which were the only two
+  reads that refreshed it, so for nine days the rate was read once per
+  document load under a docblock promising "never a last-known value".
 - **The door is the owner's own** (2026-09-05). A two-beat door shipped for a
   day and was reverted the same day on the owner's call; the first-stall
   checklist and the `pasted` stamp stayed. The door is not a screen a design
@@ -542,7 +554,7 @@ have sent revenue to an output nobody can spend.
   by 3 keys, `STLP` 2 by 1 key. Read as a product number, honestly: of the
   four `STL1` keys, one is the owner's Fittings stall, one the owner's "1st"
   test stall, one a stranger's replay of the owner's link (the copycat), and
-  one a stall nobody here knows ("JardineCash", two records on 08-31); of
+  one a stall nobody here knows (two records on 08-31); of
   the `STLD` keys, one is the owner, one the owner's second wallet signing
   by mistake, one that same stranger's stall; both `STLP` payments are the
   owner paying their own quotes from their second wallet. **Adoption outside

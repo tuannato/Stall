@@ -376,6 +376,18 @@ function stallEmpty(over: Partial<State['view']> = {}): State {
     };
 }
 
+/**
+ * The three presses that put the glance on screen: the row, the face it
+ * opens, and the fold the fiat line lives inside. Synchronous — the fold's
+ * own toggle is deliberately paintless.
+ */
+function openGlanceFold(root: HTMLElement): void {
+    (root.querySelector('.item-head') as HTMLButtonElement).click();
+    const fold = root.querySelector('[data-role="item-how"]') as HTMLDetailsElement;
+    fold.open = true;
+    fold.dispatchEvent(new Event('toggle'));
+}
+
 function waitingState(kind: 'unresolvable' | 'unresolved'): State {
     return {
         view: {
@@ -1029,9 +1041,15 @@ describe('the-poster-survives-a-live-repaint', () => {
 describe('the-poster-survives-a-fiat-answer', () => {
     /**
      * `refreshFiat` used to call `paint()` itself. Opening Story, then letting
-     * the boot-time price fetch land, remounted the sheet — the same hole as a
-     * book tick, on a path `livePaint` never saw. The closing paint is the
-     * flush, as it is for the book.
+     * the price fetch land, remounted the sheet — the same hole as a book
+     * tick, on a path `livePaint` never saw. The closing paint is the flush,
+     * as it is for the book.
+     *
+     * Staged through the fold that starts the read (2026-09-12): the glance is
+     * asked for when the line that shows it is on screen, so the reader opens
+     * a listing's face and its fold, then leaves for the poster while the feed
+     * is still thinking. Which is the same race the boot-time read used to
+     * make on its own, and the only one left that can make it.
      */
     it('keeps the Story sheet node while the mocked price resolves', async () => {
         let resolvePrice!: (rate: bigint | undefined) => void;
@@ -1040,10 +1058,15 @@ describe('the-poster-survives-a-fiat-answer', () => {
                 resolvePrice = resolve;
             });
 
-        const { root } = bootStall(
-            stallEmpty({ tokens: new Map([[TOKEN, TOKEN_META]]) }),
-        );
+        const { root } = bootStall({
+            ...stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+            }),
+            offers: [OFFER],
+        });
         await flush();
+        openGlanceFold(root);
 
         (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
         (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
@@ -3603,14 +3626,19 @@ describe('a-tag-opened-from-the-describe-sheet-closes-back-onto-it', () => {
     });
 });
 
-describe('the-boot-glance-fetch-is-bounded', () => {
+describe('the-glance-fetch-is-bounded', () => {
     /**
-     * The glance fetch starts before the document has finished loading, and
-     * WebKit's progress bar stays alive until every request started then has
-     * ended — on a connection that died during a sleep, that is the OS's own
-     * TCP timeout, minutes of "loading" over a shop that had painted (owner,
-     * Chrome on iOS after a resume, 2026-09-08). Bounded, so a slow feed is no
-     * rate and never a page that never finishes loading.
+     * It was the boot that started this read, before the document had finished
+     * loading, and WebKit's progress bar stays alive until every request
+     * started then has ended — on a connection that died during a sleep, that
+     * is the OS's own TCP timeout, minutes of "loading" over a shop that had
+     * painted (owner, Chrome on iOS after a resume, 2026-09-08).
+     *
+     * The read is a reader's own press now, so that reason retired with the
+     * boot fetch — and the bound did not, because it protects something else:
+     * one read is in flight at a time, so a request that never ends holds that
+     * flag for the life of the tab and the glance is never read again. A slow
+     * feed is no rate, and never a line frozen at the number it had.
      */
     it('asks the feed with a deadline', async () => {
         let seen: { timeoutMs?: number } | undefined;
@@ -3620,9 +3648,18 @@ describe('the-boot-glance-fetch-is-bounded', () => {
             seen = opts;
             return undefined;
         };
-        bootStall(stallEmpty());
+        const { root } = bootStall({
+            ...stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+            }),
+            offers: [OFFER],
+        });
         await flush();
-        expect(asked).toBeGreaterThan(0);
+        expect(asked, 'a painted shop asks nothing').toBe(0);
+        openGlanceFold(root);
+        await flush();
+        expect(asked, 'the fold that shows the line is what asks').toBe(1);
         expect(seen?.timeoutMs).toBe(FIAT_GLANCE_TIMEOUT_MS);
     });
 });
