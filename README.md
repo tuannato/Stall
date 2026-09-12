@@ -15,10 +15,11 @@ buyer who wants to complete a purchase is handed to Cashtab, which signs.
   every offer for a token and may preselect one from another seller; the page
   says so before you leave.
 - **Quotes** — the seller's own price for an item they deliver themselves,
-  written on a token they minted and published as an on-chain record. A buyer
-  pays the seller's address directly from their own wallet, with a memo naming
-  the item. No escrow, no token changes hands, and the page never claims a
-  delivery it cannot see.
+  published as an on-chain record against one of their own tokens: the editor
+  refuses a new quote on a token it can prove another wallet minted, and warns
+  when it cannot tell. A buyer pays the seller's address directly from their
+  own wallet, with a memo naming the item. No escrow, no token changes hands,
+  and the page never claims a delivery it cannot see.
 - **A stream overlay** for OBS (`/s/<seller>?view=broadcast`), posters and
   images to print or share, a public activity feed of what the page saw
   arrive at the address, and two static guides at `/guide` and `/stream`.
@@ -27,12 +28,14 @@ buyer who wants to complete a purchase is handed to Cashtab, which signs.
 
 ## What it does not do
 
-It never mints, lists, signs, or holds a key. It runs no backend, keeps no
-account, sets no cookie and ships no analytics; the browser stores only
-display preferences. It cannot tell that a purchase happened or that an item
-was delivered, and does not claim to. There is no directory of stalls and no
-name in the URL: a stall is identified by its seller's key, and found through
-the link the seller shares.
+It never mints, lists, signs, or holds a key. It keeps no account, sets no
+cookie and ships no analytics; the browser stores only display preferences.
+Its only server-side code is a Pages function that renders each stall link's
+social card and a Worker that proxies token icons — neither holds an account,
+a session or a key, and both are in scope below. It cannot tell that a
+purchase happened or that an item was delivered, and does not claim to. There
+is no directory of stalls and no name in the URL: a stall is identified by its
+seller's key, and found through the link the seller shares.
 
 ## Identity and routing
 
@@ -122,10 +125,12 @@ privately are in [SECURITY.md](SECURITY.md).
 
 ## Working notes
 
-The design specimens, the technical manual, the working contract and the
-roadmap are kept out of this repository on purpose. They are working documents
-about people, prices and plans, and they are not published. What survives them
-as rules lives in the code and in the tests named above.
+The design specimens, the technical manual and the working contract are kept
+out of this repository on purpose: they are working documents about people,
+prices and plans. The roadmap is not — [PLAN.md](PLAN.md) is tracked and
+public, because what is decided and what was rejected is the part a
+collaborator needs most. What survives the rest as rules lives in the code and
+in the tests named above.
 
 ## Licence
 
