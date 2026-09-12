@@ -9327,8 +9327,9 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
         const words = root.querySelector('.bc-words') as HTMLElement;
         expect(words.hasAttribute('data-marquee')).toBe(true);
         const run = words.querySelector<HTMLElement>('.mq-run')!;
+        // A pass is the travel plus the hold at its tail.
         expect(run.style.getPropertyValue('--mq-ms')).toBe(
-            `${marqueeRunMs(300, 'words', STREAM_SPEED_PX_PER_S)}ms`,
+            `${marqueeRunMs(300, 'words', STREAM_SPEED_PX_PER_S) + MARQUEE_HOLD_MS}ms`,
         );
         // Once, on the node itself: the count is per surface now, and the
         // stream's is the one inside `/stream`'s published rhythm.
@@ -12340,10 +12341,12 @@ describe('a-cut-row-name-runs-three-times-and-a-fitting-one-stands', () => {
         expect(cut.hasAttribute('data-marquee')).toBe(true);
         const run = cut.querySelector('.mq-run') as HTMLElement;
         expect(run.style.getPropertyValue('--mq-shift')).toBe('-120px');
-        expect(run.style.getPropertyValue('--mq-ms')).toBe(`${marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)}ms`);
-        // One pass, at the rows' pace: 120px at 30px/s (owner, 2026-09-12 —
-        // ten slower on both kinds).
+        // The travel at the rows' pace — 120px at 30px/s (owner, 2026-09-12,
+        // ten slower on both kinds) — plus the hold at the tail of the pass.
         expect(marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S)).toBe(4000);
+        expect(run.style.getPropertyValue('--mq-ms')).toBe(
+            `${marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S) + MARQUEE_HOLD_MS}ms`,
+        );
         expect(run.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS}ms`);
         // Three passes on a row, written on the node — the count is the
         // surface's, and `--mq-ms` stays one pass.
@@ -12410,8 +12413,10 @@ describe('a-repaint-mid-run-continues-the-run-and-a-finished-one-rests', () => {
         // Still owing, one pass in: three is the row's count, so the cycle is
         // not over at the end of the first pass. Derived from the constants,
         // never a literal — a pace change must not quietly retune this.
-        const onePass = marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S);
-        const cycle = MARQUEE_HOLD_MS + ROW_MARQUEE.runs * onePass + MARQUEE_HOLD_MS;
+        const travel = marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S);
+        // Start hold once, then every pass: travel and the hold at its tail.
+        const onePass = travel + MARQUEE_HOLD_MS;
+        const cycle = MARQUEE_HOLD_MS + ROW_MARQUEE.runs * onePass;
         now += MARQUEE_HOLD_MS + onePass;
         expect(
             paint(view).root.querySelector<HTMLElement>('.item-n')!.hasAttribute('data-marquee'),
@@ -12534,5 +12539,63 @@ describe('a-card-back-at-the-cursor-runs-its-name-again', () => {
         // And the run it reports is a whole one, which is what the dwell reads.
         const onePass = marqueeRunMs(300, 'name', STREAM_SPEED_PX_PER_S);
         expect(lastMarqueeRunAheadMs()).toBe(MARQUEE_HOLD_MS + onePass + MARQUEE_HOLD_MS);
+    });
+});
+
+describe('a-pass-holds-at-the-end-of-the-text-before-it-returns', () => {
+    /**
+     * The end hold was written down from the first day — "travels left until
+     * its end is in view, holds, and rests at its start" — and never
+     * rendered: `animationend` stripped the attribute the instant the travel
+     * finished, so the tail a reader ran the line to see flashed past. With
+     * three passes on a row it mattered twice over, because each pass snapped
+     * back the moment it arrived (owner, 2026-09-12).
+     *
+     * The hold is the compositor's, like the passes: the pass lasts travel +
+     * hold and the easing reaches its end value at the travel mark, so the
+     * text sits at its tail for `MARQUEE_HOLD_MS` before the next pass takes
+     * it back to the start. The start hold stays the animation's delay, once,
+     * before the first pass.
+     */
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+
+    const armedRow = (): HTMLElement => {
+        setMarqueeMeasure(() => 120);
+        const view = offersView([OFFER], new Map([[TOKEN_ID, { ...BEANS, name: 'A name far too long for its line' }]]));
+        return paint(view).root.querySelector<HTMLElement>('.item-n .mq-run')!;
+    };
+
+    it('spends the pass on travel then the hold, and says so in the easing', () => {
+        const run = armedRow();
+        const travel = marqueeRunMs(120, 'name', ROW_SPEED_PX_PER_S);
+        // The duration of ONE pass is the travel plus the hold at its end.
+        expect(run.style.getPropertyValue('--mq-ms')).toBe(`${travel + MARQUEE_HOLD_MS}ms`);
+        // And the easing reaches the end of the text at the travel mark, then
+        // stays there — which is what makes the rest of the pass a hold.
+        const ease = run.style.getPropertyValue('--mq-ease');
+        const mark = Number.parseFloat(ease.match(/1 ([\d.]+)%/)![1]!);
+        expect(mark).toBeCloseTo((travel / (travel + MARQUEE_HOLD_MS)) * 100, 1);
+        expect(ease.endsWith('1 100%)')).toBe(true);
+        // The start hold is still the delay, and still once.
+        expect(run.style.getPropertyValue('--mq-delay')).toBe(`${MARQUEE_HOLD_MS}ms`);
+    });
+
+    it('leaves the stream card’s whole cycle exactly where it was', () => {
+        // `cardDwell` budgets `lastMarqueeRunAheadMs()`, which has always been
+        // hold + travel + hold for the stream's single pass. The end hold now
+        // fills the second hold instead of the card sitting there snapped
+        // back — the same total, so no number `/stream` publishes moves.
+        resetMarqueesForTests();
+        setMarqueeMeasure(() => 300);
+        paint(
+            quoteView({
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+                broadcastState: 'live',
+            }),
+        );
+        const travel = marqueeRunMs(300, 'name', STREAM_SPEED_PX_PER_S);
+        expect(lastMarqueeRunAheadMs()).toBe(MARQUEE_HOLD_MS + travel + MARQUEE_HOLD_MS);
     });
 });

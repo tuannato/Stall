@@ -6,7 +6,8 @@
  * words and the text is wider than the line, the text used to wrap (a
  * two-line clamp on the listing row, 2026-08-30) or be cut with an ellipsis.
  * Since 2026-09-09 (owner) it **runs**: holds at its start, travels left
- * until its end is in view, and then rests at its start with the ellipsis.
+ * until its end is in view, holds there so the tail can be read, and then
+ * rests at its start with the ellipsis.
  *
  * **How many times is the surface's, not this module's** (owner, 2026-09-12).
  * A shop row runs `ROW_MARQUEE.runs` times — one pass is easy to miss on a
@@ -75,7 +76,10 @@ export type MarqueeKind = 'name' | 'words';
 export const ROW_SPEED_PX_PER_S: Readonly<Record<MarqueeKind, number>> = { name: 30, words: 50 };
 /** The stream is read from across a room at 1920 wide: faster, and untouched. */
 export const STREAM_SPEED_PX_PER_S: Readonly<Record<MarqueeKind, number>> = { name: 60, words: 90 };
-/** The hold at each end. Above the contrast sampler's 400 ms freeze, on purpose. */
+/**
+ * The hold at each end — the delay before the first pass, and the tail of
+ * every pass. Above the contrast sampler's 400 ms freeze, on purpose.
+ */
 export const MARQUEE_HOLD_MS = 1_500;
 /** The longest **single pass**; a surface's own count multiplies it. */
 export const MARQUEE_MAX_RUN_MS = 12_000;
@@ -210,7 +214,16 @@ export function applyMarquees(root: ParentNode, surface: MarqueeSurface): number
         // paint start it again.
         painted.add(key);
         const runMs = marqueeRunMs(overflow, kind, surface.speeds);
-        const totalMs = MARQUEE_HOLD_MS + passes * runMs + MARQUEE_HOLD_MS;
+        // One pass is the travel and the hold at its end. The hold is inside
+        // the pass rather than after the last one, so every pass ends with
+        // the tail in view — which is the half of "travels, holds, rests"
+        // that was written down and never rendered: `animationend` stripped
+        // the attribute the instant the travel finished (owner, 2026-09-12).
+        const passMs = runMs + MARQUEE_HOLD_MS;
+        // The start hold is the delay, once, before the first pass — so the
+        // whole cycle is that plus every pass. At one pass this is exactly
+        // what it always was, which is why no stream number moves.
+        const totalMs = MARQUEE_HOLD_MS + passes * passMs;
         let started = runs.get(key);
         if (started !== undefined && now - started.startedAtMs >= started.totalMs) {
             // Had its passes while this screen has been up: it rests at its
@@ -224,7 +237,22 @@ export function applyMarquees(root: ParentNode, surface: MarqueeSurface): number
         const elapsed = now - started.startedAtMs;
         node.setAttribute('data-marquee', '');
         run.style.setProperty('--mq-shift', `-${overflow}px`);
-        run.style.setProperty('--mq-ms', `${runMs}ms`);
+        run.style.setProperty('--mq-ms', `${passMs}ms`);
+        /*
+         * The hold is the easing's, not a second animation and not a timer:
+         * the pass travels to its end by `runMs` and the curve then stays
+         * there for the rest of the pass. `linear()` takes the stops, so the
+         * hold stays a fixed 1.5 s while the travel varies with the text —
+         * a ratio expressed as keyframe percentages could not, because those
+         * are global and this one is per line.
+         *
+         * Written as its own property and applied by a longhand *after* the
+         * shorthand: a runtime without `linear()` drops this one declaration
+         * and keeps an animation that simply travels, where an invalid
+         * shorthand would have left no animation at all.
+         */
+        const travelPct = ((runMs / passMs) * 100).toFixed(2);
+        run.style.setProperty('--mq-ease', `linear(0 0%, 1 ${travelPct}%, 1 100%)`);
         // The passes are the compositor's: one animation, N iterations. The
         // count is written even at one, so a node rebuilt by a paint of the
         // other surface can never wear the wrong one.

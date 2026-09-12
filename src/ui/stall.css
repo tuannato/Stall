@@ -1215,6 +1215,7 @@ body {
     --mq-ms: 0ms;
     --mq-delay: 0ms;
     --mq-runs: 1;
+    --mq-ease: linear;
 }
 
 [data-marquee] {
@@ -1223,10 +1224,18 @@ body {
 
 /* The passes are the compositor's: one animation, `--mq-runs` iterations,
    written inline per surface by `applyMarquees` (the shop's rows take three
-   since 2026-09-12, the stream card one). Each pass snaps back to the start,
-   the same cut the line makes when the whole run ends. */
+   since 2026-09-12, the stream card one).
+
+   The hold at the end of each pass is the easing's, not a second animation:
+   `--mq-ease` reaches the end of the text at the travel mark and stays there
+   for the rest of the pass, so the tail is readable before the line goes back
+   for the next one. The longhand comes AFTER the shorthand on purpose — a
+   runtime without `linear()` drops this declaration alone and keeps a pass
+   that simply travels, where an invalid shorthand would leave no animation
+   at all. */
 [data-marquee] > .mq-run {
     animation: mq-run var(--mq-ms) linear var(--mq-delay) var(--mq-runs) both;
+    animation-timing-function: var(--mq-ease);
 }
 
 @keyframes mq-run {
