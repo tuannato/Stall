@@ -29,6 +29,7 @@ import {
     NO_DECOR_SCREENS,
     SCREENS,
     STATE_SCREENS,
+    T1,
     handlers,
 } from './fixtures';
 
@@ -540,6 +541,27 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
         if (cell.querySelector('.mq-run') === null) {
             fail('a marquee with nothing to move', describe(cell));
+        }
+    }
+
+    /*
+     * And a screen that exists for the marquee must arm the cell it exists
+     * for. `long-item-name` carries a token name (T1's) wider than a 390px
+     * row so the name path of `src/ui/marquee.ts` is measured here at all;
+     * a fixture whose name quietly fitted again would leave the rule above
+     * green over nothing — the same audit the runner makes of a pay screen
+     * that mounts no figure (2026-09-14). T1's own cell and not any cell:
+     * the first version asked for any `[data-marquee]` and stayed green
+     * with the name shortened, because the long-figure rows crush their own
+     * names into runs. Desktop is not asked: the row is wide enough there.
+     */
+    if (screen.startsWith('long-item-name') && window.innerWidth < 680) {
+        const armed = surface.querySelector(`[data-marquee][data-mq="name"][data-mq-key="${T1}"]`);
+        if (armed === null) {
+            fail(
+                'a screen built for the marquee armed none',
+                `${screen} at ${window.innerWidth}px: T1's name cell carries no data-marquee`,
+            );
         }
     }
 

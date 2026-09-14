@@ -66,7 +66,17 @@ nothing.
   inner `.mq-run`. The reduce pass gained `plugin-missing-quotes` the same
   day, so the kill for the quote row's name and words is proved on a screen
   that has them; the 1.5 s start hold keeps the contrast sampler's 400 ms
-  freeze on whole glyphs.
+  freeze on whole glyphs. **The name path has its own screen since
+  2026-09-14**: `long-item-name` carries a token name wider than a 390px
+  row on its own. Measured while adding it: `offers` already armed two
+  name cells at 390px on Modern (`Roasted Beans` on T1's grouped card,
+  `Harvest Ledger` beside its ten-billion figure) — names past about
+  twelve characters run on a phone row — so the name path had been under
+  Chrome since 09-09 without anyone knowing. The rule refuses
+  `long-item-name` at the phone width when **T1's own** name cell arms
+  no run; "any cell" was the first version, and it stayed green with the
+  name shortened because the crushed rows run on their own. Proved red
+  with a short name (28 failures), then green.
 - **A row tile covers its own line.** An Activity row's token tile sits in
   its own 24px grid column, and the kind and time start in the next. On the
   live origin at 1280px (owner, 2026-09-08) the desktop block's `.item-ic {

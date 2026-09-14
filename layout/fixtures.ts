@@ -553,6 +553,30 @@ export const SCREENS: Record<string, StallView> = {
      * 32 bytes with no break opportunity, and an all-emoji name that spends
      * four bytes a glyph. The probe's sideways-scroll check is the guard.
      */
+    /*
+     * A row whose **name** is cut on its own. The marquee shipped 2026-09-09
+     * was thought to be measured on the words line alone — but at 390px on
+     * Modern `offers` already arms two name cells (`Roasted Beans` on T1's
+     * grouped card, `Harvest Ledger` beside its ten-billion figure), so the
+     * name path of `src/ui/marquee.ts` had been under Chrome unknowingly
+     * since that day. What this screen adds is a name that is wide on its
+     * own rather than crushed, and a rule in `probe.ts` that refuses the
+     * screen when T1's own cell does not run — measured, not assumed
+     * (2026-09-14). Geometry only: its ink is `offers`'.
+     */
+    'long-item-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        tokens: new Map([
+            ...tokens,
+            [
+                T1,
+                {
+                    ...meta(T1, 'Single-origin Yirgacheffe washed heirloom lot, roasted the morning it ships', 'SLP_TOKEN_TYPE_FUNGIBLE'),
+                    url: 'https://example.com/beans',
+                },
+            ],
+        ]),
+    }),
     'hostile-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         stallName: 'W'.repeat(32),
@@ -874,6 +898,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'studio',
     'activity',
     'hostile-name',
+    // A row name wider than the row: the marquee's name path, geometry only.
+    'long-item-name',
     // The poster sheet's tag: its decorations sit outside the scrim.
     'pay-tag',
     'emoji-name',
@@ -936,6 +962,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'pay-moved',
     'pay-dust',
     'item-quote',
+    // `offers`' ink with one name too wide for its row; the marquee cell is
+    // a geometry rule, and the contrast pass has sampled that ground.
+    'long-item-name',
     // The checklist is `unresolvable`'s ground with numbered steps on it;
     // its muted status lines are not contrast targets. Geometry only.
     'first-stall',
