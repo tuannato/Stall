@@ -12272,6 +12272,90 @@ describe('a-strangers-record-shaped-dust-does-not-fetch-an-icon', () => {
     });
 });
 
+describe('a-withheld-tokens-picture-never-paints-on-activity', () => {
+    /**
+     * The name is a citation and the picture is a fetch. Activity prints a
+     * withheld token's name — a payer's memo naming FIRMA is a fact about a
+     * transaction (CLAUDE §4) — but a tile that paints its logo is this
+     * origin fetching an impersonator's picture on its own initiative, and
+     * on a row a logo is louder than the word "claim" beside it. N3-A gated
+     * the picture on whose record it is; this gates it on which token it is
+     * (audit 2026-09-09, N3-B; built 2026-09-14). Letters either way — by id
+     * (`WITHHELD_TOKEN_IDS`) and by genesis name (`WITHHELD_NAMES`) alike.
+     */
+    const AT = 1_756_400_000_000;
+    /** FIRMA, withheld by id. */
+    const FIRMA = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
+    /** A fresh id whose genesis name is one Cashtab refuses to mint: withheld by name. */
+    const NAMED = 'ef'.repeat(32);
+    const meta = (tokenId: string, name: string, ticker: string) => ({
+        tokenId,
+        name,
+        ticker,
+        decimals: 0,
+        tokenType: { protocol: 'SLP' as const, type: 'SLP_TOKEN_TYPE_FUNGIBLE' as const },
+    });
+    const tokens = new Map([
+        [TOKEN_ID, BEANS],
+        [FIRMA, meta(FIRMA, 'Firma', 'FIRMA')],
+        [NAMED, meta(NAMED, 'firma', 'FRM')],
+    ]);
+    const quote = { code: 'usd', exponent: 2, amount: 500n };
+    const tileFor = (event: StallEvent) =>
+        paint(
+            offersView([OFFER], tokens, {
+                panel: 'activity',
+                events: [event],
+                // The seller quotes all three, so the payment branch's own
+                // gate ("the seller's record names that token") is open and
+                // only the withheld rule can keep the picture off.
+                prices: new Map([
+                    [TOKEN_ID, quote],
+                    [FIRMA, quote],
+                    [NAMED, quote],
+                ]),
+            }),
+        ).root.querySelector<HTMLElement>('summary [data-role="event-icon"]');
+
+    it('paints letters for the stall’s own record about a withheld token, by id and by name', () => {
+        for (const tokenId of [FIRMA, NAMED]) {
+            const tile = tileFor({
+                txid: 'a2'.repeat(32),
+                kind: 'description',
+                seenAtMs: AT,
+                tokenId,
+                recordAuthority: 'stalls',
+            })!;
+            expect(tile, tokenId).not.toBeNull();
+            expect(tile.getAttribute('data-token-id'), tokenId).toBeNull();
+            expect(tile.querySelector('img'), tokenId).toBeNull();
+        }
+    });
+
+    it('paints letters for a payment whose memo names a withheld token the seller quoted, and the picture for an honest one', () => {
+        for (const tokenId of [FIRMA, NAMED]) {
+            const tile = tileFor({
+                txid: 'a3'.repeat(32),
+                kind: 'payment',
+                seenAtMs: AT,
+                sats: 1_000n,
+                payment: { tokenId, quantity: 1n },
+            })!;
+            expect(tile, tokenId).not.toBeNull();
+            expect(tile.getAttribute('data-token-id'), tokenId).toBeNull();
+            expect(tile.querySelector('img'), tokenId).toBeNull();
+        }
+        const honest = tileFor({
+            txid: 'a4'.repeat(32),
+            kind: 'payment',
+            seenAtMs: AT,
+            sats: 1_000n,
+            payment: { tokenId: TOKEN_ID, quantity: 1n },
+        })!;
+        expect(honest.getAttribute('data-token-id')).toBe(TOKEN_ID);
+    });
+});
+
 describe('the-listing-face-says-the-sellers-words-on-the-card', () => {
     /**
      * The seller's words lived under the listing face's closed fold, three

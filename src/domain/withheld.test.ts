@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WITHHELD_NAMES, WITHHELD_TOKEN_IDS } from './withheld-data';
 import { isWithheldToken, normalizeTokenText } from './withheld';
+import { SHIPPED_ATTACHMENTS } from './attachments';
 
 const FIRMA = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
 const FCHF = 'a8c83ebe937b9c1b0a7cb7645f43459f57a10043744ddfbc2357e1bd43fe2465';
@@ -99,5 +100,26 @@ describe('the-name-fence-is-cashtabs-own-rule', () => {
             expect(entry, 'normalised').toBe(normalizeTokenText(entry));
         }
         expect([...WITHHELD_NAMES]).toEqual([...WITHHELD_NAMES].sort());
+    });
+});
+
+describe('no-shipped-decoration-is-a-withheld-token', () => {
+    /**
+     * Activity's `token-move` row paints its picture without asking the
+     * withheld rule, because a moved token is one this app ships in the
+     * decorations table (`wantedAttachmentTokens`) and a stranger cannot name
+     * one there. That holds only while no shipped row's token is on the list
+     * — pinned here rather than gated at paint, where a runtime check would
+     * hide the day it stops holding (critic, 2026-09-14). The genesis name is
+     * not in the table, so the row's label stands in for it against the name
+     * fence: a proxy, said as one.
+     */
+    it('carries no token id on the withheld list, and no label the name fence refuses', () => {
+        for (const row of SHIPPED_ATTACHMENTS) {
+            if (row.tokenId !== undefined) {
+                expect(isWithheldToken(row.tokenId, undefined), row.label).toBe(false);
+            }
+            expect(WITHHELD_NAMES.includes(normalizeTokenText(row.label)), row.label).toBe(false);
+        }
     });
 });

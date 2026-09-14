@@ -6507,6 +6507,15 @@ function historyControl(
  * picture paints only where the seller's own record names that token (a
  * quote or a description), and letters otherwise. Book and other rows name
  * no token at all.
+ *
+ * **A withheld token's picture never paints, whatever the row** (2026-09-14).
+ * The name is a citation of the transaction and stays (CLAUDE §4: Activity
+ * is not filtered); the picture is this origin fetching an impersonator's
+ * bytes on its own initiative, and on a row a logo is louder than the word
+ * "claim" beside it. The `token-move` branch does not ask, because a moved
+ * token is one this app ships — `no-shipped-decoration-is-a-withheld-token`
+ * pins that no shipped row is on the list, where a runtime gate would hide
+ * the day it stopped holding.
  */
 function eventIcon(event: StallEvent, view: StallView): { tokenId: string; picture: boolean } | undefined {
     if (event.kind === 'description') {
@@ -6517,7 +6526,12 @@ function eventIcon(event: StallEvent, view: StallView): { tokenId: string; pictu
         // says whose it is not.
         return event.tokenId === undefined
             ? undefined
-            : { tokenId: event.tokenId, picture: event.recordAuthority === 'stalls' };
+            : {
+                  tokenId: event.tokenId,
+                  picture:
+                      event.recordAuthority === 'stalls' &&
+                      !isWithheldToken(event.tokenId, view.tokens.get(event.tokenId)),
+              };
     }
     if (event.kind === 'token-move') {
         // A moved token is one this app ships in the decorations table
@@ -6527,7 +6541,7 @@ function eventIcon(event: StallEvent, view: StallView): { tokenId: string; pictu
     if (event.kind === 'payment' && event.payment !== undefined) {
         const id = event.payment.tokenId;
         const named = view.prices?.has(id) === true || view.descriptions?.has(id) === true;
-        return { tokenId: id, picture: named };
+        return { tokenId: id, picture: named && !isWithheldToken(id, view.tokens.get(id)) };
     }
     return undefined;
 }
