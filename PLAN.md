@@ -588,17 +588,29 @@ have sent revenue to an output nobody can spend.
 - **Deferred by the owner on 2026-09-09, after the audit's two critics
   (`private/agent-output/audit-0909/CRITIC-1.md`, `CRITIC-2.md`)** — four
   behaviour decisions, each with its cost written so it is not re-derived:
-  1. *N7, the refused quote on the rail.* The walk collects tokens whose
-     record was signed by the stall but not self-paid 546, or could not be
-     decoded; nothing lifts them to the view, so the rail prints "nothing
-     quoted" and `Quotes · 0` over them (a false zero under §4's floor rule).
-     Options: leave; count only (~35 lines, reusing `quotedUnreadable(n)`,
-     label loses its number) — but a token can be in the set *and* have a
-     good winning record, which then prints "1 could not read" beside its
-     own row for ever; count with a per-token rank compare like STL1's
-     `noteRefused` (~60 lines) — the only shape with no permanent false
-     line. Recommended: the third. A foreign-signed record is not in the
-     set on either record and is said on Activity alone.
+  1. *N7, the refused quote on the rail.* **Deferred again 2026-09-14, on
+     the recount and a critic round.** The walk collects tokens whose record
+     was signed by the stall but not self-paid 546, or could not be decoded;
+     nothing lifts them to the view, so the rail prints "nothing quoted" and
+     `Quotes · 0` over them (a false zero under §4's floor rule). Measured
+     2026-09-14: the set is empty on every stall anyone visits — all 22
+     self-paying records are accepted, and the two that do not self-pay are
+     foreign-signed on the stalls they name, refused before the set. The
+     shape to build when it stops being empty, so it is not re-derived (the
+     critic's corrections of the first plan, `private` audit-0914): two
+     maps beside `unreadable` in the descriptions walk (`unaddressedBest`,
+     `brokenBest`, the ambiguous-in-one-tx case riding `brokenBest` and
+     said so), a per-token rank compare against the winner like STL1's
+     `noteRefused` — never a count alone, which prints "1 could not read"
+     beside a good row for ever — two sentences worded as **records** and
+     never "quoted items" (an STLD carries words, shelf and price in one, so
+     a record we refused may not have been a quote), withheld subtracted,
+     the label withholding its number while either set is non-empty,
+     `QUOTES_NONE` not said, and a seventh `?pay=` outcome without the
+     word "latest" (a truncated walk cannot claim it). Where it paints is
+     still open: a refused record costs the Listings side its words and
+     shelf too. A foreign-signed record is not in the set on either record
+     and is said on Activity alone.
   2. *N3-B, the withheld token's picture on Activity.* The gate shipped
      (picture only for the stall's own record) does not cover a seller's own
      record about a withheld token: its logo paints. §4's "Activity is not
