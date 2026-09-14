@@ -321,8 +321,10 @@ body {
 
 /*
  * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
- * to a real in-flow band under the sign: a doubled grid tipped away with a
- * transform, fading upward. A node, never a pseudo-element — the probe
+ * to a real in-flow band **above** the sign (the renderer's call: under it,
+ * it read as a divider between the sign and the goods, ~75px against the
+ * design's zero — this comment said "under" until 2026-09-14): a doubled
+ * grid tipped away with a transform, fading upward. A node, never a pseudo-element — the probe
  * measures boxes — and static by design: a floor reads as material, and
  * this row is priced as material, not as an event.
  */
