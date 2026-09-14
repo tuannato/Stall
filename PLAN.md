@@ -628,18 +628,25 @@ have sent revenue to an output nobody can spend.
      does not close it); drop `firstSeen` (re-opens the measured 09-07
      incident: four edits in one block, the removal lost to the highest
      txid). Recommended: keep.
-  4. *F6, `loadTokenMeta` fans out one request per listed token, uncapped
-     and unwindowed, and the first paint waits on all of them.* A stranger
-     inflates N through gift PARTIAL listings at ~1,000–1,500 sats per
-     distinct token (a genesis, a listing, 546 of dust; the fiat price is
-     unrecorded here). Options: a bare cap of 24 — six of thirty honest
-     tokens paint hex ids, and `isWithheldToken(id, undefined)` is false, so
-     the name fence is *off* past the cap (do not do this alone); an 8-wide
-     concurrency window — nothing visible changes, honest latency grows
-     (thirty tokens: four waves); cap what the first paint waits on and read
-     the rest after it, the `fillQuotedGenesis` pattern — display complete,
-     fence intact, the tail a paint nobody waits for. Recommended: the
-     third, the window if it must be cheap.
+  4. *F6, `loadTokenMeta` fanned out one request per listed token, uncapped
+     and unwindowed.* **Decided 2026-09-14: the window.** `TOKEN_META_WINDOW`
+     (8) reads in flight at once, inside `loadTokenMeta` so every call site
+     inherits it — the cold load, the live path's `fillNewTokens`, the
+     quoted-but-unlisted read, the group names. Nothing visible changes; a
+     stall a stranger inflated through gift listings opens in waves instead
+     of one burst. The option first recommended — cap what the first paint
+     waits on and read the rest after it — was holed three ways by the
+     critic and measured true in the source: the sign's `N items for sale`
+     and `Listings · N` print from a state where the name fence has not run
+     for the tail (a floor printed as a count, §4's rule on the surface it
+     was written for); "shop order" needs meta and shelves the load does not
+     have yet, so tail rows land in `unsorted` at the bottom and jump up
+     window by window; and the live path is the same fan-out one socket
+     message away, racing the tail fill into duplicate reads. Building it
+     properly is a pending-meta set that withholds every count, one paint at
+     the end, one group lookup after the whole tail, a shared in-flight set,
+     and the window underneath anyway — the next step if a busy stall is ever
+     measured slow, not before.
 - **The tag's follow-ups**: a real icon on the PNG needs the icon Worker
   to allow this origin (header set after the cache read, so cached entries
   gain it at deploy) and a separate cache key for the CORS load, never the

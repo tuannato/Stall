@@ -1,6 +1,21 @@
 import type { TokenMeta } from '../domain/state';
 import type { TokenChronik } from './chain';
 
+/**
+ * How many `chronik.token()` reads are in flight at once.
+ *
+ * One read per listed token, and a stranger can grow that number through
+ * gift listings under the seller's key (CLAUDE §10): until 2026-09-14 every
+ * read left at once, two hundred requests in one burst on a two-hundred-token
+ * stall. A window bounds the burst without changing what paints — a busy
+ * stall opens in waves — and every call site inherits it (the cold load, the
+ * live path's `fillNewTokens`, the quoted-but-unlisted read, the group
+ * names). PLAN § Open item 4 records why this and not "read the tail after
+ * the paint": that option printed a count before the name fence could run,
+ * jumped rows window by window, and left the live path unbounded.
+ */
+export const TOKEN_META_WINDOW = 8;
+
 export async function loadTokenMeta(
     chronik: TokenChronik,
     tokenIds: readonly string[],
@@ -15,8 +30,7 @@ export async function loadTokenMeta(
         unique.push(id);
     }
 
-    const settled = await Promise.allSettled(
-        unique.map(async (tokenId): Promise<TokenMeta> => {
+    const readOne = async (tokenId: string): Promise<TokenMeta> => {
             const info = await chronik.token(tokenId);
             const meta: TokenMeta = {
                 tokenId,
@@ -44,14 +58,26 @@ export async function loadTokenMeta(
                 };
             }
             return meta;
-        }),
-    );
+    };
 
-    const out: TokenMeta[] = [];
-    for (const result of settled) {
-        if (result.status === 'fulfilled') {
-            out.push(result.value);
+    // The window: `TOKEN_META_WINDOW` workers pull the next id off one cursor,
+    // so at most that many reads are in flight and the answers keep the input
+    // order. A read that throws is dropped, exactly as `allSettled` dropped
+    // it before — a token the index did not answer is not a reason to lose
+    // the rest.
+    const results: (TokenMeta | undefined)[] = new Array<TokenMeta | undefined>(unique.length).fill(undefined);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        while (next < unique.length) {
+            const i = next;
+            next += 1;
+            try {
+                results[i] = await readOne(unique[i]!);
+            } catch {
+                // dropped
+            }
         }
-    }
-    return out;
+    };
+    await Promise.all(Array.from({ length: Math.min(TOKEN_META_WINDOW, unique.length) }, worker));
+    return results.filter((m): m is TokenMeta => m !== undefined);
 }
