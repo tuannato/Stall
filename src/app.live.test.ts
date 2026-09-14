@@ -3508,7 +3508,9 @@ describe('an-unanswered-feed-replaces-the-asking-line', () => {
             }),
         );
         await flush();
-        // The boot glance is in flight too; let it be, and answer the sheet's own ask.
+        // No glance is asked here (since 9816656 it is read only while a
+        // listing face's fiat fold is open), so the sheet's own ask is the
+        // one pending promise; answer that.
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
         const sheet = () => root.querySelector('[data-role="pay"]') as HTMLElement;
