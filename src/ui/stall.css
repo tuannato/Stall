@@ -2397,8 +2397,15 @@ textarea.paste-in {
     background: var(--s-surface);
     border-left: 2px solid var(--s-accent);
     border-radius: max(0px, calc(var(--s-radius) - 4px));
-    padding: 9px 11px;
-    line-height: 1.45;
+    padding: 8px 10px;
+    line-height: 1.4;
+}
+
+/* The one line under the Pay control that says the money cannot come back:
+   the same 11.5px rung as every other fine line, in ink rather than muted —
+   the tier is weight and colour, not size (round 8, item 5). */
+.fine[data-role='pay-final'] {
+    color: var(--s-text);
 }
 
 /*
@@ -2730,7 +2737,7 @@ details.fold.fold-cta[open] > .fold-sum {
 .acts {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .acts .mini {
@@ -3218,7 +3225,7 @@ textarea.share-embed {
     padding: var(--s-card-pad);
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 10px;
 }
 
 /*
@@ -4969,8 +4976,12 @@ textarea.share-embed {
 .pay-amt {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 16px;
+    /* Round 8, item 5 (2026-09-15): the pay sheet's fine print is tiered by
+       spacing, never by size — the small-text scale is pinned. Tighter card,
+       tighter control stack, tighter sheet gap, and the final-payment line
+       in ink: on Neo's mono the Close control sat below 844px. */
+    gap: 4px;
+    padding: 14px;
     border: var(--s-card-border);
     border-radius: var(--s-radius);
     background: var(--s-surface);
