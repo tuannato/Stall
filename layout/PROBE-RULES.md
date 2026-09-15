@@ -964,3 +964,18 @@ sampling the row counted the control's ground as the address ink's background
 (2.84:1 on Modern, 1.55:1 on Rural worn, for grey mono that sits on its own
 ground at well over 3:1). The control is a `.mini` and is sampled in its own
 box; the protected-box list still names `.addr`, the row.
+
+Two more contrast targets the same day: `.event-sum .event-ic` (the Activity
+tile's letters, restyled in round 8 to ink on an accent tint after the look
+review found them unreadable at 9px on Neo and Rural — and the empty tile a
+row without a token wears, which has no letters and samples its ink token
+against the row's ground) and `.door-chips li` (the door's fact chips, ahead of
+the pill rule that unborders them). Both were contrast claims on the design
+board; the pass measures them.
+
+A target that wears a picture is skipped (`targetFor`, the same day): the
+Activity tile whose token image had landed sampled the image's own pixels
+against the letters' ink — 2.20:1 bare and 1.18:1 under Sun-faded on Rural,
+2.64:1 on Neo — while every letters tile beside it read 5.7–12:1 and every
+empty tile 7–17:1 (pixels measured with the scratch script). There are no
+letters under a picture; nothing was unreadable.

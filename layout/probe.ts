@@ -1229,6 +1229,11 @@ const CONTRAST_TEXT = [
     '[data-role="seller-price"]',
     '.chip',
     '.pay-pointer',
+    // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
+    // at 9px, and the door's fact chips, restyled as facts — both contrast
+    // claims of the design board, measured here rather than asserted.
+    '.event-sum .event-ic',
+    '.door-chips li',
 ].join(', ');
 
 declare global {
@@ -1296,6 +1301,15 @@ let preparedNodes: HTMLElement[] = [];
 
 /** One node's sample box and static fields, or nothing worth sampling. */
 function targetFor(node: HTMLElement): ContrastTarget | undefined {
+    if (node.querySelector('img') !== null) {
+        // A tile wearing its token's picture has no letters to measure: the
+        // pixels in its box are the image's own, and sampling them against
+        // the ink the letters would have worn reported the Activity's
+        // description-row tile at 1.18–2.64:1 on Rural and Neo (2026-09-15,
+        // the day `.event-sum .event-ic` joined the list). The letters
+        // tiles and the empty tiles beside it measured 5.7–17:1.
+        return undefined;
+    }
     const full = node.getBoundingClientRect();
     let box: { x: number; y: number; width: number; height: number } = full;
     // Content scrolled out of a clip keeps its full rect, and a box

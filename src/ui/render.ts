@@ -6658,6 +6658,15 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
         const tile = itemIcon(icon.tokenId, name, 'event-ic', ICON_ROW_SIZE, icon.picture);
         tile.setAttribute('data-role', 'event-icon');
         glance.append(tile);
+    } else {
+        // A row that names no token keeps the column (round 8, 2026-09-15):
+        // an empty tile, the same 24px in the same track, so the kind and the
+        // time of every row start on one line. No role, no token id, no
+        // `itemIcon` and so no request — nothing is claimed about a row that
+        // has nothing to wear, and assistive tech is not told about a box.
+        const blank = el('div', 'item-ic event-ic event-ic-empty');
+        blank.setAttribute('aria-hidden', 'true');
+        glance.append(blank);
     }
     const at = eventTime(event);
     if (at !== undefined) {

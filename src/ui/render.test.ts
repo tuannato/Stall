@@ -12872,3 +12872,39 @@ describe('the-studio-name-card-stacks-the-name-over-the-tagline', () => {
         expect(block.querySelector('.stag')?.textContent).toBe(copy.STUDIO_NO_TAGLINE);
     });
 });
+
+describe('an-activity-row-without-a-token-keeps-the-tile-column', () => {
+    /**
+     * Round 8, item 4 (owner, 2026-09-15): rows with no token left their tile
+     * column empty, so the kind and the time of a book row started flush
+     * where a neighbouring row's started 34px in — one list, two rhythms.
+     * A row that names no token wears an empty tile in the same column: no
+     * role, no token id, no image, hidden from assistive tech — nothing is
+     * claimed and nothing is fetched. A row that names one wears its tile
+     * as before.
+     */
+    it('a book row wears an empty tile; a description row wears its token', () => {
+        const AT = 1_756_400_000_000;
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                panel: 'activity',
+                events: [
+                    { txid: 'b1'.repeat(32), kind: 'book', seenAtMs: AT, book: 'consumed' },
+                    { txid: 'b2'.repeat(32), kind: 'description', seenAtMs: AT - 1, tokenId: TOKEN_ID, recordAuthority: 'stalls' },
+                ],
+            }),
+        );
+        const rows = [...root.querySelectorAll<HTMLElement>('li.event')];
+        expect(rows).toHaveLength(2);
+        const empty = rows[0]!.querySelector<HTMLElement>('summary .event-ic.event-ic-empty')!;
+        expect(empty, 'the book row keeps the column').not.toBeNull();
+        expect(empty.getAttribute('aria-hidden')).toBe('true');
+        expect(empty.hasAttribute('data-role')).toBe(false);
+        expect(empty.hasAttribute('data-token-id')).toBe(false);
+        expect(empty.querySelector('img')).toBeNull();
+        expect(rows[0]!.querySelector('[data-role="event-icon"]')).toBeNull();
+        const worn = rows[1]!.querySelector<HTMLElement>('summary [data-role="event-icon"]')!;
+        expect(worn).not.toBeNull();
+        expect(worn.classList.contains('event-ic-empty')).toBe(false);
+    });
+});
