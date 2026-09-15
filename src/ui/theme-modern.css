@@ -222,7 +222,7 @@
 }
 
 .t-modern .addr {
-    padding: 7px 10px;
+    padding: 3px 10px;
     border-radius: 10px;
     background: color-mix(in srgb, var(--s-muted) 8%, var(--s-surface));
     color: var(--s-muted);

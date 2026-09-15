@@ -4757,12 +4757,13 @@ describe('big-shop-tools', () => {
         expect(h.onChangeSort).toHaveBeenCalledWith('price-asc');
     });
 
-    it('the filter narrows the shelves and never the header count', () => {
+    it('the filter narrows the shelves and never the tab count', () => {
         const { root } = paint(bigShop({ shopFilter: 'apple' }));
         expect(cardNames(root)).toEqual(['Apple']);
-        // The header keeps counting everything listed: the filter is a way of
-        // looking, not a claim about the stall.
-        expect(root.textContent).toContain(itemsForSale(7));
+        // The tab label keeps counting everything listed (the sign's own
+        // count line left in round 8 — the label carries the number): the
+        // filter is a way of looking, not a claim about the stall.
+        expect(railTab(root, 'listings')!.textContent).toBe(copy.shopTabLabel(copy.SHOP_TAB_LISTINGS, 7));
     });
 
     it('an emptied shelf blames the filter, never the stall', () => {
@@ -9895,7 +9896,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.paste-in, .share-url, .share-embed'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr-toggle', '.addr-copy', '.paste-in, .share-url, .share-embed'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
@@ -12746,5 +12747,94 @@ describe('quotes-stack-one-per-row-on-desktop', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
         expect(css).not.toMatch(/\.pay-items\s*\{\s*grid-template-columns:\s*repeat\(2/);
         expect(css).toMatch(/\.pay-items\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    });
+});
+
+describe('the-shop-sign-carries-no-count-chip-when-the-tab-counts', () => {
+    /**
+     * Round 8 (owner, 2026-09-15): the sign block took 250–300px of a 390px
+     * screen, and one of its lines said what the tab label under it already
+     * says — `Listings · N`. The chip leaves the sign exactly when the label
+     * carries the number (a complete read, nothing withheld, nothing dropped,
+     * no face open) and stays in every other case: a withheld side keeps its
+     * sentence (`a-withheld-shop-does-not-say-zero-items-for-sale`), a read
+     * that dropped rows keeps its line, and a face screen — which paints no
+     * tabs — keeps the count.
+     */
+    it('no chip over a complete read; the tab label carries the number', () => {
+        const { root } = paint(offersView());
+        expect(root.querySelector('.stall-sub')).toBeNull();
+        expect(railTab(root, 'listings')!.textContent).toContain('1');
+    });
+
+    it('a face screen keeps the count on the sign', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, { overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' } }),
+        );
+        expect(root.querySelector('[data-role="shop-tabs"]')).toBeNull();
+        expect(root.querySelector('.stall-sub')?.textContent).toBe(copy.itemsForSale(1));
+    });
+
+    it('a read that dropped rows keeps the line', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER], dropped: 2 },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(root.querySelector('.stall-sub')?.textContent).toBe(copy.itemsForSale(1));
+    });
+});
+
+describe('the-address-is-one-line-on-a-phone-and-whole-on-a-desk', () => {
+    /**
+     * The two-line address box was the most prominent thing on the sign and
+     * the thing a buyer needs least (look review, 2026-09-15). One line now:
+     * the payload's first and last eight characters as a control that opens
+     * the whole string, the whole string in the DOM beside it — hidden on a
+     * phone until opened, always shown at desk width — and a copy control.
+     * A buyer who compares character by character opens it; the QR and the
+     * copy control carry the whole string either way.
+     */
+    // A named stall: an unnamed one is titled by its own address and prints
+    // it once, as the sign always has.
+    const named = { stallName: 'Riverside Goods' };
+
+    it('a short form opens the whole string, which stays in the DOM', () => {
+        const { root } = paint(offersView([OFFER], undefined, named));
+        const box = root.querySelector<HTMLElement>('.addr')!;
+        const toggle = box.querySelector<HTMLButtonElement>('.addr-toggle')!;
+        const full = box.querySelector<HTMLElement>('.addr-full')!;
+        expect(toggle.textContent).toBe('qpjqjm0l…c3j7hv09');
+        expect(full.textContent).toBe(ADDR);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        toggle.click();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(box.getAttribute('data-open')).toBe('true');
+        toggle.click();
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('the phone hides the whole string until opened; the desk shows it and drops the control', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        expect(css).toMatch(/\.addr-full\s*\{[^}]*display:\s*none;/);
+        expect(css).toMatch(/\.addr\[data-open='true'\]\s+\.addr-full\s*\{[^}]*display:\s*block;/);
+        expect(css).toMatch(/\.addr-toggle\s*\{\s*display:\s*none;\s*\}\s*\.addr-full\s*\{\s*display:\s*inline;\s*\}/);
+    });
+});
+
+describe('the-address-copy-control-copies-the-whole-address', () => {
+    it('writes the whole ecash: string, never the short form', async () => {
+        const { root } = paint(offersView([OFFER], undefined, { stallName: 'Riverside Goods' }));
+        const original = navigator.clipboard;
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            (root.querySelector('.addr [data-role="addr-copy"]') as HTMLButtonElement).click();
+            await Promise.resolve();
+            expect(writeText).toHaveBeenCalledWith(ADDR);
+        } finally {
+            Object.defineProperty(navigator, 'clipboard', { configurable: true, value: original });
+        }
     });
 });

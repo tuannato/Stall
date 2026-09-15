@@ -945,3 +945,22 @@ wrap anywhere. Green after: 133.3s, 2,023 boxes, every rule.
 - **Whether the QR scans.** The guard measures that it is not covered and not
   themed; scanning it from a monitor at 1080p and at 720p is a person with a
   phone, and has not been done.
+
+## A contrast target nested in a contrast target (2026-09-15)
+
+The sign's address became a row with a copy control in it — a `.mini` inside
+`.addr`, both on `CONTRAST_TEXT`. `__contrastPrepare` read each target's ink
+and blanked the node **and its descendants** in one loop, so by the time the
+inner control was reached its colour was already transparent and the backup
+the read falls back to had never been written; the runner threw
+`unreadable computed colour "undefined"` and the whole pass was lost, green
+rules and all. The prepare step now reads every ink first and blanks second.
+Nothing else changed: a nested target is still sampled in its own box, and
+the outer box still counts the inner control's ground as ground.
+
+The same row moved the contrast target off `.addr` and onto its two text nodes,
+`.addr-toggle` and `.addr-full`: the row's box now holds the copy control, and
+sampling the row counted the control's ground as the address ink's background
+(2.84:1 on Modern, 1.55:1 on Rural worn, for grey mono that sits on its own
+ground at well over 3:1). The control is a `.mini` and is sampled in its own
+box; the protected-box list still names `.addr`, the row.

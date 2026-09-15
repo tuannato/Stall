@@ -1,6 +1,6 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { describe, expect, it } from 'vitest';
-import {
+import { shortAddress,
     MAX_PAY_PARAM_CHARS,
     MIN_PAY_PARAM_CHARS,
     PAY_PARAM_PREFIX,
@@ -392,3 +392,11 @@ describe('an-upper-case-address-is-the-same-stall', () => {
     });
 });
 
+
+describe('the-sign-shortens-the-address-to-a-glance', () => {
+    it('keeps the first and last eight of the payload, prefix dropped; a short payload stays whole', () => {
+        expect(shortAddress('ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09')).toBe('qpjqjm0l…c3j7hv09');
+        expect(shortAddress('qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09')).toBe('qpjqjm0l…c3j7hv09');
+        expect(shortAddress('ecash:short')).toBe('short');
+    });
+});

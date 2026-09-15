@@ -2132,6 +2132,51 @@ textarea.paste-in {
     border-radius: var(--s-addr-radius);
     padding: var(--s-addr-pad);
     text-align: var(--s-addr-align);
+    /* One line on a phone (round 8, 2026-09-15): the short form, the copy
+       control at the right, and the whole string under them once opened. */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 10px;
+}
+
+/* The short form is a control that opens the whole string, on its own 44px
+   floor in its own block, as every tappable control declares. */
+.addr-toggle {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    min-height: 44px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.addr-full {
+    display: none;
+}
+
+.addr[data-open='true'] .addr-full {
+    display: block;
+    flex-basis: 100%;
+    padding-bottom: 10px;
+}
+
+.addr-copy {
+    min-height: 44px;
+    margin-left: auto;
+}
+
+@media (min-width: 680px) {
+    /* The desk has room for the whole string, so the control leaves. */
+    .addr-toggle {
+        display: none;
+    }
+
+    .addr-full {
+        display: inline;
+    }
 }
 
 /*

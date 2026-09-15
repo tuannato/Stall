@@ -28,14 +28,14 @@
         linear-gradient(#8a7458, #8a7458);
     background-repeat: no-repeat;
     background-size:
-        3px 26px,
-        3px 26px;
+        3px 16px,
+        3px 16px;
     background-position:
         left 26% top,
         right 26% top;
     border: 0;
     box-shadow: none;
-    padding: 24px 0 10px;
+    padding: 16px 0 8px;
     align-items: center;
 }
 
@@ -53,8 +53,8 @@
     flex: none;
     width: calc(100% - 28px);
     margin-inline: auto;
-    padding: 22px 18px 16px;
-    transform-origin: 50% -48px;
+    padding: 16px 16px 12px;
+    transform-origin: 50% -38px;
     animation: t-rural-swing 7s ease-in-out infinite;
 }
 
@@ -99,7 +99,7 @@
 
 /* On the paper below the board, as designed — a cream pill, dead still. */
 .t-rural .addr {
-    padding: 7px 14px;
+    padding: 3px 14px;
     border: 1px dashed rgba(107, 89, 66, 0.55);
     border-radius: 999px;
     background: var(--s-surface);
@@ -315,6 +315,15 @@
     transition:
         background 0.2s,
         color 0.2s;
+}
+
+/* The sign's copy control in ink, not the accent: under the Sun-faded mood
+   the accent lightens to rgb(172,102,64), and the probe's sample band inside
+   the pill catches one antialiased row of its own 1.5px border — 2.95:1 on
+   that row against the lighter ink, measured 2026-09-15 at 1280px. The ink
+   token clears it with room to spare; every other pill keeps the accent. */
+.t-rural .addr .mini {
+    color: var(--s-text);
 }
 
 /* Pressed reads by weight (and the check glyph); the look's colour is already the accent. */

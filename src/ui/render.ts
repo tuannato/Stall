@@ -37,7 +37,7 @@ import {
     isUnbuyable,
     RATE_TOO_SMALL,
 } from '../domain/money';
-import {
+import { shortAddress,
     parseSellerParam,
     PAY_PARAM_PREFIX,
     payLandingUrl,
@@ -1323,17 +1323,26 @@ function paintOffers(
     // each. The per-token listing counts live on the cards and in the detail.
     const distinct = new Set(offers.map((offer) => offer.tokenId)).size;
     const withheld = withheldListings(view);
+    const face = facePanel(view, handlers);
+    // The sign's count line leaves when the tab label under it carries the
+    // number (round 8, owner 2026-09-15: the sign took 250–300px of a phone
+    // screen and this line repeated `Listings · N`). `listingsCount` is the
+    // label's own rule — a complete read, nothing withheld, nothing dropped —
+    // and a face screen paints no tabs, so it keeps the count.
+    const counted = face === null && listingsCount(view) !== undefined;
     stall.append(
         header(
             displayName(view),
             // A number while anything is withheld would be a floor, and a
             // zero over a stall whose listings this page chose not to paint
             // is the empty-versus-unreachable collapse in the largest type.
-            withheld === 0
-                ? copy.itemsForSale(distinct)
-                : distinct === 0
-                  ? copy.WITHHELD_ALL_LISTINGS
-                  : copy.ITEMS_FOR_SALE_WITHHELD,
+            counted
+                ? undefined
+                : withheld === 0
+                  ? copy.itemsForSale(distinct)
+                  : distinct === 0
+                    ? copy.WITHHELD_ALL_LISTINGS
+                    : copy.ITEMS_FOR_SALE_WITHHELD,
             view.address,
             view.tagline,
             signPinOf(view, handlers),
@@ -1351,7 +1360,6 @@ function paintOffers(
     // Why the look is not the one the seller asked for, above the control:
     // it is about the stall, so it belongs to neither rail.
     settingsNotes(body, view);
-    const face = facePanel(view, handlers);
     if (face !== null) {
         // One token's face replaces the rail it came from: no tabs, no tools,
         // no rows. The header above still counts the whole shop.
@@ -5446,9 +5454,38 @@ function header(
     // Never when it is already the name — an unnamed stall is titled by its own
     // route, and printing that twice says nothing the first line did not.
     if (address !== undefined && address !== '' && address !== name) {
-        hd.append(el('div', 'addr', address));
+        hd.append(addressLine(address));
     }
     return hd;
+}
+
+/**
+ * The address on the sign, one line on a phone (round 8, owner 2026-09-15:
+ * the two-line box was the most prominent thing on the sign and the thing a
+ * buyer needs least). The payload's first and last eight characters are a
+ * control that opens the whole string; the whole string is in the DOM beside
+ * it — hidden under 680px until opened, always shown at desk width — so every
+ * reader of the sign's text and the copy control get the whole. The box stays
+ * the probe's protected `.addr`.
+ */
+function addressLine(address: string): HTMLElement {
+    const box = el('div', 'addr');
+    const toggle = el('button', 'addr-toggle', shortAddress(address));
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', 'addr-full');
+    toggle.title = address;
+    const full = el('span', 'addr-full', address);
+    full.id = 'addr-full';
+    toggle.addEventListener('click', () => {
+        const open = toggle.getAttribute('aria-expanded') !== 'true';
+        toggle.setAttribute('aria-expanded', String(open));
+        box.setAttribute('data-open', String(open));
+    });
+    const copyBtn = copyControl(address, 'addr-copy');
+    copyBtn.classList.add('addr-copy');
+    box.append(toggle, full, copyBtn);
+    return box;
 }
 
 /**

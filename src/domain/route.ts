@@ -194,3 +194,19 @@ export function parseBroadcastParams(search: string): BroadcastParams | undefine
         cards: broadcastParam(params, 'cards') === 'quotes' ? 'quotes' : 'listings',
     };
 }
+
+/**
+ * The address as the sign shows it on a phone (round 8, 2026-09-15): the
+ * payload's first and last eight characters around an ellipsis, the prefix
+ * dropped — 17 characters where the whole string is 48. A glance, never what
+ * a buyer compares against a wallet: the whole string stays in the DOM beside
+ * it (opened by the same control) and the copy control copies the whole. A
+ * payload short enough to show whole is shown whole.
+ */
+export function shortAddress(address: string): string {
+    const payload = address.startsWith('ecash:') ? address.slice('ecash:'.length) : address;
+    if (payload.length <= 20) {
+        return payload;
+    }
+    return `${payload.slice(0, 8)}…${payload.slice(-8)}`;
+}

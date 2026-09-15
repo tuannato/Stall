@@ -1181,7 +1181,15 @@ const CONTRAST_TEXT = [
     '[data-role="price"]',
     '.row.big dd',
     '.buy',
-    '.addr',
+    // The address's two text nodes, never the `.addr` row itself: since round
+    // 8 (2026-09-15) the row holds a copy control, and sampling the row's box
+    // counted that control's ground as the ink's background — 2.84:1 on
+    // Modern for grey mono that sits on its own ground at 4.6:1. The control
+    // is a `.mini`, sampled in its own box. One of the two is display: none
+    // at every width (the short form at desk, the whole string on a phone),
+    // and a zero box is skipped, so each is measured where it is seen.
+    '.addr-toggle',
+    '.addr-full',
     '[data-role="publish-hex"]',
     '[data-role="describe-hex"]',
     '[data-role="fiat"]',
@@ -1421,12 +1429,19 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
         details.open = true;
     }
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
+    // Every ink is read BEFORE any node is blanked. A target nested in a
+    // target — the sign's copy control, a `.mini` inside `.addr`, since round
+    // 8 (2026-09-15) — had its colour set to transparent by the outer node's
+    // descendant blanking below, and `targetFor` then read an ink nobody had
+    // stored: the runner threw on "undefined" and the whole pass was lost.
     const targets: ContrastTarget[] = [];
     for (const node of preparedNodes) {
         const target = targetFor(node);
         if (target !== undefined) {
             targets.push(target);
         }
+    }
+    for (const node of preparedNodes) {
         // The descendants too: a child with its own ink (`.tab-name` holds
         // the seller's name in the muted channel) does not inherit the
         // blanking, and its glyphs sampled as "ground" reported the shop tab
