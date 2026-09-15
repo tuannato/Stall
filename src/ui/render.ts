@@ -5416,11 +5416,13 @@ function header(
     pin?: SignPin,
 ): HTMLElement {
     const hd = el('header', 'stall-head');
-    // The brand mark leads every screen — the app's identity, sitting beside
-    // the seller's stall name, never replacing it. It carries its own colours
-    // (§brand), so it reads on any theme this header is painted in.
+    // The sign is the seller's and carries no platform mark (round 9, owner
+    // 2026-09-15). The mark stood here beside the seller's name from the
+    // first build: a co-author on their shopfront, the one element no look or
+    // decoration could dress, and a credential next to a name. Stall's own
+    // surfaces keep it — the door, the stream plate, the share card, the
+    // sparse-shop motif.
     const sign = el('div', 'stall-sign');
-    sign.append(stallMark());
     const headings = el('div', 'stall-headings');
     if (name !== undefined && name !== '') {
         // The one <h1> on every screen. A screen reader needs an outline to

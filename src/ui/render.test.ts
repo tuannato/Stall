@@ -2260,41 +2260,37 @@ describe('unresolvable narrates the journey forward', () => {
     });
 });
 
-describe('brand mark leads the header', () => {
+describe('the-sellers-sign-carries-no-brand-mark', () => {
     /**
-     * The mark is the app's identity, so it precedes every screen's headings —
-     * the apex and a resolved stall alike. It is the shipped logo image on a
-     * same-origin, fingerprinted asset (no external host, `img-src 'self'`),
-     * and it is decorative: the name beside it carries identity to a reader.
+     * The sign is the seller's (round 9, owner 2026-09-15: "bỏ khỏi bảng").
+     * A platform mark beside a seller's name made Stall the co-author of the
+     * shop, was the one element no look or decoration could dress (the same
+     * button blue on Rural's wood, among Neo's neon, on Modern's paper), and
+     * read as a credential next to the name — the wax seal's problem in
+     * miniature. The brand keeps the door, the stream plate, the share card
+     * and the sparse-shop motif; the sign leads with the seller's headings.
      */
-    it('is the logo image, first in the header, on apex and stall', () => {
-        const views: StallView[] = [
-            { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() },
+    it('a stall sign has no mark and leads with the headings; the door keeps its mark', () => {
+        const stall = paint(
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 theme: decodeTheme(NEO_CITY_THEME_ID),
+                stallName: 'Riverside Goods',
             }),
-        ];
-        for (const view of views) {
-            const { root } = paint(view);
-            // The door carries its own brand header (direction D); a stall
-            // keeps the sign. Either way the mark leads a <header>.
-            const sign = root.querySelector(
-                view.route.kind === 'home' ? 'header.door-brand' : '.stall-head .stall-sign',
-            ) as HTMLElement | null;
-            expect(sign, 'the sign carries the mark and the headings').not.toBeNull();
-            const mark = sign!.querySelector('img.stall-mark') as HTMLImageElement | null;
-            expect(mark, 'the mark leads the sign').not.toBeNull();
-            expect(mark!.tagName).toBe('IMG');
-            expect(mark!.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
-            expect(mark!.alt, 'decorative: the name beside it announces identity').toBe('');
-            expect(sign!.firstElementChild, 'mark precedes the headings').toBe(mark);
-            if (view.route.kind !== 'home') {
-                const head = root.querySelector('.stall-head') as HTMLElement;
-                expect(head.firstElementChild, 'the sign leads the header').toBe(sign);
-            }
-        }
+        ).root;
+        const sign = stall.querySelector('.stall-head .stall-sign') as HTMLElement;
+        expect(sign).not.toBeNull();
+        expect(sign.querySelector('img.stall-mark'), 'no platform mark on the seller\'s sign').toBeNull();
+        expect(sign.firstElementChild?.classList.contains('stall-headings'), 'the headings lead the sign').toBe(true);
+
+        const door = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }).root;
+        const brand = door.querySelector('header.door-brand') as HTMLElement;
+        const mark = brand.querySelector('img.stall-mark') as HTMLImageElement;
+        expect(mark, 'the door keeps the brand').not.toBeNull();
+        expect(mark.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
+        expect(mark.alt, 'decorative: the wordmark beside it announces identity').toBe('');
+        expect(brand.firstElementChild).toBe(mark);
     });
 });
 
