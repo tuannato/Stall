@@ -12908,3 +12908,23 @@ describe('an-activity-row-without-a-token-keeps-the-tile-column', () => {
         expect(worn.classList.contains('event-ic-empty')).toBe(false);
     });
 });
+
+describe('the-doors-facts-are-not-styled-as-controls', () => {
+    /**
+     * Round 8, item 6 (owner, 2026-09-15): the door's three chips are facts
+     * about the product, and they wore the same outlined pill as the door's
+     * buttons — one shape for a thing you press and a thing you read. The
+     * chips keep their words, weight and colour and lose the border and the
+     * ground. Read statically, like the other CSS pins: a pill drawn back
+     * onto them fails here before anyone taps a fact.
+     */
+    it('the door chips carry no border and no ground', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const block = css.match(/\.door-chips li\s*\{([^}]*)\}/)?.[1] ?? '';
+        expect(block, 'the block exists').not.toBe('');
+        expect(block).toMatch(/border:\s*0;/);
+        expect(block).toMatch(/background:\s*transparent;/);
+        expect(block).not.toMatch(/border-radius/);
+        expect(block).toMatch(/font-weight:\s*600;/);
+    });
+});

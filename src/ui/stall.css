@@ -4323,18 +4323,28 @@ textarea.share-embed {
 .door-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 2px 18px;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
+/*
+ * Facts are not styled as controls (round 8, item 6, owner 2026-09-15). The
+ * three chips say what the product is; they wore the same outlined pill as
+ * the door's buttons, one shape for a thing you press and a thing you read.
+ * Words and weight stay; the border and the ground go — and with the ground
+ * gone the ink follows the page's, so it is the accent token and not the
+ * door's literal blue: the probe's worn half paints the door under Modern's
+ * After-hours night, where `#1d4fc4` on a fact with no ground of its own
+ * read 2.59:1 (2026-09-15). On the door as it paints, the token is the same
+ * brand blue. Test: `the-doors-facts-are-not-styled-as-controls`.
+ */
 .door-chips li {
-    padding: 7px 13px;
-    border: 1.5px solid rgba(37, 99, 235, 0.35);
-    border-radius: 999px;
-    background: #fff;
-    color: #1d4fc4;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: var(--s-accent);
     font-size: 13px;
     font-weight: 600;
 }
