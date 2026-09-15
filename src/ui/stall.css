@@ -1316,6 +1316,14 @@ body {
         max-width: 100%;
         margin-top: 6px;
     }
+
+    /* The quote head at tier 3: the figure takes its own row and Pay stays on
+       the name's. Its own rule, after the listing's, so `--s-areas-m3` —
+       which names a caret — is never applied to a head holding a Pay control. */
+    .item-head-q[data-price-tier='3'] {
+        grid-template-areas: 'ic name pay' 'price price price';
+        grid-template-columns: var(--s-icon) minmax(0, 1fr) auto;
+    }
 }
 
 /*
@@ -2579,7 +2587,7 @@ details.fold > .fold-sum {
  * that aligns its children to the start sizes each to its content, and a
  * one-line sentence sized to its content ran under the Pay control.
  */
-.pay-b > * {
+.item-b > * {
     max-width: 100%;
 }
 
@@ -4712,27 +4720,29 @@ textarea.share-embed {
 }
 
 /*
- * Its own grid, so the quote and its control sit at the row's right edge
- * rather than under the name. Named areas for the same reason the offer card
- * has them: `.item-ic` places itself on `ic`, and a grid without that name
- * would leave the tile wherever auto-placement put it.
+ * The quote row's head: the listing row's grid with the Pay control where the
+ * listing has its caret (round 8, 2026-09-15 — one card anatomy for both
+ * rails). Its own areas rather than the look's `--s-areas-m`, which name a
+ * caret; the tier-3 rule in the phone block reshapes it the way the listing's
+ * does. A `div`: it holds two controls.
  */
-.pay-row {
-    display: grid;
-    grid-template-areas: 'ic name right';
-    grid-template-columns: var(--s-icon) minmax(0, 1fr) auto;
-    gap: var(--s-card-gap);
-    align-items: center;
-    padding: var(--s-card-pad);
+.item-head-q {
+    grid-template-areas: 'ic name price pay';
+    grid-template-columns: var(--s-icon) minmax(0, 1fr) auto auto;
+    cursor: default;
 }
 
-.pay-b {
-    grid-area: name;
-    min-width: 0;
+.item-head-q .pay-btn {
+    grid-area: pay;
+}
+
+/* The label line under a quote's name: rail label, provenance chip, age. */
+.item-labels {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    max-width: 100%;
 }
 
 /*
@@ -4771,22 +4781,35 @@ textarea.share-embed {
     color: var(--s-muted);
 }
 
-.pay-r {
-    grid-area: right;
+/*
+ * The row's foot, the quote's counterpart of the listing's pointer line: the
+ * words on one running line, the no-words note, the borrowed-id warning.
+ * Padded with the card's own pad and never through a margin shorthand:
+ * `--s-card-pad` carries two values on Neo, and a shorthand holding it is
+ * invalid CSS that silently drops the whole margin (measured on the design
+ * board, 2026-09-15).
+ */
+.item-foot {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
+    gap: 4px;
+    margin: -4px 0 12px;
+    padding-inline: var(--s-card-pad);
+    min-width: 0;
 }
 
-/* The seller's figure: tabular, and never wrapped — it is one number. */
-.pay-q {
-    font-size: 20px;
-    font-weight: var(--s-price-weight);
-    letter-spacing: var(--s-price-track);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    line-height: 1.05;
+/* The provenance chip in the foot keeps its own width: a stretched flex
+   item would paint its ground across the whole card. */
+.item-foot > .chip {
+    align-self: flex-start;
+}
+
+/* The seller's words on the row: the tagline's rung, ink not muted — the
+   words are the item, where the label line only says whose figure it is. */
+.item-foot-words {
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--s-text);
 }
 
 /*
@@ -4961,11 +4984,20 @@ textarea.share-embed {
 
 @media (min-width: 680px) {
     /*
-     * Two to a row at desk width: the quote and its control are a short pair,
-     * and one per line leaves a column of empty page beside them.
+     * One per row at desk width, like the listings: the two rails share one
+     * card anatomy since round 8, and a two-column grid cut the shared card
+     * in half beside a full-width neighbour.
      */
     .pay-items {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .item-head-q {
+        grid-template-columns: var(--s-icon-d) minmax(0, 1fr) auto auto;
+    }
+
+    .item-foot-words {
+        font-size: 14px;
     }
 }
 

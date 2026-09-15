@@ -9458,7 +9458,10 @@ const HOSTS_NO_PLUGIN = [{ host: 'one.example', result: 'plugin-missing' as cons
 describe('the-two-rails-never-paint-on-one-screen', () => {
     it('paints the book alone, then the quotes alone', () => {
         const listings = paint(railView({ shopTab: 'listings' })).root;
-        expect(listings.querySelector('.item-head')).not.toBeNull();
+        // The listing head is the row's one `<button>`; since round 8 the quote
+        // row wears the same `.item-head` grid on a `div`, so the class alone no
+        // longer tells the rails apart — the element does, and so do the roles.
+        expect(listings.querySelector('button.item-head')).not.toBeNull();
         expect(listings.querySelector('[data-role="price"]')).not.toBeNull();
         expect(listings.querySelector('[data-role="pay-row"]')).toBeNull();
         expect(listings.querySelector('[data-role="seller-price"]')).toBeNull();
@@ -9466,7 +9469,7 @@ describe('the-two-rails-never-paint-on-one-screen', () => {
         const quotes = paint(railView({ shopTab: 'quotes' })).root;
         expect(quotes.querySelector('[data-role="pay-row"]')).not.toBeNull();
         expect(quotes.querySelector('[data-role="seller-price"]')).not.toBeNull();
-        expect(quotes.querySelector('.item-head')).toBeNull();
+        expect(quotes.querySelector('button.item-head')).toBeNull();
         expect(quotes.querySelector('[data-role="price"]')).toBeNull();
     });
 
@@ -12681,5 +12684,67 @@ describe('a-pass-holds-at-the-end-of-the-text-before-it-returns', () => {
         );
         const travel = marqueeRunMs(300, 'name', STREAM_SPEED_PX_PER_S);
         expect(lastMarqueeRunAheadMs()).toBe(MARQUEE_HOLD_MS + travel + MARQUEE_HOLD_MS);
+    });
+});
+
+describe('a-quote-row-wears-the-listing-anatomy', () => {
+    /**
+     * Round 8 (owner, 2026-09-15): the two rails share one card. A quote row
+     * is the listing row's head — icon · name and its label line · figure ·
+     * control — with Pay where the listing has its caret, and a foot like the
+     * listing's pointer line. The label line carries the rail label, the
+     * record's age (on the row because Pay is); the foot carries the words
+     * on one running line and, never displaced by them, one of the two
+     * provenance sentences — the chip, or the borrowed-id warning, the
+     * critic's finding on the design board, which had `words || warning`.
+     * The chip moved from the label line to the foot after the probe: at
+     * 11px uppercase it is ~178px wide and the phone's name column beside a
+     * figure and a Pay pill is 112–148px, so it spilled under the figure.
+     */
+    const withWords = { descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]) };
+
+    it('head: icon · name · label line · whole figure · Pay; foot: the words', () => {
+        const { root } = paint(payView({ ...withWords, genesis: new Map([[TOKEN_ID, 'attributed']]) }));
+        const row = root.querySelector<HTMLElement>('[data-role="pay-row"]')!;
+        const head = row.querySelector<HTMLElement>('.item-head.item-head-q');
+        expect(head, 'the quote head wears the listing grid').not.toBeNull();
+        expect(head!.querySelector('.item-ic')).not.toBeNull();
+        expect(head!.querySelector('.item-b [data-role="item-open"]')).not.toBeNull();
+        expect(head!.querySelector('.item-labels [data-role="rail-label"]')?.textContent).toBe(copy.ROW_LABEL_PAY);
+        expect(head!.querySelector('[data-role="quote-minted"]'), 'the chip is not in the head').toBeNull();
+        expect(row.querySelector('.item-foot [data-role="quote-minted"]')).not.toBeNull();
+        expect(head!.querySelector('.item-p [data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(head!.querySelector('[data-role="pay-open"]')).not.toBeNull();
+        expect(row.querySelector('.item-foot [data-role="quote-words"]')?.textContent).toBe('Half kilo of beans');
+        expect(row.querySelector('.item-foot [data-role="quote-not-minted"]')).toBeNull();
+    });
+
+    it('the borrowed-id warning stays on the row beside the words', () => {
+        const { root } = paint(payView({ ...withWords, genesis: new Map([[TOKEN_ID, 'not-attributed']]) }));
+        const foot = root.querySelector<HTMLElement>('[data-role="pay-row"] .item-foot')!;
+        expect(foot.querySelector('[data-role="quote-words"]')?.textContent).toBe('Half kilo of beans');
+        expect(foot.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(copy.QUOTE_NOT_MINTED_HERE);
+    });
+
+    it('a long figure steps the quote head down to its own row', () => {
+        const { root } = paint(
+            payView({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 10_000_000_000n }]]) }),
+        );
+        const head = root.querySelector<HTMLElement>('[data-role="pay-row"] .item-head')!;
+        expect(head.querySelector('[data-role="seller-price"]')?.textContent).toBe('100,000,000.00 XEC');
+        expect(head.getAttribute('data-price-tier')).toBe('3');
+    });
+});
+
+describe('quotes-stack-one-per-row-on-desktop', () => {
+    /**
+     * The desktop block used to give `.pay-items` two columns; with one card
+     * anatomy for both rails a half-width quote beside a full-width listing
+     * read as two kinds of thing. Read statically, like the other CSS pins.
+     */
+    it('the desktop block gives .pay-items one column, like the listings', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        expect(css).not.toMatch(/\.pay-items\s*\{\s*grid-template-columns:\s*repeat\(2/);
+        expect(css).toMatch(/\.pay-items\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     });
 });

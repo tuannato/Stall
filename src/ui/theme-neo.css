@@ -763,6 +763,13 @@
  * order. Transitions are named alongside the animations; the probe's
  * armed-transition check is the guard.
  */
+/* The quote row's foot clears the card's corner brackets: at the base pad
+   the words line sat on the bracket strokes (design board, 2026-09-15). */
+.t-neo .item-foot {
+    padding-inline: 22px;
+    margin-bottom: 18px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .t-neo .invite-cursor,
     .t-neo .sm-neon,

@@ -2212,58 +2212,60 @@ function payRow(
     view: StallView,
     handlers: StallHandlers,
 ): HTMLElement {
-    const row = el('div', 'item pay-row');
+    const row = el('div', 'item item-quote');
     row.setAttribute('data-role', 'pay-row');
     const named = quoteNaming(view, item.tokenId);
     const minted = view.genesis?.get(item.tokenId);
-    row.append(itemIcon(item.tokenId, named.title, undefined, ICON_ROW_SIZE, minted !== 'not-attributed'));
-    const words = el('div', 'pay-b');
-    // The name opens the face; the row's Pay control still opens the pay
-    // sheet in one press, so no press is added to the money path.
+    /*
+     * One anatomy for both rails (round 8, owner 2026-09-15): icon · name
+     * and its label line · figure · control — the listing row's grid, with
+     * the Pay control where the listing has its caret. A `div` rather than
+     * the listing head's `<button>`, because this head holds two controls:
+     * the name opens the face and Pay opens the sheet in one press, and a
+     * control nested in a button is markup no browser agrees about.
+     */
+    const head = el('div', 'item-head item-head-q');
+    head.append(itemIcon(item.tokenId, named.title, undefined, ICON_ROW_SIZE, minted !== 'not-attributed'));
+    const info = el('span', 'item-b');
     const openFace = marqueeNode(el('button', 'item-n item-open', named.title), 'name', item.tokenId);
     openFace.type = 'button';
     openFace.setAttribute('data-role', 'item-open');
     openFace.setAttribute('data-focus-key', `item-open:${item.tokenId}`);
     openFace.addEventListener('click', () => handlers.onOpenItem(item.tokenId, 'quotes'));
-    words.append(openFace);
-    const rail = el('span', 'pay-sub rail-label', copy.ROW_LABEL_PAY);
+    info.append(openFace);
+    // The label line: whose figure this is and the record's age — on the row
+    // because Pay is, and a buyer decides here. Not the provenance chip: at
+    // 11px uppercase it is ~178px wide, and the name column beside a figure
+    // and a Pay pill is 112–148px on a phone (probe, 2026-09-15), so a chip
+    // here spilled under the figure on every look. Both provenance sentences
+    // live in the foot, where the card is the full width.
+    const labels = el('span', 'item-labels');
+    const rail = el('span', 'item-q rail-label', copy.ROW_LABEL_PAY);
     rail.setAttribute('data-role', 'rail-label');
-    words.append(rail);
-    // The token's own name, small, under the item's: a genesis name is true
-    // and is rarely the thing a buyer is paying for. Absent when it is already
-    // the title, which is what a quote with no words falls back to.
-    if (named.words !== undefined) {
-        // One line, an ellipsis at the end: the face and the sheet show it whole.
-        const under = marqueeNode(el('span', 'pay-sub pay-words-line', named.words), 'words', item.tokenId);
-        under.setAttribute('data-role', 'quote-words');
-        words.append(under);
-    }
-    if (named.note !== undefined) {
-        const note = el('span', 'pay-sub', named.note);
-        note.setAttribute('data-role', 'quote-no-words');
-        words.append(note);
-    }
-    if (minted === 'not-attributed') {
-        const borrowed = el('span', 'pay-sub', copy.QUOTE_NOT_MINTED_HERE);
-        borrowed.setAttribute('data-role', 'quote-not-minted');
-        words.append(borrowed);
-    } else if (minted === 'attributed') {
-        // The positive half. Without it, silence meant either "this stall
-        // minted it" or "this page could not tell", and the reader had no way
-        // to know which — `unknown` is the one that still says nothing.
-        const here = el('span', 'chip', copy.QUOTE_MINTED_CHIP);
-        here.setAttribute('data-role', 'quote-minted');
-        words.append(here);
-    }
+    labels.append(rail);
     const age = quoteAgeNode(view, item.tokenId, 'span', 'pay-sub');
     if (age !== null) {
-        words.append(age);
+        labels.append(age);
     }
-    row.append(words);
-    const right = el('div', 'pay-r');
-    const figure = el('span', 'pay-q', quoteFigure(item.price));
+    info.append(labels);
+    head.append(info);
+    // The seller's figure, whole and in the unit they wrote, in one node under
+    // one role: `seller-price` is a protected box, a contrast target and the
+    // pay-screen audit's key, so its text is never split into figure and unit.
+    // The Pay pill sits where the listing's 16px caret does, so the tier
+    // ladder counts its width in price characters.
+    const figureText = quoteFigure(item.price);
+    const tier = priceTier(figureText, false, tierCharCeilings(paintedThemeId(view)), PAY_PILL_CHARS);
+    if (tier > 0) {
+        head.setAttribute('data-price-tier', String(tier));
+    }
+    const price = el('span', 'item-p');
+    const amount = el('span', 'item-a');
+    const figure = el('span', 'item-x', figureText);
     figure.setAttribute('data-role', 'seller-price');
-    right.append(figure);
+    amount.append(figure);
+    price.append(amount);
+    head.append(price);
     const open = el('button', 'buy pay-btn', copy.PAY_OPEN);
     open.type = 'button';
     open.setAttribute('data-role', 'pay-open');
@@ -2272,8 +2274,40 @@ function payRow(
     if (onOpenPay !== undefined) {
         open.addEventListener('click', () => onOpenPay(item.tokenId));
     }
-    right.append(open);
-    row.append(right);
+    head.append(open);
+    row.append(head);
+    // The foot, the quote's counterpart of the listing's pointer line: the
+    // seller's words on one running line (the face and the sheet show them
+    // whole), the note that they wrote none, and — never displaced by the
+    // words — one of the two provenance sentences, the chip or the
+    // borrowed-id warning, because a buyer decides on this row.
+    const foot = el('div', 'item-foot');
+    if (named.words !== undefined) {
+        const under = marqueeNode(el('span', 'item-foot-words pay-words-line', named.words), 'words', item.tokenId);
+        under.setAttribute('data-role', 'quote-words');
+        foot.append(under);
+    }
+    if (named.note !== undefined) {
+        const note = el('span', 'pay-sub', named.note);
+        note.setAttribute('data-role', 'quote-no-words');
+        foot.append(note);
+    }
+    if (minted === 'attributed') {
+        // The positive half. Without it, silence meant either "this stall
+        // minted it" or "this page could not tell", and the reader had no way
+        // to know which — `unknown` is the one that still says nothing.
+        const here = el('span', 'chip', copy.QUOTE_MINTED_CHIP);
+        here.setAttribute('data-role', 'quote-minted');
+        foot.append(here);
+    }
+    if (minted === 'not-attributed') {
+        const borrowed = el('span', 'pay-sub', copy.QUOTE_NOT_MINTED_HERE);
+        borrowed.setAttribute('data-role', 'quote-not-minted');
+        foot.append(borrowed);
+    }
+    if (foot.childElementCount > 0) {
+        row.append(foot);
+    }
     return row;
 }
 
@@ -4781,12 +4815,27 @@ function offerRow(
  * rides the figure's own line, so it counts as two characters. Desktop has
  * the width and none of the rules read the attribute there.
  */
+/**
+ * What the Pay pill costs the quote row in price characters. The listing's
+ * fourth column is a 16px caret; the quote's is the Pay pill, 57–59px wide
+ * on the three looks at 390px (measured 2026-09-15), so the same ceilings
+ * would let a quote figure crush the name the listing's would not. The
+ * extra 43px is 2.4 characters of a 30px tabular figure and 3.4 of a 21px
+ * one; three is the middle, and it puts every USD quote (`$5.00` is five
+ * characters) on the 21px rung — where the old 20px quote figure sat — with
+ * the 30px rung kept for a figure of four characters or fewer. Five was
+ * tried first and pushed `$5.00` to 17px. The name-floor probe rule is the
+ * judge, on `plugin-missing-quotes`.
+ */
+export const PAY_PILL_CHARS = 3;
+
 export function priceTier(
     figure: string,
     hasFrom: boolean,
     ceilings: readonly [number, number, number],
+    extraChars = 0,
 ): 0 | 1 | 2 | 3 {
-    const chars = figure.length + (hasFrom ? 2 : 0);
+    const chars = figure.length + (hasFrom ? 2 : 0) + extraChars;
     if (chars <= ceilings[0]) return 0;
     if (chars <= ceilings[1]) return 1;
     if (chars <= ceilings[2]) return 2;
