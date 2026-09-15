@@ -5766,6 +5766,21 @@ function studioCard(role: string, title: string): { card: HTMLElement; head: HTM
     return { card, head };
 }
 
+/**
+ * The stall's name over its tagline on the Name & look card (round 8, item
+ * 3, owner 2026-09-15). It was one `kv` row — the tagline right-aligned and
+ * muted beside the name — so a tagline of any length fought the name for one
+ * line and wrapped ragged against the card's edge. Stacked, the name reads as
+ * the sign does and the tagline runs under it; the role stays, so every
+ * reader of `studio-name-row` finds the same block.
+ */
+function nameBlock(name: string, tagline: string): HTMLElement {
+    const block = el('div', 'sname-block');
+    block.setAttribute('data-role', 'studio-name-row');
+    block.append(el('div', 'sname', name), el('div', 'stag', tagline));
+    return block;
+}
+
 /** A label and a value on one line of a studio card. */
 function kvRow(label: string, value: string, role?: string): HTMLElement {
     const row = el('div', 'kv');
@@ -5823,9 +5838,7 @@ function paintStudio(
         change.addEventListener('click', () => openPublish());
         name.head.append(change);
     }
-    name.card.append(
-        kvRow(view.stallName ?? copy.STUDIO_NO_NAME, view.tagline ?? copy.STUDIO_NO_TAGLINE, 'studio-name-row'),
-    );
+    name.card.append(nameBlock(view.stallName ?? copy.STUDIO_NO_NAME, view.tagline ?? copy.STUDIO_NO_TAGLINE));
     const lookId = view.theme?.id ?? DEFAULT_THEME.id;
     name.card.append(
         kvRow(

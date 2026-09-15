@@ -2971,6 +2971,38 @@ textarea.share-embed {
     overflow-wrap: anywhere;
 }
 
+/* The Name & look card's name over its tagline (round 8, 2026-09-15): the
+   name at the card's own heading size, the tagline on the 13.5px rung the
+   sign's tagline and the quote foot use, muted. The look row under it keeps
+   the kv shape behind one rule. */
+.sname-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 2px 0 4px;
+    min-width: 0;
+}
+
+.sname {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.stag {
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--s-muted);
+    overflow-wrap: anywhere;
+}
+
+.sname-block + .kv {
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    padding-top: 8px;
+}
+
 .trow {
     display: grid;
     grid-template-areas:

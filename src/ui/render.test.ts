@@ -12838,3 +12838,37 @@ describe('the-address-copy-control-copies-the-whole-address', () => {
         }
     });
 });
+
+describe('the-studio-name-card-stacks-the-name-over-the-tagline', () => {
+    /**
+     * Round 8, item 3 (owner, 2026-09-15): the Name & look card set the name
+     * and the tagline as one `kv` row — two spans, space-between, the tagline
+     * right-aligned and muted — so a tagline of any length fought the name
+     * for one line and wrapped ragged against the right edge. The name now
+     * stands over its tagline (`.sname` over `.stag`) in one block that keeps
+     * the `studio-name-row` role; the look row stays a `kv` under a rule.
+     */
+    it('paints the name over the tagline under the same role, and the look row as a kv', () => {
+        const { root } = paint(
+            offersView([OFFER], undefined, {
+                stallName: 'Riverside Goods',
+                tagline: 'Fresh from the riverside — roasted and packed weekly',
+                panel: 'studio',
+            }),
+        );
+        const block = root.querySelector<HTMLElement>('[data-role="studio-name-row"]')!;
+        expect(block.classList.contains('sname-block')).toBe(true);
+        expect(block.querySelector('.sname')?.textContent).toBe('Riverside Goods');
+        expect(block.querySelector('.stag')?.textContent).toBe('Fresh from the riverside — roasted and packed weekly');
+        const look = root.querySelector<HTMLElement>('[data-role="studio-look-row"]')!;
+        expect(look.classList.contains('kv')).toBe(true);
+        expect(look.textContent).toContain('Modern');
+    });
+
+    it('an unnamed, untagged stall says so in the same two slots', () => {
+        const { root } = paint(offersView([OFFER], undefined, { panel: 'studio' }));
+        const block = root.querySelector<HTMLElement>('[data-role="studio-name-row"]')!;
+        expect(block.querySelector('.sname')?.textContent).toBe(copy.STUDIO_NO_NAME);
+        expect(block.querySelector('.stag')?.textContent).toBe(copy.STUDIO_NO_TAGLINE);
+    });
+});
