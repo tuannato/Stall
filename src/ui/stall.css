@@ -367,25 +367,49 @@ body {
  */
 .att-horizon {
     position: relative;
+    /* 72px and not a pixel more: this band stands ABOVE the sign, so every
+       pixel of it is first-fold a phone spends before the shop's name. The
+       v2 redraw took it to 86 for a deeper floor and gave it straight back
+       — round 8 cut the sign block for exactly this reason. */
     height: 72px;
     flex: none;
     pointer-events: none;
     overflow: hidden;
+    /*
+     * v2 (round 10, 2026-09-16: "làm lại cho đẹp hơn"). v1 was one grid in
+     * one colour under one linear mask, and it read as graph paper laid on
+     * its side. Three changes, all of them depth. The two axes take
+     * different colours, so the floor has a direction the way a lit grid
+     * does — the second accent running away from the reader, the first
+     * crossing it. A glow sits along the far edge, where a floor this steep
+     * would meet its horizon, brightest at the middle of the run. And the
+     * mask is a two-stop fade rather than one, so the grid arrives out of
+     * the dark instead of being cut off at 78%.
+     *
+     * Still a node, never a pseudo-element — the probe measures boxes — and
+     * still static: a floor reads as material, and this row is priced as
+     * material rather than as an event.
+     */
     background:
+        radial-gradient(
+            120% 74% at 50% 0,
+            color-mix(in srgb, var(--s-accent) 30%, transparent),
+            transparent 62%
+        ),
         repeating-linear-gradient(
             90deg,
-            color-mix(in srgb, var(--s-accent) 26%, transparent) 0 1px,
-            transparent 1px 42px
+            color-mix(in srgb, var(--s-accent-2) 30%, transparent) 0 1px,
+            transparent 1px 38px
         ),
         repeating-linear-gradient(
             0deg,
-            color-mix(in srgb, var(--s-accent) 26%, transparent) 0 1px,
-            transparent 1px 26px
+            color-mix(in srgb, var(--s-accent) 24%, transparent) 0 1px,
+            transparent 1px 22px
         );
-    transform: perspective(360px) rotateX(54deg);
+    transform: perspective(320px) rotateX(58deg);
     transform-origin: 50% 100%;
-    -webkit-mask: linear-gradient(rgba(0, 0, 0, 0), #000 78%);
-    mask: linear-gradient(rgba(0, 0, 0, 0), #000 78%);
+    -webkit-mask: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55) 34%, #000 82%);
+    mask: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55) 34%, #000 82%);
 }
 
 
