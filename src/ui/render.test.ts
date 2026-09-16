@@ -13002,3 +13002,44 @@ describe('the-sign-is-centred', () => {
         expect(head).toMatch(/align-items:\s*center;/);
     });
 });
+
+/*
+ * Round 10, 2026-09-16. The beetle's yard is the ground under Rural's hanging
+ * board, and at 1280 it ran 1,261px against the board's 558px — the owner saw
+ * a strip across the whole window. Its width is the board's own now, and that
+ * number is stated in two files: `.att-beetle` in stall.css, where every
+ * decoration rule lives, and `.t-rural .stall-sign` in the look's own sheet.
+ * A number repeated in two places drifts, and no probe rule can see that these
+ * two are meant to agree — only that neither covers anything. So the agreement
+ * is read statically here.
+ */
+describe('the-yard-is-as-wide-as-the-board', () => {
+    it('gives the beetle Rural’s board metrics at both widths', () => {
+        const noComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+        const stall = noComments(readFileSync(join(UI_DIR, 'stall.css'), 'utf8'));
+        const rural = noComments(readFileSync(join(UI_DIR, 'theme-rural.css'), 'utf8'));
+        // Innermost blocks only: a rule body holds no braces, so this reads a
+        // rule wherever it sits, inside a media block included. The last match
+        // in source order wins, which is the cascade between two rules of
+        // equal specificity — and a desk override is exactly that.
+        const decl = (css: string, selector: string, prop: string): string | undefined => {
+            let found: string | undefined;
+            for (const match of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+                const selectors = match[1].split(',').map((one) => one.trim().replace(/\s+/g, ' '));
+                if (!selectors.includes(selector)) continue;
+                const hit = new RegExp(`(?:^|;)\\s*${prop}:\\s*([^;]+)`).exec(match[2]);
+                if (hit?.[1] !== undefined) found = hit[1].trim();
+            }
+            return found;
+        };
+        // Phone: the board is inset 28px inside its head, and so is the yard.
+        expect(decl(rural, '.t-rural .stall-sign', 'width')).toBe('calc(100% - 28px)');
+        expect(decl(stall, '.att-beetle', 'width')).toBe('calc(100% - 28px)');
+        // Desk: the board takes a fixed maximum, and the yard takes the same.
+        const boardMax = decl(rural, '.t-rural .stall-sign', 'max-width');
+        expect(boardMax).toBe('556px');
+        expect(decl(stall, '.att-beetle', 'max-width')).toBe(boardMax);
+        // And it is centred, never pinned to an edge.
+        expect(decl(stall, '.att-beetle', 'margin')).toBe('10px auto 14px');
+    });
+});

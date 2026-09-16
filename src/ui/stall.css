@@ -689,7 +689,18 @@ body {
     position: relative;
     overflow: hidden;
     height: 48px;
-    margin: 10px 2px 14px;
+    /*
+     * As wide as the board it stands under, never the window (round 10,
+     * owner 2026-09-16: "trên desktop nó dài cả màn hình"). Measured at 1280
+     * before the fix: the strip ran 1,261px while Rural's board was 558px
+     * and the content column 780px. A ground wider than the stall standing
+     * on it reads as a page break, which is the complaint the full-bleed v1
+     * rail earned in August, returning at desk width. The two numbers are
+     * Rural's own board metrics from `theme-rural.css`, and
+     * `the-yard-is-as-wide-as-the-board` fails when they drift apart.
+     */
+    width: calc(100% - 28px);
+    margin: 10px auto 14px;
     --att-bug-trav: calc(100% - 50px);
     flex: none;
     pointer-events: none;
@@ -706,6 +717,12 @@ body {
         left bottom 5px,
         left bottom,
         left bottom;
+}
+
+@media (min-width: 680px) {
+    .att-beetle {
+        max-width: 556px;
+    }
 }
 
 .att-beetle-bug {
