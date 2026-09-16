@@ -1101,6 +1101,47 @@ for (const theme of SHIPPED_THEMES) {
     }
 
     /*
+     * Worn with a MOOD, every other row must still apply (round 10,
+     * 2026-09-16, from the owner's ask that After hours stop flattening what
+     * is worn beside it). A mood repaints the canvas through the palette,
+     * and the rule above compares a row against the BARE look, so nothing
+     * checked a row against the look it is actually wearing.
+     *
+     * What this catches is **erasure**, not dimness: a mood rule and a row
+     * rule that collide in the cascade, the way two root rules once did (the
+     * aurora erased the rain outright). Each non-mood row is painted twice —
+     * the mood alone, then the mood wearing the row — and identical
+     * signatures mean the row gave up everything it had.
+     *
+     * What it cannot catch, stated so nobody trusts it too far: a row that
+     * still applies and still cannot be seen. Signatures are computed style
+     * strings, so an accent hairline lost against a near-black ground reads
+     * as a difference here while a buyer finds nothing — which is exactly
+     * what the old Pinstripe was. A pixel rule was tried on paper and
+     * refused: every threshold that failed the old page frame also failed
+     * the confetti, which is sparse on purpose. That judgement stays with
+     * the eye, in the framework's review checklist, under each mood the row
+     * can be worn with.
+     */
+    const moods = attachmentsForTheme(theme.id).filter((row) => row.slot === 'mood');
+    const wearable = attachmentsForTheme(theme.id).filter((row) => row.slot !== 'mood');
+    for (const mood of moods) {
+        paint('offers', theme.id, [mood]);
+        const moodAlone = paintSignature();
+        for (const row of wearable) {
+            paint('offers', theme.id, [mood, row]);
+            if (paintSignature() === moodAlone) {
+                failures.push({
+                    screen: 'billboard',
+                    theme: theme.label,
+                    check: 'a mood erases a row worn with it',
+                    detail: `${row.label} under ${mood.label}`,
+                });
+            }
+        }
+    }
+
+    /*
      * Worn TOGETHER, the root rows must all still be there. Two root rules
      * at equal specificity cannot compose background lists — measured:
      * aurora erased the neon rain outright (image and animation) and the

@@ -691,6 +691,28 @@ clips today); no incident yet.
   computed-style diff by the catalogue plan).
 - A **mood** must move the canvas ≥60 channel-points — the first Sun-faded
   moved it four and a buyer could not tell they were wearing it.
+- Worn **together**, no root row may erase another: each single row's
+  signature is compared against the all-root dress, and equality means the
+  cascade ate the rest (aurora once erased the rain's image and animation
+  both).
+- Worn with a **mood**, every other row must still apply (round 10,
+  2026-09-16, from the owner's ask that After hours stop flattening what is
+  worn beside it). The row-against-bare rule above compares against the
+  unworn look, so nothing checked a row against the palette it is actually
+  wearing. Each non-mood row is painted twice — the mood alone, then the
+  mood wearing the row — and identical signatures fail. Five pairs across
+  the shipped catalogue, since only Modern and Rural ship a mood; the run
+  measured 142.5s against the 150s ceiling with it in.
+  **What it does not prove:** that the row can be *seen* under that mood.
+  Signatures are computed style strings, so a hairline lost against a
+  near-black ground still reads as a difference — the old Pinstripe's exact
+  failure. A pixel rule was designed and refused: every area-and-magnitude
+  threshold that would have failed the old page frame (1.2% of the frame,
+  changed hard) also failed the paper confetti (0.16%, sparse on purpose),
+  so the threshold would have been tuned to one case and would reject
+  legitimate designs. That judgement belongs to the eye, and the workshop
+  framework's checklist now carries it: look at every row under every mood
+  it can be worn with, at 390 and 1280.
 
 ## Budget
 
