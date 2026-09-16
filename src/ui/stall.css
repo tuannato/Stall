@@ -578,43 +578,61 @@ body {
 }
 
 /*
- * Rural · badge · Confetti. The fair's falling specks as three dot layers
- * on the root, drifting one tile per loop. Behind every surface, over the
- * look's own backdrop, which is restated because background-image does
- * not merge.
+ * Rural · badge · Confetti, v2 (round 10, 2026-09-16). Paper, not dust: the
+ * first version was three round specks of 2 to 3px, which at arm's length
+ * read as a texture bug rather than as a fair. Four bits per tile now, each
+ * a flattened lozenge at a different aspect — one lying flat, one on end,
+ * one small, one pale — which is how a scrap of paper reads as it turns
+ * over. One tile every 22s rather than 14: paper that fell fast enough to
+ * track was rain.
+ *
+ * The colours stay palette roles rather than literals, so Sun-faded bleaches
+ * the paper along with the stall it falls on — a decoration that ignored a
+ * mood it can be worn beside is the thing that rule exists for. And they
+ * stay a root background because that is the only shape that falls behind
+ * every surface without a box that could cover one; it repaints the viewport
+ * each frame, which is the exception the performance rule asks to be stated
+ * rather than hidden, and the slow drift is what pays for it.
  */
 .stall.att-confetti {
     background-image:
         radial-gradient(
-            3px 3px at 30px 40px,
-            color-mix(in srgb, var(--s-accent) 40%, transparent),
-            transparent 4px
+            7px 2.6px at 34px 44px,
+            color-mix(in srgb, var(--s-accent) 70%, transparent),
+            transparent 72%
         ),
         radial-gradient(
-            2.5px 2.5px at 90px 110px,
-            color-mix(in srgb, var(--s-muted) 45%, transparent),
-            transparent 4px
+            2.6px 6.5px at 118px 96px,
+            color-mix(in srgb, var(--s-accent-2) 62%, transparent),
+            transparent 72%
         ),
         radial-gradient(
-            2px 2px at 150px 70px,
-            color-mix(in srgb, var(--s-accent-2) 50%, transparent),
-            transparent 3px
+            5.5px 2.2px at 168px 24px,
+            color-mix(in srgb, var(--s-muted) 58%, transparent),
+            transparent 72%
+        ),
+        radial-gradient(
+            3px 3px at 76px 140px,
+            color-mix(in srgb, var(--s-text) 22%, transparent),
+            transparent 70%
         ),
         var(--s-backdrop);
     background-size:
-        180px 160px,
-        180px 160px,
-        180px 160px,
+        200px 180px,
+        200px 180px,
+        200px 180px,
+        200px 180px,
         auto;
-    animation: att-confetti-fall 14s linear infinite;
+    animation: att-confetti-fall 22s linear infinite;
 }
 
 @keyframes att-confetti-fall {
     to {
         background-position:
-            0 160px,
-            0 160px,
-            0 160px,
+            0 180px,
+            0 180px,
+            0 180px,
+            0 180px,
             0 0;
     }
 }
@@ -624,19 +642,24 @@ body {
 .stall.att-sunburst.att-confetti {
     background-image:
         radial-gradient(
-            3px 3px at 30px 40px,
-            color-mix(in srgb, var(--s-accent) 40%, transparent),
-            transparent 4px
+            7px 2.6px at 34px 44px,
+            color-mix(in srgb, var(--s-accent) 70%, transparent),
+            transparent 72%
         ),
         radial-gradient(
-            2.5px 2.5px at 90px 110px,
-            color-mix(in srgb, var(--s-muted) 45%, transparent),
-            transparent 4px
+            2.6px 6.5px at 118px 96px,
+            color-mix(in srgb, var(--s-accent-2) 62%, transparent),
+            transparent 72%
         ),
         radial-gradient(
-            2px 2px at 150px 70px,
-            color-mix(in srgb, var(--s-accent-2) 50%, transparent),
-            transparent 3px
+            5.5px 2.2px at 168px 24px,
+            color-mix(in srgb, var(--s-muted) 58%, transparent),
+            transparent 72%
+        ),
+        radial-gradient(
+            3px 3px at 76px 140px,
+            color-mix(in srgb, var(--s-text) 22%, transparent),
+            transparent 70%
         ),
         radial-gradient(
             circle 620px at 50% 110px,
@@ -650,24 +673,26 @@ body {
         ),
         var(--s-backdrop);
     background-size:
-        180px 160px,
-        180px 160px,
-        180px 160px,
+        200px 180px,
+        200px 180px,
+        200px 180px,
+        200px 180px,
         auto,
         auto,
         auto;
-    background-repeat: repeat, repeat, repeat, no-repeat, repeat, repeat;
+    background-repeat: repeat, repeat, repeat, repeat, no-repeat, repeat, repeat;
     animation:
-        att-confetti-sun-fall 14s linear infinite,
+        att-confetti-sun-fall 22s linear infinite,
         att-sunburst-spin 70s linear infinite;
 }
 
 @keyframes att-confetti-sun-fall {
     to {
         background-position:
-            0 160px,
-            0 160px,
-            0 160px,
+            0 180px,
+            0 180px,
+            0 180px,
+            0 180px,
             0 0,
             0 0,
             0 0;
