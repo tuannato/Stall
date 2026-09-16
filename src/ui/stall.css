@@ -229,18 +229,36 @@ body {
 }
 
 /*
- * Neo city · crest · The sign hums. Paint on the seller's own name and nothing
- * else. A shadow has no box and no hit region, so the guard cannot see it —
- * which is exactly why it is confined to text on one element and given a blur
- * small enough that it cannot reach the address below it.
+ * Neo city · crest · The sign hums, v2 (round 10, 2026-09-16: "làm lại cho
+ * đẹp hơn và nổi bật"). Paint on the seller's own name and nothing else. A
+ * shadow has no box and no hit region, so the guard cannot see it — which is
+ * exactly why it is confined to text on one element and kept to blurs that
+ * cannot reach the address below it.
+ *
+ * v1 was two cyan shadows at 8 and 20px, which a buyer could barely tell
+ * from Neo's own lit sign (the look already ships 8 and 28px). A real tube
+ * is not one glow but four things at once, and that is what separates a paid
+ * crest from the base: a white-hot core, a saturated inner burn, a wide soft
+ * halo, and the colour the glass throws back — here the second accent,
+ * bleeding a little below the letters the way a magenta tube bleeds beside a
+ * cyan one. 26px is the widest blur, under Neo's own 28, so the spill still
+ * stops above the address.
+ *
+ * Still, and deliberately. A flicker would have to animate the text itself,
+ * which means dimming the seller's name on a timer — the one thing on this
+ * sign that must stay readable — and the crest paints on a text node, so
+ * there is no separate layer to flicker instead.
  */
 .stall.att-hum .stall-name {
     /* Shadow only — the paid glow must never repaint the tube's white-hot
        core: neon reads as lit because the core stays near-white (review
        S6; the row once flattened the sign to plain accent cyan). */
     text-shadow:
-        0 0 8px color-mix(in srgb, var(--s-accent) 85%, transparent),
-        0 0 20px color-mix(in srgb, var(--s-accent) 45%, transparent);
+        0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+        0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+        0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+        0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent),
+        0 2px 18px color-mix(in srgb, var(--s-accent-2) 32%, transparent);
 }
 
 /*
