@@ -45,8 +45,10 @@ describe('attachment-table-ids-are-pinned', () => {
             // 2026-08-31: Modern's pair re-aimed while unminted (walked:
             // never set on chain) — weather out, objects in: the signature
             // stroke under the name, the wax seal beside the headings.
+            // 2026-09-16: the wax seal deleted, unminted — its asset carried
+            // letters beside the seller's name (round 9). Modern bit 3 is
+            // free again pending a fresh walk.
             '1:2:crest',
-            '1:3:badge',
             // Extraction round 1: bits 2-4 re-cut from the full dress while
             // unminted — the sanctioned cheapest moment, updated on purpose.
             '2:2:yard',

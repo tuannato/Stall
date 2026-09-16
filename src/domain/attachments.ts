@@ -202,15 +202,15 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-stroke',
         motion: false,
     },
-    {
-        themeId: DEFAULT_THEME_ID,
-        bit: 3,
-        slot: 'badge',
-        label: 'Wax seal',
-        paint: 'node',
-        cls: 'att-seal',
-        motion: false,
-    },
+    /*
+     * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
+     * 2026-09-16: a pressed seal beside the seller's name whose asset carried
+     * an "S" in Stall blue — a platform credential next to a seller's name,
+     * the same reading that took the brand mark off the sign (round 9). The
+     * owner deleted it. The bit was never set on chain (the 08-30 walk saw
+     * only Neo bit 0); it is free for Modern's next badge-slot object once a
+     * fresh shape-only walk confirms that.
+     */
     /*
      * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
      * were Circuit edge and Holotag — unminted, so free to replace — and
