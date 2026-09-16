@@ -12941,3 +12941,37 @@ describe('the-doors-facts-are-not-styled-as-controls', () => {
         expect(block).toMatch(/font-weight:\s*600;/);
     });
 });
+
+describe('the-pin-sits-at-the-signs-corner-not-in-the-name-row', () => {
+    /**
+     * Round 9 (owner, 2026-09-16: "đẩy nút ghim sang phải góc trên để không
+     * ảnh hưởng đến chữ"). The pin shared the name's row and took 44px of it
+     * on every screen; the name wrapped early and could not be centred. It
+     * is the sign's last child now, positioned at the card's top-right
+     * corner by CSS, and the sign says it carries one (`has-pin`) so the
+     * headings can keep clear of it. No name row remains.
+     */
+    it('the pin is the sign’s last child and the headings lead; no name row', () => {
+        const { root } = paint(offersView([OFFER], undefined, { stallName: 'Riverside Goods' }));
+        const sign = root.querySelector<HTMLElement>('.stall-head .stall-sign')!;
+        expect(sign.classList.contains('has-pin')).toBe(true);
+        expect(sign.firstElementChild?.classList.contains('stall-headings')).toBe(true);
+        expect(sign.lastElementChild?.classList.contains('pin-btn')).toBe(true);
+        expect(sign.querySelector('.stall-name-row')).toBeNull();
+        expect(sign.querySelector('.stall-headings > h1.stall-name')).not.toBeNull();
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        expect(css).toMatch(/\.stall-sign\s*\{[^}]*position:\s*relative;/);
+        expect(css).toMatch(/\.pin-btn\s*\{[^}]*position:\s*absolute;[^}]*top:\s*-8px;[^}]*right:\s*0;/);
+        expect(css).not.toMatch(/\.stall-name-row/);
+    });
+
+    it('a sign with no pin offered carries no class and no control', () => {
+        const root = document.createElement('div');
+        const h = handlers();
+        delete (h as { onTogglePin?: unknown }).onTogglePin;
+        renderStall(root, offersView([OFFER], undefined, { stallName: 'Riverside Goods' }), h);
+        const sign = root.querySelector<HTMLElement>('.stall-head .stall-sign')!;
+        expect(sign.classList.contains('has-pin')).toBe(false);
+        expect(sign.querySelector('.pin-btn')).toBeNull();
+    });
+});

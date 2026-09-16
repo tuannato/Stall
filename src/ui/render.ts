@@ -5428,18 +5428,7 @@ function header(
         // The one <h1> on every screen. A screen reader needs an outline to
         // navigate by; the whole site was <div>s. `stall.css` selects on class,
         // so nothing restyles.
-        const h1 = el('h1', 'stall-name', name);
-        if (pin !== undefined) {
-            // The pin sits at the name's corner — one icon, not a sentence
-            // (owner's call 2026-08-30): pinning is a visitor's flick, and
-            // the words live in the aria-label where a reader needs them.
-            const row = el('div', 'stall-name-row');
-            row.append(h1);
-            row.append(signPinButton(pin, name));
-            headings.append(row);
-        } else {
-            headings.append(h1);
-        }
+        headings.append(el('h1', 'stall-name', name));
     }
     // The seller's own line, screened at decode like the name (tag 0x02) and
     // rendered as text through `textContent` like everything else. It is
@@ -5451,6 +5440,16 @@ function header(
         headings.append(el('div', 'stall-sub', sub));
     }
     sign.append(headings);
+    if (pin !== undefined && name !== undefined && name !== '') {
+        // The pin is one icon, not a sentence (owner's call 2026-08-30):
+        // pinning is a visitor's flick, and the words live in the aria-label
+        // where a reader needs them. It sits at the sign's top-right corner
+        // (owner, 2026-09-16), the sign's last child positioned by CSS —
+        // it shared the name's row until then and took 44px of it on every
+        // screen. `has-pin` lets the headings keep clear of the corner.
+        sign.classList.add('has-pin');
+        sign.append(signPinButton(pin, name));
+    }
     hd.append(sign);
     // The address belongs to the sign: it is what the shop is reachable at.
     // Never when it is already the name — an unnamed stall is titled by its own

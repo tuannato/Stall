@@ -871,9 +871,8 @@ body {
 }
 
 .stall-sign {
+    position: relative;
     display: flex;
-    /* Cap-height alignment, as designed: centering sat the mark beside
-       the tagline instead of the name. */
     align-items: flex-start;
     gap: 12px;
     min-width: 0;
@@ -3415,30 +3414,22 @@ textarea.share-embed {
  * near nothing protected — so the name lays out exactly as if the pin did
  * not exist.
  */
-.stall-name-row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    width: 100%;
-}
-
-.stall-name-row .stall-name {
-    padding-right: 44px;
-}
-
-@media (min-width: 680px) {
-    .t-rural .stall-name-row .stall-name {
-        /* Symmetric on the centred board, so the centre holds. */
-        padding-inline: 44px;
-    }
+/* The pin at the sign's top-right corner (round 9, 2026-09-16): a 44px
+   box flush with the sign box's right edge and lifted 8px, so its glyph
+   centre lands ~22px in from the sign's padding edge and ~30px below the
+   card's top on every look. Never past the right edge: an absolutely placed
+   child that pokes out widens the sign's scroll box, and the probe read
+   that 8px as text spilling under a sheet's Close control on the publish
+   screens. The headings keep clear of it by padding while a pin is
+   offered, so the name never runs under the glyph. */
+.stall-sign.has-pin .stall-headings {
+    padding-right: 40px;
 }
 
 .pin-btn {
     position: absolute;
-    top: 50%;
+    top: -8px;
     right: 0;
-    translate: 0 -50%;
     width: 44px;
     height: 44px;
     display: grid;
