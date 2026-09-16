@@ -844,7 +844,7 @@ body {
     padding: var(--s-sign-pad-m);
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     /* The chrome layer: the look's own header panel. `border` first, so a
        look that keeps only the underline can still win with sign-rule. */
@@ -870,10 +870,15 @@ body {
     display: block;
 }
 
+/* A sign is a sign, not a document heading (round 9, owner 2026-09-16):
+   the name, the tagline, the state line and the address centre on every
+   look at every width. Rural's board already did at desk width. */
 .stall-sign {
     position: relative;
     display: flex;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: 12px;
     min-width: 0;
     flex: 1;
@@ -883,8 +888,10 @@ body {
 .stall-headings {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 3px;
     min-width: 0;
+    width: 100%;
 }
 
 .stall-name {
@@ -3422,8 +3429,10 @@ textarea.share-embed {
    that 8px as text spilling under a sheet's Close control on the publish
    screens. The headings keep clear of it by padding while a pin is
    offered, so the name never runs under the glyph. */
-.stall-sign.has-pin .stall-headings {
-    padding-right: 40px;
+.stall-sign.has-pin .stall-name {
+    /* Both sides, so the centre holds; the tagline sits below the glyph
+       and runs the full width. */
+    padding-inline: 40px;
 }
 
 .pin-btn {

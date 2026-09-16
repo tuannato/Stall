@@ -12975,3 +12975,30 @@ describe('the-pin-sits-at-the-signs-corner-not-in-the-name-row', () => {
         expect(sign.querySelector('.pin-btn')).toBeNull();
     });
 });
+
+describe('the-sign-is-centred', () => {
+    /**
+     * Round 9 (owner, 2026-09-16, after a side-by-side at 390 and 1280 on
+     * the three looks): a sign is a sign, not a document heading. The name,
+     * the tagline, the state line and the address centre on every look at
+     * every width — Rural's board already did at desk width — and the pin,
+     * at the top-right corner since the same day, reserves the name's two
+     * sides symmetrically so the centre holds; the tagline, below the pin,
+     * runs the full width. Pinned statically, like the other CSS rules that
+     * decide a shape: the probe measures what this paints.
+     */
+    it('the sign, its headings and the name’s pin reservation centre by rule', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const sign = css.match(/\.stall-sign\s*\{([^}]*)\}/)![1];
+        expect(sign).toMatch(/flex-direction:\s*column;/);
+        expect(sign).toMatch(/align-items:\s*center;/);
+        expect(sign).toMatch(/text-align:\s*center;/);
+        const headings = css.match(/\.stall-headings\s*\{([^}]*)\}/)![1];
+        expect(headings).toMatch(/align-items:\s*center;/);
+        expect(headings).toMatch(/width:\s*100%;/);
+        expect(css).toMatch(/\.stall-sign\.has-pin \.stall-name\s*\{\s*padding-inline:\s*40px;\s*\}/);
+        expect(css).not.toMatch(/\.stall-sign\.has-pin \.stall-headings/);
+        const head = css.match(/\n\.stall-head\s*\{([^}]*)\}/)![1];
+        expect(head).toMatch(/align-items:\s*center;/);
+    });
+});
