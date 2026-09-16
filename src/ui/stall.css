@@ -288,22 +288,6 @@ body {
 }
 
 /*
- * Modern · crest · Signature stroke. A hand-inked flourish under the shop
- * name — an object, unmistakable in a still. The stroke is our own SVG
- * asset on a real node the probe measures.
- */
-.att-stroke {
-    display: block;
-    width: 200px;
-    max-width: 100%;
-    height: 16px;
-    margin-top: 4px;
-    flex: none;
-    pointer-events: none;
-    background: url('decor/signature-stroke.svg') no-repeat left center / contain;
-}
-
-/*
  * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
  * to a real in-flow band **above** the sign (the renderer's call: under it,
  * it read as a divider between the sign and the goods, ~75px against the

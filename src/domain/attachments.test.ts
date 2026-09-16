@@ -47,8 +47,11 @@ describe('attachment-table-ids-are-pinned', () => {
             // stroke under the name, the wax seal beside the headings.
             // 2026-09-16: the wax seal deleted, unminted — its asset carried
             // letters beside the seller's name (round 9). Modern bit 3 is
-            // free again pending a fresh walk.
-            '1:2:crest',
+            // free again pending a fresh walk. The signature stroke went the
+            // same day on the same road (round 10): unminted, an ink flourish
+            // that was neither Modern's material nor anything a buyer could
+            // want to own. Bits 2 AND 3 are free pending that walk, so Modern
+            // ships one row and a mood.
             // Extraction round 1: bits 2-4 re-cut from the full dress while
             // unminted — the sanctioned cheapest moment, updated on purpose.
             '2:2:yard',

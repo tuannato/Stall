@@ -193,15 +193,16 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * had no OBJECT to show off (the possessions memo's exact case). Both
      * bits verified never set by any on-chain record before re-aiming.
      */
-    {
-        themeId: DEFAULT_THEME_ID,
-        bit: 2,
-        slot: 'crest',
-        label: 'Signature stroke',
-        paint: 'node',
-        cls: 'att-stroke',
-        motion: false,
-    },
+    /*
+     * Modern bit 2 was "Signature stroke" (crest, unminted) from 2026-08-31
+     * to 2026-09-16: a hand-inked flourish under the shop name. The owner
+     * dropped it in round 10. Modern's voice is restraint and printed paper;
+     * a felt-tip squiggle is neither its material nor an object anybody would
+     * buy, and a crest that paints beside the seller's name had the wax
+     * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
+     * only Neo bit 0), so the bit is free for Modern's next crest once a
+     * fresh shape-only walk confirms it.
+     */
     /*
      * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
      * 2026-09-16: a pressed seal beside the seller's name whose asset carried
@@ -234,8 +235,13 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         slot: 'trim',
         label: 'Aurora glows',
         paint: 'root',
+        // Still light since round 10 (2026-09-16). The old pulse animated
+        // `background-size` over the whole viewport, a main-thread repaint
+        // every frame, and Neo already spends its mover budget on the rain.
+        // The lamps also moved inside the screen: centred outside it, the
+        // row painted nothing a phone could see.
+        motion: false,
         cls: 'att-aurora',
-        motion: true,
     },
     /*
      * Extraction round 1: Straw charm and Stitched were unminted, so their
