@@ -262,32 +262,53 @@ body {
 }
 
 /*
- * Neo city · fringe · Neon rain. The whole page now: two layers of streaks
- * at different depths falling as background motion on the stall itself —
- * behind every surface, so it cannot cover, and the rendered-pixel pass
- * samples whatever lands behind a figure. Layered over the look's own
- * backdrop, which is restated here because background-image does not merge.
+ * Neo city · fringe · Neon rain, v3 (round 10, 2026-09-16: "làm lại cho đẹp
+ * hơn, cũng như fix với desktop"). Behind every surface on the page, so it
+ * cannot cover, and the rendered-pixel pass samples whatever lands behind a
+ * figure. Layered over the look's own backdrop, which is restated here
+ * because background-image does not merge.
+ *
+ * v2 was two sheets of 1px lines at 115deg — a 25-degree slant, evenly
+ * spaced, equally bright. Measured at 1280 it read as diagonal wallpaper
+ * rather than weather, which is what the owner saw. Three things fix that
+ * and all three are depth. The slant drops to 9, 11 and 13 degrees off
+ * vertical, because rain falls nearly straight and the eye reads a steep
+ * line as fast; the three sheets take different weights, spacings and
+ * alphas, so the near one is sparse and bright and the far one is dense and
+ * faint; and each falls at its own speed, which costs nothing because the
+ * keyframes move each layer by its own tile height in one cycle — a taller
+ * tile is a faster sheet. Near, mid, far, in that order.
+ *
+ * At desk width every tile grows: the page is taller, and a sheet that
+ * crossed a phone in a second crawled across a monitor.
  */
 .stall.att-rainfall {
     background-image:
         repeating-linear-gradient(
-            115deg,
-            transparent 0 46px,
-            color-mix(in srgb, var(--s-accent-2) 15%, transparent) 46px 47px,
-            transparent 47px 90px
+            99deg,
+            transparent 0 126px,
+            color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
+            transparent 128px 260px
         ),
         repeating-linear-gradient(
-            115deg,
-            transparent 0 64px,
-            color-mix(in srgb, var(--s-accent) 11%, transparent) 64px 65px,
-            transparent 65px 118px
+            101deg,
+            transparent 0 62px,
+            color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
+            transparent 63px 128px
+        ),
+        repeating-linear-gradient(
+            103deg,
+            transparent 0 33px,
+            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
+            transparent 33.8px 68px
         ),
         var(--s-backdrop);
     background-size:
-        100% 300px,
-        100% 460px,
+        100% 540px,
+        100% 360px,
+        100% 240px,
         auto;
-    animation: att-rainfall-drift 1600ms linear infinite;
+    animation: att-rainfall-drift 1500ms linear infinite;
 }
 
 @keyframes att-rainfall-drift {
@@ -295,12 +316,42 @@ body {
         background-position:
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
-            0 300px,
-            0 460px,
+            0 540px,
+            0 360px,
+            0 240px,
+            0 0;
+    }
+}
+
+@media (min-width: 680px) {
+    .stall.att-rainfall {
+        background-size:
+            100% 820px,
+            100% 560px,
+            100% 380px,
+            auto;
+        animation-name: att-rainfall-drift-d;
+    }
+}
+
+@keyframes att-rainfall-drift-d {
+    from {
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0;
+    }
+    to {
+        background-position:
+            0 820px,
+            0 560px,
+            0 380px,
             0 0;
     }
 }
@@ -420,31 +471,39 @@ body {
             transparent 68%
         ),
         repeating-linear-gradient(
-            115deg,
-            transparent 0 46px,
-            color-mix(in srgb, var(--s-accent-2) 15%, transparent) 46px 47px,
-            transparent 47px 90px
+            99deg,
+            transparent 0 126px,
+            color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
+            transparent 128px 260px
         ),
         repeating-linear-gradient(
-            115deg,
-            transparent 0 64px,
-            color-mix(in srgb, var(--s-accent) 11%, transparent) 64px 65px,
-            transparent 65px 118px
+            101deg,
+            transparent 0 62px,
+            color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
+            transparent 63px 128px
+        ),
+        repeating-linear-gradient(
+            103deg,
+            transparent 0 33px,
+            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
+            transparent 33.8px 68px
         ),
         var(--s-backdrop);
     background-size:
         280px 280px,
         300px 300px,
-        100% 300px,
-        100% 460px,
+        100% 540px,
+        100% 360px,
+        100% 240px,
         auto;
-    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat;
-    animation: att-aurora-rain-drift 1600ms linear infinite;
+    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
+    animation: att-aurora-rain-drift 1500ms linear infinite;
 }
 
 @keyframes att-aurora-rain-drift {
     from {
         background-position:
+            0 0,
             0 0,
             0 0,
             0 0,
@@ -455,8 +514,76 @@ body {
         background-position:
             0 0,
             0 0,
-            0 300px,
-            0 460px,
+            0 540px,
+            0 360px,
+            0 240px,
+            0 0;
+    }
+}
+
+/* The composite out-specifies the single rain rule, so its own desk tiles
+   are stated here or the full dress would keep falling at phone speed on a
+   monitor. */
+@media (min-width: 680px) {
+    .stall.att-rainfall.att-aurora {
+        background-image:
+            radial-gradient(
+                440px 440px at 22% 190px,
+                color-mix(in srgb, var(--s-accent) 22%, transparent),
+                transparent 68%
+            ),
+            radial-gradient(
+                460px 460px at 86% 46%,
+                color-mix(in srgb, var(--s-accent-2) 19%, transparent),
+                transparent 68%
+            ),
+            repeating-linear-gradient(
+                99deg,
+                transparent 0 126px,
+                color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
+                transparent 128px 260px
+            ),
+            repeating-linear-gradient(
+                101deg,
+                transparent 0 62px,
+                color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
+                transparent 63px 128px
+            ),
+            repeating-linear-gradient(
+                103deg,
+                transparent 0 33px,
+                color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
+                transparent 33.8px 68px
+            ),
+            var(--s-backdrop);
+        background-size:
+            440px 440px,
+            460px 460px,
+            100% 820px,
+            100% 560px,
+            100% 380px,
+            auto;
+        animation-name: att-aurora-rain-drift-d;
+    }
+}
+
+@keyframes att-aurora-rain-drift-d {
+    from {
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0 0;
+    }
+    to {
+        background-position:
+            0 0,
+            0 0,
+            0 820px,
+            0 560px,
+            0 380px,
             0 0;
     }
 }
