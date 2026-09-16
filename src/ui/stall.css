@@ -217,15 +217,66 @@ body {
  */
 
 /*
- * Modern · fringe · Pinstripe. A tailored frame now, not one line: a strong
- * top bar, a hairline around all four edges, and an inner pinstripe drawn
- * with an inset shadow — every stroke on the root's own box, where paint
- * cannot leave and cannot cover.
+ * Modern · fringe · Pinstripe, v3 (round 10, 2026-09-16: "đổi nó thành các
+ * viền có hiệu ứng chạy quanh các thẻ item của listings và quotes").
+ *
+ * v2 framed the page: a bar across the top, a hairline round the window, an
+ * inset wash inside it. It was tailoring on the wrong garment — a frame at
+ * the edge of a phone is four thin lines a buyer scrolls past, and under
+ * After hours the accent hairline all but vanished against a near-black
+ * ground, which is the complaint that retired it. The stripe belongs where
+ * the goods are.
+ *
+ * So it runs around the cards now, both rails: a two-pixel ring in the
+ * card's own border box, filled with a 135-degree pinstripe that travels
+ * along its own axis. The ring is drawn with two background layers rather
+ * than a border colour — the fill clipped to the padding box, the stripe to
+ * the border box — because that is the one way to paint INSIDE a border's
+ * own two pixels and follow the card's radius round every corner. The card
+ * keeps the look's own surface, so a mood repaints it with everything else.
+ *
+ * The travel is exact rather than approximate: the shift vector is
+ * (16px, 16px), whose length is 22.627px, and the stripe's period is that
+ * same 22.627px, so each loop lands the pattern exactly one period along and
+ * nothing jumps. An angle whose sine and cosine are equal is the reason 135
+ * was chosen over the old 115.
+ *
+ * Cost, stated rather than hidden (framework §5a.2): this is the round's one
+ * per-card animation, so it repaints each card's background every frame
+ * instead of one page-wide layer. Measured against the alternative — a
+ * child node rotating a conic gradient, which the compositor would own —
+ * that shape is refused outright here, because a decoration box laid over a
+ * card is a box laid over the asked amount inside it, and the probe rejects
+ * exactly that. A card is also a fraction of the page: eight of them on a
+ * phone repaint less area than one viewport-wide sheet of rain.
  */
-.stall.att-pinstripe {
-    border: 1px solid color-mix(in srgb, var(--s-accent) 55%, transparent);
-    border-top: 4px solid var(--s-accent);
-    box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--s-accent) 12%, transparent);
+.stall.att-pinstripe .item {
+    border: 2px solid transparent;
+    background-image:
+        linear-gradient(var(--s-surface), var(--s-surface)),
+        repeating-linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--s-accent) 62%, transparent) 0 7px,
+            color-mix(in srgb, var(--s-accent) 20%, transparent) 7px 11px,
+            transparent 11px 22.627px
+        );
+    background-origin: padding-box, border-box;
+    background-clip: padding-box, border-box;
+    background-repeat: repeat, repeat;
+    animation: att-pinstripe-run 2.4s linear infinite;
+}
+
+@keyframes att-pinstripe-run {
+    from {
+        background-position:
+            0 0,
+            0 0;
+    }
+    to {
+        background-position:
+            0 0,
+            16px 16px;
+    }
 }
 
 /*
@@ -5454,6 +5505,7 @@ textarea.share-embed {
        composed full-dress rules carry higher specificity than their
        single-row parents, so they are named here too — the stillness
        guard caught exactly this the day they were written. */
+    .stall.att-pinstripe .item,
     .stall.att-confetti,
     .stall.att-rainfall.att-aurora,
     .stall.att-sunburst.att-confetti,

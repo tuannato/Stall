@@ -109,7 +109,10 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'Pinstripe',
         paint: 'root',
         cls: 'att-pinstripe',
-        motion: false,
+        // A mover since round 10 (2026-09-16): the stripe runs around the
+        // item cards rather than standing still at the page's edge, so it
+        // takes a kill in the reduce block and a line in the stillness pass.
+        motion: true,
     },
     {   
         tokenId: 'c136cdac5c17def45a7cf1f308fc14f21a54b21ce2b4a70ee513d6b9a8055876',
