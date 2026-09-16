@@ -5462,31 +5462,46 @@ function header(
 }
 
 /**
- * The address on the sign, one line on a phone (round 8, owner 2026-09-15:
- * the two-line box was the most prominent thing on the sign and the thing a
- * buyer needs least). The payload's first and last eight characters are a
- * control that opens the whole string; the whole string is in the DOM beside
- * it — hidden under 680px until opened, always shown at desk width — so every
- * reader of the sign's text and the copy control get the whole. The box stays
- * the probe's protected `.addr`.
+ * The address on the sign is one compact control (round 9, owner 2026-09-16:
+ * "bỏ nút copy, khung địa chỉ gọn lại, bấm vào để copy"). Round 8 painted it
+ * as a row — a short-form toggle, the whole string and a separate Copy pill —
+ * three things where a buyer needs one. The box is a `<button>`: the
+ * payload's first and last eight characters on a phone, the whole string at
+ * desk width (CSS swaps the two spans), a drawn copy glyph, and a tap that
+ * writes the whole string and says "Copied" for `ADDR_COPIED_MS` before the
+ * address comes back. When the clipboard refuses, the whole string is shown
+ * instead, so the buyer can still read it. It keeps the `.addr` class the
+ * probe protects and samples, and declares its own 44px floor.
  */
+export const ADDR_COPIED_MS = 2500;
+
 function addressLine(address: string): HTMLElement {
-    const box = el('div', 'addr');
-    const toggle = el('button', 'addr-toggle', shortAddress(address));
-    toggle.type = 'button';
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-controls', 'addr-full');
-    toggle.title = address;
-    const full = el('span', 'addr-full', address);
-    full.id = 'addr-full';
-    toggle.addEventListener('click', () => {
-        const open = toggle.getAttribute('aria-expanded') !== 'true';
-        toggle.setAttribute('aria-expanded', String(open));
-        box.setAttribute('data-open', String(open));
+    const box = el('button', 'addr');
+    box.type = 'button';
+    box.setAttribute('data-role', 'addr-copy');
+    box.setAttribute('aria-label', copy.addrCopyLabel(address));
+    const said = el('span', 'addr-said', copy.EVENT_TXID_COPIED);
+    box.append(el('span', 'addr-short', shortAddress(address)), el('span', 'addr-full', address), said, glyph('copy', 'addr-ic'));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const shown = (): void => {
+        box.setAttribute('data-copied', 'shown');
+    };
+    box.addEventListener('click', () => {
+        const clipboard = navigator.clipboard;
+        if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
+            void clipboard.writeText(address).then(() => {
+                box.setAttribute('data-copied', 'true');
+                if (timer !== undefined) {
+                    clearTimeout(timer);
+                }
+                timer = setTimeout(() => {
+                    box.removeAttribute('data-copied');
+                }, ADDR_COPIED_MS);
+            }, shown);
+            return;
+        }
+        shown();
     });
-    const copyBtn = copyControl(address, 'addr-copy');
-    copyBtn.classList.add('addr-copy');
-    box.append(toggle, full, copyBtn);
     return box;
 }
 

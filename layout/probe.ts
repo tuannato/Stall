@@ -1181,14 +1181,13 @@ const CONTRAST_TEXT = [
     '[data-role="price"]',
     '.row.big dd',
     '.buy',
-    // The address's two text nodes, never the `.addr` row itself: since round
-    // 8 (2026-09-15) the row holds a copy control, and sampling the row's box
-    // counted that control's ground as the ink's background — 2.84:1 on
-    // Modern for grey mono that sits on its own ground at 4.6:1. The control
-    // is a `.mini`, sampled in its own box. One of the two is display: none
-    // at every width (the short form at desk, the whole string on a phone),
-    // and a zero box is skipped, so each is measured where it is seen.
-    '.addr-toggle',
+    // The address's two text nodes, never the `.addr` box itself: the box
+    // holds a glyph beside the text, and sampling a container's box counted
+    // pixels that are not the ink's ground (2.84:1 on Modern, 2026-09-15, when
+    // the row held a copy pill). One of the two spans is display: none at
+    // every width (the short form at desk, the whole string on a phone), and
+    // a zero box is skipped, so each is measured where it is seen.
+    '.addr-short',
     '.addr-full',
     '[data-role="publish-hex"]',
     '[data-role="describe-hex"]',

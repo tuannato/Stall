@@ -2139,53 +2139,65 @@ textarea.paste-in {
        character by character. */
     font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 11.5px;
+    font-weight: inherit;
     color: var(--s-muted);
-    word-break: break-all;
     line-height: 1.45;
     background: var(--s-addr-bg);
     border: var(--s-addr-border);
     border-radius: var(--s-addr-radius);
     padding: var(--s-addr-pad);
     text-align: var(--s-addr-align);
-    /* One line on a phone (round 8, 2026-09-15): the short form, the copy
-       control at the right, and the whole string under them once opened. */
-    display: flex;
-    flex-wrap: wrap;
+    /* One compact box that IS the copy control (round 9, 2026-09-16): the
+       short form on a phone, the whole string at desk width, a copy glyph,
+       a tap that copies. A button, so it declares its own 44px floor. */
+    display: inline-flex;
     align-items: center;
-    gap: 0 10px;
+    gap: 8px;
+    max-width: 100%;
+    min-height: 44px;
+    margin: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    word-break: break-all;
 }
 
-/* The short form is a control that opens the whole string, on its own 44px
-   floor in its own block, as every tappable control declares. */
-.addr-toggle {
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: 0;
-    padding: 0;
-    min-height: 44px;
-    cursor: pointer;
-    text-align: left;
+.addr .addr-ic {
+    width: 14px;
+    height: 14px;
+    color: color-mix(in srgb, var(--s-muted) 70%, transparent);
 }
 
 .addr-full {
     display: none;
 }
 
-.addr[data-open='true'] .addr-full {
-    display: block;
-    flex-basis: 100%;
-    padding-bottom: 10px;
+.addr-said {
+    display: none;
 }
 
-.addr-copy {
-    min-height: 44px;
-    margin-left: auto;
+/* Copied: the word for a moment, then the address again (ADDR_COPIED_MS). */
+.addr[data-copied='true'] .addr-short,
+.addr[data-copied='true'] .addr-full {
+    display: none;
+}
+
+.addr[data-copied='true'] .addr-said {
+    display: inline;
+}
+
+/* The clipboard refused: show the whole string, so it can still be read. */
+.addr[data-copied='shown'] .addr-short {
+    display: none;
+}
+
+.addr[data-copied='shown'] .addr-full {
+    display: inline;
 }
 
 @media (min-width: 680px) {
-    /* The desk has room for the whole string, so the control leaves. */
-    .addr-toggle {
+    /* The desk has room for the whole string. */
+    .addr-short {
         display: none;
     }
 

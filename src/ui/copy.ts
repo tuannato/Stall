@@ -552,6 +552,8 @@ export const EVENT_PAYER_NOTE =
 export const EVENT_COPY_TXID = 'Copy';
 export const EVENT_TXID_COPIED = 'Copied';
 export const EVENT_TXID_SELECT = 'Select it';
+/** The address box's accessible name: it is one control, and the control is the copy (round 9). */
+export const addrCopyLabel = (address: string): string => `Copy the stall's address, ${address}`;
 /**
  * The amount is what arrived at this address, and it is never dressed as a
  * sale: a payment proves money moved, not that anything was bought. XEC, from

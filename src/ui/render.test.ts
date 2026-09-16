@@ -96,7 +96,7 @@ import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
-import {
+import { ADDR_COPIED_MS,
     PAY_RATE_MAX_AGE_MS,
     priceTier,
     renderStall,
@@ -9892,7 +9892,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr-toggle', '.addr-copy', '.paste-in, .share-url, .share-embed'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.paste-in, .share-url, .share-embed'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
@@ -12782,53 +12782,70 @@ describe('the-shop-sign-carries-no-count-chip-when-the-tab-counts', () => {
     });
 });
 
-describe('the-address-is-one-line-on-a-phone-and-whole-on-a-desk', () => {
+describe('the-address-box-is-the-copy-control', () => {
     /**
-     * The two-line address box was the most prominent thing on the sign and
-     * the thing a buyer needs least (look review, 2026-09-15). One line now:
-     * the payload's first and last eight characters as a control that opens
-     * the whole string, the whole string in the DOM beside it — hidden on a
-     * phone until opened, always shown at desk width — and a copy control.
-     * A buyer who compares character by character opens it; the QR and the
-     * copy control carry the whole string either way.
+     * Round 9 (owner, 2026-09-16: "bỏ nút copy, khung địa chỉ gọn lại, bấm
+     * vào để copy"). The round-8 row — a short-form toggle, the whole string
+     * and a separate Copy pill — was three things where a buyer needs one:
+     * the address they can copy. One compact box now, and the box is the
+     * control: the payload's first and last eight characters on a phone, the
+     * whole string at desk width, a small copy glyph, a tap that writes the
+     * whole string and says "Copied" for a moment. No pill, no toggle. The
+     * box keeps the `.addr` class the probe protects and its 44px floor.
      */
-    // A named stall: an unnamed one is titled by its own address and prints
-    // it once, as the sign always has.
     const named = { stallName: 'Riverside Goods' };
 
-    it('a short form opens the whole string, which stays in the DOM', () => {
+    it('one button: short form on a phone, whole string at desk width, no separate control', () => {
         const { root } = paint(offersView([OFFER], undefined, named));
-        const box = root.querySelector<HTMLElement>('.addr')!;
-        const toggle = box.querySelector<HTMLButtonElement>('.addr-toggle')!;
-        const full = box.querySelector<HTMLElement>('.addr-full')!;
-        expect(toggle.textContent).toBe('qpjqjm0l…c3j7hv09');
-        expect(full.textContent).toBe(ADDR);
-        expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        toggle.click();
-        expect(toggle.getAttribute('aria-expanded')).toBe('true');
-        expect(box.getAttribute('data-open')).toBe('true');
-        toggle.click();
-        expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    });
-
-    it('the phone hides the whole string until opened; the desk shows it and drops the control', () => {
+        const box = root.querySelector<HTMLButtonElement>('button.addr[data-role="addr-copy"]')!;
+        expect(box, 'the address box is the control').not.toBeNull();
+        expect(box.type).toBe('button');
+        expect(box.querySelector('.addr-short')?.textContent).toBe('qpjqjm0l…c3j7hv09');
+        expect(box.querySelector('.addr-full')?.textContent).toBe(ADDR);
+        expect(box.getAttribute('aria-label')).toBe(copy.addrCopyLabel(ADDR));
+        expect(box.querySelector('svg.ic'), 'a copy glyph, drawn').not.toBeNull();
+        expect(root.querySelector('.addr-toggle')).toBeNull();
+        expect(root.querySelector('.addr .mini')).toBeNull();
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
-        expect(css).toMatch(/\.addr-full\s*\{[^}]*display:\s*none;/);
-        expect(css).toMatch(/\.addr\[data-open='true'\]\s+\.addr-full\s*\{[^}]*display:\s*block;/);
-        expect(css).toMatch(/\.addr-toggle\s*\{\s*display:\s*none;\s*\}\s*\.addr-full\s*\{\s*display:\s*inline;\s*\}/);
+        expect(css).toMatch(/\.addr-full\s*\{\s*display:\s*none;\s*\}/);
+        expect(css).toMatch(/\.addr-short\s*\{\s*display:\s*none;\s*\}\s*\.addr-full\s*\{\s*display:\s*inline;\s*\}/);
     });
 });
 
 describe('the-address-copy-control-copies-the-whole-address', () => {
-    it('writes the whole ecash: string, never the short form', async () => {
+    it('a tap writes the whole ecash: string, says Copied, then shows the address again', async () => {
+        vi.useFakeTimers();
         const { root } = paint(offersView([OFFER], undefined, { stallName: 'Riverside Goods' }));
         const original = navigator.clipboard;
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
         try {
-            (root.querySelector('.addr [data-role="addr-copy"]') as HTMLButtonElement).click();
+            const box = root.querySelector('button.addr[data-role="addr-copy"]') as HTMLButtonElement;
+            box.click();
+            await Promise.resolve();
             await Promise.resolve();
             expect(writeText).toHaveBeenCalledWith(ADDR);
+            expect(box.getAttribute('data-copied')).toBe('true');
+            expect(box.querySelector('.addr-said')?.textContent).toBe(copy.EVENT_TXID_COPIED);
+            vi.advanceTimersByTime(ADDR_COPIED_MS + 1);
+            expect(box.hasAttribute('data-copied'), 'the address comes back').toBe(false);
+        } finally {
+            Object.defineProperty(navigator, 'clipboard', { configurable: true, value: original });
+            vi.useRealTimers();
+        }
+    });
+
+    it('when the clipboard refuses, the whole string is shown instead', async () => {
+        const { root } = paint(offersView([OFFER], undefined, { stallName: 'Riverside Goods' }));
+        const original = navigator.clipboard;
+        const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            const box = root.querySelector('button.addr[data-role="addr-copy"]') as HTMLButtonElement;
+            box.click();
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(box.getAttribute('data-copied')).toBe('shown');
         } finally {
             Object.defineProperty(navigator, 'clipboard', { configurable: true, value: original });
         }
