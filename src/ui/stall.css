@@ -321,47 +321,61 @@ body {
 
 
 /*
- * Neo city · trim · Aurora glows. The full dress's blurred light orbs as
- * two radial layers on the root's own background — edge lighting behind
- * every surface, static at ship: the pulse yielded the mover slot to the
- * rain, and the light still reads standing still.
+ * Neo city · trim · Aurora glows, v2 (round 10, 2026-09-16). The owner wore
+ * it and saw nothing, and the cause was exact rather than a matter of taste:
+ * both lamps were centred OUTSIDE the viewport — one at `-60px`, one at
+ * `calc(100% + 70px)` — so a phone at 390 showed the far edge of each
+ * falloff and nothing else. Paint nobody can see is the worst trade a
+ * decoration can make. The lamps stand inside the screen now, one high on
+ * the left behind the sign, one low on the right, and a little brighter.
+ *
+ * And it no longer breathes. The pulse animated `background-size` across the
+ * whole viewport, a main-thread repaint every frame; Neo already spends its
+ * mover budget on the rain, and two viewport-wide repainting animations worn
+ * together is the case the owner's performance rule names. A light that
+ * stands still is what this row always claimed to be.
  */
 .stall.att-aurora {
     background-image:
         radial-gradient(
-            300px 300px at -60px 30%,
-            color-mix(in srgb, var(--s-accent) 13%, transparent),
-            transparent 70%
+            280px 280px at 18% 150px,
+            color-mix(in srgb, var(--s-accent) 22%, transparent),
+            transparent 68%
         ),
         radial-gradient(
-            320px 320px at calc(100% + 70px) 62%,
-            color-mix(in srgb, var(--s-accent-2) 12%, transparent),
-            transparent 70%
+            300px 300px at 88% 44%,
+            color-mix(in srgb, var(--s-accent-2) 19%, transparent),
+            transparent 68%
         ),
         var(--s-backdrop);
     background-size:
+        280px 280px,
         300px 300px,
-        320px 320px,
         auto;
-    /* The orbs are two lamps at the page's edges, never a tile: with the
-       breathe keyframes animating background-size, default repeat laid a
-       300px grid of them across the whole ground (review S5). */
+    /* Never a tile: default repeat laid a grid of orbs across the whole
+       ground (review S5). */
     background-repeat: no-repeat, no-repeat, repeat;
-    animation: att-aurora-breathe 8s ease-in-out infinite;
 }
 
-@keyframes att-aurora-breathe {
-    0%,
-    100% {
+/* At desk width the room is wider, so the lamps widen with it rather than
+   sitting as two small dots in a large dark field. */
+@media (min-width: 680px) {
+    .stall.att-aurora {
+        background-image:
+            radial-gradient(
+                440px 440px at 22% 190px,
+                color-mix(in srgb, var(--s-accent) 22%, transparent),
+                transparent 68%
+            ),
+            radial-gradient(
+                460px 460px at 86% 46%,
+                color-mix(in srgb, var(--s-accent-2) 19%, transparent),
+                transparent 68%
+            ),
+            var(--s-backdrop);
         background-size:
-            300px 300px,
-            320px 320px,
-            auto;
-    }
-    50% {
-        background-size:
-            360px 360px,
-            380px 380px,
+            440px 440px,
+            460px 460px,
             auto;
     }
 }
@@ -378,14 +392,14 @@ body {
 .stall.att-rainfall.att-aurora {
     background-image:
         radial-gradient(
-            300px 300px at -60px 30%,
-            color-mix(in srgb, var(--s-accent) 13%, transparent),
-            transparent 70%
+            280px 280px at 18% 150px,
+            color-mix(in srgb, var(--s-accent) 22%, transparent),
+            transparent 68%
         ),
         radial-gradient(
-            320px 320px at calc(100% + 70px) 62%,
-            color-mix(in srgb, var(--s-accent-2) 12%, transparent),
-            transparent 70%
+            300px 300px at 88% 44%,
+            color-mix(in srgb, var(--s-accent-2) 19%, transparent),
+            transparent 68%
         ),
         repeating-linear-gradient(
             115deg,
@@ -401,35 +415,13 @@ body {
         ),
         var(--s-backdrop);
     background-size:
+        280px 280px,
         300px 300px,
-        320px 320px,
         100% 300px,
         100% 460px,
         auto;
     background-repeat: no-repeat, no-repeat, repeat, repeat, repeat;
-    animation:
-        att-aurora-rain-breathe 8s ease-in-out infinite,
-        att-aurora-rain-drift 1600ms linear infinite;
-}
-
-@keyframes att-aurora-rain-breathe {
-    0%,
-    100% {
-        background-size:
-            300px 300px,
-            320px 320px,
-            100% 300px,
-            100% 460px,
-            auto;
-    }
-    50% {
-        background-size:
-            360px 360px,
-            380px 380px,
-            100% 300px,
-            100% 460px,
-            auto;
-    }
+    animation: att-aurora-rain-drift 1600ms linear infinite;
 }
 
 @keyframes att-aurora-rain-drift {
@@ -5251,7 +5243,6 @@ textarea.share-embed {
        composed full-dress rules carry higher specificity than their
        single-row parents, so they are named here too — the stillness
        guard caught exactly this the day they were written. */
-    .stall.att-aurora,
     .stall.att-confetti,
     .stall.att-rainfall.att-aurora,
     .stall.att-sunburst.att-confetti,
