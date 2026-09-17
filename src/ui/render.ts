@@ -489,10 +489,26 @@ export function renderStall(
         }
     }
 
-    // After the screen, because a `yard` needs the footer to sit above and a
-    // `fringe` needs the strip to sit inside. `applyTheme` has already put the
-    // root classes on, which is everything a `root` row needs.
-    placeAttachmentNodes(stall, view.worn ?? []);
+    /*
+     * After the screen, because a `yard` needs the footer to sit above and a
+     * `fringe` needs the strip to sit inside. `applyTheme` has already put
+     * the root classes on, which is everything a `root` row needs.
+     *
+     * And it takes the PREVIEW's set when one is active, as `applyTheme`
+     * already does above. Reading the record here while the classes came
+     * from the try-on meant a root row survived a repaint and a `node` row
+     * did not: trying on the Yard beetle, the Grid horizon or the Bunting
+     * and then walking to the Shop tab — the loop `activePreview`'s own
+     * docblock advertises — showed a stall wearing nothing. No entitlement
+     * filter either, for the same reason the try-on has none: looking is
+     * free, and a seller deciding whether to buy is exactly who is looking.
+     */
+    placeAttachmentNodes(
+        stall,
+        previewed !== undefined
+            ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+            : (view.worn ?? []),
+    );
 
     frame.append(stall);
     root.append(frame);

@@ -4217,6 +4217,38 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         expect(note.hidden).toBe(true);
     });
 
+    it('keeps a tried-on yard row through the walk to the Shop tab', () => {
+        /*
+         * Round 11. `applyTheme` took the preview's worn set and
+         * `placeAttachmentNodes` took the record's, so a `root` row survived
+         * a repaint and a `node` row vanished — the beetle, the grid horizon
+         * and the bunting, which are three of the five objects in the
+         * catalogue. The loop it broke is the one `activePreview` is for:
+         * press a chip, close the sheet, walk to the Shop tab and look at
+         * the candidate storefront at full size.
+         */
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(RURAL_THEME_ID),
+                previewLook: { themeId: RURAL_THEME_ID, attachmentFlags: 0b1 },
+            }),
+        );
+        expect(root.querySelector('.stall')?.className).toContain('t-rural');
+        expect(root.querySelector('.att-beetle'), 'the yard row is on the repainted stall').not.toBeNull();
+        // A root row was never the broken half, and must not become one.
+        const { root: sunburst } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(RURAL_THEME_ID),
+                previewLook: { themeId: RURAL_THEME_ID, attachmentFlags: 0b1000 },
+            }),
+        );
+        expect(sunburst.querySelector('.stall')?.className).toContain('att-sunburst');
+    });
+
     it('previews the choice on the stall behind', () => {
         const root = sheet({ stallName: 'Riverside' });
         document.body.append(root);
