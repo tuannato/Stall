@@ -4302,6 +4302,47 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         expect(sunburst.querySelector('.stall')?.className).toContain('att-sunburst');
     });
 
+    it('brings the tried-on looks own closing motif, not the records', () => {
+        /*
+         * Round 13, measured on the owner's own live stall (2026-09-17, both
+         * Modern and Neo): a Rural stall trying another look on kept Rural's
+         * PLANKS motif markup under the other look's stylesheet. The planks
+         * and the carvings have rules only under `.t-rural`, so all that
+         * survived was the one child carrying its own colours — the Stall
+         * hexagon — hanging off the motif's top-left corner with nothing
+         * around it, reading as a stray platform logo on the seller's shop.
+         *
+         * The motif's children are chosen by `theme.sparse.kind`, so the
+         * markup has to follow the look being painted, exactly as the class
+         * and the worn rows already do. Two stalls, both sparse (the motif
+         * needs two rows or fewer).
+         */
+        const sparse = (themeId: number, previewId: number) =>
+            paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    theme: decodeTheme(themeId),
+                    previewLook: { themeId: previewId, attachmentFlags: 0 },
+                }),
+            ).root;
+        const onModern = sparse(RURAL_THEME_ID, DEFAULT_THEME_ID);
+        expect(onModern.querySelector('.stall')?.className).toContain('t-modern');
+        expect(
+            onModern.querySelector('.sparse-motif')?.className,
+            'the motif is the tried-on looks own',
+        ).toContain('sm-kind-lightwell');
+        expect(
+            onModern.querySelector('.sparse-motif .stall-mark'),
+            'so no plank-only brand mark is left stranded',
+        ).toBeNull();
+        // The other direction: Rural tried on over Modern brings the planks
+        // and their mark, which belong to it.
+        const onRural = sparse(DEFAULT_THEME_ID, RURAL_THEME_ID);
+        expect(onRural.querySelector('.sparse-motif')?.className).toContain('sm-kind-planks');
+        expect(onRural.querySelector('.sparse-motif .stall-mark')).not.toBeNull();
+    });
+
     it('previews the choice on the stall behind', () => {
         const root = sheet({ stallName: 'Riverside' });
         document.body.append(root);
@@ -13305,6 +13346,41 @@ describe('the-sign-is-centred', () => {
         expect(css).not.toMatch(/\.stall-sign\.has-pin \.stall-headings/);
         const head = css.match(/\n\.stall-head\s*\{([^}]*)\}/)![1];
         expect(head).toMatch(/align-items:\s*center;/);
+    });
+});
+
+/*
+ * Round 13, 2026-09-17, the owner watching their own stall: "Với hiệu ứng
+ * Pinstripe bị giật cục thấy rõ … giật là lúc nó hết vòng lặp đó."
+ *
+ * A running border is only running if its loop closes. Three numbers decide
+ * that and they sit in three different declarations of the same rule — the
+ * stripe period inside a `repeating-linear-gradient`, the tile in
+ * `background-size`, and the travel in a `@keyframes` block — so nothing but
+ * a reader like this one can see that they agree. The geometry, once:
+ * the stripes run at 135deg, so moving the layer by (d, d) moves the pattern
+ * d·√2 along the gradient's own axis; a travel closes the loop when d·√2 is a
+ * whole number of periods, and a square tile is seamless when S·√2 is too.
+ * Both were one-line changes away from being wrong, and one of them was.
+ */
+describe('the-running-border-closes-its-own-loop', () => {
+    it('travels a whole number of stripes across a tile that repeats', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rule = /\.stall\.att-pinstripe \.item\s*\{([\s\S]*?)\n\}/.exec(css)?.[1];
+        expect(rule, 'the pinstripe rule is still one block').toBeDefined();
+        // The angle the whole calculation rests on.
+        expect(rule).toMatch(/repeating-linear-gradient\(\s*135deg/);
+        // The period is the gradient's last stop; the tile is the second layer.
+        const period = Number(/transparent\s+[\d.]+px\s+([\d.]+)px/.exec(rule!)?.[1]);
+        const tile = Number(/background-size:\s*auto,\s*([\d.]+)px\s+\1px/.exec(rule!.replace(/\s+/g, ' '))?.[1]);
+        const frames = /@keyframes att-pinstripe-run\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+        const travel = Number(/to\s*\{[^}]*?([\d.]+)px\s+\1px/.exec(frames.replace(/\s+/g, ' '))?.[1]);
+        expect([period, tile, travel].every(Number.isFinite), `read ${period} / ${tile} / ${travel}`).toBe(true);
+        const whole = (px: number): number => (px * Math.SQRT2) / period;
+        // A hair of tolerance, because 22.627px is 16√2 written down.
+        expect(Math.abs(whole(travel) - Math.round(whole(travel))), 'the travel is whole stripes').toBeLessThan(0.001);
+        expect(Math.round(whole(travel)), 'and at least one, or nothing moves').toBeGreaterThanOrEqual(1);
+        expect(Math.abs(whole(tile) - Math.round(whole(tile))), 'the tile is whole stripes too').toBeLessThan(0.001);
     });
 });
 

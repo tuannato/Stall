@@ -346,6 +346,28 @@ export function paintedThemeId(view: StallView): number {
     return activePreview(view)?.themeId ?? (view.theme ?? DEFAULT_THEME).id;
 }
 
+/**
+ * The whole look that is painting, not just its id — the same answer
+ * `renderStall` gives the frame, for the screens that read a look's *words*
+ * and its *markup* rather than its class.
+ *
+ * The sparse-shop chrome is exactly that: `theme.sparse.kind` chooses which
+ * children the motif mounts, and each look's sheet styles only its own kind.
+ * Those four call sites read `view.theme` — the record's look — so a seller
+ * trying Modern on over a published Rural stall got Rural's PLANKS markup
+ * under Modern's stylesheet: the planks and carvings had no rules, and the
+ * one child that carries its own colours, the Stall mark, was left hanging
+ * off the motif's top-left corner with nothing around it. Measured on the
+ * owner's own stall, 2026-09-17, on both Modern and Neo.
+ *
+ * Same family as `1c52639` (the node rows) and `d52c555` (the sheet's own
+ * summary): whatever the try-on paints, it paints whole.
+ */
+function paintedTheme(view: StallView): DecodedTheme {
+    const previewed = activePreview(view);
+    return previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+}
+
 export function renderStall(
     root: HTMLElement,
     view: StallView,
@@ -380,7 +402,7 @@ export function renderStall(
     const frame = el('div', 'frame');
     const stall = el('div', 'stall');
     const previewed = activePreview(view);
-    const theme = previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+    const theme = paintedTheme(view);
 
     /*
      * The overlay is a second render path on every route except `invalid`
@@ -1092,7 +1114,7 @@ function taglineInvite(view: StallView, handlers: StallHandlers): HTMLElement | 
     if (view.pasted !== true || (view.tagline ?? '') !== '' || handlers.onOpenPublish === undefined) {
         return null;
     }
-    const theme = view.theme ?? DEFAULT_THEME;
+    const theme = paintedTheme(view);
     const btn = el('button', 'tagline-invite');
     btn.type = 'button';
     btn.setAttribute('data-role', 'edit-tagline');
@@ -1109,7 +1131,7 @@ function noticeInvite(view: StallView, handlers: StallHandlers): HTMLElement | n
     if (view.pasted !== true || (view.announcement ?? '') !== '' || handlers.onOpenPublish === undefined) {
         return null;
     }
-    const theme = view.theme ?? DEFAULT_THEME;
+    const theme = paintedTheme(view);
     const btn = el('button', 'notice-invite');
     btn.type = 'button';
     btn.setAttribute('data-role', 'announcement-invite');
@@ -1128,7 +1150,7 @@ function noticeInvite(view: StallView, handlers: StallHandlers): HTMLElement | n
 /** The kind's fixed child set — like the ornament, adding a look means
  *  adding a row that picks a kind, never growing this function per theme. */
 function sparseMotif(view: StallView): HTMLElement {
-    const theme = view.theme ?? DEFAULT_THEME;
+    const theme = paintedTheme(view);
     // The kind rides as `sm-kind-*`, never bare `sm-${kind}`: 'floor' is
     // also a CHILD class, and the collision dressed the container as its
     // own perspective grid — measured as a 28px sideways scroll.
@@ -1207,7 +1229,7 @@ function paintEmpty(
             // rail is for, so the empty book is not the whole screen here.
             body.append(quotesPanel(view, handlers));
         } else {
-            const theme = view.theme ?? DEFAULT_THEME;
+            const theme = paintedTheme(view);
             const emptyBlock = el('div', 'sparse-empty');
             emptyBlock.append(el('p', 'sparse-empty-t', theme.sparse.emptyTitle));
             emptyBlock.append(el('p', 'sparse-empty-s', theme.sparse.emptySub));

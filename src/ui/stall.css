@@ -303,6 +303,35 @@ body {
     background-origin: padding-box, border-box;
     background-clip: padding-box, border-box;
     background-repeat: repeat, repeat;
+    /*
+     * The tile is stated, and 32px is the only family of numbers that works
+     * (owner, 2026-09-17: "giật là lúc nó hết vòng lặp").
+     *
+     * A gradient with no `background-size` is drawn once at the size of its
+     * positioning area, and `repeat` then tiles THAT image. At offset 0 the
+     * one tile covers the card and the seam is outside it — but the moment
+     * the animation moves the layer, the neighbour slides in, and a card is
+     * not a whole number of stripe periods wide, so the neighbour arrives
+     * out of phase. The seam crossed the card every cycle and snapped back
+     * at the wrap, which is the stutter that was reported.
+     *
+     * The stripes run at 135deg, so a translation of (d, d) moves the
+     * pattern d·√2 along the gradient's own axis. The period is 22.627px =
+     * 16√2, so the keyframe's (16, 16) is exactly one period — that part was
+     * always right. A square tile of side S is seamless when S·√2 is a whole
+     * number of periods: S = 16√2·√2·k = 32k. 32px it is, two periods to a
+     * tile, and the speed is untouched.
+     *
+     * Measured in headless Chrome at 3x, one card, five phases of the cycle
+     * (`private/design/tools/pinstripe-wrap.mjs`): RMSE between the frame
+     * before the wrap and the frame after it fell from 2,707 — nearly the
+     * 3,106 of a 600ms step, i.e. the whole animation jumping backwards —
+     * to 368, while a 600ms step stayed at 3,147 and the resting frame moved
+     * 0.13%. Pinned by `the-running-border-closes-its-own-loop`.
+     */
+    background-size:
+        auto,
+        32px 32px;
     animation: att-pinstripe-run 2.4s linear infinite;
 }
 
