@@ -89,9 +89,18 @@ export const DECOR_HELD = 'This stall holds the token, so publishing will paint 
 export const DECOR_UNKNOWN_HOLDING =
     'This page could not read what this stall holds, so it cannot say whether publishing will paint this one.';
 export const DECOR_SHOP = 'See the decorations';
-/** The footer credit: the catalogue's own billboard, in our words. */
+/**
+ * The footer credit: the catalogue's own billboard, in our words.
+ *
+ * Kept as a whole sentence for anything that wants one string, and split into
+ * its two pieces for the footer, which since round 12 makes each name a link
+ * to the shop that sells it. One source either way, so the two can never
+ * drift into two different sentences.
+ */
+export const WEARING_LEAD = 'Wearing:';
+export const WEARING_SEP = ' \u00b7 ';
 export const wearing = (labels: readonly string[]): string =>
-    `Wearing: ${labels.join(' \u00b7 ')}`;
+    `${WEARING_LEAD} ${labels.join(WEARING_SEP)}`;
 /**
  * Where that link goes. It was **undefined until the shop existed**: a control
  * that cannot be aimed is not painted, for the same reason the buy link is

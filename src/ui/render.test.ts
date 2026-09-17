@@ -4337,6 +4337,58 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     });
 });
 
+describe('a-worn-decoration-says-where-it-came-from', () => {
+    /*
+     * Round 12. The credit line has named what a stall wears since the
+     * catalogue shipped, and its docblock promised a road to the shop "once
+     * the fittings stall exists". It has existed since 2026-09-17. This is
+     * the one surface where a stranger sees a decoration in situ, so it is
+     * where the want is made — and until now it was inert text.
+     */
+    it('links each worn row to its own page in the shop, in a new tab', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(RURAL_THEME_ID),
+                worn: wornAttachments(RURAL_THEME_ID, 0b1),
+            }),
+        );
+        const line = root.querySelector('[data-role="wearing"]')!;
+        expect(line.textContent).toContain(copy.WEARING_LEAD);
+        const links = [...line.querySelectorAll('[data-role="wearing-link"]')];
+        expect(links, 'the worn row is a link').toHaveLength(1);
+        const beetle = SHIPPED_ATTACHMENTS.find(
+            (r) => r.themeId === RURAL_THEME_ID && r.bit === 0,
+        )!;
+        expect(links[0]!.textContent).toBe(beetle.label);
+        // Its own row in the shop, by the shipped mechanism for naming one
+        // item — not the shop's front door.
+        expect(links[0]!.getAttribute('href')).toBe(
+            payLandingUrl(stallPath(copy.FITTINGS_STALL!), beetle.tokenId!),
+        );
+        expect(links[0]!.getAttribute('target')).toBe('_blank');
+        expect(links[0]!.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    it('leaves a row with no token as plain words', () => {
+        // Nothing to open: an unminted row is previewable and unbuyable, and
+        // a link to a page that cannot sell it is a control that does not do
+        // what it says.
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(DEFAULT_THEME_ID),
+                worn: [{ ...SHIPPED_ATTACHMENTS[0]!, tokenId: undefined, label: 'Unminted row' }],
+            }),
+        );
+        const line = root.querySelector('[data-role="wearing"]')!;
+        expect(line.textContent).toContain('Unminted row');
+        expect(line.querySelector('[data-role="wearing-link"]')).toBeNull();
+    });
+});
+
 describe('a-worn-decoration-reaches-the-stall', () => {
     it('puts a root row on the stall and builds the yard under the sign', () => {
         const { root } = paint(
@@ -10029,7 +10081,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.paste-in, .share-url, .share-embed'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);

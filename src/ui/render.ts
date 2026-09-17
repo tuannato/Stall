@@ -7023,9 +7023,56 @@ function stallFooter(
      */
     const worn = view.worn ?? [];
     if (worn.length > 0) {
-        ft.append(
-            el('p', 'fine wearing', copy.wearing(worn.map((row) => row.label))),
-        );
+        /*
+         * Round 12 (owner, 2026-09-17). The line has named what a stall wears
+         * since the catalogue shipped, and its own docblock above promised
+         * "once the fittings stall exists, where it came from". The shop has
+         * existed since 2026-09-17 and the line was still inert text.
+         *
+         * This is the one surface in the product where a stranger sees a
+         * decoration **in situ** — full size, on a real shop, with real goods
+         * beside it — which is the moment a want is created. Everywhere else
+         * a decoration is only ever seen by the person who already owns it.
+         *
+         * Each name is a link to that row's own page in the fittings stall,
+         * not to the shop's front door: `payLandingUrl` is the shipped
+         * mechanism for naming one item by a prefix of its token id, and it
+         * opens the pay sheet for that item when the shop quotes it. A row
+         * with no token is not a link, because there is nothing to open.
+         *
+         * A new tab, so a visitor reading a stall does not lose it — and this
+         * anchor may hold its destination, unlike the Pay controls: it points
+         * at this origin's own path, which is the same reason the explorer
+         * link is allowed to be an anchor and the minter's link is not.
+         */
+        const line = el('p', 'fine wearing');
+        line.setAttribute('data-role', 'wearing');
+        line.append(`${copy.WEARING_LEAD} `);
+        worn.forEach((row, i) => {
+            if (i > 0) {
+                line.append(copy.WEARING_SEP);
+            }
+            const shop = copy.FITTINGS_STALL;
+            // `payLandingUrl` answers `undefined` rather than guessing when
+            // the id is not one it can vouch for, and an anchor with no
+            // destination is a control that does not do what it says — so a
+            // row without a usable link stays the words it always was.
+            const href =
+                row.tokenId === undefined || shop === undefined
+                    ? undefined
+                    : payLandingUrl(stallPath(shop), row.tokenId);
+            if (href === undefined) {
+                line.append(row.label);
+                return;
+            }
+            const a = el('a', 'wearing-link', row.label);
+            a.setAttribute('data-role', 'wearing-link');
+            a.setAttribute('href', href);
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener noreferrer');
+            line.append(a);
+        });
+        ft.append(line);
     }
     return ft;
 }

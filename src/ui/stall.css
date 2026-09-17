@@ -3403,6 +3403,22 @@ textarea.share-embed {
  * stops a flick inside the list from carrying on into the page, which is
  * what makes a nested scroller feel broken on a phone.
  */
+/*
+ * Each worn decoration's name in the footer credit, linking to its row in the
+ * shop that sells it (round 12). A tappable control, so it takes the 44px
+ * floor every other one takes — as an inline-flex box rather than by growing
+ * the type, because the line is `fine` at 11.5px and the names are read as
+ * part of a sentence.
+ */
+.wearing-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--s-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .trows {
     max-height: 336px;
     overflow-y: auto;
