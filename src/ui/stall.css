@@ -459,6 +459,11 @@ body {
      */
     background:
         radial-gradient(
+            150% 40% at 50% 0,
+            color-mix(in srgb, var(--s-accent-2) 42%, transparent),
+            transparent 58%
+        ),
+        radial-gradient(
             120% 74% at 50% 0,
             color-mix(in srgb, var(--s-accent) 30%, transparent),
             transparent 62%
