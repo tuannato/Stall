@@ -13318,6 +13318,103 @@ describe('the-pin-sits-at-the-signs-corner-not-in-the-name-row', () => {
     });
 });
 
+/*
+ * Round 13, 2026-09-17: "Sign hums thêm hiệu ứng một chữ cái nhấp nháy như
+ * bóng đèn bị hỏng". The crest's rule had refused a flicker since it shipped,
+ * for a reason that still binds — it paints on a text node, so the only thing
+ * it could animate was the whole seller's name. The sign hands it one
+ * grapheme instead, and the two things that must hold are that the name is
+ * still the name, and that the cut is never made inside a character.
+ */
+describe('the-sign-hums-guts-one-letter-and-never-the-name', () => {
+    const nameOf = (stallName: string): HTMLElement =>
+        paint(offersView([OFFER], undefined, { stallName })).root.querySelector(
+            '.stall-name',
+        ) as HTMLElement;
+
+    it('marks exactly one letter and leaves the words untouched', () => {
+        const h1 = nameOf('Riverside Goods');
+        expect(h1.textContent, 'the name reads as it was written').toBe('Riverside Goods');
+        const lamps = h1.querySelectorAll('.sign-lamp');
+        expect(lamps, 'one lamp, not a per-letter span soup').toHaveLength(1);
+        expect([...(lamps[0]!.textContent ?? '')].length).toBe(1);
+        expect(lamps[0]!.textContent!.trim(), 'a flickering space is no effect').not.toBe('');
+    });
+
+    it('lights the same letter on every repaint of one stall', () => {
+        // The socket repaints on a stranger's dust. A lamp that moved each
+        // time would read as the whole sign twitching, not one dead tube.
+        const first = nameOf('Riverside Goods').querySelector('.sign-lamp')?.textContent;
+        const again = nameOf('Riverside Goods').querySelector('.sign-lamp')?.textContent;
+        const other = nameOf('Cà phê Sông Xanh').querySelector('.sign-lamp')?.textContent;
+        expect(first).toBe(again);
+        expect(first).not.toBe(undefined);
+        expect(other).not.toBe(undefined);
+    });
+
+    it('never cuts inside a character', () => {
+        /*
+         * A stall name is up to 32 bytes of legible text the seller chose:
+         * Vietnamese stacks, emoji, a family sequence joined by zero-width
+         * joiners. Slicing by code unit paints a replacement character in
+         * somebody's shop name; `Intl.Segmenter` is what stops that.
+         */
+        // The last one is every eligible letter multi-unit — a family
+        // sequence, a flag pair, an emoji with a variation selector — so no
+        // choice of lamp can dodge the cut this test is about.
+        for (const stallName of [
+            'Bánh mì Sài Gòn',
+            '☕️ Roasters',
+            'Chả cá 🇻🇳 Lã Vọng',
+            'ẞ',
+            '👨‍👩‍👧 🇻🇳 ☕️',
+        ]) {
+            const h1 = nameOf(stallName);
+            expect(h1.textContent, stallName).toBe(stallName);
+            expect(h1.textContent, `${stallName} lost a character`).not.toContain('\uFFFD');
+            const lamp = h1.querySelector('.sign-lamp')?.textContent ?? '';
+            /*
+             * The lamp must be one of the NAME's own graphemes. Segmenting
+             * the lamp alone is not enough — a lone surrogate half segments
+             * as one grapheme too, and `textContent` still reconstructs the
+             * string, so both of those checks pass over a cut that paints a
+             * replacement glyph on the seller's sign. Membership is what
+             * fails; proved red by slicing the name with `split('')`.
+             */
+            const graphemes = [
+                ...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(stallName),
+            ].map((part) => part.segment);
+            expect(graphemes, `${stallName}: the lamp is a whole character`).toContain(lamp);
+        }
+    });
+
+    it('guts the glow and never the glyph, and stops under reduced motion', () => {
+        /*
+         * Read statically, because happy-dom lays nothing out: what the rule
+         * may animate is the shadow and an ink that stays legible — the
+         * contrast pass samples pixels at instants it picks, so a dim state
+         * has to be safe by construction rather than by where a seek lands.
+         */
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        const frames = /@keyframes att-hum-gutter\s*\{([\s\S]*?)\n\}/.exec(css)?.[1];
+        expect(frames, 'the gutter has keyframes').toBeDefined();
+        expect(frames, 'nothing here hides the letter').not.toMatch(/opacity|visibility|display/);
+        // Every dim step mixes toward the ground in tokens, so a mood moves it
+        // and the floor is the palette's, never a hardcoded grey.
+        for (const decl of frames!.matchAll(/color:\s*([^;]+);/g)) {
+            const value = decl[1]!.trim();
+            expect(
+                value === 'inherit' || /color-mix\(in srgb, var\(--s-text\) 7\d%/.test(value),
+                `dim ink out of the palette: ${value}`,
+            ).toBe(true);
+        }
+        // And the whole thing is off under reduce, at this selector's own
+        // specificity — a kill one class short loses the cascade in silence.
+        const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion'));
+        expect(reduce).toMatch(/\.stall\.att-hum \.sign-lamp[^{]*\{[^}]*animation:\s*none/);
+    });
+});
+
 describe('the-sign-is-centred', () => {
     /**
      * Round 9 (owner, 2026-09-16, after a side-by-side at 390 and 1280 on

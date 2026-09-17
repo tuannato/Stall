@@ -191,7 +191,11 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         label: 'The sign hums',
         paint: 'root',
         cls: 'att-hum',
-        motion: false,
+        // A mover since round 13: one letter of the sign gutters like a
+        // failing lamp (owner, 2026-09-17). Root paint, so the flag is
+        // allowed — and the reduced-motion block has to still it, which is
+        // the only thing this flag is trusted for.
+        motion: true,
     },
     {   
         tokenId: '15e67ab0299782529a5971eaf5920a559d1be920ffe596dfcacb16eabda3ebd7',

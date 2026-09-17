@@ -364,10 +364,10 @@ body {
  * cyan one. 26px is the widest blur, under Neo's own 28, so the spill still
  * stops above the address.
  *
- * Still, and deliberately. A flicker would have to animate the text itself,
- * which means dimming the seller's name on a timer — the one thing on this
- * sign that must stay readable — and the crest paints on a text node, so
- * there is no separate layer to flicker instead.
+ * The whole name is still, and deliberately. A flicker across it would mean
+ * dimming the seller's name on a timer — the one thing on this sign that must
+ * stay readable. Round 13 gave the crest one letter to fail on instead
+ * (`signName`, and `att-hum-gutter` below): the fault is a lamp, not the sign.
  */
 .stall.att-hum .stall-name {
     /* Shadow only — the paid glow must never repaint the tube's white-hot
@@ -379,6 +379,77 @@ body {
         0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
         0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent),
         0 2px 18px color-mix(in srgb, var(--s-accent-2) 32%, transparent);
+}
+
+/*
+ * One lamp in the sign is failing (round 13, owner 2026-09-17: "thêm hiệu ứng
+ * một chữ cái nhấp nháy như bóng đèn bị hỏng — thời gian sáng nhiều hơn").
+ *
+ * What moves is the GLOW, not the glyph. A neon letter whose transformer is
+ * going still shows its glass: the tube stops lighting the wall, the letter
+ * stays there to be read. That is also what keeps this safe — the contrast
+ * pass samples rendered pixels at instants it chooses, so the dim state has
+ * to be legible by construction, never by the luck of where a seek lands.
+ * The ink dips only to a 74% mix toward the ground, in tokens, so a mood
+ * carries it: on Neo that is still better than 12:1 against the panel.
+ *
+ * Lit 93% of the cycle, in two guttering bursts seven seconds apart — one a
+ * three-beat stutter, one a single blink. A failing lamp is mostly on; the
+ * shape the owner ruled out is the opposite, dark with an occasional flash.
+ * The two bursts sit at 41% and 79% rather than on a metronome, because an
+ * even rhythm reads as a designed pulse instead of a fault.
+ *
+ * The lamp is `signName`'s single grapheme, so nothing here can reach the
+ * whole name. Killed in the reduce block at this specificity.
+ */
+.stall.att-hum .sign-lamp {
+    animation: att-hum-gutter 7s linear infinite;
+}
+
+@keyframes att-hum-gutter {
+    0%,
+    41% {
+        color: inherit;
+        text-shadow:
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
+    41.6%,
+    42.4%,
+    43.6% {
+        color: color-mix(in srgb, var(--s-text) 74%, var(--s-bg));
+        text-shadow:
+            0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent),
+            0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent);
+    }
+    42%,
+    43%,
+    44.2%,
+    78.4% {
+        color: inherit;
+        text-shadow:
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
+    79% {
+        color: color-mix(in srgb, var(--s-text) 74%, var(--s-bg));
+        text-shadow:
+            0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent),
+            0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent);
+    }
+    79.8%,
+    100% {
+        color: inherit;
+        text-shadow:
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
 }
 
 /*
@@ -5750,7 +5821,8 @@ textarea.share-embed {
         animation: none;
     }
 
-    .stall-name {
+    .stall-name,
+    .stall.att-hum .sign-lamp {
         animation: none;
     }
 

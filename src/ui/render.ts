@@ -5500,6 +5500,85 @@ function sheetRow(label: string, value: string, big = false): HTMLElement {
 /** The sign's pin control, when this screen offers one. */
 type SignPin = { pinned: boolean; full: boolean; onToggle: () => void };
 
+/**
+ * The seller's name, with one letter marked as the sign's failing lamp.
+ *
+ * Round 13 (owner, 2026-09-17): "The sign hums" gains a flicker on ONE
+ * letter, like a broken bulb — lit most of the time, guttering briefly, never
+ * the other way round. The crest's own rule refused a flicker until now for a
+ * reason that still holds: it paints on a text node, so the only thing it
+ * could have animated was the whole seller's name, and dimming that on a
+ * timer is the one thing this sign may not do. So the sign hands the crest a
+ * single grapheme to fail on, and the name keeps standing.
+ *
+ * The span ships on every look and every screen, styled by nothing until the
+ * root wears `att-hum`. That is the cheaper half of the trade: `header()`
+ * would otherwise need to be told which decorations are worn, on every call
+ * site, to place one `<span>`.
+ *
+ * **Graphemes, never code units.** A stall name is up to 32 bytes of
+ * attacker-chosen legible text (§5) — Vietnamese stacks, emoji, combining
+ * marks — and slicing by index would split a surrogate pair or tear a mark
+ * off its base, painting a replacement character in the seller's own name.
+ * `Intl.Segmenter` decides, and where it is missing the name is one text node
+ * exactly as before: no lamp, no flicker, nothing broken.
+ *
+ * Which letter is the name's own, through a cheap deterministic hash, so it
+ * is the same lamp on every repaint of a given stall rather than a new one
+ * each time the socket ticks. Whitespace is skipped — a flickering space is
+ * an effect nobody can see.
+ */
+function signName(name: string): HTMLElement {
+    const h1 = el('h1', 'stall-name');
+    const parts = graphemesOf(name);
+    const lamp = parts === undefined ? undefined : lampAt(name, parts);
+    if (parts === undefined || lamp === undefined) {
+        h1.textContent = name;
+        return h1;
+    }
+    const before = parts.slice(0, lamp).join('');
+    const after = parts.slice(lamp + 1).join('');
+    if (before !== '') {
+        h1.append(document.createTextNode(before));
+    }
+    h1.append(el('span', 'sign-lamp', parts[lamp]!));
+    if (after !== '') {
+        h1.append(document.createTextNode(after));
+    }
+    return h1;
+}
+
+/** The name in user-perceived characters, or nothing when this runtime
+ *  cannot tell where one ends — in which case the name is left whole. */
+function graphemesOf(name: string): string[] | undefined {
+    const seg = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+    if (seg === undefined) {
+        return undefined;
+    }
+    return [...new seg(undefined, { granularity: 'grapheme' }).segment(name)].map(
+        (part) => part.segment,
+    );
+}
+
+/** A stable index into `parts`, skipping whitespace. FNV-1a over the name,
+ *  because the lamp must not move between two paints of the same stall. */
+function lampAt(name: string, parts: readonly string[]): number | undefined {
+    const lit: number[] = [];
+    parts.forEach((part, i) => {
+        if (part.trim() !== '') {
+            lit.push(i);
+        }
+    });
+    if (lit.length === 0) {
+        return undefined;
+    }
+    let hash = 0x811c9dc5;
+    for (const unit of name) {
+        hash = Math.imul(hash ^ unit.codePointAt(0)!, 0x01000193) >>> 0;
+    }
+    return lit[hash % lit.length];
+}
+
 function header(
     name?: string,
     sub?: string,
@@ -5520,7 +5599,7 @@ function header(
         // The one <h1> on every screen. A screen reader needs an outline to
         // navigate by; the whole site was <div>s. `stall.css` selects on class,
         // so nothing restyles.
-        headings.append(el('h1', 'stall-name', name));
+        headings.append(signName(name));
     }
     // The seller's own line, screened at decode like the name (tag 0x02) and
     // rendered as text through `textContent` like everything else. It is
