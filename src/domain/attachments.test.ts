@@ -173,9 +173,13 @@ describe('attachment-table-ids-are-pinned', () => {
          * pinned here the way the slots and bits are, and a change has to be
          * a deliberate one that comes and edits this list.
          *
-         * Filled 2026-09-16 from the owner's own mints on the fittings stall,
-         * pasted from their wallet. Not yet verified against chronik: that is
-         * a network read and waits for the owner's yes.
+         * Filled 2026-09-16 and 2026-09-17 from the owner's own mints on the
+         * fittings stall. **Every one is verified against chronik**
+         * (`scripts/verify-decor-tokens.mjs`, run on both days): each genesis
+         * exists, is ALP standard at 0 decimals with a supply of 1,000 and a
+         * live mint baton, carries the name its row carries, and shares one
+         * `authPubkey` that hashes to the fittings stall's own address, which
+         * held all twelve at the time of the read.
          */
         const minted = SHIPPED_ATTACHMENTS.filter((a) => a.tokenId !== undefined).map(
             (a) => `${a.label}=${a.tokenId}`,
