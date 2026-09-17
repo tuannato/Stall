@@ -2907,6 +2907,12 @@ textarea.paste-in {
 }
 
 .dec-chip {
+    /* A tick and its name on one line since round 12, so the control is the
+       whole label rather than a chip whose pressed state was the only thing
+       saying it was on. */
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     min-height: 44px;
     padding: 0 12px;
     border-radius: var(--s-btn-radius);
@@ -3410,6 +3416,40 @@ textarea.share-embed {
  * the type, because the line is `fine` at 11.5px and the names are read as
  * part of a sentence.
  */
+/*
+ * One decoration, one row (round 12): the tick that turns it on, the fact
+ * about whether this stall holds it, and the way to buy one if it does not.
+ * The tick is the old `.dec-chip` control, so it keeps the 44px floor it
+ * always had and the floor test keeps reading the same block.
+ */
+.dec-row {
+    /* Three columns, never wrapping: the tick, what this stall can do about
+       it, and the way to get one. Wrapped, the buy control dropped onto a
+       line of its own under every row and the group read as ten rows rather
+       than five. */
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.dec-row .dec-state {
+    min-width: 0;
+}
+
+.dec-chip .dec-tick {
+    opacity: 0;
+    flex: none;
+}
+
+.dec-chip[aria-pressed='true'] .dec-tick {
+    opacity: 1;
+}
+
+.dec-buy {
+    flex: none;
+}
+
 .wearing-link {
     display: inline-flex;
     align-items: center;

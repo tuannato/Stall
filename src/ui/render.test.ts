@@ -4176,45 +4176,67 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         expect(pressedDecor(root, 'yard'), 'a place can go bare again').toEqual([]);
     });
 
-    it('says a chosen row is only being looked at until the stall holds it', () => {
-        // The tokens exist now, so the honest note is no longer "not on sale
-        // yet" — it is that a flag without the token paints nothing. The
-        // read has to have ANSWERED for that to be sayable: an empty set is
-        // "holds none of them", which is a fact about the stall.
+    /*
+     * Round 12 (owner: a tick list beside the look, kept inside the sheet).
+     * The four facts a seller needs are on the ROW now, not spread across a
+     * chip, one sentence under all the chips and a link at the foot of a
+     * fold. `decor-state-<slot>-<bit>` is that sentence, per row.
+     */
+    const stateOf = (root: HTMLElement, slot: string, bit: number) =>
+        root.querySelector(`[data-role="decor-state-${slot}-${bit}"]`)?.textContent;
+    const buyOf = (root: HTMLElement, slot: string, bit: number) =>
+        root.querySelector(`[data-role="decor-buy-${slot}-${bit}"]`);
+
+    it('says on the row that this stall does not hold it, and offers the way to get one', () => {
+        // An empty set is "holds none of them", which is a fact about the
+        // stall — the read answered.
         const root = sheet({ attachmentFlags: 1, heldTokens: new Set<string>() });
-        const note = root.querySelector('[data-role="decor-note"]')!;
-        expect(note.textContent).toBe(copy.DECOR_PREVIEW_ONLY);
-        expect((note as HTMLElement).hidden).toBe(false);
+        expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_NOT_HELD);
+        const beetle = SHIPPED_ATTACHMENTS.find(
+            (r) => r.themeId === RURAL_THEME_ID && r.bit === 0,
+        )!;
+        expect(buyOf(root, 'yard', 0)?.getAttribute('href')).toBe(
+            payLandingUrl(stallPath(copy.FITTINGS_STALL!), beetle.tokenId!),
+        );
+        expect(buyOf(root, 'yard', 0)?.getAttribute('target')).toBe('_blank');
     });
 
     it('says the holdings read did not answer, rather than that the stall holds nothing', () => {
         /*
-         * Round 11. `heldTokens` absent used to fall through to "you are
-         * looking at it, not wearing it" — our own unanswered question filed
-         * as a fact about the seller, which is the §4 collapse on the one
-         * screen where a seller decides whether to buy. Absent can only mean
-         * the read did not answer now: the question is the whole minted
-         * catalogue, so it is never empty for want of asking.
+         * Round 11, kept on the row in round 12. `heldTokens` absent used to
+         * fall through to "you are looking at it, not wearing it" — our own
+         * unanswered question filed as a fact about the seller, the §4
+         * collapse on the one screen where a seller decides whether to buy.
          */
         const root = sheet({ attachmentFlags: 1 });
-        const note = root.querySelector('[data-role="decor-note"]')!;
-        expect(note.textContent).toBe(copy.DECOR_UNKNOWN_HOLDING);
-        expect(note.textContent).not.toBe(copy.DECOR_PREVIEW_ONLY);
-        expect((note as HTMLElement).hidden).toBe(false);
+        expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_UNKNOWN);
+        expect(stateOf(root, 'yard', 0)).not.toBe(copy.DECOR_ROW_NOT_HELD);
+        // Unknown is not held: the way to buy one stays offered.
+        expect(buyOf(root, 'yard', 0)).not.toBeNull();
     });
 
-    it('says it will paint once the stall is known to hold the token', () => {
+    it('says the stall holds it, and stops selling it', () => {
         const held = SHIPPED_ATTACHMENTS.find((r) => r.themeId === RURAL_THEME_ID && r.bit === 0);
         const root = sheet({
             attachmentFlags: 1,
             heldTokens: new Set([held!.tokenId!]),
         });
-        expect(root.querySelector('[data-role="decor-note"]')!.textContent).toBe(copy.DECOR_HELD);
+        expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_HELD);
+        expect(buyOf(root, 'yard', 0), 'nothing to buy on a row already held').toBeNull();
     });
 
-    it('says nothing at all when nothing is chosen', () => {
-        const note = sheet().querySelector<HTMLElement>('[data-role="decor-note"]')!;
-        expect(note.hidden).toBe(true);
+    it('says a row nothing can hold is not on sale, and offers no way to buy it', () => {
+        // Modern bit 3 is the catalogue's one unminted row.
+        const root = sheet({ theme: decodeTheme(DEFAULT_THEME_ID) });
+        const unminted = SHIPPED_ATTACHMENTS.find((r) => r.tokenId === undefined);
+        if (unminted === undefined) {
+            // Every row is minted today; the shape still has to hold, so this
+            // says so out loud rather than passing silently.
+            expect(SHIPPED_ATTACHMENTS.every((r) => r.tokenId !== undefined)).toBe(true);
+            return;
+        }
+        expect(stateOf(root, unminted.slot, unminted.bit)).toBe(copy.DECOR_ROW_UNMINTED);
+        expect(buyOf(root, unminted.slot, unminted.bit)).toBeNull();
     });
 
     it('opens on the look being tried on, not the one on the record', () => {
@@ -4313,27 +4335,31 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         root.remove();
     });
 
-    it('points at the fittings stall, by its own address', () => {
+    it('sells each row from the row itself, at the shop\u2019s own address', () => {
         /*
-         * The shop exists since 2026-09-17: every one of the eleven shipped
-         * rows is minted and the stall below holds all eleven, verified
-         * against chronik (`scripts/verify-decor-tokens.mjs`, and the
-         * genesis `authPubkey` hashes to exactly this address). Until that
-         * day this test asserted the link was ABSENT — a control that cannot
-         * be aimed is not painted, the same rule that keeps the buy link off
-         * `action=BUY`.
+         * The shop has existed since 2026-09-17. Until round 12 the one road
+         * to it was a single "See the decorations" link at the foot of a
+         * closed fold, under every chip at once — so a seller who wanted the
+         * bunting had to find the fold, find the link, find the shop and then
+         * find the row. Each row carries its own now, aimed at its own token.
          *
          * The address is pinned through the rendered href rather than by
          * reading the constant back: what matters is where a seller is sent,
-         * and a typo in the constant is only a defect once it reaches an
-         * `href`.
+         * and a typo is only a defect once it reaches an anchor.
          */
-        const shop = sheet().querySelector('[data-role="decor-shop"]');
-        expect(shop, 'the decorations link paints once the shop exists').not.toBeNull();
-        expect(shop!.getAttribute('href')).toBe(
-            '/s/qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r',
+        const root = sheet({ heldTokens: new Set<string>() });
+        const bunting = SHIPPED_ATTACHMENTS.find(
+            (r) => r.themeId === RURAL_THEME_ID && r.label === 'Bunting',
+        )!;
+        const buy = root.querySelector(
+            `[data-role="decor-buy-${bunting.slot}-${bunting.bit}"]`,
+        ) as HTMLAnchorElement | null;
+        expect(buy, 'the row that is not held carries its own way to buy').not.toBeNull();
+        expect(buy!.textContent).toBe(copy.DECOR_ROW_BUY);
+        expect(buy!.getAttribute('href')).toBe(
+            `/s/qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r?pay=${bunting.tokenId!.slice(0, 12)}`,
         );
-        expect(shop!.textContent).toBe(copy.DECOR_SHOP);
+        expect(buy!.getAttribute('rel')).toBe('noopener noreferrer');
     });
 });
 

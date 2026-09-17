@@ -4625,31 +4625,6 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     let flags = view.previewLook?.attachmentFlags ?? view.attachmentFlags ?? 0;
     const decorWrap = el('div', 'decor');
     decorWrap.setAttribute('data-role', 'decor');
-    const decorNote = el('p', 'fine', '');
-    decorNote.setAttribute('data-role', 'decor-note');
-
-    const describeChoice = (themeId: number): string => {
-        const chosen = wornAttachments(themeId, flags);
-        if (chosen.length === 0) {
-            return '';
-        }
-        // The first thing that is not simply true of everything chosen: a row
-        // nobody can hold yet outranks one this stall merely does not hold.
-        if (chosen.some((r) => r.tokenId === undefined)) {
-            return copy.DECOR_NOT_MINTED;
-        }
-        const held = view.heldTokens;
-        // Three answers, because there are three facts: the stall holds it,
-        // it does not, or this page could not read what it holds. The third
-        // used to be filed as the second.
-        if (held === undefined) {
-            return copy.DECOR_UNKNOWN_HOLDING;
-        }
-        if (chosen.every((r) => held.has(r.tokenId!))) {
-            return copy.DECOR_HELD;
-        }
-        return copy.DECOR_PREVIEW_ONLY;
-    };
 
     const renderDecor = (themeId: number): void => {
         decorWrap.replaceChildren();
@@ -4658,39 +4633,48 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             return;
         }
         decorWrap.append(el('p', 'fine', copy.DECOR_LEDE));
-        const sayNote = (): void => {
-            decorNote.textContent = describeChoice(themeId);
-            decorNote.hidden = decorNote.textContent === '';
-        };
         for (const slot of [...new Set(rows.map((r) => r.slot))]) {
             const place = sheetGroup(`${copy.DECOR_LABEL} · ${slot}`);
             place.classList.add('decor-place');
-            // The place is the marker, one per slot the look ships; the chips
+            // The place is the marker, one per slot the look ships; the rows
             // inside carry the bit. Nothing at runtime reads `theme-picker`
             // off a decoration group — the look's group keeps that name for
             // the tests keyed to it, and this one is named for what it is.
             place.setAttribute('data-role', `decor-${slot}`);
-            const chips = el('div', 'dec');
-            chips.setAttribute('role', 'group');
-            chips.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
+            const list = el('div', 'dec');
+            list.setAttribute('role', 'group');
+            list.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
             const here = rows.filter((r) => r.slot === slot);
-            const paintChips = (): void => {
-                for (const chip of chips.querySelectorAll('[data-bit]')) {
-                    const bit = Number(chip.getAttribute('data-bit'));
-                    chip.setAttribute(
+            const paintTicks = (): void => {
+                for (const tick of list.querySelectorAll('[data-bit]')) {
+                    const bit = Number(tick.getAttribute('data-bit'));
+                    tick.setAttribute(
                         'aria-pressed',
                         (flags & (1 << bit)) !== 0 ? 'true' : 'false',
                     );
                 }
             };
             for (const row of here) {
-                const chip = el('button', 'dec-chip', row.label);
-                chip.type = 'button';
-                chip.setAttribute('data-bit', String(row.bit));
-                chip.setAttribute('data-role', `decor-${slot}-${row.bit}`);
-                chip.setAttribute('data-focus-key', `decor-${slot}-${row.bit}`);
-                chip.setAttribute('aria-pressed', (flags & (1 << row.bit)) !== 0 ? 'true' : 'false');
-                chip.addEventListener('click', () => {
+                /*
+                 * A row, not a chip (round 12). The chip said one thing —
+                 * its name — and the three facts a seller needs to decide
+                 * were elsewhere: whether it is on (the chip's own pressed
+                 * state), whether this stall holds the token (one sentence
+                 * under ALL the chips, so it never said which), and where to
+                 * buy it (a link at the foot of a closed fold). They sit on
+                 * one line now, per row.
+                 */
+                const line = el('div', 'dec-row');
+                line.setAttribute('data-role', `decor-row-${slot}-${row.bit}`);
+                const tick = el('button', 'dec-chip', '');
+                tick.type = 'button';
+                tick.setAttribute('data-bit', String(row.bit));
+                tick.setAttribute('data-role', `decor-${slot}-${row.bit}`);
+                tick.setAttribute('data-focus-key', `decor-${slot}-${row.bit}`);
+                tick.setAttribute('aria-pressed', (flags & (1 << row.bit)) !== 0 ? 'true' : 'false');
+                tick.setAttribute('aria-label', row.label);
+                tick.append(glyph('check', 'dec-tick'), el('span', 'dec-name', row.label));
+                tick.addEventListener('click', () => {
                     const wasOn = (flags & (1 << row.bit)) !== 0;
                     // One occupant per place, enforced where the choice is
                     // made: every other bit here goes off before this one on.
@@ -4700,24 +4684,48 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     if (!wasOn) {
                         flags |= 1 << row.bit;
                     }
-                    paintChips();
-                    previewLook(chips, themeId, flags);
+                    paintTicks();
+                    previewLook(list, themeId, flags);
                     reportPreview(themeId, flags);
-                    sayNote();
                     refresh();
                 });
-                chips.append(chip);
+                line.append(tick);
+                // What this stall can do about it, said on the row it is
+                // about. `undefined` is the read that did not answer, which
+                // is our own fact and not a claim about the seller (§4).
+                const held = view.heldTokens;
+                const state =
+                    row.tokenId === undefined
+                        ? copy.DECOR_ROW_UNMINTED
+                        : held === undefined
+                          ? copy.DECOR_ROW_UNKNOWN
+                          : held.has(row.tokenId)
+                            ? copy.DECOR_ROW_HELD
+                            : copy.DECOR_ROW_NOT_HELD;
+                const why = el('span', 'fine dec-state', state);
+                why.setAttribute('data-role', `decor-state-${slot}-${row.bit}`);
+                line.append(why);
+                // The way to get one, on the row that wants it: the shop's
+                // own page for this token, the same landing link the credit
+                // line on every decorated stall now carries. Not on a row
+                // this stall already holds, and not on one nothing can hold.
+                const shop = copy.FITTINGS_STALL;
+                const href =
+                    row.tokenId === undefined || shop === undefined || held?.has(row.tokenId) === true
+                        ? undefined
+                        : payLandingUrl(stallPath(shop), row.tokenId);
+                if (href !== undefined) {
+                    const buy = el('a', 'mini dec-buy', copy.DECOR_ROW_BUY);
+                    buy.setAttribute('data-role', `decor-buy-${slot}-${row.bit}`);
+                    buy.setAttribute('href', href);
+                    buy.setAttribute('target', '_blank');
+                    buy.setAttribute('rel', 'noopener noreferrer');
+                    line.append(buy);
+                }
+                list.append(line);
             }
-            place.append(chips);
+            place.append(list);
             decorWrap.append(place);
-        }
-        sayNote();
-        decorWrap.append(decorNote);
-        if (copy.FITTINGS_STALL !== undefined) {
-            const shop = el('a', 'mini another', copy.DECOR_SHOP);
-            shop.setAttribute('data-role', 'decor-shop');
-            shop.href = stallPath(copy.FITTINGS_STALL);
-            decorWrap.append(shop);
         }
     };
 

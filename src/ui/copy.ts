@@ -71,24 +71,29 @@ export const PUBLISH_OPEN_PAY = 'Sign with another wallet app';
 export const DECOR_LABEL = 'Decoration';
 export const DECOR_LEDE =
     'Decorations are tokens. Your stall wears one when it holds the token and your settings say so — so this is two things, and both are yours.';
-export const DECOR_PREVIEW_ONLY =
-    'You are looking at it, not wearing it. Publishing this changes nothing until the stall holds the token.';
-export const DECOR_NOT_MINTED =
-    'This one is not on sale yet. You can look at it, but the record you sign here will not name it — nothing can hold it until it exists.';
-export const DECOR_HELD = 'This stall holds the token, so publishing will paint it.';
-/**
- * The third answer, and it is about us (round 11, 2026-09-17). The picker had
- * two sentences — the stall holds it, or it does not — and said the second
- * one whenever `heldTokens` was absent. Absent meant "we did not ask": the
- * read used to be narrowed to the rows the published record already wore, so
- * a stall wearing nothing asked nothing and every seller was told their
- * publish would paint nothing. The question is the whole catalogue now, so
- * absent can only mean the read did not answer, and that is its own fact —
- * the same rule that keeps an empty shop and an unreachable index apart (§4).
+/*
+ * One row of the picker says three things at once (round 12, owner's call: a
+ * tick list beside the look, kept inside the sheet). Whether it is on,
+ * whether this stall holds the token, and where to buy one if it does not.
+ *
+ * Five constants left with the shape they served — DECOR_PREVIEW_ONLY,
+ * DECOR_NOT_MINTED, DECOR_HELD, DECOR_UNKNOWN_HOLDING and DECOR_SHOP. Each
+ * said about ALL the chips at once what a row now says about itself, so a
+ * seller read "you are looking at it, not wearing it" with no way to tell
+ * which chip it was about; and the one shop link they ended with sat at the
+ * foot of a closed fold. A constant nothing paints is deleted, never kept
+ * (`every-copy-constant-has-a-reader`).
+ *
+ * `DECOR_ROW_UNKNOWN` carries round 11's hard-won third answer: absent
+ * holdings mean the read did not answer, never that the stall holds nothing
+ * — the same rule that keeps an empty shop and an unreachable index apart
+ * (§4).
  */
-export const DECOR_UNKNOWN_HOLDING =
-    'This page could not read what this stall holds, so it cannot say whether publishing will paint this one.';
-export const DECOR_SHOP = 'See the decorations';
+export const DECOR_ROW_HELD = 'This stall holds it';
+export const DECOR_ROW_NOT_HELD = 'Not held yet';
+export const DECOR_ROW_UNKNOWN = 'Holding not known';
+export const DECOR_ROW_UNMINTED = 'Not on sale yet';
+export const DECOR_ROW_BUY = 'Buy it';
 /**
  * The footer credit: the catalogue's own billboard, in our words.
  *
