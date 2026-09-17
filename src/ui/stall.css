@@ -742,27 +742,28 @@ body {
  * review's "two-tone bunting that never grows".
  */
 .att-bunting {
+    /*
+     * v2, round 11 (owner approved the sagging line and asked for a faded
+     * row behind it to fill the gaps). One drawn tile instead of seven
+     * conic gradients: the string sags between its ends, every flag hangs
+     * from where the string actually is, and each carries a shaded half so
+     * cloth reads as cloth. The back row is inside the same drawing at 42%
+     * and offset half a pitch, so it sits in the front row's gaps and the
+     * line looks full rather than gap-toothed — one asset, one layer, no
+     * second element and no pseudo the probe would refuse.
+     */
+    /* The four lines the v1 rule carried and the rewrite dropped: without
+       them the node shrank to its content and the probe measured a bunting
+       1px wide ("too small to sell"), which is exactly what that rule is
+       for. A background has no intrinsic width. */
     position: relative;
     display: block;
     width: 100%;
     align-self: stretch;
-    height: 52px;
+    height: 58px;
     flex: none;
     pointer-events: none;
-    background:
-        linear-gradient(#8a7458, #8a7458) top / 100% 3px no-repeat,
-        conic-gradient(from 318deg at 16.6% 100%, #9e4620 0 84deg, rgba(0, 0, 0, 0) 0)
-            0 3px / 108px 24px repeat-x,
-        conic-gradient(from 318deg at 50% 100%, #c98a2c 0 84deg, rgba(0, 0, 0, 0) 0)
-            0 3px / 108px 24px repeat-x,
-        conic-gradient(from 318deg at 83.3% 100%, #5b7b46 0 84deg, rgba(0, 0, 0, 0) 0)
-            0 3px / 108px 24px repeat-x,
-        conic-gradient(from 318deg at 16.6% 100%, rgba(158, 70, 32, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-            54px 26px / 108px 24px repeat-x,
-        conic-gradient(from 318deg at 50% 100%, rgba(91, 123, 70, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-            54px 26px / 108px 24px repeat-x,
-        conic-gradient(from 318deg at 83.3% 100%, rgba(201, 138, 44, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-            54px 26px / 108px 24px repeat-x;
+    background: url('decor/bunting.svg') repeat-x left top / 288px 52px;
     transform-origin: 50% 0;
     animation: att-bunting-sway 6s ease-in-out infinite;
 }
@@ -770,20 +771,7 @@ body {
 @media (min-width: 680px) {
     .att-bunting {
         height: 68px;
-        background:
-            linear-gradient(#8a7458, #8a7458) top / 100% 3px no-repeat,
-            conic-gradient(from 318deg at 16.6% 100%, #9e4620 0 84deg, rgba(0, 0, 0, 0) 0)
-                0 3px / 144px 32px repeat-x,
-            conic-gradient(from 318deg at 50% 100%, #c98a2c 0 84deg, rgba(0, 0, 0, 0) 0)
-                0 3px / 144px 32px repeat-x,
-            conic-gradient(from 318deg at 83.3% 100%, #5b7b46 0 84deg, rgba(0, 0, 0, 0) 0)
-                0 3px / 144px 32px repeat-x,
-            conic-gradient(from 318deg at 16.6% 100%, rgba(158, 70, 32, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-                72px 34px / 144px 32px repeat-x,
-            conic-gradient(from 318deg at 50% 100%, rgba(91, 123, 70, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-                72px 34px / 144px 32px repeat-x,
-            conic-gradient(from 318deg at 83.3% 100%, rgba(201, 138, 44, 0.65) 0 84deg, rgba(0, 0, 0, 0) 0)
-                72px 34px / 144px 32px repeat-x;
+        background-size: 360px 65px;
     }
 }
 
