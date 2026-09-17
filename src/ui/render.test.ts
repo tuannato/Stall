@@ -59,7 +59,6 @@ import {
     PUBLISH_UNAVAILABLE,
     PUBLISH_SAME_LOOK,
     PUBLISH_AFTER_SIGNING,
-    PUBLISH_CHECK_NOW,
     PUBLISH_CLOSE,
     UNRESOLVED_TITLE,
     UNRESOLVED_BODY,
@@ -2060,11 +2059,11 @@ describe('publish-sheet', () => {
         // rather than a deletion.
         expect(said, 'says nothing about what has to hold').toContain('connection');
 
-        const check = root.querySelector('[data-role="publish-check"]') as HTMLElement;
-        expect(check.textContent).toBe(PUBLISH_CHECK_NOW);
+        // And no control here asks outright any more (owner, 2026-09-17): the
+        // socket delivers the stall's own record in seconds, and the button's
+        // name read as "show me my shop" — which is what its refresh did.
+        expect(root.querySelector('[data-role="publish-check"]')).toBeNull();
         expect(h.onRetry).not.toHaveBeenCalled();
-        check.dispatchEvent(new Event('click'));
-        expect(h.onRetry).toHaveBeenCalledTimes(1);
     });
 
     it('does not offer it when there is no address to publish from', () => {
@@ -2883,16 +2882,16 @@ describe('the-way-out-is-at-both-ends-of-the-sheet', () => {
         bottom.click();
         expect(h.onClosePublish).toHaveBeenCalledTimes(2);
 
-        // The ask-outright control sits in the same foot, after both record
-        // editors — the refresh serves the description record too.
-        const check = root.querySelector(
-            '.sheet-foot [data-role="publish-check"]',
-        ) as HTMLElement;
-        expect(check).not.toBeNull();
+        // The close is the whole foot now: the ask-outright control that stood
+        // beside it was removed on 2026-09-17 (see `sheetFoot`).
+        expect(
+            root.querySelectorAll('.sheet-foot button'),
+            'the foot is one control',
+        ).toHaveLength(1);
         const describe = root.querySelector('[data-role="describe"]');
         if (describe !== null) {
             expect(
-                describe.compareDocumentPosition(check) &
+                describe.compareDocumentPosition(bottom) &
                     Node.DOCUMENT_POSITION_FOLLOWING,
                 'the foot trails the description editor',
             ).toBeTruthy();
@@ -10122,15 +10121,12 @@ describe('every-glyph-control-carries-an-icon-and-no-glyph-text', () => {
         expect(caret?.classList.contains('ic')).toBe(true);
     });
 
-    it('the retry, the check, the add and the explorer link carry a glyph beside their words', () => {
+    it('the retry, the add and the explorer link carry a glyph beside their words', () => {
         const down = paint(idlePubkey({ fetch: { kind: 'empty' } })).root;
         const retry = down.querySelector('[data-role="retry"]');
         expectOneIcon(retry, 'retry');
         expect([copy.TRY_AGAIN, copy.CHECK_AGAIN]).toContain(retry!.textContent);
         const sheet = paint(railView({ overlay: { kind: 'describe' } })).root;
-        const check = sheet.querySelector('[data-role="publish-check"]');
-        expectOneIcon(check, 'check for it now');
-        expect(check!.textContent).toBe(copy.PUBLISH_CHECK_NOW);
         const add = sheet.querySelector('[data-role="describe-paste-add"]');
         expectOneIcon(add, 'add');
         expect(add!.textContent).toBe(copy.DESC_PASTE_ADD);
@@ -11793,7 +11789,7 @@ describe('the-name-sheets-more-is-a-fold', () => {
         for (const sel of ['[data-role="theme-picker"]', '[data-role="publish-announcement"]', '[data-role="decor"]', '.meter', '[data-role="publish-hex-fold"]', '[data-role="publish-qr-fold"]']) {
             expect(more.querySelector(sel), `${sel} is inside More`).not.toBeNull();
         }
-        for (const sel of ['[data-role="publish-pay"]', '[data-role="publish-summary"]', '[data-role="publish-invalid"]', '[data-role="publish-check"]']) {
+        for (const sel of ['[data-role="publish-pay"]', '[data-role="publish-summary"]', '[data-role="publish-invalid"]']) {
             expect(root.querySelector(sel)?.closest('details'), `${sel} never folds`).toBeNull();
         }
         // Folded controls still write the record: the look picker is live.

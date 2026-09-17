@@ -799,8 +799,9 @@ export function boot(
      * the QR ceiling — cannot hold a paint back for a sheet that is not on
      * screen, which would stop the stall updating with nothing to say why.
      *
-     * A paint a person asked for is untouched — including `PUBLISH_CHECK_NOW`,
-     * whose whole answer is the sheet closing onto a re-read stall.
+     * A paint a person asked for is untouched. (Until 2026-09-17 that included
+     * the sheet's own "Check for it now", whose whole answer was the sheet
+     * closing onto a re-read stall; the owner removed it — see `sheetFoot`.)
      */
     const livePaint = (): void => {
         if (holdsLivePaint(state.view)) {

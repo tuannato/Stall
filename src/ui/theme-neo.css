@@ -13,13 +13,85 @@
     font-size: 13.5px;
 }
 
+/*
+ * The sign is a lit sign-box (round 13, owner 2026-09-17: "thiết kế lại bảng
+ * hiệu cho neo theme", then A4 of the mockups).
+ *
+ * What was wrong: it was a Neo card enlarged — flat ground, one hairline —
+ * and a sign that is the same object as the row beneath it is not a sign.
+ * The address sat in a DASHED box, which on every other screen in the world
+ * means "nothing here yet". So the seller's own name hung in a plain panel
+ * over an empty-looking field.
+ *
+ * Four things, and every one of them is light or edge — Neo's own vocabulary
+ * from round 9, never an added object:
+ *
+ * 1. A tube across the top (`inset 0 2px` white-hot, then a wide inner cyan
+ *    spill) with the light falling into the box as a radial from above the
+ *    edge. A sign-box is lit from its own rim.
+ * 2. Scanlines at 5% over the ground, so the panel reads as lit GLASS rather
+ *    than paint. Static: nothing here may move — the name must stay
+ *    readable, which is the same reason `att-hum` is a still crest.
+ * 3. Four magenta corner brackets, 13px arms 7px inside the frame, drawn as
+ *    eight background layers. Brackets are what Neo's cards already wear, so
+ *    the sign joins the look instead of sitting above it; and a bracket is a
+ *    mounting, which is what a sign has.
+ * 4. A magenta hairline along the base (`inset 0 -2px 0 -1px`) — the rail the
+ *    box is mounted on, and the one place the second accent touches the sign
+ *    without competing with the name.
+ *
+ * Backgrounds, borders and shadows only: no positioned pseudo-element (the
+ * probe cannot measure one) and nothing in `BANNED_THEME_PROPS`. The pin
+ * still lands at the sign's own corner, inside the top-right bracket.
+ */
 .t-neo .stall-head {
-    background: linear-gradient(180deg, #0d1322, #0a0f1c);
-    border: 1px solid rgba(44, 233, 224, 0.4);
+    background-color: #070c17;
+    background-image:
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(#ff4d7a, #ff4d7a),
+        repeating-linear-gradient(180deg, rgba(44, 233, 224, 0.05) 0 1px, transparent 1px 4px),
+        radial-gradient(135% 86px at 50% -10px, rgba(44, 233, 224, 0.32), transparent 72%),
+        linear-gradient(180deg, #101a2c 0%, #0a1120 55%, #070c17 100%);
+    background-size:
+        13px 1px,
+        1px 13px,
+        13px 1px,
+        1px 13px,
+        13px 1px,
+        1px 13px,
+        13px 1px,
+        1px 13px,
+        100% 100%,
+        100% 100%,
+        100% 100%;
+    background-position:
+        7px 7px,
+        7px 7px,
+        calc(100% - 7px) 7px,
+        calc(100% - 7px) 7px,
+        7px calc(100% - 7px),
+        7px calc(100% - 7px),
+        calc(100% - 7px) calc(100% - 7px),
+        calc(100% - 7px) calc(100% - 7px),
+        0 0,
+        0 0,
+        0 0;
+    background-repeat: no-repeat;
+    border: 1px solid rgba(44, 233, 224, 0.5);
     border-radius: 0;
     box-shadow:
+        inset 0 2px 0 0 rgba(198, 255, 253, 0.92),
+        inset 0 10px 22px -8px rgba(44, 233, 224, 0.6),
+        inset 0 -2px 0 -1px rgba(255, 77, 122, 0.55),
         0 0 0 1px rgba(44, 233, 224, 0.1),
-        0 0 34px rgba(44, 233, 224, 0.15);
+        0 10px 34px rgba(44, 233, 224, 0.2);
+    padding: 19px 16px 15px;
 }
 
 .t-neo .stall-name {
@@ -50,12 +122,18 @@
     text-transform: uppercase;
 }
 
+/* The address is a plate screwed to the sign, not a field waiting to be
+   filled: solid edge, a dark recess, one lit top lip. The dashed box it
+   replaces read as an empty input on every look that has a form. */
 .t-neo .addr {
-    padding: 3px 10px;
-    border: 1px dashed rgba(44, 233, 224, 0.45);
+    padding: 3px 12px;
+    border: 1px solid rgba(44, 233, 224, 0.34);
     border-radius: 0;
-    background: rgba(44, 233, 224, 0.05);
-    color: #8aa6c9;
+    background: linear-gradient(180deg, rgba(3, 8, 15, 0.96), rgba(13, 22, 37, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(44, 233, 224, 0.26),
+        0 1px 0 rgba(0, 0, 0, 0.75);
+    color: #a8cfe0;
     font-size: 11px;
 }
 

@@ -211,9 +211,7 @@ export const PUBLISH_SAME_LOOK =
  * copy happens to be here.
  */
 export const PUBLISH_AFTER_SIGNING =
-    'This page cannot see your wallet. After you sign, the network has to agree the record exists — and while this page still has a connection, it re-reads on its own once that happens. If your stall still looks the same, ask for it here.';
-
-export const PUBLISH_CHECK_NOW = 'Check for it now';
+    'This page cannot see your wallet. After you sign, the network has to agree the record exists — and while this page still has a connection, it re-reads on its own once that happens.';
 
 export const PUBLISH_UNAVAILABLE =
     'This stall has no address yet, so there is nothing to publish from.';

@@ -4180,27 +4180,28 @@ function sheetHead(title: string, sub: string, handlers: StallHandlers): HTMLEle
 }
 
 /**
- * The foot both sheets wear: the ask-outright control beside the quiet close.
+ * The foot both sheets wear: one quiet close.
  *
- * Signing happens in another app. The socket watches the stall address, so a
- * record published from that wallet does re-read on its own — but only while
- * this page still has a connection, and only if the wallet that signed it is
- * this stall's. Neither is ours to promise, which is why the copy above states
- * them as conditions and this control exists to ask outright. It runs a full
- * refresh, so the sheet closes and the answer is the stall itself.
+ * It carried a second control until 2026-09-17 — "Check for it now", a full
+ * refresh whose whole answer was the sheet closing onto a re-read stall. The
+ * owner had it removed, on their own reading of what the socket does: a
+ * record this page's link composed is signed by the stall's own wallet, pays
+ * the stall's own script, arrives on the script subscription and is finalized
+ * by avalanche in a couple of seconds, so the stall repaints itself before a
+ * seller can reach for a button.
+ *
+ * What it cost, stated rather than waived: the sentence above still says
+ * "while this page still has a connection", and a socket that is down
+ * delivers nothing — the seller's way through is now closing the sheet or
+ * reopening the page, which is what most of them did anyway. Nothing was lost
+ * for the cases the control could never fix: a record signed by another
+ * wallet, or one that does not pay its own stall, is nobody's record and no
+ * amount of asking makes it arrive. The name was also the trap — the owner
+ * read "Check for it now" as "look at my shop", which is what a *refresh*
+ * lands you on.
  */
 function sheetFoot(handlers: StallHandlers): HTMLElement {
     const foot = el('div', 'sheet-foot');
-    const check = el('button', 'mini');
-    glyphLabel(check, 'retry', copy.PUBLISH_CHECK_NOW);
-    check.type = 'button';
-    check.setAttribute('data-role', 'publish-check');
-    check.setAttribute('data-focus-key', 'publish-check');
-    check.addEventListener('click', () => {
-        handlers.onRetry();
-    });
-    foot.append(check);
-
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
     close.type = 'button';
     close.setAttribute('data-role', 'publish-close');
