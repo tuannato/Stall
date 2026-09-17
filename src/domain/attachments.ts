@@ -143,6 +143,18 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * bits take the showroom's pieces; round 3 set the light drifting
      * again, as the full dress had it.
      */
+    {
+        themeId: DEFAULT_THEME_ID,
+        bit: 2,
+        slot: 'trim',
+        label: 'Awning',
+        // Root paint: a canopy belongs above everything and must not be a box
+        // over anything, so it rides the stall's own background and the page
+        // makes room for it with padding rather than with a node.
+        paint: 'root',
+        cls: 'att-awning',
+        motion: false,
+    },
     /*
      * Modern bit 2 was "Signature stroke" (crest, unminted) from 2026-08-31
      * to 2026-09-16: a hand-inked flourish under the shop name. The owner
@@ -152,7 +164,10 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
      * only Neo bit 0), and the walk was re-run on 2026-09-17
      * (`scripts/walk-attachment-bits.mjs`, 10 records: Neo bits 0 and 1 and
-     * nothing else), so the bit is free for Modern's next crest.
+     * nothing else). The bit is **taken** the same day by the Awning above,
+     * which is round 11's answer to Modern having no object at all — and it
+     * is permanent from the first record that sets it, so it is unminted
+     * until the owner mints it.
      */
     /*
      * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to

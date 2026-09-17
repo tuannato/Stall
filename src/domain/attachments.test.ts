@@ -45,6 +45,9 @@ describe('attachment-table-ids-are-pinned', () => {
             // ever set either one.
             '1:0:mood',
             '1:1:fringe',
+            // Round 11 took bit 2 for the Awning, after the 2026-09-17 walk
+            // confirmed no record had ever set it. Bit 3 is still free.
+            '1:2:trim',
             // Neo city: bit 3 retired unminted when the corner brackets
             // folded into the base look.
             '2:0:crest',

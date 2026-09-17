@@ -217,6 +217,46 @@ body {
  */
 
 /*
+ * Modern · trim · Awning (round 11, 2026-09-17). Modern had a mood and a
+ * stripe and no object at all — nothing a buyer could point at — and round
+ * 10 freed two bits by deleting the signature stroke and the wax seal. This
+ * takes the first of them.
+ *
+ * A striped canopy across the top of the page with scalloped edges, in the
+ * look's own accent against a pale tint of it. Two earlier drawings were
+ * thrown away: the first cut narrow scallops through high-contrast stripes
+ * and read as a row of dark teeth, and the second scalloped a cream that was
+ * within three points of Modern's own ground, so half the scallops were
+ * invisible and what showed read as a white line across the middle — the
+ * owner's words, and they were exactly right.
+ *
+ * Root paint, so it has no box that could sit over a figure; the page makes
+ * room for it with padding rather than with a node. Still, and deliberately:
+ * a canopy that flapped would be a mover on every screen of a look whose
+ * voice is restraint.
+ */
+.stall.att-awning {
+    padding-top: 54px;
+    background-image: url('decor/awning.svg'), var(--s-backdrop);
+    background-size:
+        96px 46px,
+        auto;
+    background-position:
+        left top,
+        0 0;
+    background-repeat: repeat-x, repeat;
+}
+
+@media (min-width: 680px) {
+    .stall.att-awning {
+        padding-top: 66px;
+        background-size:
+            120px 58px,
+            auto;
+    }
+}
+
+/*
  * Modern · fringe · Pinstripe, v3 (round 10, 2026-09-16: "đổi nó thành các
  * viền có hiệu ứng chạy quanh các thẻ item của listings và quotes").
  *

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 46">
+<defs><clipPath id="scallop"><path d="M0 0H96V34a12 12 0 0 1-24 0 12 12 0 0 1-24 0 12 12 0 0 1-24 0 12 12 0 0 1-24 0Z"/></clipPath></defs>
+<g clip-path="url(#scallop)">
+<rect x="0" y="0" width="96" height="46" fill="#dbe3f3"/>
+<rect x="0" y="0" width="24" height="46" fill="#3d6fd9"/>
+<rect x="48" y="0" width="24" height="46" fill="#3d6fd9"/>
+<rect x="0" y="0" width="96" height="6" fill="#000" fill-opacity=".12"/>
+</g>
+</svg>
