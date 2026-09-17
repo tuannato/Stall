@@ -534,6 +534,12 @@ body {
  * decoration can make. The lamps stand inside the screen now, one high on
  * the left behind the sign, one low on the right, and a little brighter.
  *
+ * Round 11: the owner could not find it in a screenshot, which four frames
+ * side by side confirmed — so the two lamps are 38% and 34% against 22 and
+ * 19, wider, and a third joins them low and left. A soft light on a
+ * near-black ground is quiet by nature; this is as far as it goes before it
+ * starts eating the contrast the figures need.
+ *
  * And it no longer breathes. The pulse animated `background-size` across the
  * whole viewport, a main-thread repaint every frame; Neo already spends its
  * mover budget on the rain, and two viewport-wide repainting animations worn
@@ -543,23 +549,29 @@ body {
 .stall.att-aurora {
     background-image:
         radial-gradient(
-            280px 280px at 18% 150px,
-            color-mix(in srgb, var(--s-accent) 22%, transparent),
-            transparent 68%
+            340px 340px at 14% 130px,
+            color-mix(in srgb, var(--s-accent) 38%, transparent),
+            transparent 70%
         ),
         radial-gradient(
-            300px 300px at 88% 44%,
-            color-mix(in srgb, var(--s-accent-2) 19%, transparent),
-            transparent 68%
+            360px 360px at 92% 40%,
+            color-mix(in srgb, var(--s-accent-2) 34%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            300px 300px at 38% 96%,
+            color-mix(in srgb, var(--s-accent) 26%, transparent),
+            transparent 72%
         ),
         var(--s-backdrop);
     background-size:
-        280px 280px,
+        340px 340px,
+        360px 360px,
         300px 300px,
         auto;
     /* Never a tile: default repeat laid a grid of orbs across the whole
        ground (review S5). */
-    background-repeat: no-repeat, no-repeat, repeat;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
 
 /* At desk width the room is wider, so the lamps widen with it rather than
@@ -568,19 +580,25 @@ body {
     .stall.att-aurora {
         background-image:
             radial-gradient(
-                440px 440px at 22% 190px,
-                color-mix(in srgb, var(--s-accent) 22%, transparent),
-                transparent 68%
+                520px 520px at 18% 170px,
+                color-mix(in srgb, var(--s-accent) 38%, transparent),
+                transparent 70%
             ),
             radial-gradient(
-                460px 460px at 86% 46%,
-                color-mix(in srgb, var(--s-accent-2) 19%, transparent),
-                transparent 68%
+                540px 540px at 90% 42%,
+                color-mix(in srgb, var(--s-accent-2) 34%, transparent),
+                transparent 70%
+            ),
+            radial-gradient(
+                420px 420px at 34% 97%,
+                color-mix(in srgb, var(--s-accent) 26%, transparent),
+                transparent 72%
             ),
             var(--s-backdrop);
         background-size:
-            440px 440px,
-            460px 460px,
+            520px 520px,
+            540px 540px,
+            420px 420px,
             auto;
     }
 }
@@ -597,14 +615,19 @@ body {
 .stall.att-rainfall.att-aurora {
     background-image:
         radial-gradient(
-            280px 280px at 18% 150px,
-            color-mix(in srgb, var(--s-accent) 22%, transparent),
-            transparent 68%
+            340px 340px at 14% 130px,
+            color-mix(in srgb, var(--s-accent) 38%, transparent),
+            transparent 70%
         ),
         radial-gradient(
-            300px 300px at 88% 44%,
-            color-mix(in srgb, var(--s-accent-2) 19%, transparent),
-            transparent 68%
+            360px 360px at 92% 40%,
+            color-mix(in srgb, var(--s-accent-2) 34%, transparent),
+            transparent 70%
+        ),
+        radial-gradient(
+            300px 300px at 38% 96%,
+            color-mix(in srgb, var(--s-accent) 26%, transparent),
+            transparent 72%
         ),
         repeating-linear-gradient(
             97deg,
@@ -632,14 +655,15 @@ body {
         ),
         var(--s-backdrop);
     background-size:
-        280px 280px,
+        340px 340px,
+        360px 360px,
         300px 300px,
         100% 900px,
         100% 540px,
         100% 360px,
         100% 240px,
         auto;
-    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat, repeat;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, repeat, repeat, repeat;
     animation: att-aurora-rain-drift 1500ms linear infinite;
 }
 
@@ -652,10 +676,12 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
+            0 0,
             0 0,
             0 0,
             0 900px,
@@ -673,14 +699,19 @@ body {
     .stall.att-rainfall.att-aurora {
         background-image:
             radial-gradient(
-                440px 440px at 22% 190px,
-                color-mix(in srgb, var(--s-accent) 22%, transparent),
-                transparent 68%
+                520px 520px at 18% 170px,
+                color-mix(in srgb, var(--s-accent) 38%, transparent),
+                transparent 70%
             ),
             radial-gradient(
-                460px 460px at 86% 46%,
-                color-mix(in srgb, var(--s-accent-2) 19%, transparent),
-                transparent 68%
+                540px 540px at 90% 42%,
+                color-mix(in srgb, var(--s-accent-2) 34%, transparent),
+                transparent 70%
+            ),
+            radial-gradient(
+                420px 420px at 34% 97%,
+                color-mix(in srgb, var(--s-accent) 26%, transparent),
+                transparent 72%
             ),
             repeating-linear-gradient(
                 97deg,
@@ -708,8 +739,9 @@ body {
             ),
             var(--s-backdrop);
         background-size:
-            440px 440px,
-            460px 460px,
+            520px 520px,
+            540px 540px,
+            420px 420px,
             100% 1360px,
             100% 820px,
             100% 560px,
@@ -728,10 +760,12 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
+            0 0,
             0 0,
             0 0,
             0 1360px,
