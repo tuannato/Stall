@@ -319,6 +319,10 @@ body {
  * figure. Layered over the look's own backdrop, which is restated here
  * because background-image does not merge.
  *
+ * v4 (round 11, approved): a fourth sheet in FRONT — 3px wide, one streak
+ * every 268px, the brightest of the four and the fastest, so the rain has
+ * an event in it rather than an even texture.
+ *
  * v2 was two sheets of 1px lines at 115deg — a 25-degree slant, evenly
  * spaced, equally bright. Measured at 1280 it read as diagonal wallpaper
  * rather than weather, which is what the owner saw. Three things fix that
@@ -335,6 +339,12 @@ body {
  */
 .stall.att-rainfall {
     background-image:
+        repeating-linear-gradient(
+            97deg,
+            transparent 0 268px,
+            color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
+            transparent 271px 540px
+        ),
         repeating-linear-gradient(
             99deg,
             transparent 0 126px,
@@ -355,6 +365,7 @@ body {
         ),
         var(--s-backdrop);
     background-size:
+        100% 900px,
         100% 540px,
         100% 360px,
         100% 240px,
@@ -368,10 +379,12 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
+            0 900px,
             0 540px,
             0 360px,
             0 240px,
@@ -382,6 +395,7 @@ body {
 @media (min-width: 680px) {
     .stall.att-rainfall {
         background-size:
+            100% 1360px,
             100% 820px,
             100% 560px,
             100% 380px,
@@ -396,10 +410,12 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
+            0 1360px,
             0 820px,
             0 560px,
             0 380px,
@@ -546,6 +562,12 @@ body {
             transparent 68%
         ),
         repeating-linear-gradient(
+            97deg,
+            transparent 0 268px,
+            color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
+            transparent 271px 540px
+        ),
+        repeating-linear-gradient(
             99deg,
             transparent 0 126px,
             color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
@@ -567,11 +589,12 @@ body {
     background-size:
         280px 280px,
         300px 300px,
+        100% 900px,
         100% 540px,
         100% 360px,
         100% 240px,
         auto;
-    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
+    background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat, repeat;
     animation: att-aurora-rain-drift 1500ms linear infinite;
 }
 
@@ -583,12 +606,14 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
             0 0,
             0 0,
+            0 900px,
             0 540px,
             0 360px,
             0 240px,
@@ -613,6 +638,12 @@ body {
                 transparent 68%
             ),
             repeating-linear-gradient(
+                97deg,
+                transparent 0 268px,
+                color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
+                transparent 271px 540px
+            ),
+            repeating-linear-gradient(
                 99deg,
                 transparent 0 126px,
                 color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
@@ -634,6 +665,7 @@ body {
         background-size:
             440px 440px,
             460px 460px,
+            100% 1360px,
             100% 820px,
             100% 560px,
             100% 380px,
@@ -650,12 +682,14 @@ body {
             0 0,
             0 0,
             0 0,
+            0 0,
             0 0;
     }
     to {
         background-position:
             0 0,
             0 0,
+            0 1360px,
             0 820px,
             0 560px,
             0 380px,
