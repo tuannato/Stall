@@ -4363,6 +4363,92 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     });
 });
 
+describe('a-closed-name-sheet-comes-back-with-what-was-typed', () => {
+    /*
+     * Round 12 (owner approved). The three fields lived in the DOM and
+     * nowhere else, so closing the sheet destroyed them — which is exactly
+     * why the sheet had to cover the stall, and why the owner's own 2026-08-30
+     * ruling (walk to the Shop tab to review a look) could not be taken up: a
+     * seller who walked lost the record they were composing.
+     *
+     * Module state, like `doorDraft`, and never storage: §2 lets
+     * `localStorage` hold display preferences, and half a permanent record is
+     * not one.
+     */
+    const sheetView = (over: Partial<StallView> = {}) =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            tokens: new Map([[TOKEN_ID, BEANS]]),
+            stallName: 'Riverside Goods',
+            panel: 'studio',
+            overlay: { kind: 'publish-name' },
+            ...over,
+        });
+    const typeInto = (root: HTMLElement, role: string, value: string) => {
+        const field = root.querySelector(`[data-role="${role}"]`) as HTMLInputElement;
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    it('holds the name, the tagline and the announcement across a close and a walk', () => {
+        const root = document.createElement('div');
+        renderStall(root, sheetView(), handlers());
+        typeInto(root, 'publish-name', 'Riverside Roastery');
+        typeInto(root, 'publish-tagline', 'Small-batch, roasted to order');
+        typeInto(root, 'publish-announcement', 'Closed Sunday');
+        // Closed, and away to the shop to look at the stall.
+        renderStall(root, sheetView({ overlay: { kind: 'idle' }, panel: 'shop' }), handlers());
+        expect(root.querySelector('[data-role="publish-name"]')).toBeNull();
+        // Back to the sheet: everything is where it was left.
+        renderStall(root, sheetView(), handlers());
+        expect((root.querySelector('[data-role="publish-name"]') as HTMLInputElement).value).toBe(
+            'Riverside Roastery',
+        );
+        expect((root.querySelector('[data-role="publish-tagline"]') as HTMLInputElement).value).toBe(
+            'Small-batch, roasted to order',
+        );
+        expect(
+            (root.querySelector('[data-role="publish-announcement"]') as HTMLInputElement).value,
+        ).toBe('Closed Sunday');
+    });
+
+    it('does not follow the reader to another stall', () => {
+        const root = document.createElement('div');
+        renderStall(root, sheetView(), handlers());
+        typeInto(root, 'publish-name', 'Riverside Roastery');
+        // A different stall, the same screen: its own record, not this draft.
+        renderStall(
+            root,
+            sheetView({ address: 'ecash:qq' + 'b'.repeat(40), stallName: 'Another Stall' }),
+            handlers(),
+        );
+        expect((root.querySelector('[data-role="publish-name"]') as HTMLInputElement).value).toBe(
+            'Another Stall',
+        );
+    });
+
+    it('retires when the record it was written against changes', () => {
+        /*
+         * Which is what a landed publish looks like from here: the settings
+         * walk answers, the name on the view becomes the one just signed, and
+         * keeping the draft would paint stale text over a record the chain
+         * has already accepted.
+         */
+        const root = document.createElement('div');
+        renderStall(root, sheetView(), handlers());
+        typeInto(root, 'publish-name', 'Riverside Roastery');
+        renderStall(root, sheetView({ stallName: 'Riverside Roastery' }), handlers());
+        expect((root.querySelector('[data-role="publish-name"]') as HTMLInputElement).value).toBe(
+            'Riverside Roastery',
+        );
+        // And a record that changed to something else wins outright.
+        renderStall(root, sheetView({ stallName: 'Riverside Goods' }), handlers());
+        expect((root.querySelector('[data-role="publish-name"]') as HTMLInputElement).value).toBe(
+            'Riverside Goods',
+        );
+    });
+});
+
 describe('a-worn-decoration-says-where-it-came-from', () => {
     /*
      * Round 12. The credit line has named what a stall wears since the
@@ -11581,7 +11667,11 @@ describe('nothing-stands-between-the-name-and-the-sign-control', () => {
         // condition, by name — a second `fine` line here fails the equality.
         expect(before[2]!.getAttribute('data-role')).toBe('publish-must-sign');
         const form = before[1]!;
-        const allowed = new Set(['stall-name', 'publish-tagline', 'publish-summary', 'publish-invalid', 'publish-same-look']);
+        // `publish-name` where `stall-name` used to be: the field gained a
+        // role in round 12 so the draft that survives a close can find it,
+        // and the fence reads a role before it falls back to an input name.
+        // Same node, same place, named rather than guessed at.
+        const allowed = new Set(['publish-name', 'publish-tagline', 'publish-summary', 'publish-invalid', 'publish-same-look']);
         for (const child of form.children) {
             const key =
                 child.getAttribute('data-role') ??

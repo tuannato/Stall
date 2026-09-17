@@ -4330,7 +4330,16 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // signal, and swallowing it is the leniency AGENTS.md §5 warns about.
     input.setAttribute('autocapitalize', 'none');
     input.setAttribute('autocorrect', 'off');
-    input.value = view.stallName ?? '';
+    /*
+     * The draft outranks the record, and only for the stall and the record it
+     * was started against. `draftFor` retires it otherwise, so a reader who
+     * walks to another shop — or a seller whose publish has landed — opens
+     * the sheet on what is true rather than on what they typed an hour ago.
+     */
+    const draft = draftFor(view);
+    input.value = draft?.name ?? view.stallName ?? '';
+    input.setAttribute('data-role', 'publish-name');
+    input.setAttribute('data-focus-key', 'publish-name');
     input.setAttribute('aria-label', copy.PUBLISH_NAME_LABEL);
     label.append(input);
 
@@ -4399,7 +4408,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     taglineInput.setAttribute('data-role', 'publish-tagline');
     taglineInput.setAttribute('data-focus-key', 'publish-tagline');
     taglineInput.setAttribute('aria-label', copy.PUBLISH_TAGLINE_LABEL);
-    taglineInput.value = view.tagline ?? '';
+    taglineInput.value = draft?.tagline ?? view.tagline ?? '';
     taglineLabel.append(taglineInput);
 
     // The announcement (tag 0x05): the seller's dated sentence, painted
@@ -4414,7 +4423,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     announceInput.setAttribute('data-role', 'publish-announcement');
     announceInput.setAttribute('data-focus-key', 'publish-announcement');
     announceInput.setAttribute('aria-label', copy.PUBLISH_ANNOUNCEMENT_LABEL);
-    announceInput.value = view.announcement ?? '';
+    announceInput.value = draft?.announcement ?? view.announcement ?? '';
     announceLabel.append(announceInput);
 
     /*
@@ -4575,9 +4584,28 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             }
         }
     };
-    input.addEventListener('input', refresh);
-    taglineInput.addEventListener('input', refresh);
-    announceInput.addEventListener('input', refresh);
+    /*
+     * Every keystroke updates the record on screen AND the draft behind it,
+     * so closing the sheet costs nothing. `keep` writes all three fields
+     * rather than the one that changed: they are one record, and three
+     * separate half-drafts is a state nobody can reason about.
+     */
+    const keep = (): void => {
+        nameDraft = {
+            key: identityOf(view) ?? '',
+            record: recordFingerprint(view),
+            name: input.value,
+            tagline: taglineInput.value,
+            announcement: announceInput.value,
+        };
+    };
+    const typed = (): void => {
+        keep();
+        refresh();
+    };
+    input.addEventListener('input', typed);
+    taglineInput.addEventListener('input', typed);
+    announceInput.addEventListener('input', typed);
 
     const reportPreview = (themeId: number, chosenFlags: number): void => {
         const recordTheme = view.theme?.id ?? DEFAULT_THEME.id;
@@ -7336,6 +7364,63 @@ function applyTitle(view: StallView): void {
  * — a pin toggle, the fiat answer landing — and a box that came back empty
  * mid-address was the door's own way of refusing an address.
  */
+/**
+ * What a seller has typed into the name sheet but not signed.
+ *
+ * The three fields lived in the DOM and nowhere else, so closing the sheet
+ * destroyed them — which is why the sheet had to cover the stall: stepping
+ * out to look at what you were composing cost you the composition. The
+ * owner's 2026-08-30 ruling ("the shell has tabs, so the way to review a
+ * look is to walk to the Shop tab") only works if the walk is free.
+ *
+ * Module state, exactly as `doorDraft` is and for the same reason
+ * (`renderStall` rebuilds the tree on every paint), and deliberately NOT
+ * storage: §2 lets `localStorage` hold display preferences and nothing else,
+ * and half a permanent record is not a display preference. So it dies with
+ * the tab, which is the honest life for it.
+ *
+ * It also dies when the stall changes — a draft must not follow a reader to
+ * somebody else's shop — and when the painted record changes, which is what
+ * a landed publish looks like from here: keeping it then would paint stale
+ * text over a record the chain has already accepted.
+ */
+type NameDraft = {
+    /** The stall it belongs to. */
+    readonly key: string;
+    /** The record it was started against, so a new one can retire it. */
+    readonly record: string;
+    name: string;
+    tagline: string;
+    announcement: string;
+};
+let nameDraft: NameDraft | undefined;
+
+/** The record the sheet is composing against, as one comparable string. */
+function recordFingerprint(view: StallView): string {
+    return [
+        view.stallName ?? '',
+        view.tagline ?? '',
+        view.announcement ?? '',
+        String(view.theme?.id ?? ''),
+        String(view.attachmentFlags ?? 0),
+    ].join('\u0000');
+}
+
+/**
+ * The draft for this stall and this record, or nothing — and it retires the
+ * one it refuses, so a draft cannot outlive the screen it belongs to.
+ */
+function draftFor(view: StallView): NameDraft | undefined {
+    if (nameDraft === undefined) {
+        return undefined;
+    }
+    if (nameDraft.key !== (identityOf(view) ?? '') || nameDraft.record !== recordFingerprint(view)) {
+        nameDraft = undefined;
+        return undefined;
+    }
+    return nameDraft;
+}
+
 let doorDraft = '';
 
 function pasteForm(handlers: StallHandlers): HTMLFormElement {
