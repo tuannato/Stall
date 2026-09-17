@@ -81,12 +81,21 @@ export const DECOR_SHOP = 'See the decorations';
 export const wearing = (labels: readonly string[]): string =>
     `Wearing: ${labels.join(' \u00b7 ')}`;
 /**
- * Where that link goes. **Undefined until the shop exists**: a control that
- * cannot be aimed is not painted, for the same reason the buy link is never
- * `action=BUY` — a button that does not do what it says is worse than no
- * button. Set this to the fittings stall's address and the link appears.
+ * Where that link goes. It was **undefined until the shop existed**: a control
+ * that cannot be aimed is not painted, for the same reason the buy link is
+ * never `action=BUY` — a button that does not do what it says is worse than
+ * no button.
+ *
+ * The shop exists since 2026-09-17. Every one of the eleven shipped rows is
+ * minted, and this address is the stall that sells them: verified against
+ * chronik that day (`scripts/verify-decor-tokens.mjs`) — the `authPubkey` on
+ * all eleven genesis records hashes to exactly this address, and the address
+ * held all eleven tokens at the time of writing. It is left as the seller's
+ * own string with its prefix; `stallPath` drops the prefix for the link and
+ * the route puts it back.
  */
-export const FITTINGS_STALL: string | undefined = undefined;
+export const FITTINGS_STALL: string | undefined =
+    'ecash:qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r';
 
 export const PUBLISH_CLOSE = 'Close';
 

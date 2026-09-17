@@ -4195,8 +4195,27 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         root.remove();
     });
 
-    it('paints no link to a shop that does not exist yet', () => {
-        expect(sheet().querySelector('[data-role="decor-shop"]')).toBeNull();
+    it('points at the fittings stall, by its own address', () => {
+        /*
+         * The shop exists since 2026-09-17: every one of the eleven shipped
+         * rows is minted and the stall below holds all eleven, verified
+         * against chronik (`scripts/verify-decor-tokens.mjs`, and the
+         * genesis `authPubkey` hashes to exactly this address). Until that
+         * day this test asserted the link was ABSENT — a control that cannot
+         * be aimed is not painted, the same rule that keeps the buy link off
+         * `action=BUY`.
+         *
+         * The address is pinned through the rendered href rather than by
+         * reading the constant back: what matters is where a seller is sent,
+         * and a typo in the constant is only a defect once it reaches an
+         * `href`.
+         */
+        const shop = sheet().querySelector('[data-role="decor-shop"]');
+        expect(shop, 'the decorations link paints once the shop exists').not.toBeNull();
+        expect(shop!.getAttribute('href')).toBe(
+            '/s/qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r',
+        );
+        expect(shop!.textContent).toBe(copy.DECOR_SHOP);
     });
 });
 
