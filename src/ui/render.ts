@@ -5881,6 +5881,24 @@ function paintStudio(
     if (ids.length === 0) {
         items.card.append(el('p', 'fine', copy.STUDIO_NO_ITEMS));
     }
+    /*
+     * The rows live in a box of their own, and the box has a ceiling (owner,
+     * 2026-09-17: "làm dạng bảng cố định có thể vuốt được để không bị dài
+     * ngoằn khi có nhiều token"). One row per token appended straight into
+     * the card meant a seller with thirty tokens had a Studio thirty rows
+     * long, with Share and the browser preference pushed off the end of a
+     * scroll nobody finishes. The ceiling shows about five rows and scrolls
+     * past them; under five it does nothing at all, because `max-height`
+     * only bites when there is more.
+     *
+     * `overscroll-behavior: contain` keeps a flick inside the list from
+     * carrying on into the page — the one thing that makes a nested scroller
+     * feel broken on a phone. And no count is printed on it: the studio
+     * prints none anywhere, because a number here is a claim about the
+     * seller's inventory that a failed read cannot back (§5).
+     */
+    const rows = el('div', 'trows');
+    rows.setAttribute('data-role', 'studio-items-scroll');
     for (const id of ids) {
         const row = el('div', 'trow');
         row.setAttribute('data-role', 'studio-item');
@@ -5910,7 +5928,10 @@ function paintStudio(
             }
         }
         row.append(acts);
-        items.card.append(row);
+        rows.append(row);
+    }
+    if (ids.length > 0) {
+        items.card.append(rows);
     }
     if (ids.length > 0 && hasAddress && openDescribe !== undefined) {
         // The set is listed ∪ described ∪ quoted, never a holdings read (the

@@ -989,6 +989,43 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         expect(card.querySelector('.scard-h')?.textContent).not.toMatch(/\d/);
     });
 
+    it('keeps every row inside one bounded, scrollable box', () => {
+        /*
+         * Round 11, the owner's ask: one row per token appended straight into
+         * the card gave a seller with thirty tokens a Studio thirty rows long,
+         * with the Share card and the browser preference below a scroll
+         * nobody finishes. The rows live in a box with a ceiling now.
+         *
+         * The ceiling is read from the shipped block rather than measured,
+         * for the reason the 44px floor test gives: happy-dom lays nothing
+         * out, and the probe measures only the screens it fixtures.
+         */
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                descriptions: new Map([[OTHER_TOKEN, 'Loose leaf']]),
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER_TOKEN, TEA]]),
+                panel: 'studio',
+            }),
+        );
+        const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
+        const box = card.querySelector('[data-role="studio-items-scroll"]');
+        expect(box, 'the rows have a box of their own').not.toBeNull();
+        const rows = [...card.querySelectorAll('[data-role="studio-item"]')];
+        expect(rows.length).toBeGreaterThan(1);
+        for (const row of rows) {
+            expect(row.parentElement, 'every row sits inside that box').toBe(box);
+        }
+        // And the hint stays OUT of the scroller: it is about the list, not
+        // one more thing to scroll past.
+        expect(card.querySelector('[data-role="studio-items-hint"]')?.parentElement).toBe(card);
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const block = /\n\.trows\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+        expect(block, 'the box declares a ceiling').toMatch(/max-height:\s*\d+px/);
+        expect(block, 'and scrolls past it').toMatch(/overflow-y:\s*auto/);
+        expect(block, 'and a flick does not carry into the page').toMatch(/overscroll-behavior:\s*contain/);
+    });
+
     it('a failed book still lists what the records name, and prints no count', () => {
         const { root } = paint(
             idlePubkey({

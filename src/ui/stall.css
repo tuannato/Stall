@@ -3396,6 +3396,25 @@ textarea.share-embed {
     padding-top: 8px;
 }
 
+/*
+ * The studio's token list, bounded (round 11, 2026-09-17). About five rows
+ * tall and scrolling past that, so a seller with thirty tokens still has a
+ * Studio whose Share card and browser preference are reachable. `contain`
+ * stops a flick inside the list from carrying on into the page, which is
+ * what makes a nested scroller feel broken on a phone.
+ */
+.trows {
+    max-height: 336px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+@media (min-width: 680px) {
+    .trows {
+        max-height: 430px;
+    }
+}
+
 .trow {
     display: grid;
     grid-template-areas:
