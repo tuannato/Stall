@@ -4346,7 +4346,18 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * `theme-picker` because that is what the sheet's other controls are keyed
      * against.
      */
-    const painted = view.theme?.id ?? DEFAULT_THEME.id;
+    /*
+     * Round 11: the sheet opens on what is PAINTED, which is the try-on when
+     * one is live, and only the record when it is not. It used to read the
+     * record either way — so after Change → try Neo → Close → Shop → Studio →
+     * Change the sheet showed Modern's picker and Modern's chips over a Neo
+     * stall, the "Publishes:" line named the look that was not on screen, and
+     * the next chip press silently reverted the try-on. `painted` is still
+     * what the same-look note compares against, and `reportPreview` still
+     * compares against the RECORD, which is what decides whether a preview
+     * is active at all.
+     */
+    const painted = view.previewLook?.themeId ?? view.theme?.id ?? DEFAULT_THEME.id;
     let chosenTheme = painted;
     const themeGroup = sheetGroup(copy.PUBLISH_THEME_LABEL);
     themeGroup.setAttribute('data-role', 'theme-picker');
@@ -4611,7 +4622,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * they own nothing. What holding decides is what actually paints, and the
      * note under the chips says which of the three states this choice is in.
      */
-    let flags = view.attachmentFlags ?? 0;
+    let flags = view.previewLook?.attachmentFlags ?? view.attachmentFlags ?? 0;
     const decorWrap = el('div', 'decor');
     decorWrap.setAttribute('data-role', 'decor');
     const decorNote = el('p', 'fine', '');

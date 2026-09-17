@@ -4217,6 +4217,37 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
         expect(note.hidden).toBe(true);
     });
 
+    it('opens on the look being tried on, not the one on the record', () => {
+        /*
+         * Round 11. The sheet read the record for both the picker and the
+         * chips, so after Change → try another look → Close → Shop → Studio →
+         * Change it showed the record's look over a stall painted in the
+         * try-on, the "Publishes:" line named the look that was not on
+         * screen, and the next chip press reverted the try-on without saying
+         * so. A summary describing one record beside a shop painted as
+         * another is that line's one job failing.
+         */
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                theme: decodeTheme(DEFAULT_THEME_ID),
+                previewLook: { themeId: NEO_CITY_THEME_ID, attachmentFlags: 0b10 },
+                stallName: 'Riverside Goods',
+                panel: 'studio',
+                overlay: { kind: 'publish-name' },
+            }),
+        );
+        expect(root.querySelector('.stall')?.className).toContain('t-neo');
+        const pressed = [...root.querySelectorAll('[data-role^="look-"]')]
+            .filter((b) => b.getAttribute('aria-pressed') === 'true')
+            .map((b) => b.getAttribute('data-theme-id'));
+        expect(pressed, 'the picker shows the look on screen').toEqual([String(NEO_CITY_THEME_ID)]);
+        const chip = root.querySelector('[data-role="decor-fringe-1"]');
+        expect(chip?.getAttribute('aria-pressed'), 'and the chip that is being worn').toBe('true');
+        expect(root.querySelector('[data-role="publish-summary"]')?.textContent).toContain('Neo city');
+    });
+
     it('keeps a tried-on yard row through the walk to the Shop tab', () => {
         /*
          * Round 11. `applyTheme` took the preview's worn set and
