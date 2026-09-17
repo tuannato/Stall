@@ -76,6 +76,18 @@ export const DECOR_PREVIEW_ONLY =
 export const DECOR_NOT_MINTED =
     'This one is not on sale yet. You can look at it, but the record you sign here will not name it — nothing can hold it until it exists.';
 export const DECOR_HELD = 'This stall holds the token, so publishing will paint it.';
+/**
+ * The third answer, and it is about us (round 11, 2026-09-17). The picker had
+ * two sentences — the stall holds it, or it does not — and said the second
+ * one whenever `heldTokens` was absent. Absent meant "we did not ask": the
+ * read used to be narrowed to the rows the published record already wore, so
+ * a stall wearing nothing asked nothing and every seller was told their
+ * publish would paint nothing. The question is the whole catalogue now, so
+ * absent can only mean the read did not answer, and that is its own fact —
+ * the same rule that keeps an empty shop and an unreachable index apart (§4).
+ */
+export const DECOR_UNKNOWN_HOLDING =
+    'This page could not read what this stall holds, so it cannot say whether publishing will paint this one.';
 export const DECOR_SHOP = 'See the decorations';
 /** The footer credit: the catalogue's own billboard, in our words. */
 export const wearing = (labels: readonly string[]): string =>

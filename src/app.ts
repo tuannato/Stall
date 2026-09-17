@@ -12,6 +12,7 @@ import {
 import {
     ATTACHMENT_FLAGS_TAG,
     decodeAttachmentFlags,
+    mintedAttachmentTokens,
     wornAttachments,
 } from './domain/attachments';
 import { DEFAULT_THEME_ID } from './domain/theme';
@@ -1758,16 +1759,17 @@ export function boot(
         livePaint();
     };
 
-    /** The attachment tokens the settings currently on screen depend on. */
-    const wantedAttachmentTokens = (): Set<string> =>
-        new Set(
-            wornAttachments(
-                state.view.theme?.id ?? DEFAULT_THEME_ID,
-                state.view.attachmentFlags ?? 0,
-            )
-                .map((row) => row.tokenId)
-                .filter((id): id is string => id !== undefined),
-        );
+    /**
+     * The attachment tokens the page watches for, which is the whole minted
+     * catalogue rather than the rows the painted record happens to wear.
+     *
+     * It decides two things: what the holdings read asks about, and — through
+     * `classifyTx`'s `wantedTokenIds` — whether a token arriving at this
+     * address is worth waking that read for. Narrowed to the worn rows, the
+     * purchase of a decoration moved a token nobody was watching, so buying
+     * one was invisible to the page until the seller published a flag blind.
+     */
+    const wantedAttachmentTokens = (): Set<string> => new Set(mintedAttachmentTokens());
 
     /**
      * The stall's own settings, re-read because something at its address looked
@@ -2705,11 +2707,12 @@ async function loadCurrent(): Promise<AppState> {
     let heldTokens: ReadonlySet<string> | undefined;
     let mintedHere: ReadonlySet<string> | undefined;
     {
-        const wanted = new Set(
-            wornAttachments(theme?.id ?? DEFAULT_THEME_ID, attachmentFlags)
-                .map((row) => row.tokenId)
-                .filter((id): id is string => id !== undefined),
-        );
+        // Every minted row, not the ones this record already wears: a stall
+        // that has never worn anything used to ask about nothing, so the
+        // seller who had just bought a decoration was told they did not hold
+        // it. Same one `utxos()` call either way (`loadHoldings` filters
+        // locally), and now a purchase is a question this page has asked.
+        const wanted = mintedAttachmentTokens();
         // One utxo read per stall open, two answers: which decorations the
         // address holds, and which tokens it holds a mint baton for — the
         // seller's own product, the way a freshly minted token reaches the
@@ -2717,9 +2720,10 @@ async function loadCurrent(): Promise<AppState> {
         // derived p2pkh when the route was a bare key: §3 says the stall
         // address is that, and it is the address both are held at.
         const holdings = await loadHoldings(createChronik() as never, address, wanted);
-        // `heldTokens` keeps its old meaning: absent when nothing was wanted,
-        // so "holds none of them" is never said about an empty question.
-        heldTokens = wanted.size > 0 ? holdings?.held : undefined;
+        // `undefined` means the read did not answer, and nothing else: the
+        // question is never empty now, so an absent set can no longer be our
+        // own unasked question filed as a fact about the seller (§4).
+        heldTokens = holdings?.held;
         mintedHere = holdings?.mintedHere;
     }
 

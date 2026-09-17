@@ -4612,7 +4612,13 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             return copy.DECOR_NOT_MINTED;
         }
         const held = view.heldTokens;
-        if (held !== undefined && chosen.every((r) => held.has(r.tokenId!))) {
+        // Three answers, because there are three facts: the stall holds it,
+        // it does not, or this page could not read what it holds. The third
+        // used to be filed as the second.
+        if (held === undefined) {
+            return copy.DECOR_UNKNOWN_HOLDING;
+        }
+        if (chosen.every((r) => held.has(r.tokenId!))) {
             return copy.DECOR_HELD;
         }
         return copy.DECOR_PREVIEW_ONLY;

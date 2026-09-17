@@ -4,6 +4,7 @@ import {
     ATTACHMENT_FLAGS_TAG,
     SHIPPED_ATTACHMENTS,
     attachmentsForTheme,
+    mintedAttachmentTokens,
     publishableFlags,
     attachmentClasses,
     attachmentNodesWanted,
@@ -198,6 +199,27 @@ describe('attachment-table-ids-are-pinned', () => {
             'Bunting=758d486646ef7bce4a52166e551c86edacaadb52a33f00776e0c0fa97728de1b',
             'Confetti=dfd75ce9bc8038ef753e5de2b55e2ee06cdcec531b642ae9f319b4672562c83d',
         ]);
+    });
+
+    it('offers every minted token to the entitlement read', () => {
+        /*
+         * The read used to ask only about the rows the published record
+         * already named, so a stall wearing nothing asked about nothing and
+         * the picker told a seller who had just bought a decoration that they
+         * did not hold it. The question is the whole catalogue now, which
+         * costs no extra request.
+         */
+        const asked = mintedAttachmentTokens();
+        const minted = SHIPPED_ATTACHMENTS.filter((a) => a.tokenId !== undefined);
+        expect(asked.size).toBe(minted.length);
+        for (const row of minted) {
+            expect(asked.has(row.tokenId!), `${row.label} is asked about`).toBe(true);
+        }
+        // An unminted row has no token to hold, and its bit cannot be
+        // published, so it is not a question anyone can answer.
+        for (const row of SHIPPED_ATTACHMENTS) {
+            if (row.tokenId === undefined) expect(asked.has(row.label)).toBe(false);
+        }
     });
 
     it('never points two rows at one token', () => {

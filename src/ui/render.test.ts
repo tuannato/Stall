@@ -4178,10 +4178,28 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('says a chosen row is only being looked at until the stall holds it', () => {
         // The tokens exist now, so the honest note is no longer "not on sale
-        // yet" — it is that a flag without the token paints nothing.
-        const root = sheet({ attachmentFlags: 1 });
+        // yet" — it is that a flag without the token paints nothing. The
+        // read has to have ANSWERED for that to be sayable: an empty set is
+        // "holds none of them", which is a fact about the stall.
+        const root = sheet({ attachmentFlags: 1, heldTokens: new Set<string>() });
         const note = root.querySelector('[data-role="decor-note"]')!;
         expect(note.textContent).toBe(copy.DECOR_PREVIEW_ONLY);
+        expect((note as HTMLElement).hidden).toBe(false);
+    });
+
+    it('says the holdings read did not answer, rather than that the stall holds nothing', () => {
+        /*
+         * Round 11. `heldTokens` absent used to fall through to "you are
+         * looking at it, not wearing it" — our own unanswered question filed
+         * as a fact about the seller, which is the §4 collapse on the one
+         * screen where a seller decides whether to buy. Absent can only mean
+         * the read did not answer now: the question is the whole minted
+         * catalogue, so it is never empty for want of asking.
+         */
+        const root = sheet({ attachmentFlags: 1 });
+        const note = root.querySelector('[data-role="decor-note"]')!;
+        expect(note.textContent).toBe(copy.DECOR_UNKNOWN_HOLDING);
+        expect(note.textContent).not.toBe(copy.DECOR_PREVIEW_ONLY);
         expect((note as HTMLElement).hidden).toBe(false);
     });
 

@@ -352,6 +352,29 @@ export function attachmentAt(themeId: number, bit: number): ShippedAttachment | 
     return SHIPPED_ATTACHMENTS.find((a) => a.themeId === themeId && a.bit === bit);
 }
 
+/**
+ * Every token the catalogue can be entitled by: the minted rows' ids, all
+ * looks at once.
+ *
+ * The entitlement read used to ask about the rows the **published record
+ * already names**, which meant a stall that had never worn anything asked
+ * about nothing — so the one seller the fittings stall exists for, the one
+ * who has just bought a decoration, was told "you are looking at it, not
+ * wearing it" by a page that had not looked. It costs nothing to ask about
+ * all of them: `loadHoldings` makes one `utxos()` call either way and
+ * filters locally.
+ *
+ * Minted only, because an unminted row has no token to hold and a bit that
+ * names one cannot be published anyway (`publishableFlags`).
+ */
+export function mintedAttachmentTokens(): ReadonlySet<string> {
+    return new Set(
+        SHIPPED_ATTACHMENTS.map((row) => row.tokenId).filter(
+            (id): id is string => id !== undefined,
+        ),
+    );
+}
+
 export function attachmentsForTheme(themeId: number): readonly ShippedAttachment[] {
     return SHIPPED_ATTACHMENTS.filter((a) => a.themeId === themeId);
 }
