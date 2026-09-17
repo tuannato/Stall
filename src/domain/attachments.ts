@@ -76,6 +76,24 @@ const rgb = (r: number, g: number, b: number): Rgb => ({ r, g, b });
  * and a stall that holds neither wears neither.
  */
 export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
+    /*
+     * The second wave, minted on the fittings stall 2026-09-16 (the owner):
+     * Grid horizon, Aurora glows, Sunburst, Bunting and Confetti carry their
+     * genesis txids below. **Every shipped row is now minted** — eleven of
+     * eleven — so every bit in this table is permanent from this moment and
+     * none of them can ever be re-aimed again (§7). The next row of any look
+     * takes the next free bit and nothing else.
+     *
+     * The unminted shape stays supported and is not dead code: a row with no
+     * tokenId is previewable in the picker ("not on sale yet"), is masked out
+     * of `publishableFlags` so nothing can sign a bit nothing can hold, and
+     * fails the entitlement check by design. That is how the catalogue is
+     * allowed to run ahead of the shop again, which is exactly what round 10
+     * will need when Modern's two free bits are drawn.
+     */
+    /* -------------------------------------------------------------------
+     * MODERN — paper, ink, restraint. Two rows, and two bits free again.
+     * ---------------------------------------------------------------- */
     {   
         tokenId: '14e1f68b541840cd443a40029b9aef28b4fee9db6066d18607812b856169e9c4',
         themeId: DEFAULT_THEME_ID,
@@ -114,6 +132,39 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         // takes a kill in the reduce block and a line in the stillness pass.
         motion: true,
     },
+    /*
+     * Redesign round 2026-08-31: Drifting light and Sheen sweep leave —
+     * worn alone the drift was invisible in a still, and Modern's buyers
+     * had no OBJECT to show off (the possessions memo's exact case). Both
+     * bits verified never set by any on-chain record before re-aiming.
+     */
+    /*
+     * Extraction round 1: Brass pin and Blueprint were unminted, so their
+     * bits take the showroom's pieces; round 3 set the light drifting
+     * again, as the full dress had it.
+     */
+    /*
+     * Modern bit 2 was "Signature stroke" (crest, unminted) from 2026-08-31
+     * to 2026-09-16: a hand-inked flourish under the shop name. The owner
+     * dropped it in round 10. Modern's voice is restraint and printed paper;
+     * a felt-tip squiggle is neither its material nor an object anybody would
+     * buy, and a crest that paints beside the seller's name had the wax
+     * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
+     * only Neo bit 0), so the bit is free for Modern's next crest once a
+     * fresh shape-only walk confirms it.
+     */
+    /*
+     * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
+     * 2026-09-16: a pressed seal beside the seller's name whose asset carried
+     * an "S" in Stall blue — a platform credential next to a seller's name,
+     * the same reading that took the brand mark off the sign (round 9). The
+     * owner deleted it. The bit was never set on chain (the 08-30 walk saw
+     * only Neo bit 0); it is free for Modern's next badge-slot object once a
+     * fresh shape-only walk confirms that.
+     */
+    /* -------------------------------------------------------------------
+     * NEO CITY — glass, tube light, rain. Four rows; bit 3 retired unminted.
+     * ---------------------------------------------------------------- */
     {   
         tokenId: 'c136cdac5c17def45a7cf1f308fc14f21a54b21ce2b4a70ee513d6b9a8055876',
         themeId: NEO_CITY_THEME_ID,
@@ -138,6 +189,42 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         cls: 'att-rainfall',
         motion: true,
     },
+    /*
+     * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
+     * were Circuit edge and Holotag — unminted, so free to replace — and
+     * the pieces cut from the approved full dress take their bits. Bit 4
+     * is new. Round 3 restored every piece's full-dress motion; the live
+     * audit folded the corner brackets into the base (the design has no
+     * bracketless Neo), retiring bit 3 unminted.
+     */
+    {
+        tokenId: '1d8fc26810f5c6ec059fe857fc3a44102736b249f89e968f855f09b82ef329f8',
+        themeId: NEO_CITY_THEME_ID,
+        bit: 2,
+        slot: 'yard',
+        label: 'Grid horizon',
+        paint: 'node',
+        cls: 'att-horizon',
+        motion: false,
+    },
+    {
+        tokenId: 'c8d534edce337f992a230a2238b6f01602cfc1f48a2042c85d03ecd1df61d443',
+        themeId: NEO_CITY_THEME_ID,
+        bit: 4,
+        slot: 'trim',
+        label: 'Aurora glows',
+        paint: 'root',
+        // Still light since round 10 (2026-09-16). The old pulse animated
+        // `background-size` over the whole viewport, a main-thread repaint
+        // every frame, and Neo already spends its mover budget on the rain.
+        // The lamps also moved inside the screen: centred outside it, the
+        // row painted nothing a phone could see.
+        motion: false,
+        cls: 'att-aurora',
+    },
+    /* -------------------------------------------------------------------
+     * RURAL — wood, cloth, kraft, plants. Five rows; bit 2 retired unminted.
+     * ---------------------------------------------------------------- */
     {   
         tokenId: '314c3acedc40ffd92cf6ee50e5cbac9e5504b83b7c6a956a4039f6291a46c6e6',
         themeId: RURAL_THEME_ID,
@@ -179,74 +266,6 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         },
     },
     /*
-     * The second wave, minted when the fittings stall opens: rows without a
-     * tokenId are previewable in the picker ("not on sale yet") and fail the
-     * entitlement check by design, so the catalogue can grow ahead of the
-     * shop. Bits 2 and 3 of each theme are claimed here and are permanent
-     * from the first record that sets them.
-     */
-    /*
-     * Extraction round 1: Brass pin and Blueprint were unminted, so their
-     * bits take the showroom's pieces; round 3 set the light drifting
-     * again, as the full dress had it.
-     */
-    /*
-     * Redesign round 2026-08-31: Drifting light and Sheen sweep leave —
-     * worn alone the drift was invisible in a still, and Modern's buyers
-     * had no OBJECT to show off (the possessions memo's exact case). Both
-     * bits verified never set by any on-chain record before re-aiming.
-     */
-    /*
-     * Modern bit 2 was "Signature stroke" (crest, unminted) from 2026-08-31
-     * to 2026-09-16: a hand-inked flourish under the shop name. The owner
-     * dropped it in round 10. Modern's voice is restraint and printed paper;
-     * a felt-tip squiggle is neither its material nor an object anybody would
-     * buy, and a crest that paints beside the seller's name had the wax
-     * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
-     * only Neo bit 0), so the bit is free for Modern's next crest once a
-     * fresh shape-only walk confirms it.
-     */
-    /*
-     * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
-     * 2026-09-16: a pressed seal beside the seller's name whose asset carried
-     * an "S" in Stall blue — a platform credential next to a seller's name,
-     * the same reading that took the brand mark off the sign (round 9). The
-     * owner deleted it. The bit was never set on chain (the 08-30 walk saw
-     * only Neo bit 0); it is free for Modern's next badge-slot object once a
-     * fresh shape-only walk confirms that.
-     */
-    /*
-     * Extraction round 1 (internal/EXTRACTION-ROUND-1.md): bits 2 and 3
-     * were Circuit edge and Holotag — unminted, so free to replace — and
-     * the pieces cut from the approved full dress take their bits. Bit 4
-     * is new. Round 3 restored every piece's full-dress motion; the live
-     * audit folded the corner brackets into the base (the design has no
-     * bracketless Neo), retiring bit 3 unminted.
-     */
-    {
-        themeId: NEO_CITY_THEME_ID,
-        bit: 2,
-        slot: 'yard',
-        label: 'Grid horizon',
-        paint: 'node',
-        cls: 'att-horizon',
-        motion: false,
-    },
-    {
-        themeId: NEO_CITY_THEME_ID,
-        bit: 4,
-        slot: 'trim',
-        label: 'Aurora glows',
-        paint: 'root',
-        // Still light since round 10 (2026-09-16). The old pulse animated
-        // `background-size` over the whole viewport, a main-thread repaint
-        // every frame, and Neo already spends its mover budget on the rain.
-        // The lamps also moved inside the screen: centred outside it, the
-        // row painted nothing a phone could see.
-        motion: false,
-        cls: 'att-aurora',
-    },
-    /*
      * Extraction round 1: Straw charm and Stitched were unminted, so their
      * bits take the full dress's pieces; round 3 restored every piece's
      * full-dress motion and added Confetti (bit 5). The live audit folded
@@ -254,6 +273,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * and the bare header read as unfinished — retiring bit 2 unminted.
      */
     {
+        tokenId: '9bd55b6dcd03b4a5205a0b606146b7b12e1aea8740aded7d63488a0e8d46771d',
         themeId: RURAL_THEME_ID,
         bit: 3,
         slot: 'trim',
@@ -267,6 +287,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         motion: true,
     },
     {
+        tokenId: '758d486646ef7bce4a52166e551c86edacaadb52a33f00776e0c0fa97728de1b',
         themeId: RURAL_THEME_ID,
         bit: 4,
         slot: 'fringe',
@@ -276,6 +297,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         motion: true,
     },
     {
+        tokenId: 'dfd75ce9bc8038ef753e5de2b55e2ee06cdcec531b642ae9f319b4672562c83d',
         themeId: RURAL_THEME_ID,
         bit: 5,
         slot: 'badge',

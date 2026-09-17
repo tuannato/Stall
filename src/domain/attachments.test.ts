@@ -34,28 +34,25 @@ describe('attachment-table-ids-are-pinned', () => {
     it('pins every slot and bit by number', () => {
         const map = SHIPPED_ATTACHMENTS.map((a) => `${a.themeId}:${a.bit}:${a.slot}`);
         expect(map).toEqual([
+            // Grouped by look since 2026-09-16 so the catalogue reads as the
+            // three galleries the fittings stall sells it in — the shop cuts
+            // a run wherever the look changes, and the table is the order
+            // that page's own test walks. Bits are fields, not positions, so
+            // the order is presentation and the numbers below are the pin.
+            // Modern: two rows, bits 2 and 3 free again (the signature
+            // stroke and the wax seal, both deleted unminted in round 10,
+            // both pending a fresh shape-only walk before either is re-aimed).
             '1:0:mood',
             '1:1:fringe',
+            // Neo city: bit 3 retired unminted when the corner brackets
+            // folded into the base look.
             '2:0:crest',
             '2:1:fringe',
-            '3:0:yard',
-            '3:1:mood',
-            // The second wave, 2026-08-29 — unminted until the fittings stall
-            // opens, permanent from the first record that sets them.
-            // 2026-08-31: Modern's pair re-aimed while unminted (walked:
-            // never set on chain) — weather out, objects in: the signature
-            // stroke under the name, the wax seal beside the headings.
-            // 2026-09-16: the wax seal deleted, unminted — its asset carried
-            // letters beside the seller's name (round 9). Modern bit 3 is
-            // free again pending a fresh walk. The signature stroke went the
-            // same day on the same road (round 10): unminted, an ink flourish
-            // that was neither Modern's material nor anything a buyer could
-            // want to own. Bits 2 AND 3 are free pending that walk, so Modern
-            // ships one row and a mood.
-            // Extraction round 1: bits 2-4 re-cut from the full dress while
-            // unminted — the sanctioned cheapest moment, updated on purpose.
             '2:2:yard',
             '2:4:trim',
+            // Rural: bit 2 retired unminted when the hanging sign folded in.
+            '3:0:yard',
+            '3:1:mood',
             '3:3:trim',
             '3:4:fringe',
             '3:5:badge',
@@ -159,6 +156,38 @@ describe('attachment-table-ids-are-pinned', () => {
             }
             expect(a.tokenId, `${a.label} is not a genesis txid`).toMatch(/^[0-9a-f]{64}$/);
         }
+    });
+
+    it('pins every minted row to its own genesis txid', () => {
+        /*
+         * Minting is the moment a bit stops being ours (§7): from the first
+         * record that sets it, the row's bit, slot and token are permanent,
+         * and an id edited by accident is a row that silently paints for
+         * whoever holds a different token. The shape check above cannot see
+         * that — every one of these is 64 hex either way — so the numbers are
+         * pinned here the way the slots and bits are, and a change has to be
+         * a deliberate one that comes and edits this list.
+         *
+         * Filled 2026-09-16 from the owner's own mints on the fittings stall,
+         * pasted from their wallet. Not yet verified against chronik: that is
+         * a network read and waits for the owner's yes.
+         */
+        const minted = SHIPPED_ATTACHMENTS.filter((a) => a.tokenId !== undefined).map(
+            (a) => `${a.label}=${a.tokenId}`,
+        );
+        expect(minted).toEqual([
+            'After hours=14e1f68b541840cd443a40029b9aef28b4fee9db6066d18607812b856169e9c4',
+            'Pinstripe=9a0d0745a9ca0e82eea47f2690d2611ca791635f3eba26af6a9bf49dfd528e59',
+            'The sign hums=c136cdac5c17def45a7cf1f308fc14f21a54b21ce2b4a70ee513d6b9a8055876',
+            'Neon rain=15e67ab0299782529a5971eaf5920a559d1be920ffe596dfcacb16eabda3ebd7',
+            'Grid horizon=1d8fc26810f5c6ec059fe857fc3a44102736b249f89e968f855f09b82ef329f8',
+            'Aurora glows=c8d534edce337f992a230a2238b6f01602cfc1f48a2042c85d03ecd1df61d443',
+            'Yard beetle=314c3acedc40ffd92cf6ee50e5cbac9e5504b83b7c6a956a4039f6291a46c6e6',
+            'Sun-faded=aecd2dbc2cef26aaf46ef94ceab289fc0deec2c57d6ff0d2a7ec20c3f4460fb6',
+            'Sunburst=9bd55b6dcd03b4a5205a0b606146b7b12e1aea8740aded7d63488a0e8d46771d',
+            'Bunting=758d486646ef7bce4a52166e551c86edacaadb52a33f00776e0c0fa97728de1b',
+            'Confetti=dfd75ce9bc8038ef753e5de2b55e2ee06cdcec531b642ae9f319b4672562c83d',
+        ]);
     });
 
     it('never points two rows at one token', () => {
