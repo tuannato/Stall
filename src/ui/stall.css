@@ -786,7 +786,14 @@ body {
 }
 
 /*
- * Rural · badge · Confetti, v2 (round 10, 2026-09-16). Paper, not dust: the
+ * Rural · badge · Confetti, v3 (round 11, 2026-09-17). The owner could not
+ * see v2's change at all — "confetti làm miếng giấy to hơn" — and they were
+ * right: a 7x2.6px scrap with a 2px shadow half is below what an eye picks
+ * out of a page it is not staring at. The bits are 12x4.4 and 4.4x11 now,
+ * with the small pale one at 5x5: paper you can watch fall rather than
+ * grain in the ground. Everything else v2 said still holds.
+ *
+ * Paper, not dust: the
  * first version was three round specks of 2 to 3px, which at arm's length
  * read as a texture bug rather than as a fair. Four bits per tile now, each
  * a flattened lozenge at a different aspect — one lying flat, one on end,
@@ -805,23 +812,23 @@ body {
 .stall.att-confetti {
     background-image:
         radial-gradient(
-            7px 2.6px at 34px 44px,
+            12px 4.4px at 34px 44px,
             color-mix(in srgb, var(--s-accent) 70%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            2.6px 6.5px at 118px 96px,
+            4.4px 11px at 118px 96px,
             color-mix(in srgb, var(--s-accent-2) 62%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            5.5px 2.2px at 168px 24px,
+            9px 3.6px at 168px 24px,
             color-mix(in srgb, var(--s-muted) 58%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            3px 3px at 76px 140px,
-            color-mix(in srgb, var(--s-text) 22%, transparent),
+            5px 5px at 76px 140px,
+            color-mix(in srgb, var(--s-text) 24%, transparent),
             transparent 70%
         ),
         var(--s-backdrop);
@@ -850,23 +857,23 @@ body {
 .stall.att-sunburst.att-confetti {
     background-image:
         radial-gradient(
-            7px 2.6px at 34px 44px,
+            12px 4.4px at 34px 44px,
             color-mix(in srgb, var(--s-accent) 70%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            2.6px 6.5px at 118px 96px,
+            4.4px 11px at 118px 96px,
             color-mix(in srgb, var(--s-accent-2) 62%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            5.5px 2.2px at 168px 24px,
+            9px 3.6px at 168px 24px,
             color-mix(in srgb, var(--s-muted) 58%, transparent),
             transparent 72%
         ),
         radial-gradient(
-            3px 3px at 76px 140px,
-            color-mix(in srgb, var(--s-text) 22%, transparent),
+            5px 5px at 76px 140px,
+            color-mix(in srgb, var(--s-text) 24%, transparent),
             transparent 70%
         ),
         radial-gradient(
