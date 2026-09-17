@@ -453,35 +453,32 @@ body {
 }
 
 /*
- * Neo city · fringe · Neon rain, v5 — drawn rain (round 14, owner
- * 2026-09-17: "tôi nghĩ mưa nên làm mưa giống thật, nó phản chiếu ánh neon
- * sẽ đẹp", after "mưa làm ngắn lại và tăng số lượng").
+ * Neo city · fringe · Neon rain, v6 (round 14, after the owner's screencast:
+ * "mưa bị giật cục và có dãi đường ngang quét xuống trông như tivi cũ bị
+ * lỗi").
  *
- * v4 was four `repeating-linear-gradient` sheets, and that is the whole
- * story of why it read as wallpaper: a linear gradient can only vary along
- * ONE axis, so every one of its lines runs edge to edge. It can draw a
- * ruled page; it cannot draw a drop, which has a beginning and an end.
- * Short and many was therefore not a tuning away — it needed a different
- * kind of paint.
+ * That band was not the rain. `var(--s-backdrop)` expands to **two** layers
+ * on Neo — a scanline pattern and the 480px ground glow — and every
+ * `background-size` / `-position` / `-repeat` list here was written as if it
+ * were one. A background list that is shorter than the image list CYCLES, so
+ * the seventh layer, the ground glow, was handed the FIRST entry's size and
+ * the FIRST entry's animated position: Neo's own ground became a 430px tile
+ * scrolling down the page. An old television with a roll, exactly.
  *
- * So the rain is art now: three tiles from
- * `private/design/tools/rain-tiles.mjs`, near, mid and far. Few long bright
- * drops in front, the body of the shower behind them, a dense faint dust
- * behind that — and each drop carries the colour it is reflecting, most of
- * them the sign's cyan and about a fifth the magenta, which is what
- * "phản chiếu ánh neon" means on a street with two tubes on it. Every tile
- * is seamless in both axes by construction (each stroke redrawn at every
- * ±W/±H offset, the viewBox clipping), so no tile edge can travel across
- * the page the way the pinstripe's did.
+ * It also explains the stutter. That mis-cycled layer was a full-width
+ * gradient re-tiled and re-rastered on every frame of a 60fps animation,
+ * on top of the work the rain was actually asking for.
  *
- * The colours are baked into the art and a mood therefore cannot move them.
- * That costs nothing today — Neo ships no mood row — and the day it does,
- * this is the row that needs a second pair of tiles, not a var.
+ * Two more things went with it. The drift is straight down now — a sideways
+ * component that is not a whole tile width cannot wrap, so it jumped every
+ * cycle. And the tiles paint at their intrinsic size at every width rather
+ * than being scaled up at desk: scaling puts the tile's seam on a fractional
+ * pixel, where the two halves of a stroke that crosses it no longer meet.
+ * Rain does not get bigger because the window did.
  *
- * Still root paint, behind every surface, so it cannot cover a figure. Each
- * sheet falls at its own speed by moving exactly its own tile height in one
- * cycle: a taller tile is a faster sheet, and the wrap is seamless because
- * one tile height is one tile.
+ * The art itself is unchanged from v5: three drawn sheets, near, mid and
+ * far, each seamless in both axes by construction, each drop carrying the
+ * colour it reflects. `private/design/tools/rain-tiles.mjs`.
  */
 .stall.att-rainfall {
     background-image:
@@ -493,7 +490,9 @@ body {
         320px 320px,
         260px 260px,
         200px 200px,
+        auto,
         auto;
+    background-repeat: repeat, repeat, repeat, repeat, repeat;
     animation: att-rainfall-drift 2600ms linear infinite;
 }
 
@@ -503,115 +502,105 @@ body {
             0 0,
             0 0,
             0 0,
-            0 0;
-    }
-    to {
-        background-position:
-            18px 320px,
-            13px 260px,
-            9px 200px,
-            0 0;
-    }
-}
-
-/* At desk width the drops grow with the room — a shower sized for a phone
-   reads as drizzle on a monitor — and the sheets keep their own speeds. */
-@media (min-width: 680px) {
-    .stall.att-rainfall {
-        background-size:
-            430px 430px,
-            340px 340px,
-            250px 250px,
-            auto;
-        animation-name: att-rainfall-drift-d;
-    }
-}
-
-@keyframes att-rainfall-drift-d {
-    from {
-        background-position:
-            0 0,
-            0 0,
             0 0,
             0 0;
     }
     to {
         background-position:
-            24px 430px,
-            17px 340px,
-            11px 250px,
+            0 320px,
+            0 260px,
+            0 200px,
+            0 0,
             0 0;
     }
 }
 
 /*
- * Neo city · yard · Grid horizon, v4 — the sign is a screen (round 14, owner
- * 2026-09-17: "Horizon tôi muốn hiệu ứng của nó không đặt lên trên bảng hiệu
- * nữa mà là đặt trong bảng hiệu … bảng hiệu sẽ trông 3D và có nền là
- * horizon, trông như một màn hình").
+ * Neo city · yard · Grid horizon, v5 — the sign is a screen (round 14, owner
+ * 2026-09-17: "không đặt lên trên bảng hiệu nữa mà là đặt trong bảng hiệu …
+ * bảng hiệu sẽ trông 3D và có nền là horizon, trông như một màn hình", then
+ * "horizon chưa được đẹp, chăm chút lại").
  *
  * v1–v3 were a 72px band ABOVE the sign, and every version of it spent the
  * most expensive pixels on the page — a phone's first fold, before the shop
- * even says its name — on a decoration. Inside the sign it costs nothing:
- * the sign is already there, already lit, already bracketed, and a
- * perspective floor behind the name is exactly what turns a lit box into a
- * screen. The band is gone, so the row gives 72px back.
+ * says its name — on a decoration. Inside the sign it costs nothing: the
+ * sign is already there, already lit, already bracketed, and a floor running
+ * away behind the name is what turns a lit box into a screen. The row gives
+ * those 72px back.
  *
- * Painted on `.stall-sign`, which is the only box inside the head that no
- * look dresses — the look owns `.stall-head` and a background list cannot
- * merge across two rules, so a decoration that wrote into the head's list
- * would have to restate Neo's whole sign and then drift from it.
+ * Painted on `.stall-sign`, the one box inside the head that no look
+ * dresses: a background list cannot merge across two rules, so a decoration
+ * writing into `.stall-head`'s list would have to restate Neo's whole sign
+ * and then drift from it.
  *
- * Perspective without a transform, in three layers:
- *   · the verticals are a conic gradient whose centre IS the vanishing
- *     point, so its spokes converge by construction; its box starts at the
- *     horizon so nothing radiates upward;
- *   · the horizontals are hand-placed stops, crowded near the line and wide
- *     apart near the reader — the spacing IS the depth;
- *   · the horizon itself is a lit rule in the second accent with a glow
- *     above it, which is the thing the row is named for.
+ * Perspective without a transform, and every layer is one of the four things
+ * that make distance read:
+ *   · the VANISHING POINT — a conic gradient whose centre is that point, so
+ *     its spokes converge by construction; its box begins at the horizon, so
+ *     nothing radiates upward into the name;
+ *   · SPACING — the horizontals are hand-placed, crowded at the line and
+ *     wide apart near the reader, which is the whole of the depth cue;
+ *   · HAZE — a wash of the page's own ground centred on the vanishing point,
+ *     so the grid fades INTO the distance instead of staying equally bright
+ *     all the way to the line, and a matching scrim sinks the near floor so
+ *     the tagline and the address plate sit on ground rather than on floor
+ *     lines (a scrim, never a mask: a mask on this box would take the
+ *     seller's own words with it);
+ *   · the LINE — a crisp rule in the second accent, brightest at the centre
+ *     of the run and fading to nothing at both edges, with its own glow
+ *     above it. v4 had a soft blob here and that is what read as unfinished.
  *
- * Still static: a floor reads as material, and this row is priced as
- * material rather than as an event. And it is behind the seller's own text,
- * so the contrast pass is the judge of every number here.
+ * Still static: a floor is material, and this row is priced as material
+ * rather than as an event. It sits behind the seller's own text, so the
+ * contrast pass is the judge of every number in it.
  */
 .stall.att-horizon .stall-sign {
     background-image:
-        /*
-         * The near floor sinks into the dark. Not a mask — a mask on this
-         * box would take the seller's own words with it — but a scrim layer
-         * painted over the grid and under every child, so the tagline and
-         * the address plate sit on ground rather than on floor lines.
-         */
+        /* the near floor sinks into the dark, under every child */
         linear-gradient(
             to bottom,
             transparent 44%,
             color-mix(in srgb, var(--s-bg) 86%, transparent) 80%
         ),
-        /* the lit horizon */
-        radial-gradient(
-            104% 26px at 50% 52%,
-            color-mix(in srgb, var(--s-accent-2) 44%, transparent),
-            transparent 60%
+        /* the line */
+        linear-gradient(
+            to right,
+            transparent,
+            color-mix(in srgb, var(--s-accent-2) 78%, transparent) 22%,
+            color-mix(in srgb, var(--s-accent-2) 90%, transparent) 50%,
+            color-mix(in srgb, var(--s-accent-2) 78%, transparent) 78%,
+            transparent
         ),
-        /* the floor's horizontals, compressing into it */
+        /* and the light it throws */
+        radial-gradient(
+            70% 20px at 50% 100%,
+            color-mix(in srgb, var(--s-accent-2) 46%, transparent),
+            transparent 70%
+        ),
+        /* distance haze, centred on the vanishing point */
+        radial-gradient(
+            52% 76% at 50% 0,
+            color-mix(in srgb, var(--s-bg) 82%, transparent),
+            transparent 72%
+        ),
+        /* the floor's horizontals, compressing into the line */
         linear-gradient(
             to bottom,
             transparent 0px 2px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 2px 3px,
-            transparent 3px 7px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 7px 8px,
-            transparent 8px 14px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 14px 15px,
-            transparent 15px 24px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 24px 25px,
-            transparent 25px 37px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 37px 38px,
-            transparent 38px 54px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 54px 55px,
-            transparent 55px 76px,
-            color-mix(in srgb, var(--s-accent) 46%, transparent) 76px 77px,
-            transparent 77px 100%
+            color-mix(in srgb, var(--s-accent) 16%, transparent) 2px 3px,
+            transparent 3px 6px,
+            color-mix(in srgb, var(--s-accent) 22%, transparent) 6px 7px,
+            transparent 7px 12px,
+            color-mix(in srgb, var(--s-accent) 28%, transparent) 12px 13px,
+            transparent 13px 21px,
+            color-mix(in srgb, var(--s-accent) 36%, transparent) 21px 22px,
+            transparent 22px 33px,
+            color-mix(in srgb, var(--s-accent) 44%, transparent) 33px 34px,
+            transparent 34px 49px,
+            color-mix(in srgb, var(--s-accent) 52%, transparent) 49px 50px,
+            transparent 50px 70px,
+            color-mix(in srgb, var(--s-accent) 60%, transparent) 70px 71px,
+            transparent 71px 100%
         ),
         /* and its verticals, converging on the same point */
         repeating-conic-gradient(
@@ -621,12 +610,16 @@ body {
         );
     background-size:
         100% 100%,
-        100% 100%,
+        100% 1px,
+        100% 22px,
+        100% 48%,
         100% 48%,
         100% 48%;
     background-position:
         0 0,
-        0 0,
+        0 52%,
+        0 52%,
+        0 100%,
         0 100%,
         0 100%;
     background-repeat: no-repeat;
@@ -634,79 +627,98 @@ body {
 
 
 /*
- * Neo city · trim · Aurora glows, v4 — a police wash (round 14, owner
- * 2026-09-17: "Phần aurora nên là nền nằm sau tất cả, sẽ đẩy màu xanh dương
- * với đỏ chuyển màu nhẹ nhàng với nhau như ánh đèn police, kết hợp với rain
- * ở trên cùng sẽ đẹp").
+ * Neo city · trim · Aurora glows, v5 (round 14, after the screencast:
+ * "aurora không tự đổi màu cho nhau").
  *
- * The bug it replaces is exact, and it is the "dãy màu xanh" the owner saw
- * at desk width: `radial-gradient(520px 520px at 18% 170px, …)` puts the
- * gradient's CENTRE at 18% of its own 520px tile — 94px in — and then gives
- * it a 520px radius, so the circle ran far past the tile and the tile edge
- * CUT it. Three hard-edged rectangles of colour, parked over the left of
- * the page, sliding with the scroll. Not a glow at all.
+ * v4 traded the two washes by breathing their SIZE in anti-phase, and the
+ * owner is right that it does not read: a wash that grows while another
+ * shrinks is a change in shape, and what a police light does is a change of
+ * COLOUR — the wall goes blue, then red, then blue. So the geometry is fixed
+ * now and the colour is what moves, through a registered custom property:
+ * `--au-tide` runs 0→1 and each wash mixes its own accent against nothing by
+ * that amount, one rising while the other falls. Where `@property` is
+ * missing the value still swaps, in one step instead of a glide, and the
+ * page is otherwise identical.
  *
- * So the lamps are gone and the row is a ground: two washes, each sized
- * LARGER than the page and faded to nothing well inside its own box, so no
- * edge of either can ever reach a pixel. Cyan sits high-left, magenta
- * low-right, and they breathe in anti-phase — one swells while the other
- * withdraws, seventeen seconds, eased, alternating. That slow exchange is
- * what a police light does to a wet street, and it is the whole of the
- * motion: nothing here travels, so there is no direction to follow and
- * nothing to make a reader seasick.
+ * A registered property also happens to be the cheaper animation: the
+ * gradients keep their boxes, so nothing re-lays-out, and — the reason it is
+ * written this way rather than as a second `background-size` — the rain
+ * drifts by `background-position` and two animations may not touch one
+ * property. These two never meet.
  *
- * It breathes with `background-size` rather than `background-position` on
- * purpose: the rain drifts by position, and when the two are worn together
- * a single element has to carry both motions. Two animations that touch the
- * same property would silently leave only the last one; two that touch
- * different properties compose.
+ * The bug v4 fixed still stands and is worth keeping written down: the old
+ * lamps were `radial-gradient(520px 520px at 18% 170px, …)`, which puts the
+ * centre at 18% of its own 520px tile and then gives it a 520px radius, so
+ * the tile edge CUT the circle — three hard-edged rectangles of colour
+ * parked over the left of the page, sliding with the scroll. Both washes are
+ * sized larger than the page and faded out well inside their own boxes, so
+ * no edge of either can reach a pixel.
  */
+@property --au-tide {
+    syntax: '<number>';
+    inherits: false;
+    initial-value: 0;
+}
+
 .stall.att-aurora {
     background-image:
-        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent) 19%, transparent), transparent 66%),
-        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent-2) 19%, transparent), transparent 66%),
+        radial-gradient(
+            farthest-side at 50% 50%,
+            color-mix(in srgb, var(--s-accent) calc(6% + 22% * var(--au-tide, 0.5)), transparent),
+            transparent 66%
+        ),
+        radial-gradient(
+            farthest-side at 50% 50%,
+            color-mix(in srgb, var(--s-accent-2) calc(28% - 22% * var(--au-tide, 0.5)), transparent),
+            transparent 66%
+        ),
         var(--s-backdrop);
     background-size:
         152% 124%,
         128% 108%,
+        auto,
         auto;
     background-position:
         6% 14%,
         92% 78%,
+        0 0,
         0 0;
-    background-repeat: no-repeat, no-repeat, repeat;
-    animation: att-aurora-sweep 17s ease-in-out infinite alternate;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+    animation: att-aurora-tide 17s ease-in-out infinite alternate;
 }
 
-@keyframes att-aurora-sweep {
+@keyframes att-aurora-tide {
     from {
-        background-size:
-            152% 124%,
-            128% 108%,
-            auto;
+        --au-tide: 0;
     }
     to {
-        background-size:
-            116% 94%,
-            178% 144%,
-            auto;
+        --au-tide: 1;
     }
 }
 
 /*
  * Worn together. `background-image` does not compose across two rules, so
  * the full dress is its own rule and restates every layer: the rain in
- * front, the wash behind it, the backdrop last — which is the order the
- * owner asked for, "aurora nằm sau tất cả … kết hợp với rain ở trên cùng".
- * Two animations, one per property, for the reason in the docblock above.
+ * front, the wash behind it, the backdrop last — the order the owner asked
+ * for, "aurora nằm sau tất cả … kết hợp với rain ở trên cùng". Two
+ * animations, one on `background-position` and one on `--au-tide`, for the
+ * reason in the docblock above.
  */
 .stall.att-rainfall.att-aurora {
     background-image:
         url('decor/rain-near.svg'),
         url('decor/rain-mid.svg'),
         url('decor/rain-far.svg'),
-        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent) 19%, transparent), transparent 66%),
-        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent-2) 19%, transparent), transparent 66%),
+        radial-gradient(
+            farthest-side at 50% 50%,
+            color-mix(in srgb, var(--s-accent) calc(6% + 22% * var(--au-tide, 0.5)), transparent),
+            transparent 66%
+        ),
+        radial-gradient(
+            farthest-side at 50% 50%,
+            color-mix(in srgb, var(--s-accent-2) calc(28% - 22% * var(--au-tide, 0.5)), transparent),
+            transparent 66%
+        ),
         var(--s-backdrop);
     background-size:
         320px 320px,
@@ -714,18 +726,12 @@ body {
         200px 200px,
         152% 124%,
         128% 108%,
+        auto,
         auto;
-    background-position:
-        0 0,
-        0 0,
-        0 0,
-        6% 14%,
-        92% 78%,
-        0 0;
-    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, repeat;
+    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, repeat, repeat;
     animation:
         att-rain-aurora-drift 2600ms linear infinite,
-        att-rain-aurora-sweep 17s ease-in-out infinite alternate;
+        att-aurora-tide 17s ease-in-out infinite alternate;
 }
 
 @keyframes att-rain-aurora-drift {
@@ -736,92 +742,18 @@ body {
             0 0,
             6% 14%,
             92% 78%,
+            0 0,
             0 0;
     }
     to {
         background-position:
-            18px 320px,
-            13px 260px,
-            9px 200px,
+            0 320px,
+            0 260px,
+            0 200px,
             6% 14%,
             92% 78%,
-            0 0;
-    }
-}
-
-@keyframes att-rain-aurora-sweep {
-    from {
-        background-size:
-            320px 320px,
-            260px 260px,
-            200px 200px,
-            152% 124%,
-            128% 108%,
-            auto;
-    }
-    to {
-        background-size:
-            320px 320px,
-            260px 260px,
-            200px 200px,
-            116% 94%,
-            178% 144%,
-            auto;
-    }
-}
-
-@media (min-width: 680px) {
-    .stall.att-rainfall.att-aurora {
-        background-size:
-            430px 430px,
-            340px 340px,
-            250px 250px,
-            152% 124%,
-            128% 108%,
-            auto;
-        animation-name: att-rain-aurora-drift-d, att-rain-aurora-sweep-d;
-    }
-}
-
-@keyframes att-rain-aurora-drift-d {
-    from {
-        background-position:
             0 0,
-            0 0,
-            0 0,
-            6% 14%,
-            92% 78%,
             0 0;
-    }
-    to {
-        background-position:
-            24px 430px,
-            17px 340px,
-            11px 250px,
-            6% 14%,
-            92% 78%,
-            0 0;
-    }
-}
-
-@keyframes att-rain-aurora-sweep-d {
-    from {
-        background-size:
-            430px 430px,
-            340px 340px,
-            250px 250px,
-            152% 124%,
-            128% 108%,
-            auto;
-    }
-    to {
-        background-size:
-            430px 430px,
-            340px 340px,
-            250px 250px,
-            116% 94%,
-            178% 144%,
-            auto;
     }
 }
 
@@ -881,7 +813,12 @@ body {
             transparent 9deg 18deg
         ),
         var(--s-backdrop);
-    background-repeat: no-repeat, repeat, repeat;
+    /* Four entries, not three: Rural's ground is two gradients, and a list
+       shorter than the image list cycles rather than stopping — the fourth
+       layer was taking `no-repeat` from the first. Harmless here, because a
+       repeating gradient at `auto` size already fills its box, and listed
+       out anyway: the same miscount rolled Neo's ground down the page. */
+    background-repeat: no-repeat, repeat, repeat, repeat;
     animation: att-sunburst-spin 70s linear infinite;
 }
 
@@ -999,6 +936,7 @@ body {
         200px 180px,
         200px 180px,
         200px 180px,
+        auto,
         auto;
     animation: att-confetti-fall 22s linear infinite;
 }
@@ -1056,8 +994,9 @@ body {
         200px 180px,
         auto,
         auto,
+        auto,
         auto;
-    background-repeat: repeat, repeat, repeat, repeat, no-repeat, repeat, repeat;
+    background-repeat: repeat, repeat, repeat, repeat, no-repeat, repeat, repeat, repeat;
     animation:
         att-confetti-sun-fall 22s linear infinite,
         att-sunburst-spin 70s linear infinite;

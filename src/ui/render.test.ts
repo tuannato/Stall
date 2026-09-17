@@ -13446,6 +13446,76 @@ describe('the-sign-is-centred', () => {
 });
 
 /*
+ * Round 14, 2026-09-17, from the owner's screencast: "mưa bị giật cục và có
+ * dãi đường ngang quét xuống trông như tivi cũ bị lỗi".
+ *
+ * `var(--s-backdrop)` is ONE token that expands to MORE THAN ONE background
+ * layer — two on Neo, a scanline pattern and the ground glow. Every
+ * decoration rule that ends its `background-image` with that token therefore
+ * has more layers than the token count suggests, and a `background-size` /
+ * `-position` / `-repeat` list that is shorter than the image list does not
+ * stop: it CYCLES. The seventh layer took the first entry's size and the
+ * first entry's animated position, so Neo's own ground became a 430px tile
+ * rolling down the page, and re-rastered on every frame of a 60fps
+ * animation. An old television, and a stutter, out of one miscount.
+ *
+ * Nothing in the language can catch that, and no probe rule can see it
+ * either — the page it paints is wrong, not broken. So it is counted here:
+ * the number of top-level entries in each list must equal the number of
+ * layers the rule really has, backdrop expansion included.
+ */
+describe('a-decoration-counts-the-layers-the-backdrop-brings', () => {
+    it('sizes, positions and repeats every layer these rules paint', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        // Top-level commas only: a gradient carries plenty of its own.
+        const parts = (value: string): number => {
+            let depth = 0;
+            let n = 1;
+            for (const ch of value) {
+                if (ch === '(') depth += 1;
+                else if (ch === ')') depth -= 1;
+                else if (ch === ',' && depth === 0) n += 1;
+            }
+            return n;
+        };
+        // What the token expands to is the LOOK's, not a constant: Modern's
+        // ground is one gradient and Neo's is two. So each rule is asked
+        // about its own look, found by the `att-` class in its selector
+        // against the shipped catalogue — the same table the picker reads.
+        const backdropLayers = (themeId: number): number =>
+            parts(themeVars(decodeTheme(themeId))['--s-backdrop'] ?? '');
+        const lookOfRule = (selector: string): number | undefined => {
+            for (const cls of selector.matchAll(/\.(att-[a-z0-9-]+)/g)) {
+                const row = SHIPPED_ATTACHMENTS.find((a) => a.cls === cls[1]);
+                if (row !== undefined) return row.themeId;
+            }
+            return undefined;
+        };
+        expect(backdropLayers(NEO_CITY_THEME_ID), 'Neo grounds in two layers').toBeGreaterThan(1);
+
+        let checked = 0;
+        for (const rule of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+            const body = rule[2]!;
+            const image = /(?:^|;)\s*background-image:\s*([^;]+)/.exec(body)?.[1];
+            if (image === undefined || !image.includes('var(--s-backdrop)')) continue;
+            const themeId = lookOfRule(rule[1]!);
+            if (themeId === undefined) continue;
+            const layers = parts(image) - 1 + backdropLayers(themeId);
+            for (const prop of ['background-size', 'background-repeat', 'background-position']) {
+                const value = new RegExp(`(?:^|;)\\s*${prop}:\\s*([^;]+)`).exec(body)?.[1];
+                if (value === undefined) continue;
+                expect(
+                    parts(value),
+                    `${rule[1]!.trim()} — ${prop} lists ${parts(value)} of ${layers} layers, so it cycles`,
+                ).toBe(layers);
+            }
+            checked += 1;
+        }
+        expect(checked, 'the sweep found the decoration rules').toBeGreaterThanOrEqual(3);
+    });
+});
+
+/*
  * Round 13, 2026-09-17, the owner watching their own stall: "Với hiệu ứng
  * Pinstripe bị giật cục thấy rõ … giật là lúc nó hết vòng lặp đó."
  *
