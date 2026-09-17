@@ -933,7 +933,12 @@ body {
 .att-beetle {
     position: relative;
     overflow: hidden;
-    height: 48px;
+    /*
+     * 56px since round 11 (owner approved the redrawn yard, 2026-09-17): the
+     * plants stand instead of being cropped at the ankle, which is what the
+     * old 48 did to anything taller than a tuft.
+     */
+    height: 56px;
     /*
      * As wide as the board it stands under, never the window (round 10,
      * owner 2026-09-16: "trên desktop nó dài cả màn hình"). Measured at 1280
@@ -953,13 +958,16 @@ body {
         url('decor/beetle-yard.svg'),
         radial-gradient(rgba(110, 66, 31, 0.35) 1px, transparent 1.3px),
         linear-gradient(180deg, #cdb28c, #b79a73);
-    background-repeat: repeat-x, repeat, no-repeat;
+    /* The speckle is soil, so it stays a band along the bottom: with the
+       strip at 56px a full repeat tiled dots up the whole box and read as
+       wallpaper behind the plants. */
+    background-repeat: repeat-x, repeat-x, no-repeat;
     background-size:
-        auto 38px,
+        auto 44px,
         9px 5px,
-        100% 7px;
+        100% 8px;
     background-position:
-        left bottom 5px,
+        left bottom 6px,
         left bottom,
         left bottom;
 }
@@ -981,8 +989,19 @@ body {
     animation: att-beetle-crawl 17s linear infinite;
 }
 
+/*
+ * The lap, with two rests in it (round 11): a beetle that walks without
+ * stopping reads as a mechanism, and the pauses are where a viewer notices
+ * there is an animal on the page at all. 8% of the lap at each end, which is
+ * ~1.4s of the 17s — long enough to register, short enough that nobody waits
+ * for it.
+ */
 @keyframes att-beetle-crawl {
     0% {
+        left: 6px;
+        transform: scaleX(1);
+    }
+    8% {
         left: 6px;
         transform: scaleX(1);
     }
@@ -993,6 +1012,10 @@ body {
     /* The turn is a mirror, never a rotation: a rotate walks it home
        belly-up. `left` for travel so the box never leaves the strip. */
     50% {
+        left: var(--att-bug-trav);
+        transform: scaleX(-1);
+    }
+    58% {
         left: var(--att-bug-trav);
         transform: scaleX(-1);
     }
