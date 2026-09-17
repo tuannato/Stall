@@ -13428,11 +13428,14 @@ describe('the-sign-is-centred', () => {
      */
     it('the sign, its headings and the name’s pin reservation centre by rule', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-        const sign = css.match(/\.stall-sign\s*\{([^}]*)\}/)![1];
+        // Anchored at a line start, like `.stall-head` below: since round 14
+        // a decoration writes `.stall.att-horizon .stall-sign`, and an
+        // unanchored match read THAT rule and asked it to be a flex column.
+        const sign = css.match(/\n\.stall-sign\s*\{([^}]*)\}/)![1];
         expect(sign).toMatch(/flex-direction:\s*column;/);
         expect(sign).toMatch(/align-items:\s*center;/);
         expect(sign).toMatch(/text-align:\s*center;/);
-        const headings = css.match(/\.stall-headings\s*\{([^}]*)\}/)![1];
+        const headings = css.match(/\n\.stall-headings\s*\{([^}]*)\}/)![1];
         expect(headings).toMatch(/align-items:\s*center;/);
         expect(headings).toMatch(/width:\s*100%;/);
         expect(css).toMatch(/\.stall-sign\.has-pin \.stall-name\s*\{\s*padding-inline:\s*40px;\s*\}/);

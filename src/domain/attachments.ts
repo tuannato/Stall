@@ -223,9 +223,14 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         tokenId: '1d8fc26810f5c6ec059fe857fc3a44102736b249f89e968f855f09b82ef329f8',
         themeId: NEO_CITY_THEME_ID,
         bit: 2,
+        // The slot still says `yard` and that is deliberate: a slot is the
+        // PLACE a look offers, the thing the picker groups by and the thing
+        // at most one row may occupy. Round 14 moved where this row paints
+        // — inside the sign, not on the ground above it — and moving its
+        // slot would only re-aim an exclusivity nothing else on Neo shares.
         slot: 'yard',
         label: 'Grid horizon',
-        paint: 'node',
+        paint: 'root',
         cls: 'att-horizon',
         motion: false,
     },
@@ -236,12 +241,15 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         slot: 'trim',
         label: 'Aurora glows',
         paint: 'root',
-        // Still light since round 10 (2026-09-16). The old pulse animated
-        // `background-size` over the whole viewport, a main-thread repaint
-        // every frame, and Neo already spends its mover budget on the rain.
-        // The lamps also moved inside the screen: centred outside it, the
-        // row painted nothing a phone could see.
-        motion: false,
+        // A mover again since round 14 (owner: the row should read as a
+        // police light washing the street, blue and red trading places).
+        // Round 10 had stilled it for a real reason — a `background-size`
+        // pulse over the whole viewport is a main-thread repaint every
+        // frame — so the version that brought it back is slow and eased
+        // (17s, alternating) rather than a loop, and the lamps that used to
+        // travel are gone: nothing here moves across the page, so there is
+        // no direction for an eye to follow.
+        motion: true,
         cls: 'att-aurora',
     },
     /* -------------------------------------------------------------------

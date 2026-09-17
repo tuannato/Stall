@@ -32,10 +32,15 @@
  * 2. Scanlines at 5% over the ground, so the panel reads as lit GLASS rather
  *    than paint. Static: nothing here may move — the name must stay
  *    readable, which is the same reason `att-hum` is a still crest.
- * 3. Four magenta corner brackets, 13px arms 7px inside the frame, drawn as
- *    eight background layers. Brackets are what Neo's cards already wear, so
- *    the sign joins the look instead of sitting above it; and a bracket is a
- *    mounting, which is what a sign has.
+ * 3. Four magenta corner brackets, 13px arms 7px inside the frame.
+ *    Brackets are what Neo's cards already wear, so the sign joins the look
+ *    instead of sitting above it; and a bracket is a mounting, which is what
+ *    a sign has. Since round 14 each arm is TWO layers — a 1px core and a
+ *    9px halo centred on it, fading to nothing on both sides — because the
+ *    owner's note is exactly right: on a neon sign every lit thing glows,
+ *    and a flat hairline beside a glowing tube reads as a drawn rectangle.
+ *    A background layer takes no `box-shadow`, so the glow is painted as a
+ *    gradient rather than cast: sixteen layers, all static.
  * 4. A magenta hairline along the base (`inset 0 -2px 0 -1px`) — the rail the
  *    box is mounted on, and the one place the second accent touches the sign
  *    without competing with the name.
@@ -49,36 +54,60 @@
     background-image:
         linear-gradient(#ff4d7a, #ff4d7a),
         linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(to bottom, transparent, rgba(255, 77, 122, 0.45), transparent),
+        linear-gradient(to right, transparent, rgba(255, 77, 122, 0.45), transparent),
         linear-gradient(#ff4d7a, #ff4d7a),
         linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(to bottom, transparent, rgba(255, 77, 122, 0.45), transparent),
+        linear-gradient(to right, transparent, rgba(255, 77, 122, 0.45), transparent),
         linear-gradient(#ff4d7a, #ff4d7a),
         linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(to bottom, transparent, rgba(255, 77, 122, 0.45), transparent),
+        linear-gradient(to right, transparent, rgba(255, 77, 122, 0.45), transparent),
         linear-gradient(#ff4d7a, #ff4d7a),
         linear-gradient(#ff4d7a, #ff4d7a),
+        linear-gradient(to bottom, transparent, rgba(255, 77, 122, 0.45), transparent),
+        linear-gradient(to right, transparent, rgba(255, 77, 122, 0.45), transparent),
         repeating-linear-gradient(180deg, rgba(44, 233, 224, 0.05) 0 1px, transparent 1px 4px),
         radial-gradient(135% 86px at 50% -10px, rgba(44, 233, 224, 0.32), transparent 72%),
         linear-gradient(180deg, #101a2c 0%, #0a1120 55%, #070c17 100%);
     background-size:
         13px 1px,
         1px 13px,
+        13px 9px,
+        9px 13px,
         13px 1px,
         1px 13px,
+        13px 9px,
+        9px 13px,
         13px 1px,
         1px 13px,
+        13px 9px,
+        9px 13px,
         13px 1px,
         1px 13px,
+        13px 9px,
+        9px 13px,
         100% 100%,
         100% 100%,
         100% 100%;
     background-position:
         7px 7px,
         7px 7px,
+        7px 3.0px,
+        3.0px 7px,
         calc(100% - 7px) 7px,
         calc(100% - 7px) 7px,
+        calc(100% - 7px) 3.0px,
+        calc(100% - 3.0px) 7px,
         7px calc(100% - 7px),
         7px calc(100% - 7px),
+        7px calc(100% - 3.0px),
+        3.0px calc(100% - 7px),
         calc(100% - 7px) calc(100% - 7px),
         calc(100% - 7px) calc(100% - 7px),
+        calc(100% - 7px) calc(100% - 3.0px),
+        calc(100% - 3.0px) calc(100% - 7px),
         0 0,
         0 0,
         0 0;
@@ -92,6 +121,13 @@
         0 0 0 1px rgba(44, 233, 224, 0.1),
         0 10px 34px rgba(44, 233, 224, 0.2);
     padding: 19px 16px 15px;
+}
+
+/* Neo's own bar: the accent at low light on a near-black rail, so the
+   scroller reads as part of the street rather than as browser furniture. */
+.stall.t-neo {
+    scrollbar-color: color-mix(in srgb, var(--s-accent) 46%, var(--s-bg))
+        color-mix(in srgb, var(--s-accent) 9%, var(--s-bg));
 }
 
 .t-neo .stall-name {
@@ -353,11 +389,16 @@
     color: #8aa6c9;
 }
 
+/* The control has a body (round 14). At 6% cyan it had none, so its bright
+   cyan ink sat on whatever the street was doing — and once the rain and the
+   police wash landed behind it, the contrast pass read seventeen of these
+   between 2.07:1 and 2.96:1 against a 3:1 floor. A dark plate is what a lit
+   control on a wet street has; the hover tint below still lifts off it. */
 .t-neo .mini {
     padding: 10px 13px;
     border: 1px solid rgba(44, 233, 224, 0.6);
     border-radius: 0;
-    background: rgba(44, 233, 224, 0.06);
+    background: rgba(7, 11, 21, 0.86);
     color: #3df2ea;
     font-size: 12px;
     font-weight: 700;

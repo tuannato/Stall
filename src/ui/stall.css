@@ -453,64 +453,48 @@ body {
 }
 
 /*
- * Neo city · fringe · Neon rain, v3 (round 10, 2026-09-16: "làm lại cho đẹp
- * hơn, cũng như fix với desktop"). Behind every surface on the page, so it
- * cannot cover, and the rendered-pixel pass samples whatever lands behind a
- * figure. Layered over the look's own backdrop, which is restated here
- * because background-image does not merge.
+ * Neo city · fringe · Neon rain, v5 — drawn rain (round 14, owner
+ * 2026-09-17: "tôi nghĩ mưa nên làm mưa giống thật, nó phản chiếu ánh neon
+ * sẽ đẹp", after "mưa làm ngắn lại và tăng số lượng").
  *
- * v4 (round 11, approved): a fourth sheet in FRONT — 3px wide, one streak
- * every 268px, the brightest of the four and the fastest, so the rain has
- * an event in it rather than an even texture.
+ * v4 was four `repeating-linear-gradient` sheets, and that is the whole
+ * story of why it read as wallpaper: a linear gradient can only vary along
+ * ONE axis, so every one of its lines runs edge to edge. It can draw a
+ * ruled page; it cannot draw a drop, which has a beginning and an end.
+ * Short and many was therefore not a tuning away — it needed a different
+ * kind of paint.
  *
- * v2 was two sheets of 1px lines at 115deg — a 25-degree slant, evenly
- * spaced, equally bright. Measured at 1280 it read as diagonal wallpaper
- * rather than weather, which is what the owner saw. Three things fix that
- * and all three are depth. The slant drops to 9, 11 and 13 degrees off
- * vertical, because rain falls nearly straight and the eye reads a steep
- * line as fast; the three sheets take different weights, spacings and
- * alphas, so the near one is sparse and bright and the far one is dense and
- * faint; and each falls at its own speed, which costs nothing because the
- * keyframes move each layer by its own tile height in one cycle — a taller
- * tile is a faster sheet. Near, mid, far, in that order.
+ * So the rain is art now: three tiles from
+ * `private/design/tools/rain-tiles.mjs`, near, mid and far. Few long bright
+ * drops in front, the body of the shower behind them, a dense faint dust
+ * behind that — and each drop carries the colour it is reflecting, most of
+ * them the sign's cyan and about a fifth the magenta, which is what
+ * "phản chiếu ánh neon" means on a street with two tubes on it. Every tile
+ * is seamless in both axes by construction (each stroke redrawn at every
+ * ±W/±H offset, the viewBox clipping), so no tile edge can travel across
+ * the page the way the pinstripe's did.
  *
- * At desk width every tile grows: the page is taller, and a sheet that
- * crossed a phone in a second crawled across a monitor.
+ * The colours are baked into the art and a mood therefore cannot move them.
+ * That costs nothing today — Neo ships no mood row — and the day it does,
+ * this is the row that needs a second pair of tiles, not a var.
+ *
+ * Still root paint, behind every surface, so it cannot cover a figure. Each
+ * sheet falls at its own speed by moving exactly its own tile height in one
+ * cycle: a taller tile is a faster sheet, and the wrap is seamless because
+ * one tile height is one tile.
  */
 .stall.att-rainfall {
     background-image:
-        repeating-linear-gradient(
-            97deg,
-            transparent 0 268px,
-            color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
-            transparent 271px 540px
-        ),
-        repeating-linear-gradient(
-            99deg,
-            transparent 0 126px,
-            color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
-            transparent 128px 260px
-        ),
-        repeating-linear-gradient(
-            101deg,
-            transparent 0 62px,
-            color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
-            transparent 63px 128px
-        ),
-        repeating-linear-gradient(
-            103deg,
-            transparent 0 33px,
-            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
-            transparent 33.8px 68px
-        ),
+        url('decor/rain-near.svg'),
+        url('decor/rain-mid.svg'),
+        url('decor/rain-far.svg'),
         var(--s-backdrop);
     background-size:
-        100% 900px,
-        100% 540px,
-        100% 360px,
-        100% 240px,
+        320px 320px,
+        260px 260px,
+        200px 200px,
         auto;
-    animation: att-rainfall-drift 1500ms linear infinite;
+    animation: att-rainfall-drift 2600ms linear infinite;
 }
 
 @keyframes att-rainfall-drift {
@@ -519,26 +503,25 @@ body {
             0 0,
             0 0,
             0 0,
-            0 0,
             0 0;
     }
     to {
         background-position:
-            0 900px,
-            0 540px,
-            0 360px,
-            0 240px,
+            18px 320px,
+            13px 260px,
+            9px 200px,
             0 0;
     }
 }
 
+/* At desk width the drops grow with the room — a shower sized for a phone
+   reads as drizzle on a monitor — and the sheets keep their own speeds. */
 @media (min-width: 680px) {
     .stall.att-rainfall {
         background-size:
-            100% 1360px,
-            100% 820px,
-            100% 560px,
-            100% 380px,
+            430px 430px,
+            340px 340px,
+            250px 250px,
             auto;
         animation-name: att-rainfall-drift-d;
     }
@@ -550,329 +533,295 @@ body {
             0 0,
             0 0,
             0 0,
-            0 0,
             0 0;
     }
     to {
         background-position:
-            0 1360px,
-            0 820px,
-            0 560px,
-            0 380px,
+            24px 430px,
+            17px 340px,
+            11px 250px,
             0 0;
     }
 }
 
 /*
- * Neo city · yard · Grid horizon. The full dress's perspective floor, cut
- * to a real in-flow band **above** the sign (the renderer's call: under it,
- * it read as a divider between the sign and the goods, ~75px against the
- * design's zero — this comment said "under" until 2026-09-14): a doubled
- * grid tipped away with a transform, fading upward. A node, never a pseudo-element — the probe
- * measures boxes — and static by design: a floor reads as material, and
- * this row is priced as material, not as an event.
+ * Neo city · yard · Grid horizon, v4 — the sign is a screen (round 14, owner
+ * 2026-09-17: "Horizon tôi muốn hiệu ứng của nó không đặt lên trên bảng hiệu
+ * nữa mà là đặt trong bảng hiệu … bảng hiệu sẽ trông 3D và có nền là
+ * horizon, trông như một màn hình").
+ *
+ * v1–v3 were a 72px band ABOVE the sign, and every version of it spent the
+ * most expensive pixels on the page — a phone's first fold, before the shop
+ * even says its name — on a decoration. Inside the sign it costs nothing:
+ * the sign is already there, already lit, already bracketed, and a
+ * perspective floor behind the name is exactly what turns a lit box into a
+ * screen. The band is gone, so the row gives 72px back.
+ *
+ * Painted on `.stall-sign`, which is the only box inside the head that no
+ * look dresses — the look owns `.stall-head` and a background list cannot
+ * merge across two rules, so a decoration that wrote into the head's list
+ * would have to restate Neo's whole sign and then drift from it.
+ *
+ * Perspective without a transform, in three layers:
+ *   · the verticals are a conic gradient whose centre IS the vanishing
+ *     point, so its spokes converge by construction; its box starts at the
+ *     horizon so nothing radiates upward;
+ *   · the horizontals are hand-placed stops, crowded near the line and wide
+ *     apart near the reader — the spacing IS the depth;
+ *   · the horizon itself is a lit rule in the second accent with a glow
+ *     above it, which is the thing the row is named for.
+ *
+ * Still static: a floor reads as material, and this row is priced as
+ * material rather than as an event. And it is behind the seller's own text,
+ * so the contrast pass is the judge of every number here.
  */
-.att-horizon {
-    position: relative;
-    /* 72px and not a pixel more: this band stands ABOVE the sign, so every
-       pixel of it is first-fold a phone spends before the shop's name. The
-       v2 redraw took it to 86 for a deeper floor and gave it straight back
-       — round 8 cut the sign block for exactly this reason. */
-    height: 72px;
-    flex: none;
-    pointer-events: none;
-    overflow: hidden;
-    /*
-     * v2 (round 10, 2026-09-16: "làm lại cho đẹp hơn"). v1 was one grid in
-     * one colour under one linear mask, and it read as graph paper laid on
-     * its side. Three changes, all of them depth. The two axes take
-     * different colours, so the floor has a direction the way a lit grid
-     * does — the second accent running away from the reader, the first
-     * crossing it. A glow sits along the far edge, where a floor this steep
-     * would meet its horizon, brightest at the middle of the run. And the
-     * mask is a two-stop fade rather than one, so the grid arrives out of
-     * the dark instead of being cut off at 78%.
-     *
-     * Still a node, never a pseudo-element — the probe measures boxes — and
-     * still static: a floor reads as material, and this row is priced as
-     * material rather than as an event.
-     */
-    background:
+.stall.att-horizon .stall-sign {
+    background-image:
+        /*
+         * The near floor sinks into the dark. Not a mask — a mask on this
+         * box would take the seller's own words with it — but a scrim layer
+         * painted over the grid and under every child, so the tagline and
+         * the address plate sit on ground rather than on floor lines.
+         */
+        linear-gradient(
+            to bottom,
+            transparent 44%,
+            color-mix(in srgb, var(--s-bg) 86%, transparent) 80%
+        ),
+        /* the lit horizon */
         radial-gradient(
-            150% 40% at 50% 0,
-            color-mix(in srgb, var(--s-accent-2) 42%, transparent),
-            transparent 58%
+            104% 26px at 50% 52%,
+            color-mix(in srgb, var(--s-accent-2) 44%, transparent),
+            transparent 60%
         ),
-        radial-gradient(
-            120% 74% at 50% 0,
-            color-mix(in srgb, var(--s-accent) 30%, transparent),
-            transparent 62%
+        /* the floor's horizontals, compressing into it */
+        linear-gradient(
+            to bottom,
+            transparent 0px 2px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 2px 3px,
+            transparent 3px 7px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 7px 8px,
+            transparent 8px 14px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 14px 15px,
+            transparent 15px 24px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 24px 25px,
+            transparent 25px 37px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 37px 38px,
+            transparent 38px 54px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 54px 55px,
+            transparent 55px 76px,
+            color-mix(in srgb, var(--s-accent) 46%, transparent) 76px 77px,
+            transparent 77px 100%
         ),
-        repeating-linear-gradient(
-            90deg,
-            color-mix(in srgb, var(--s-accent-2) 30%, transparent) 0 1px,
-            transparent 1px 38px
-        ),
-        repeating-linear-gradient(
-            0deg,
-            color-mix(in srgb, var(--s-accent) 24%, transparent) 0 1px,
-            transparent 1px 22px
+        /* and its verticals, converging on the same point */
+        repeating-conic-gradient(
+            from 200deg at 50% 0,
+            color-mix(in srgb, var(--s-accent-2) 44%, transparent) 0 0.35deg,
+            transparent 0.35deg 8deg
         );
-    transform: perspective(320px) rotateX(58deg);
-    transform-origin: 50% 100%;
-    -webkit-mask: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55) 34%, #000 82%);
-    mask: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55) 34%, #000 82%);
+    background-size:
+        100% 100%,
+        100% 100%,
+        100% 48%,
+        100% 48%;
+    background-position:
+        0 0,
+        0 0,
+        0 100%,
+        0 100%;
+    background-repeat: no-repeat;
 }
 
 
 /*
- * Neo city · trim · Aurora glows, v2 (round 10, 2026-09-16). The owner wore
- * it and saw nothing, and the cause was exact rather than a matter of taste:
- * both lamps were centred OUTSIDE the viewport — one at `-60px`, one at
- * `calc(100% + 70px)` — so a phone at 390 showed the far edge of each
- * falloff and nothing else. Paint nobody can see is the worst trade a
- * decoration can make. The lamps stand inside the screen now, one high on
- * the left behind the sign, one low on the right, and a little brighter.
+ * Neo city · trim · Aurora glows, v4 — a police wash (round 14, owner
+ * 2026-09-17: "Phần aurora nên là nền nằm sau tất cả, sẽ đẩy màu xanh dương
+ * với đỏ chuyển màu nhẹ nhàng với nhau như ánh đèn police, kết hợp với rain
+ * ở trên cùng sẽ đẹp").
  *
- * Round 11: the owner could not find it in a screenshot, which four frames
- * side by side confirmed — so the two lamps are 38% and 34% against 22 and
- * 19, wider, and a third joins them low and left. A soft light on a
- * near-black ground is quiet by nature; this is as far as it goes before it
- * starts eating the contrast the figures need.
+ * The bug it replaces is exact, and it is the "dãy màu xanh" the owner saw
+ * at desk width: `radial-gradient(520px 520px at 18% 170px, …)` puts the
+ * gradient's CENTRE at 18% of its own 520px tile — 94px in — and then gives
+ * it a 520px radius, so the circle ran far past the tile and the tile edge
+ * CUT it. Three hard-edged rectangles of colour, parked over the left of
+ * the page, sliding with the scroll. Not a glow at all.
  *
- * And it no longer breathes. The pulse animated `background-size` across the
- * whole viewport, a main-thread repaint every frame; Neo already spends its
- * mover budget on the rain, and two viewport-wide repainting animations worn
- * together is the case the owner's performance rule names. A light that
- * stands still is what this row always claimed to be.
+ * So the lamps are gone and the row is a ground: two washes, each sized
+ * LARGER than the page and faded to nothing well inside its own box, so no
+ * edge of either can ever reach a pixel. Cyan sits high-left, magenta
+ * low-right, and they breathe in anti-phase — one swells while the other
+ * withdraws, seventeen seconds, eased, alternating. That slow exchange is
+ * what a police light does to a wet street, and it is the whole of the
+ * motion: nothing here travels, so there is no direction to follow and
+ * nothing to make a reader seasick.
+ *
+ * It breathes with `background-size` rather than `background-position` on
+ * purpose: the rain drifts by position, and when the two are worn together
+ * a single element has to carry both motions. Two animations that touch the
+ * same property would silently leave only the last one; two that touch
+ * different properties compose.
  */
 .stall.att-aurora {
     background-image:
-        radial-gradient(
-            340px 340px at 14% 130px,
-            color-mix(in srgb, var(--s-accent) 38%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            360px 360px at 92% 40%,
-            color-mix(in srgb, var(--s-accent-2) 34%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            300px 300px at 38% 96%,
-            color-mix(in srgb, var(--s-accent) 26%, transparent),
-            transparent 72%
-        ),
+        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent) 19%, transparent), transparent 66%),
+        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent-2) 19%, transparent), transparent 66%),
         var(--s-backdrop);
     background-size:
-        340px 340px,
-        360px 360px,
-        300px 300px,
+        152% 124%,
+        128% 108%,
         auto;
-    /* Never a tile: default repeat laid a grid of orbs across the whole
-       ground (review S5). */
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+    background-position:
+        6% 14%,
+        92% 78%,
+        0 0;
+    background-repeat: no-repeat, no-repeat, repeat;
+    animation: att-aurora-sweep 17s ease-in-out infinite alternate;
 }
 
-/* At desk width the room is wider, so the lamps widen with it rather than
-   sitting as two small dots in a large dark field. */
-@media (min-width: 680px) {
-    .stall.att-aurora {
-        background-image:
-            radial-gradient(
-                520px 520px at 18% 170px,
-                color-mix(in srgb, var(--s-accent) 38%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                540px 540px at 90% 42%,
-                color-mix(in srgb, var(--s-accent-2) 34%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                420px 420px at 34% 97%,
-                color-mix(in srgb, var(--s-accent) 26%, transparent),
-                transparent 72%
-            ),
-            var(--s-backdrop);
+@keyframes att-aurora-sweep {
+    from {
         background-size:
-            520px 520px,
-            540px 540px,
-            420px 420px,
+            152% 124%,
+            128% 108%,
+            auto;
+    }
+    to {
+        background-size:
+            116% 94%,
+            178% 144%,
             auto;
     }
 }
 
-
 /*
- * Both neo root rows worn together. Two rules at equal specificity cannot
- * compose background lists — the later one erased the rain outright
- * (image AND animation), inherited its sizes and tiled the orbs across
- * the ground. So the full dress is written as its own rule, orbs first,
- * streaks beneath, the backdrop last, with keyframes that carry all five
- * layers. The worn-together billboard check keeps this honest.
+ * Worn together. `background-image` does not compose across two rules, so
+ * the full dress is its own rule and restates every layer: the rain in
+ * front, the wash behind it, the backdrop last — which is the order the
+ * owner asked for, "aurora nằm sau tất cả … kết hợp với rain ở trên cùng".
+ * Two animations, one per property, for the reason in the docblock above.
  */
 .stall.att-rainfall.att-aurora {
     background-image:
-        radial-gradient(
-            340px 340px at 14% 130px,
-            color-mix(in srgb, var(--s-accent) 38%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            360px 360px at 92% 40%,
-            color-mix(in srgb, var(--s-accent-2) 34%, transparent),
-            transparent 70%
-        ),
-        radial-gradient(
-            300px 300px at 38% 96%,
-            color-mix(in srgb, var(--s-accent) 26%, transparent),
-            transparent 72%
-        ),
-        repeating-linear-gradient(
-            97deg,
-            transparent 0 268px,
-            color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
-            transparent 271px 540px
-        ),
-        repeating-linear-gradient(
-            99deg,
-            transparent 0 126px,
-            color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
-            transparent 128px 260px
-        ),
-        repeating-linear-gradient(
-            101deg,
-            transparent 0 62px,
-            color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
-            transparent 63px 128px
-        ),
-        repeating-linear-gradient(
-            103deg,
-            transparent 0 33px,
-            color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
-            transparent 33.8px 68px
-        ),
+        url('decor/rain-near.svg'),
+        url('decor/rain-mid.svg'),
+        url('decor/rain-far.svg'),
+        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent) 19%, transparent), transparent 66%),
+        radial-gradient(farthest-side at 50% 50%, color-mix(in srgb, var(--s-accent-2) 19%, transparent), transparent 66%),
         var(--s-backdrop);
     background-size:
-        340px 340px,
-        360px 360px,
-        300px 300px,
-        100% 900px,
-        100% 540px,
-        100% 360px,
-        100% 240px,
+        320px 320px,
+        260px 260px,
+        200px 200px,
+        152% 124%,
+        128% 108%,
         auto;
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, repeat, repeat, repeat;
-    animation: att-aurora-rain-drift 1500ms linear infinite;
+    background-position:
+        0 0,
+        0 0,
+        0 0,
+        6% 14%,
+        92% 78%,
+        0 0;
+    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, repeat;
+    animation:
+        att-rain-aurora-drift 2600ms linear infinite,
+        att-rain-aurora-sweep 17s ease-in-out infinite alternate;
 }
 
-@keyframes att-aurora-rain-drift {
+@keyframes att-rain-aurora-drift {
     from {
         background-position:
             0 0,
             0 0,
             0 0,
-            0 0,
-            0 0,
-            0 0,
-            0 0,
+            6% 14%,
+            92% 78%,
             0 0;
     }
     to {
         background-position:
-            0 0,
-            0 0,
-            0 0,
-            0 900px,
-            0 540px,
-            0 360px,
-            0 240px,
+            18px 320px,
+            13px 260px,
+            9px 200px,
+            6% 14%,
+            92% 78%,
             0 0;
     }
 }
 
-/* The composite out-specifies the single rain rule, so its own desk tiles
-   are stated here or the full dress would keep falling at phone speed on a
-   monitor. */
+@keyframes att-rain-aurora-sweep {
+    from {
+        background-size:
+            320px 320px,
+            260px 260px,
+            200px 200px,
+            152% 124%,
+            128% 108%,
+            auto;
+    }
+    to {
+        background-size:
+            320px 320px,
+            260px 260px,
+            200px 200px,
+            116% 94%,
+            178% 144%,
+            auto;
+    }
+}
+
 @media (min-width: 680px) {
     .stall.att-rainfall.att-aurora {
-        background-image:
-            radial-gradient(
-                520px 520px at 18% 170px,
-                color-mix(in srgb, var(--s-accent) 38%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                540px 540px at 90% 42%,
-                color-mix(in srgb, var(--s-accent-2) 34%, transparent),
-                transparent 70%
-            ),
-            radial-gradient(
-                420px 420px at 34% 97%,
-                color-mix(in srgb, var(--s-accent) 26%, transparent),
-                transparent 72%
-            ),
-            repeating-linear-gradient(
-                97deg,
-                transparent 0 268px,
-                color-mix(in srgb, var(--s-accent-2) 34%, transparent) 268px 271px,
-                transparent 271px 540px
-            ),
-            repeating-linear-gradient(
-                99deg,
-                transparent 0 126px,
-                color-mix(in srgb, var(--s-accent-2) 20%, transparent) 126px 128px,
-                transparent 128px 260px
-            ),
-            repeating-linear-gradient(
-                101deg,
-                transparent 0 62px,
-                color-mix(in srgb, var(--s-accent) 13%, transparent) 62px 63px,
-                transparent 63px 128px
-            ),
-            repeating-linear-gradient(
-                103deg,
-                transparent 0 33px,
-                color-mix(in srgb, var(--s-accent-2) 8%, transparent) 33px 33.8px,
-                transparent 33.8px 68px
-            ),
-            var(--s-backdrop);
         background-size:
-            520px 520px,
-            540px 540px,
-            420px 420px,
-            100% 1360px,
-            100% 820px,
-            100% 560px,
-            100% 380px,
+            430px 430px,
+            340px 340px,
+            250px 250px,
+            152% 124%,
+            128% 108%,
             auto;
-        animation-name: att-aurora-rain-drift-d;
+        animation-name: att-rain-aurora-drift-d, att-rain-aurora-sweep-d;
     }
 }
 
-@keyframes att-aurora-rain-drift-d {
+@keyframes att-rain-aurora-drift-d {
     from {
         background-position:
             0 0,
             0 0,
             0 0,
-            0 0,
-            0 0,
-            0 0,
-            0 0,
+            6% 14%,
+            92% 78%,
             0 0;
     }
     to {
         background-position:
-            0 0,
-            0 0,
-            0 0,
-            0 1360px,
-            0 820px,
-            0 560px,
-            0 380px,
+            24px 430px,
+            17px 340px,
+            11px 250px,
+            6% 14%,
+            92% 78%,
             0 0;
+    }
+}
+
+@keyframes att-rain-aurora-sweep-d {
+    from {
+        background-size:
+            430px 430px,
+            340px 340px,
+            250px 250px,
+            152% 124%,
+            128% 108%,
+            auto;
+    }
+    to {
+        background-size:
+            430px 430px,
+            340px 340px,
+            250px 250px,
+            116% 94%,
+            178% 144%,
+            auto;
     }
 }
 
@@ -1293,6 +1242,23 @@ body {
 }
 
 /* The shop's sign: the mark, the name, and the address it is reachable at. */
+/*
+ * The scrollbars are the look's (owner, 2026-09-17: "chỉnh lại thanh cuộn
+ * cho phù hợp với từng theme"). A browser's default bar is the one piece of
+ * chrome no look had touched: light grey furniture down the edge of Neo's
+ * near-black street and Rural's cream board. Written in tokens on `.stall`,
+ * which is the ancestor of every scroller this app makes — the panel, both
+ * sheets, the studio's token box, the textareas — because `scrollbar-color`
+ * inherits, so one declaration dresses all of them and each look supplies
+ * its own palette. Looks that want their own character override it in their
+ * own sheet. `thin` on purpose: the bar is furniture, not a control.
+ */
+.stall {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--s-muted) 55%, var(--s-bg))
+        color-mix(in srgb, var(--s-muted) 12%, var(--s-bg));
+}
+
 .stall-head {
     padding: var(--s-sign-pad-m);
     display: flex;
@@ -2210,6 +2176,14 @@ textarea.paste-in {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+}
+
+/* A sheet is modal, so the stall behind it holds still (round 14). The class
+   rides every mounted overlay — the two record sheets, the pay sheet and the
+   poster — and `overflow: hidden` keeps the offset rather than resetting it,
+   so closing the sheet returns the reader where they were. */
+.stall.has-sheet .stall-scroll {
+    overflow: hidden;
 }
 
 /*
@@ -3764,6 +3738,9 @@ textarea.share-embed {
     max-height: 92vh;
     transition: transform 160ms ease-out;
     overflow-y: auto;
+    /* Reaching the end of the sheet does not pass the wheel to the page
+       behind it (round 14); the lock above closes the other road. */
+    overscroll-behavior: contain;
     background: var(--s-bg);
     color: var(--s-text);
     border: var(--s-sheet-border);
@@ -5813,6 +5790,7 @@ textarea.share-embed {
        guard caught exactly this the day they were written. */
     .stall.att-pinstripe .item,
     .stall.att-confetti,
+    .stall.att-aurora,
     .stall.att-rainfall.att-aurora,
     .stall.att-sunburst.att-confetti,
     .att-bunting,

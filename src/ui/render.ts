@@ -500,13 +500,33 @@ export function renderStall(
      * updating for good.
      */
     if (overlayMounts(view)) {
+        /*
+         * The page behind a sheet does not scroll (owner, 2026-09-17: "khi
+         * cuộn page sẽ bị lòi ở đầu"). The scrim is `position: fixed` and
+         * the sheet is capped at 92vh, so a band of the stall shows above
+         * and below it — and the wheel was still reaching that stall, which
+         * slid the seller's own sign up into the band until it read as the
+         * sheet's title coming apart. A modal whose background scrolls is
+         * a modal in name only; `.sheet` also carries `overscroll-behavior`
+         * so reaching the sheet's own end does not hand the wheel on.
+         *
+         * Per branch, never on `overlayMounts` alone: the ITEM FACE is an
+         * overlay kind too and it paints IN FLOW with no scrim — locking the
+         * scroller under it clipped every screen's lower half, which the
+         * contrast pass reported as twenty-two controls painting on nothing.
+         * Modal is the four kinds that carry a scrim, not "an overlay".
+         */
         if (view.overlay.kind === 'publish-name') {
+            stall.classList.add('has-sheet');
             stall.append(sheetOverlay(nameSheet(view, handlers), 'publish-sheet', handlers));
         } else if (view.overlay.kind === 'describe') {
+            stall.classList.add('has-sheet');
             stall.append(sheetOverlay(describeSheet(view, handlers), 'describe-sheet', handlers));
         } else if (view.overlay.kind === 'pay') {
+            stall.classList.add('has-sheet');
             stall.append(sheetOverlay(paySheet(view, handlers), 'pay-sheet', handlers));
         } else if (view.overlay.kind === 'poster') {
+            stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
         }
     }
