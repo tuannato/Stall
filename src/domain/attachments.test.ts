@@ -46,7 +46,8 @@ describe('attachment-table-ids-are-pinned', () => {
             '1:0:mood',
             '1:1:fringe',
             // Round 11 took bit 2 for the Awning, after the 2026-09-17 walk
-            // confirmed no record had ever set it. Bit 3 is still free.
+            // confirmed no record had ever set it; the owner minted it the
+            // same day, so it is permanent now. Bit 3 is still free.
             '1:2:trim',
             // Neo city: bit 3 retired unminted when the corner brackets
             // folded into the base look.
@@ -182,6 +183,7 @@ describe('attachment-table-ids-are-pinned', () => {
         expect(minted).toEqual([
             'After hours=14e1f68b541840cd443a40029b9aef28b4fee9db6066d18607812b856169e9c4',
             'Pinstripe=9a0d0745a9ca0e82eea47f2690d2611ca791635f3eba26af6a9bf49dfd528e59',
+            'Awning=0068a09be231d9e1fce93688f3be4215ea67d97af4429da320bc5fc2821e21c1',
             'The sign hums=c136cdac5c17def45a7cf1f308fc14f21a54b21ce2b4a70ee513d6b9a8055876',
             'Neon rain=15e67ab0299782529a5971eaf5920a559d1be920ffe596dfcacb16eabda3ebd7',
             'Grid horizon=1d8fc26810f5c6ec059fe857fc3a44102736b249f89e968f855f09b82ef329f8',

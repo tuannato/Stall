@@ -144,6 +144,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * again, as the full dress had it.
      */
     {
+        tokenId: '0068a09be231d9e1fce93688f3be4215ea67d97af4429da320bc5fc2821e21c1',
         themeId: DEFAULT_THEME_ID,
         bit: 2,
         slot: 'trim',
@@ -164,10 +165,10 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
      * only Neo bit 0), and the walk was re-run on 2026-09-17
      * (`scripts/walk-attachment-bits.mjs`, 10 records: Neo bits 0 and 1 and
-     * nothing else). The bit is **taken** the same day by the Awning above,
-     * which is round 11's answer to Modern having no object at all — and it
-     * is permanent from the first record that sets it, so it is unminted
-     * until the owner mints it.
+     * nothing else). The bit is **taken** by the Awning above, which is round
+     * 11's answer to Modern having no object at all, and the owner minted it
+     * on the fittings stall the same day — so bit 2 is permanent from here
+     * and only bit 3 is left free.
      */
     /*
      * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
