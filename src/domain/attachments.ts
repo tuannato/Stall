@@ -150,8 +150,9 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * a felt-tip squiggle is neither its material nor an object anybody would
      * buy, and a crest that paints beside the seller's name had the wax
      * seal's problem in a milder form. Never set on chain (the 08-30 walk saw
-     * only Neo bit 0), so the bit is free for Modern's next crest once a
-     * fresh shape-only walk confirms it.
+     * only Neo bit 0), and the walk was re-run on 2026-09-17
+     * (`scripts/walk-attachment-bits.mjs`, 10 records: Neo bits 0 and 1 and
+     * nothing else), so the bit is free for Modern's next crest.
      */
     /*
      * Modern bit 3 was "Wax seal" (badge, unminted) from 2026-08-31 to
@@ -159,8 +160,9 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
      * an "S" in Stall blue — a platform credential next to a seller's name,
      * the same reading that took the brand mark off the sign (round 9). The
      * owner deleted it. The bit was never set on chain (the 08-30 walk saw
-     * only Neo bit 0); it is free for Modern's next badge-slot object once a
-     * fresh shape-only walk confirms that.
+     * only Neo bit 0), and the walk was re-run on 2026-09-17
+     * (`scripts/walk-attachment-bits.mjs`: 10 records, Neo bits 0 and 1 and
+     * nothing else), so it is free for Modern's next badge-slot object.
      */
     /* -------------------------------------------------------------------
      * NEO CITY — glass, tube light, rain. Four rows; bit 3 retired unminted.

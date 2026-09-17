@@ -39,9 +39,10 @@ describe('attachment-table-ids-are-pinned', () => {
             // a run wherever the look changes, and the table is the order
             // that page's own test walks. Bits are fields, not positions, so
             // the order is presentation and the numbers below are the pin.
-            // Modern: two rows, bits 2 and 3 free again (the signature
-            // stroke and the wax seal, both deleted unminted in round 10,
-            // both pending a fresh shape-only walk before either is re-aimed).
+            // Modern: two rows, bits 2 and 3 free again — the signature
+            // stroke and the wax seal, both deleted unminted in round 10, and
+            // the shape-only walk of 2026-09-17 found no record on chain that
+            // ever set either one.
             '1:0:mood',
             '1:1:fringe',
             // Neo city: bit 3 retired unminted when the corner brackets
