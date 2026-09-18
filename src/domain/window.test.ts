@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { offersWithinLock, suggestedLock, tokensAtBlock } from './window';
+import { nextCard, offersWithinLock, suggestedLock, tokensAtBlock } from './window';
 import { parseBlockParam, parseWindowParams, MAX_BLOCK_HEIGHT } from './route';
 import type { StallOffer } from './state';
 
@@ -145,5 +145,48 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
         expect(parseBlockParam(String(MAX_BLOCK_HEIGHT + 1))).toBeUndefined();
         expect(parseBlockParam('999999999')).toBeUndefined();
         expect(parseBlockParam(null)).toBeUndefined();
+    });
+});
+
+describe('the-window-turns-the-rail-at-the-wrap-and-never-mid-list', () => {
+    /**
+     * One clock, not two. A rail timer running beside a card timer is how the
+     * cursor comes to point into the list it is not on — the same defect
+     * `carryBroadcastCursor` exists to prevent on the stream, arriving by a
+     * second road.
+     */
+    it('walks the list, then turns over', () => {
+        let step = { cursor: 0, rail: 'listings' as const };
+        const seen: string[] = [];
+        for (let i = 0; i < 5; i += 1) {
+            const length = step.rail === 'listings' ? 2 : 3;
+            step = nextCard(step.cursor, length, 'all', step.rail) as typeof step;
+            seen.push(`${step.rail}:${step.cursor}`);
+        }
+        expect(seen).toEqual([
+            'listings:1',
+            'quotes:0',
+            'quotes:1',
+            'quotes:2',
+            'listings:0',
+        ]);
+    });
+
+    it('never turns the rail when one rail was asked for', () => {
+        let step = { cursor: 0, rail: 'listings' as const };
+        for (let i = 0; i < 4; i += 1) {
+            step = nextCard(step.cursor, 2, 'listings', step.rail) as typeof step;
+            expect(step.rail).toBe('listings');
+        }
+        expect(step.cursor).toBe(0);
+    });
+
+    /**
+     * A rail with nothing on it must not trap the screen on itself: a seller
+     * who quotes nothing and shows `all` would otherwise get a blank screen
+     * for ever, with no control anywhere to get off it.
+     */
+    it('turns off an empty rail rather than resting on it', () => {
+        expect(nextCard(0, 0, 'all', 'quotes')).toEqual({ cursor: 0, rail: 'listings' });
     });
 });

@@ -144,12 +144,63 @@ import {
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { withDeadline } from './domain/deadline';
+import { nextCard, tokensAtBlock } from './domain/window';
+import { windowListings } from './ui/window';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
  * keep their script socket and must not have this timer tear it down.
  */
 const BROADCAST_RETRY_MS = 30_000;
+
+/**
+ * How long one card stands in the shop window's `cycle`.
+ *
+ * Not the stream's `BROADCAST_FIXED_MS`. A stream viewer glances between
+ * scenes and can scrub back; a customer in a shop notices the item, gets a
+ * phone out of a pocket, unlocks it, opens a camera and aims — and if the
+ * card changed halfway through, the code they are pointing at is a different
+ * item's. Twenty seconds is the slowest thing on this screen on purpose.
+ */
+const WINDOW_CARD_MS = 20_000;
+
+/**
+ * How often an unattended screen re-reads the chain regardless of the socket.
+ *
+ * The socket is the fast path and stays the fast path; this is the floor
+ * underneath it. `chronik-client` sends no ping, so a half-open TCP connection
+ * — a shop router rebooting, a NAT entry expiring — fires no `close` and no
+ * `error`, `onReconnect` never runs, and the page shows yesterday's prices in
+ * silence. Every other surface is saved by `visibilitychange` into `resume()`,
+ * and a kiosk that is visible around the clock never fires it.
+ *
+ * A minute, because the thing it is catching is a socket that died hours ago,
+ * not a price that moved a second ago — and the same read on three hosts is
+ * the cost a shop's connection pays for it.
+ */
+const WINDOW_BEAT_MS = 60_000;
+
+/**
+ * How long `browse` waits after somebody touches it before it scrolls itself
+ * again (owner, 2026-09-18: "chỉ auto sau 1 khoảng thời gian đứng im").
+ *
+ * Long, because the interaction it is yielding to is a person reading. The
+ * stream's dwell numbers are for somebody walking past; this one is for
+ * somebody standing still and deciding.
+ */
+const WINDOW_IDLE_MS = 45_000;
+
+/** One step of the self-scroll, and the pause between steps. */
+const WINDOW_SCROLL_MS = 6_000;
+
+/**
+ * What counts as a touch, and `mousemove` deliberately does not.
+ *
+ * A customer walking past a counter knocks the mouse; a screen that stopped
+ * scrolling every time somebody brushed the desk would be a screen that never
+ * scrolls. These are all deliberate: a finger, a key, a wheel, a press.
+ */
+const WINDOW_TOUCHES = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
 /** `mode=fixed` advances the cursor on this interval. */
 const BROADCAST_FIXED_MS = 8_000;
 /**
@@ -303,6 +354,14 @@ export function boot(
      */
     let carousel: ReturnType<typeof setTimeout> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * The shop window's own three, cleared beside the broadcast's because a
+     * timer outliving the stall it was armed for is how one screen ends up
+     * driving another's cursor.
+     */
+    let windowCard: ReturnType<typeof setTimeout> | undefined;
+    let windowBeat: ReturnType<typeof setTimeout> | undefined;
+    let windowRoll: ReturnType<typeof setTimeout> | undefined;
 
     const clearBroadcastTimers = (): void => {
         if (carousel !== undefined) {
@@ -313,6 +372,14 @@ export function boot(
             clearTimeout(retry);
             retry = undefined;
         }
+        for (const timer of [windowCard, windowBeat, windowRoll]) {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+            }
+        }
+        windowCard = undefined;
+        windowBeat = undefined;
+        windowRoll = undefined;
     };
     /**
      * One currency above the table (CLAUDE §8). `readSavedFiat` answers `usd`
@@ -400,6 +467,29 @@ export function boot(
      * different seller decides again from their own shop.
      */
     let shopTab: ShopTab = 'listings';
+    /**
+     * The shop window's own state, and it lives here for `shopTab`'s reason:
+     * the heartbeat below is a full `refresh()`, which rebuilds the view from
+     * `loadCurrent()`. A cursor rebuilt from a load would snap the carousel
+     * back to its first card every minute, and the rail would snap with it.
+     */
+    let windowCursorAt = 0;
+    let windowRailAt: 'listings' | 'quotes' = 'listings';
+    /**
+     * The token ids this screen saw at its lock. Captured once, on the first
+     * paint that has both a lock and a book, and kept across every refresh —
+     * see `offersWithinLock` for why membership and not a height comparison.
+     */
+    let windowLockSet: ReadonlySet<string> | undefined;
+    /** When somebody last touched this screen. `0` is "nobody has". */
+    let windowTouchedAt = 0;
+    /**
+     * When this page last read the chain, by this browser's clock. Stamped
+     * where a read LANDS — the load and the live re-read — never at paint, or
+     * a repaint over a dead socket would keep saying the screen is current.
+     * `0` until the first read, and the freshness line is absent with it.
+     */
+    let bookReadAt = 0;
     let shopTabFor: string | undefined;
     /**
      * The transactions this page has watched arrive, newest first.
@@ -574,6 +664,7 @@ export function boot(
             isPinnedStall: isPinnedStall(identityOf(state.view)),
             pinnedDoorFull: pinnedDoorIsFull(),
             fiatCode,
+            ...(bookReadAt === 0 ? {} : { readAtMs: bookReadAt }),
             fiatRate,
             payRate,
             payRateWhy,
@@ -581,6 +672,13 @@ export function boot(
             payQuantity,
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
+            ...(state.view.window === undefined
+                ? {}
+                : {
+                      windowCursor: windowCursorAt,
+                      windowRail: windowRailAt,
+                      ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }),
+                  }),
             // From the entry's own state, at paint time: a loader never fills
             // it in, so a refresh cannot lose it and a shared link cannot gain it.
             pasted: (history.state as { pasted?: boolean } | null)?.pasted === true,
@@ -921,6 +1019,114 @@ export function boot(
             ? cardDwell(params.mode === 'fixed' ? BROADCAST_FIXED_MS : BROADCAST_RAIL_LIVE_MS)
             : BROADCAST_RAIL_REST_MS;
         carousel = setTimeout(carouselTick, delay);
+    };
+
+    /**
+     * The shop window drives itself, and every one of its three timers exists
+     * because nobody is standing at the screen to do the thing by hand.
+     *
+     * Idempotent, like `syncGlance`: called after every paint, arms only what
+     * the screen on the wall actually needs, and disarms the lot the moment
+     * this stops being a window.
+     */
+    const syncWindow = (): void => {
+        const params = state.view.window;
+        if (params === undefined) {
+            return;
+        }
+        // The freeze is captured ONCE, on the first paint that has both a lock
+        // and a book. After that the remembered set is what filters, so an
+        // item partly sold since — whose remaining utxo is now in a later
+        // block — stays on the shelf it was on when the seller locked it.
+        if (params.upto !== undefined && windowLockSet === undefined && state.offers.length > 0) {
+            windowLockSet = tokensAtBlock(state.offers, params.upto);
+        }
+
+        if (windowBeat === undefined) {
+            const beat = (): void => {
+                windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
+                // A full refresh rather than a book re-read: the thing this is
+                // catching is a socket that died without saying so, and only
+                // rebuilding the socket heals that. The cursor, the rail and
+                // the lock all survive it — they are closure state written at
+                // paint time, which is exactly why they live there.
+                void refresh();
+            };
+            windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
+        }
+
+        if (params.mode === 'cycle') {
+            if (windowCard === undefined) {
+                windowCard = setTimeout(function step() {
+                    windowCard = setTimeout(step, WINDOW_CARD_MS);
+                    advanceWindowCard();
+                }, WINDOW_CARD_MS);
+            }
+            return;
+        }
+
+        // `browse` yields to a person and takes the screen back when they
+        // leave. One step every few seconds, never a per-frame loop: this runs
+        // for hours on whatever computer is behind a shop's television.
+        if (windowRoll === undefined) {
+            windowRoll = setTimeout(function roll() {
+                windowRoll = setTimeout(roll, WINDOW_SCROLL_MS);
+                if (Date.now() - windowTouchedAt < WINDOW_IDLE_MS) {
+                    return;
+                }
+                rollWindow();
+            }, WINDOW_SCROLL_MS);
+        }
+    };
+
+    /**
+     * One card on, and at the end of the list the rail turns over.
+     *
+     * `show=all` **rotates**; the two rails never share a screen. Folding the
+     * turn into the wrap rather than giving it a timer of its own is what
+     * keeps them in step — two clocks is how a cursor comes to point into the
+     * list it is not on.
+     */
+    const advanceWindowCard = (): void => {
+        const params = state.view.window;
+        if (params === undefined) {
+            return;
+        }
+        const length =
+            windowRailAt === 'quotes'
+                ? quotedItems(state.view).length
+                : windowListings(state.view, params).length;
+        const step = nextCard(windowCursorAt, length, params.show, windowRailAt);
+        windowCursorAt = step.cursor;
+        windowRailAt = step.rail;
+        paint();
+    };
+
+    /**
+     * One step down the catalogue, and the turn at the bottom.
+     *
+     * A cut, never a cross-fade. A transition that mounted the outgoing rail
+     * beside the incoming one would put a covenant's asked amount and a
+     * seller's own quote in the tree together — the one pairing
+     * `the-two-rails-never-paint-on-one-screen` forbids, on the screen with no
+     * tab to press to ask which figure is which.
+     */
+    const rollWindow = (): void => {
+        const strip = root.querySelector('.sw-strip') as HTMLElement | null;
+        if (strip === null) {
+            return;
+        }
+        const room = strip.scrollHeight - strip.clientHeight;
+        if (room <= 1 || strip.scrollTop >= room - 1) {
+            strip.scrollTop = 0;
+            if (state.view.window?.show === 'all') {
+                windowRailAt = windowRailAt === 'listings' ? 'quotes' : 'listings';
+                windowCursorAt = 0;
+                paint();
+            }
+            return;
+        }
+        strip.scrollBy({ top: Math.round(strip.clientHeight * 0.8), behavior: 'smooth' });
     };
 
     const syncBroadcastTimers = (): void => {
@@ -1396,10 +1602,12 @@ export function boot(
         // the failure returned would call the seller's own item unknown. The
         // pending apply asks instead, once it has them.
         state = next.pendingFacts === undefined ? applyPayHint(loaded) : loaded;
+        bookReadAt = Date.now();
         adoptFiatHint();
         paint();
         watch(claimed);
         syncBroadcastTimers();
+        syncWindow();
         if (next.pendingFacts !== undefined) {
             applyPendingFacts(claimed, next.pendingFacts);
         } else if (next.genesisPending !== undefined) {
@@ -2316,6 +2524,12 @@ export function boot(
                                     : undefined,
                         };
                         carryBroadcastCursor(prevCard, nextFetch);
+                        // A definite answer is a read; our own failures are
+                        // not, and stamping one would tell a shop screen it is
+                        // current because we successfully failed.
+                        if (status.kind === 'offers' || status.kind === 'empty') {
+                            bookReadAt = Date.now();
+                        }
                         state = {
                             ...state,
                             offers: status.kind === 'offers' ? status.offers : [],
@@ -2430,6 +2644,29 @@ export function boot(
      * Lives here rather than in `net/`, where `directory-walls` forbids
      * `document` — and this is the app's lifecycle to own anyway.
      */
+    /*
+     * A person touching the shop window takes it back from the driver.
+     *
+     * On the document and attached once, because `renderStall` throws the tree
+     * away on every paint and a listener on the strip would be re-attached (or
+     * silently lost) on every socket tick. Passive and capturing: this only
+     * reads the clock, and a scroll listener that is not passive is a scroll
+     * listener that can stutter a whole screen.
+     *
+     * `mousemove` is not on the list on purpose — see `WINDOW_TOUCHES`.
+     */
+    for (const kind of WINDOW_TOUCHES) {
+        document.addEventListener(
+            kind,
+            () => {
+                if (state.view.window !== undefined) {
+                    windowTouchedAt = Date.now();
+                }
+            },
+            { passive: true, capture: true },
+        );
+    }
+
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
             live?.pause();

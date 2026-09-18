@@ -84,3 +84,36 @@ export function offersWithinLock(
 export function suggestedLock(tipHeight: number): number {
     return tipHeight + 1;
 }
+
+/** Where the carousel goes next, and which rail it lands on. */
+export type WindowStep = {
+    cursor: number;
+    rail: 'listings' | 'quotes';
+};
+
+/**
+ * One card on, and at the end of the list the rail turns over.
+ *
+ * The turn is **folded into the wrap** rather than given a clock of its own,
+ * and that is the whole point: two timers is how a cursor comes to point into
+ * the list it is not on. `show=all` rotates between the rails and never merges
+ * them — a covenant's asked amount beside a seller's own quote is what
+ * `the-two-rails-never-paint-on-one-screen` forbids, and a shop screen has no
+ * tab to press to ask which figure is which.
+ *
+ * An empty list rests at zero and turns anyway when the screen is showing
+ * both: a rail with nothing on it must not trap the screen on itself.
+ */
+export function nextCard(
+    cursor: number,
+    length: number,
+    show: 'listings' | 'quotes' | 'all',
+    rail: 'listings' | 'quotes',
+): WindowStep {
+    const next = length === 0 ? 0 : (cursor + 1) % length;
+    const wrapped = next === 0;
+    if (!wrapped || show !== 'all') {
+        return { cursor: next, rail };
+    }
+    return { cursor: 0, rail: rail === 'listings' ? 'quotes' : 'listings' };
+}
