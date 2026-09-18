@@ -1080,13 +1080,24 @@ export function boot(
 
         if (windowBeat === undefined) {
             const beat = (): void => {
-                windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
                 // A full refresh rather than a book re-read: the thing this is
                 // catching is a socket that died without saying so, and only
                 // rebuilding the socket heals that. The cursor, the rail and
                 // the lock all survive it — they are closure state written at
                 // paint time, which is exactly why they live there.
-                void refresh();
+                //
+                // Re-armed in `finally`, not before the call. `refresh()`
+                // clears every timer as its first act and re-arms this one
+                // through `syncWindow` at its last, so a rejection anywhere
+                // between leaves an unattended screen with no socket and no
+                // heartbeat, permanently, with nothing on it to say so. The
+                // guard is what keeps the two paths from arming two timers:
+                // on the ordinary path `syncWindow` has already set it.
+                void refresh().finally(() => {
+                    if (state.view.window !== undefined && windowBeat === undefined) {
+                        windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
+                    }
+                });
             };
             windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
         }
@@ -1647,7 +1658,16 @@ export function boot(
         // the failure returned would call the seller's own item unknown. The
         // pending apply asks instead, once it has them.
         state = next.pendingFacts === undefined ? applyPayHint(loaded) : loaded;
-        bookReadAt = Date.now();
+        // Only a definite answer is a read. Our own failures are not, and
+        // stamping one tells a shop screen it is current because we
+        // successfully failed — the live path guards this and said so, and
+        // this line did not, one function away. Since the heartbeat is a full
+        // `refresh()` every minute, an unstamped failure is what keeps a dead
+        // router from reading as a fresh shelf for ever.
+        const landed = next.view.fetch?.kind;
+        if (landed === 'offers' || landed === 'empty') {
+            bookReadAt = Date.now();
+        }
         adoptFiatHint();
         paint();
         watch(claimed);

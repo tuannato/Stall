@@ -386,7 +386,11 @@ function statusBar(
     rail: 'listings' | 'quotes',
 ): HTMLElement {
     const bar = el('div', 'sw-status');
-    const left = el('span', 'sw-state', copy.windowState(rail, params.upto));
+    // The quotes rail is read from the descriptions walk, not the book, so a
+    // failed BOOK says nothing about it — §4's rule that neither side lends
+    // the other its words, on a new surface.
+    const outcome = rail === 'quotes' ? undefined : copy.windowOutcome(view.fetch?.kind);
+    const left = el('span', 'sw-state', copy.windowState(rail, params.upto, outcome));
     left.setAttribute('data-role', 'window-state');
     bar.append(left);
     const fresh = copy.windowFreshness(view.readAtMs, Date.now());

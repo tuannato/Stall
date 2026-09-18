@@ -1634,7 +1634,16 @@ export const WINDOW_SCAN_SHOP = 'Scan to browse this shop on your phone';
  * whole of that side, and a screen nobody can question is the worst place to
  * print a floor as an inventory.
  */
-export function windowState(rail: 'listings' | 'quotes', upto?: number): string {
+export function windowState(
+    rail: 'listings' | 'quotes',
+    upto?: number,
+    outcome?: string,
+): string {
+    // What this page actually knows outranks what it was asked to show: a
+    // screen that could not read the shop must not claim to be showing it.
+    if (outcome !== undefined) {
+        return outcome;
+    }
     const what = rail === 'quotes' ? 'Showing quotes' : 'Showing listings';
     return upto === undefined ? what : `${what} · locked at block ${upto.toLocaleString('en-US')}`;
 }
@@ -1720,3 +1729,27 @@ export const WINDOW_LOCK_REFUSED = 'A block height is digits only — no commas.
 
 /** Said beside a rail this stall has nothing on, so the seller does not pick a blank wall. */
 export const WINDOW_RAIL_EMPTY = 'This stall has nothing on that side right now.';
+
+/**
+ * What a shop window says about itself when it has no rows, and it is three
+ * different sentences because they are three different facts.
+ *
+ * §4's rule arriving on a wall: `empty` is a claim about the seller,
+ * `unreachable` / `plugin-missing` / `unreadable` are claims about us, and
+ * `opening` is neither yet. The first version printed "Showing listings" over
+ * all four — our own failure stated as the seller's inventory, on the one
+ * surface with nobody to press retry.
+ */
+export function windowOutcome(kind: string | undefined): string | undefined {
+    if (kind === 'offers') {
+        return undefined;
+    }
+    if (kind === 'empty') {
+        return 'Nothing listed yet';
+    }
+    if (kind === undefined || kind === 'opening') {
+        return 'Opening…';
+    }
+    // `unreachable`, `plugin-missing`, `unreadable`: ours, and said as ours.
+    return 'This screen could not read the shop';
+}

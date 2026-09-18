@@ -529,3 +529,49 @@ describe('the-window-row-keeps-every-rule-the-shop-row-keeps', () => {
             .querySelector('.item-from')?.textContent).toBe('from');
     });
 });
+
+describe('a-window-that-could-not-read-is-not-an-empty-shelf', () => {
+    /**
+     * §4's oldest rule, arriving on a wall. `plugin-missing-is-not-empty` is a
+     * load-bearing name in §11, and the first version of this screen never
+     * read `view.fetch` at all: `opening`, `empty`, `unreachable`,
+     * `plugin-missing` and `unreadable` painted one identical screen under
+     * "Showing listings" — our own failure stated as the seller's inventory,
+     * on the one surface with nobody to press retry.
+     */
+    it('says a different thing for a failure, an empty shop and an opening one', () => {
+        const said = (kind: string): string => {
+            const root = paint(
+                windowView({ show: 'listings', mode: 'browse' }, {
+                    fetch: { kind },
+                } as unknown as Partial<StallView>),
+            );
+            return root.querySelector('[data-role="window-state"]')?.textContent ?? '';
+        };
+        const failure = said('plugin-missing');
+        const empty = said('empty');
+        const opening = said('opening');
+        expect(new Set([failure, empty, opening]).size).toBe(3);
+        expect(failure).not.toBe(empty);
+        // And our failure never claims to be showing the shop.
+        expect(failure.toLowerCase()).not.toContain('showing');
+        expect(said('unreachable')).toBe(failure);
+    });
+
+    /**
+     * The freshness line is the other half of the same lie. The heartbeat is a
+     * full `refresh()` every minute, so an unguarded stamp leaves a shop whose
+     * hosts are down showing an empty shelf under "Updated just now" for ever.
+     */
+    it('is the state line that changes, not the shelf pretending to be fresh', () => {
+        const root = paint(
+            windowView({ show: 'listings', mode: 'browse' }, {
+                fetch: { kind: 'unreachable' },
+                readAtMs: Date.now() - 7_200_000,
+            } as unknown as Partial<StallView>),
+        );
+        expect(root.querySelector('[data-role="window-fresh"]')?.textContent).toBe(
+            'Updated 2 hours ago',
+        );
+    });
+});

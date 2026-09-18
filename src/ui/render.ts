@@ -409,6 +409,12 @@ export function renderStall(
     }
     // The reader's place, read off the tree about to go (see `lastScreenKey`).
     const keptScroll = (root.querySelector('.stall-scroll') as HTMLElement | null)?.scrollTop ?? 0;
+    // The shop window scrolls its own strip inside a shell that does not, so
+    // the shell's offset says nothing about where a catalogue was. Without
+    // this a socket tick, a stranger's dust or the sixty-second heartbeat
+    // sends a wall back to its first row — the same complaint §4 records
+    // against the shop, on the screen where nobody is there to scroll again.
+    const keptStrip = (root.querySelector('.sw-strip') as HTMLElement | null)?.scrollTop ?? 0;
     const thisScreen = screenKey(view);
     const sameScreen = thisScreen === lastScreenKey;
     lastScreenKey = thisScreen;
@@ -493,6 +499,12 @@ export function renderStall(
         // them was this).
         stall.setAttribute('data-mode', view.window.mode);
         stall.append(renderShopWindow(view, view.window));
+        if (sameScreen && keptStrip > 0) {
+            const strip = stall.querySelector('.sw-strip') as HTMLElement | null;
+            if (strip !== null) {
+                strip.scrollTop = keptStrip;
+            }
+        }
         placeAttachmentNodes(stall, view.worn ?? []);
         frame.append(stall);
         root.append(frame);

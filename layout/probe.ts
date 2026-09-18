@@ -182,6 +182,16 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
  * always had is that the dock sits outside it in flow and so can never cover
  * what is inside.
  */
+/**
+ * How many hit-test points the clip tolerance skipped this run.
+ *
+ * Reported, because §6's own complaint is about a check that quietly does not
+ * run: a `coveredBy` that skipped every point would be indistinguishable from
+ * one that found nothing wrong. The runner prints it beside the pass so a
+ * number that jumps is visible without anybody reading this file.
+ */
+export let clipSkips = 0;
+
 function clipsOf(node: Element): DOMRect[] {
     const rects: DOMRect[] = [];
     let at: Element | null = node.parentElement;
@@ -228,6 +238,7 @@ function coveredBy(node: Element): string | undefined {
                     y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right,
             )
         ) {
+            clipSkips += 1;
             continue;
         }
         const hit = document.elementFromPoint(x, y);
@@ -1572,6 +1583,7 @@ result.textContent = JSON.stringify(
         viewport: window.innerWidth,
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         screensMeasured: measured,
+        clipSkips,
         screensWithQuote: [...withQuote],
         failures,
     },

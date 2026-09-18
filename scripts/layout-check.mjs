@@ -534,7 +534,15 @@ try {
         }
         const spent = took();
         if (report.failures.length === 0) {
-            console.log(`✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}`);
+            // The clip tolerance's own count, printed beside the pass: a
+            // `coveredBy` that skipped every point would otherwise be
+            // indistinguishable from one that found nothing wrong, which is
+            // §6's complaint about a guard that quietly does not run.
+            const skipped = report.clipSkips ?? 0;
+            console.log(
+                `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
+                    (skipped > 0 ? ` · ${skipped} points behind a clip` : ''),
+            );
             continue;
         }
         failed = true;
