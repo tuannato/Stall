@@ -167,7 +167,7 @@ export async function loadOffers(
             continue;
         }
         attempted += 1;
-        const mapped = mapOffer(parsed);
+        const mapped = mapOffer(parsed, heightOf(utxo));
         if (mapped === undefined) {
             dropped += 1;
             continue;
@@ -198,7 +198,23 @@ function hostAttempts(err: unknown): HostAttempt[] {
     return CHRONIK_HOSTS.map((host) => ({ host, result, detail }));
 }
 
-function mapOffer(offer: AgoraOfferView): StallOffer | undefined {
+/**
+ * The block a plugin utxo sits in, normalised.
+ *
+ * chronik's `Utxo.blockHeight` is `-1` in the mempool; this answers `0` there,
+ * which is below every real height so a just-broadcast listing is inside every
+ * freeze. Anything that is not a finite integer is absent rather than guessed:
+ * a node that omitted the field must not have a height invented for it.
+ */
+function heightOf(utxo: unknown): number | undefined {
+    const raw = (utxo as { blockHeight?: unknown }).blockHeight;
+    if (typeof raw !== 'number' || !Number.isInteger(raw)) {
+        return undefined;
+    }
+    return raw < 0 ? 0 : raw;
+}
+
+function mapOffer(offer: AgoraOfferView, blockHeight?: number): StallOffer | undefined {
     const variant = offer.variant.type;
     if (variant !== 'ONESHOT' && variant !== 'PARTIAL') {
         return undefined;
@@ -218,6 +234,7 @@ function mapOffer(offer: AgoraOfferView): StallOffer | undefined {
         askedSats: priced.askedSats,
         askedAtoms: priced.askedAtoms,
         minAcceptedAtoms: priced.minAcceptedAtoms,
+        ...(blockHeight === undefined ? {} : { blockHeight }),
     };
     const rate = rateOf(offer, priced);
     if (rate !== undefined) {

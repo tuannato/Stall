@@ -60,6 +60,22 @@ export type StallOffer = {
     askedAtoms: bigint;
     minAcceptedAtoms?: bigint;
     /**
+     * The block holding **this utxo**, or absent when the node did not say.
+     * chronik writes `-1` for a mempool utxo and that reaches here as `0`,
+     * which is below every real height and so is inside every freeze — a
+     * listing the seller has just broadcast belongs on their own screen.
+     *
+     * **Never an age, and never "when this item was listed."** A partial fill
+     * spends the offer and re-creates the remainder as a NEW utxo in a later
+     * block (§3), so this number JUMPS FORWARD the moment somebody buys part
+     * of a lot. That is why the shop window's freeze stores the token ids it
+     * saw at a height and filters on membership, rather than comparing this
+     * field against the lock: the height picks the moment, the set does the
+     * refusing. Comparing directly would take an item off the screen as a
+     * reward for selling some of it.
+     */
+    blockHeight?: number;
+    /**
      * Floor-divided nanosats per atom of the remaining lot (oneshot: the
      * asked take). An annotation, not a second asked amount — multiplying
      * back does not recover `askedSats`. Absent when it cannot be formed.
@@ -204,6 +220,50 @@ export type BroadcastParams = {
      * viewer scanning a code has no way to ask which one they are looking at.
      */
     cards: 'listings' | 'quotes';
+};
+
+/**
+ * Query that turns `/s/<seller>` into the shop window — the stall on a screen
+ * in a physical shop, which nobody touches. Parsed by `parseWindowParams`.
+ *
+ * A second render path over the same read, like the broadcast overlay, and
+ * gated by the same `view` param so the two can never both be asked for. It is
+ * **not** width-gated: the CONTROL that composes this link is desk-only, but a
+ * link already composed paints at whatever width it is opened at, because a
+ * shop screen hung in portrait is 1080 wide and a counter tablet is 768. A
+ * width test here would refuse exactly the devices the feature is for.
+ */
+export type WindowParams = {
+    /**
+     * Which rail the screen shows. `all` **rotates** between them and never
+     * merges them: a covenant's asked amount beside a seller's own quote is
+     * the one thing `the-two-rails-never-paint-on-one-screen` forbids, and a
+     * screen nobody can question is the worst surface to break it on.
+     */
+    show: 'listings' | 'quotes' | 'all';
+    /**
+     * `cycle` shows one item at a time and asks nothing of anyone; `browse` is
+     * a catalogue that scrolls, and resumes scrolling itself after a spell
+     * with no touch.
+     */
+    mode: 'cycle' | 'browse';
+    /**
+     * The block height the **listing** set is frozen at, or absent for no
+     * freeze. `upto=` on the wire.
+     *
+     * Listings only, on purpose: a PARTIAL covenant lands in any `P + pubkey`
+     * group with no key of that pubkey (CLAUDE.md §10), so a stranger can hang
+     * their token in this seller's shop window. A quote cannot be planted —
+     * `recordIsStalls` demands the stall's own input signature *and* a 546-sat
+     * output back to itself — so the quotes rail needs no freeze and never
+     * gets one.
+     *
+     * It rides the URL rather than storage because the whole point of the link
+     * is that it is bookmarked on the shop's own computer: a freeze kept in
+     * one browser's `localStorage` would be set on a laptop and absent on the
+     * machine driving the screen.
+     */
+    upto?: number;
 };
 
 /**

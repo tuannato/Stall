@@ -124,7 +124,15 @@ describe('served-weight-has-a-ceiling', () => {
     // as the deliberate diff this docblock asks for; the margin is for
     // ordinary growth, and an 85 KB latin-ext subset re-added by accident
     // still lands past this and fails.
-    const CEILING_BYTES = 800_000;
+    //
+    // Measured 799,933 at the commit before the shop window — 67 bytes of
+    // headroom, which is not a margin, it is a coincidence. Raised to 840,000
+    // for that feature: a second render path, its own stylesheet, an options
+    // sheet and the drivers, against the direct-payment rail's measured 19 KB
+    // for a whole rail. Deliberate, and the number to watch is the delta this
+    // docblock records rather than the ceiling, which is only ever the alarm.
+    // The 85 KB subset still fails, which is what the alarm is for.
+    const CEILING_BYTES = 840_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

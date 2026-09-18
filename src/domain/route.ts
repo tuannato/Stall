@@ -1,5 +1,5 @@
 import { decodeCashAddress, isValidCashAddress } from 'ecashaddrjs';
-import type { BroadcastParams, RouteParse } from './state';
+import type { BroadcastParams, RouteParse, WindowParams } from './state';
 
 const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 
@@ -192,6 +192,70 @@ export function parseBroadcastParams(search: string): BroadcastParams | undefine
         // mistyped it gets the shop they already had rather than a screen
         // showing money from a different rail.
         cards: broadcastParam(params, 'cards') === 'quotes' ? 'quotes' : 'listings',
+    };
+}
+
+/**
+ * The highest block height this parse will accept.
+ *
+ * eCash is around 870,000 and gains ~144 a day, so ten million is roughly two
+ * centuries of headroom and still refuses a string long enough to be an
+ * accident. A bound rather than no bound because the value reaches a
+ * comparison against every offer on the page, and an unbounded digit string
+ * from a URL is an unbounded digit string on the paint path.
+ */
+export const MAX_BLOCK_HEIGHT = 10_000_000;
+
+/** Digits only: no sign, no separators, no exponent, and never empty. */
+const BLOCK_HEIGHT_RE = /^[0-9]{1,8}$/;
+
+/**
+ * The block a shop window's listing set is frozen at, or `undefined`.
+ *
+ * Refuses rather than clamps. A clamp would turn "874,213" — which is what a
+ * seller reads off a block explorer, commas and all — into some other height
+ * silently, and the screen would then be locked to a block nobody chose. Zero
+ * is refused too: it is a real height in the type but no stall's listing
+ * predates it, so a `0` on the wire is a typo and not a freeze at genesis.
+ */
+export function parseBlockParam(raw: string | null): number | undefined {
+    if (raw === null || !BLOCK_HEIGHT_RE.test(raw)) {
+        return undefined;
+    }
+    const height = Number(raw);
+    return height >= 1 && height <= MAX_BLOCK_HEIGHT ? height : undefined;
+}
+
+/**
+ * Query params that turn `/s/<seller>` into the shop window.
+ *
+ * `view=window` is the gate; anything else is somebody else's screen. The same
+ * shape as `parseBroadcastParams` and for the same reason: a malformed option
+ * falls back to its default rather than dropping the window, because a shop
+ * screen that silently became a shop PAGE — dock, tabs, footer and all — is
+ * the failure a seller would not see until a customer did.
+ *
+ * The one option that does NOT fall back is the freeze: a malformed `upto` is
+ * absent, never zero and never "everything up to now". Inventing a height
+ * would either hide the whole shop or hide nothing while claiming to hide
+ * something, and the status bar prints what it claims.
+ */
+export function parseWindowParams(search: string): WindowParams | undefined {
+    let params: URLSearchParams;
+    try {
+        params = new URLSearchParams(search);
+    } catch {
+        return undefined;
+    }
+    if (broadcastParam(params, 'view') !== 'window') {
+        return undefined;
+    }
+    const show = broadcastParam(params, 'show');
+    const upto = parseBlockParam(broadcastParam(params, 'upto') ?? null);
+    return {
+        show: show === 'listings' || show === 'quotes' ? show : 'all',
+        mode: broadcastParam(params, 'mode') === 'browse' ? 'browse' : 'cycle',
+        ...(upto === undefined ? {} : { upto }),
     };
 }
 
