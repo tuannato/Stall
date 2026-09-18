@@ -135,6 +135,23 @@ function el<K extends keyof HTMLElementTagNameMap>(
     return node;
 }
 
+/**
+ * Which rail this row is on, in the row.
+ *
+ * Both shop rows carry one and the window's dropped it — on the surface that
+ * needs it MOST. With `show=all` a wall rotates between a covenant's asked
+ * amount and the seller's own quote, and this module's own docblock gives
+ * "no tab to press to ask which figure is which" as the reason the two rails
+ * never share a screen. Dropping the only per-row thing that answers that
+ * question left a customer looking at a number with no way to know which kind
+ * it is.
+ */
+function railLabel(words: string): HTMLElement {
+    const rail = el('span', 'item-q rail-label', words);
+    rail.setAttribute('data-role', 'rail-label');
+    return rail;
+}
+
 /** A listing, as the window paints it: picture, name, the covenant's figure. */
 function listingRow(listing: TokenListing, view: StallView, withCode: boolean): HTMLElement {
     const offer = cheapestOf(listing);
@@ -144,6 +161,7 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
     head.append(itemIcon(offer.tokenId, name, undefined, ICON_HERO_SIZE));
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', offer.tokenId));
+    info.append(railLabel(copy.ROW_LABEL_AGORA));
     head.append(info);
 
     const price = el('span', 'item-p');
@@ -203,6 +221,7 @@ function quoteRow(
     );
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', item.tokenId));
+    info.append(railLabel(copy.ROW_LABEL_PAY));
     head.append(info);
 
     const price = el('span', 'item-p');
@@ -233,13 +252,16 @@ function quoteRow(
     }
     // One of the two provenance sentences, never displaced by the words —
     // the shop's foot rule, and a buyer at a wall has no fold to open.
-    foot.append(
-        el(
-            'span',
-            'chip',
-            minted === 'not-attributed' ? copy.QUOTE_NOT_MINTED_HERE : copy.QUOTE_MINTED_CHIP,
-        ),
-    );
+    // Three states, three shapes (§5). `unknown` — and an absent map, which
+    // is every first paint before `fillQuotedGenesis` lands — says NOTHING:
+    // the positive is only honest because silence is what "this page could
+    // not tell" looks like, and a chip that vouched for a borrowed token on a
+    // wall is the one direction this must not err in.
+    if (minted === 'not-attributed') {
+        foot.append(el('span', 'chip', copy.QUOTE_NOT_MINTED_HERE));
+    } else if (minted === 'attributed') {
+        foot.append(el('span', 'chip', copy.QUOTE_MINTED_CHIP));
+    }
     card.append(foot);
     return card;
 }
@@ -291,18 +313,26 @@ export function windowListings(view: StallView, params: WindowParams): TokenList
 }
 
 /**
- * Which rail is on screen right now.
+ * Which rail is on screen right now — **the one derivation there is**.
  *
- * `all` **rotates**; it never merges. A covenant's asked amount beside a
- * seller's own quote is the one pairing `the-two-rails-never-paint-on-one-screen`
- * forbids, and a screen nobody can question is the worst place to break it.
- * The driver moves `view.windowRail`; this only reads it.
+ * `all` rotates; it never merges. A covenant's asked amount beside a seller's
+ * own quote is what `the-two-rails-never-paint-on-one-screen` forbids, and a
+ * shop screen has no tab to press to ask which figure is which.
+ *
+ * Pure, and taking both halves as arguments, because the painter reads the
+ * rail off the view and the driver holds it in a closure — and when those were
+ * two expressions the driver stepped the cursor modulo the LISTINGS count
+ * while the painter indexed the quotes. Measured: `show=quotes` on a stall
+ * with one listing and three quotes showed the same card for ever. CLAUDE.md
+ * §4 states this for the stream in one line — "a list derived in five places
+ * is how the cursor and the card come to mean different rows" — and this
+ * screen had two.
  */
-export function windowRail(view: StallView, params: WindowParams): 'listings' | 'quotes' {
-    if (params.show !== 'all') {
-        return params.show;
-    }
-    return view.windowRail ?? 'listings';
+export function windowRail(
+    show: WindowParams['show'],
+    rail: 'listings' | 'quotes',
+): 'listings' | 'quotes' {
+    return show === 'all' ? rail : show;
 }
 
 /** The scrolling half of the screen, for the mode that is on. */
@@ -331,7 +361,7 @@ export function renderShopWindow(view: StallView, params: WindowParams): HTMLEle
 
     const body = el('main', 'stall-body');
     const strip = el('div', 'items sw-strip');
-    const rail = windowRail(view, params);
+    const rail = windowRail(params.show, view.windowRail ?? 'listings');
     const cycle = params.mode === 'cycle';
 
     if (rail === 'quotes') {
@@ -389,7 +419,15 @@ function statusBar(
     // The quotes rail is read from the descriptions walk, not the book, so a
     // failed BOOK says nothing about it — §4's rule that neither side lends
     // the other its words, on a new surface.
-    const outcome = rail === 'quotes' ? undefined : copy.windowOutcome(view.fetch?.kind);
+    // The route outranks the rail: an address that never spent has no quotes
+    // rail either, so the exemption below is only about the BOOK.
+    const route = view.route.kind === 'pubkey' ? undefined : view.route.kind;
+    const outcome =
+        route !== undefined
+            ? copy.windowOutcome(view.fetch?.kind, route)
+            : rail === 'quotes'
+              ? undefined
+              : copy.windowOutcome(view.fetch?.kind);
     const left = el('span', 'sw-state', copy.windowState(rail, params.upto, outcome));
     left.setAttribute('data-role', 'window-state');
     bar.append(left);

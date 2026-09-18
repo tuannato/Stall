@@ -202,9 +202,11 @@ function hostAttempts(err: unknown): HostAttempt[] {
  * The block a plugin utxo sits in, normalised.
  *
  * chronik's `Utxo.blockHeight` is `-1` in the mempool; this answers `0` there,
- * which is below every real height so a just-broadcast listing is inside every
- * freeze. Anything that is not a finite integer is absent rather than guessed:
- * a node that omitted the field must not have a height invented for it.
+ * which is below every real height and is therefore **outside** every freeze —
+ * `settledAtOrBefore` reads `0` as "not in a block yet", because something the
+ * network has not accepted cannot have been on the shelf at a past block.
+ * Anything that is not a finite integer is absent rather than guessed: a node
+ * that omitted the field must not have a height invented for it.
  */
 function heightOf(utxo: unknown): number | undefined {
     const raw = (utxo as { blockHeight?: unknown }).blockHeight;

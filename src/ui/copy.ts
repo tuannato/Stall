@@ -1709,7 +1709,7 @@ export const WINDOW_LOCK_PRESS = 'Show only listings up to block';
  * rule about a floor printed as a count.
  */
 export const WINDOW_LOCK_WHY =
-    'Suggested: the next block. A listing that appears after it stays off this screen — it stays on your shop. Your own quotes are never locked: nobody else can add one.';
+    'Suggested: one block past the newest listing this page has read. A listing that appears after it stays off this screen — it stays on your shop. Your own quotes are never locked: nobody else can add one.';
 export const WINDOW_LINK_LABEL = 'Link';
 export const WINDOW_LINK_WHY =
     'Bookmark this on the shop’s own computer to open the same screen tomorrow.';
@@ -1740,7 +1740,22 @@ export const WINDOW_RAIL_EMPTY = 'This stall has nothing on that side right now.
  * all four — our own failure stated as the seller's inventory, on the one
  * surface with nobody to press retry.
  */
-export function windowOutcome(kind: string | undefined): string | undefined {
+export function windowOutcome(
+    kind: string | undefined,
+    route?: string,
+): string | undefined {
+    // §4's "three layers, not one enum", and the route is the first of them.
+    // A never-spent address and a walk that hit our own page cap are facts
+    // about IDENTITY — there is no shop to be empty or unreadable yet — and
+    // the first version painted both as "Opening…" for ever, over a blank
+    // wall with a code inviting customers to browse a stall that does not
+    // exist.
+    if (route === 'unresolvable') {
+        return 'This address has not listed anything yet';
+    }
+    if (route === 'unresolved') {
+        return 'This screen could not finish reading the address';
+    }
     if (kind === 'offers') {
         return undefined;
     }

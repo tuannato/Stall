@@ -277,7 +277,24 @@ body {
     background-repeat: repeat-x, no-repeat, repeat-x, repeat;
 }
 
+/*
+ * The shop window's launcher is a desk control.
+ *
+ * Not a render gate: a link already composed must open at whatever width it
+ * is opened at, because a shop screen hung in portrait is 1080 wide and a
+ * counter tablet is 768. What is desk-only is COMPOSING one — a phone is not
+ * where somebody sets up a television. The claim was in two docblocks and in
+ * no stylesheet until now, so the button painted at every width.
+ */
+.studio-window {
+    display: none;
+}
+
 @media (min-width: 680px) {
+    .studio-window {
+        display: inline-flex;
+    }
+
     .stall.att-awning {
         /* A wider canopy at desk width: 32px stripes, so the hem's discs
            are 16px and the strip they are cut from is 16px tall. */

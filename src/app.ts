@@ -145,7 +145,7 @@ import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { withDeadline } from './domain/deadline';
 import { nextCard, tokensAtBlock } from './domain/window';
-import { windowListings } from './ui/window';
+import { windowListings, windowRail } from './ui/window';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -663,8 +663,16 @@ export function boot(
      */
     const adoptFiatHint = (): void => {};
 
-    /** The newest block any offer on this stall sits in, or nothing. */
-    const tipOf = (offers: readonly StallOffer[]): number | undefined => {
+    /**
+     * The newest block any offer on this stall sits in, or nothing.
+     *
+     * Deliberately NOT the chain tip: this page never asks for one, and every
+     * offer already carries the block it is in, so the highest of them is free
+     * and is always at or below the tip. Below is the safe side — a suggestion
+     * under the tip keeps every offer this page can see, where one above it
+     * would keep offers nobody has read yet.
+     */
+    const seenBlockOf = (offers: readonly StallOffer[]): number | undefined => {
         let best: number | undefined;
         for (const offer of offers) {
             if (offer.blockHeight !== undefined && offer.blockHeight > (best ?? 0)) {
@@ -693,7 +701,7 @@ export function boot(
             // on a stall with no offers, and the field stays editable either
             // way — a seller reading a height off an explorer is the road
             // that always works.
-            ...(tipOf(state.offers) === undefined ? {} : { tipHeight: tipOf(state.offers) }),
+            ...(seenBlockOf(state.offers) === undefined ? {} : { tipHeight: seenBlockOf(state.offers) }),
             fiatRate,
             payRate,
             payRateWhy,
@@ -1139,11 +1147,16 @@ export function boot(
         if (params === undefined) {
             return;
         }
+        // The SAME derivation the painter uses, and the same view: the lock
+        // is written onto the view at paint time, so counting off `state.view`
+        // dropped the remembered-token branch the screen was painting.
+        const rail = windowRail(params.show, windowRailAt);
+        const seen: StallView = { ...state.view, ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }) };
         const length =
-            windowRailAt === 'quotes'
-                ? quotedItems(state.view).length
-                : windowListings(state.view, params).length;
-        const step = nextCard(windowCursorAt, length, params.show, windowRailAt);
+            rail === 'quotes'
+                ? quotedItems(seen).length
+                : windowListings(seen, params).length;
+        const step = nextCard(windowCursorAt, length, params.show, rail);
         windowCursorAt = step.cursor;
         windowRailAt = step.rail;
         paint();
@@ -1625,8 +1638,27 @@ export function boot(
         factsQueued = undefined;
         // Paint the parsed route before the index is asked, so a paste is not
         // a no-op while Chronik is in flight. Home is local; still cheap.
-        state = openingFromLocation();
-        paint();
+        // A shop window keeps what is on the wall while the read runs.
+        //
+        // The blanking repaint exists so a visitor who navigates sees the
+        // stall's identity at once rather than the last one. On a wall, with
+        // the heartbeat calling this every sixty seconds, it means losing the
+        // seller's name, their look, their decorations and every row — and
+        // printing "Opening…" — for the whole length of a full load, once a
+        // minute, for ever. The broadcast refuses exactly this and keeps its
+        // last-good card (`a-broadcast-failed-reread-is-stale-not-blank`); the
+        // window inherited the opposite by taking this path.
+        //
+        // Only for the SAME stall: a navigation to another seller must not
+        // leave the previous one's goods on screen under the new one's link.
+        const opening = openingFromLocation();
+        const sameStall =
+            state.view.window !== undefined &&
+            sellerFromPath(location.pathname) === identityOf(state.view);
+        if (!sameStall) {
+            state = opening;
+            paint();
+        }
         const next = await load();
         if (claimed !== generation) {
             return;

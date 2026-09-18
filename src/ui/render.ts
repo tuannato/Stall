@@ -481,7 +481,21 @@ export function renderStall(
     if (
         view.window !== undefined &&
         view.route.kind !== 'invalid' &&
-        view.route.kind !== 'home'
+        view.route.kind !== 'home' &&
+        // A phone is not a wall.
+        //
+        // This said "not width-gated" and rendered at every width, on the
+        // reasoning that a portrait screen is 1080 wide and a counter tablet
+        // is 768 — both true, and both above this line. What it also did was
+        // paint a wall layout at 390px, where the probe measured a thousand
+        // failures: a name column collapsed to nothing, figures over their
+        // clips, the asked amount covered. Nobody hangs a phone in a shop, and
+        // a link opened on one is a mistake that should land on the ordinary
+        // stall rather than on a broken copy of a television.
+        //
+        // 680 because it is this app's one breakpoint: the row caret, the
+        // address's long form and the sheets' QR all turn at it.
+        (root.ownerDocument.defaultView?.innerWidth ?? 0) >= 680
     ) {
         applyTheme(
             stall,
@@ -499,15 +513,22 @@ export function renderStall(
         // them was this).
         stall.setAttribute('data-mode', view.window.mode);
         stall.append(renderShopWindow(view, view.window));
-        if (sameScreen && keptStrip > 0) {
-            const strip = stall.querySelector('.sw-strip') as HTMLElement | null;
-            if (strip !== null) {
-                strip.scrollTop = keptStrip;
-            }
-        }
         placeAttachmentNodes(stall, view.worn ?? []);
         frame.append(stall);
         root.append(frame);
+        // AFTER the tree is connected, and in a microtask, the way the shell's
+        // own restore does it: a detached element has no layout box, so the
+        // setter terminates and the write is a silent no-op. The first version
+        // wrote it before the append and happy-dom, which keeps `scrollTop` as
+        // a plain property, could not have told anybody.
+        if (sameScreen && keptStrip > 0) {
+            queueMicrotask(() => {
+                const strip = root.querySelector('.sw-strip') as HTMLElement | null;
+                if (strip !== null && strip.isConnected) {
+                    strip.scrollTop = keptStrip;
+                }
+            });
+        }
         applyMarquees(root, WINDOW_MARQUEE);
         remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE);
         overlayWasOpen = overlayOpen;

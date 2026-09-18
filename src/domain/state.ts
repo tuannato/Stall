@@ -287,10 +287,10 @@ export type WindowParams = {
  */
 export type WindowState = {
     /**
-     * The token ids this screen saw at its lock, carried across a reload.
-     * A union with the height test rather than a replacement for it — see
-     * `offersWithinLock`, and the cost stated there for a machine with no
-     * memory of this lock.
+     * The token ids this screen saw at its lock. Closure state, persisted by
+     * nothing — the lock rides the URL, the set does not. A union with the
+     * height test rather than a replacement for it; the cost of a load with
+     * no memory of it is stated on `offersWithinLock`.
      */
     windowLock?: ReadonlySet<string>;
     /** Which rail `show=all` is currently resting on. Rotated, never merged. */

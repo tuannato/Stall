@@ -31,10 +31,35 @@ import type { StallOffer } from './state';
  * refuse a stranger's arrival, and refusing on a missing field would blank a
  * seller's own shelf over a node that answered thinly.
  */
+/**
+ * Whether this offer was settled in a block at or before the lock.
+ *
+ * **A utxo still in the mempool is not**, and that was the hole: `heightOf`
+ * normalises chronik's `-1` to `0`, `0` is below every real height, and the
+ * first version read `<= upto` — so a stranger's plant that had not been
+ * mined yet walked straight through the freeze, took `cheapestOf` with a
+ * cheaper ask, AND was written into the remembered set, which then kept it
+ * for the life of the screen once it confirmed. Measured: a lock at 120 with
+ * an unconfirmed plant painted the stranger's 6 over the seller's 1,200.
+ *
+ * "Already on the shelf at block N" means settled by block N. Something the
+ * network has not accepted into a block yet is by definition after it.
+ *
+ * A height the node never gave is still kept: the freeze refuses an arrival
+ * it can SEE, and refusing on our own gap would blank a seller's shelf over a
+ * node that answered thinly.
+ */
+function settledAtOrBefore(blockHeight: number | undefined, upto: number): boolean {
+    if (blockHeight === undefined) {
+        return true;
+    }
+    return blockHeight > 0 && blockHeight <= upto;
+}
+
 export function tokensAtBlock(offers: readonly StallOffer[], upto: number): Set<string> {
     const ids = new Set<string>();
     for (const offer of offers) {
-        if (offer.blockHeight === undefined || offer.blockHeight <= upto) {
+        if (settledAtOrBefore(offer.blockHeight, upto)) {
             ids.add(offer.tokenId);
         }
     }
@@ -44,15 +69,17 @@ export function tokensAtBlock(offers: readonly StallOffer[], upto: number): Set<
 /**
  * The offers a frozen screen paints.
  *
- * `remembered` is the set this screen captured the first time it opened on
- * this lock, carried across a reload in storage. It is a union with a fresh
- * height test rather than a replacement for it, so the first load — which has
- * nothing remembered — works from the heights alone.
+ * `remembered` is the set this screen captured the first time it painted on
+ * this lock. It lives in `boot` closure state and **nothing persists it** —
+ * it dies with the page, and the lock itself rides the URL precisely so the
+ * choice survives what the set does not. It is a union with a fresh height
+ * test rather than a replacement for it, so a cold load — which is every
+ * reload — works from the heights alone.
  *
- * **The cost, stated:** on a machine with no memory of this lock (a cleared
- * browser, a second screen, a different computer) an item that has been
- * partly sold since the freeze has only a post-lock utxo left, so it is
- * dropped. That errs toward showing fewer of the seller's own goods and never
+ * **The cost, stated:** on any load with no memory of this lock — which is
+ * every reload, on every machine, including the sixty-second heartbeat's own
+ * refresh — an item partly sold since the freeze has only a post-lock utxo
+ * left, so it is dropped. That errs toward showing fewer of the seller's own goods and never
  * toward showing a stranger's, which is the direction a shopfront should fail
  * in. A republish of the lock at a newer height brings it back.
  */
@@ -66,8 +93,7 @@ export function offersWithinLock(
     }
     return offers.filter(
         (offer) =>
-            offer.blockHeight === undefined ||
-            offer.blockHeight <= upto ||
+            settledAtOrBefore(offer.blockHeight, upto) ||
             remembered?.has(offer.tokenId) === true,
     );
 }

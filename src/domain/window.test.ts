@@ -76,28 +76,27 @@ describe('the-freeze-remembers-tokens-and-never-compares-heights-alone', () => {
     });
 
     /**
-     * chronik writes -1 for a mempool utxo and `heightOf` normalises that to 0,
-     * which is below every real height — a listing the seller broadcast a
-     * moment ago belongs on their own screen rather than being treated as a
-     * stranger arriving after the lock.
+     * A utxo still in the mempool is NOT already on the shelf.
+     *
+     * The first version read `<= upto` over a height `heightOf` normalises to
+     * `0`, so a stranger's plant that had not been mined yet walked through
+     * the freeze, took `cheapestOf` with a cheaper ask, and was written into
+     * the remembered set — which kept it for the life of the screen once it
+     * confirmed. The test that stood here asserted the opposite and pinned
+     * the hole as intended behaviour.
+     *
+     * The cost, chosen: a listing the seller broadcast a moment ago is also
+     * outside the lock until it confirms. That errs toward showing fewer of
+     * the seller's own goods and never toward showing a stranger's.
      */
-    it('keeps a listing still in the mempool', () => {
-        const shown = offersWithinLock([offer(BEANS, 0)], 120);
-        expect(shown.map((o) => o.tokenId)).toEqual([BEANS]);
-    });
-
-    /**
-     * The capture itself, which nothing covered: every earlier case fed
-     * `tokensAtBlock` only pre-lock offers, so replacing its whole guard with
-     * an unconditional add left all of them green. This is the function
-     * `syncWindow` runs over the live book, and a broken one remembers a
-     * stranger's post-lock token for ever — the §10 gift listing on a wall
-     * all afternoon, which is the feature's stated reason for existing.
-     */
-    it('remembers only what was already being offered at the lock', () => {
-        const ids = tokensAtBlock([offer(BEANS, 100), offer(JUNK, 900)], 120);
-        expect([...ids]).toEqual([BEANS]);
-        expect(ids.has(JUNK)).toBe(false);
+    it('treats a listing still in the mempool as arriving after the lock', () => {
+        expect(offersWithinLock([offer(BEANS, 0)], 120).map((o) => o.tokenId)).toEqual([]);
+        expect(tokensAtBlock([offer(BEANS, 0)], 120).has(BEANS)).toBe(false);
+        // And a remembered token still comes through: a partial fill is what
+        // the union is for, and it is unaffected by this.
+        expect(
+            offersWithinLock([offer(BEANS, 0)], 120, new Set([BEANS])).map((o) => o.tokenId),
+        ).toEqual([BEANS]);
     });
 
     it('is the whole book when no lock is asked for', () => {

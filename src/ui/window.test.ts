@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { renderStall } from './render';
+import * as copy from './copy';
+import { holdsLivePaint, overlayMounts, renderStall } from './render';
 import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, windowItemLink, windowLinkFor } from './window';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import type { StallHandlers } from './render';
@@ -24,6 +25,7 @@ function handlers(): StallHandlers {
         onOpenPay: vi.fn(),
         onSwitchShopTab: vi.fn(),
         onZoomIcon: vi.fn(),
+        onClosePublish: vi.fn(),
     } as unknown as StallHandlers;
 }
 
@@ -306,12 +308,25 @@ describe('a-shop-window-mounts-no-sheet', () => {
      * HOLD the live paint, so one opened on an unattended screen would stop
      * the stall updating with nobody there to close it and nothing on screen
      * to say why.
+     *
+     * The gate is asserted directly. The first version only looked at the
+     * painted DOM — and the render path returns before any sheet mounts
+     * anyway, so deleting the whole clause from `overlayAllowed` left the
+     * entire suite green.
      */
-    it('refuses every overlay while the window is the screen', () => {
-        const root = paint({
-            ...windowView({ show: 'all', mode: 'cycle' }),
-            overlay: { kind: 'shop-window' },
-        } as StallView);
+    it('refuses the mount and the paint hold, on the table and on the screen', () => {
+        const onWindow = windowView({ show: 'all', mode: 'cycle' });
+        for (const kind of ['pay', 'describe', 'publish-name', 'poster'] as const) {
+            const view = { ...onWindow, overlay: { kind } } as unknown as StallView;
+            expect(overlayMounts(view), `${kind} mounts`).toBe(false);
+            expect(holdsLivePaint(view), `${kind} holds`).toBe(false);
+        }
+        // And off a window the same kinds behave exactly as they always have,
+        // or the clause would be a gate on everything.
+        const ordinary = { ...onWindow, window: undefined, overlay: { kind: 'pay', tokenId: BEANS } } as unknown as StallView;
+        expect(holdsLivePaint(ordinary)).toBe(true);
+
+        const root = paint({ ...onWindow, overlay: { kind: 'shop-window' } } as StallView);
         expect(root.querySelector('[data-role="sheet-scrim"]')).toBeNull();
         expect(root.querySelector('[data-role="shop-window"]')).not.toBeNull();
     });
@@ -346,31 +361,24 @@ describe('the-window-code-is-the-size-the-module-tests-pin', () => {
 });
 
 describe('the-options-sheet-closes-the-way-every-other-sheet-does', () => {
-    function sheetRoot(): HTMLElement {
+    it('builds one scrim, and pressing it closes', () => {
         const root = document.createElement('div');
+        const h = handlers();
         renderStall(
             root,
             { ...windowView({ show: 'all', mode: 'cycle' }), window: undefined,
               overlay: { kind: 'shop-window' } } as StallView,
-            handlers(),
+            h,
         );
-        return root;
-    }
-
-    /**
-     * §5: "Both sheets are the same shape and share their way out … the
-     * scrim, Escape, the tab trap." The first version built its own scrim and
-     * handed it to `sheetOverlay`, which wrapped it in a second one — so the
-     * backdrop was two scrims deep, composited to ~80% black instead of 55%,
-     * and every click on it landed on the inner node while the close handler
-     * compared against the outer. The sheet could not be dismissed by its own
-     * backdrop.
-     */
-    it('builds one scrim, and the sheet is what sits in it', () => {
-        const root = sheetRoot();
         const scrims = root.querySelectorAll('[data-role="sheet-scrim"]');
         expect(scrims).toHaveLength(1);
         expect(scrims[0]!.firstElementChild?.classList.contains('sheet')).toBe(true);
+
+        // The rule in the name, asserted. The first version checked the shape
+        // and not the behaviour: breaking `sheetOverlay`'s close handler left
+        // all twenty-six tests green.
+        scrims[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(h.onClosePublish).toHaveBeenCalled();
     });
 });
 
@@ -615,5 +623,57 @@ describe('the-window-lock-is-off-until-somebody-asks-for-it', () => {
         expect(row.hidden).toBe(true);
         expect(press.getAttribute('aria-pressed')).toBe('false');
         expect(link.value).not.toContain('upto');
+    });
+});
+
+describe('a-window-over-an-unresolved-address-says-which-layer-failed', () => {
+    /**
+     * §4's "three layers, not one enum", arriving on a wall. A never-spent
+     * address and a walk that hit our own page cap are facts about IDENTITY —
+     * there is no shop yet to be empty or unreadable — and the first version
+     * painted both as "Opening…" for ever over a blank screen whose code
+     * invited customers to browse a stall that does not exist.
+     */
+    it('tells a never-spent address from a walk that stopped from an opening one', () => {
+        const said = (route: Record<string, unknown>, fetch?: Record<string, unknown>): string => {
+            const root = paint(
+                windowView({ show: 'listings', mode: 'browse' }, {
+                    route,
+                    ...(fetch === undefined ? {} : { fetch }),
+                } as unknown as Partial<StallView>),
+            );
+            return root.querySelector('[data-role="window-state"]')?.textContent ?? '';
+        };
+        const never = said({ kind: 'unresolvable', address: ADDR });
+        const stopped = said({ kind: 'unresolved', address: ADDR });
+        const opening = said({ kind: 'pubkey', pubkeyHex: PK, address: ADDR }, { kind: 'opening' });
+        expect(new Set([never, stopped, opening]).size).toBe(3);
+        for (const line of [never, stopped]) {
+            expect(line.toLowerCase()).not.toContain('showing');
+        }
+    });
+});
+
+describe('a-window-row-says-which-rail-it-is-on', () => {
+    /**
+     * With `show=all` a wall rotates between a covenant's asked amount and the
+     * seller's own quote. This module's own reason for never merging the rails
+     * is that there is "no tab to press to ask which figure is which" — and
+     * the first version then dropped the only per-row thing that answers it.
+     * Both shop rows carry one; so must these.
+     */
+    it('labels a listing and a quote', () => {
+        const listing = paint(windowView({ show: 'listings', mode: 'browse' }));
+        expect(listing.querySelector('[data-role="rail-label"]')?.textContent).toBe(
+            copy.ROW_LABEL_AGORA,
+        );
+        const quote = paint(
+            windowView({ show: 'quotes', mode: 'browse' }, {
+                prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            } as unknown as Partial<StallView>),
+        );
+        expect(quote.querySelector('[data-role="rail-label"]')?.textContent).toBe(
+            copy.ROW_LABEL_PAY,
+        );
     });
 });

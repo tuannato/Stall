@@ -763,6 +763,38 @@ export const SCREENS: Record<string, StallView> = {
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
+    /*
+     * The quote rail on a wall, which nothing measured until now: the seller's
+     * own figure under `[data-role="seller-price"]`, their words on a running
+     * line, and the borrowed-token case at hero size — every one of them a
+     * surface the listings fixtures never reach.
+     */
+    'shop-window-quotes': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse' },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        // At 390 the render gate hands back the ordinary stall, and this says
+        // which rail that stall opens on — or the pay-screen audit refuses a
+        // screen whose name promises a quote and whose paint carries none.
+        shopTab: 'quotes',
+    }),
+    /*
+     * The same screen at the size it is actually hung at. The page pass runs
+     * the three above at 390 and 1280 — a phone, where the render gate hands
+     * back the ordinary stall, and a small shop television. This one is the
+     * 1920x1080 the feature exists for, and it is a separate fixture because
+     * a screen sits on one side of the viewport split or the other.
+     */
+    'shop-window-wall': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle' },
+        announcement: 'Back on the 10th — orders ship then',
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
     broadcast: base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         broadcast: bc('corner', 'fixed'),
@@ -1054,8 +1086,7 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-empty',
     'broadcast-long-name',
     'broadcast-rail-long-name',
-    'shop-window-cycle',
-    'shop-window-browse',
+    'shop-window-wall',
 ]);
 
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
