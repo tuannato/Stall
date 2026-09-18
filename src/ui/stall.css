@@ -279,11 +279,14 @@ body {
 
 @media (min-width: 680px) {
     .stall.att-awning {
-        padding-top: 66px;
         /* A wider canopy at desk width: 32px stripes, so the hem's discs
            are 16px and the strip they are cut from is 16px tall. */
         background-image:
-            radial-gradient(circle 16px at 50% 0, transparent 0 15.4px, var(--s-bg) 15.8px),
+            radial-gradient(
+                circle calc(16px * var(--att-awn)) at 50% 0,
+                transparent 0 calc(15.4px * var(--att-awn)),
+                var(--s-bg) calc(15.8px * var(--att-awn))
+            ),
             linear-gradient(
                 180deg,
                 color-mix(in srgb, var(--s-accent) 20%, transparent),
@@ -291,18 +294,29 @@ body {
             ),
             repeating-linear-gradient(
                 90deg,
-                var(--s-accent) 0 32px,
-                color-mix(in srgb, var(--s-accent) 26%, var(--s-surface)) 32px 64px
+                var(--s-accent) 0 calc(32px * var(--att-awn)),
+                color-mix(in srgb, var(--s-accent) 26%, var(--s-surface))
+                    calc(32px * var(--att-awn)) calc(64px * var(--att-awn))
             ),
             var(--s-backdrop);
+        /*
+         * Five numbers, and they are one number. The hem band sits at the
+         * stripes' FOOT and the spill starts where the stripes end, so a size
+         * scaled without its position cuts the scallops through the middle of
+         * the canopy and leaves it ending on a straight line — measured while
+         * drawing the shop window, and it is why they are written from
+         * `--att-awn` rather than typed apart.
+         */
+        --att-awn: var(--s-decor-scale, 1);
+        padding-top: calc(66px * var(--att-awn));
         background-size:
-            32px 16px,
-            100% 92px,
-            100% 58px,
+            calc(32px * var(--att-awn)) calc(16px * var(--att-awn)),
+            100% calc(92px * var(--att-awn)),
+            100% calc(58px * var(--att-awn)),
             auto;
         background-position:
-            left 42px,
-            left 58px,
+            left calc(42px * var(--att-awn)),
+            left calc(58px * var(--att-awn)),
             left top,
             0 0;
     }
@@ -541,21 +555,42 @@ body {
  * colour it reflects. `private/design/tools/rain-tiles.mjs`.
  */
 .stall.att-rainfall {
+    /*
+     * One declaration per drawn tile, because the size, the travel and the
+     * composite rule below all have to name the same length. `--s-decor-scale`
+     * is 1 everywhere but the shop window, where a phone-pitch tile repeated
+     * twenty times across 1920px reads as scratches on a broken screen rather
+     * than as rain.
+     */
+    --att-rain-near: calc(320px * var(--s-decor-scale, 1));
+    --att-rain-mid: calc(260px * var(--s-decor-scale, 1));
+    --att-rain-far: calc(200px * var(--s-decor-scale, 1));
     background-image:
         url('decor/rain-near.svg'),
         url('decor/rain-mid.svg'),
         url('decor/rain-far.svg'),
         var(--s-backdrop);
     background-size:
-        320px 320px,
-        260px 260px,
-        200px 200px,
+        var(--att-rain-near) var(--att-rain-near),
+        var(--att-rain-mid) var(--att-rain-mid),
+        var(--att-rain-far) var(--att-rain-far),
         auto,
         auto;
     background-repeat: repeat, repeat, repeat, repeat, repeat;
-    animation: att-rainfall-drift 2600ms linear infinite;
+    /*
+     * The pace moves with the tile. At twice the size and the same duration
+     * the drops fall twice as fast, which reads as a downpour rather than as
+     * the same weather seen closer.
+     */
+    animation: att-rainfall-drift calc(2600ms * var(--s-decor-scale, 1)) linear infinite;
 }
 
+/*
+ * The travel is a WHOLE tile per axis, written from the same three lengths as
+ * the size above. Two numbers that must agree and are stated apart is exactly
+ * how round 13's jump happened; at a second scale it happens again, and the
+ * decor gate's "travel is a whole tile per axis" rule is what catches it.
+ */
 @keyframes att-rainfall-drift {
     from {
         background-position:
@@ -567,9 +602,9 @@ body {
     }
     to {
         background-position:
-            0 320px,
-            0 260px,
-            0 200px,
+            0 var(--att-rain-near),
+            0 var(--att-rain-mid),
+            0 var(--att-rain-far),
             0 0,
             0 0;
     }
@@ -809,9 +844,9 @@ body {
         var(--s-backdrop);
     background-size:
         100% 100%,
-        320px 320px,
-        260px 260px,
-        200px 200px,
+        var(--att-rain-near) var(--att-rain-near),
+        var(--att-rain-mid) var(--att-rain-mid),
+        var(--att-rain-far) var(--att-rain-far),
         152% 124%,
         128% 108%,
         auto,
@@ -819,7 +854,9 @@ body {
     background-repeat:
         no-repeat, repeat, repeat, repeat, no-repeat, no-repeat, repeat, repeat;
     animation:
-        att-rain-aurora-drift 2600ms linear infinite,
+        /* The pace rides the tile, as it does in the rain's own rule. The
+           tide does not: a colour breath is a colour breath at any size. */
+        att-rain-aurora-drift calc(2600ms * var(--s-decor-scale, 1)) linear infinite,
         att-aurora-tide 4s ease-in-out infinite alternate;
 }
 
@@ -838,9 +875,9 @@ body {
     to {
         background-position:
             0 0,
-            0 320px,
-            0 260px,
-            0 200px,
+            0 var(--att-rain-near),
+            0 var(--att-rain-mid),
+            0 var(--att-rain-far),
             6% 14%,
             92% 78%,
             0 0,

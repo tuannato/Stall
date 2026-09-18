@@ -203,6 +203,23 @@ const sizesOf = (body: string): string[] | undefined => {
 
 /** A paint property: what makes a rule paint rather than merely exist. */
 /** Every custom property this sheet declares, at any depth. */
+/**
+ * Whether a custom property this sheet declares is stated in pixels.
+ *
+ * Read off the declaration rather than resolved: this gate has no cascade, and
+ * what the travel rule needs to know is only that the shared token is a length
+ * and not a percentage. A token declared in more than one place has to say px
+ * in every one of them, or the rule would pass on whichever it found first.
+ */
+function statesPx(name: string): boolean {
+    const decls = [
+        ...CSS.matchAll(new RegExp(`${name}\\s*:\\s*([^;}]+)`, 'g')),
+    ].map((m) => m[1] ?? '');
+    // `\bpx\b` does not match `320px`: there is no word boundary between a
+    // digit and a letter. A number followed by the unit is what a length is.
+    return decls.length > 0 && decls.every((value) => /[\d.]px\b/.test(value));
+}
+
 const SHEET_DEFINES: ReadonlySet<string> = new Set(
     [...CSS.toLowerCase().matchAll(/(--[a-z0-9_-]+)\s*:/g)].map((m) => m[1]!),
 );
@@ -440,6 +457,37 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
                             // still, and reading one end alone called its
                             // `6%` a travel.
                             if (one === two) {
+                                continue;
+                            }
+                            /*
+                             * A travel written as the SAME token the tile is
+                             * written in proves itself, and proves itself more
+                             * strongly than two numbers that happen to agree
+                             * today: one declaration, so they cannot drift.
+                             * This is what lets a decoration be written once
+                             * and scale — `--att-rain-near` is the tile in
+                             * `background-size` and the travel in the
+                             * keyframe, and `--s-decor-scale` moves both.
+                             *
+                             * Only when the OTHER end is a true rest (`0`):
+                             * `var(--a)` → `var(--b)` is two tokens and this
+                             * gate still cannot tell whether they agree.
+                             */
+                            const token = /^var\(\s*(--[a-z0-9-]+)/i;
+                            const moved = token.exec(two)?.[1];
+                            if (
+                                moved !== undefined &&
+                                one === '0' &&
+                                token.exec(tile[axis] ?? '')?.[1] === moved &&
+                                // And the token must be a LENGTH. A percentage
+                                // tile travelling that percentage is not a lap
+                                // — `background-position` resolves a percentage
+                                // against the positioning area, not the tile —
+                                // so a shared `--x: 50%` would otherwise read
+                                // as proof of something it does not prove.
+                                statesPx(moved)
+                            ) {
+                                checked += 1;
                                 continue;
                             }
                             const px = (v: string): number | undefined => {
