@@ -537,6 +537,21 @@ export function shopWindowSheet(
     form.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
 
     form.append(el('label', 'paste-label', copy.WINDOW_LOCK_LABEL));
+    /*
+     * The switch comes first, and the machinery only after it.
+     *
+     * A block height is a thing a seller has to go and look up, and most
+     * stalls never meet the problem it solves — so the sheet does not put one
+     * in front of everybody. Off is the default and off is the common answer;
+     * the height field, its refusal line and the explanation all live behind
+     * this one press.
+     */
+    const lockSwitch = el('button', 'mini sw-switch', copy.WINDOW_LOCK_SWITCH);
+    lockSwitch.type = 'button';
+    lockSwitch.setAttribute('aria-pressed', 'false');
+    lockSwitch.setAttribute('data-role', 'window-lock-switch');
+    form.append(lockSwitch);
+    form.append(el('p', 'fine', copy.WINDOW_LOCK_SWITCH_WHY));
     const lockRow = el('div', 'sw-lock');
     const lockPress = el('button', 'mini', copy.WINDOW_LOCK_PRESS);
     lockPress.type = 'button';
@@ -569,9 +584,29 @@ export function shopWindowSheet(
         settle();
     });
     lockRow.append(lockPress, heightField);
+    const lockWhy = el('p', 'fine', copy.WINDOW_LOCK_WHY);
     form.append(lockRow);
     form.append(refused);
-    form.append(el('p', 'fine', copy.WINDOW_LOCK_WHY));
+    form.append(lockWhy);
+    // Hidden until the switch is on, and turning it off takes the lock with
+    // it — a link must never carry an `upto` from a control the seller can no
+    // longer see.
+    const showLock = (on: boolean): void => {
+        lockRow.hidden = !on;
+        lockWhy.hidden = !on;
+        if (!on) {
+            refused.hidden = true;
+            locked = false;
+            lockPress.setAttribute('aria-pressed', 'false');
+        }
+        sync();
+    };
+    lockSwitch.addEventListener('click', () => {
+        const on = lockSwitch.getAttribute('aria-pressed') !== 'true';
+        lockSwitch.setAttribute('aria-pressed', String(on));
+        showLock(on);
+    });
+    showLock(false);
     sheet.append(form);
 
     const linkBox = el('div', 'share-box');

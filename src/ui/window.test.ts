@@ -575,3 +575,45 @@ describe('a-window-that-could-not-read-is-not-an-empty-shelf', () => {
         );
     });
 });
+
+describe('the-window-lock-is-off-until-somebody-asks-for-it', () => {
+    /**
+     * A block height is a thing a seller has to go and look up, and most
+     * stalls never meet the problem it solves — §10's gift listing. So the
+     * sheet does not put one in front of everybody: off by default, and the
+     * field, its refusal line and its explanation all live behind one press
+     * (owner, 2026-09-18).
+     */
+    it('hides the height until the switch is on, and takes the lock back when it goes off', () => {
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            { ...windowView({ show: 'all', mode: 'cycle' }), window: undefined,
+              overlay: { kind: 'shop-window' } } as StallView,
+            handlers(),
+        );
+        const sw = root.querySelector<HTMLButtonElement>('[data-role="window-lock-switch"]')!;
+        const row = root.querySelector<HTMLElement>('.sw-lock')!;
+        const press = root.querySelector<HTMLButtonElement>('[data-role="window-lock"]')!;
+        const field = root.querySelector<HTMLInputElement>('[data-role="window-lock-height"]')!;
+        const link = root.querySelector<HTMLInputElement>('[data-role="shop-window-link"]')!;
+
+        expect(sw.getAttribute('aria-pressed')).toBe('false');
+        expect(row.hidden).toBe(true);
+        expect(link.value).not.toContain('upto');
+
+        sw.click();
+        expect(row.hidden).toBe(false);
+        field.value = '874213';
+        field.dispatchEvent(new Event('input'));
+        press.click();
+        expect(link.value).toContain('upto=874213');
+
+        // And off takes it back: a link must never carry an `upto` from a
+        // control the seller can no longer see.
+        sw.click();
+        expect(row.hidden).toBe(true);
+        expect(press.getAttribute('aria-pressed')).toBe('false');
+        expect(link.value).not.toContain('upto');
+    });
+});

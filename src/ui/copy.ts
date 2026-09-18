@@ -1753,3 +1753,15 @@ export function windowOutcome(kind: string | undefined): string | undefined {
     // `unreachable`, `plugin-missing`, `unreadable`: ours, and said as ours.
     return 'This screen could not read the shop';
 }
+
+/**
+ * The freeze's own switch, and it is off.
+ *
+ * Most sellers never need it: it exists for §10's gift listing, which most
+ * stalls never see. Off by default and folded behind one press, so a seller
+ * who does not want it never meets a block height at all (owner, 2026-09-18:
+ * "nếu user không muốn thì cũng không cần").
+ */
+export const WINDOW_LOCK_SWITCH = 'Lock the listings to a block';
+export const WINDOW_LOCK_SWITCH_WHY =
+    'Off by default. Turn it on only if somebody has hung something on your stall that you do not sell — anyone can, and it pays you rather than them.';
