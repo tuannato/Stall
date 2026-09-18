@@ -484,6 +484,17 @@ export function boot(
     /** When somebody last touched this screen. `0` is "nobody has". */
     let windowTouchedAt = 0;
     /**
+     * When `browse` last turned the rail.
+     *
+     * A catalogue that FITS its strip has nothing to scroll, so the roll
+     * timer reached the turn on every tick — a rail flip every six seconds on
+     * a wall, for ever, on the commonest shape of small shop, with no
+     * `prefers-reduced-motion` escape because nothing here is an animation.
+     * A turn now waits a card's dwell, which is the pace the other mode was
+     * given for a person's sake in the first place.
+     */
+    let windowTurnedAt = 0;
+    /**
      * When this page last read the chain, by this browser's clock. Stamped
      * where a read LANDS — the load and the live re-read — never at paint, or
      * a repaint over a dead socket would keep saying the screen is current.
@@ -652,6 +663,17 @@ export function boot(
      */
     const adoptFiatHint = (): void => {};
 
+    /** The newest block any offer on this stall sits in, or nothing. */
+    const tipOf = (offers: readonly StallOffer[]): number | undefined => {
+        let best: number | undefined;
+        for (const offer of offers) {
+            if (offer.blockHeight !== undefined && offer.blockHeight > (best ?? 0)) {
+                best = offer.blockHeight;
+            }
+        }
+        return best;
+    };
+
     const paint = (): void => {
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
@@ -665,6 +687,13 @@ export function boot(
             pinnedDoorFull: pinnedDoorIsFull(),
             fiatCode,
             ...(bookReadAt === 0 ? {} : { readAtMs: bookReadAt }),
+            // The tip, for the freeze's SUGGESTION and nothing else. Free:
+            // every offer already carries the block it sits in, so the
+            // highest of them is the newest block this page has seen. Absent
+            // on a stall with no offers, and the field stays editable either
+            // way — a seller reading a height off an explorer is the road
+            // that always works.
+            ...(tipOf(state.offers) === undefined ? {} : { tipHeight: tipOf(state.offers) }),
             fiatRate,
             payRate,
             payRateWhy,
@@ -1126,11 +1155,20 @@ export function boot(
         const room = strip.scrollHeight - strip.clientHeight;
         if (room <= 1 || strip.scrollTop >= room - 1) {
             strip.scrollTop = 0;
-            if (state.view.window?.show === 'all') {
-                windowRailAt = windowRailAt === 'listings' ? 'quotes' : 'listings';
-                windowCursorAt = 0;
-                paint();
+            if (state.view.window?.show !== 'all') {
+                return;
             }
+            // A list that fits reaches this on every tick; one that scrolls
+            // reaches it once it has been read. Either way the turn is paced
+            // by the card's dwell, never by the scroll step.
+            const now = Date.now();
+            if (now - windowTurnedAt < WINDOW_CARD_MS) {
+                return;
+            }
+            windowTurnedAt = now;
+            windowRailAt = windowRailAt === 'listings' ? 'quotes' : 'listings';
+            windowCursorAt = 0;
+            paint();
             return;
         }
         strip.scrollBy({ top: Math.round(strip.clientHeight * 0.8), behavior: 'smooth' });

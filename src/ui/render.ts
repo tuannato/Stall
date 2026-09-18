@@ -2305,7 +2305,7 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
  * description. The stream overlay keeps the genesis name too: its plate is
  * 216px of nowrap with an ellipsis, a cut no probe rule can see.
  */
-function quoteNaming(
+export function quoteNaming(
     view: StallView,
     tokenId: string,
 ): { title: string; words?: string; note?: string } {

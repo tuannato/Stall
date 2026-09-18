@@ -1,8 +1,8 @@
 import './window.css';
 import { cashtabTokenUrl } from '../domain/cashtab';
-import { formatXec } from '../domain/money';
+import { formatXec, isUnbuyable } from '../domain/money';
 import { parseBlockParam, payLandingUrl } from '../domain/route';
-import type { StallOffer, StallView, WindowParams } from '../domain/state';
+import type { StallView, WindowParams } from '../domain/state';
 import { offersWithinLock, suggestedLock } from '../domain/window';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
@@ -15,6 +15,7 @@ import {
     listingsInShopOrder,
     qrSvg,
     quoteFigure,
+    quoteNaming,
     quotedItems,
     stallBaseUrl,
     tokenName,
@@ -42,8 +43,19 @@ import { ICON_HERO_SIZE } from '../domain/icons';
  * `the-window-row-wears-the-shop-row-anatomy` fails when the two drift.
  */
 
-/** The QR's box, in px. Both destinations clear the project's own bracket here. */
+/**
+ * The code's box: what it takes where there is room, and what it will not go
+ * below.
+ *
+ * The ceiling is a third of 1080 — the floor `every-format-keeps-the-qr-at-a-
+ * third-of-the-short-side` already applies to a poster. The minimum is what
+ * still decodes on a 720p television: at this screen's densest destination
+ * (Cashtab's token page, 41 data modules in a 49 painted span) 240px is
+ * 4.90px a module, under the 5.17 this project has read and well over the
+ * 3.60 it has refused.
+ */
 export const WINDOW_QR_PX = 360;
+export const WINDOW_QR_MIN_PX = 240;
 
 /**
  * Which code a row carries, and it is not the same code on the two rails.
@@ -135,13 +147,26 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
     head.append(info);
 
     const price = el('span', 'item-p');
-    const amount = el('span', 'item-a');
-    amount.append(el('span', 'item-from', copy.PRICE_FROM));
-    const figure = el('span', 'item-x', formatXec(offer.askedSats));
-    figure.setAttribute('data-role', 'price');
-    amount.append(figure);
-    amount.append(el('span', 'item-u', copy.XEC));
-    price.append(amount);
+    if (isUnbuyable(offer)) {
+        // The price this page holds is for a take the covenant will refuse,
+        // so it is not shown as a price — `offerRow`'s rule, and it matters
+        // more here: a shop row a buyer can open to find out is one thing, a
+        // number on a wall with nothing to press is another.
+        price.append(el('span', 'dash', copy.DASHED_PRICE));
+        price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
+    } else {
+        const amount = el('span', 'item-a');
+        // "from" is a claim about the figure — that it prices PART of the lot.
+        // On a whole-lot offer it is simply false.
+        if (offer.askedAtoms < offer.atoms) {
+            amount.append(el('span', 'item-from', copy.PRICE_FROM));
+        }
+        const figure = el('span', 'item-x', formatXec(offer.askedSats));
+        figure.setAttribute('data-role', 'price');
+        amount.append(figure);
+        amount.append(el('span', 'item-u', copy.XEC));
+        price.append(amount);
+    }
     head.append(price);
 
     if (withCode) {
@@ -156,14 +181,26 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
 
 /** A quote, as the window paints it: the seller's own figure and their words. */
 function quoteRow(
-    item: { tokenId: string; price: Parameters<typeof quoteFigure>[0]; words?: string },
+    item: { tokenId: string; price: Parameters<typeof quoteFigure>[0] },
     view: StallView,
     withCode: boolean,
 ): HTMLElement {
-    const name = tokenName(view.tokens, item.tokenId);
+    // The words come from the descriptions map through the shop's own helper.
+    // They are NOT on `QuotedItem`, which carries a token and a price — the
+    // first version read a field that does not exist, TypeScript saw an
+    // optional, and every quote on every wall said the seller wrote nothing.
+    const named = quoteNaming(view, item.tokenId);
+    const name = named.title;
+    // §5's reader rule: a quote on somebody else's token borrows its id, its
+    // picture and whatever it stands for, so the icon is refused and the
+    // sentence is said. At 460px on a shop wall the borrowed logo is the
+    // largest thing in the room.
+    const minted = view.genesis?.get(item.tokenId);
     const card = el('div', 'item');
     const head = el('div', 'item-head item-head-q sw-row');
-    head.append(itemIcon(item.tokenId, name, undefined, ICON_HERO_SIZE));
+    head.append(
+        itemIcon(item.tokenId, name, undefined, ICON_HERO_SIZE, minted !== 'not-attributed'),
+    );
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', item.tokenId));
     head.append(info);
@@ -187,14 +224,22 @@ function quoteRow(
     // The seller's own words, on the rail where the item is off-chain and the
     // words ARE the item. Cut lines run; `marqueeNode` decides which.
     const foot = el('div', 'item-foot');
-    const words = item.words ?? '';
-    if (words === '') {
-        foot.append(el('span', 'item-foot-words fine', copy.QUOTE_NO_WORDS_LINE));
+    if (named.words === undefined) {
+        foot.append(el('span', 'item-foot-words fine', named.note ?? copy.QUOTE_NO_WORDS_LINE));
     } else {
-        const line = el('span', 'item-foot-words', words);
+        const line = el('span', 'item-foot-words', named.words);
         line.setAttribute('data-role', 'quote-words');
         foot.append(marqueeNode(line, 'words', item.tokenId));
     }
+    // One of the two provenance sentences, never displaced by the words —
+    // the shop's foot rule, and a buyer at a wall has no fold to open.
+    foot.append(
+        el(
+            'span',
+            'chip',
+            minted === 'not-attributed' ? copy.QUOTE_NOT_MINTED_HERE : copy.QUOTE_MINTED_CHIP,
+        ),
+    );
     card.append(foot);
     return card;
 }
@@ -210,14 +255,39 @@ export function windowListings(view: StallView, params: WindowParams): TokenList
     if (params.upto === undefined) {
         return all;
     }
-    const kept = new Set(
-        offersWithinLock(
-            all.map((l) => cheapestOf(l)) as readonly StallOffer[],
-            params.upto,
-            view.windowLock,
-        ).map((o) => o.tokenId),
-    );
-    return all.filter((l) => kept.has(l.tokenId));
+    const kept: TokenListing[] = [];
+    for (const listing of all) {
+        // The OFFERS, not the token. Filtering by token decides whose goods
+        // are on the shelf and leaves `cheapestOf` to pick across every offer
+        // of a kept token — so a stranger who plants a cheap PARTIAL on
+        // something the seller already sells takes the figure, while the lock
+        // reports itself as holding. Measured before this was written: the
+        // seller's 1,200 painted as 6.
+        const within = offersWithinLock(listing.offers, params.upto);
+        if (within.length > 0) {
+            kept.push({ tokenId: listing.tokenId, offers: within });
+            continue;
+        }
+        // Nothing of this token survives the height test, and that is the
+        // partial-fill case as often as it is a stranger: a fill spends the
+        // offer and re-creates the remainder in a later block (§3), so the
+        // seller's own goods move past the lock by being bought. The
+        // remembered set is what tells the two apart — and it only tells them
+        // apart by TOKEN, so what is left here is the seller's item shown at
+        // whatever price now stands against it.
+        //
+        // **The hole this leaves, stated rather than hidden:** a token that
+        // was on the shelf at the lock, whose every pre-lock offer has since
+        // gone, and which a stranger has planted against, shows the
+        // stranger's figure. It needs both halves; a plant alone no longer
+        // reaches the wall. Closing it means refusing the item outright once
+        // its own offers have moved, which takes a partly-sold item off the
+        // screen until the seller re-locks — a product trade, not a bug fix.
+        if (view.windowLock?.has(listing.tokenId) === true) {
+            kept.push(listing);
+        }
+    }
+    return kept;
 }
 
 /**
@@ -354,9 +424,9 @@ export function shopWindowSheet(
     let mode: WindowParams['mode'] = 'cycle';
     let locked = false;
     let height = tipHeight === undefined ? undefined : suggestedLock(tipHeight);
+    const noListings = listingsInShopOrder(view).length === 0;
+    const noQuotes = quotedItems(view).length === 0;
 
-    const scrim = el('div', 'sheet-scrim');
-    scrim.setAttribute('data-role', 'sheet-scrim');
     const sheet = el('div', 'sheet sw-sheet');
     sheet.setAttribute('data-role', 'shop-window-sheet');
 
@@ -396,16 +466,25 @@ export function shopWindowSheet(
 
     const picker = <T extends string>(
         label: string,
-        options: ReadonlyArray<readonly [T, string]>,
+        options: ReadonlyArray<readonly [T, string, boolean?]>,
         current: () => T,
         set: (value: T) => void,
     ): HTMLElement => {
         const wrap = el('div');
         wrap.append(el('label', 'paste-label', label));
         const seg = el('div', 'seg');
-        for (const [value, words] of options) {
+        for (const [value, words, empty] of options) {
             const button = el('button', 'seg-b', words);
             button.type = 'button';
+            // A rail this stall has nothing on is a blank wall for however
+            // long the screen is left running, so the sheet says so where the
+            // choice is made rather than letting the seller find out in the
+            // shop.
+            if (empty === true) {
+                button.disabled = true;
+                button.title = copy.WINDOW_RAIL_EMPTY;
+                button.setAttribute('data-role-empty', 'true');
+            }
             button.setAttribute('data-role', `window-${label.toLowerCase()}-${value}`);
             button.setAttribute('aria-pressed', String(current() === value));
             button.addEventListener('click', () => {
@@ -428,9 +507,9 @@ export function shopWindowSheet(
         picker(
             copy.WINDOW_SHOW_LABEL,
             [
-                ['listings', copy.WINDOW_SHOW_LISTINGS],
-                ['quotes', copy.WINDOW_SHOW_QUOTES],
-                ['all', copy.WINDOW_SHOW_ALL],
+                ['listings', copy.WINDOW_SHOW_LISTINGS, noListings],
+                ['quotes', copy.WINDOW_SHOW_QUOTES, noQuotes],
+                ['all', copy.WINDOW_SHOW_ALL, noListings && noQuotes],
             ] as const,
             () => show,
             (value) => {
@@ -463,18 +542,31 @@ export function shopWindowSheet(
     heightField.setAttribute('inputmode', 'numeric');
     heightField.setAttribute('data-role', 'window-lock-height');
     heightField.value = height === undefined ? '' : String(height);
-    heightField.addEventListener('input', () => {
-        const parsed = parseBlockParam(heightField.value.trim());
-        height = parsed;
+    const refused = el('p', 'fine', copy.WINDOW_LOCK_REFUSED);
+    refused.setAttribute('data-role', 'window-lock-refused');
+    refused.hidden = true;
+    /**
+     * A lock is on only when there is a height to lock at. Pressing it over a
+     * field the parse refuses used to say `aria-pressed="true"` while the
+     * link silently carried no `upto` — a control claiming to do the one
+     * thing it was not doing.
+     */
+    const settle = (): void => {
+        const typed = heightField.value.trim();
+        height = parseBlockParam(typed);
+        refused.hidden = typed === '' || height !== undefined;
+        const on = locked && height !== undefined;
+        lockPress.setAttribute('aria-pressed', String(on));
         sync();
-    });
+    };
+    heightField.addEventListener('input', settle);
     lockPress.addEventListener('click', () => {
         locked = !locked;
-        lockPress.setAttribute('aria-pressed', String(locked));
-        sync();
+        settle();
     });
     lockRow.append(lockPress, heightField);
     form.append(lockRow);
+    form.append(refused);
     form.append(el('p', 'fine', copy.WINDOW_LOCK_WHY));
     sheet.append(form);
 
@@ -500,7 +592,5 @@ export function shopWindowSheet(
     sheet.append(foot);
 
     sync();
-    void view;
-    scrim.append(sheet);
-    return scrim;
+    return sheet;
 }

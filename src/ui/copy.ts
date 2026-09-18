@@ -1706,3 +1706,17 @@ export const WINDOW_LINK_WHY =
     'Bookmark this on the shop’s own computer to open the same screen tomorrow.';
 export const WINDOW_OPEN_HERE = 'Open here';
 export const WINDOW_OPEN_TAB = 'Open in a new tab';
+
+/**
+ * The lock's own refusal, said and never substituted.
+ *
+ * `parseBlockParam` refuses `"874,213"` — which its own docblock names as
+ * what a seller reads off an explorer, commas and all. The first version
+ * dropped the lock from the link in silence and left the control reporting
+ * itself as pressed. §8's rule for a quantity this field cannot read: say so,
+ * never guess one.
+ */
+export const WINDOW_LOCK_REFUSED = 'A block height is digits only — no commas.';
+
+/** Said beside a rail this stall has nothing on, so the seller does not pick a blank wall. */
+export const WINDOW_RAIL_EMPTY = 'This stall has nothing on that side right now.';

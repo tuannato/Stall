@@ -86,6 +86,20 @@ describe('the-freeze-remembers-tokens-and-never-compares-heights-alone', () => {
         expect(shown.map((o) => o.tokenId)).toEqual([BEANS]);
     });
 
+    /**
+     * The capture itself, which nothing covered: every earlier case fed
+     * `tokensAtBlock` only pre-lock offers, so replacing its whole guard with
+     * an unconditional add left all of them green. This is the function
+     * `syncWindow` runs over the live book, and a broken one remembers a
+     * stranger's post-lock token for ever — the §10 gift listing on a wall
+     * all afternoon, which is the feature's stated reason for existing.
+     */
+    it('remembers only what was already being offered at the lock', () => {
+        const ids = tokensAtBlock([offer(BEANS, 100), offer(JUNK, 900)], 120);
+        expect([...ids]).toEqual([BEANS]);
+        expect(ids.has(JUNK)).toBe(false);
+    });
+
     it('is the whole book when no lock is asked for', () => {
         const all = [offer(BEANS, 100), offer(JUNK, 900)];
         expect(offersWithinLock(all, undefined)).toEqual(all);
