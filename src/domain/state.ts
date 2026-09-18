@@ -267,6 +267,34 @@ export type WindowParams = {
 };
 
 /**
+ * What a painted shop window is holding, beyond the link's own options.
+ *
+ * All four are **paint-time closure state written by `boot`**, never fields a
+ * loader fills: `refresh()` rebuilds the view from `loadCurrent()`, and a
+ * cursor or a rail rebuilt from a load would snap the carousel back to its
+ * first card on every socket tick. The same reason `fiatCode` and `shopTab`
+ * live there.
+ */
+export type WindowState = {
+    /**
+     * The token ids this screen saw at its lock, carried across a reload.
+     * A union with the height test rather than a replacement for it — see
+     * `offersWithinLock`, and the cost stated there for a machine with no
+     * memory of this lock.
+     */
+    windowLock?: ReadonlySet<string>;
+    /** Which rail `show=all` is currently resting on. Rotated, never merged. */
+    windowRail?: 'listings' | 'quotes';
+    /** Which card `mode=cycle` is on. Clamped by the painter, not stored clamped. */
+    windowCursor?: number;
+    /**
+     * When this page last read the chain, by this browser's clock. Absent
+     * until a read lands, and the freshness line is absent with it.
+     */
+    readAtMs?: number;
+};
+
+/**
  * Which panel of a resolved stall is on screen. **App state, never
  * `history.state`**: the only popstate listener runs `refresh()`, which
  * closes the socket, empties the event ring and re-runs the whole load — a
@@ -498,8 +526,15 @@ export type PayRateAnswer =
     | { rate: bigint; atMs: number; check?: RateCheck; why?: undefined }
     | { rate?: undefined; why: PayRateWhy };
 
-export type StallView = {
+export type StallView = WindowState & {
     route: RouteResolution;
+    /**
+     * The shop window's own options, when this load is one. Written at paint
+     * time from the entry's search, the way `broadcast` is — absent on every
+     * ordinary stall, and the two can never both be present because they read
+     * the same `view` param.
+     */
+    window?: WindowParams;
     fetch?: FetchStatus;
     overlay: Overlay;
     stallName?: string;

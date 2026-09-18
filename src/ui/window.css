@@ -1,0 +1,407 @@
+/*
+ * The shop window — the stall at the size a wall needs.
+ *
+ * Its own sheet, the way `broadcast.css` belongs to the overlay: everything
+ * here is scoped under `.stall.shop-window`, so nothing in it can reach the
+ * shop, and the shop's own rules reach every element here because the window
+ * wears the same classes on purpose (`.item`, `.item-head`, `.item-ic`,
+ * `.item-b`, `.item-n`, `.item-p`, `.item-a`, `.item-x`). That is what lets a
+ * look dress this screen without anybody drawing a thing for it.
+ *
+ * Two rules the base sheet states for a reading column and this one has to
+ * undo, both stated rather than fought:
+ *
+ *   `--s-content-max-d` caps the head, the body and the foot so three cards do
+ *   not spread across whatever a monitor is. A shop window IS whatever the
+ *   monitor is, so the cap is widened rather than deleted — the var stays
+ *   emitted and stays read, or `every-theme-var-reaches-the-stylesheet` and
+ *   `no-stylesheet-reads-a-var-nobody-emits` both move.
+ *
+ *   `.items` pins `grid-template-rows` at desk width for a 152px row. A window
+ *   row is twice that, and a pinned template makes the rows overlap rather
+ *   than grow — measured while drawing this, and it is why `grid-auto-rows`
+ *   is restated here.
+ */
+
+.stall.shop-window {
+    /* A decoration's own numbers multiply by this; the shop leaves it at 1.
+       Set here rather than inline so the whole screen scales as one. */
+    --s-decor-scale: 2;
+}
+
+/*
+ * The scroll is a named grid, and the names are load-bearing: Rural's yard
+ * (`.att-beetle`) is a child of `.stall-scroll`, so an unnamed template
+ * auto-places it into the sign's row and a decoration lands on top of the
+ * seller's name. Measured while drawing this.
+ */
+.stall.shop-window .stall-scroll {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    height: 100%;
+    overflow: hidden;
+}
+
+.stall.shop-window .stall-head {
+    grid-row: 1;
+}
+
+.stall.shop-window .att-beetle {
+    grid-row: 2;
+}
+
+.stall.shop-window .stall-body {
+    grid-row: 3;
+}
+
+.stall.shop-window .sw-status {
+    grid-row: 4;
+}
+
+.stall.shop-window .stall-head,
+.stall.shop-window .stall-body {
+    width: 100%;
+    max-width: min(100%, 1720px);
+    margin-inline: auto;
+}
+
+.stall.shop-window .stall-head {
+    padding: 22px 44px 18px;
+}
+
+.stall.shop-window .stall-headings {
+    gap: 10px;
+}
+
+.stall.shop-window .stall-name {
+    margin: 0;
+    font-size: 54px;
+    line-height: 1.02;
+}
+
+.stall.shop-window .stall-tagline {
+    margin: 0;
+    font-size: 21px;
+}
+
+.stall.shop-window .stall-sign {
+    width: 100%;
+    max-width: none;
+}
+
+.stall.shop-window .stall-body {
+    padding: 24px 44px;
+    align-content: start;
+}
+
+.stall.shop-window .items,
+.stall.shop-window .sw-strip {
+    max-width: none;
+    grid-template-rows: none;
+    grid-auto-rows: max-content;
+}
+
+.stall.shop-window .items > .item {
+    margin: 0;
+    max-width: none;
+}
+
+/* The name's cell is sized for a 390px row; here it has a wall. */
+.stall.shop-window .item-b,
+.stall.shop-window .item-p,
+.stall.shop-window .item-a {
+    min-width: 0;
+}
+
+.stall.shop-window .sw-qr svg,
+.stall.shop-window .sw-plate svg {
+    display: block;
+    border-radius: 4px;
+}
+
+/*
+ * The caption is the only sentence on the screen telling a customer what the
+ * code does, and a shop screen is read from two to five metres. Everything
+ * muted on this surface is ours; this one is theirs, so it is in ink and on
+ * the large step of the scale rather than the small one.
+ */
+.stall.shop-window .sw-cap {
+    display: block;
+    margin-top: 14px;
+    color: var(--s-text);
+    font-size: 28px;
+    line-height: 1.25;
+}
+
+.stall.shop-window .sw-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 44px;
+    border-top: var(--s-sect-rule);
+    color: var(--s-muted);
+    font-size: 19px;
+}
+
+.stall.shop-window .sw-fresh {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- cycle: one item, two columns, one vertical rhythm ---------- */
+
+.stall.shop-window[data-mode='cycle'] .sw-strip {
+    display: grid;
+    place-content: center;
+    height: 100%;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-head {
+    display: grid;
+    grid-template-areas:
+        'ic name'
+        'ic price'
+        'ic qr';
+    grid-template-columns: 520px minmax(0, 1fr);
+    column-gap: 72px;
+    row-gap: 22px;
+    align-content: center;
+    align-items: start;
+    padding: 40px 48px;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-ic {
+    grid-area: ic;
+    align-self: center;
+    width: 520px;
+    height: 520px;
+    font-size: 180px;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-b {
+    grid-area: name;
+    align-self: end;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-n {
+    font-size: 68px;
+    line-height: 1.04;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-p {
+    grid-area: price;
+    justify-self: start;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-x {
+    font-size: 112px;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-from,
+.stall.shop-window[data-mode='cycle'] .item-u {
+    font-size: 28px;
+}
+
+.stall.shop-window[data-mode='cycle'] .sw-qr {
+    grid-area: qr;
+    justify-self: start;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 24px;
+    align-items: center;
+}
+
+.stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
+    margin: 0;
+    max-width: 460px;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-foot {
+    padding: 0 48px 32px;
+}
+
+.stall.shop-window[data-mode='cycle'] .item-foot-words {
+    font-size: 30px;
+}
+
+/* ---------- browse: a price list, and one code for the shop ---------- */
+
+.stall.shop-window[data-mode='browse'] .stall-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    column-gap: 44px;
+    overflow: hidden;
+}
+
+.stall.shop-window[data-mode='browse'] .sw-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    overflow-y: auto;
+    align-content: start;
+}
+
+.stall.shop-window[data-mode='browse'] .item-head {
+    display: grid;
+    grid-template-areas: 'ic name price';
+    grid-template-columns: 140px minmax(0, 1fr) auto;
+    column-gap: 30px;
+    align-items: center;
+    padding: 18px 28px;
+}
+
+.stall.shop-window[data-mode='browse'] .item-ic {
+    grid-area: ic;
+    width: 140px;
+    height: 140px;
+    font-size: 50px;
+}
+
+.stall.shop-window[data-mode='browse'] .item-b {
+    grid-area: name;
+    align-self: center;
+}
+
+.stall.shop-window[data-mode='browse'] .item-n {
+    font-size: 40px;
+    line-height: 1.08;
+}
+
+.stall.shop-window[data-mode='browse'] .item-p {
+    grid-area: price;
+    justify-self: end;
+    align-self: center;
+}
+
+.stall.shop-window[data-mode='browse'] .item-x {
+    font-size: 50px;
+}
+
+.stall.shop-window[data-mode='browse'] .item-from,
+.stall.shop-window[data-mode='browse'] .item-u {
+    font-size: 21px;
+}
+
+.stall.shop-window[data-mode='browse'] .item-foot {
+    padding: 0 28px 18px;
+}
+
+.stall.shop-window[data-mode='browse'] .item-foot-words {
+    font-size: 26px;
+}
+
+.stall.shop-window[data-mode='browse'] .sw-plate {
+    align-self: center;
+    justify-self: center;
+    display: grid;
+    justify-items: center;
+    text-align: center;
+}
+
+.stall.shop-window[data-mode='browse'] .sw-plate .sw-cap {
+    max-width: 380px;
+}
+
+/* ---------- portrait: a screen hung the other way is first-class ---------- */
+
+@media (orientation: portrait) {
+    .stall.shop-window[data-mode='cycle'] .item-head {
+        grid-template-areas:
+            'ic'
+            'name'
+            'price'
+            'qr';
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        row-gap: 28px;
+        padding: 36px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-ic {
+        width: 560px;
+        height: 560px;
+        font-size: 190px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-b {
+        text-align: center;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-p {
+        justify-self: center;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-x {
+        font-size: 124px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-qr {
+        grid-template-columns: minmax(0, 1fr);
+        justify-self: center;
+        text-align: center;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
+        margin-top: 14px;
+        max-width: 620px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .stall-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        row-gap: 28px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .item-head {
+        grid-template-areas:
+            'ic name'
+            'ic price';
+        grid-template-columns: 160px minmax(0, 1fr);
+        column-gap: 28px;
+        row-gap: 8px;
+        padding: 20px 24px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .item-ic {
+        width: 160px;
+        height: 160px;
+        font-size: 56px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .item-p {
+        justify-self: start;
+        align-self: start;
+    }
+
+    .stall.shop-window[data-mode='browse'] .item-x {
+        font-size: 46px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .sw-plate {
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 28px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .stall.shop-window[data-mode='browse'] .sw-plate .sw-cap {
+        margin: 0;
+        max-width: 420px;
+        text-align: left;
+    }
+}
+
+/*
+ * STAYS LAST. `the-reduce-block-is-the-last-rule-in-its-sheet` holds it here,
+ * and the rule is not decoration: a kill for a mover at the base rule's
+ * specificity has to out-rank it, and anything added below would out-rank the
+ * kill instead.
+ *
+ * A shop window is the one surface where a reader cannot press anything, so a
+ * reader who needs stillness has no way to ask for it beyond this.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .stall.shop-window [data-marquee] > .mq-run {
+        animation: none;
+        transform: none;
+    }
+}

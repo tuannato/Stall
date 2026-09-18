@@ -116,6 +116,23 @@ export const ROW_MARQUEE: MarqueeSurface = { speeds: ROW_SPEED_PX_PER_S, runs: 3
  */
 export const STREAM_MARQUEE: MarqueeSurface = { speeds: STREAM_SPEED_PX_PER_S, runs: 1 };
 
+/**
+ * A shop window is a wall, and a wall is read from further away than a phone
+ * and for longer than a stream card.
+ *
+ * Slower than the stream's pace, because nobody here is glancing between
+ * scenes — a customer is standing in front of it deciding. Two passes rather
+ * than the shop's three, because in `cycle` a card is replaced on its own
+ * schedule and a third pass would be spent on a card about to leave; in
+ * `browse` the line is in front of the reader for as long as they stand
+ * there, and a line that keeps running is the loop WCAG 2.2.2 refuses.
+ */
+export const WINDOW_SPEED_PX_PER_S: Readonly<Record<MarqueeKind, number>> = {
+    name: 46,
+    words: 70,
+};
+export const WINDOW_MARQUEE: MarqueeSurface = { speeds: WINDOW_SPEED_PX_PER_S, runs: 2 };
+
 type Measure = (node: HTMLElement) => number;
 
 const realMeasure: Measure = (node) => node.scrollWidth - node.clientWidth;

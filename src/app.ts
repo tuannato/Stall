@@ -4,6 +4,7 @@ import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import {
     isHomePath,
     parseBroadcastParams,
+    parseWindowParams,
     parsePayParam,
     parseSellerParam,
     sellerFromPath,
@@ -175,10 +176,18 @@ function withUrlParams(state: AppState): AppState {
         return state;
     }
     const broadcast = parseBroadcastParams(location.search);
-    // A stream overlay mounts no sheet, so an item named on one would open
-    // nothing and say nothing. The parameter is simply not carried there.
-    const payHint = broadcast === undefined ? parsePayParam(location.search) : undefined;
-    if (broadcast === undefined && payHint === undefined) {
+    // The two screens read the same `view` param, so they can never both be
+    // asked for; the parse is still guarded rather than assumed, because a
+    // future third value must not silently be both.
+    const window = broadcast === undefined ? parseWindowParams(location.search) : undefined;
+    // Neither of the unattended screens mounts a sheet, so an item named on
+    // one would open nothing and say nothing. The parameter is simply not
+    // carried there.
+    const payHint =
+        broadcast === undefined && window === undefined
+            ? parsePayParam(location.search)
+            : undefined;
+    if (broadcast === undefined && window === undefined && payHint === undefined) {
         return state;
     }
     return {
@@ -186,6 +195,7 @@ function withUrlParams(state: AppState): AppState {
         view: {
             ...state.view,
             ...(broadcast === undefined ? {} : { broadcast }),
+            ...(window === undefined ? {} : { window }),
             ...(payHint === undefined ? {} : { payHint }),
         },
     };

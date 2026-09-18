@@ -1611,3 +1611,67 @@ export const BROADCAST_QUOTE_QR_ALT = 'QR code for this item at this stall';
 export function broadcastMore(n: number): string {
     return `+${n} more`;
 }
+
+/* ---------- the shop window ---------- */
+
+/**
+ * What a code on one item does, and it is deliberately not "buy".
+ *
+ * A quote's code opens this page's pay sheet; a listing's opens Cashtab's
+ * token page, where every maker's offers are listed and the buyer picks a row
+ * (§2 — no `action=BUY`). Neither is a purchase, and Cashtab may not even show
+ * the row this screen is advertising (§10), so the word is "open".
+ */
+export const WINDOW_SCAN_ITEM = 'Scan to open this item';
+
+/** The one code a catalogue carries: the shop, not a row of it. */
+export const WINDOW_SCAN_SHOP = 'Scan to browse this shop on your phone';
+
+/**
+ * What the screen is showing, on the left of the status bar.
+ *
+ * No count: §4's rule is that a number is printed only when this page read the
+ * whole of that side, and a screen nobody can question is the worst place to
+ * print a floor as an inventory.
+ */
+export function windowState(rail: 'listings' | 'quotes', upto?: number): string {
+    const what = rail === 'quotes' ? 'Showing quotes' : 'Showing listings';
+    return upto === undefined ? what : `${what} · locked at block ${upto.toLocaleString('en-US')}`;
+}
+
+/** How long a screen may go unread before the line rounds to the next unit. */
+const WINDOW_FRESH_STEPS: ReadonlyArray<readonly [number, string]> = [
+    [86_400, 'day'],
+    [3_600, 'hour'],
+    [60, 'minute'],
+];
+
+/**
+ * How long ago this screen last read the chain.
+ *
+ * **Absent when it cannot be said.** A screen with no read time prints no line
+ * rather than "just now", which is §5's rule about a record this page cannot
+ * date, applied where the claim is about our own reading. A stamp ahead of
+ * this browser's clock answers nothing for the same reason.
+ *
+ * It exists because nothing else on an unattended screen can say it:
+ * `chronik-client` sends no ping, a half-open socket fires no `close`, and the
+ * one recovery path that saves every other case — `visibilitychange` into
+ * `resume()` — never fires on a kiosk that is visible around the clock.
+ */
+export function windowFreshness(readAtMs: number | undefined, nowMs: number): string | undefined {
+    if (readAtMs === undefined || !Number.isFinite(readAtMs) || readAtMs > nowMs) {
+        return undefined;
+    }
+    const seconds = Math.floor((nowMs - readAtMs) / 1000);
+    if (seconds < 60) {
+        return 'Updated just now';
+    }
+    for (const [size, unit] of WINDOW_FRESH_STEPS) {
+        const count = Math.floor(seconds / size);
+        if (count >= 1) {
+            return `Updated ${count} ${unit}${count === 1 ? '' : 's'} ago`;
+        }
+    }
+    return 'Updated just now';
+}

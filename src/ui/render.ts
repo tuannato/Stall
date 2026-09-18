@@ -93,6 +93,7 @@ import {
 import { stallMark } from './brand';
 import * as copy from './copy';
 import { renderBroadcastView } from './broadcast';
+import { renderShopWindow } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide } from './obsGuide';
 import {
     drawPoster,
@@ -105,6 +106,7 @@ import {
 import {
     ROW_MARQUEE,
     STREAM_MARQUEE,
+    WINDOW_MARQUEE,
     applyMarquees,
     marqueeNode,
     remeasureWhenFontsReady,
@@ -443,6 +445,48 @@ export function renderStall(
         // when the real faces land.
         applyMarquees(root, STREAM_MARQUEE);
         remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_MARQUEE);
+        overlayWasOpen = overlayOpen;
+        return;
+    }
+
+    /*
+     * The shop window is the third render path, and it is the stall rather
+     * than a second product: the same sign, the same row anatomy, the same
+     * looks and every decoration the seller chose, at the size a wall needs.
+     *
+     * Early return for the broadcast's reasons minus one. No dock, no footer,
+     * no rail tabs, no overlay mount and no row buttons — a screen nobody
+     * attends must not be navigable into a state the seller has to walk over
+     * and fix. What it does NOT drop is the decoration set: the owner's call
+     * (2026-09-18) is that whatever look and decor a seller chose paints here
+     * in full, so `wornAttachments` runs exactly as it does on the shop.
+     *
+     * The ornament strip is the one thing left off. Round 9 took the hexagon
+     * off the seller's sign because it made Stall a co-author of their
+     * shopfront; at 10px on a phone `// stall.cash` above their name is a
+     * footnote, and blown up on a wall in their shop for an afternoon it is
+     * an advertisement standing over the seller's own name.
+     */
+    if (
+        view.window !== undefined &&
+        view.route.kind !== 'invalid' &&
+        view.route.kind !== 'home'
+    ) {
+        applyTheme(
+            stall,
+            theme,
+            previewed !== undefined
+                ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+                : (view.worn ?? []),
+            { ornament: false },
+        );
+        stall.classList.add('shop-window');
+        stall.append(renderShopWindow(view, view.window));
+        placeAttachmentNodes(stall, view.worn ?? []);
+        frame.append(stall);
+        root.append(frame);
+        applyMarquees(root, WINDOW_MARQUEE);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE);
         overlayWasOpen = overlayOpen;
         return;
     }
@@ -1811,7 +1855,7 @@ function revealLoadedIcon(
  * keeps its icon whatever the genesis says: there the token *is* the thing
  * being sold, and its picture is its own.
  */
-function itemIcon(
+export function itemIcon(
     tokenId: string,
     name: string,
     extraClass?: string,
@@ -5731,7 +5775,7 @@ function lampAt(name: string, parts: readonly string[]): number | undefined {
     return lit[hash % lit.length];
 }
 
-function header(
+export function header(
     name?: string,
     sub?: string,
     address?: string,

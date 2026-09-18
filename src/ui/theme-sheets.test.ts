@@ -40,6 +40,7 @@ const SHEETS = [
     'theme-rural.css',
     'broadcast.css',
     'obsGuide.css',
+    'window.css',
 ];
 
 const stripped = (file: string): string =>
