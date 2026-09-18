@@ -746,6 +746,21 @@ export const SCREENS: Record<string, StallView> = {
      * from `listingsInShopOrder`: token-id sort puts T2, LONG, T1 in the
      * etoken section and LONGER, NFT in the nft one.)
      */
+    /**
+     * The stall on a wall: one item, and the catalogue. Both wear a look's
+     * decorations at `--s-decor-scale: 2`, which is the whole point of the
+     * screen and the thing a probe at a phone's width cannot see.
+     */
+    'shop-window-cycle': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle' },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-browse': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'browse', upto: 874_213 },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
     broadcast: base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         broadcast: bc('corner', 'fixed'),
@@ -1015,6 +1030,32 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
  *   four edges" — a transparent overlay paints nothing on purpose — and the
  *   `.item-b` name floor, which is a grid the overlay does not have.
  */
+/**
+ * Screens the runner measures at 1920x1080 rather than at a phone and a desk.
+ *
+ * The union of the stream overlay and the shop window, and they are here for
+ * two different reasons: an overlay is a 1920 canvas by definition, and a
+ * shop window is one because a wall is. `NO_DECOR_SCREENS` stayed the answer
+ * to a DIFFERENT question — whether decorations paint — because the window
+ * wears every one the seller chose (owner, 2026-09-18) and the overlay wears
+ * none. One set answering both questions is how a screen ends up on the wrong
+ * viewport or stripped of the thing it exists to show.
+ */
+export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
+    'broadcast',
+    'broadcast-clear',
+    'broadcast-quotes',
+    'broadcast-quotes-clear',
+    'broadcast-quotes-long-name',
+    'broadcast-rest',
+    'broadcast-rail',
+    'broadcast-empty',
+    'broadcast-long-name',
+    'broadcast-rail-long-name',
+    'shop-window-cycle',
+    'shop-window-browse',
+]);
+
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-clear',

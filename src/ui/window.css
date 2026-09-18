@@ -113,9 +113,28 @@
     min-width: 0;
 }
 
+/*
+ * The code's box, and it is the one number on this screen that is not taste.
+ *
+ * `qrSvg` draws a viewBox and no size, so a code with no rule here collapses
+ * to the intrinsic 300x150 of a sizeless SVG and paints straight out of its
+ * grid row — which is what the probe found the day this screen first reached
+ * it, 378 times over.
+ *
+ * 360px is a third of 1080, the floor `every-format-keeps-the-qr-at-a-third-
+ * of-the-short-side` already applies to a poster, "because a code small
+ * against the sheet it is on is a code nobody scans across a market" — and a
+ * wall is that argument at its strongest. At the densest destination this
+ * screen has (Cashtab's token page, 41 data modules in a 49 span) that is
+ * 7.35px a module, against the project's only bracket of 5.17 read and 3.60
+ * refused. `the-window-code-is-the-size-the-module-tests-pin` holds the
+ * number here to `WINDOW_QR_PX`.
+ */
 .stall.shop-window .sw-qr svg,
 .stall.shop-window .sw-plate svg {
     display: block;
+    width: 360px;
+    height: 360px;
     border-radius: 4px;
 }
 
@@ -161,8 +180,9 @@
         'ic name'
         'ic price'
         'ic qr';
-    grid-template-columns: 520px minmax(0, 1fr);
-    column-gap: 72px;
+    grid-template-columns: 460px minmax(0, 1fr);
+    column-gap: 56px;
+    max-width: 100%;
     row-gap: 22px;
     align-content: center;
     align-items: start;
@@ -172,9 +192,9 @@
 .stall.shop-window[data-mode='cycle'] .item-ic {
     grid-area: ic;
     align-self: center;
-    width: 520px;
-    height: 520px;
-    font-size: 180px;
+    width: 460px;
+    height: 460px;
+    font-size: 160px;
 }
 
 .stall.shop-window[data-mode='cycle'] .item-b {
@@ -212,7 +232,7 @@
 
 .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
     margin: 0;
-    max-width: 460px;
+    max-width: 380px;
 }
 
 .stall.shop-window[data-mode='cycle'] .item-foot {

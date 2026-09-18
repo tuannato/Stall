@@ -498,11 +498,14 @@ try {
          * "no screens" would print a tick for a pass that measured nothing, and
          * one that answered "all of them" would certify 252px plates at 390px.
          */
-        const overlayScreens = await evalJson(cdp, sessionId, 'window.__noDecorScreens');
+        // The set the SPLIT is about, which is not the set the decorations
+        // are about: a shop window is a 1920 canvas and wears every decoration
+        // the seller chose, where an overlay is a 1920 canvas and wears none.
+        const canvasScreens = await evalJson(cdp, sessionId, 'window.__canvasScreens');
         const ran = report.screensMeasured ?? [];
         const isCanvas = vp === CANVAS;
-        const strays = ran.filter((name) => overlayScreens.includes(name) !== isCanvas);
-        if (ran.length === 0 || strays.length > 0 || (isCanvas && ran.length !== overlayScreens.length)) {
+        const strays = ran.filter((name) => canvasScreens.includes(name) !== isCanvas);
+        if (ran.length === 0 || strays.length > 0 || (isCanvas && ran.length !== canvasScreens.length)) {
             failed = true;
             console.error(
                 `✗ ${vp.name} (${measured}): measured ${ran.length} screen(s)` +

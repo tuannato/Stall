@@ -486,6 +486,12 @@ export function renderStall(
             { ornament: false },
         );
         stall.classList.add('shop-window');
+        // The mode goes on the ROOT, because that is where `window.css`
+        // selects it — the two modes are different layouts of the same
+        // markup, and a selector that reached for the attribute one level
+        // down matched nothing at all (378 probe failures, and every one of
+        // them was this).
+        stall.setAttribute('data-mode', view.window.mode);
         stall.append(renderShopWindow(view, view.window));
         placeAttachmentNodes(stall, view.worn ?? []);
         frame.append(stall);

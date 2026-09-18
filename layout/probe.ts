@@ -25,6 +25,7 @@ import {
     OBS_STICKER_WIDTH,
 } from '../src/ui/obsSizes';
 import {
+    CANVAS_SCREENS,
     GEOMETRY_ONLY_SCREENS,
     NO_DECOR_SCREENS,
     SCREENS,
@@ -164,6 +165,40 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
  * Sampled at five points rather than one: a decoration that covers half a
  * number still hides the number, and a single centre probe misses it.
  */
+/**
+ * Every ancestor that clips this node, out to the shell.
+ *
+ * All of them, not the nearest: a point is on screen only if it is inside
+ * EVERY clip above it, and taking one alone gets it wrong in both directions.
+ * Measured while adding the shop window, both ways round — reading only the
+ * nearest scroller let the dock report itself as covering a shop row 560
+ * times, because the nearer box contained a point the shell's did not; and
+ * reading only the shell (which is what this was, by name) let a row scrolled
+ * out of the window's own strip report as a covered asked amount 117 times,
+ * because the shell's box contained a point the strip's did not.
+ *
+ * The shell is matched by NAME as well as by `overflow`, because on the shop
+ * the page is what scrolls and the shell clips nothing — the tolerance it has
+ * always had is that the dock sits outside it in flow and so can never cover
+ * what is inside.
+ */
+function clipsOf(node: Element): DOMRect[] {
+    const rects: DOMRect[] = [];
+    let at: Element | null = node.parentElement;
+    while (at !== null && at !== document.documentElement) {
+        const style = getComputedStyle(at);
+        if (
+            at.classList.contains('stall-scroll') ||
+            style.overflowY !== 'visible' ||
+            style.overflowX !== 'visible'
+        ) {
+            rects.push(at.getBoundingClientRect());
+        }
+        at = at.parentElement;
+    }
+    return rects;
+}
+
 function coveredBy(node: Element): string | undefined {
     const box = node.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) {
@@ -181,15 +216,17 @@ function coveredBy(node: Element): string | undefined {
     // covered — it is reachable by scrolling, and the tab bar sits outside
     // the clip in flow, so it can never cover what is inside. Points within
     // the clip are still fully checked.
-    const clip = node.closest('.stall-scroll')?.getBoundingClientRect();
+    const clips = clipsOf(node);
     for (const [x, y] of points) {
         if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
             // Off screen is its own failure, reported by the viewport check.
             continue;
         }
         if (
-            clip !== undefined &&
-            (y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right)
+            clips.some(
+                (clip) =>
+                    y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right,
+            )
         ) {
             continue;
         }
@@ -947,7 +984,7 @@ function variantsFor(screen: string, themeId: number): readonly (readonly Shippe
  */
 function screensForViewport(): string[] {
     const canvas = new URLSearchParams(location.search).get('viewport') === 'canvas';
-    return Object.keys(SCREENS).filter((name) => NO_DECOR_SCREENS.has(name) === canvas);
+    return Object.keys(SCREENS).filter((name) => CANVAS_SCREENS.has(name) === canvas);
 }
 
 /**
@@ -1299,6 +1336,7 @@ declare global {
         __contrastScreens: string[];
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
+        __canvasScreens: string[];
         __themes: number[];
         __probeReady: boolean;
     }
@@ -1328,6 +1366,7 @@ window.__contrastScreens = screensForViewport().filter(
         !GEOMETRY_ONLY_SCREENS.has(name),
 );
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
+window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = SHIPPED_THEMES.map((t) => t.id);
 
 /** True when any ancestor up to the stall carries a live transform. */

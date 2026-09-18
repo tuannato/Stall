@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { renderStall } from './render';
-import { windowItemLink, windowLinkFor } from './window';
+import { WINDOW_QR_PX, windowItemLink, windowLinkFor } from './window';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import type { StallHandlers } from './render';
 import type { StallOffer, StallView, WindowParams } from '../domain/state';
@@ -280,5 +283,26 @@ describe('a-shop-window-mounts-no-sheet', () => {
         } as StallView);
         expect(root.querySelector('[data-role="sheet-scrim"]')).toBeNull();
         expect(root.querySelector('[data-role="shop-window"]')).not.toBeNull();
+    });
+});
+
+describe('the-window-code-is-the-size-the-module-tests-pin', () => {
+    /**
+     * A number stated twice is a number that drifts. `qrSvg` draws a viewBox
+     * and no size, so the box is the stylesheet's to give — and the first
+     * version of this screen gave it none, which the layout probe found 378
+     * times before a browser ever showed anybody.
+     *
+     * 360 is a third of 1080, the same floor the poster formats already keep,
+     * "because a code small against the sheet it is on is a code nobody scans
+     * across a market".
+     */
+    it('states one box in the sheet and in the module', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8');
+        const block = /\.sw-qr svg,[\s\S]*?\}/.exec(css)?.[0] ?? '';
+        expect(block).toContain(`width: ${WINDOW_QR_PX}px`);
+        expect(block).toContain(`height: ${WINDOW_QR_PX}px`);
+        // A third of the short side of a 1080 screen, the poster's own floor.
+        expect(WINDOW_QR_PX).toBeGreaterThanOrEqual(Math.floor(1080 / 3));
     });
 });

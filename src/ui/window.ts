@@ -238,7 +238,6 @@ export function windowRail(view: StallView, params: WindowParams): 'listings' | 
 export function renderShopWindow(view: StallView, params: WindowParams): HTMLElement {
     const scroll = el('div', 'stall-scroll sw');
     scroll.setAttribute('data-role', 'shop-window');
-    scroll.setAttribute('data-mode', params.mode);
     scroll.setAttribute('data-show', params.show);
 
     scroll.append(
