@@ -152,6 +152,10 @@ export const handlers: StallHandlers = {
     onTogglePin: () => {},
     onChangeSort: () => {},
     onChangeFilter: () => {},
+    // Without this the face paints a bare tile and the picture's own control
+    // is measured on no screen at all — the probe would be green about a
+    // button it never saw.
+    onZoomIcon: () => {},
 };
 
 export const base = (over: Partial<StallView>): StallView => ({
@@ -230,6 +234,19 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
         // The longest thing a seller can publish, with no spaces to break on.
         descriptions: new Map([[T1, UNBROKEN]]),
+    }),
+    /*
+     * The face's picture at full size (2026-09-18). Its own screen because
+     * it is its own scrim: the probe measures inside the scrim it finds, so
+     * without this the surface would never be measured at all — the same
+     * reason the two record sheets are two screens rather than one.
+     */
+    'item-zoom': base({
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)],
+        },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings', zoom: true },
     }),
     /*
      * The two record sheets, one screen each. They were one screen while they
@@ -936,6 +953,15 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // Black ink on a white page inside a sheet: no ground the record sheets
     // and the stall poster's own page do not already put a figure on.
     'pay-tag',
+    /*
+     * The picture at full size carries no money figure at all — a token's
+     * artwork, its name and a Close — and its two text nodes are white on a
+     * scrim that is a literal no look touches. What this screen is here to
+     * prove is geometry: that the surface is bounded, that it covers the
+     * stall deliberately rather than by accident, and that nothing of the
+     * face leaks past it.
+     */
+    'item-zoom',
     /*
      * These two were pruned to pay for the panel's segmented control, which
      * joined the sampled set on every page screen at once (`.seg-b` was

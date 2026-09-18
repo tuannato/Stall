@@ -386,7 +386,9 @@ function measure(screen: string, themeLabel: string): Failure[] {
     // sheets' role — measured 2026-09-08 when the first poster screen was
     // added: read against `root`, every price behind the modal reported the
     // scrim covering it, and nothing inside the sheet was measured at all.
-    const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"]');
+    const scrim = root.querySelector(
+        '[data-role="sheet-scrim"], [data-role="poster"], [data-role="zoom"]',
+    );
     const surface: ParentNode = scrim ?? root;
 
     // A closed <details> lays out nothing, so every check below it would pass
@@ -620,7 +622,11 @@ function measure(screen: string, themeLabel: string): Failure[] {
     if (scrim !== null) {
         // A sheet taller than the screen with nothing to scroll would strand
         // whatever is below it — including a figure a seller is about to sign.
-        const sheet = scrim.querySelector('.sheet');
+        // `.zoom-card` is the same surface on the picture overlay (2026-09-18):
+        // what is measured is a modal's readable content, and a scrim holding
+        // loose children has none — which is why the zoom puts its picture,
+        // its name and its close in one card rather than three siblings.
+        const sheet = scrim.querySelector('.sheet, .zoom-card');
         if (sheet === null) {
             fail('a scrim with no sheet', 'nothing to read inside the overlay');
         } else {

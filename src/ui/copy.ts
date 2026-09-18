@@ -1416,6 +1416,16 @@ export const ROW_LABEL_AGORA = 'Agora';
 export const ROW_LABEL_PAY = 'Pay the seller';
 /** The face's close control: back to the rail it came from. */
 /** The words alone: the back glyph is drawn beside them, never typed. */
+/*
+ * The picture, at the size the page can actually show it (owner, 2026-09-18).
+ * "See" and not "zoom": what opens is the token's own artwork at the largest
+ * size this origin fetches — 256px, which is the biggest the icon Worker
+ * routes — so promising a magnification it cannot deliver would be a claim
+ * about somebody else's file. The label names the thing, not the gesture.
+ */
+export const ITEM_ICON_OPEN = 'See the picture';
+export const ITEM_ICON_CLOSE = 'Close';
+
 export const ITEM_BACK_LISTINGS = 'Listings';
 export const ITEM_BACK_QUOTES = 'Quotes';
 /** Under the Pay control on a quote's face — the one sentence, the rest folds. */

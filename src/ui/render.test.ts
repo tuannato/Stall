@@ -195,6 +195,7 @@ function handlers() {
         onChangeFilter: vi.fn(),
         onOpenPay: vi.fn(),
         onSwitchShopTab: vi.fn(),
+        onZoomIcon: vi.fn(),
     };
 }
 
@@ -2249,8 +2250,11 @@ describe('expanded-card-shows-a-large-token-image', () => {
         expect(face).not.toBeNull();
         const big = face.querySelector('.item-ic.item-ic-lg') as HTMLElement;
         expect(big).not.toBeNull();
-        // The hero leads the card's head row: the first thing after the back control.
-        expect(face.querySelector('.face-h')?.firstElementChild).toBe(big);
+        // The hero still leads the card's head row — through its control since
+        // 2026-09-18, which is what opens the picture at full size.
+        const lead = face.querySelector('.face-h')?.firstElementChild as HTMLElement;
+        expect(lead.getAttribute('data-role')).toBe('face-icon');
+        expect(lead.firstElementChild).toBe(big);
         // No icon has loaded, so it holds the initials, never an empty square.
         expect(big.textContent?.length ?? 0).toBeGreaterThan(0);
     });
@@ -13412,6 +13416,95 @@ describe('the-sign-hums-guts-one-letter-and-never-the-name', () => {
         // specificity — a kill one class short loses the cascade in silence.
         const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion'));
         expect(reduce).toMatch(/\.stall\.att-hum \.sign-lamp[^{]*\{[^}]*animation:\s*none/);
+    });
+});
+
+/*
+ * Round 15, 2026-09-18. The caret owned a 14–16px track plus the grid's gap,
+ * and on a phone that track came out of the one column with nothing to
+ * spare: measured at 390px, the seller's own name had 9 characters on
+ * Modern, 12 on Neo and 8 on Rural, and dropping the caret gives back
+ * 12 / 15 / 11. The owner took that trade knowing the cost — a thumb loses
+ * the only mark saying the row opens (the row is still a `<button>`, so a
+ * screen reader and a mouse are unaffected).
+ *
+ * Two halves that must agree or the row breaks: every look's PHONE grid
+ * names no `caret` area, and the stylesheet takes the caret out of flow at
+ * the same width. A grid child with no named area is auto-placed — it would
+ * land in a row of its own rather than vanish.
+ */
+describe('the-row-caret-is-a-desk-affordance', () => {
+    it('no phone grid names it, and the sheet takes it out of flow with them', () => {
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const vars = themeVars(decodeTheme(id));
+            expect(vars['--s-areas-m'], `look ${id} phone areas`).not.toContain('caret');
+            expect(vars['--s-areas-m3'], `look ${id} tier-3 areas`).not.toContain('caret');
+            // Tier 3 is a phone-only ladder (§6), so it loses the track too.
+            expect(vars['--s-areas-d'], `look ${id} desk areas`).toContain('caret');
+        }
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const base = /\n\.item-caret\s*\{([^}]*)\}/.exec(css)?.[1];
+        expect(base, 'the caret has its own rule').toBeDefined();
+        expect(base, 'and it is out of flow by default').toMatch(/display:\s*none/);
+        expect(
+            css,
+            'the one desk block puts it back',
+        ).toMatch(/\.item-head > \.item-caret\s*\{\s*display:\s*block;\s*\}/);
+    });
+});
+
+/*
+ * Round 15, 2026-09-18 (owner: "bấm vào icon để phóng to ảnh trong detail").
+ * The face's picture is a control, and what it opens rides `overlay.zoom`
+ * rather than an overlay kind of its own — the face does not hold the live
+ * paint (§4), so a surface outside this state would be thrown away by the
+ * next socket tick under whoever was looking at it.
+ */
+describe('the-faces-picture-opens-at-full-size', () => {
+    const faceView = (over: Partial<StallView> = {}): StallView =>
+        offersView([OFFER], undefined, {
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            ...over,
+        });
+
+    it('the picture is a control, and pressing it asks for the picture', () => {
+        const { root, h } = paint(faceView());
+        const btn = root.querySelector('[data-role="face-icon"]') as HTMLButtonElement;
+        expect(btn, 'the face wraps its tile in a control').not.toBeNull();
+        expect(btn.tagName.toLowerCase(), 'a control a keyboard can reach').toBe('button');
+        expect(btn.getAttribute('aria-label') ?? '', 'and it says what it opens').toContain(
+            copy.ITEM_ICON_OPEN,
+        );
+        expect(btn.querySelector('.item-ic-lg'), 'the look keeps its own tile').not.toBeNull();
+        expect(h.onZoomIcon).not.toHaveBeenCalled();
+        btn.dispatchEvent(new Event('click'));
+        expect(h.onZoomIcon).toHaveBeenCalledWith(true);
+        // Nothing opened on its own: the flag is the app's to set.
+        expect(root.querySelector('[data-role="zoom"]')).toBeNull();
+    });
+
+    it('opens the picture, its name and one way out — and survives a repaint', () => {
+        const open = faceView({
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings', zoom: true },
+        });
+        const { root, h } = paint(open);
+        const scrim = root.querySelector('[data-role="zoom"]') as HTMLElement;
+        expect(scrim, 'the picture is over the face').not.toBeNull();
+        expect(scrim.getAttribute('aria-modal'), 'and it says it is one').toBe('true');
+        expect(scrim.querySelector('.zoom-card'), 'one card, so the probe can measure it').not.toBeNull();
+        expect(scrim.querySelector('.zoom-ic'), 'the token\u2019s own tile, enlarged').not.toBeNull();
+        expect(scrim.querySelector('.zoom-name')?.textContent, 'named').toBe(BEANS.name);
+        const close = scrim.querySelector('[data-role="zoom-close"]') as HTMLButtonElement;
+        close.dispatchEvent(new Event('click'));
+        expect(h.onZoomIcon).toHaveBeenCalledWith(false);
+
+        // The reason it is a flag and not an overlay kind: the face lets an
+        // unsolicited paint through, and this has to come back with it.
+        const again = paint(open).root;
+        expect(
+            again.querySelector('[data-role="zoom"]'),
+            'a repaint rebuilds the picture instead of closing it',
+        ).not.toBeNull();
     });
 });
 

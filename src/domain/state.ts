@@ -146,7 +146,17 @@ export type Overlay =
      * state, because a live repaint rebuilds the face and a fold that shut
      * itself under a reader is a regression the old expander never had.
      */
-    | { kind: 'item'; tokenId: string; rail: 'listings' | 'quotes'; how?: boolean }
+    /**
+     * `zoom` is whether the token's picture is open at full size over the
+     * face (owner, 2026-09-18). A flag on the face rather than an overlay
+     * kind of its own, for one reason that decides the behaviour: the face
+     * does NOT hold the live paint (§4 — a listing's figure is the chain's
+     * and must move under a reader), so an overlay that lived outside this
+     * state would be thrown away by the next socket tick under whoever was
+     * looking at it. Carried here, a repaint rebuilds the zoom with the rest
+     * and the picture stays open while the figure behind it updates.
+     */
+    | { kind: 'item'; tokenId: string; rail: 'listings' | 'quotes'; how?: boolean; zoom?: boolean }
     /**
      * The stall's own record: name, tagline, announcement, look, decorations.
      * Composing the settings transaction — disclosure, not a wallet.

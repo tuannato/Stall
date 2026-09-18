@@ -606,6 +606,18 @@ export function boot(
                 // deliberately paintless.
                 syncGlance();
             },
+            onZoomIcon: (open) => {
+                const overlay = state.view.overlay;
+                if (overlay.kind !== 'item') {
+                    return;
+                }
+                // This one paints, where `onItemHow` above deliberately does
+                // not: the fold had already moved on screen by the time the
+                // handler ran, and this opens a surface that does not exist
+                // until the paint puts it there.
+                state = { ...state, view: { ...state.view, overlay: { ...overlay, zoom: open } } };
+                paint();
+            },
             onRetry: () => {
                 void refresh();
             },

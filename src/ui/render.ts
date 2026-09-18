@@ -121,6 +121,14 @@ export type StallHandlers = {
     onOpenItem: (tokenId: string, rail: 'listings' | 'quotes') => void;
     /** The item face's fold was opened or closed: state only, no paint. */
     onItemHow?: (open: boolean) => void;
+    /**
+     * The face's picture was opened or closed at full size. It paints —
+     * unlike the fold above, which only records — because the surface it
+     * opens is the whole screen. Optional, so a render-only test that never
+     * mounts it gets a tile with no control, which is also what a screen
+     * with no handler should paint.
+     */
+    onZoomIcon?: (open: boolean) => void;
     onRetry: () => void;
     onCloseSheet: () => void;
     /** Apex paste. Optional so a render-only test need not invent navigation. */
@@ -516,7 +524,25 @@ export function renderStall(
          * contrast pass reported as twenty-two controls painting on nothing.
          * Modal is the four kinds that carry a scrim, not "an overlay".
          */
-        if (view.overlay.kind === 'publish-name') {
+        if (view.overlay.kind === 'item' && view.overlay.zoom === true) {
+            /*
+             * The picture over the face. Mounted here rather than inside
+             * `facePanel` because the face has four call sites and this is
+             * one surface; and it rides `overlay.zoom`, so the repaint a
+             * socket tick causes rebuilds it instead of closing it under a
+             * reader (`state.ts` says why the face itself must not hold the
+             * paint back). No `has-sheet`: the stall behind a picture may
+             * still be scrolled, because nothing here is half-written.
+             */
+            const id = view.overlay.tokenId;
+            const named =
+                view.overlay.rail === 'quotes'
+                    ? quoteNaming(view, id).title
+                    : tokenName(view.tokens, id);
+            const attributed =
+                view.overlay.rail !== 'quotes' || view.genesis?.get(id) !== 'not-attributed';
+            stall.append(zoomSheet(id, named, attributed, handlers));
+        } else if (view.overlay.kind === 'publish-name') {
             stall.classList.add('has-sheet');
             stall.append(sheetOverlay(nameSheet(view, handlers), 'publish-sheet', handlers));
         } else if (view.overlay.kind === 'describe') {
@@ -5030,7 +5056,7 @@ function itemFace(
         const named = quoteNaming(view, tokenId);
         const minted = view.genesis?.get(tokenId);
         const headRow = el('div', 'face-h');
-        headRow.append(itemIcon(tokenId, named.title, 'item-ic-lg', ICON_HERO_SIZE, minted !== 'not-attributed'));
+        headRow.append(faceIcon(tokenId, named.title, minted !== 'not-attributed', handlers));
         const names = el('div');
         names.append(el('div', 'face-nm', named.title));
         if (named.words !== undefined) {
@@ -5104,7 +5130,7 @@ function itemFace(
     const meta = tokenMeta(view.tokens, offer.tokenId);
     const name = tokenName(view.tokens, offer.tokenId);
     const headRow = el('div', 'face-h');
-    headRow.append(itemIcon(offer.tokenId, name, 'item-ic-lg', ICON_HERO_SIZE));
+    headRow.append(faceIcon(offer.tokenId, name, true, handlers));
     headRow.append(el('div', 'face-nm', name));
     card.append(headRow);
 
@@ -5245,6 +5271,105 @@ function faceFold(view: StallView, how: HTMLElement, handlers: StallHandlers): H
         handlers.onItemHow?.(fold.open);
     });
     return fold;
+}
+
+/**
+ * The token's picture on the face, as a control that opens it at full size
+ * (owner, 2026-09-18: "bấm vào icon để phóng to ảnh trong detail").
+ *
+ * A button around the tile rather than a listener on it: the tile is a `div`
+ * that may hold an image or two letters, and a control a keyboard can reach
+ * has to say so in the markup. The cue is a drawn glyph, like every other
+ * mark in this chrome, and it is painted whether or not the picture has
+ * loaded — the swap-in happens without a repaint, so a cue gated on the
+ * image would be missing exactly when the reader arrived.
+ *
+ * What opens is 256px, the largest the icon Worker routes (§4). No claim of
+ * magnification is made anywhere in the copy for that reason.
+ */
+function faceIcon(
+    tokenId: string,
+    name: string,
+    attributed: boolean,
+    handlers: StallHandlers,
+): HTMLElement {
+    const tile = itemIcon(tokenId, name, 'item-ic-lg', ICON_HERO_SIZE, attributed);
+    if (handlers.onZoomIcon === undefined) {
+        return tile;
+    }
+    const btn = el('button', 'face-ic');
+    btn.type = 'button';
+    btn.setAttribute('data-role', 'face-icon');
+    btn.setAttribute('data-focus-key', 'face-icon');
+    btn.setAttribute('aria-label', `${copy.ITEM_ICON_OPEN} — ${name}`);
+    btn.append(tile);
+    const cue = el('span', 'face-ic-cue');
+    cue.setAttribute('aria-hidden', 'true');
+    cue.append(glyph('expand'));
+    btn.append(cue);
+    btn.addEventListener('click', () => handlers.onZoomIcon!(true));
+    return btn;
+}
+
+/**
+ * The picture at full size over the face. Its own scrim, because it covers
+ * the stall the way a sheet does and the layout probe measures inside the
+ * scrim it finds (`data-role="zoom"` joins that list in `probe.ts`).
+ *
+ * Shown SQUARE and uncropped even where the look crops its tile round —
+ * Rural's hero is a circle, and a circle is the shelf's framing, not the
+ * seller's picture. What is enlarged is the artwork, not the frame.
+ */
+function zoomSheet(
+    tokenId: string,
+    name: string,
+    attributed: boolean,
+    handlers: StallHandlers,
+): HTMLElement {
+    const scrim = el('div', 'zoom-scrim');
+    scrim.setAttribute('data-role', 'zoom');
+    // One card inside the scrim, the way a sheet is one card inside its own:
+    // the probe measures a modal's readable surface for being bounded and
+    // scrollable, and a scrim whose content is loose children has no such
+    // surface to measure.
+    const card = el('div', 'zoom-card');
+    const frame = el('div', 'zoom-frame');
+    frame.append(itemIcon(tokenId, name, 'zoom-ic', ICON_HERO_SIZE, attributed));
+    card.append(frame);
+    card.append(el('p', 'zoom-name', name));
+    scrim.append(card);
+    const close = el('button', 'mini another zoom-close', copy.ITEM_ICON_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'zoom-close');
+    close.setAttribute('data-focus-key', 'zoom-close');
+    close.addEventListener('click', () => handlers.onZoomIcon?.(false));
+    card.append(close);
+    scrim.addEventListener('click', (ev) => {
+        // The ground closes it; the picture and its words do not.
+        if (ev.target === scrim) {
+            handlers.onZoomIcon?.(false);
+        }
+    });
+    // Escape, like every other surface that covers the stall — a thing a
+    // keyboard cannot dismiss is not a dialog. Bound on the scrim, which
+    // takes focus on open, so no listener outlives the paint.
+    scrim.addEventListener('keydown', (ev) => {
+        if ((ev as KeyboardEvent).key === 'Escape') {
+            ev.preventDefault();
+            handlers.onZoomIcon?.(false);
+        }
+    });
+    scrim.tabIndex = -1;
+    scrim.setAttribute('data-focus-key', 'zoom');
+    scrim.setAttribute('role', 'dialog');
+    scrim.setAttribute('aria-modal', 'true');
+    trapTab(scrim);
+    queueMicrotask(() => {
+        if (scrim.isConnected && !scrim.contains(scrim.ownerDocument.activeElement)) {
+            close.focus();
+        }
+    });
+    return scrim;
 }
 
 /** The face for the overlay on the view, or null when it names nothing on that rail. */

@@ -1518,11 +1518,27 @@ body {
 }
 
 /*
- * The only affordance a thumb gets. It points into the face the row opens
- * and never turns: the face replaced the expander, so nothing is "open".
+ * It points into the face the row opens and never turns: the face replaced
+ * the expander, so nothing is "open".
+ *
+ * **Not painted under 680px** (owner, 2026-09-18). It owns a 14–16px track
+ * plus the grid's gap, and on a phone that track is taken from the one
+ * column that has nothing to spare: measured at 390px, the seller's own name
+ * had 9 characters on Modern, 12 on Neo and 8 on Rural, and dropping the
+ * caret gives back 12 / 15 / 11. Every look's phone grid names no `caret`
+ * area now (`areasM`, `areasM3` in the table), so this must go out of flow
+ * with it — a grid child with no named area is auto-placed, which would put
+ * it in a row of its own.
+ *
+ * The cost, stated rather than waived: the row is a `<button>`, so a screen
+ * reader still announces it and a mouse still gets its cursor, but a THUMB
+ * now has no mark saying the row opens. That is the trade the owner took for
+ * the name. The quote row is untouched — its Pay pill stands in the same
+ * place and keeps the money path's affordance — so at phone width the two
+ * rails no longer rhyme at their right edge, which is the second cost.
  */
 .item-caret {
-    display: block;
+    display: none;
     width: 16px;
     height: 16px;
     color: var(--s-muted);
@@ -2048,6 +2064,115 @@ textarea.paste-in {
     font-size: 13px;
     font-weight: 660;
     word-break: break-all;
+}
+
+/*
+ * The face's picture is a control (owner, 2026-09-18). A button around the
+ * tile, sized by the tile, with the cue drawn at its corner — the button
+ * adds no box of its own, so the hero keeps the geometry every look gave it.
+ * Well past the 44px floor at 120–140px, so it is not on that list.
+ */
+.face-ic {
+    position: relative;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    align-self: center;
+    border-radius: var(--s-hero-radius);
+}
+
+.face-ic-cue {
+    position: absolute;
+    right: -7px;
+    bottom: -7px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--s-bg) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
+    color: var(--s-text);
+}
+
+.face-ic-cue .ic {
+    width: 12px;
+    height: 12px;
+}
+
+/*
+ * The picture at full size. Its own scrim, its own role — the layout probe
+ * measures inside the scrim it finds, and `data-role="zoom"` is on that list
+ * in `probe.ts` for the same reason the sheets' is: covering the stall is
+ * what the reader opened it to do.
+ *
+ * Square and uncropped, whatever the look's tile does: Rural crops its hero
+ * to a circle, and a circle is the shelf's framing rather than the seller's
+ * picture. 320px at most, because the largest the icon Worker routes is 256
+ * and nothing is gained by painting it bigger than it is.
+ */
+.zoom-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: grid;
+    place-items: center;
+    padding: 22px;
+    background: color-mix(in srgb, #000 78%, transparent);
+}
+
+.zoom-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: min(100%, 320px);
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.zoom-frame {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--s-radius);
+    overflow: hidden;
+    background: var(--s-surface);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+    display: grid;
+    place-items: center;
+}
+
+.zoom-frame .zoom-ic {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    font-size: 64px;
+}
+
+.zoom-frame .zoom-ic img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.zoom-name {
+    margin: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    text-wrap: pretty;
+}
+
+.zoom-close {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 /* The facts, one column beside (desktop) or under (mobile) the hero image. */
@@ -4251,6 +4376,12 @@ textarea.share-embed {
         justify-items: var(--s-card-items-d);
     }
 
+    /* The caret is a desk affordance now: the desk grids still name its
+       area, and there the row has the width to spare (see `.item-caret`). */
+    .item-head > .item-caret {
+        display: block;
+    }
+
     .item-p {
         text-align: var(--s-price-align-d);
         border-top: var(--s-price-rule-d);
@@ -5627,10 +5758,15 @@ textarea.share-embed {
     gap: 12px;
     align-items: center;
 }
-.face-h .item-ic.item-ic-lg {
+.face-h .item-ic.item-ic-lg,
+.face-h > .face-ic {
     /* `.item-ic` carries the row grid's `grid-area: ic`; in this grid that
        name resolves to nothing and auto-placement pushed the picture into an
-       implicit third column, with the name in the 56px first one. */
+       implicit third column, with the name in the 56px first one.
+       `.face-ic` is the control wrapped around that picture (2026-09-18) and
+       stands in the same cell: without it here, the `:not()` rule below put
+       the control in the NAME's column and the two painted on top of each
+       other. */
     grid-area: 1 / 1;
     width: 56px;
     height: 56px;
@@ -5639,7 +5775,14 @@ textarea.share-embed {
     margin-bottom: 0;
     font-size: 20px;
 }
-.face-h > :not(.item-ic) {
+
+/* The tile fills its control; the control carries the size. */
+.face-h > .face-ic .item-ic-lg {
+    width: 100%;
+    height: 100%;
+}
+
+.face-h > :not(.item-ic):not(.face-ic) {
     grid-area: 1 / 2;
     min-width: 0;
 }
