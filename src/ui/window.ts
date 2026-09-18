@@ -48,14 +48,22 @@ import { ICON_HERO_SIZE } from '../domain/icons';
  * below.
  *
  * The ceiling is a third of 1080 — the floor `every-format-keeps-the-qr-at-a-
- * third-of-the-short-side` already applies to a poster. The minimum is what
- * still decodes on a 720p television: at this screen's densest destination
- * (Cashtab's token page, 41 data modules in a 49 painted span) 240px is
- * 4.90px a module, under the 5.17 this project has read and well over the
- * 3.60 it has refused.
+ * third-of-the-short-side` already applies to a poster.
+ *
+ * The minimum is derived from the DENSEST code this screen can draw, and that
+ * depends on the origin: a quote's landing link carries `stallBaseUrl()`, so
+ * a pubkey route is 41 data modules in a 49 span at `stall.cash` and 45 in a
+ * 53 span at `stall-cash.pages.dev`. 280px clears 5.17px a module — the only
+ * density this project has watched a phone read — at 53, and 5.71 at 49. The
+ * first version pinned 240 against a hardcoded 49 and would have shipped 4.53
+ * on the host §9 names.
+ *
+ * `the-window-code-is-the-size-the-module-tests-pin` recomputes the span from
+ * the real composers, so a longer origin turns it red rather than shrinking
+ * the code under a wall.
  */
 export const WINDOW_QR_PX = 360;
-export const WINDOW_QR_MIN_PX = 240;
+export const WINDOW_QR_MIN_PX = 280;
 
 /**
  * Which code a row carries, and it is not the same code on the two rails.

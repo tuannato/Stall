@@ -1724,8 +1724,14 @@ export const WINDOW_OPEN_TAB = 'Open in a new tab';
  * dropped the lock from the link in silence and left the control reporting
  * itself as pressed. §8's rule for a quantity this field cannot read: say so,
  * never guess one.
+ *
+ * And it names every refusal, not the one that prompted it: the parse also
+ * turns away `0`, a leading space, a decimal point, an exponent, a minus sign
+ * and anything over `MAX_BLOCK_HEIGHT`. A sentence about commas over a string
+ * with no commas is the same silence in a different coat.
  */
-export const WINDOW_LOCK_REFUSED = 'A block height is digits only — no commas.';
+export const WINDOW_LOCK_REFUSED =
+    'A block height is a plain number: digits only, no commas, and under ten million.';
 
 /** Said beside a rail this stall has nothing on, so the seller does not pick a blank wall. */
 export const WINDOW_RAIL_EMPTY = 'This stall has nothing on that side right now.';

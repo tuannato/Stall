@@ -1658,6 +1658,17 @@ export function boot(
         if (!sameStall) {
             state = opening;
             paint();
+            // A new stall is a new screen. `events`, `walked` and
+            // `factsQueued` are cleared above for the same reason, and these
+            // carry one seller's remembered lock set, read time and cursor
+            // onto another's wall if they are not — the shape of the
+            // cross-stall contamination this project has already had once.
+            windowLockSet = undefined;
+            windowCursorAt = 0;
+            windowRailAt = 'listings';
+            windowTurnedAt = 0;
+            windowTouchedAt = 0;
+            bookReadAt = 0;
         }
         const next = await load();
         if (claimed !== generation) {

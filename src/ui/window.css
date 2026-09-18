@@ -166,15 +166,14 @@
      * which kills the one thing on this screen a customer is meant to use.
      * `.stall-scroll` is `overflow: hidden`, so it went silently.
      *
-     * The floor is 240px, not a third of the short side: at the densest
-     * destination this screen has (Cashtab's token page, 41 data modules in a
-     * 49 span) that is 4.90px a module, which is under the 5.17 this project
-     * has read and well over the 3.60 it has refused. Below a 720p screen
-     * there is no honest number, which is what the minimum-height rule under
-     * this is for.
+     * The floor is 280px, not a third of the short side, and it is derived from
+     * the densest code this screen can draw rather than chosen: a quote's
+     * landing link carries this origin, so a pubkey route is a 53-module span
+     * at `stall-cash.pages.dev`. 280 clears 5.17px a module there — the only
+     * density this project has watched a phone read.
      */
-    width: clamp(240px, 33vh, 360px);
-    height: clamp(240px, 33vh, 360px);
+    width: clamp(280px, 33vh, 360px);
+    height: clamp(280px, 33vh, 360px);
     border-radius: 4px;
 }
 
@@ -293,6 +292,57 @@
 
 .stall.shop-window[data-mode='cycle'] .item-foot-words {
     font-size: 30px;
+}
+
+/*
+ * A SHORT landscape screen puts the code beside the price, not under it.
+ *
+ * The code has a floor it cannot go below and still be read — 280px, derived
+ * from the densest link this origin produces — and a 720p television does not
+ * have room for a picture, a name, a figure AND that code stacked. Measured:
+ * at 1280x720 the stacked column ran 57px off the bottom, at 1366x768 19px.
+ *
+ * Three columns is the arrangement this screen started with and lost at 1920
+ * for being three stranded islands — which it is, when there is room to
+ * spread. When there is not, it is the only shape that keeps the code
+ * scannable, and the code is the one thing on the screen a customer uses.
+ */
+@media (orientation: landscape) and (max-height: 900px) {
+    .stall.shop-window[data-mode='cycle'] .item-head {
+        grid-template-areas:
+            'ic name qr'
+            'ic price qr';
+        grid-template-columns: clamp(200px, 34vh, 460px) minmax(0, 1fr) auto;
+        column-gap: clamp(24px, 3vw, 56px);
+        align-items: center;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-ic {
+        width: clamp(200px, 34vh, 460px);
+        height: clamp(200px, 34vh, 460px);
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-b {
+        align-self: end;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-p {
+        align-self: start;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-qr {
+        grid-area: qr;
+        grid-template-columns: minmax(0, 1fr);
+        justify-self: end;
+        align-self: center;
+        text-align: center;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
+        margin-top: 12px;
+        max-width: 320px;
+        text-align: center;
+    }
 }
 
 /* ---------- browse: a price list, and one code for the shop ---------- */
@@ -435,8 +485,8 @@
 
     .stall.shop-window .sw-qr svg,
     .stall.shop-window .sw-plate svg {
-        width: clamp(240px, 26vh, 360px);
-        height: clamp(240px, 26vh, 360px);
+        width: clamp(280px, 26vh, 360px);
+        height: clamp(280px, 26vh, 360px);
     }
 
     .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {

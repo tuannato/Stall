@@ -7,6 +7,8 @@ import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall } from './render';
 import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, windowItemLink, windowLinkFor } from './window';
 import { cashtabTokenUrl } from '../domain/cashtab';
+import { qrMatrix } from '../domain/qr';
+import { payLandingUrl } from '../domain/route';
 import type { StallHandlers } from './render';
 import type { StallOffer, StallView, TokenMeta, WindowParams } from '../domain/state';
 
@@ -346,17 +348,43 @@ describe('the-window-code-is-the-size-the-module-tests-pin', () => {
      * FLOOR is the smallest box at which this screen's densest destination
      * still clears the only reading this project has.
      */
-    it('states one ceiling and one floor, in the sheet and in the module', () => {
+    it('states one ceiling and one floor, and the floor clears the densest code', () => {
         const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8');
         const block = /\.sw-qr svg,[\s\S]*?\}/.exec(css)?.[0] ?? '';
         expect(block).toContain(`${WINDOW_QR_PX}px)`);
         expect(block).toContain(`clamp(${WINDOW_QR_MIN_PX}px`);
         // A third of the short side of a 1080 screen, the poster's own floor.
         expect(WINDOW_QR_PX).toBeGreaterThanOrEqual(Math.floor(1080 / 3));
-        // Cashtab's token page is the densest code this screen draws: 41 data
-        // modules in a 49 painted span. The floor must still beat 3.60, the
-        // only density this project has watched fail.
-        expect(WINDOW_QR_MIN_PX / 49).toBeGreaterThan(4.5);
+
+        /*
+         * The floor is RECOMPUTED here from the real composers, not compared
+         * against a number typed twice. A quote's landing link carries
+         * `stallBaseUrl()`, so the span grows with this origin — the first
+         * version divided by a hardcoded 49 and would have shipped 4.53px a
+         * module on the host §9 names. Changing the domain now turns this red
+         * instead of shrinking a code on somebody's wall.
+         */
+        const ORIGINS = ['https://stall.cash', 'https://stall-cash.pages.dev'];
+        const ID = 'a'.repeat(64);
+        const PK = '02' + '11'.repeat(32);
+        const ADDR = 'qpjq0dcnn4j0c7lnrjqxpqk3z2qz0mfvyv8qyqz3hn';
+        let worst = 0;
+        for (const origin of ORIGINS) {
+            for (const seller of [ADDR, PK]) {
+                for (const link of [
+                    payLandingUrl(`${origin}/s/${seller}`, ID),
+                    `${origin}/s/${seller}`,
+                ]) {
+                    // `qrSvg` draws four quiet modules each side, so the box
+                    // covers the data span plus eight.
+                    worst = Math.max(worst, qrMatrix(link ?? '').length + 8);
+                }
+            }
+        }
+        worst = Math.max(worst, qrMatrix(cashtabTokenUrl(ID) ?? '').length + 8);
+        // 5.17 is the only density this project has watched a phone read;
+        // 3.60 is the only one it has watched fail (CLAUDE.md §9).
+        expect(WINDOW_QR_MIN_PX / worst).toBeGreaterThanOrEqual(5.17);
     });
 });
 
