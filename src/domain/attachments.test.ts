@@ -110,6 +110,39 @@ describe('attachment-table-ids-are-pinned', () => {
         }
     });
 
+    it('every row says where it paints, and a place has one name', () => {
+        /*
+         * Round 15, 2026-09-18. The picker printed the SLOT key as its group
+         * heading, and a slot is a place ONE LOOK offers: `yard` is the
+         * ground under Rural's stall and the floor inside Neo's sign. So a
+         * Neo seller read "Decoration · yard" over a row that paints inside
+         * their sign and "· trim" over the ground behind their whole page.
+         *
+         * The words are the row's now. Two things have to hold: every row
+         * has one, and rows sharing a slot within a look agree — the heading
+         * takes the first row's word, so two rows with two words would print
+         * one of them over both.
+         */
+        for (const row of SHIPPED_ATTACHMENTS) {
+            expect(row.place, `${row.label} says where it paints`).toBeTruthy();
+            expect(row.place, `${row.label}: a place is not a slot key`).not.toBe(row.slot);
+        }
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const bySlot = new Map<string, Set<string>>();
+            for (const row of attachmentsForTheme(id)) {
+                const seen = bySlot.get(row.slot) ?? new Set<string>();
+                seen.add(row.place);
+                bySlot.set(row.slot, seen);
+            }
+            for (const [slot, words] of bySlot) {
+                expect(
+                    [...words],
+                    `look ${id}, slot ${slot}: one place, one name`,
+                ).toHaveLength(1);
+            }
+        }
+    });
+
     it('a mover is flagged as one — the flag is what reduced-motion trusts', () => {
         /*
          * The one-mover-per-look cap was retired 2026-08-30 by the owner:

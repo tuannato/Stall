@@ -217,42 +217,94 @@ body {
  */
 
 /*
- * Modern · trim · Awning (round 11, 2026-09-17). Modern had a mood and a
- * stripe and no object at all — nothing a buyer could point at — and round
- * 10 freed two bits by deleting the signature stroke and the wax seal. This
- * takes the first of them.
+ * Modern · trim · Awning, v3 — drawn in tokens (round 15, owner 2026-09-18:
+ * "cải thiện decor awning và các decor của modern khi đang khoác lên after
+ * hours").
  *
- * A striped canopy across the top of the page with scalloped edges, in the
- * look's own accent against a pale tint of it. Two earlier drawings were
- * thrown away: the first cut narrow scallops through high-contrast stripes
- * and read as a row of dark teeth, and the second scalloped a cream that was
- * within three points of Modern's own ground, so half the scallops were
- * invisible and what showed read as a white line across the middle — the
- * owner's words, and they were exactly right.
+ * v2 was `decor/awning.svg`, and that is exactly why it broke at night: a
+ * MOOD paints no class — it swaps the palette and nothing else (the
+ * catalogue pins `cls` undefined for every mood row, because a class would
+ * reach the broadcast overlay) — so the only way a decoration can follow one
+ * is THROUGH THE TOKENS. Baked art cannot. Under After hours the canopy
+ * stayed in daylight blue and cream over a near-black page and read as a
+ * cut-out pasted on top, which is what the owner photographed.
  *
- * Root paint, so it has no box that could sit over a figure; the page makes
- * room for it with padding rather than with a node. Still, and deliberately:
- * a canopy that flapped would be a mover on every screen of a look whose
- * voice is restraint.
+ * So the canopy is CSS now and every colour in it is a token: the stripes
+ * are the look's accent against a tint of its own surface, the scalloped hem
+ * is cut by notches in the page's own ground, and the light the canopy
+ * spills onto the page below is a wash of the accent. Change the palette and
+ * the whole thing follows — night, day, or a mood nobody has written yet.
+ *
+ * The hem: the notch layer is one circle per tile in `--s-bg`, and the
+ * stripes are offset half a tile so every notch lands on a stripe boundary
+ * — one true half-circle per stripe, which is the shape round 11 approved.
+ * One asset lighter, too.
  */
 .stall.att-awning {
     padding-top: 54px;
-    background-image: url('decor/awning.svg'), var(--s-backdrop);
+    background-image:
+        /*
+         * The hem. In the bottom 13px the ground is painted back over the
+         * stripes EXCEPT inside a disc centred on each stripe — so what is
+         * left hanging is one true half-circle per stripe, which is the
+         * shape round 11 approved. The disc is the hole, not the scallop:
+         * the other way round gives battlements.
+         */
+        radial-gradient(circle 13px at 50% 0, transparent 0 12.4px, var(--s-bg) 12.8px),
+        /* the light the canopy throws down the page */
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--s-accent) 20%, transparent),
+            transparent 100%
+        ),
+        /* the stripes */
+        repeating-linear-gradient(
+            90deg,
+            var(--s-accent) 0 26px,
+            color-mix(in srgb, var(--s-accent) 26%, var(--s-surface)) 26px 52px
+        ),
+        var(--s-backdrop);
     background-size:
-        96px 46px,
+        26px 13px,
+        100% 74px,
+        100% 46px,
         auto;
     background-position:
+        left 33px,
+        left 46px,
         left top,
         0 0;
-    background-repeat: repeat-x, repeat;
+    background-repeat: repeat-x, no-repeat, repeat-x, repeat;
 }
 
 @media (min-width: 680px) {
     .stall.att-awning {
         padding-top: 66px;
+        /* A wider canopy at desk width: 32px stripes, so the hem's discs
+           are 16px and the strip they are cut from is 16px tall. */
+        background-image:
+            radial-gradient(circle 16px at 50% 0, transparent 0 15.4px, var(--s-bg) 15.8px),
+            linear-gradient(
+                180deg,
+                color-mix(in srgb, var(--s-accent) 20%, transparent),
+                transparent 100%
+            ),
+            repeating-linear-gradient(
+                90deg,
+                var(--s-accent) 0 32px,
+                color-mix(in srgb, var(--s-accent) 26%, var(--s-surface)) 32px 64px
+            ),
+            var(--s-backdrop);
         background-size:
-            120px 58px,
+            32px 16px,
+            100% 92px,
+            100% 58px,
             auto;
+        background-position:
+            left 42px,
+            left 58px,
+            left top,
+            0 0;
     }
 }
 
@@ -297,7 +349,15 @@ body {
         repeating-linear-gradient(
             135deg,
             color-mix(in srgb, var(--s-accent) 62%, transparent) 0 7px,
-            color-mix(in srgb, var(--s-accent) 20%, transparent) 7px 11px,
+            /*
+             * The faint pass carries the look's own INK, not more accent
+             * (round 15, owner 2026-09-18). At 20% accent it read on
+             * Modern's paper and all but vanished on the same look under
+             * After hours: a low-alpha blue on a near-black card has
+             * nothing to sit against. `--s-text` flips with the palette, so
+             * the quiet stripe is dark on paper and pale at night.
+             */
+            color-mix(in srgb, var(--s-text) 26%, transparent) 7px 11px,
             transparent 11px 22.627px
         );
     background-origin: padding-box, border-box;
@@ -684,7 +744,7 @@ body {
         0 0,
         0 0;
     background-repeat: no-repeat, no-repeat, repeat, repeat;
-    animation: att-aurora-tide 17s ease-in-out infinite alternate;
+    animation: att-aurora-tide 4s ease-in-out infinite alternate;
 }
 
 @keyframes att-aurora-tide {
@@ -706,6 +766,33 @@ body {
  */
 .stall.att-rainfall.att-aurora {
     background-image:
+        /*
+         * The rain takes the light's colour (owner, 2026-09-18: "bổ sung màu
+         * sắc rain của neo dựa theo nền aurora khi cả 2 cùng được khoác
+         * lên"). The drops are drawn art with their colours baked in, so
+         * nothing can recolour the strokes themselves — but a tint in FRONT
+         * of them, on the same tide, tints the drops and the ground under
+         * them together, which is what a police light does to rain. Cyan at
+         * the corner the cyan wash sits in, magenta at the other, so as the
+         * tide turns the whole street changes colour and the rain with it.
+         *
+         * In front of the rain and still behind every card: these are the
+         * root's background layers, and a card is an element on top of them.
+         */
+        linear-gradient(
+            140deg,
+            color-mix(
+                in srgb,
+                var(--s-accent) calc(3% + 13% * var(--au-tide, 0.5)),
+                transparent
+            ),
+            transparent 46%,
+            color-mix(
+                in srgb,
+                var(--s-accent-2) calc(16% - 13% * var(--au-tide, 0.5)),
+                transparent
+            )
+        ),
         url('decor/rain-near.svg'),
         url('decor/rain-mid.svg'),
         url('decor/rain-far.svg'),
@@ -721,6 +808,7 @@ body {
         ),
         var(--s-backdrop);
     background-size:
+        100% 100%,
         320px 320px,
         260px 260px,
         200px 200px,
@@ -728,15 +816,17 @@ body {
         128% 108%,
         auto,
         auto;
-    background-repeat: repeat, repeat, repeat, no-repeat, no-repeat, repeat, repeat;
+    background-repeat:
+        no-repeat, repeat, repeat, repeat, no-repeat, no-repeat, repeat, repeat;
     animation:
         att-rain-aurora-drift 2600ms linear infinite,
-        att-aurora-tide 17s ease-in-out infinite alternate;
+        att-aurora-tide 4s ease-in-out infinite alternate;
 }
 
 @keyframes att-rain-aurora-drift {
     from {
         background-position:
+            0 0,
             0 0,
             0 0,
             0 0,
@@ -747,6 +837,7 @@ body {
     }
     to {
         background-position:
+            0 0,
             0 320px,
             0 260px,
             0 200px,
@@ -1280,9 +1371,16 @@ body {
     overflow-wrap: anywhere;
 }
 
+/* Centred with the rest of the sign (round 15, owner 2026-09-18, from a
+   photograph of Rural's board: the name was centred and this chip hugged the
+   left edge under it). Round 9 centred the name, the tagline, the state line
+   and the address "on every look at every width" — this line was the one
+   that never was, because `flex-start` here out-ranked the column's own
+   `align-items: center`. It is the panel's own word on the sign: "Items for
+   sale" on the shop, "Seller studio" on the studio, "Activity" on the list. */
 .stall-sub {
     font-size: 12.5px;
-    align-self: flex-start;
+    align-self: center;
     color: var(--s-sub-ink);
     background: var(--s-sub-bg);
     border: var(--s-sub-border);
@@ -2491,7 +2589,7 @@ textarea.paste-in {
        on Neo and Rural. Both colours are tokens, so a mood moves them
        together; the contrast pass samples the tile (`.event-sum .event-ic`). */
     color: var(--s-text);
-    background: color-mix(in srgb, var(--s-accent) 14%, var(--s-surface));
+    background: color-mix(in srgb, var(--s-accent) 26%, var(--s-surface));
     border: 1px solid color-mix(in srgb, var(--s-accent) 45%, transparent);
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -3835,6 +3933,25 @@ textarea.share-embed {
     top: 0;
     z-index: 4;
     background: var(--s-bg);
+    /*
+     * A slab of the sheet's own ground above it (round 15, owner 2026-09-18,
+     * photographed: the record's fields scrolling through a band above the
+     * title). `top: 0` on a sticky child of a scroll container stops at the
+     * CONTENT edge, not the border — measured 18px down on Rural and 14 on
+     * Modern, which is each look's own `--s-card-pad` — so the sheet's top
+     * padding is a band the form travels through in full view.
+     *
+     * A shadow rather than a negative margin because `--s-card-pad` is a
+     * shorthand that carries two values on Neo: nothing in CSS can take its
+     * top component out again. `overflow: auto` on the sheet clips this to
+     * the padding box, so the slab can only ever cover that band.
+     */
+    box-shadow: 0 -26px 0 0 var(--s-bg);
+    /* And a clean lower edge: the form slides UNDER this, and with no bottom
+       padding the next label arrived against the subtitle's baseline (the
+       same photograph). The sheet's own `gap` cannot serve here — it is
+       outside the head's opaque ground. */
+    padding-bottom: 8px;
 }
 
 .sheet-head .item-n {

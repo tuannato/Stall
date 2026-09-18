@@ -4731,7 +4731,15 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
         decorWrap.append(el('p', 'fine', copy.DECOR_LEDE));
         for (const slot of [...new Set(rows.map((r) => r.slot))]) {
-            const place = sheetGroup(`${copy.DECOR_LABEL} · ${slot}`);
+            /*
+             * The group says where its rows paint, in the catalogue's own
+             * words, not the slot key. `yard` is the ground under Rural's
+             * stall and the floor inside Neo's sign — one key, two places —
+             * so printing the key told a Neo seller their screen-floor was
+             * a yard and their whole ground was a trim (owner, 2026-09-18).
+             */
+            const here = rows.filter((r) => r.slot === slot);
+            const place = sheetGroup(`${copy.DECOR_LABEL} · ${here[0]!.place}`);
             place.classList.add('decor-place');
             // The place is the marker, one per slot the look ships; the rows
             // inside carry the bit. Nothing at runtime reads `theme-picker`
@@ -4740,8 +4748,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             place.setAttribute('data-role', `decor-${slot}`);
             const list = el('div', 'dec');
             list.setAttribute('role', 'group');
-            list.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${slot}`);
-            const here = rows.filter((r) => r.slot === slot);
+            list.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${here[0]!.place}`);
             const paintTicks = (): void => {
                 for (const tick of list.querySelectorAll('[data-bit]')) {
                     const bit = Number(tick.getAttribute('data-bit'));
