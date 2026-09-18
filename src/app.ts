@@ -162,7 +162,7 @@ const BROADCAST_RETRY_MS = 30_000;
  * card changed halfway through, the code they are pointing at is a different
  * item's. Twenty seconds is the slowest thing on this screen on purpose.
  */
-const WINDOW_CARD_MS = 20_000;
+export const WINDOW_CARD_MS = 20_000;
 
 /**
  * How often an unattended screen re-reads the chain regardless of the socket.
@@ -178,7 +178,7 @@ const WINDOW_CARD_MS = 20_000;
  * not a price that moved a second ago — and the same read on three hosts is
  * the cost a shop's connection pays for it.
  */
-const WINDOW_BEAT_MS = 60_000;
+export const WINDOW_BEAT_MS = 60_000;
 
 /**
  * How long `browse` waits after somebody touches it before it scrolls itself
@@ -188,10 +188,10 @@ const WINDOW_BEAT_MS = 60_000;
  * stream's dwell numbers are for somebody walking past; this one is for
  * somebody standing still and deciding.
  */
-const WINDOW_IDLE_MS = 45_000;
+export const WINDOW_IDLE_MS = 45_000;
 
 /** One step of the self-scroll, and the pause between steps. */
-const WINDOW_SCROLL_MS = 6_000;
+export const WINDOW_SCROLL_MS = 6_000;
 
 /**
  * What counts as a touch, and `mousemove` deliberately does not.
@@ -1652,9 +1652,16 @@ export function boot(
         // Only for the SAME stall: a navigation to another seller must not
         // leave the previous one's goods on screen under the new one's link.
         const opening = openingFromLocation();
+        // Compared as PATHS. `identityOf` answers the prefixed address and
+        // `sellerFromPath` answers the bare payload, so comparing those two
+        // directly never matches — which left the guard permanently false and
+        // the wall still blanking, until a test that asserted mid-load said
+        // so. `stallPath` is the canonicaliser both sides already go through.
+        const here = identityOf(state.view);
         const sameStall =
             state.view.window !== undefined &&
-            sellerFromPath(location.pathname) === identityOf(state.view);
+            here !== undefined &&
+            stallPath(here) === location.pathname;
         if (!sameStall) {
             state = opening;
             paint();
