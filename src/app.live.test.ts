@@ -3367,6 +3367,13 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
+        // The press asks two feeds and the answers land on their own chains.
+        // A fixed tick count reached them on an idle box and missed them on a
+        // busy one — this file's own `until` docblock says so, and these were
+        // the last readers of the pattern it warns about. Measured: the whole
+        // suite went red here twice, in two different cases, purely under
+        // parallel load.
+        await until(() => painted.view?.payRate !== undefined);
         expect(check).toHaveBeenCalledTimes(1);
         expect(check.mock.calls[0]![1]).toEqual({ timeoutMs: PAY_CHECK_TIMEOUT_MS });
         expect(painted.view?.payRate?.check).toBe('agree');
@@ -3384,6 +3391,13 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
+        // The press asks two feeds and the answers land on their own chains.
+        // A fixed tick count reached them on an idle box and missed them on a
+        // busy one — this file's own `until` docblock says so, and these were
+        // the last readers of the pattern it warns about. Measured: the whole
+        // suite went red here twice, in two different cases, purely under
+        // parallel load.
+        await until(() => painted.view?.payRate !== undefined);
         expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
         expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
             '166,666.67',
@@ -3397,6 +3411,13 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
+        // The press asks two feeds and the answers land on their own chains.
+        // A fixed tick count reached them on an idle box and missed them on a
+        // busy one — this file's own `until` docblock says so, and these were
+        // the last readers of the pattern it warns about. Measured: the whole
+        // suite went red here twice, in two different cases, purely under
+        // parallel load.
+        await until(() => painted.view?.payRate !== undefined);
         expect(painted.view?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
         expect(painted.view?.payRate?.check).toBe('disagree');
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_RATE_DISAGREE);
@@ -3412,6 +3433,13 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
+        // The press asks two feeds and the answers land on their own chains.
+        // A fixed tick count reached them on an idle box and missed them on a
+        // busy one — this file's own `until` docblock says so, and these were
+        // the last readers of the pattern it warns about. Measured: the whole
+        // suite went red here twice, in two different cases, purely under
+        // parallel load.
+        await until(() => painted.view?.payRate !== undefined);
         expect(painted.view?.payRate?.check).toBe('none');
         const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
         expect(rate).toContain(RATE_SOURCE_PRIMARY);
