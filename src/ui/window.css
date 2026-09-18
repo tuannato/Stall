@@ -84,9 +84,28 @@
     font-size: 21px;
 }
 
+/*
+ * A sign and not a banner. The board reads as a thing hung above the goods at
+ * about twelve hundred; at the body's full width it reads as a page header,
+ * which is what the first draft looked like.
+ */
 .stall.shop-window .stall-sign {
     width: 100%;
-    max-width: none;
+    max-width: 1200px;
+    margin-inline: auto;
+}
+
+/* The seller's own sentence, inside the sign and at the size of a sign. */
+.stall.shop-window .stall-headings [data-role='announcement'] {
+    margin-top: 14px;
+}
+
+.stall.shop-window .notice-text {
+    font-size: 22px;
+}
+
+.stall.shop-window .notice-chip {
+    font-size: 14px;
 }
 
 .stall.shop-window .stall-body {

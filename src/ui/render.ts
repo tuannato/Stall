@@ -1199,7 +1199,7 @@ function retryControl(handlers: StallHandlers, label = copy.TRY_AGAIN): HTMLElem
  * unvouched — and painted on the empty screen too, where "away until Monday"
  * is most of the explanation.
  */
-function announcementNote(view: StallView): HTMLElement | null {
+export function announcementNote(view: StallView): HTMLElement | null {
     const text = view.announcement;
     if (text === undefined || text === '') {
         return null;

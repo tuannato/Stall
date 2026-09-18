@@ -754,11 +754,13 @@ export const SCREENS: Record<string, StallView> = {
     'shop-window-cycle': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'cycle' },
+        announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     'shop-window-browse': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', upto: 874_213 },
+        announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     broadcast: base({

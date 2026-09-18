@@ -8,6 +8,7 @@ import * as copy from './copy';
 import { marqueeNode } from './marquee';
 import type { TokenListing } from './render';
 import {
+    announcementNote,
     cheapestOf,
     header,
     itemIcon,
@@ -240,9 +241,23 @@ export function renderShopWindow(view: StallView, params: WindowParams): HTMLEle
     scroll.setAttribute('data-role', 'shop-window');
     scroll.setAttribute('data-show', params.show);
 
-    scroll.append(
-        header(view.stallName, undefined, undefined, view.tagline, undefined),
-    );
+    /*
+     * The sign, and the seller's own sentence inside it.
+     *
+     * A shop window's sign has width the phone's never had, and the first
+     * draft left it as a name centred in 1720px of nothing. The announcement
+     * (`STL1` tag 0x05) is the piece of copy on this screen a regular
+     * customer would actually read twice — market days, a thank-you, "back on
+     * the 10th" — so it fills the space rather than a decoration doing it.
+     * Dropping it, which the first draft also did, took the most
+     * shop-window-native thing this app has off the shop window.
+     */
+    const sign = header(view.stallName, undefined, undefined, view.tagline, undefined);
+    const notice = announcementNote(view);
+    if (notice !== null) {
+        sign.querySelector('.stall-headings')?.append(notice);
+    }
+    scroll.append(sign);
 
     const body = el('main', 'stall-body');
     const strip = el('div', 'items sw-strip');
