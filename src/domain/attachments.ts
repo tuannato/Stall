@@ -50,6 +50,26 @@ export type ShippedAttachment = {
      */
     place: string;
     /**
+     * Where this row's COLOURS come from, and therefore whether a mood can
+     * move them (round 15, 2026-09-18 — the awning's lesson).
+     *
+     * `palette`: every colour is a `--s-*` token, so the row repaints itself
+     * when the look's palette changes, a mood included.
+     *
+     * `art`: the row ships drawn art — an SVG asset, or literals a mood
+     * cannot reach. A mood paints NO class (the catalogue pins `cls`
+     * undefined for every mood row, because a class would reach the
+     * broadcast overlay), so nothing in CSS can ask whether one is worn:
+     * `art` is a declaration that this row will not follow one, and the gate
+     * (`decor-gate.test.ts`) holds the declaration to what the stylesheet
+     * actually does.
+     *
+     * The workshop needs this on the wire of a submission, because a
+     * stranger shipping art into a look that has a mood is the daylight
+     * cut-out the owner photographed, and no eye will be reviewing it.
+     */
+    follows: 'palette' | 'art';
+    /**
      * The class this row paints under. **Must start with `att-`**:
      * `decorations()` in `layout/probe.ts` finds decorations by that prefix, so
      * a row named anything else ships with no guard at all. Absent for `mood`,
@@ -114,6 +134,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 0,
         slot: 'mood',
         label: 'After hours',
+        follows: 'palette',
         place: 'the whole palette',
         motion: false,
         // Open late. Modern's voice is restraint, so its decoration is a
@@ -140,6 +161,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 1,
         slot: 'fringe',
         label: 'Pinstripe',
+        follows: 'palette',
         place: 'around every card',
         paint: 'root',
         cls: 'att-pinstripe',
@@ -165,6 +187,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 2,
         slot: 'trim',
         label: 'Awning',
+        follows: 'palette',
         place: 'over the shopfront',
         // Root paint: a canopy belongs above everything and must not be a box
         // over anything, so it rides the stall's own background and the page
@@ -206,6 +229,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 0,
         slot: 'crest',
         label: 'The sign hums',
+        follows: 'palette',
         place: 'on the sign\u2019s name',
         paint: 'root',
         cls: 'att-hum',
@@ -221,6 +245,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 1,
         slot: 'fringe',
         label: 'Neon rain',
+        follows: 'art',
         place: 'falling over the page',
         // Root paint now: rain falls the whole page as background layers on
         // the stall itself — behind every surface, so it cannot cover, and
@@ -249,6 +274,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         // slot would only re-aim an exclusivity nothing else on Neo shares.
         slot: 'yard',
         label: 'Grid horizon',
+        follows: 'palette',
         place: 'inside the sign',
         paint: 'root',
         cls: 'att-horizon',
@@ -260,6 +286,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 4,
         slot: 'trim',
         label: 'Aurora glows',
+        follows: 'palette',
         place: 'behind everything',
         paint: 'root',
         // A mover again since round 14 (owner: the row should read as a
@@ -282,6 +309,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 0,
         slot: 'yard',
         label: 'Yard beetle',
+        follows: 'art',
         place: 'on the ground below',
         paint: 'node',
         cls: 'att-beetle',
@@ -293,6 +321,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 1,
         slot: 'mood',
         label: 'Sun-faded',
+        follows: 'palette',
         place: 'the whole palette',
         motion: false,
         // Bleached and warmed, like a stall that has stood a season. Age is the
@@ -331,6 +360,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 3,
         slot: 'trim',
         label: 'Sunburst',
+        follows: 'palette',
         place: 'behind the stall',
         // Root, not a node: a shallow stage box could never be the design's
         // sky-filling wheel without overlapping a protected box; a root
@@ -346,6 +376,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 4,
         slot: 'fringe',
         label: 'Bunting',
+        follows: 'art',
         place: 'across the top',
         paint: 'node',
         cls: 'att-bunting',
@@ -357,6 +388,7 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
         bit: 5,
         slot: 'badge',
         label: 'Confetti',
+        follows: 'palette',
         place: 'falling over the page',
         paint: 'root',
         cls: 'att-confetti',
