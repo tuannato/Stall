@@ -697,6 +697,13 @@ export function boot(
                 paint();
                 syncGlance();
             },
+            onOpenShopWindow: () => {
+                state = {
+                    ...state,
+                    view: { ...state.view, overlay: { kind: 'shop-window' } },
+                };
+                paint();
+            },
             onOpenItem: (tokenId, rail) => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'item', tokenId, rail } } };
                 paint();

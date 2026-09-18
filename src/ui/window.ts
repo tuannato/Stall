@@ -1,9 +1,9 @@
 import './window.css';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { formatXec } from '../domain/money';
-import { payLandingUrl } from '../domain/route';
+import { parseBlockParam, payLandingUrl } from '../domain/route';
 import type { StallOffer, StallView, WindowParams } from '../domain/state';
-import { offersWithinLock } from '../domain/window';
+import { offersWithinLock, suggestedLock } from '../domain/window';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
 import type { TokenListing } from './render';
@@ -68,6 +68,31 @@ export function windowItemLink(tokenId: string, rail: 'listing' | 'quote'): stri
     return rail === 'quote'
         ? payLandingUrl(stallBaseUrl(), tokenId)
         : cashtabTokenUrl(tokenId);
+}
+
+/**
+ * The link a seller bookmarks on the shop's own computer.
+ *
+ * Every option rides the URL rather than storage, the freeze included, because
+ * the whole point is that the screen is opened on a DIFFERENT machine from the
+ * one the seller composed it on. A choice kept in one browser's `localStorage`
+ * would be set on a laptop and absent on the computer behind the television.
+ *
+ * Defaults are omitted, the way `cards=quotes` is on the stream link: a link
+ * that names only what was chosen is a link a person can read.
+ */
+export function windowLinkFor(params: WindowParams, base = stallBaseUrl()): string {
+    const query = new URLSearchParams({ view: 'window' });
+    if (params.show !== 'all') {
+        query.set('show', params.show);
+    }
+    if (params.mode !== 'cycle') {
+        query.set('mode', params.mode);
+    }
+    if (params.upto !== undefined) {
+        query.set('upto', String(params.upto));
+    }
+    return `${base}?${query.toString()}`;
 }
 
 /** The shop's own link: one code for a whole catalogue, in `browse`. */
@@ -287,4 +312,181 @@ function statusBar(
         bar.append(right);
     }
     return bar;
+}
+
+/**
+ * The options, on the seller's own side of the glass.
+ *
+ * Every choice here is **local to this sheet** — no app state, no handler per
+ * picker, nothing on the view. The options exist only to compose a URL, so the
+ * sheet keeps them in its own closure and rewrites the link field on every
+ * press. A seller who closes it and reopens it starts from the defaults, which
+ * is correct: the link they already bookmarked is where the choice lives.
+ *
+ * Two ways out, and they are two different elements on purpose. "Open here" is
+ * a `<button>`; "Open in a new tab" is a real `<a target="_blank">`. §8 bans an
+ * anchor on the two Pay controls because an anchor carries its destination
+ * where a middle-click or "copy link address" can take it, past every listener
+ * — and once a rate has aged that hands a wallet a stale amount. Nothing here
+ * carries an amount and nothing here goes stale, so the anchor is right, and
+ * the browser's own "open in new tab" works for free.
+ */
+export function shopWindowSheet(
+    view: StallView,
+    onClose: () => void,
+    tipHeight?: number,
+): HTMLElement {
+    let show: WindowParams['show'] = 'all';
+    let mode: WindowParams['mode'] = 'cycle';
+    let locked = false;
+    let height = tipHeight === undefined ? undefined : suggestedLock(tipHeight);
+
+    const scrim = el('div', 'sheet-scrim');
+    scrim.setAttribute('data-role', 'sheet-scrim');
+    const sheet = el('div', 'sheet sw-sheet');
+    sheet.setAttribute('data-role', 'shop-window-sheet');
+
+    const head = el('div', 'sheet-head');
+    const title = el('div', 'sheet-head-t');
+    title.append(el('h2', undefined, copy.WINDOW_TITLE));
+    title.append(el('p', 'note', copy.WINDOW_LEDE));
+    head.append(title);
+    const x = el('button', 'mini another sheet-x', copy.PUBLISH_CLOSE);
+    x.type = 'button';
+    x.setAttribute('data-role', 'shop-window-close-top');
+    x.addEventListener('click', onClose);
+    head.append(x);
+    sheet.append(head);
+
+    const linkField = el('input', 'share-url');
+    linkField.readOnly = true;
+    linkField.setAttribute('data-role', 'shop-window-link');
+    const openHere = el('button', 'buy', copy.WINDOW_OPEN_HERE);
+    openHere.type = 'button';
+    openHere.setAttribute('data-role', 'shop-window-open-here');
+    const openTab = el('a', 'mini another', copy.WINDOW_OPEN_TAB);
+    openTab.setAttribute('target', '_blank');
+    openTab.setAttribute('rel', 'noopener noreferrer');
+    openTab.setAttribute('data-role', 'shop-window-open-tab');
+
+    const composed = (): WindowParams => ({
+        show,
+        mode,
+        ...(locked && height !== undefined ? { upto: height } : {}),
+    });
+    const sync = (): void => {
+        const url = windowLinkFor(composed());
+        linkField.value = url;
+        openTab.setAttribute('href', url);
+    };
+
+    const picker = <T extends string>(
+        label: string,
+        options: ReadonlyArray<readonly [T, string]>,
+        current: () => T,
+        set: (value: T) => void,
+    ): HTMLElement => {
+        const wrap = el('div');
+        wrap.append(el('label', 'paste-label', label));
+        const seg = el('div', 'seg');
+        for (const [value, words] of options) {
+            const button = el('button', 'seg-b', words);
+            button.type = 'button';
+            button.setAttribute('data-role', `window-${label.toLowerCase()}-${value}`);
+            button.setAttribute('aria-pressed', String(current() === value));
+            button.addEventListener('click', () => {
+                set(value);
+                for (const other of seg.querySelectorAll('.seg-b')) {
+                    other.setAttribute('aria-pressed', 'false');
+                }
+                button.setAttribute('aria-pressed', 'true');
+                sync();
+            });
+            seg.append(button);
+        }
+        wrap.append(seg);
+        return wrap;
+    };
+
+    const form = el('form', 'paste');
+    form.addEventListener('submit', (event) => event.preventDefault());
+    form.append(
+        picker(
+            copy.WINDOW_SHOW_LABEL,
+            [
+                ['listings', copy.WINDOW_SHOW_LISTINGS],
+                ['quotes', copy.WINDOW_SHOW_QUOTES],
+                ['all', copy.WINDOW_SHOW_ALL],
+            ] as const,
+            () => show,
+            (value) => {
+                show = value;
+            },
+        ),
+    );
+    form.append(
+        picker(
+            copy.WINDOW_MODE_LABEL,
+            [
+                ['cycle', copy.WINDOW_MODE_CYCLE],
+                ['browse', copy.WINDOW_MODE_BROWSE],
+            ] as const,
+            () => mode,
+            (value) => {
+                mode = value;
+            },
+        ),
+    );
+    form.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
+
+    form.append(el('label', 'paste-label', copy.WINDOW_LOCK_LABEL));
+    const lockRow = el('div', 'sw-lock');
+    const lockPress = el('button', 'mini', copy.WINDOW_LOCK_PRESS);
+    lockPress.type = 'button';
+    lockPress.setAttribute('aria-pressed', 'false');
+    lockPress.setAttribute('data-role', 'window-lock');
+    const heightField = el('input', 'paste-in sw-block');
+    heightField.setAttribute('inputmode', 'numeric');
+    heightField.setAttribute('data-role', 'window-lock-height');
+    heightField.value = height === undefined ? '' : String(height);
+    heightField.addEventListener('input', () => {
+        const parsed = parseBlockParam(heightField.value.trim());
+        height = parsed;
+        sync();
+    });
+    lockPress.addEventListener('click', () => {
+        locked = !locked;
+        lockPress.setAttribute('aria-pressed', String(locked));
+        sync();
+    });
+    lockRow.append(lockPress, heightField);
+    form.append(lockRow);
+    form.append(el('p', 'fine', copy.WINDOW_LOCK_WHY));
+    sheet.append(form);
+
+    const linkBox = el('div', 'share-box');
+    linkBox.append(el('label', 'paste-label', copy.WINDOW_LINK_LABEL));
+    linkBox.append(linkField);
+    linkBox.append(el('p', 'fine', copy.WINDOW_LINK_WHY));
+    sheet.append(linkBox);
+
+    openHere.addEventListener('click', () => {
+        window.location.assign(windowLinkFor(composed()));
+    });
+    const acts = el('div', 'acts');
+    acts.append(openHere, openTab);
+    sheet.append(acts);
+
+    const foot = el('div', 'sheet-foot');
+    const close = el('button', 'mini another', copy.PUBLISH_CLOSE);
+    close.type = 'button';
+    close.setAttribute('data-role', 'shop-window-close');
+    close.addEventListener('click', onClose);
+    foot.append(close);
+    sheet.append(foot);
+
+    sync();
+    void view;
+    scrim.append(sheet);
+    return scrim;
 }

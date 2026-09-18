@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import { renderStall } from './render';
-import { windowItemLink } from './window';
+import { windowItemLink, windowLinkFor } from './window';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import type { StallHandlers } from './render';
 import type { StallOffer, StallView, WindowParams } from '../domain/state';
@@ -210,5 +210,75 @@ describe('a-window-that-cannot-date-its-read-prints-no-time', () => {
         expect(root.querySelector('[data-role="window-fresh"]')?.textContent).toBe(
             'Updated 2 minutes ago',
         );
+    });
+});
+
+describe('the-shop-window-sheet-composes-a-link-and-signs-nothing', () => {
+    function sheet(): HTMLElement {
+        const view = windowView({ show: 'all', mode: 'cycle' });
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            { ...view, window: undefined, overlay: { kind: 'shop-window' } } as StallView,
+            handlers(),
+        );
+        return root;
+    }
+
+    /**
+     * Two ways out, and two different elements on purpose. §8 bans an anchor
+     * on the two Pay controls because an anchor carries its destination where
+     * a middle-click or "copy link address" can take it, past every listener —
+     * and once a rate has aged that hands a wallet a stale amount. Nothing
+     * here carries an amount and nothing here goes stale, so the anchor is
+     * right and the browser's own "open in new tab" works for free.
+     */
+    it('opens here with a button and in a tab with a real anchor', () => {
+        const root = sheet();
+        const here = root.querySelector('[data-role="shop-window-open-here"]');
+        expect(here?.tagName).toBe('BUTTON');
+        const tab = root.querySelector('[data-role="shop-window-open-tab"]');
+        expect(tab?.tagName).toBe('A');
+        expect(tab?.getAttribute('href') ?? '').toContain('view=window');
+        expect(tab?.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    /** It composes a URL. It signs nothing, so it carries no wallet road. */
+    it('carries no publish or pay link', () => {
+        const root = sheet();
+        const hrefs = [...root.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '');
+        for (const href of hrefs) {
+            expect(href.startsWith('ecash:')).toBe(false);
+            expect(href).not.toContain('op_return_raw');
+        }
+    });
+
+    /**
+     * A link that names only what was chosen is a link a person can read —
+     * the rule `cards=quotes` already follows on the stream link.
+     */
+    it('omits every default and names every choice', () => {
+        const base = 'https://stall.cash/s/qpjq';
+        expect(windowLinkFor({ show: 'all', mode: 'cycle' }, base)).toBe(`${base}?view=window`);
+        expect(windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213 }, base)).toBe(
+            `${base}?view=window&show=quotes&mode=browse&upto=874213`,
+        );
+    });
+});
+
+describe('a-shop-window-mounts-no-sheet', () => {
+    /**
+     * Sharper than the broadcast's reason for the same rule: the four sheets
+     * HOLD the live paint, so one opened on an unattended screen would stop
+     * the stall updating with nobody there to close it and nothing on screen
+     * to say why.
+     */
+    it('refuses every overlay while the window is the screen', () => {
+        const root = paint({
+            ...windowView({ show: 'all', mode: 'cycle' }),
+            overlay: { kind: 'shop-window' },
+        } as StallView);
+        expect(root.querySelector('[data-role="sheet-scrim"]')).toBeNull();
+        expect(root.querySelector('[data-role="shop-window"]')).not.toBeNull();
     });
 });

@@ -183,6 +183,16 @@ export type Overlay =
      * discovers a fee at a time. Nothing persists an overlay kind (not
      * `history.state`, not storage), so the split needed no migration.
      */
+    /**
+     * The shop window's options, on the seller's own side of the glass.
+     *
+     * It signs nothing and reads nothing off the chain — it composes a link.
+     * It still **holds the live paint**, for the describe sheet's reason: the
+     * block height is a typed field, and a socket tick rebuilding the tree
+     * under a seller mid-number would lose what they typed with nothing on
+     * screen to say why.
+     */
+    | { kind: 'shop-window' }
     | { kind: 'publish-name' }
     /** One token's own record: words, shelf, quote. `tokenId` preselects. */
     | { kind: 'describe'; tokenId?: string }
@@ -292,6 +302,16 @@ export type WindowState = {
      * until a read lands, and the freshness line is absent with it.
      */
     readAtMs?: number;
+    /**
+     * The chain's tip, when this page happens to know it — only ever used to
+     * SUGGEST a freeze height in the options sheet.
+     *
+     * Absent is the honest default and the field stays editable either way: a
+     * seller reading a height off an explorer and typing it is the road that
+     * always works, and a suggestion this page could not make is one it does
+     * not invent.
+     */
+    tipHeight?: number;
 };
 
 /**

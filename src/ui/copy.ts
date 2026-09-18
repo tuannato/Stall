@@ -1675,3 +1675,34 @@ export function windowFreshness(readAtMs: number | undefined, nowMs: number): st
     }
     return 'Updated just now';
 }
+
+/** The Studio's launcher for the shop window, in the Share card's family. */
+export const WINDOW_OPEN = 'Open the shop window';
+export const WINDOW_TITLE = 'Shop window';
+export const WINDOW_LEDE = 'Put this stall on a screen in your shop. Nobody has to touch it.';
+export const WINDOW_SHOW_LABEL = 'Show';
+export const WINDOW_MODE_LABEL = 'Mode';
+export const WINDOW_SHOW_LISTINGS = 'Listings';
+export const WINDOW_SHOW_QUOTES = 'Quotes';
+export const WINDOW_SHOW_ALL = 'All';
+export const WINDOW_MODE_CYCLE = 'Cycle';
+export const WINDOW_MODE_BROWSE = 'Browse';
+export const WINDOW_MODE_WHY =
+    'Cycle shows one item at a time and needs nobody. Browse scrolls, and starts again on its own after a while without a touch.';
+export const WINDOW_LOCK_LABEL = 'Lock the listings';
+export const WINDOW_LOCK_PRESS = 'Show only listings up to block';
+/**
+ * The freeze's sentence, and it is about the SCREEN.
+ *
+ * A listing that arrives after the lock is still a real listing on a real
+ * shop page; this only decides what a wall shows. Saying anything else would
+ * be our own display choice reported as the seller's inventory, which is §4's
+ * rule about a floor printed as a count.
+ */
+export const WINDOW_LOCK_WHY =
+    'Suggested: the next block. A listing that appears after it stays off this screen — it stays on your shop. Your own quotes are never locked: nobody else can add one.';
+export const WINDOW_LINK_LABEL = 'Link';
+export const WINDOW_LINK_WHY =
+    'Bookmark this on the shop’s own computer to open the same screen tomorrow.';
+export const WINDOW_OPEN_HERE = 'Open here';
+export const WINDOW_OPEN_TAB = 'Open in a new tab';

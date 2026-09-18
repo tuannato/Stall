@@ -93,7 +93,7 @@ import {
 import { stallMark } from './brand';
 import * as copy from './copy';
 import { renderBroadcastView } from './broadcast';
-import { renderShopWindow } from './window';
+import { renderShopWindow, shopWindowSheet } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide } from './obsGuide';
 import {
     drawPoster,
@@ -119,6 +119,11 @@ import './theme-rural.css';
 import './broadcast.css';
 
 export type StallHandlers = {
+    /**
+     * Open the shop window's options. The Studio's own control; the window
+     * itself is reached by the link that sheet composes.
+     */
+    onOpenShopWindow?: () => void;
     /** Open one token's face on one rail — the expander raised to a surface. */
     onOpenItem: (tokenId: string, rail: 'listings' | 'quotes') => void;
     /** The item face's fold was opened or closed: state only, no paint. */
@@ -598,6 +603,15 @@ export function renderStall(
         } else if (view.overlay.kind === 'poster') {
             stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
+        } else if (view.overlay.kind === 'shop-window') {
+            stall.classList.add('has-sheet');
+            stall.append(
+                sheetOverlay(
+                    shopWindowSheet(view, () => handlers.onCloseSheet(), view.tipHeight),
+                    'shop-window-sheet',
+                    handlers,
+                ),
+            );
         }
     }
 
@@ -4332,11 +4346,26 @@ const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }
     describe: { mounts: true, holds: true },
     pay: { mounts: true, holds: true },
     poster: { mounts: true, holds: true },
+    'shop-window': { mounts: true, holds: true },
 };
 
 function overlayAllowed(view: StallView): boolean {
     if (
         view.broadcast !== undefined &&
+        view.route.kind !== 'invalid' &&
+        view.route.kind !== 'home'
+    ) {
+        return false;
+    }
+    /*
+     * A shop window mounts no overlay either, and for a sharper reason than
+     * the broadcast's: the four sheets HOLD the live paint, so one opened on
+     * an unattended screen would stop the stall updating with nobody there to
+     * close it and nothing on screen to say why. The options sheet is the
+     * seller's, on the ordinary stall, and never on the wall.
+     */
+    if (
+        view.window !== undefined &&
         view.route.kind !== 'invalid' &&
         view.route.kind !== 'home'
     ) {
@@ -6318,6 +6347,26 @@ function paintStudio(
     share.card.append(shareControl());
     share.card.append(embedControl(view));
     posterControl(share.card, view, handlers);
+    /*
+     * The shop window's one door, in the Share card because that card is one
+     * family: the link and its code, the embed box, the poster, the stream
+     * recipe — every way this stall is put somewhere else. It is desk-only,
+     * which `window.css` does by width and not by a render gate: a link
+     * already composed must open at whatever width it is opened at, because a
+     * shop screen hung in portrait is 1080 wide and a counter tablet is 768.
+     *
+     * One door and not two. Two controls opening one sheet read as two roads
+     * (owner, 2026-09-05, on the items card), so there is nothing for this on
+     * the Shop panel — what a seller bookmarks is the link, not this button.
+     */
+    const openWindow = handlers.onOpenShopWindow;
+    if (openWindow !== undefined) {
+        const launch = el('button', 'mini another studio-window', copy.WINDOW_OPEN);
+        launch.type = 'button';
+        launch.setAttribute('data-role', 'studio-open-window');
+        launch.addEventListener('click', () => openWindow());
+        share.card.append(launch);
+    }
     // The stream overlay's recipe, folded: its strings live in the module
     // itself, and it never navigates or stores.
     const obs = el('div');
