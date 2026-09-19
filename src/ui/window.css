@@ -307,6 +307,38 @@
  * spread. When there is not, it is the only shape that keeps the code
  * scannable, and the code is the one thing on the screen a customer uses.
  */
+/*
+ * The options sheet's switches.
+ *
+ * Scoped under `.sheet` — (0,3,0) — because each look re-states
+ * `.t-* .mini[aria-pressed='true']` at (0,2,0), and two of the three do
+ * while the third does not. A switch whose whole state was that attribute
+ * therefore painted NOTHING on one look (owner, 2026-09-19). The words in
+ * `.sw-switch-state` are the state; this is only the dress that agrees
+ * with them, so losing it costs emphasis and never meaning.
+ */
+.sheet .sw-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sheet .sw-switch-state {
+    border: 1px solid var(--s-sect-rule);
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.sheet .sw-switch[aria-pressed='true'] .sw-switch-state {
+    border-color: transparent;
+    background: var(--s-accent);
+    color: var(--s-surface);
+}
+
 @media (orientation: landscape) and (max-height: 900px) {
     .stall.shop-window[data-mode='cycle'] .item-head {
         grid-template-areas:

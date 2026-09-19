@@ -128,6 +128,47 @@ function shopLink(): string {
     return stallBaseUrl();
 }
 
+/**
+ * A switch that says which way it is set, in words.
+ *
+ * `aria-pressed` alone was the whole state, and nothing painted it: there is
+ * no base rule for it in `stall.css`, and the look-scoped
+ * `.t-* .mini[aria-pressed='true']` exists on two of the three looks — so on
+ * the third a seller pressed this and **nothing on screen changed** (owner,
+ * 2026-09-19). The freeze switch had the same hole and got away with it,
+ * because turning it on reveals the height field underneath and the
+ * consequence stood in for the state.
+ *
+ * So the state is CONTENT, not dress: one span, two words, in the button.
+ * It survives every look, every mood, a decoration painted over the sheet
+ * and a reader who cannot see colour — none of which a pressed tint does.
+ * `aria-pressed` stays for the screen reader that already reads it.
+ */
+function switchControl(
+    label: string,
+    role: string,
+    on: boolean,
+    onToggle: (on: boolean) => void,
+): HTMLButtonElement {
+    const button = el('button', 'mini sw-switch', label) as HTMLButtonElement;
+    button.type = 'button';
+    button.setAttribute('data-role', role);
+    const state = el('span', 'sw-switch-state');
+    state.setAttribute('data-role', `${role}-state`);
+    const paint = (next: boolean): void => {
+        button.setAttribute('aria-pressed', String(next));
+        state.textContent = next ? copy.WINDOW_SWITCH_ON : copy.WINDOW_SWITCH_OFF;
+    };
+    button.append(state);
+    paint(on);
+    button.addEventListener('click', () => {
+        const next = button.getAttribute('aria-pressed') !== 'true';
+        paint(next);
+        onToggle(next);
+    });
+    return button;
+}
+
 function codePlate(text: string, caption: string, cls: string): HTMLElement {
     const box = el('div', cls);
     box.append(qrSvg(text, caption));
@@ -629,15 +670,15 @@ export function shopWindowSheet(
      * a whole way of using this feature, and one press rather than a second
      * link to compose by hand.
      */
-    const codeSwitch = el('button', 'mini sw-switch', copy.WINDOW_PAYCODE_SWITCH);
-    codeSwitch.type = 'button';
-    codeSwitch.setAttribute('aria-pressed', 'true');
-    codeSwitch.setAttribute('data-role', 'window-paycode-switch');
-    codeSwitch.addEventListener('click', () => {
-        payCode = codeSwitch.getAttribute('aria-pressed') !== 'true';
-        codeSwitch.setAttribute('aria-pressed', String(payCode));
-        sync();
-    });
+    const codeSwitch = switchControl(
+        copy.WINDOW_PAYCODE_SWITCH,
+        'window-paycode-switch',
+        true,
+        (on) => {
+            payCode = on;
+            sync();
+        },
+    );
     form.append(codeSwitch);
     form.append(el('p', 'fine', copy.WINDOW_PAYCODE_WHY));
 
@@ -651,10 +692,12 @@ export function shopWindowSheet(
      * the height field, its refusal line and the explanation all live behind
      * this one press.
      */
-    const lockSwitch = el('button', 'mini sw-switch', copy.WINDOW_LOCK_SWITCH);
-    lockSwitch.type = 'button';
-    lockSwitch.setAttribute('aria-pressed', 'false');
-    lockSwitch.setAttribute('data-role', 'window-lock-switch');
+    const lockSwitch = switchControl(
+        copy.WINDOW_LOCK_SWITCH,
+        'window-lock-switch',
+        false,
+        (on) => showLock(on),
+    );
     form.append(lockSwitch);
     form.append(el('p', 'fine', copy.WINDOW_LOCK_SWITCH_WHY));
     const lockRow = el('div', 'sw-lock');
@@ -706,11 +749,6 @@ export function shopWindowSheet(
         }
         sync();
     };
-    lockSwitch.addEventListener('click', () => {
-        const on = lockSwitch.getAttribute('aria-pressed') !== 'true';
-        lockSwitch.setAttribute('aria-pressed', String(on));
-        showLock(on);
-    });
     showLock(false);
     sheet.append(form);
 

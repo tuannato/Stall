@@ -1873,6 +1873,10 @@ export function windowQuotesOutcome(read: {
  * and a switch that read as "no codes anywhere" would be a promise this does
  * not keep.
  */
+/** A switch's own state, in words — the one thing every look paints. */
+export const WINDOW_SWITCH_ON = 'On';
+export const WINDOW_SWITCH_OFF = 'Off';
+
 export const WINDOW_PAYCODE_SWITCH = 'Show a code that pays each quote';
 export const WINDOW_PAYCODE_WHY =
     'On by default. Turn it off for a screen that only shows prices, where a customer pays at the counter instead of from the wall. The listings keep their code either way: it opens the item in Cashtab and pays nobody.';

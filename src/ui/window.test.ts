@@ -894,3 +894,55 @@ describe('the-quote-code-is-a-switch-and-the-listings-code-is-not-its-business',
         expect(root.querySelector('.sw-qr')).not.toBeNull();
     });
 });
+
+describe('a-switch-says-which-way-it-is-set', () => {
+    /**
+     * `aria-pressed` was the whole state and nothing painted it: `stall.css`
+     * has no base rule for it, and the look-scoped
+     * `.t-* .mini[aria-pressed='true']` exists on two of the three looks — so
+     * on the third a seller pressed the code switch and nothing on screen
+     * changed (owner, 2026-09-19). The freeze switch had the same hole and
+     * got away with it, because turning it on reveals the height field and
+     * the consequence stood in for the state.
+     *
+     * The state is CONTENT now. A colour can be lost to a look, a mood, a
+     * decoration over the sheet or a reader who cannot see it; two words
+     * cannot.
+     */
+    // The sheet is the SELLER's side of the glass, so it paints on an
+    // ordinary stall — `window: undefined` — and never on the window itself,
+    // which mounts no overlay at all.
+    const sheetOf = (): HTMLElement => {
+        const view = windowView({ show: 'all', mode: 'cycle' });
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            { ...view, window: undefined, overlay: { kind: 'shop-window' } } as StallView,
+            handlers(),
+        );
+        return root;
+    };
+
+    for (const [role, opens] of [
+        ['window-paycode-switch', true],
+        ['window-lock-switch', false],
+    ] as const) {
+        it(`${role} carries its state in words`, () => {
+            const root = sheetOf();
+            const sw = root.querySelector<HTMLButtonElement>(`[data-role="${role}"]`);
+            expect(sw, 'the switch is on the sheet').not.toBeNull();
+            const state = sw!.querySelector(`[data-role="${role}-state"]`);
+            expect(state, 'the state is a node, not only an attribute').not.toBeNull();
+            expect(sw!.getAttribute('aria-pressed')).toBe(String(opens));
+            expect(state!.textContent).toBe(
+                opens ? copy.WINDOW_SWITCH_ON : copy.WINDOW_SWITCH_OFF,
+            );
+
+            sw!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            expect(sw!.getAttribute('aria-pressed')).toBe(String(!opens));
+            expect(state!.textContent, 'the words follow the press').toBe(
+                opens ? copy.WINDOW_SWITCH_OFF : copy.WINDOW_SWITCH_ON,
+            );
+        });
+    }
+});
