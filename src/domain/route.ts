@@ -102,6 +102,14 @@ export const MAX_PAY_PARAM_CHARS = 64;
 /** How much of an id a link this app writes carries. The parser accepts more. */
 export const PAY_PARAM_PREFIX = 12;
 
+/**
+ * The query key a scanned link names its item under. One home, because the
+ * close path deletes exactly what this parse reads (`dropPayParam` in
+ * `app.ts`) and two spellings of it would leave a sheet reopening on a
+ * reload with nothing to say why.
+ */
+export const PAY_PARAM = 'pay';
+
 const PAY_PARAM_RE = new RegExp(
     `^[0-9a-f]{${MIN_PAY_PARAM_CHARS},${MAX_PAY_PARAM_CHARS}}$`,
 );
@@ -117,7 +125,7 @@ export function parsePayParam(search: string): string | undefined {
     } catch {
         return undefined;
     }
-    const raw = params.get('pay');
+    const raw = params.get(PAY_PARAM);
     if (raw === null || raw.length > MAX_PAY_PARAM_CHARS) {
         return undefined;
     }

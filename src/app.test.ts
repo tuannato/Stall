@@ -765,10 +765,11 @@ describe('an-ambiguous-or-unknown-pay-hint-is-the-ordinary-stall', () => {
 
 describe('a-pay-hint-is-consumed-once-per-load', () => {
     /**
-     * The URL is not rewritten, so a reload of a scanned link reopens the
-     * sheet — which is what a scanned link should do. But the seller's "check
-     * now" is a refresh of the same page load, and it must not reopen a sheet
-     * the buyer closed.
+     * The seller's "check now" is a refresh of the same page load, and it
+     * must not reopen a sheet the buyer closed. The other half of that — a
+     * reload, which is a NEW load and reads the URL afresh — is
+     * `a-closed-pay-sheet-is-not-reopened-by-a-reload`: closing takes the
+     * param off, so only a reload before a close reopens the sheet.
      */
     it('does not reopen the sheet on a refresh of the same load', async () => {
         const root = document.createElement('div');
@@ -782,6 +783,37 @@ describe('a-pay-hint-is-consumed-once-per-load', () => {
         await flush();
         expect(root.querySelector('[data-role="pay"]')).toBeNull();
         expect(root.querySelector('[data-role="pay-hint-note"]')).toBeNull();
+    });
+});
+
+describe('a-closed-pay-sheet-is-not-reopened-by-a-reload', () => {
+    /**
+     * A `?pay=` link opens the sheet on load, and the param used to stay in
+     * the URL after the buyer closed it — so anything that re-runs the
+     * document put the sheet back under them: Back, a wallet hand-off that
+     * navigated this tab, and above all a desktop browser discarding a
+     * backgrounded tab, which is how the owner met it (2026-09-19, Neo, the
+     * fittings stall). Closing drops the param, so a reload after a close
+     * stays closed. A reload *before* a close still reopens it: that is what
+     * a scanned link should do, and the param is still there to do it.
+     */
+    it('drops the pay param when the buyer closes the sheet', async () => {
+        window.history.replaceState(
+            null,
+            '',
+            `${stallPath(ADDR)}?pay=${QUOTED.slice(0, 12)}`,
+        );
+        const root = document.createElement('div');
+        boot(root, async () => quotedStall({ payHint: QUOTED.slice(0, 12) }));
+        await flush();
+        expect(root.querySelector('[data-role="pay"]')).not.toBeNull();
+        expect(new URL(window.location.href).searchParams.get('pay')).not.toBeNull();
+
+        (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+        expect(root.querySelector('[data-role="pay"]')).toBeNull();
+        // The one thing a reload reads. The path is untouched.
+        expect(new URL(window.location.href).searchParams.get('pay')).toBeNull();
+        expect(window.location.pathname).toBe(stallPath(ADDR));
     });
 });
 

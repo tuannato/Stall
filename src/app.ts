@@ -2,6 +2,7 @@ import { encodeCashAddress } from 'ecashaddrjs';
 import { isWithheldToken } from './domain/withheld';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import {
+    PAY_PARAM,
     isHomePath,
     parseBroadcastParams,
     parseWindowParams,
@@ -455,6 +456,33 @@ export function boot(
      * sheet the buyer closed would be this page arguing with them.
      */
     let payHintUsed = false;
+
+    /**
+     * A close that leaves `?pay=` in the URL is undone by anything that runs
+     * the document again — Back, a wallet hand-off that navigated this tab,
+     * and above all a desktop browser discarding a backgrounded tab, which is
+     * how this was met (2026-09-19). `payHintUsed` only bounds THIS page load;
+     * the next one reads the URL afresh and reopens the sheet the buyer
+     * closed. So the close takes the param off. A reload *before* a close
+     * still reopens it, which is what a scanned link should do.
+     *
+     * `replaceState`, and `history.state` is passed back untouched: §3's
+     * `door` and `pasted` stamps ride that entry and a shared link's null
+     * state must stay null. The path and every other param are kept, so a
+     * `?view=` or `?m=` link survives a close.
+     */
+    const dropPayParam = (): void => {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has(PAY_PARAM)) {
+            return;
+        }
+        url.searchParams.delete(PAY_PARAM);
+        window.history.replaceState(
+            window.history.state,
+            '',
+            `${url.pathname}${url.search}${url.hash}`,
+        );
+    };
     /**
      * Which rail of the Shop panel is on screen, and the stall that choice
      * belongs to.
@@ -805,6 +833,9 @@ export function boot(
                 paint();
             },
             onClosePublish: () => {
+                if (state.view.overlay.kind === 'pay') {
+                    dropPayParam();
+                }
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
