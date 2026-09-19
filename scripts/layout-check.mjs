@@ -40,6 +40,28 @@ const VIEWPORTS = [
  * measures nothing and prints a tick.
  */
 const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
+/**
+ * A television hung the tall way, which is what a shop window often is.
+ *
+ * `window.css` carries three layouts for the cycle card and only two were
+ * ever measured: landscape, and `(orientation: portrait) and (max-height:
+ * 1200px)` — the phone and the counter tablet, which the 390x844 pass
+ * matches. The third, `portrait` with that max-height NOT matching, is the
+ * stacked column a wall-mounted portrait screen paints, and **no viewport
+ * reached it**: a whole half of the layout this feature was asked for
+ * (owner, 2026-09-18: "Cũng thiết kế để hỗ trợ màn hình dọc") sat behind a
+ * media query the probe could not enter, so every run printed a tick over
+ * CSS nothing had executed.
+ *
+ * It runs the shop-window screens alone, through `?screens=`, the way the
+ * reduced-motion pass runs the animating ones: the rest of the app has no
+ * portrait-only rule and re-measuring it would double the run for nothing.
+ * The verdict echoes the media condition back (`portraitTall`) so a pass
+ * that silently stayed landscape fails instead of passing.
+ */
+const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
+const WINDOW_SCREENS =
+    'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
@@ -601,6 +623,60 @@ try {
         );
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+        }
+    }
+
+    /*
+     * Pass 2b: the shop window hung the tall way. See `PORTRAIT` above for
+     * why this is a pass of its own and not another entry in ALL_VIEWPORTS —
+     * it measures four screens, not the matrix.
+     */
+    {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: PORTRAIT.width, height: PORTRAIT.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        const wanted = WINDOW_SCREENS.split(',').length;
+        const label = `portrait (${PORTRAIT.width}x${PORTRAIT.height}, shop window)`;
+        try {
+            const pv = await readVerdict(
+                cdp,
+                sessionId,
+                probeUrl(PORTRAIT, `&screens=${WINDOW_SCREENS}`),
+            );
+            if (pv.viewport !== PORTRAIT.width) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: asked for ${PORTRAIT.width}px and the page measured ${pv.viewport}px.`,
+                );
+            } else if (pv.portraitTall !== true) {
+                // The emulation applied a size and the media query still did
+                // not match: the pass would measure the landscape or the
+                // short-portrait layout and print a tick for the tall one.
+                failed = true;
+                console.error(
+                    `✗ ${label}: the page never entered the tall-portrait block —` +
+                        ' this pass would certify a layout it did not paint.',
+                );
+            } else if ((pv.screensMeasured ?? []).length !== wanted) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: measured ${(pv.screensMeasured ?? []).length} of ${wanted}` +
+                        ' screens — vacuous green.',
+                );
+            } else if (pv.failures.length === 0) {
+                console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}`);
+            } else {
+                failed = true;
+                console.error(`✗ ${label}: ${pv.failures.length} failure(s) — ${took()}`);
+                for (const f of pv.failures) {
+                    console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                }
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
         }
     }
 

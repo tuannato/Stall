@@ -1593,6 +1593,17 @@ result.textContent = JSON.stringify(
     {
         viewport: window.innerWidth,
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        /*
+         * The tall-portrait half of `window.css`, echoed back so the runner
+         * can refuse a pass the media feature never reached — the same guard
+         * `reducedMotion` gives that pass. It is `portrait` with the
+         * `max-height: 1200px` block NOT matching: a phone and a counter
+         * tablet are portrait too and take the short variant, so the stacked
+         * column a wall-mounted screen paints is a third state, and asking
+         * only for `portrait` would have certified it from a 390px phone.
+         */
+        portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
+            .matches,
         screensMeasured: measured,
         clipSkips,
         clipChecks,

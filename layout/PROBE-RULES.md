@@ -409,6 +409,42 @@ Sampling amendments, each measured:
   translucent Modern dock at 2.48:1 over Drifting light's orbs under After
   hours — mobile-only had certified pixels nobody paints at 1280.
 
+## The shop window hung the tall way (pass 2b, 2026-09-19)
+
+`window.css` carries **three** layouts for the cycle card, and the probe
+reached two of them.
+
+- Landscape — the desk widths and the 1920x1080 canvas.
+- `(orientation: portrait) and (max-height: 1200px)` — the phone and the
+  counter tablet, which the 390x844 pass matches. Picture beside the text.
+- `(orientation: portrait)` with that max-height **not** matching — the
+  stacked column a wall-mounted portrait screen paints. **No viewport
+  reached it.**
+
+So half the layout of the thing the feature was asked for (owner,
+2026-09-18: "Cũng thiết kế để hỗ trợ màn hình dọc") sat behind a media query
+this guard could not enter, and every run printed a tick over CSS nothing had
+executed. Note the trap: asking only for `orientation: portrait` would NOT
+have closed it — 390x844 is portrait, and it takes the short variant.
+
+The pass is 1080x1920 over the four shop-window screens through `?screens=`,
+the way pass 3 runs the animating ones; the rest of the app has no
+portrait-only rule and re-measuring it would double the run for nothing.
+
+- The page echoes the media condition back as `portraitTall`
+  (`(orientation: portrait) and (min-height: 1201px)`), and the runner
+  **refuses the pass when it is false** — the `reducedMotion` guard, for the
+  same reason: emulation that applied a size while the query stayed unmatched
+  would certify the landscape layout under a portrait label. Proved by
+  setting the pass to 1080x900 and watching it refuse.
+- The pass must measure all four screens or it is vacuous green.
+- **Proved it has eyes**: `width: 3000px` planted on `.sw-strip` inside the
+  tall-portrait block produced **602 failures** in this pass — sideways
+  scroll and text-spills, on every look and every seek instant — while
+  mobile, desktop and canvas all stayed green. That the other three passes
+  missed it is the measurement of the gap, not just of the plant.
+- Cost: +2.8s (181.7s → 184.5s against the 200s ceiling).
+
 ## Reduced motion (pass 3)
 
 - The page's own `matchMedia` answer is required — emulation that silently
