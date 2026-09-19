@@ -20,7 +20,12 @@ import {
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
-import { DEFAULT_FIAT_CODE, judgeRates, type RateCheck } from './domain/fiat';
+import {
+    DEFAULT_FIAT_CODE,
+    isQuoteUnit,
+    judgeQuoteRates,
+    type RateCheck,
+} from './domain/fiat';
 import {
     clearSavedStall,
     isPinnedStall,
@@ -1362,6 +1367,25 @@ export function boot(
         state.view.prices?.get(tokenId)?.code === XEC_PRICE_CODE;
 
     /**
+     * The unit the open pay sheet's quote is written in.
+     *
+     * Read from the overlay rather than passed down, because the sheet's own
+     * refresh control hands back only a timeout — and a rate read for the
+     * wrong unit would put a figure on screen in one currency composed from
+     * another's rate, which is the one mistake this whole rail is built to
+     * make impossible. No sheet open is `usd`: the only other caller is the
+     * `?pay=` landing, which opens one in the same turn.
+     */
+    const quoteUnitOnScreen = (): string => {
+        const over = state.view.overlay;
+        if (over.kind !== 'pay') {
+            return DEFAULT_FIAT_CODE;
+        }
+        const code = state.view.prices?.get(over.tokenId)?.code;
+        return code !== undefined && isQuoteUnit(code) ? code : DEFAULT_FIAT_CODE;
+    };
+
+    /**
      * One fresh rate for the pay sheet: remembered here and handed back, with
      * **no paint**. The sheet holds the buyer's own quantity in a closure, and
      * `renderStall` opens with `replaceChildren()` — so a paint from this path
@@ -1380,14 +1404,25 @@ export function boot(
         // and never price — is the domain's (`judgeRates`), not this file's.
         // Neither feed judges the glance (`refreshFiat`): that is `≈`, off
         // the money path, and has no sentence for absence (CLAUDE §8).
-        const [primary, check] = await Promise.all([
+        //
+        // A quote written in another unit adds ONE request: its own rate,
+        // for the figure. The USD pair is still asked and still judges —
+        // the window is written for USD and the second feed answers for USD
+        // alone, so that pair is the only place the fence and the
+        // disagreement rule can run (`judgeQuoteRates`). A USD quote asks
+        // exactly the two it always did.
+        const code = quoteUnitOnScreen();
+        const [primary, check, figure] = await Promise.all([
             fetchXecPrice(DEFAULT_FIAT_CODE, timeoutMs === undefined ? undefined : { timeoutMs }),
             withDeadline(
                 fetchXecPriceCheck(DEFAULT_FIAT_CODE, { timeoutMs: PAY_CHECK_TIMEOUT_MS }),
                 PAY_CHECK_TIMEOUT_MS,
             ),
+            code === DEFAULT_FIAT_CODE
+                ? Promise.resolve(undefined)
+                : fetchXecPrice(code, timeoutMs === undefined ? undefined : { timeoutMs }),
         ]);
-        const judged = judgeRates(DEFAULT_FIAT_CODE, primary, check);
+        const judged = judgeQuoteRates(code, figure, primary, check);
         const answer: PayRateAnswer =
             judged.kind === 'refused'
                 ? { why: judged.why }

@@ -10,7 +10,16 @@ import {
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
-import { fiatCurrency, formatFiat, formatXecRate, satsForQuote } from '../domain/fiat';
+import {
+    DEFAULT_FIAT_CODE,
+    QUOTE_UNITS,
+    fiatCurrency,
+    formatFiat,
+    formatXecRate,
+    isQuoteUnit,
+    quoteUnitExponent,
+    satsForQuote,
+} from '../domain/fiat';
 import { isPriceable, sectionsOf, type Category } from '../domain/category';
 import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
@@ -2068,8 +2077,13 @@ export function listingsInShopOrder(view: StallView): TokenListing[] {
     return out;
 }
 
-/** The units a quote is painted in. Every other code is decoded and silent. */
-const PAINTED_QUOTE_CODES: readonly string[] = ['usd', XEC_PRICE_CODE];
+/**
+ * The units a quote is painted in: the editor's own table (`QUOTE_UNITS`).
+ * Every other code the wire carries is decoded, never painted, and counted
+ * among the records this page could not read — the two sets are one list so
+ * a seller can never publish a figure their own stall then refuses to show.
+ */
+const isPaintedQuoteCode = (code: string): boolean => isQuoteUnit(code);
 
 /** One item the seller has quoted, and the figure they wrote for it. */
 export type QuotedItem = { tokenId: string; price: TokenPrice };
@@ -2090,7 +2104,7 @@ export type QuotedItem = { tokenId: string; price: TokenPrice };
 export function quotedItems(view: StallView): QuotedItem[] {
     const out: QuotedItem[] = [];
     for (const [tokenId, price] of view.prices ?? []) {
-        if (!PAINTED_QUOTE_CODES.includes(price.code)) {
+        if (!isPaintedQuoteCode(price.code)) {
             continue;
         }
         if (!isPriceable(tokenId, view.tokens.get(tokenId))) {
@@ -2697,20 +2711,20 @@ function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
 }
 
 /**
- * The units this editor writes, and the only ones it reads back to a seller.
- * `usd` is what most sellers think in; `xec` is the chain's own unit, which is
- * the one figure a printed QR cannot make stale. Every other code the wire
- * carries is decoded, never painted, and carried forward untouched.
+ * The units this editor writes, and the only ones it reads back to a seller:
+ * `QUOTE_UNITS`, whose order is the chain's own unit, then the one every rate
+ * feed prices, then the shipped table. A code outside it is decoded, never
+ * painted, and carried forward untouched.
  */
-const EDITABLE_PRICE_CODES = ['usd', XEC_PRICE_CODE] as const;
+const EDITABLE_PRICE_CODES: readonly string[] = QUOTE_UNITS.map((u) => u.code);
 
 /**
- * Two decimal places for both, which is what the record's exponent byte says.
- * Never `fiatFractionDigits`: that table is a display convention this app may
- * change on any deploy, and a published record whose meaning moved with it
- * would be a different price after an unrelated release.
+ * The exponent a unit is written at, from the editor's own frozen table.
+ * **Never `fiatFractionDigits`**: that one is a display convention this app
+ * may change on any deploy, and a published record whose meaning moved with
+ * it would be a different price after an unrelated release.
  */
-const EDITOR_PRICE_EXPONENT = 2;
+const editorExponent = (code: string): number => quoteUnitExponent(code) ?? 2;
 
 /**
  * The margins this editor offers, and the reason for the steps: under 1% is
@@ -3002,42 +3016,55 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     priceAmount.setAttribute('data-focus-key', 'describe-price');
     priceAmountLabel.append(priceAmount);
     /*
-     * The unit as a two-way segment. A `<select>` of two options is a menu
-     * for a choice that is always visible, and the accessible name carries
-     * the code — "$" alone is a glyph three currencies share.
+     * The unit as a list, because a list is what it is now.
+     *
+     * It was a two-way segment while there were two units, and a segment is
+     * right for a choice that is always visible. `QUOTE_UNITS` is the shipped
+     * table, so the control is a `<select>`: the chain's own unit first, the
+     * unit every rate feed prices second, and the rest after them. Nothing
+     * below those two is ranked or recommended here or anywhere else — the
+     * seller writing the record is the one who knows what their customers
+     * think in, and the record is theirs.
+     *
+     * The option text carries the code and the currency's own name, never a
+     * glyph alone: "$" is shared by several of these and reads aloud as
+     * nothing.
      */
     const priceUnit = sheetGroup(copy.DESC_PRICE_CODE_LABEL);
     priceUnit.setAttribute('data-role', 'describe-price-code');
-    const unitSeg = el('div', 'seg seg-two');
-    unitSeg.setAttribute('role', 'group');
+    const unitSeg = el('select', 'paste-in');
     unitSeg.setAttribute('aria-label', copy.DESC_PRICE_CODE_LABEL);
-    let priceCode: string = EDITABLE_PRICE_CODES[0];
-    const unitButtons: HTMLButtonElement[] = [];
+    unitSeg.setAttribute('data-role', 'describe-unit');
+    unitSeg.setAttribute('data-focus-key', 'describe-unit');
+    /*
+     * The list opens on USD, which is NOT its first option.
+     *
+     * `QUOTE_UNITS` puts the chain's own unit first, and a `<select>` shows
+     * the current value rather than the head of its list — so the order the
+     * owner asked for costs nothing here. The default is a separate question
+     * from the order and it does not move: a seller who types a figure
+     * without touching this control publishes what they published before,
+     * and a default that changed under them would sign a permanent record in
+     * a unit they never chose.
+     */
+    let priceCode: string = DEFAULT_FIAT_CODE;
     const paintUnits = (): void => {
-        for (const button of unitButtons) {
-            button.setAttribute(
-                'aria-pressed',
-                button.getAttribute('data-code') === priceCode ? 'true' : 'false',
-            );
-        }
+        (unitSeg as HTMLSelectElement).value = priceCode;
     };
-    for (const code of EDITABLE_PRICE_CODES) {
-        const button = el('button', 'seg-b', copy.priceUnitGlyph(code));
-        button.type = 'button';
-        button.setAttribute('data-code', code);
-        button.setAttribute('data-role', `describe-unit-${code}`);
-        button.setAttribute('data-focus-key', `describe-unit-${code}`);
-        // The glyph on screen, the code in the accessible name: a "$" read
-        // aloud is not a currency.
-        button.setAttribute('aria-label', code.toUpperCase());
-        button.addEventListener('click', () => {
-            priceCode = code;
-            paintUnits();
-            refresh();
-        });
-        unitButtons.push(button);
-        unitSeg.append(button);
+    for (const unit of QUOTE_UNITS) {
+        const option = el('option', undefined, copy.priceUnitLabel(unit.code));
+        (option as HTMLOptionElement).value = unit.code;
+        option.setAttribute('data-code', unit.code);
+        unitSeg.append(option);
     }
+    unitSeg.addEventListener('change', () => {
+        const picked = (unitSeg as HTMLSelectElement).value;
+        if (!isQuoteUnit(picked)) {
+            return;
+        }
+        priceCode = picked;
+        refresh();
+    });
     priceUnit.append(unitSeg);
     priceWrap.append(priceAmountLabel, priceUnit);
     form.append(priceWrap);
@@ -3313,7 +3340,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const typedPrice =
             figure === ''
                 ? undefined
-                : parsePriceFigure(figure, priceCode, EDITOR_PRICE_EXPONENT);
+                : parsePriceFigure(figure, priceCode, editorExponent(priceCode));
         const priceRefused = figure !== '' && typedPrice === undefined;
         /*
          * Which margin the record carries, and the whole rule in one place:
@@ -3426,9 +3453,8 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         for (const input of [field, shelfField, priceAmount]) {
             input.disabled = removing;
         }
-        for (const button of unitButtons) {
-            button.disabled = removing;
-        }
+        // The unit list is a field like the others in removal mode.
+        (unitSeg as HTMLSelectElement).disabled = removing;
         form.classList.toggle('removing', removing);
 
         clearLede.hidden = removing || !clearing;
@@ -3453,7 +3479,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 : /[\r\n]/.test(text)
                   ? copy.DESC_ONE_LINE
                   : priceRefused
-                    ? copy.DESC_PRICE_REFUSED
+                    ? copy.priceRefusedFor(editorExponent(priceCode))
                     : descriptionRecordBytes(text, shelf, price) > OP_RETURN_BUDGET
                       ? price === undefined
                           ? copy.DESC_OVER_BUDGET
@@ -3674,7 +3700,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             price !== undefined &&
             (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code);
         priceAmount.value = editable ? formatPriceFigure(price) : '';
-        priceCode = editable ? price.code : EDITABLE_PRICE_CODES[0];
+        priceCode = editable ? price.code : DEFAULT_FIAT_CODE;
         // A margin belongs to one token's record, so switching tokens drops
         // whatever was pressed for the last one.
         toleranceTouched = false;
@@ -4112,7 +4138,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             rateLabel.textContent =
                 glance === undefined || rate === undefined
                     ? ''
-                    : copy.payRateLine(glance, formatTriedAt(rate.atMs), copy.rateSources(rate.check));
+                    : copy.payRateLine(
+                          glance,
+                          formatTriedAt(rate.atMs),
+                          // Both feeds price a USD quote; only the first
+                          // prices any other unit (`judgeQuoteRates`).
+                          copy.rateSources(rate.check, price.code === DEFAULT_FIAT_CODE),
+                      );
         }
         why.hidden = sats !== undefined && !subDust;
         why.textContent = subDust

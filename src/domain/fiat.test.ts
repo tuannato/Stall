@@ -15,6 +15,7 @@ import {
     scaleRate,
 } from './fiat';
 import { XEC_PRICE_CODE, type TokenPrice } from './description';
+import { QUOTE_UNITS, isQuoteUnit, judgeQuoteRates, quoteUnitExponent } from './fiat';
 
 /** A plausible XEC price: 1 XEC ≈ $0.00003. */
 const USD_RATE = scaleRate(0.00003);
@@ -298,5 +299,82 @@ describe('the-figure-comes-from-the-first-feed-and-never-the-check', () => {
     it('refuses on the first feed alone, whatever the second said', () => {
         expect(judgeRates('usd', undefined, agreeing)).toEqual({ kind: 'refused', why: 'no-answer' });
         expect(judgeRates('usd', scaleRate(5)!, agreeing)).toEqual({ kind: 'refused', why: 'implausible' });
+    });
+});
+
+
+describe('a-quote-unit-table-the-display-table-cannot-move', () => {
+    /**
+     * The exponent a quote is written at goes into a permanent record, so it
+     * is pinned HERE and never read from `fiatFractionDigits` — a display
+     * convention this app may change on any deploy. The two agree today and
+     * are allowed to diverge; what may never happen is a published record
+     * meaning something different after a cosmetic release.
+     */
+    it('offers the chain’s unit first and the rate feeds’ unit second', () => {
+        expect(QUOTE_UNITS[0]?.code).toBe(XEC_PRICE_CODE);
+        expect(QUOTE_UNITS[1]?.code).toBe('usd');
+    });
+
+    it('covers every shipped currency exactly once, and the chain’s unit', () => {
+        const codes = QUOTE_UNITS.map((u) => u.code);
+        expect(new Set(codes).size, 'no code appears twice').toBe(codes.length);
+        for (const currency of FIAT_CURRENCIES) {
+            expect(isQuoteUnit(currency.code), currency.code).toBe(true);
+        }
+        expect(isQuoteUnit(XEC_PRICE_CODE)).toBe(true);
+        expect(isQuoteUnit('zzz')).toBe(false);
+    });
+
+    it('writes every unit at an exponent the wire can carry', () => {
+        for (const unit of QUOTE_UNITS) {
+            expect(Number.isInteger(unit.exponent), unit.code).toBe(true);
+            expect(unit.exponent, unit.code).toBeGreaterThanOrEqual(0);
+            expect(unit.exponent, unit.code).toBeLessThanOrEqual(8);
+            expect(quoteUnitExponent(unit.code)).toBe(unit.exponent);
+        }
+        expect(quoteUnitExponent('zzz')).toBeUndefined();
+    });
+});
+
+describe('a-quote-in-any-unit-is-judged-in-usd', () => {
+    /**
+     * The plausibility window is written for USD and the second feed answers
+     * for USD alone, so the USD pair judges the FEED whatever the seller
+     * quoted in, and the quote's own rate supplies the FIGURE.
+     */
+    const USD = scaleRate(0.00003)!;
+    const OTHER = scaleRate(0.0007)!;
+
+    it('is the old judgement exactly when the quote is in usd', () => {
+        for (const check of [USD, scaleRate(0.0000305)!, scaleRate(0.00009)!, undefined]) {
+            expect(judgeQuoteRates('usd', USD, USD, check)).toEqual(
+                judgeRates('usd', USD, check),
+            );
+        }
+    });
+
+    it('prices the figure in the quote’s unit and keeps the usd verdict', () => {
+        const agreed = judgeQuoteRates('eur', OTHER, USD, USD);
+        expect(agreed).toEqual({ kind: 'rate', rate: OTHER, check: 'agree' });
+        // The disagreement rule is the old one and it is still run in USD.
+        const split = judgeQuoteRates('eur', OTHER, USD, scaleRate(0.00009)!);
+        expect(split).toEqual({ kind: 'rate', rate: OTHER, check: 'disagree' });
+    });
+
+    it('refuses a figure it has no fence for', () => {
+        // No USD answer is no window, and a figure a wallet signs is never
+        // composed from an unfenced rate — even with the quote's own rate in.
+        expect(judgeQuoteRates('eur', OTHER, undefined, USD)).toEqual({
+            kind: 'refused',
+            why: 'no-answer',
+        });
+        // A USD answer outside the window refuses whatever the unit is.
+        expect(judgeQuoteRates('eur', OTHER, scaleRate(5)!, USD).kind).toBe('refused');
+        // And the quote's own rate missing is no figure.
+        expect(judgeQuoteRates('eur', undefined, USD, USD)).toEqual({
+            kind: 'refused',
+            why: 'no-answer',
+        });
     });
 });

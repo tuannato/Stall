@@ -90,7 +90,7 @@ import {
     encodeRemovalHex,
 } from '../domain/description';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
-import { scaleRate } from '../domain/fiat';
+import { QUOTE_UNITS, scaleRate } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
@@ -6872,11 +6872,12 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
         });
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
         expect(amount.value).toBe('12.50');
+        // The control is a list since 2026-09-19: what it shows is the unit
+        // the record carries, which is the same claim the pressed segment
+        // used to make.
         expect(
-            root
-                .querySelector('[data-role="describe-price-code"] [aria-pressed="true"]')
-                ?.getAttribute('data-code'),
-            'the pressed unit is the published one',
+            (root.querySelector('[data-role="describe-unit"]') as HTMLSelectElement).value,
+            'the list shows the published unit',
         ).toBe('usd');
         // Scoped to the sheet: the same role now paints on the pay surface
         // behind it, and a query from the root would read that row's figure.
@@ -6926,7 +6927,7 @@ describe('the-editor-shows-the-sellers-price-back-under-its-own-role', () => {
     });
 });
 
-describe('the-app-writes-usd-cents-and-nothing-else', () => {
+describe('the-editor-writes-the-units-its-own-table-pins', () => {
     const sheet = (over: Partial<StallView> = {}) =>
         paint(
             idlePubkey({
@@ -6938,30 +6939,55 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
             }),
         );
 
-    // Amended 2026-09-04: the unit is a two-way segment, not a menu. Pressing
-    // it is what a seller does; the assertions below are unchanged.
+    /*
+     * Amended 2026-09-19: the unit is a list again, because there are more
+     * than two of them. Choosing one is what a seller does; the assertions
+     * below are unchanged by the change of control.
+     */
+    const pickUnit = (root: HTMLElement, code: string) => {
+        const unit = root.querySelector('[data-role="describe-unit"]') as HTMLSelectElement;
+        unit.value = code;
+        unit.dispatchEvent(new Event('change', { bubbles: true }));
+        return unit;
+    };
     const typePrice = (root: HTMLElement, figure: string, code = 'usd') => {
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
-        const unit = root.querySelector(
-            `[data-role="describe-unit-${code}"]`,
-        ) as HTMLButtonElement;
-        unit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        pickUnit(root, code);
         amount.value = figure;
         amount.dispatchEvent(new Event('input'));
         return root.querySelector('[data-role="describe-hex"]') as HTMLElement;
     };
 
-    it('offers exactly two units, and writes each at two decimal places', () => {
+    /**
+     * Widened 2026-09-19 from "usd and xec and nothing else" (owner): the
+     * unit is the seller's to choose per quote, and they are the one who
+     * knows what their customers think in. What did NOT widen is where the
+     * exponent comes from — `QUOTE_UNITS` is the editor's own frozen table,
+     * never the display table, so a cosmetic release can never re-interpret
+     * a record somebody already signed.
+     */
+    it('offers its own table in its own order, and opens on usd', () => {
         const { root } = sheet();
         const units = [
             ...root.querySelectorAll('[data-role="describe-price-code"] [data-code]'),
         ];
-        expect(units.map((u) => u.getAttribute('data-code'))).toEqual(['usd', 'xec']);
-        // The glyph is painted, the code is read aloud: "$" alone is a sign
-        // three currencies share.
-        expect(units.map((u) => u.textContent)).toEqual(['$', 'XEC']);
-        expect(units.map((u) => u.getAttribute('aria-label'))).toEqual(['USD', 'XEC']);
-        expect(units[0]!.getAttribute('aria-pressed'), 'opens on USD').toBe('true');
+        // The chain's own unit first, the one every rate feed prices second.
+        expect(units.map((u) => u.getAttribute('data-code'))).toEqual(
+            QUOTE_UNITS.map((u) => u.code),
+        );
+        expect(units[0]!.getAttribute('data-code')).toBe('xec');
+        expect(units[1]!.getAttribute('data-code')).toBe('usd');
+        // Every option names the code that goes into the record; a glyph
+        // alone is a sign several of these share.
+        for (const option of units) {
+            expect(option.textContent).toContain(
+                (option.getAttribute('data-code') ?? '').toUpperCase(),
+            );
+        }
+        // The order moved; the DEFAULT did not. A seller who types a figure
+        // without touching this control signs what they signed before.
+        const control = root.querySelector('[data-role="describe-unit"]') as HTMLSelectElement;
+        expect(control.value, 'opens on USD, which is not the first option').toBe('usd');
 
         // A typed USD figure carries no tolerance byte until a preset is
         // pressed (2026-09-07; it carried 2% by default for three days). The
@@ -6982,6 +7008,34 @@ describe('the-app-writes-usd-cents-and-nothing-else', () => {
                 price: { code: 'xec', exponent: 2, amount: 45_000n },
             }),
         );
+    });
+
+    /**
+     * Every unit on the list writes at the exponent the editor's OWN table
+     * pins, and the record decodes back to it. A currency whose sub-unit is
+     * not in daily use takes whole figures, and typing a fraction into one
+     * is refused rather than rounded into a permanent record.
+     */
+    it('writes each unit at the exponent its own table pins', () => {
+        const { root } = sheet();
+        for (const unit of QUOTE_UNITS) {
+            const whole = typePrice(root, '7', unit.code);
+            expect(whole.textContent, unit.code).toBe(
+                encodeDescriptionHex(TOKEN_ID, '', {
+                    price: {
+                        code: unit.code,
+                        exponent: unit.exponent,
+                        amount: 7n * 10n ** BigInt(unit.exponent),
+                    },
+                }),
+            );
+            if (unit.exponent === 0) {
+                // A sub-unit this currency does not use is not silently
+                // dropped or rounded — the field refuses it.
+                const frac = typePrice(root, '7.50', unit.code);
+                expect(frac.hidden, unit.code).toBe(true);
+            }
+        }
     });
 
     it('refuses a figure the record cannot hold, and hands over nothing', () => {
@@ -7178,16 +7232,21 @@ describe('clearing-every-field-removes-everything', () => {
     });
 });
 
-describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
+describe('a-price-in-a-unit-this-editor-cannot-write-is-void-and-silent', () => {
     /**
-     * Void on screen, never on the wire. The editor writes two units and paints
-     * two; a record carrying anything else is read, shown nowhere and mentioned
-     * nowhere. What it is **not** is forgotten: a publish from this sheet
-     * restates every field, so an unwritable code is carried forward untouched
-     * until the seller types a figure of their own over it. A field this app no
-     * longer edits is never dropped — the same rule the STL1 fiat hint gets.
+     * Void on screen, never on the wire. The editor writes `QUOTE_UNITS` and
+     * paints exactly those; a record carrying anything else is read, shown
+     * nowhere and mentioned nowhere. What it is **not** is forgotten: a
+     * publish from this sheet restates every field, so an unwritable code is
+     * carried forward untouched until the seller types a figure of their own
+     * over it. A field this app no longer edits is never dropped — the same
+     * rule the STL1 fiat hint gets.
+     *
+     * The example used to be `eur`, which the table now carries (2026-09-19).
+     * A code outside the shipped table is what this rule was always about:
+     * another app's unit, or one this one has not learned.
      */
-    const EUR = { code: 'eur', exponent: 2, amount: 900n } as const;
+    const OTHER = { code: 'zzz', exponent: 2, amount: 900n } as const;
     const sheet = () =>
         paint(
             idlePubkey({
@@ -7195,7 +7254,7 @@ describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 overlay: { kind: 'describe' },
                 stallName: 'Riverside Goods',
-                prices: new Map([[TOKEN_ID, EUR]]),
+                prices: new Map([[TOKEN_ID, OTHER]]),
             }),
         );
 
@@ -7207,7 +7266,7 @@ describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
             true,
         );
         expect(root.textContent).not.toContain('9.00');
-        expect(root.textContent).not.toContain('EUR');
+        expect(root.textContent).not.toContain('ZZZ');
         const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
         expect(err.hidden, 'an unwritable code is not an error').toBe(true);
     });
@@ -7219,7 +7278,7 @@ describe('a-price-not-in-usd-or-xec-is-void-and-silent', () => {
         field.dispatchEvent(new Event('input'));
         const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
         expect(hex.textContent).toBe(
-            encodeDescriptionHex(TOKEN_ID, 'New words', { price: EUR }),
+            encodeDescriptionHex(TOKEN_ID, 'New words', { price: OTHER }),
         );
     });
 
@@ -7898,12 +7957,12 @@ describe('the-summary-says-what-the-record-carries', () => {
         // untouched and shown nowhere — but the record carries it, so the
         // line names the field. Silence about a field being signed is the
         // other half of the same honesty.
-        const EUR = { code: 'eur', exponent: 2, amount: 900n } as const;
+        const other = { code: 'zzz', exponent: 2, amount: 900n } as const;
         const { root } = paint(
             offersView([OFFER], undefined, {
                 overlay: { kind: 'describe' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                prices: new Map([[TOKEN_ID, EUR]]),
+                prices: new Map([[TOKEN_ID, other]]),
             }),
         );
         const field = root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement;
@@ -7912,7 +7971,7 @@ describe('the-summary-says-what-the-record-carries', () => {
         const line = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
         expect(line.textContent).toContain(copy.SUMMARY_QUOTE);
         expect(line.textContent, 'no figure this sheet cannot change').not.toContain('9.00');
-        expect(line.textContent).not.toContain('EUR');
+        expect(line.textContent).not.toContain('ZZZ');
     });
 
     it('says nothing to publish rather than a size for a record nobody asked for', () => {
@@ -8338,6 +8397,29 @@ describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
         expect(rate?.textContent).toContain('CoinGecko');
     });
 
+    /**
+     * The figure's own feed is what the line names. A quote in a unit the
+     * second feed does not answer for was priced by the first alone, and
+     * naming a feed that never priced it would be the louder, weaker claim.
+     * The two feeds were still consulted and still judged each other in USD
+     * — that is `judgeQuoteRates`, and the valve is where it speaks.
+     */
+    it('names one feed for a quote the second feed does not price', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { code: 'eur', exponent: 2, amount: 500n }]]),
+            payRate: { ...PAY_RATE, check: 'agree' },
+        });
+        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]');
+        expect(rate?.textContent).toContain(copy.RATE_SOURCE_PRIMARY);
+        expect(rate?.textContent).not.toContain(copy.RATE_SOURCE_CHECK);
+    });
+
+    it('names both feeds for a usd quote they agreed on', () => {
+        const { root } = sheet({ payRate: { ...PAY_RATE, check: 'agree' } });
+        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]');
+        expect(rate?.textContent).toContain(copy.RATE_SOURCE_CHECK);
+    });
+
     it('drops the rate entirely for an xec quote', () => {
         const { root } = sheet({
             prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
@@ -8699,9 +8781,9 @@ describe('the-editor-writes-presets-only-and-reads-anything', () => {
 
     it('hides the control under an xec quote and writes no byte there', () => {
         const { root } = sheet();
-        (
-            root.querySelector('[data-role="describe-unit-xec"]') as HTMLButtonElement
-        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const unit = root.querySelector('[data-role="describe-unit"]') as HTMLSelectElement;
+        unit.value = 'xec';
+        unit.dispatchEvent(new Event('change', { bubbles: true }));
         const amount = root.querySelector('[data-role="describe-price"]') as HTMLInputElement;
         amount.value = '450.00';
         amount.dispatchEvent(new Event('input'));
@@ -10716,7 +10798,7 @@ describe('a-quotes-count-is-a-number-only-when-every-record-is-a-row', () => {
                 shopTab: 'quotes',
                 prices: new Map([
                     [TOKEN_ID, QUOTE_USD],
-                    ['ee'.repeat(32), { code: 'eur', exponent: 2, amount: 500n }],
+                    ['ee'.repeat(32), { code: 'zzz', exponent: 2, amount: 500n }],
                 ]),
             }),
         );

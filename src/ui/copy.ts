@@ -1,7 +1,7 @@
 /** Load-bearing stall copy. Screens quote these; do not paraphrase at the call site. */
 
 import type { RecordAge } from '../domain/age';
-import type { RateCheck } from '../domain/fiat';
+import { fiatCurrency, type RateCheck } from '../domain/fiat';
 import type { PayRateOutcome, PayRateWhy } from '../domain/state';
 
 export const LINK_UNREADABLE_TITLE = 'This link is unreadable';
@@ -1147,12 +1147,29 @@ export const DESC_PRICE_CODE_LABEL = 'Unit';
  * and three currencies wide, so the button's accessible name carries the code
  * and only the glyph is painted.
  */
-export const priceUnitGlyph = (code: string): string =>
-    code === 'usd' ? '$' : code.toUpperCase();
+/**
+ * A unit as the picker lists it: the code, then the currency's own name where
+ * the shipped table has one. The code leads because the code is what goes
+ * into the record, and a name alone would leave a seller guessing which three
+ * letters they are signing.
+ */
+export const priceUnitLabel = (code: string): string => {
+    const named = fiatCurrency(code)?.name;
+    return named === undefined ? code.toUpperCase() : `${code.toUpperCase()} — ${named}`;
+};
 export const DESC_PRICE_LEDE =
     'Your own asking figure, published as you write it. Nothing here converts it.';
 export const DESC_PRICE_REFUSED =
     'A price is a figure above zero with up to two decimal places — “12.50” or “12,50” — never a thousands separator (“1,200”) and never “0”.';
+/**
+ * The same refusal for a unit whose sub-unit is not in daily use. The figure
+ * is whole there, and a seller typing a fraction is told so rather than
+ * having it rounded into a permanent record.
+ */
+export const DESC_PRICE_REFUSED_WHOLE =
+    'A price is a whole figure above zero \u2014 \u201c1250\u201d \u2014 never a thousands separator (\u201c1,200\u201d) and never \u201c0\u201d.';
+export const priceRefusedFor = (exponent: number): string =>
+    exponent === 0 ? DESC_PRICE_REFUSED_WHOLE : DESC_PRICE_REFUSED;
 /**
  * A price is per whole token, so a token whose kind this page has not read is
  * not one it may write a permanent record about. Affirmative, never a
@@ -1394,8 +1411,16 @@ export const PAY_XEC_QUOTE_NOTE =
  */
 export const RATE_SOURCE_PRIMARY = 'CoinGecko';
 export const RATE_SOURCE_CHECK = 'CoinPaprika';
-export const rateSources = (check: RateCheck | undefined): string =>
-    check === 'agree' || check === 'disagree'
+/**
+ * `both` is false when the figure's own rate came from the first feed alone
+ * — a quote written in a unit the second feed does not answer for. The two
+ * feeds were still consulted and still judged each other, in USD, and a
+ * disagreement between them still reaches the valve; what this line names is
+ * where THIS FIGURE came from, and naming a feed that never priced it would
+ * be the louder, weaker claim.
+ */
+export const rateSources = (check: RateCheck | undefined, both = true): string =>
+    both && (check === 'agree' || check === 'disagree')
         ? `${RATE_SOURCE_PRIMARY} \u00b7 ${RATE_SOURCE_CHECK}`
         : RATE_SOURCE_PRIMARY;
 /** Where the converted figure came from. `\u2248`: a glance, never a second price. */

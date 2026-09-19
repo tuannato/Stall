@@ -110,6 +110,46 @@ export function fiatFractionDigits(code: string): number {
 }
 
 /**
+ * The units a quote may be written in, and the exponent each is written at.
+ *
+ * **The editor's own table, frozen, and never `fiatFractionDigits`.** That
+ * one is a display convention this app may change on any deploy, and a
+ * published record whose meaning moved with it would be a different price
+ * after an unrelated release — a permanent document re-interpreted by a
+ * cosmetic edit. The two tables agree today and are allowed to diverge: this
+ * one may only ever grow, and a row in it may never change its exponent.
+ *
+ * `xec` first and `usd` second, then the shipped table's own order. Those two
+ * are the units this app is built around — the chain's own, and the one every
+ * rate feed prices — and nothing below them is ranked, recommended or
+ * mentioned anywhere else in this code (owner, 2026-09-19). The rest are
+ * offered because the seller writing the record is the one who knows what
+ * their customers think in, and a quote is their document, not ours.
+ *
+ * Two decimals everywhere except the currencies whose sub-unit is not in
+ * daily use. A currency whose real minor unit is three digits is pinned at
+ * two here on purpose: it is what every other surface in this app prints,
+ * and a record must not say one thing while the page says another.
+ */
+export const QUOTE_UNITS: readonly { readonly code: string; readonly exponent: number }[] = [
+    { code: XEC_PRICE_CODE, exponent: 2 },
+    ...FIAT_CURRENCIES.map((c) => ({
+        code: c.code,
+        exponent: ZERO_DECIMAL_CODES.has(c.code) ? 0 : 2,
+    })),
+];
+
+/** The exponent a quote in this unit is written at, or nothing for a unit this editor does not write. */
+export function quoteUnitExponent(code: string): number | undefined {
+    return QUOTE_UNITS.find((u) => u.code === code)?.exponent;
+}
+
+/** Whether this editor writes, and this reader paints, a quote in this unit. */
+export function isQuoteUnit(code: string): boolean {
+    return QUOTE_UNITS.some((u) => u.code === code);
+}
+
+/**
  * The rates this page will turn into an amount a wallet signs, per code, in
  * the module's own unit — `RATE_SCALE` sub-units per XEC, the same `bigint`
  * `scaleRate` returns and `satsForQuote` takes, so a window written in floats
@@ -339,6 +379,41 @@ export type RateJudgement =
  * line — because a second third party must not be able to take the pay
  * rail down (`src/net/price.ts`: a price feed may not take the shop down).
  */
+/**
+ * The judgement for a quote written in any unit, and it is judged in USD.
+ *
+ * Two facts do not move with the unit the seller chose. The plausibility
+ * window is written for USD and is a unit-error fence, not a market opinion
+ * (`RATE_WINDOWS`); and the second feed answers for USD alone, so the
+ * disagreement rule — the one that catches a stale cache or a hijacked host
+ * mid-move — can only ever be run there. So the USD pair judges the FEED,
+ * whatever is being quoted, and the quote's own rate supplies the FIGURE.
+ *
+ * For `usd` the two are the same number and this collapses to `judgeRates`
+ * exactly, which is the property worth pinning: adding units must not move
+ * the road every existing quote already takes.
+ *
+ * No USD answer means no fence, and a figure a wallet signs is not composed
+ * from an unfenced rate — so it is refused even when the quote's own rate
+ * arrived. In practice both come from one request to one host and fail
+ * together; the case this states is the one where they do not.
+ */
+export function judgeQuoteRates(
+    code: string,
+    figure: bigint | undefined,
+    usdPrimary: bigint | undefined,
+    usdCheck: bigint | undefined,
+): RateJudgement {
+    const feed = judgeRates(DEFAULT_FIAT_CODE, usdPrimary, usdCheck);
+    if (feed.kind === 'refused' || code === DEFAULT_FIAT_CODE) {
+        return feed;
+    }
+    if (figure === undefined || figure <= 0n) {
+        return { kind: 'refused', why: 'no-answer' };
+    }
+    return { kind: 'rate', rate: figure, check: feed.check };
+}
+
 export function judgeRates(
     code: string,
     primary: bigint | undefined,
