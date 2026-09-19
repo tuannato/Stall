@@ -5,17 +5,25 @@ A sibling of stall.cash, not a dependency. It proxies token icons from
 Worker is unreachable the shop still paints: every row falls back to initials.
 
 The shop already points here: `img-src` names this host in all three policy
-copies and `iconUrl` builds this route. **The Worker itself has not been
-deployed**, so the hostname does not resolve and every row is initials — the
-designed fallback, not a fault. `cd worker-icons && npx wrangler deploy` is what
-closes that gap; the `custom_domain` route below creates the DNS record.
+copies and `iconUrl` builds this route. It is deployed and serving (§6a below
+is the postmortem of the first live deploy); `cd worker-icons && npx wrangler
+deploy` is how a change reaches it, and the `custom_domain` route creates the
+DNS record on a first deploy.
+
+**This side deploys BEFORE the app, every time the size list grows.** The
+client enum is the contract and this route is the enforcement, so an app
+asking a size this Worker does not carry gets a 404 that paints letters. The
+app now asks for 512 on the shop window's cycle card (2026-09-19) — deploy
+this first, confirm step 5, then deploy the app.
 
 ## Route
 
-`GET /icon/64/<64-lowercase-hex>.png`
+`GET /icon/<64|128|256|512>/<64-lowercase-hex>.png`
 
-Anything else is 404 or 405 before an upstream request is built. Only size 64:
-a wider allowlist is proxy surface the shop does not use.
+Anything else is 404 or 405 before an upstream request is built. Four sizes and
+no more — a wider allowlist is proxy surface the shop does not use. Rows ask
+128, an opened card's hero 256, the shop window's cycle card 512; 64 stays for
+tabs still open across the deploy that raised the sizes.
 
 ## Cache
 
@@ -54,8 +62,10 @@ Needs `icons.stall.cash` on the same Cloudflare account as stall.cash.
 - The real 4-second timeout against a hanging origin.
 - Orange-cloud CDN behaviour in front of the Worker (HEAD rewrite, cache of a
   `no-store` 404).
-- Byte sizes of real `/64/` icons. `MAX_ICON_BYTES` is 64 KiB by construction
-  (4× a 64×64 RGBA bitmap), not by measuring etokens.
+- Byte sizes of real icons. The cap is `maxIconBytes(size)` — `size² × 16`, so
+  64 KiB at 64 and 4 MiB at 512 — by construction (4× an RGBA bitmap of that
+  side), not by measuring etokens. A 512 PNG measured ~315KB upstream, well
+  inside it.
 
 ## Deploy, step by step
 
@@ -124,7 +134,11 @@ refuses with 405, so every header check would report a routing failure that is
 not there. Use `-D-` when you need the headers.
 
 ```
-curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/512/0000000000000000000000000000000000000000000000000000000000000000.png
+curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/512/<a real token id>.png
+```
+
+```
+curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/1024/0000000000000000000000000000000000000000000000000000000000000000.png
 ```
 
 ```
@@ -135,10 +149,14 @@ curl -so /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/64/not-hex.
 curl -sX POST -o /dev/null -w '%{http_code}\n' https://icons.stall.cash/icon/64/0000000000000000000000000000000000000000000000000000000000000000.png
 ```
 
-The first is a real id and answers 200 or 404 depending on whether the upstream
-has that icon. The second and third must be **404** — a size that is not 64 and
-an id that is not 64 hex characters are refused before an upstream request is
-built. The fourth must be **405**.
+The first answers 200 or 404 depending on whether the upstream has that icon.
+**The second is the one this deploy is about**: 512 must reach the upstream
+(200, or 404 for a token with no icon) and must NOT be the flat 404 an
+unallowed size gets — if it 404s for a token whose 256 answers 200, the
+deploy did not take and the shop window will paint letters. The third and
+fourth must be **404** — a size off the allowlist and an id that is not 64 hex
+characters are refused before an upstream request is built. The fifth must be
+**405**.
 
 ### 6. Confirm the response is cacheable but not immutable
 
