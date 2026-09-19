@@ -521,6 +521,14 @@ export function renderStall(
         // down matched nothing at all (378 probe failures, and every one of
         // them was this).
         stall.setAttribute('data-mode', view.window.mode);
+        // The turn goes on the same root and for the same reason: it sizes
+        // and rotates the frame, and the frame IS the container every
+        // orientation rule in `window.css` asks. No attribute when there is
+        // no turn — the absent case must carry no rule at all, or an
+        // untouched screen pays for a transform it never asked for.
+        if (view.window.turn !== 'none') {
+            stall.setAttribute('data-turn', view.window.turn);
+        }
         stall.append(renderShopWindow(view, view.window));
         placeAttachmentNodes(stall, view.worn ?? []);
         frame.append(stall);

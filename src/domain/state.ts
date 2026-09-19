@@ -275,6 +275,25 @@ export type WindowParams = {
      */
     payCode: boolean;
     /**
+     * Whether the page turns itself a quarter, and which way. `turn=cw|ccw`
+     * on the wire; `none` is the default and the shape of every screen that
+     * needs nothing.
+     *
+     * A shop television is often hung sideways and driven by a computer that
+     * still sends a landscape picture (owner, 2026-09-19) — an old panel with
+     * no network of its own, which is exactly the screen this feature is for.
+     * The OS cannot always rotate the output and the browser reports the
+     * VIEWPORT, so nothing the page could measure would know. The seller
+     * tells it.
+     *
+     * Two directions, because a panel is hung either way and only the person
+     * standing in front of it can see which: pick one, and if the picture is
+     * upside down pick the other. Nothing on this side can tell them apart,
+     * and a screen that guessed would be wrong half the time with no way to
+     * say so.
+     */
+    turn: 'none' | 'cw' | 'ccw';
+    /**
      * The block height the **listing** set is frozen at, or absent for no
      * freeze. `upto=` on the wire.
      *

@@ -248,6 +248,11 @@ export function parseBlockParam(raw: string | null): number | undefined {
  * would either hide the whole shop or hide nothing while claiming to hide
  * something, and the status bar prints what it claims.
  */
+/** The quarter-turn a link asks for, or none. */
+function turnParam(said: string | undefined): 'none' | 'cw' | 'ccw' {
+    return said === 'cw' || said === 'ccw' ? said : 'none';
+}
+
 export function parseWindowParams(search: string): WindowParams | undefined {
     let params: URLSearchParams;
     try {
@@ -268,6 +273,10 @@ export function parseWindowParams(search: string): WindowParams | undefined {
         // broadcast's rule, and here it errs towards the screen doing its job
         // rather than towards a silently mute wall.
         payCode: broadcastParam(params, 'paycode') !== 'off',
+        // Two named turns and nothing else; anything malformed is no turn,
+        // the broadcast's rule — a screen that turned itself on a typo would
+        // be sideways with nobody able to read why.
+        turn: turnParam(broadcastParam(params, 'turn')),
         ...(upto === undefined ? {} : { upto }),
     };
 }

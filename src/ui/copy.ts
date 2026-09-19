@@ -1714,6 +1714,20 @@ export function windowFreshness(readAtMs: number | undefined, nowMs: number): st
 export const WINDOW_OPEN = 'Open the shop window';
 export const WINDOW_TITLE = 'Shop window';
 export const WINDOW_LEDE = 'Put this stall on a screen in your shop. Nobody has to touch it.';
+/**
+ * The quarter-turn, named by the physical act rather than by an angle.
+ *
+ * A seller is standing in front of a sideways screen, not reading a spec:
+ * the words that help are "turn it", and the instruction that always works
+ * is "if it comes out upside down, use the other one".
+ */
+export const WINDOW_TURN_LABEL = 'Turn';
+export const WINDOW_TURN_NONE = 'None';
+export const WINDOW_TURN_CW = 'Turn right';
+export const WINDOW_TURN_CCW = 'Turn left';
+export const WINDOW_TURN_WHY =
+    'For a screen hung sideways on a wall while the computer driving it still sends a landscape picture \u2014 an old television with no network of its own. Leave it on None unless the picture comes out sideways; if a turn lands upside down, use the other one.';
+
 export const WINDOW_SHOW_LABEL = 'Show';
 export const WINDOW_MODE_LABEL = 'Mode';
 export const WINDOW_SHOW_LISTINGS = 'Listings';

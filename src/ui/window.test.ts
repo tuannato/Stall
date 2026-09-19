@@ -62,10 +62,13 @@ function tokenMeta(tokenId: string, name: string): [string, TokenMeta] {
  * that is not about the code says nothing about it — and the two tests that
  * ARE about it pass the field and read like what they assert.
  */
-type WindowOpts = Omit<WindowParams, 'payCode'> & { payCode?: boolean };
+type WindowOpts = Omit<WindowParams, 'payCode' | 'turn'> & {
+    payCode?: boolean;
+    turn?: WindowParams['turn'];
+};
 
 function windowView(opts: WindowOpts, over: Partial<StallView> = {}): StallView {
-    const params: WindowParams = { payCode: true, ...opts };
+    const params: WindowParams = { payCode: true, turn: 'none', ...opts };
     return {
         route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
         overlay: { kind: 'idle' },
@@ -305,14 +308,14 @@ describe('the-shop-window-sheet-composes-a-link-and-signs-nothing', () => {
      */
     it('omits every default and names every choice', () => {
         const base = 'https://stall.cash/s/qpjq';
-        expect(windowLinkFor({ show: 'all', mode: 'cycle', payCode: true }, base)).toBe(
+        expect(windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none' }, base)).toBe(
             `${base}?view=window`,
         );
         expect(
-            windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213, payCode: true }, base),
+            windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213, payCode: true, turn: 'none' }, base),
         ).toBe(`${base}?view=window&show=quotes&mode=browse&upto=874213`);
         // The code is on by default, so only OFF is written.
-        expect(windowLinkFor({ show: 'quotes', mode: 'cycle', payCode: false }, base)).toBe(
+        expect(windowLinkFor({ show: 'quotes', mode: 'cycle', payCode: false, turn: 'none' }, base)).toBe(
             `${base}?view=window&show=quotes&paycode=off`,
         );
     });
@@ -945,4 +948,67 @@ describe('a-switch-says-which-way-it-is-set', () => {
             );
         });
     }
+});
+
+describe('a-screen-hung-sideways-turns-itself-and-the-layout-follows', () => {
+    /**
+     * An old television hung vertically, driven by a computer that still
+     * sends a landscape picture (owner, 2026-09-19). The OS cannot always
+     * rotate the output and the browser reports the VIEWPORT, so nothing the
+     * page could measure would know — the seller tells it, and the page turns
+     * itself a quarter.
+     *
+     * The layout has to follow, which is why `window.css` asks a **container**
+     * and not `@media`: turned, the painted box is 100vh wide by 100vw tall
+     * while the viewport stays landscape, so every orientation rule and every
+     * `cqw`/`cqh` reads the box that is painted. That half cannot be asserted
+     * in happy-dom — it has no layout — so `pnpm test:layout` carries it and
+     * this pins the wiring: the attribute the stylesheet selects on.
+     */
+    const frameOf = (turn: WindowParams['turn']): HTMLElement =>
+        paint(windowView({ show: 'listings', mode: 'cycle', turn })).querySelector(
+            '.stall.shop-window',
+        ) as HTMLElement;
+
+    it('stamps the direction on the frame the stylesheet selects', () => {
+        expect(frameOf('cw').getAttribute('data-turn')).toBe('cw');
+        expect(frameOf('ccw').getAttribute('data-turn')).toBe('ccw');
+    });
+
+    it('carries no attribute at all when nothing is turned', () => {
+        // The absent case must carry no rule: an untouched screen does not
+        // pay for a transform, a fixed position or a container it never
+        // asked for.
+        expect(frameOf('none').hasAttribute('data-turn')).toBe(false);
+    });
+
+    it('names the direction in the link and omits the default', () => {
+        const base = 'https://stall.cash/s/qpjq';
+        expect(
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'cw' }, base),
+        ).toBe(`${base}?view=window&turn=cw`);
+        expect(
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'ccw' }, base),
+        ).toBe(`${base}?view=window&turn=ccw`);
+        expect(
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none' }, base),
+        ).toBe(`${base}?view=window`);
+    });
+
+    it('offers both directions on the sheet, and opens on neither', () => {
+        const view = windowView({ show: 'all', mode: 'cycle' });
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            { ...view, window: undefined, overlay: { kind: 'shop-window' } } as StallView,
+            handlers(),
+        );
+        const pressed = (value: string): string | null =>
+            root
+                .querySelector(`[data-role="window-turn-${value}"]`)
+                ?.getAttribute('aria-pressed') ?? null;
+        expect(pressed('none'), 'a screen that needs nothing is the default').toBe('true');
+        expect(pressed('cw')).toBe('false');
+        expect(pressed('ccw')).toBe('false');
+    });
 });

@@ -445,6 +445,23 @@ portrait-only rule and re-measuring it would double the run for nothing.
   missed it is the measurement of the gap, not just of the plant.
 - Cost: +2.8s (181.7s → 184.5s against the 200s ceiling).
 
+### What the portrait pass does NOT cover: a turned screen's geometry
+
+`turn=cw|ccw` (2026-09-19) rotates the whole frame a quarter so a television
+hung sideways reads right. Its **layout** is already covered: a turn at the
+canvas viewport produces the same 1080x1920 container this pass runs, and
+since `window.css` asks `@container` rather than `@media`, the same rules
+fire. Its **rotation geometry** is not, and the reason is structural:
+`getBoundingClientRect` is axis-aligned, so over rotated content every cover
+rule would read a box's bounding rect as overlapping its neighbours and the
+pass would be a field of false failures. Adding it needs rules that work in
+the rotated frame's own coordinates, which none of these do.
+
+Measured by hand instead, 2026-09-19 at 1920x1080, both directions: frame
+1080x1920, covering exactly (0,0)–(1920,1080), `document.scrollWidth` 1920
+with no sideways scroll, and the cycle card taking the stacked
+`"ic" "name" "price" "qr"` areas. That is a reading, not a guard.
+
 ## Reduced motion (pass 3)
 
 - The page's own `matchMedia` answer is required — emulation that silently

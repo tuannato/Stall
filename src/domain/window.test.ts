@@ -126,17 +126,36 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
             show: 'all',
             mode: 'cycle',
             payCode: true,
+            turn: 'none',
         });
         expect(parseWindowParams('?view=window&show=nonsense&mode=nonsense')).toEqual({
             show: 'all',
             mode: 'cycle',
             payCode: true,
+            turn: 'none',
         });
         expect(parseWindowParams('?view=window&show=quotes&mode=browse')).toEqual({
             show: 'quotes',
             mode: 'browse',
             payCode: true,
+            turn: 'none',
         });
+    });
+
+    /**
+     * A turn is named or it does not happen. A screen that turned itself on a
+     * typo would be sideways on a wall with nobody able to read why, and the
+     * one person who could fix it is not in the room.
+     */
+    it('turns only for a named direction', () => {
+        expect(parseWindowParams('?view=window&turn=cw')?.turn).toBe('cw');
+        expect(parseWindowParams('?view=window&turn=ccw')?.turn).toBe('ccw');
+        for (const said of ['', '90', '-90', 'left', 'right', 'CW', 'cw ', 'portrait']) {
+            expect(
+                parseWindowParams(`?view=window&turn=${encodeURIComponent(said)}`)?.turn,
+                said,
+            ).toBe('none');
+        }
     });
 
     /**
@@ -166,12 +185,14 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
                 show: 'all',
                 mode: 'cycle',
                 payCode: true,
+                turn: 'none',
             });
         }
         expect(parseWindowParams('?view=window&upto=874213')).toEqual({
             show: 'all',
             mode: 'cycle',
             payCode: true,
+            turn: 'none',
             upto: 874_213,
         });
     });

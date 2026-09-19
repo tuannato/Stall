@@ -99,7 +99,7 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
                 address: ADDR,
                 stallName: 'Riverside Goods',
                 tokens: WINDOW_TOKENS,
-                window: { show: 'listings' as const, mode, payCode: true },
+                window: { show: 'listings' as const, mode, payCode: true, turn: 'none' as const },
             },
             offers: WINDOW_OFFERS,
         };

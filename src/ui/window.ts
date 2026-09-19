@@ -120,6 +120,9 @@ export function windowLinkFor(params: WindowParams, base = stallBaseUrl()): stri
     if (!params.payCode) {
         query.set('paycode', 'off');
     }
+    if (params.turn !== 'none') {
+        query.set('turn', params.turn);
+    }
     return `${base}?${query.toString()}`;
 }
 
@@ -553,6 +556,7 @@ export function shopWindowSheet(
     let show: WindowParams['show'] = 'all';
     let mode: WindowParams['mode'] = 'cycle';
     let payCode = true;
+    let turn: WindowParams['turn'] = 'none';
     let locked = false;
     let height = tipHeight === undefined ? undefined : suggestedLock(tipHeight);
     const noListings = listingsInShopOrder(view).length === 0;
@@ -588,6 +592,7 @@ export function shopWindowSheet(
         show,
         mode,
         payCode,
+        turn,
         ...(locked && height !== undefined ? { upto: height } : {}),
     });
     const sync = (): void => {
@@ -663,6 +668,22 @@ export function shopWindowSheet(
         ),
     );
     form.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
+
+    form.append(
+        picker(
+            copy.WINDOW_TURN_LABEL,
+            [
+                ['none', copy.WINDOW_TURN_NONE],
+                ['cw', copy.WINDOW_TURN_CW],
+                ['ccw', copy.WINDOW_TURN_CCW],
+            ] as const,
+            () => turn,
+            (value) => {
+                turn = value;
+            },
+        ),
+    );
+    form.append(el('p', 'fine', copy.WINDOW_TURN_WHY));
 
     /*
      * On, because the code is what the quotes rail is for. Off makes the
