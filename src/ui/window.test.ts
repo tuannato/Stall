@@ -57,7 +57,15 @@ function tokenMeta(tokenId: string, name: string): [string, TokenMeta] {
     ];
 }
 
-function windowView(params: WindowParams, over: Partial<StallView> = {}): StallView {
+/**
+ * `payCode` defaults to ON here, the way the parse defaults it, so a test
+ * that is not about the code says nothing about it — and the two tests that
+ * ARE about it pass the field and read like what they assert.
+ */
+type WindowOpts = Omit<WindowParams, 'payCode'> & { payCode?: boolean };
+
+function windowView(opts: WindowOpts, over: Partial<StallView> = {}): StallView {
+    const params: WindowParams = { payCode: true, ...opts };
     return {
         route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
         overlay: { kind: 'idle' },
@@ -297,9 +305,15 @@ describe('the-shop-window-sheet-composes-a-link-and-signs-nothing', () => {
      */
     it('omits every default and names every choice', () => {
         const base = 'https://stall.cash/s/qpjq';
-        expect(windowLinkFor({ show: 'all', mode: 'cycle' }, base)).toBe(`${base}?view=window`);
-        expect(windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213 }, base)).toBe(
-            `${base}?view=window&show=quotes&mode=browse&upto=874213`,
+        expect(windowLinkFor({ show: 'all', mode: 'cycle', payCode: true }, base)).toBe(
+            `${base}?view=window`,
+        );
+        expect(
+            windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213, payCode: true }, base),
+        ).toBe(`${base}?view=window&show=quotes&mode=browse&upto=874213`);
+        // The code is on by default, so only OFF is written.
+        expect(windowLinkFor({ show: 'quotes', mode: 'cycle', payCode: false }, base)).toBe(
+            `${base}?view=window&show=quotes&paycode=off`,
         );
     });
 });
@@ -813,5 +827,70 @@ describe('the-window-asks-for-the-size-its-own-tile-paints', () => {
         const srcs = asked('browse');
         expect(srcs.length).toBeGreaterThan(0);
         expect(srcs.every((src) => src.includes('/icon/256/'))).toBe(true);
+    });
+});
+
+describe('the-quote-code-is-a-switch-and-the-listings-code-is-not-its-business', () => {
+    /**
+     * A shop that takes payment at the counter wants the screen to be a
+     * price board: the figure the seller quoted, and nothing on the wall a
+     * customer can scan to pay from where they stand (owner, 2026-09-19).
+     *
+     * It is the **quote** code alone. A listing's code opens that token's
+     * page in Cashtab, which pays nobody and names no maker (§2), and the
+     * shop's own code in `browse` opens this stall — two different roads,
+     * and a switch that took them too would be a promise its own words do
+     * not make.
+     */
+    const quotesView = (payCode: boolean): StallView =>
+        windowView(
+            { show: 'quotes', mode: 'cycle', payCode },
+            {
+                windowRail: 'quotes',
+                prices: new Map([[BEANS, { code: 'usd', exponent: 2, amount: 500n }]]),
+            },
+        );
+
+    it('paints the pay code when the switch is on', () => {
+        const root = paint(quotesView(true));
+        expect(root.querySelector('.sw-qr')).not.toBeNull();
+        expect(root.querySelector('[data-role="seller-price"]')).not.toBeNull();
+    });
+
+    it('paints the figure and no code when the switch is off', () => {
+        const root = paint(quotesView(false));
+        expect(root.querySelector('.sw-qr')).toBeNull();
+        // The item is still on the wall — this is a price board, not a blank.
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toContain('5');
+    });
+
+    it('keeps the card at wall size with the code off', () => {
+        /*
+         * `cycle` and `withCode` were ONE argument while the code was
+         * unconditional, and that argument also chose the icon size. Turning
+         * the code off must not shrink the picture on a price board — which
+         * is exactly what the un-split version did, silently.
+         */
+        resetIconsForTests();
+        const made: HTMLImageElement[] = [];
+        const Original = window.Image;
+        vi.stubGlobal('Image', function Probed(w?: number, h?: number): HTMLImageElement {
+            const img = new Original(w, h);
+            made.push(img);
+            return img;
+        });
+        try {
+            paint(quotesView(false));
+        } finally {
+            vi.unstubAllGlobals();
+        }
+        const srcs = made.map((img) => img.getAttribute('src') ?? '');
+        expect(srcs.length, 'the card asked for a picture').toBeGreaterThan(0);
+        expect(srcs.every((src) => src.includes('/icon/512/'))).toBe(true);
+    });
+
+    it('a listing card keeps its code whatever the quote switch says', () => {
+        const root = paint(windowView({ show: 'listings', mode: 'cycle', payCode: false }));
+        expect(root.querySelector('.sw-qr')).not.toBeNull();
     });
 });

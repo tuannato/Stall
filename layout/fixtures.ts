@@ -753,13 +753,13 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-cycle': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'cycle' },
+        window: { show: 'listings', mode: 'cycle', payCode: true },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     'shop-window-browse': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'browse', upto: 874_213 },
+        window: { show: 'listings', mode: 'browse', upto: 874_213, payCode: true },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
@@ -771,7 +771,7 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-quotes': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'quotes', mode: 'browse' },
+        window: { show: 'quotes', mode: 'browse', payCode: true },
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
@@ -791,7 +791,7 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-wall': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'cycle' },
+        window: { show: 'listings', mode: 'cycle', payCode: true },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),

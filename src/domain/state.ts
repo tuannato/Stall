@@ -258,6 +258,23 @@ export type WindowParams = {
      */
     mode: 'cycle' | 'browse';
     /**
+     * Whether a quote card carries the code that opens its pay sheet.
+     * `paycode=off` on the wire; on by default, because the code is what the
+     * rail is for.
+     *
+     * Off makes the screen a price board: the figure the seller quoted, and
+     * a customer who pays at the counter rather than from the wall. It is
+     * the **quote** code alone — a listing's code opens that token's page in
+     * Cashtab, which pays nobody and names no maker (§2), so it is a
+     * different road and this switch does not touch it. The shop's own code
+     * in `browse` is untouched for the same reason: it opens this stall, not
+     * a payment.
+     *
+     * Required rather than optional, so every reader states an answer: a
+     * `?? true` at each call site is how one of them comes to disagree.
+     */
+    payCode: boolean;
+    /**
      * The block height the **listing** set is frozen at, or absent for no
      * freeze. `upto=` on the wire.
      *

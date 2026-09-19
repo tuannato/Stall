@@ -1839,6 +1839,19 @@ export function windowQuotesOutcome(read: {
  * who does not want it never meets a block height at all (owner, 2026-09-18:
  * "nếu user không muốn thì cũng không cần").
  */
+/**
+ * The quote code's own switch, and it is on.
+ *
+ * Off turns the screen into a price board — the figure the seller quoted and
+ * nothing to scan — for a shop that takes payment at the counter. It names
+ * what it does NOT cover, because the listings rail keeps a code either way
+ * and a switch that read as "no codes anywhere" would be a promise this does
+ * not keep.
+ */
+export const WINDOW_PAYCODE_SWITCH = 'Show a code that pays each quote';
+export const WINDOW_PAYCODE_WHY =
+    'On by default. Turn it off for a screen that only shows prices, where a customer pays at the counter instead of from the wall. The listings keep their code either way: it opens the item in Cashtab and pays nobody.';
+
 export const WINDOW_LOCK_SWITCH = 'Lock the listings to a block';
 export const WINDOW_LOCK_SWITCH_WHY =
     'Off by default. Turn it on only if somebody has hung something on your stall that you do not sell — anyone can, and it pays you rather than them.';

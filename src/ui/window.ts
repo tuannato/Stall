@@ -115,6 +115,11 @@ export function windowLinkFor(params: WindowParams, base = stallBaseUrl()): stri
     if (params.upto !== undefined) {
         query.set('upto', String(params.upto));
     }
+    // Written only when it is off: the link names a choice and omits a
+    // default, which is what keeps a shared window link readable.
+    if (!params.payCode) {
+        query.set('paycode', 'off');
+    }
     return `${base}?${query.toString()}`;
 }
 
@@ -224,9 +229,19 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
 }
 
 /** A quote, as the window paints it: the seller's own figure and their words. */
+/**
+ * `cycle` and `withCode` are two facts, not one.
+ *
+ * They were one argument, which was right while the code was unconditional:
+ * cycle paints one card, so cycle is when a card gets its own code AND when
+ * the tile is 200–460px rather than 72–160. `paycode=off` separates them —
+ * the card keeps its size and loses its code — so folding them back together
+ * would shrink the picture on a price board for no reason anyone could name.
+ */
 function quoteRow(
     item: { tokenId: string; price: Parameters<typeof quoteFigure>[0] },
     view: StallView,
+    cycle: boolean,
     withCode: boolean,
 ): HTMLElement {
     // The words come from the descriptions map through the shop's own helper.
@@ -243,7 +258,7 @@ function quoteRow(
     const card = el('div', 'item');
     const head = el('div', 'item-head item-head-q sw-row');
     head.append(
-        itemIcon(item.tokenId, name, undefined, tileSize(withCode), minted !== 'not-attributed'),
+        itemIcon(item.tokenId, name, undefined, tileSize(cycle), minted !== 'not-attributed'),
     );
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', item.tokenId));
@@ -394,7 +409,7 @@ export function renderShopWindow(view: StallView, params: WindowParams): HTMLEle
         const items = quotedItems(view);
         const at = cycle ? [items[windowCursor(view, items.length)]].filter(Boolean) : items;
         for (const item of at) {
-            strip.append(quoteRow(item!, view, cycle));
+            strip.append(quoteRow(item!, view, cycle, cycle && params.payCode));
         }
     } else {
         const items = windowListings(view, params);
@@ -496,6 +511,7 @@ export function shopWindowSheet(
 ): HTMLElement {
     let show: WindowParams['show'] = 'all';
     let mode: WindowParams['mode'] = 'cycle';
+    let payCode = true;
     let locked = false;
     let height = tipHeight === undefined ? undefined : suggestedLock(tipHeight);
     const noListings = listingsInShopOrder(view).length === 0;
@@ -530,6 +546,7 @@ export function shopWindowSheet(
     const composed = (): WindowParams => ({
         show,
         mode,
+        payCode,
         ...(locked && height !== undefined ? { upto: height } : {}),
     });
     const sync = (): void => {
@@ -605,6 +622,24 @@ export function shopWindowSheet(
         ),
     );
     form.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
+
+    /*
+     * On, because the code is what the quotes rail is for. Off makes the
+     * screen a price board for a shop that takes payment at the counter —
+     * a whole way of using this feature, and one press rather than a second
+     * link to compose by hand.
+     */
+    const codeSwitch = el('button', 'mini sw-switch', copy.WINDOW_PAYCODE_SWITCH);
+    codeSwitch.type = 'button';
+    codeSwitch.setAttribute('aria-pressed', 'true');
+    codeSwitch.setAttribute('data-role', 'window-paycode-switch');
+    codeSwitch.addEventListener('click', () => {
+        payCode = codeSwitch.getAttribute('aria-pressed') !== 'true';
+        codeSwitch.setAttribute('aria-pressed', String(payCode));
+        sync();
+    });
+    form.append(codeSwitch);
+    form.append(el('p', 'fine', copy.WINDOW_PAYCODE_WHY));
 
     form.append(el('label', 'paste-label', copy.WINDOW_LOCK_LABEL));
     /*

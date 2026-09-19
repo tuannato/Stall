@@ -263,6 +263,11 @@ export function parseWindowParams(search: string): WindowParams | undefined {
     return {
         show: show === 'listings' || show === 'quotes' ? show : 'all',
         mode: broadcastParam(params, 'mode') === 'browse' ? 'browse' : 'cycle',
+        // Opt-OUT, and only the exact word: the code is what the quotes rail
+        // is for, so anything malformed falls back to showing it — the
+        // broadcast's rule, and here it errs towards the screen doing its job
+        // rather than towards a silently mute wall.
+        payCode: broadcastParam(params, 'paycode') !== 'off',
         ...(upto === undefined ? {} : { upto }),
     };
 }

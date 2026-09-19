@@ -122,15 +122,37 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
      * — is a failure the seller would not see until a customer did.
      */
     it('falls back per option rather than dropping the window', () => {
-        expect(parseWindowParams('?view=window')).toEqual({ show: 'all', mode: 'cycle' });
+        expect(parseWindowParams('?view=window')).toEqual({
+            show: 'all',
+            mode: 'cycle',
+            payCode: true,
+        });
         expect(parseWindowParams('?view=window&show=nonsense&mode=nonsense')).toEqual({
             show: 'all',
             mode: 'cycle',
+            payCode: true,
         });
         expect(parseWindowParams('?view=window&show=quotes&mode=browse')).toEqual({
             show: 'quotes',
             mode: 'browse',
+            payCode: true,
         });
+    });
+
+    /**
+     * The quote code is opt-OUT and only the exact word turns it off. It errs
+     * towards the screen doing its job: a typo that silently muted the one
+     * thing the quotes rail is for would be found by a customer standing in
+     * front of it, not by the seller who composed the link.
+     */
+    it('turns the quote code off for the word and for nothing else', () => {
+        expect(parseWindowParams('?view=window&paycode=off')?.payCode).toBe(false);
+        for (const said of ['', 'no', 'false', '0', 'OFF', 'off ', 'on', 'nonsense']) {
+            expect(
+                parseWindowParams(`?view=window&paycode=${encodeURIComponent(said)}`)?.payCode,
+                said,
+            ).toBe(true);
+        }
     });
 
     /**
@@ -143,11 +165,13 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
             expect(parseWindowParams(`?view=window&upto=${encodeURIComponent(bad)}`)).toEqual({
                 show: 'all',
                 mode: 'cycle',
+                payCode: true,
             });
         }
         expect(parseWindowParams('?view=window&upto=874213')).toEqual({
             show: 'all',
             mode: 'cycle',
+            payCode: true,
             upto: 874_213,
         });
     });
