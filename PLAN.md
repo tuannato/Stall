@@ -530,6 +530,112 @@ have sent revenue to an output nobody can spend.
 
 ---
 
+## The Firma rail, specified and deferred
+
+Researched 2026-09-19 against Firma's own sources and Cashtab's own parser,
+**deferred by the owner the same day**. The reason for the deferral is not a
+technical doubt — it is reach: a quote in a Firma unit only helps a seller
+whose BUYERS already hold that token, and on eCash most wallets hold XEC. A
+shop with walk-in customers has nobody to pay it. Build this when there are
+buyers holding Firma, and not before. Nothing below expires; re-read it
+instead of re-deriving it.
+
+### Why it is worth building at all
+
+Not "one more currency". It **deletes the riskiest machinery in the pay
+rail.** A quote denominated in something the chain does not carry drags in
+two price feeds, a plausibility window, `RATE_DISAGREE_PCT`, a frozen rate
+with a stamp, the press-time valve, a code that expires at
+`PAY_RATE_MAX_AGE_MS`, and the second-press dance WebKit forces. Quote 10
+Firma, pay 10 Firma: **none of it applies.** No rate, no feed, no expiry, no
+valve, and no way for two visitors to see two figures. It is the most honest
+money path this app can have, because nothing on it is derived.
+
+### Measured, with sources — do not re-derive
+
+- **One link, two wallets.** `pay.firma.cash/docs/pay-with-firma`: the
+  `currency` prop *"sets BIP21 `token_id`. USD is FIRMA"*, and *"Firma Wallet
+  opens with a **BIP21 payload**"*. `receiverUsername` takes *"any valid
+  `ecash:` address"*. So Firma Wallet opens the same URI Cashtab parses.
+  There is no second payment road to build — there is one link, and which
+  wallet opens it is the buyer's.
+- **Cashtab parses a token BIP21 natively** (`cashtab/src/validation/index.ts`,
+  `parseAddressInput`). With `token_id` present the allowed params are
+  exactly `token_id`, `token_decimalized_qty`, `firma`, `empp_raw`,
+  `input_data_raw`, `addr`. The XEC shape's are `amount`, `op_return_raw`,
+  `empp_raw`, `input_data_raw`, `addr`.
+- **`amount` is NOT allowed on a token tx** — which is the good news stated
+  as a constraint: no XEC figure, therefore no conversion.
+- **`op_return_raw` is NOT allowed on a token tx either.** `STLP` rides in
+  that param, so the memo has no slot. The two that exist are `firma` (an
+  ALP-only push, `opreturnParamByteLimit − 58` = **165 bytes**, *"firma will
+  only work for ALP sends"*) and `empp_raw` (**100 bytes**, allowed on both
+  shapes). Both are eMPP pushes; `STLP` is a bare-OP_RETURN LOKAD.
+- **FIRMA is ALP.** Two independent sources: Cashtab ties the `firma` param
+  to ALP sends, and Firma matches orders by an *"FPAY EMPP push"* — eMPP is
+  ALP's container.
+- **Holding is permissionless; redeeming is not.** firma.cash: *"Swiss
+  residents only"*, apply, approved in a business day. That governs opening a
+  Firma ACCOUNT and cashing out to francs. The token itself is an ordinary
+  ALP token any Cashtab holds. So a buyer anywhere can pay in Firma; only a
+  Swiss resident can turn it back into bank francs. State that wherever this
+  is ever explained.
+- **The withheld list does not collide.** `quotedItems` calls
+  `isWithheldToken(tokenId, …)` on the token being QUOTED, never on
+  `price.code`. Pricing in FIRMA is untouched by FIRMA being withheld as an
+  item. (Flagged as a decision on 2026-09-19 and withdrawn the same day —
+  it was never one.)
+
+### NOT measured — both block the first line of code
+
+1. **The genesis decimals of FIRMA, fCHF and fEUR.** `token_decimalized_qty`
+   must agree with them or the figure is wrong by a power of ten. A chronik
+   read; it was blocked in the session that wrote this.
+2. **One real link opened in Cashtab**, end to end. The docs being right does
+   not mean our composition is. Measure before trusting, per §5's four
+   silent failures.
+
+### The design, in order
+
+1. **Firma is three more `QUOTE_UNITS`**, grouped in the picker — not a
+   second system. The unit already decides the road (`xec` asks no feed,
+   `usd` does), so a stablecoin unit deciding a third road is the mechanism
+   already shipped. **This is also the fiat/stablecoin toggle the owner
+   asked for**: it needs no new concept.
+2. **A Firma-unit quote composes a token BIP21** (`token_id` +
+   `token_decimalized_qty`) rather than the XEC one, through a composer
+   beside `payBip21` — never by widening it, because the two shapes have
+   disjoint params and one function honouring both is one function that will
+   eventually emit both.
+3. **No `STLP` memo, and the sheet says so.** `STLP` is frozen and the only
+   slots are eMPP pushes. The trade is: change a permanent wire format to
+   gain a line this app already labels *the payer's claim* and already
+   captions with "this page cannot tell a payment was for this item". That
+   is a bad trade. Ship memo-less; the memo is additive later, in FPAY's
+   format or STLP's, once somebody has read FPAY's bytes properly.
+4. **Activity learns to read an incoming Firma transfer to the stall as a
+   payment**, not a `token-move`. App-side only, no wire change.
+5. **The default does not move.** The existing rail stays the default.
+
+### Rejected, with the reason
+
+- **Firma as the default rail** — most eCash wallets hold XEC, not Firma.
+- **`@firma/pay`** — a React checkout widget; this app is plain DOM with
+  vendored pinned tarballs (§9). Everything it does with a component, Stall
+  does with a link and the socket it already holds.
+- **Two payment roads** ("free via the Firma app, paid via Cashtab") — the
+  premise is wrong. Firma's "0%" is *"zero per-transaction **platform**
+  fees"*, stated against card networks' 2–3%. Both roads are the same eCash
+  transaction paying the same miner fee; Cashtab takes no cut either.
+- **Extending `STLP` into an eMPP push** — see 3 above.
+- **Denominating in Firma while paying in XEC** — the seller would receive
+  XEC, not the stable asset they chose the unit for, and the figure would
+  rest on an unverifiable peg assumption on the one screen that prints a
+  number a wallet signs. If the payment is XEC, quote in CHF or EUR instead:
+  identical for the buyer, with a real rate and a real fence.
+
+---
+
 ## Open — ask before assuming
 
 - **A widget is answered for streaming; embedding on a seller's own page is
