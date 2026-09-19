@@ -425,8 +425,32 @@ let failed = false;
 // on 2026-08-30 when the contrast pass took on the desktop width — that one
 // run found the translucent-dock defect and three sampler holes, so the
 // doubling is paid for; measured 107–120s, and the headroom is jitter, not an
-// invitation. If this grows again, prune the matrix instead.
-const RUNTIME_CEILING_S = 150;
+// invitation. Raised 150 → 200 on 2026-09-19, the owner's call: the shop
+// window added four screens that each paint at a 1920 canvas with every
+// decoration on (`CANVAS_SCREENS`), which is the most expensive cell in the
+// matrix, and the run measured 183s with every rule green — a command that
+// fails for its own cost is a command people stop running, which is the one
+// thing this number exists to prevent. Still enforcement: if it grows again,
+// prune the matrix before touching it, and the per-pass costs printed below
+// are how to choose what to prune.
+/*
+ * How much of the cover check the clip tolerance may eat before the pass
+ * stops meaning anything. `clipsOf` skips a point outside every clipping
+ * ancestor because it is reachable by scrolling and nothing outside the clip
+ * can cover it — correct, and also the one way this guard can be widened into
+ * a green run over nothing.
+ *
+ * Measured 2026-09-19, the first run that printed a denominator: mobile
+ * 1,830 of 13,118 (14%), desktop 1,582 of 11,319 (14%), canvas 0 of 825.
+ * The ceiling is a little over twice that — drift protection, not a target:
+ * it catches a tolerance that has started eating the pass while leaving room
+ * for a screen or two more. Headroom is jitter, not an invitation. If a
+ * legitimate change pushes past it, the question to answer first is which
+ * points stopped being checked, not what the number should be.
+ */
+const CLIP_SKIP_CEILING = 0.3;
+
+const RUNTIME_CEILING_S = 200;
 const startedAt = Date.now();
 /*
  * Each pass says what it cost. The budget rule is "prune the matrix before
@@ -533,20 +557,48 @@ try {
             continue;
         }
         const spent = took();
+        /*
+         * The clip tolerance's own arithmetic, on every run rather than only
+         * on a passing one. A `coveredBy` that skipped every point would be
+         * indistinguishable from one that found nothing wrong — §6's
+         * complaint about a guard that quietly does not run — and the skip
+         * count on its own has no denominator to say which it was. So the
+         * ratio is what is printed and what is held: `clipChecks` is the
+         * points this pass actually hit-tested, and a pass with none of them
+         * proved nothing at all whatever its failure list says.
+         */
+        const skipped = report.clipSkips ?? 0;
+        const checked = report.clipChecks ?? 0;
+        const clipLine =
+            skipped + checked === 0
+                ? ''
+                : ` · ${skipped}/${skipped + checked} points behind a clip` +
+                  ` (${((skipped / (skipped + checked)) * 100).toFixed(0)}%)`;
+        if (skipped > 0 && checked === 0) {
+            failed = true;
+            console.error(
+                `✗ ${vp.name} (${measured}): every hit-test point was behind a clip —` +
+                    ' the cover check ran over nothing',
+            );
+        } else if (skipped + checked > 0 && skipped / (skipped + checked) > CLIP_SKIP_CEILING) {
+            failed = true;
+            console.error(
+                `✗ ${vp.name} (${measured}): ${clipLine.trim()} —` +
+                    ` above the ${(CLIP_SKIP_CEILING * 100).toFixed(0)}% ceiling;` +
+                    ' the clip tolerance is eating the cover check',
+            );
+        }
         if (report.failures.length === 0) {
-            // The clip tolerance's own count, printed beside the pass: a
-            // `coveredBy` that skipped every point would otherwise be
-            // indistinguishable from one that found nothing wrong, which is
-            // §6's complaint about a guard that quietly does not run.
-            const skipped = report.clipSkips ?? 0;
             console.log(
                 `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
-                    (skipped > 0 ? ` · ${skipped} points behind a clip` : ''),
+                    clipLine,
             );
             continue;
         }
         failed = true;
-        console.error(`✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}`);
+        console.error(
+            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipLine}`,
+        );
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
         }

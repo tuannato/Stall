@@ -10222,6 +10222,46 @@ describe('a-copied-control-keeps-its-icon', () => {
  * measure the screens it paints, and a control that loses its floor on a
  * screen nobody fixtures is exactly the one that goes unmeasured.
  */
+describe('the-shop-window-door-wears-the-stream-recipes-dress', () => {
+    /**
+     * The Share card offers two doors onto another screen — the stream
+     * recipe and the shop window — and the shop window shipped as
+     * `mini another`, the secondary dress, so it read as the lesser of the
+     * two (owner, 2026-09-19: "cho nó bằng và nổi bật như nút Stream
+     * overlay"). Two blocks that agree today is how they come apart, so
+     * they share ONE declaration and this is what fails when somebody
+     * splits them again.
+     */
+    it('is dressed by the same rule as the stream recipe summary', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
+            /\/\*[\s\S]*?\*\//g,
+            '',
+        );
+        const rule = css
+            .split('}')
+            .map((block) => block.split('{'))
+            .find(([selector]) => (selector ?? '').includes('.fold-cta > .fold-sum'));
+        expect(rule, 'the stream recipe summary still has a dress rule').toBeDefined();
+        expect(rule![0]).toContain('.studio-window');
+        // The half that makes it read as a primary control, not a pill.
+        expect(rule![1]).toMatch(/background:\s*var\(--s-accent\)/);
+        expect(rule![1]).toMatch(/min-height:\s*48px/);
+    });
+
+    it('carries no secondary dress that a look would out-rank', () => {
+        const root = document.createElement('div');
+        renderStall(root, idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }), {
+            ...handlers(),
+            onOpenShopWindow: vi.fn(),
+        });
+        const share = root.querySelector('[data-role="studio-card-share"]')!;
+        const door = share.querySelector('[data-role="studio-open-window"]');
+        expect(door, 'the shop window door paints on the Share card').not.toBeNull();
+        // `.t-* .mini` is (0,2,0) and would beat this button's own class.
+        expect(door!.className.split(/\s+/)).toEqual(['studio-window']);
+    });
+});
+
 describe('every-tappable-control-keeps-a-44px-floor', () => {
     it('declares min-height: 44px on each control class', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

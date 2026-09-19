@@ -124,7 +124,7 @@ describe('parseIconRoute', () => {
     });
 
     it('other-size-is-404-before-upstream', () => {
-        for (const size of ['32', '512', '0', '064', '0128', '96']) {
+        for (const size of ['32', '1024', '0', '064', '0128', '96']) {
             assert.equal(
                 parseIconRoute(new URL(`${CANONICAL_ORIGIN}/icon/${size}/${ID}.png`)),
                 null,
@@ -479,9 +479,11 @@ describe('wiring contracts', () => {
         // reads as "this token has no icon".
         assert.match(icons, /ICON_ROW_SIZE = 128/);
         assert.match(icons, /ICON_HERO_SIZE = 256/);
+        assert.match(icons, /ICON_WALL_SIZE = 512/);
         assert.match(icons, /\/icon\/\$\{size\}\/\$\{id\}\.png/);
         assert.ok((ICON_SIZES as readonly number[]).includes(128));
         assert.ok((ICON_SIZES as readonly number[]).includes(256));
+        assert.ok((ICON_SIZES as readonly number[]).includes(512));
         assert.equal(canonicalCacheKey(R64), `${CANONICAL_ORIGIN}/icon/64/${ID}.png`);
         assert.equal(upstreamUrl(R64), `${UPSTREAM_ORIGIN}/64/${ID}.png`);
         assert.equal(

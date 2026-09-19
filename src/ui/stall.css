@@ -292,7 +292,12 @@ body {
 
 @media (min-width: 680px) {
     .studio-window {
-        display: inline-flex;
+        /* Block-level flex, so it fills the card the way the stream
+           recipe's summary does; its dress is the shared rule above, and
+           its 48px clears the 44px floor every tappable control keeps. */
+        display: flex;
+        width: 100%;
+        margin-top: 12px;
     }
 
     .stall.att-awning {
@@ -3359,15 +3364,32 @@ details.fold.fold-cta {
     border-top: 0;
 }
 
-details.fold.fold-cta > .fold-sum {
+/*
+ * One rule, two doors. The Share card offers the stream recipe and the shop
+ * window, and they are the same kind of thing — a way to put this stall on
+ * another screen — so they are dressed by one declaration rather than two
+ * that agree today (owner, 2026-09-19: the shop window was `mini another`
+ * and read as the lesser of the two). `.studio-window` is a <button> and the
+ * other is a <summary>, which is why they cannot share a selector shape; the
+ * border and cursor reset is the button's half and does nothing to the
+ * summary. Ink and ground are one token pair, as the theme rule requires,
+ * and no look re-states either selector — so this is the dress on all three.
+ * Test: the-shop-window-door-wears-the-stream-recipes-dress.
+ */
+details.fold.fold-cta > .fold-sum,
+.studio-window {
     justify-content: center;
+    align-items: center;
     min-height: 48px;
     padding: 0 16px;
+    border: 0;
     border-radius: var(--s-btn-radius);
     background: var(--s-accent);
     color: var(--s-surface);
+    font-family: inherit;
     font-size: 15px;
     font-weight: 700;
+    cursor: pointer;
 }
 
 details.fold.fold-cta > .fold-sum > .fold-caret {

@@ -1976,7 +1976,7 @@ function withheldListings(view: StallView): number {
 }
 
 /** Quoted tokens this page chose not to paint. */
-function withheldQuotes(view: StallView): number {
+export function withheldQuotes(view: StallView): number {
     let n = 0;
     for (const tokenId of view.prices?.keys() ?? []) {
         if (isWithheldToken(tokenId, view.tokens.get(tokenId))) {
@@ -6400,7 +6400,13 @@ function paintStudio(
      */
     const openWindow = handlers.onOpenShopWindow;
     if (openWindow !== undefined) {
-        const launch = el('button', 'mini another studio-window', copy.WINDOW_OPEN);
+        // Not `mini another`: those are the secondary dress, and every look
+        // re-states them at `.t-* .mini`, which would out-rank this button's
+        // own class. It wears the Share card's primary dress instead — the
+        // same rule as the stream recipe's summary, so the two doors off this
+        // card cannot come to look like a first and a second choice
+        // (owner, 2026-09-19).
+        const launch = el('button', 'studio-window', copy.WINDOW_OPEN);
         launch.type = 'button';
         launch.setAttribute('data-role', 'studio-open-window');
         launch.addEventListener('click', () => openWindow());

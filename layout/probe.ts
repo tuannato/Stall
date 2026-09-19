@@ -183,14 +183,24 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
  * what is inside.
  */
 /**
- * How many hit-test points the clip tolerance skipped this run.
+ * How many hit-test points the clip tolerance skipped this run, and how many
+ * it actually hit-tested.
  *
- * Reported, because §6's own complaint is about a check that quietly does not
- * run: a `coveredBy` that skipped every point would be indistinguishable from
- * one that found nothing wrong. The runner prints it beside the pass so a
- * number that jumps is visible without anybody reading this file.
+ * §6's own complaint is about a check that quietly does not run: a
+ * `coveredBy` that skipped every point would be indistinguishable from one
+ * that found nothing wrong. The skip count alone could not tell those apart
+ * — it has no denominator, so 1,830 skips is either a tolerance doing its
+ * job over a long scroll region or a tolerance that ate the whole pass, and
+ * the number was printed **only on a passing run**, which is the one run
+ * where a reader is least likely to look.
+ *
+ * So both halves are counted and both are reported on every run, pass or
+ * fail, and `scripts/layout-check.mjs` holds the ratio to a ceiling. A point
+ * off the viewport counts as neither: that is the viewport check's failure,
+ * not this one's.
  */
 export let clipSkips = 0;
+export let clipChecks = 0;
 
 function clipsOf(node: Element): DOMRect[] {
     const rects: DOMRect[] = [];
@@ -241,6 +251,7 @@ function coveredBy(node: Element): string | undefined {
             clipSkips += 1;
             continue;
         }
+        clipChecks += 1;
         const hit = document.elementFromPoint(x, y);
         if (hit === null) {
             continue;
@@ -1584,6 +1595,7 @@ result.textContent = JSON.stringify(
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         screensMeasured: measured,
         clipSkips,
+        clipChecks,
         screensWithQuote: [...withQuote],
         failures,
     },

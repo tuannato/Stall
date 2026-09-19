@@ -14,17 +14,32 @@
 export const ICON_HOST = 'https://icons.stall.cash';
 
 /**
- * The two sizes the Worker serves — rows at 128, the opened card's hero at
- * 256 — and nothing else: a wider allowlist is proxy surface we do not use.
- * Sized for the boxes that paint them at retina density: rows are 44–58px
- * (64px sources were visibly soft on any phone), the hero is 120–140px.
- * 512 exists upstream but is ~315KB for one figure — measured — and the
- * upstream falls back to the original bytes when it lacks a generated
- * size, so asking bigger never turns an icon into a miss.
+ * The three sizes the Worker serves, and nothing else: a wider allowlist is
+ * proxy surface we do not use. Each is sized for the box that paints it at
+ * retina density — rows are 44–58px (64px sources were visibly soft on any
+ * phone), the hero is 120–140px.
+ *
+ * **The wall size is the shop window's cycle card, and only that.** That
+ * tile is `clamp(200px, 40vh, 460px)` — one item on a television — and 256
+ * upscaled into it is the softness the row size was raised to fix, two
+ * doublings later and across a room. It costs ~315KB against 256's, measured
+ * upstream, which is why it is not simply the new hero: `cycle` paints ONE
+ * card, so one stall-window screen pays it once, while `browse` paints the
+ * whole catalogue into 72–160px tiles and keeps 256. An ordinary stall never
+ * asks for it at all.
+ *
+ * The upstream falls back to a token's original bytes when it lacks a
+ * generated size, so asking bigger never turns an icon into a miss — but the
+ * **Worker must be deployed before the app**, or every window tile asks a
+ * route that answers 404 and paints letters (§4).
  */
 export const ICON_ROW_SIZE = 128;
 export const ICON_HERO_SIZE = 256;
-export type IconSize = typeof ICON_ROW_SIZE | typeof ICON_HERO_SIZE;
+export const ICON_WALL_SIZE = 512;
+export type IconSize =
+    | typeof ICON_ROW_SIZE
+    | typeof ICON_HERO_SIZE
+    | typeof ICON_WALL_SIZE;
 
 const TOKEN_ID = /^[0-9a-f]{64}$/;
 

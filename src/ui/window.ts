@@ -19,8 +19,10 @@ import {
     quotedItems,
     stallBaseUrl,
     tokenName,
+    unreadableQuotes,
+    withheldQuotes,
 } from './render';
-import { ICON_HERO_SIZE } from '../domain/icons';
+import { ICON_HERO_SIZE, ICON_WALL_SIZE } from '../domain/icons';
 
 /**
  * The shop window: this stall on a screen in a physical shop.
@@ -160,13 +162,29 @@ function railLabel(words: string): HTMLElement {
     return rail;
 }
 
+/**
+ * Which icon the window's tile asks the Worker for.
+ *
+ * `cycle` paints ONE card, at up to 460px, so it pays 512's ~315KB once;
+ * `browse` paints every row into a 72–160px tile and keeps the hero's 256.
+ * Sizing the wall card off the catalogue's tile is what left a 256px source
+ * upscaled across a room.
+ */
+function tileSize(cycle: boolean): typeof ICON_WALL_SIZE | typeof ICON_HERO_SIZE {
+    return cycle ? ICON_WALL_SIZE : ICON_HERO_SIZE;
+}
+
 /** A listing, as the window paints it: picture, name, the covenant's figure. */
 function listingRow(listing: TokenListing, view: StallView, withCode: boolean): HTMLElement {
     const offer = cheapestOf(listing);
     const name = tokenName(view.tokens, offer.tokenId);
     const card = el('div', 'item');
     const head = el('div', 'item-head sw-row');
-    head.append(itemIcon(offer.tokenId, name, undefined, ICON_HERO_SIZE));
+    // `withCode` is `cycle`, and cycle is exactly when this tile is
+    // `clamp(200px, 40vh, 460px)` rather than `clamp(72px, 9vw, 140px)` —
+    // one card on a television against the whole catalogue down a wall. One
+    // flag decides both because they are one fact about the screen.
+    head.append(itemIcon(offer.tokenId, name, undefined, tileSize(withCode)));
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', offer.tokenId));
     info.append(railLabel(copy.ROW_LABEL_AGORA));
@@ -225,7 +243,7 @@ function quoteRow(
     const card = el('div', 'item');
     const head = el('div', 'item-head item-head-q sw-row');
     head.append(
-        itemIcon(item.tokenId, name, undefined, ICON_HERO_SIZE, minted !== 'not-attributed'),
+        itemIcon(item.tokenId, name, undefined, tileSize(withCode), minted !== 'not-attributed'),
     );
     const info = el('span', 'item-b');
     info.append(marqueeNode(el('span', 'item-n', name), 'name', item.tokenId));
@@ -434,7 +452,13 @@ function statusBar(
         route !== undefined
             ? copy.windowOutcome(view.fetch?.kind, route)
             : rail === 'quotes'
-              ? undefined
+              ? copy.windowQuotesOutcome({
+                    failed: view.descriptionsFailed === true,
+                    truncated: view.descriptionsTruncated === true,
+                    answered: view.prices !== undefined,
+                    rows: quotedItems(view).length,
+                    hidden: withheldQuotes(view) + unreadableQuotes(view),
+                })
               : copy.windowOutcome(view.fetch?.kind);
     const left = el('span', 'sw-state', copy.windowState(rail, params.upto, outcome));
     left.setAttribute('data-role', 'window-state');

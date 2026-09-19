@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
-import { holdsLivePaint, overlayMounts, renderStall } from './render';
+import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
 import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, windowItemLink, windowLinkFor } from './window';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { qrMatrix } from '../domain/qr';
@@ -703,5 +703,115 @@ describe('a-window-row-says-which-rail-it-is-on', () => {
         expect(quote.querySelector('[data-role="rail-label"]')?.textContent).toBe(
             copy.ROW_LABEL_PAY,
         );
+    });
+});
+
+describe('the-window-quotes-rail-says-its-own-outcome', () => {
+    /**
+     * §4's rule — neither rail lends the other its words — reaching the one
+     * screen with nobody standing at it. The quotes rail printed "Showing
+     * quotes" over a blank strip whatever had happened: a walk that failed,
+     * a walk that stopped at our own page cap, a walk that had not answered,
+     * a seller who quoted nothing, and a rail this page holds back entirely
+     * all looked identical on a wall in a shop. Four of those five are OURS,
+     * and a blank wall reads as the seller's inventory.
+     */
+    const quotesWindow = (over: Partial<StallView>): string =>
+        paint(
+            windowView({ show: 'quotes', mode: 'cycle' }, { windowRail: 'quotes', ...over }),
+        ).querySelector('[data-role="window-state"]')!.textContent!;
+
+    it('says a failed walk, and never that the seller quoted nothing', () => {
+        const said = quotesWindow({ prices: new Map(), descriptionsFailed: true });
+        expect(said).toBe('This screen could not read the quotes');
+        expect(said).not.toContain('Nothing quoted');
+    });
+
+    it('says a walk that stopped at our own cap', () => {
+        expect(quotesWindow({ prices: new Map(), descriptionsTruncated: true })).toBe(
+            'This screen read only part of the quotes',
+        );
+    });
+
+    it('says it is still reading before any record has landed', () => {
+        // `prices` undefined is the failure screen's own window: no record of
+        // the seller's has been read, so nothing may be said about them.
+        const said = quotesWindow({ prices: undefined });
+        expect(said).toBe('Reading the quotes…');
+        expect(said).not.toContain('Nothing quoted');
+    });
+
+    it('says nothing quoted only over a complete, empty read', () => {
+        expect(quotesWindow({ prices: new Map() })).toBe('Nothing quoted yet');
+    });
+
+    it('a rail this page holds back entirely does not say the seller quoted nothing', () => {
+        // One quote, on a token whose genesis never arrived: `quotedItems`
+        // yields no row and `unreadableQuotes` counts it.
+        const said = quotesWindow({
+            prices: new Map([[JUNK, { code: 'usd', exponent: 2, amount: 500n }]]),
+            tokens: new Map(),
+        });
+        expect(said).toBe('Nothing here this screen can show');
+        expect(said).not.toContain('Nothing quoted');
+    });
+
+    it('a partly hidden rail counts what it is not showing', () => {
+        const said = quotesWindow({
+            prices: new Map([
+                [BEANS, { code: 'usd', exponent: 2, amount: 500n }],
+                [JUNK, { code: 'usd', exponent: 2, amount: 900n }],
+            ]),
+        });
+        expect(said).toBe('Showing quotes · 1 not shown here');
+    });
+});
+
+describe('the-window-asks-for-the-size-its-own-tile-paints', () => {
+    /**
+     * The cycle card's tile is `clamp(200px, 40vh, 460px)` — one item on a
+     * television — and it asked for the item face's 256, which is the same
+     * softness the row size was raised to fix, two doublings later and read
+     * across a room. Browse keeps 256: its tile is 72–160px and it paints
+     * the whole catalogue, so the wall size there would be ~315KB a row for
+     * nothing (§4's rule that a bigger ask is never free).
+     *
+     * The Worker is the enforcement — `client-path-matches-worker-route` is
+     * what fails if only one side learns a size — and it **deploys first**,
+     * or every window tile asks a route that 404s and paints letters.
+     */
+    /*
+     * `itemIcon` paints initials and swaps the picture in only ON LOAD, so
+     * nothing observable lands in the tree here — what is measured is the
+     * request itself, the way `icon-src-is-set-once-per-token-and-size`
+     * measures it: the detached `Image` the module builds per token AND size.
+     */
+    const asked = (mode: WindowParams['mode']): string[] => {
+        resetIconsForTests();
+        const made: HTMLImageElement[] = [];
+        const Original = window.Image;
+        vi.stubGlobal('Image', function Probed(w?: number, h?: number): HTMLImageElement {
+            const img = new Original(w, h);
+            made.push(img);
+            return img;
+        });
+        try {
+            paint(windowView({ show: 'listings', mode }));
+        } finally {
+            vi.unstubAllGlobals();
+        }
+        return made.map((img) => img.getAttribute('src') ?? '');
+    };
+
+    it('a cycle card asks for the wall size', () => {
+        const srcs = asked('cycle');
+        expect(srcs.length, 'the window asked for a picture at all').toBeGreaterThan(0);
+        expect(srcs.every((src) => src.includes('/icon/512/'))).toBe(true);
+    });
+
+    it('a browse wall keeps the hero size', () => {
+        const srcs = asked('browse');
+        expect(srcs.length).toBeGreaterThan(0);
+        expect(srcs.every((src) => src.includes('/icon/256/'))).toBe(true);
     });
 });

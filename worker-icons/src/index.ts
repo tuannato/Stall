@@ -15,12 +15,17 @@ export const CANONICAL_ORIGIN = 'https://icons.stall.cash';
 export const UPSTREAM_ORIGIN = 'https://icons.etokens.cash';
 
 /**
- * The sizes the stall asks for — rows at 128, the opened card's hero at
- * 256 — and nothing more: a wider allowlist is proxy surface it does not
- * use. 64 stays allowed for tabs still open across the deploy that raised
- * the sizes; it leaves once those are gone.
+ * The sizes the stall asks for — rows at 128, the opened card's hero at 256,
+ * the shop window's cycle card at 512 — and nothing more: a wider allowlist
+ * is proxy surface it does not use. 64 stays allowed for tabs still open
+ * across the deploy that raised the sizes; it leaves once those are gone.
+ *
+ * 512 joined on 2026-09-19 for a tile that reaches 460px on a television.
+ * **This side deploys first**: an app asking a route this Worker does not
+ * carry gets a 404 that paints letters on every window tile, and the client
+ * enum is the contract while this route is the enforcement.
  */
-export const ICON_SIZES = [64, 128, 256] as const;
+export const ICON_SIZES = [64, 128, 256, 512] as const;
 export type IconSize = (typeof ICON_SIZES)[number];
 
 /**
@@ -52,7 +57,7 @@ export const NO_STORE = 'no-store';
 
 export const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-const PATH = /^\/icon\/(64|128|256)\/([0-9a-fA-F]{64})\.png$/;
+const PATH = /^\/icon\/(64|128|256|512)\/([0-9a-fA-F]{64})\.png$/;
 
 const SECURITY_HEADERS = {
     'x-content-type-options': 'nosniff',

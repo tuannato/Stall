@@ -1776,6 +1776,62 @@ export function windowOutcome(
 }
 
 /**
+ * The quotes rail's own outcome on the shop window, in its own words.
+ *
+ * §4's rule — neither side lends the other its words — reaches this screen
+ * too, and here it had nothing to say at all: the rail printed "Showing
+ * quotes" over a blank strip whether the seller had quoted nothing, the
+ * descriptions walk had failed, it had stopped at our own page cap, or it
+ * had not answered yet. On a wall in a shop that blank reads as the seller's
+ * inventory, which is the empty-versus-unreachable collapse on the one
+ * surface with nobody standing there to ask.
+ *
+ * Primitives rather than the view, like `windowOutcome` beside it: copy has
+ * no business knowing the shape of a read. The order is the ordinary rail's
+ * own precedence, collapsed to the one line a status bar has — a failure
+ * outranks a cap, a cap outranks "still reading", and only a complete read
+ * may say anything about the seller.
+ *
+ * `truncated` is carried even with rows on screen: the rail answered every
+ * page it asked for and the end may be further on, which is a fact about
+ * this screen and not about the shop.
+ */
+export function windowQuotesOutcome(read: {
+    failed: boolean;
+    truncated: boolean;
+    answered: boolean;
+    rows: number;
+    /**
+     * Records that produced no row — ones this page withholds (§4) and ones
+     * whose genesis it could not read — counted together because every
+     * sentence below says only that this SCREEN is not showing them. Two
+     * facts under one wording is safe exactly while the wording claims
+     * nothing about the seller; the moment one of these lines blames their
+     * inventory, they have to come apart.
+     */
+    hidden: number;
+}): string | undefined {
+    if (read.failed) {
+        return 'This screen could not read the quotes';
+    }
+    if (read.truncated) {
+        return 'This screen read only part of the quotes';
+    }
+    if (!read.answered) {
+        // Never "nothing quoted": that is a sentence about the seller, and
+        // no record of theirs has been read yet.
+        return 'Reading the quotes\u2026';
+    }
+    if (read.rows > 0) {
+        // The freeze is Agora listings only, so nothing else wants this
+        // line on the quotes rail and the outcome may own the whole of it.
+        return read.hidden > 0 ? `Showing quotes \u00b7 ${read.hidden} not shown here` : undefined;
+    }
+    // A stall whose only quote this page holds back did not quote nothing.
+    return read.hidden > 0 ? 'Nothing here this screen can show' : 'Nothing quoted yet';
+}
+
+/**
  * The freeze's own switch, and it is off.
  *
  * Most sellers never need it: it exists for §10's gift listing, which most
