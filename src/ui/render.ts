@@ -3516,7 +3516,15 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             if (published !== undefined) {
                 parts.push({ label: copy.SUMMARY_QUOTE, value: sayPrice(published) });
             }
-            size = descriptionRecordBytes('', publishedShelf ?? '', published);
+            // The bare tombstone, which is what `encodeRemovalHex(tokenId)`
+            // above produces — the words, the shelf and the price go
+            // together (owner, 2026-09-07). This counted the shelf's push
+            // and the price's too, so the meter said 62 bytes over a record
+            // that is 40, measured 2026-09-20. It overstated, so it could
+            // never let an over-budget record through and no field is
+            // editable in this mode — but CLAUDE §5's rule is that the size
+            // is the record the same call produced, and it was not.
+            size = descriptionRecordBytes('');
         } else if (clearing) {
             parts.push({ label: copy.SUMMARY_CLEARS, value: name });
             size = descriptionRecordBytes('');

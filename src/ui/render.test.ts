@@ -7920,6 +7920,63 @@ describe('the-summary-says-what-the-record-carries', () => {
         expect(line.textContent).toContain(descBytesLeft(hex.length / 2, OP_RETURN_BUDGET));
     });
 
+    it('the-meter-counts-the-removal-record-too', () => {
+        /*
+         * The rule is CLAUDE §5's: the size is the record the same call
+         * produced. The edit branch was pinned; neither the removal nor the
+         * clear-everything branch was, and the removal branch counted a
+         * shelf push and a price push that `encodeRemovalHex(tokenId)` does
+         * not write — 62 bytes printed over a 40-byte record (measured
+         * 2026-09-20). Asserted against `describe-hex`'s own length in every
+         * branch, so the two cannot drift apart again whatever the record
+         * grows into.
+         */
+        const bytesAndLine = (root: HTMLElement): { size: number; said: string } => {
+            const hex = root.querySelector('[data-role="describe-hex"]') as HTMLElement;
+            const line = root.querySelector('[data-role="describe-summary"]') as HTMLElement;
+            return { size: hex.textContent!.length / 2, said: line.textContent ?? '' };
+        };
+        const priced = { code: 'usd', exponent: 2, amount: 1250n } as const;
+        const openOn = () =>
+            paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    overlay: { kind: 'describe' },
+                    descriptions: new Map([[TOKEN_ID, 'Old words']]),
+                    shelves: new Map([[TOKEN_ID, 'Coffee']]),
+                    prices: new Map([[TOKEN_ID, priced]]),
+                }),
+            ).root;
+
+        // Removal mode: the bare tombstone.
+        const removing = openOn();
+        (
+            removing.querySelector('[data-role="describe-remove"]') as HTMLButtonElement
+        ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const off = bytesAndLine(removing);
+        expect(off.size, 'the record signed is the bare tombstone').toBe(
+            encodeRemovalHex(TOKEN_ID, {})!.length / 2,
+        );
+        expect(off.said).toContain(descBytesLeft(off.size, OP_RETURN_BUDGET));
+
+        // Clearing every field by hand signs the same record, and the sibling
+        // branch already counted it right — pinned so it stays that way.
+        const cleared = openOn();
+        for (const role of ['describe-text', 'describe-shelf', 'describe-price'] as const) {
+            const input = cleared.querySelector(`[data-role="${role}"]`) as
+                | HTMLInputElement
+                | HTMLTextAreaElement
+                | null;
+            if (input !== null) {
+                input.value = '';
+                input.dispatchEvent(new Event('input'));
+            }
+        }
+        const blank = bytesAndLine(cleared);
+        expect(blank.said).toContain(descBytesLeft(blank.size, OP_RETURN_BUDGET));
+    });
+
     it('the-meter-and-the-encoder-count-the-same-record', () => {
         const { root } = paint(
             offersView([OFFER], undefined, {
