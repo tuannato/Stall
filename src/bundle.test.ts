@@ -241,8 +241,9 @@ describe('public-weight-has-a-ceiling', () => {
      * `served-weight-has-a-ceiling` builds with `write: false`, so nothing in
      * `public/` is counted — Pages serves every file there whether or not
      * anything links it (`_redirects` names no assets). Measured 947,955
-     * bytes on 2026-09-05; the ceiling leaves about 52 KB of headroom on
-     * purpose, so the next hero image is noticed the day it lands.
+     * bytes on 2026-09-05 and 962,399 on 2026-09-20; the ceiling leaves
+     * about 37 KB of headroom on purpose, so the next hero image is
+     * noticed the day it lands.
      */
     const PUBLIC_CEILING_BYTES = 1_000_000;
 

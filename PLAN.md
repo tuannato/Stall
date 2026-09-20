@@ -638,6 +638,28 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
+- **A quote's own rate is fenced by the USD pair, not by its own value —
+  the cost of the unit feature, written down so it is not re-derived.**
+  `judgeQuoteRates` runs the window and the second feed over the USD pair,
+  then prices the figure from the quote's unit rate, which no window bounds
+  (`RATE_WINDOWS` holds a `usd` row alone, and `isPlausibleRate` answers
+  `true` for a code with no window). That is the decided design — CLAUDE §8,
+  `451e5ea`, and the test `prices the figure in the quote's unit and keeps
+  the usd verdict`. What was not written down until 2026-09-20 is what it
+  costs: `readPayRate` issues **two** `fetchXecPrice` calls, so a per-currency
+  data error at CoinGecko — a correct `usd` field and a wrong `vnd` one in
+  the same minute — composes a figure nothing refuses, while the same error
+  in USD is refused twice over. Measured: `judgeQuoteRates('eur', rate(500),
+  usd_ok, usd_ok)` answers `{kind:'rate'}` where the USD path answers
+  `{kind:'refused', why:'implausible'}`. Exposure is one seller's choice of
+  unit; no non-USD quote exists on chain. Options: leave and keep this
+  paragraph; widen `RATE_WINDOWS` per currency (PLAN § Rejected killed the
+  ×100 band shape twice, and a per-currency table is a second market
+  opinion to maintain); derive the unit's fence from the USD rate through
+  the quote's own cross-rate (one more assumption, no new third party).
+  Recommended: leave, and revisit when a second feed prices a second
+  currency — which is the same condition the `check` field already waits on.
+
 - **A widget is answered for streaming; embedding on a seller's own page is
   still open.** The broadcast view answers half: an OBS Browser Source
   navigates straight to the URL, so `frame-ancestors 'none'` is untouched. A
