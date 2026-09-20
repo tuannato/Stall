@@ -1977,7 +1977,7 @@ function offersOf(view: StallView): readonly StallOffer[] {
 }
 
 /** Distinct listed tokens this page chose not to paint. */
-function withheldListings(view: StallView): number {
+export function withheldListings(view: StallView): number {
     const ids = new Set<string>();
     for (const offer of view.fetch?.kind === 'offers' ? view.fetch.offers : []) {
         if (isWithheldToken(offer.tokenId, view.tokens.get(offer.tokenId))) {

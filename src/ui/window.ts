@@ -20,6 +20,7 @@ import {
     stallBaseUrl,
     tokenName,
     unreadableQuotes,
+    withheldListings,
     withheldQuotes,
 } from './render';
 import { ICON_HERO_SIZE, ICON_WALL_SIZE } from '../domain/icons';
@@ -542,7 +543,18 @@ function statusBar(
                     rows: quotedItems(view).length,
                     hidden: withheldQuotes(view) + unreadableQuotes(view),
                 })
-              : copy.windowOutcome(view.fetch?.kind);
+              : copy.windowOutcome(view.fetch?.kind, undefined, {
+                    // What is on the strip, and how much this screen is not
+                    // showing — withheld (§4) and dropped by the freeze
+                    // counted together, because the only sentence they
+                    // produce says this SCREEN is not showing them and
+                    // nothing about the seller.
+                    rows: windowListings(view, params).length,
+                    hidden:
+                        withheldListings(view) +
+                        (listingsInShopOrder(view).length -
+                            windowListings(view, params).length),
+                });
     /*
      * The lock line is the listings rail's alone. The freeze is listings-only
      * by construction — `recordIsStalls` demands the stall's own signature

@@ -1788,6 +1788,18 @@ export const WINDOW_RAIL_EMPTY = 'This stall has nothing on that side right now.
 export function windowOutcome(
     kind: string | undefined,
     route?: string,
+    /**
+     * What the listings rail is actually painting, when the caller knows.
+     *
+     * The twin below has taken this since it shipped; this one had no way to
+     * say it, so a shelf whose every item this page withholds (§4) or whose
+     * every item the freeze drops printed "Showing listings" over a blank
+     * strip — our own floor read, on a wall in a shop, as the seller's
+     * inventory. Only the empty case speaks: a partly hidden shelf still
+     * shows goods, so "Showing listings" is true of it, and the lock line
+     * `windowState` appends is worth more there than a count.
+     */
+    read?: { rows: number; hidden: number },
 ): string | undefined {
     // §4's "three layers, not one enum", and the route is the first of them.
     // A never-spent address and a walk that hit our own page cap are facts
@@ -1802,7 +1814,14 @@ export function windowOutcome(
         return 'This screen could not finish reading the address';
     }
     if (kind === 'offers') {
-        return undefined;
+        // The same sentence the quotes rail says in the same situation, and
+        // for the same reason: it is about this SCREEN and claims nothing
+        // about the seller. It replaces the lock line rather than joining
+        // it, which is the right trade over a blank strip — "locked at
+        // block N" explains at most one of the two ways to get here.
+        return read !== undefined && read.rows === 0
+            ? 'Nothing here this screen can show'
+            : undefined;
     }
     if (kind === 'empty') {
         return 'Nothing listed yet';

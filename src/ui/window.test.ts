@@ -723,6 +723,50 @@ describe('a-window-row-says-which-rail-it-is-on', () => {
     });
 });
 
+describe('the-window-listings-rail-says-its-own-outcome', () => {
+    /**
+     * The twin rail has taken its own read since it shipped, and its docblock
+     * gives the reason: "On a wall in a shop that blank reads as the seller's
+     * inventory." The listings rail could not say it — `windowOutcome` took
+     * no read at all — so a shelf whose every item this page withholds (§4),
+     * or whose every item the freeze drops, printed "Showing listings" over a
+     * blank strip. That is the empty-versus-unreachable collapse this project
+     * forbids everywhere else, on the screen with nobody standing at it.
+     *
+     * Only the empty case speaks. A partly hidden shelf still shows goods, so
+     * "Showing listings" is true of it, and the lock line is worth more there
+     * than a count.
+     */
+    const WITHHELD = '0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0';
+
+    const stateOf = (over: Partial<StallView>, opts: WindowOpts): string =>
+        paint(windowView(opts, { windowRail: 'listings', ...over }))
+            .querySelector('[data-role="window-state"]')!.textContent!;
+
+    it('does not call a wholly withheld shelf a shelf it is showing', () => {
+        const said = stateOf(
+            {
+                tokens: new Map([tokenMeta(WITHHELD, 'Impersonator')]),
+                fetch: { kind: 'offers', offers: [offer(WITHHELD, 100)] },
+            } as unknown as Partial<StallView>,
+            { show: 'listings', mode: 'cycle' },
+        );
+        expect(said).toBe('Nothing here this screen can show');
+        expect(said, 'never a claim about the seller').not.toContain('Nothing listed');
+    });
+
+    it('does not call a shelf the freeze emptied a shelf it is showing', () => {
+        const said = stateOf({}, { show: 'listings', mode: 'cycle', upto: 1 });
+        expect(said).toBe('Nothing here this screen can show');
+    });
+
+    it('still says it is showing listings, with the lock, when it is', () => {
+        expect(stateOf({}, { show: 'listings', mode: 'cycle', upto: 874_213 })).toBe(
+            'Showing listings \u00b7 locked at block 874,213',
+        );
+    });
+});
+
 describe('the-lock-line-is-the-listings-rails-alone', () => {
     /**
      * The freeze is listings-only by construction: `recordIsStalls` demands
