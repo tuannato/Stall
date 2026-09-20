@@ -183,9 +183,19 @@
     color: var(--s-text);
 }
 
+/*
+ * The letters, stated here with the ground (2026-09-20). `stall.css` sets
+ * `color: var(--s-bg)` for the base tile, chosen against the ACCENT gradient
+ * it paints there — and this rule replaces that gradient with a flat cream
+ * while leaving the ink behind, so the letters landed at 1.10:1 on the look's
+ * own paper and read as an empty disc. A literal ground takes a literal ink,
+ * or the pair stops moving together (`a-theme-rule-never-pairs-a-literal-ink-
+ * with-a-token-ground`); this is the look's own ink at 11.2:1.
+ */
 .t-rural .item-ic {
     border-radius: 50%;
     background: #f3e7ce;
+    color: #3a2a18;
     border: 2px solid rgba(107, 89, 66, 0.4);
 }
 

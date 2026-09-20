@@ -291,8 +291,15 @@
     color: var(--s-text);
 }
 
+/*
+ * The letters, stated here with the ground — Rural's rule, same day, same
+ * cause: the base tile's `color: var(--s-bg)` was picked against the accent
+ * gradient this rule replaces, so near-black letters sat on near-black glass
+ * at 1.18:1. The sign's own cyan, which the border already wears, at 11.3:1.
+ */
 .t-neo .item-ic {
     background: #131b30;
+    color: #2ce9e0;
     border: 1px solid rgba(44, 233, 224, 0.3);
     border-radius: 0;
 }

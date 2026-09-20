@@ -1339,6 +1339,16 @@ const CONTRAST_TEXT = [
     // claims of the design board, measured here rather than asserted.
     '.event-sum .event-ic',
     '.door-chips li',
+    /*
+     * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was
+     * added for exactly this class of defect and stopped at the Activity
+     * tile, so the tile beside every product name went unmeasured — and
+     * two looks replaced the base rule's accent gradient with a flat
+     * literal while leaving `color: var(--s-bg)` behind, landing at 1.10:1
+     * on Rural and 1.18:1 on Neo. `targetFor` skips a tile wearing an
+     * `<img>`, so what this samples is the letters and never a picture.
+     */
+    '.item-ic',
 ].join(', ');
 
 declare global {
