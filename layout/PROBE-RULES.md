@@ -297,6 +297,33 @@ the pressed-state controls the sheets are made of. A pressed segment inks
 itself on `--s-accent` and a pressed chip on a wash of it; no other screen
 puts a label on either ground.
 
+**The shop tile's letters joined on 2026-09-20, and the incident is the
+reason the list is never "done".** `stall.css` paints `.item-ic`'s initials
+in `color: var(--s-bg)` over a gradient of both accents, with a comment
+saying why that is legible — `legibleOn` corrected both accents against bg.
+Rural and Neo then replace that gradient with a flat literal (`#f3e7ce`,
+`#131b30`) and re-state no colour, so the letters kept an ink chosen for a
+ground that is no longer there: **1.10:1 on Rural and 1.18:1 on Neo**,
+computed from the shipped palettes, beside every product whose token has no
+picture.
+
+Two guards were blind for two different structural reasons, which is what
+makes it worth writing down. `.event-sum .event-ic` joined this list on
+2026-09-15 for exactly this class of defect and stopped at the Activity
+tile — the same class, one class name away. And
+`a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` fires only
+when ONE rule declares both ink and ground; here the ground is in the theme
+file and the ink is inherited from the base sheet, two rules in two files,
+which its own docblock names ("a token over a literal is the same failure
+upside down") and cannot see. **A ground restated without its ink is
+invisible to the static guard by construction, so the pixels are the only
+judge** — which is the argument for adding a selector here whenever a theme
+sheet overrides a background the base sheet chose an ink against.
+
+`targetFor` already skips a tile wearing an `<img>`, so what this samples is
+letters and never a picture. Found by a human reading a screenshot, after
+six read-only agents and this pass had all walked past it.
+
 **A control that draws its own edge has no contrast margin to spend.**
 `legibleOn` corrects `--s-accent` against `--s-bg` to `MIN_CONTRAST = 3` —
 which is exactly this pass's floor — so anything anti-aliased between an
@@ -828,6 +855,27 @@ hour.
 **The number moves ±15% between runs on the same tree** (98.9s and 113.2s for
 the same contrast pass, an hour apart). A run near the ceiling is not by
 itself a matrix that grew.
+
+**Measured 2026-09-20 on a 4-core, 3 GB box, three runs on one machine, and
+the ceiling is red on all three** — the rule above is why this is reported
+as three readings rather than one verdict:
+
+| run | tree | contrast boxes | contrast | total |
+|---|---|---|---|---|
+| 1 | `a4194a6`, six read-only agents on the box | 2504 | 143.4s | **206.7s** |
+| 2 | `a4194a6`, two agents | 2504 | 149.7s | **215.4s** |
+| 3 | fixes + `.item-ic` on the list, box quiet | 2525 | 142.2s | **202.4s** |
+
+Every geometry, reduced-motion, contrast and transparency rule is green in
+all three; the only red line is `runtime:`. Run 3 adds a selector and is the
+FASTEST of the three, which is the ledger's own point made again: the box
+moved the number, the matrix did not. `.item-ic` cost **21 boxes** (2504 →
+2525, 0.8%) because `targetFor` skips a tile wearing an `<img>` and most
+fixture rows carry one.
+
+Whether to prune, raise the number, or call this box slow stays the owner's
+call and needs a reading from the machine that sets the budget — which is
+what this table is for, not a licence to raise it.
 
 Measured again 2026-09-04, with the quote card's three canvas screens, a
 second reduced-motion screen and a second transparency screen added: **142.7s
