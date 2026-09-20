@@ -638,6 +638,20 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
+- **The shop window sheet's reveal switch, worded by an agent and not by
+  you.** "Lock the listings to a block · **On**" turned nothing on: the
+  switch reveals the row, and the control inside it sets the lock. The false
+  sentence was a bug and is fixed; the REPLACEMENT is taste and was taken
+  without you, which AGENTS §1 says is yours. It now reads "Show the
+  block-lock setting", and the critic's objection is fair: it names our
+  machinery where the sheet's other switch ("Show a code that pays each
+  quote") names a thing in the world, and "block-lock" appears nowhere else
+  in the product. Three ways out, all cheap: keep it; reword it (their
+  suggestion, "Choose a block to lock to"); or drop the switch's On/Off
+  pill and make the disclosure an `aria-expanded` control, which is the
+  honest shape for something that only reveals — and a design change, which
+  is why it is here rather than done.
+
 - **A quote's own rate is fenced by the USD pair, not by its own value —
   the cost of the unit feature, written down so it is not re-derived.**
   `judgeQuoteRates` runs the window and the second feed over the USD pair,
@@ -652,7 +666,14 @@ money path this app can have, because nothing on it is derived.
   in USD is refused twice over. Measured: `judgeQuoteRates('eur', rate(500),
   usd_ok, usd_ok)` answers `{kind:'rate'}` where the USD path answers
   `{kind:'refused', why:'implausible'}`. Exposure is one seller's choice of
-  unit; no non-USD quote exists on chain. Options: leave and keep this
+  unit. **Measured 2026-09-14** over the lokad index (§ Open's own recount):
+  13 `STLD` records by 3 keys, every one written before the unit feature
+  shipped on 2026-09-19 — a fact with a date and a shelf life of days, not
+  a standing property. **The trigger is checkable**: re-walk the `STLD`
+  lokad index for a `0x02` field whose three code bytes are neither `usd`
+  nor `xec`. The first one that appears is when this is due — not "when a
+  second feed prices a second currency", which is a condition nobody is
+  watching. Options: leave and keep this
   paragraph; widen `RATE_WINDOWS` per currency (PLAN § Rejected killed the
   ×100 band shape twice, and a per-currency table is a second market
   opinion to maintain); derive the unit's fence from the USD rate through

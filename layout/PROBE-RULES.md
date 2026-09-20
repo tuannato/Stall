@@ -873,6 +873,28 @@ moved the number, the matrix did not. `.item-ic` cost **21 boxes** (2504 →
 2525, 0.8%) because `targetFor` skips a tile wearing an `<img>` and most
 fixture rows carry one.
 
+Later the same day, after the QA/critic round, with `shop-window-sheet`
+added and the switch targets settled — and with nothing else on the box,
+which the two contaminated readings between these taught:
+
+| run | matrix | contrast boxes | contrast | total |
+|---|---|---|---|---|
+| 4 | + the sheet fixture, suite running beside it | 2504 | — | 295.2s (void) |
+| 5 | + `.sw-switch-label`, box quiet | 2696 | 142.2s | **203.7s** |
+
+Run 5 is the current tree: every geometry, reduced-motion, contrast and
+transparency rule green, 39 screens at both page widths, and the sheet that
+had never been measured at all reporting zero. It carries **one more screen
+and 171 more contrast boxes than the 2,525-box run above** and is still
+faster than either of that day's earlier readings — the box, again.
+
+**Two readings in this table are void and say so**, which is the point of
+writing them down: a `pnpm test` running beside the probe patches
+`vite.config.ts` for its own build and adds a competing vite build, so the
+seconds mean nothing and `served-weight-has-a-ceiling` fails on a bundle
+that includes `layout/probe.html`. Do not run the suite and the probe at
+once; this session did it twice.
+
 Whether to prune, raise the number, or call this box slow stays the owner's
 call and needs a reading from the machine that sets the budget — which is
 what this table is for, not a licence to raise it.
@@ -1095,6 +1117,39 @@ row without a token wears, which has no letters and samples its ink token
 against the row's ground) and `.door-chips li` (the door's fact chips, ahead of
 the pill rule that unborders them). Both were contrast claims on the design
 board; the pass measures them.
+
+**The same shape again on 2026-09-20, the day the shop window's sheet first
+got a fixture.** `switchControl` builds `button.mini.sw-switch` holding a
+state pill, and `.sheet .sw-switch[aria-pressed='true'] .sw-switch-state`
+paints that pill on `var(--s-accent)` — while `.t-modern .mini` and
+`.t-rural .mini` both declare `color: var(--s-accent)` and Neo's declares a
+neighbouring cyan. So the button sampled its own label's ink against the
+pill's ground: **1.00:1 on Modern and Rural, 1.09:1 on Neo, at both widths,
+on the very first run that could see this screen.** Neither text was
+unreadable — the label sits on `--s-surface` and the pill's ink is
+`--s-surface` on the accent.
+
+The remedy is the address row's: the container stops being the target and
+its text becomes one. `.mini` on the list is `.mini:not(.sw-switch)` now,
+the label moved into its own `.sw-switch-label` span, and that span and
+`.sw-switch-state` are targets in their own boxes. **The lesson to carry:
+adding a contrast target that CONTAINS a coloured control is how a pass
+reports a false red, and this project has now done it twice — check for an
+inner ground before adding a container to the list.**
+
+The pill itself was tried as a target on the same day and **withdrawn**.
+`.sw-switch-state` is `border-radius: 999px` and about 17px tall, which is
+the shape the `r` clamp beside `worstContrastInBox` was written for and
+still cannot sample reliably: it reported 1.00:1 on four of the six
+look-and-decoration combinations. **1.00:1 is not a colour this component
+can produce** — pressed it is `--s-surface` ink on `--s-accent`, unpressed
+it inherits `--s-accent` over the button's own `--s-surface`, and neither
+pair is anywhere near equal on any shipped palette. So the pass was not
+measuring the pill. Its two pairs are arbitrated by `legibleOn` per palette
+and declared together in one rule with both sides tokens, which is what the
+static theme-sheet rule reads; the label beside it stays measured here. A
+false red is as useless as a false green, and leaving one in place teaches
+the next reader to ignore the pass.
 
 A target that wears a picture is skipped (`targetFor`, the same day): the
 Activity tile whose token image had landed sampled the image's own pixels

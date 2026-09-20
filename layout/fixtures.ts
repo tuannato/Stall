@@ -174,10 +174,18 @@ export const base = (over: Partial<StallView>): StallView => ({
 /** Every catalogue row that has a token, which is what the fittings shop lists. */
 export const DECOR_ROWS = SHIPPED_ATTACHMENTS.filter((row) => row.tokenId !== undefined);
 
-const HOSTS_DOWN = CHRONIK_HOSTS.map((host, i) => ({
-    host,
-    result: (i === 2 ? 'error' : 'timeout') as 'error' | 'timeout',
-}));
+/*
+ * The one failure the app still attributes per host: the library ran out of
+ * hosts, so it really did ask them all.
+ *
+ * Every row says `error` and not a mix (2026-09-20). The exhaustion the
+ * library throws — "Error connecting to known Chronik instances" — carries
+ * no `code` and no `cause`, having discarded each host's own error, so
+ * `isTimeout` and `isPluginMissing` both answer false and `hostAttempts`
+ * writes `error` for all three. A fixture with a `timeout` row measured a
+ * verdict the app cannot produce.
+ */
+const HOSTS_DOWN = CHRONIK_HOSTS.map((host) => ({ host, result: 'error' as const }));
 
 /**
  * The shop's book. Shared with the broadcast screens on purpose: the overlay
@@ -667,7 +675,18 @@ export const SCREENS: Record<string, StallView> = {
         fetch: {
             kind: 'plugin-missing',
             triedAtMs: TRIED_AT_MS,
-            hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
+            /*
+             * Empty, because that is the shape the app now produces here
+             * (2026-09-20). A chronik proto error — which the agora 404 is —
+             * is thrown from the first node that answers, so `hostAttempts`
+             * refuses to invent a verdict for the other two and `hostsBox`
+             * paints `HOSTS_NOT_ATTRIBUTED` in their place. The old fixture
+             * built three rows the app can no longer reach, so this pass was
+             * measuring a dead shape and not measuring the sentence that now
+             * always paints — the smallest type on the site, in the lowest
+             * contrast role.
+             */
+            hosts: [],
         },
         tokens: new Map(),
         prices: QUOTES,
@@ -689,7 +708,8 @@ export const SCREENS: Record<string, StallView> = {
         fetch: {
             kind: 'plugin-missing',
             triedAtMs: TRIED_AT_MS,
-            hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'plugin-missing' as const })),
+            // Empty for the reason above: the shape the app can produce.
+            hosts: [],
         },
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
@@ -746,6 +766,32 @@ export const SCREENS: Record<string, StallView> = {
      * from `listingsInShopOrder`: token-id sort puts T2, LONG, T1 in the
      * etoken section and LONGER, NFT in the nft one.)
      */
+    /**
+     * The sheet that composes a wall's link — the SELLER's side, on an
+     * ordinary stall, which is why it carries no `window` of its own.
+     *
+     * It had no fixture at all until 2026-09-20, and two rounds of changes
+     * went into it unmeasured: the code switch and the freeze switch gained
+     * their state in words, then the lock control became a switch too and
+     * grew an uppercase pill beside a 30-character label. `.sw-lock` (the
+     * row that holds that control beside the height field) and `.sw-block`
+     * (the field) have no rule of their own in any stylesheet, so what that
+     * row does at 390px was decided by the cascade and read by nobody.
+     *
+     * Every rule this pass has wanted it for: the 44px floors on three
+     * `.mini` controls, `text-spills` over an unstyled row, the sheet being
+     * bounded and scrollable, and the contrast of `.mini` and
+     * `.sw-switch-state` on each look's sheet ground.
+     */
+    'shop-window-sheet': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        overlay: { kind: 'shop-window' },
+        // A quoted item, so the code switch has something to be about, and a
+        // block height for the freeze row to suggest.
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        tipHeight: 874_213,
+    }),
     /**
      * The stall on a wall: one item, and the catalogue. Both wear a look's
      * decorations at `--s-decor-scale: 2`, which is the whole point of the

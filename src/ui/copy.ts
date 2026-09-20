@@ -363,9 +363,20 @@ export const TRIED = 'tried';
  * necessarily the first in the list. An owner reading it concluded the
  * plugin was gone network-wide (2026-09-20). Two invented rows are worth
  * less than one sentence that is true.
+ *
+ * **It says nothing about what answered**, which the first wording did.
+ * `hostsBox` paints on the `unreachable` screen as well as the
+ * plugin-missing one, and `UNREACHABLE_BODY` directly above it reads "No
+ * index answered" — so "one of the nodes answered with this" put two
+ * paragraphs that contradict each other on the screen whose whole job is
+ * keeping those two failures apart (critic + QA, same day). The paths that
+ * reach it with nothing having answered are real: a chronik 4xx or 5xx, a
+ * decode failure, anything `resolveSeller` throws. So this states the
+ * MECHANISM — a read stops at the first answer — and draws no conclusion
+ * about whether one happened.
  */
-export const HOSTS_ONE_ANSWERED =
-    'One of the nodes answered with this and the read stopped there, so the others were not asked. Which one answered is not something this page is told.';
+export const HOSTS_NOT_ATTRIBUTED =
+    'A read stops at the first node that answers, so this page cannot say which of them were asked.';
 
 export const OPEN_ANOTHER_STALL = 'Open another stall';
 
@@ -1802,17 +1813,25 @@ export function windowOutcome(
     kind: string | undefined,
     route?: string,
     /**
-     * What the listings rail is actually painting, when the caller knows.
+     * How many rows the listings rail is actually painting, when the caller
+     * knows.
      *
-     * The twin below has taken this since it shipped; this one had no way to
-     * say it, so a shelf whose every item this page withholds (§4) or whose
+     * The twin below has taken its own read since it shipped; this one had
+     * none, so a shelf whose every item this page withholds (§4) or whose
      * every item the freeze drops printed "Showing listings" over a blank
      * strip — our own floor read, on a wall in a shop, as the seller's
-     * inventory. Only the empty case speaks: a partly hidden shelf still
-     * shows goods, so "Showing listings" is true of it, and the lock line
-     * `windowState` appends is worth more there than a count.
+     * inventory.
+     *
+     * **The count of what is hidden is deliberately NOT taken.** Only the
+     * empty case speaks: a partly hidden shelf still shows goods, so
+     * "Showing listings" is true of it and the lock line `windowState`
+     * appends is worth more there than a number — and a number beside a
+     * partial read is what CLAUDE §4 refuses anyway. The first version took
+     * `{ rows, hidden }` and read only `rows`, which cost the call site a
+     * `withheldListings` scan and two extra `windowListings` derivations
+     * every twenty seconds on a wall, for a value no sentence used.
      */
-    read?: { rows: number; hidden: number },
+    rows?: number,
 ): string | undefined {
     // §4's "three layers, not one enum", and the route is the first of them.
     // A never-spent address and a walk that hit our own page cap are facts
@@ -1832,9 +1851,7 @@ export function windowOutcome(
         // about the seller. It replaces the lock line rather than joining
         // it, which is the right trade over a blank strip — "locked at
         // block N" explains at most one of the two ways to get here.
-        return read !== undefined && read.rows === 0
-            ? 'Nothing here this screen can show'
-            : undefined;
+        return rows === 0 ? 'Nothing here this screen can show' : undefined;
     }
     if (kind === 'empty') {
         return 'Nothing listed yet';

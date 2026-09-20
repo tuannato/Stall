@@ -53,6 +53,17 @@ const KEY_MODULES: ReadonlyArray<readonly [RegExp, string]> = [
      * test named as its proof. `CURVE_ORDER` is deliberately not stubbed:
      * it is a bigint constant, nothing reads it, and the test greps for it
      * as the name that survives minification.
+     *
+     * Two things the test cannot say for itself, so they are said here.
+     * `CURVE_ORDER` works as a grep term ONLY because this stub omits that
+     * export — an implicit dependency between this list and `FORBIDDEN` in
+     * `src/bundle.test.ts`, and adding it here would turn that guard green
+     * over a bundle that still carried the module. And `getRandomValues` is
+     * a ban on a platform primitive: nothing in the graph uses it today
+     * (checked across `@noble`, `chronik-client`, `ecash-agora`,
+     * `ecashaddrjs`, `qrcode-generator`), so it is a real tripwire and not
+     * a false one — but if a dependency ever legitimately needs entropy,
+     * that is a conversation, not an edit to the list.
      */
     [
         /[/\\]ecash-lib[/\\]dist[/\\]eccScalar\.js$/,

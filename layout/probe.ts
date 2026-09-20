@@ -12,7 +12,7 @@
  * in a real browser, and writes a verdict into the DOM for the runner to read.
  * It asserts what only a browser can see.
  */
-import { renderStall } from '../src/ui/render';
+import { renderStall, WINDOW_MIN_PX } from '../src/ui/render';
 import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
 import {
     attachmentsForTheme,
@@ -345,6 +345,24 @@ function describe(node: Element): string {
 function paint(screen: string, themeId: number, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
     const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId), worn };
+    /*
+     * The same thing `boot` does, for the same reason (2026-09-20).
+     *
+     * Whether a page is a wall used to be asked by `renderStall` itself, so a
+     * wall fixture at 390px quietly painted the ordinary stall here. The app
+     * settles it once per load now — a predicate that read a live width
+     * flipped under a rotation and threw away an open sheet — which left the
+     * probe as the only thing in the project still handing `renderStall` a
+     * wall view at a phone's width: a state the app can no longer produce,
+     * and 42 failures per look of a layout nobody will ever see.
+     *
+     * A fixture is not exempt from a rule the app obeys. Painting what
+     * production would paint is the only way the measurement means anything.
+     */
+    if (view.window !== undefined && window.innerWidth < WINDOW_MIN_PX) {
+        renderStall(root, { ...view, window: undefined }, handlers);
+        return;
+    }
     renderStall(root, view, handlers);
 }
 
@@ -1305,7 +1323,30 @@ const CONTRAST_TEXT = [
     // Every control on the publish/handoff path, and the dock: a theme file
     // pairing a literal ink with a token ground shipped these at 2.31:1
     // under the After-hours mood while this list looked elsewhere.
-    '.mini',
+    /*
+     * `:not(.sw-switch)` for the 2026-09-15 reason, met again on the shop
+     * window's sheet: a switch's box holds its state pill, which paints the
+     * accent when pressed, and `.mini`'s ink is the accent on two looks — so
+     * the button sampled its own label against the pill's ground and read
+     * 1.00:1 everywhere. The two spans below are the real targets, each in
+     * its own box.
+     */
+    '.mini:not(.sw-switch)',
+    '.sw-switch-label',
+    /*
+     * `.sw-switch-state` is deliberately NOT here, and the reason is the
+     * one the `r` clamp above already tells: a `border-radius: 999px` pill
+     * ~17px tall, whose sample band the insets cannot reliably land inside.
+     * It reported 1.00:1 on four of six look-and-decoration combinations —
+     * and 1.00:1 is not a colour this component can produce. Pressed it is
+     * `--s-surface` ink on `--s-accent`; unpressed it inherits `--s-accent`
+     * over the button's `--s-surface`. Both pairs are arbitrated by
+     * `legibleOn` per palette and both are declared together in one rule
+     * with both sides tokens, which is what
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` reads.
+     * A figure the pass cannot sample is a false red, and a false red is as
+     * useless as a false green — the ledger's own words.
+     */
     '.tab',
     // The "Publishes:" line on both record sheets. It is the only sentence
     // that says what a permanent record carries and how big it is, and it

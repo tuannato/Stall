@@ -143,8 +143,16 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
         expect(WINDOW_BEAT_MS).toBe(60_000);
         // Yielding to a person standing still and reading, not walking past.
         expect(WINDOW_IDLE_MS).toBe(45_000);
-        expect(WINDOW_IDLE_MS).toBeGreaterThan(WINDOW_CARD_MS);
-        expect(WINDOW_SCROLL_MS).toBe(6_000);
+        /*
+         * `WINDOW_SCROLL_MS` and an ordering between the idle wait and the
+         * card dwell are deliberately NOT pinned. The scroll's own docblock
+         * says "one step every few seconds", which 4, 6 or 8 all satisfy;
+         * and the two constants govern different modes — the dwell only in
+         * `cycle`, the idle wait only in the `browse` roll — so they are
+         * never both in play on one screen and an ordering between them is
+         * a rule nobody wrote. A pin that would turn red for a seller who
+         * wants a slower shop is a tax, not a guard (critic, 2026-09-20).
+         */
     });
 
     /**
@@ -167,6 +175,88 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
         expect(shown(root), 'the card holds for its whole dwell').toBe(first);
         await vi.advanceTimersByTimeAsync(2_000);
         expect(shown(root), 'and then it turns').not.toBe(first);
+    });
+
+    /**
+     * Whether this page is a wall is decided ONCE, for its whole life
+     * (2026-09-20).
+     *
+     * The gate started as a predicate every reader asked at paint time. The
+     * QA measured what that cost: `clearBroadcastTimers()` cleared the beat
+     * and the beat's own `.finally` — whose guard is `view.window !==
+     * undefined` — armed it straight back, so a narrowed desktop kept a full
+     * `refresh()` and an ungated `paint()` every sixty seconds over an
+     * ordinary stall, rebuilding a half-typed sheet. The critic named the
+     * other half: crossing the floor UPWARD with a sheet open flipped
+     * `holdsLivePaint` to false, and the next socket tick threw the
+     * half-written record away — reachable by a rotation.
+     *
+     * Both are gone because nothing consults a live width any more. What
+     * this pins is the two ends of that bargain: a page that booted narrow
+     * is never a wall and arms no wall clock, and a page that booted wide
+     * stays one even when the viewport changes under it. The second half is
+     * the stated cost, not an oversight, so it is asserted rather than
+     * left to be rediscovered as a bug.
+     */
+    const atWidth = async (px: number, run: () => Promise<void>): Promise<void> => {
+        const had = Object.getOwnPropertyDescriptor(globalThis, 'innerWidth');
+        Object.defineProperty(globalThis, 'innerWidth', { value: px, configurable: true });
+        try {
+            await run();
+        } finally {
+            // Restored in `finally`: a failure here used to leave every later
+            // test in this file reading a phone's width.
+            if (had === undefined) {
+                delete (globalThis as { innerWidth?: number }).innerWidth;
+            } else {
+                Object.defineProperty(globalThis, 'innerWidth', had);
+            }
+        }
+    };
+
+    it('booted narrow, it is never a wall and arms no wall clock', async () => {
+        await atWidth(390, async () => {
+            vi.useFakeTimers();
+            window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=cycle`);
+            let loads = 0;
+            const root = document.createElement('div');
+            boot(root, async () => {
+                loads += 1;
+                return windowState('cycle');
+            });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(
+                root.querySelector('[data-role="shop-window"]'),
+                'a phone gets the ordinary stall',
+            ).toBeNull();
+            expect(loads).toBe(1);
+
+            // No beat, no card timer, no roll: the wall's clocks belong to
+            // the wall, and this is not one.
+            await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS * 3);
+            expect(loads, 'nothing re-read on a wall clock').toBe(1);
+        });
+    });
+
+    it('booted wide, it stays a wall when the viewport changes under it', async () => {
+        await atWidth(1280, async () => {
+            vi.useFakeTimers();
+            window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=cycle`);
+            const root = document.createElement('div');
+            boot(root, async () => windowState('cycle'));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(root.querySelector('[data-role="shop-window"]')).not.toBeNull();
+
+            // The screen narrows — a rotation, or a window dragged in. The
+            // stated cost: it keeps the wall until the next load, and that is
+            // what stops a sheet being thrown away by a gesture.
+            Object.defineProperty(globalThis, 'innerWidth', { value: 390, configurable: true });
+            await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS);
+            expect(
+                root.querySelector('[data-role="shop-window"]'),
+                'still the wall, by design',
+            ).not.toBeNull();
+        });
     });
 
     /**

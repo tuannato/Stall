@@ -7,6 +7,7 @@ export {
     overlayMounts,
     holdsLivePaint,
     shopWindowPaints,
+    WINDOW_MIN_PX,
     stallBaseUrl,
 } from './render';
 export type { QuotedItem } from './render';

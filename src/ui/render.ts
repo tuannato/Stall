@@ -500,7 +500,7 @@ export function renderStall(
     // a broken copy of a television. `WINDOW_MIN_PX` because it is this
     // app's one breakpoint: the row caret, the address's long form and the
     // sheets' QR all turn at it.
-    if (shopWindowPaints(view, root.ownerDocument.defaultView?.innerWidth ?? 0)) {
+    if (shopWindowPaints(view)) {
         applyTheme(
             stall,
             theme,
@@ -1977,7 +1977,7 @@ function offersOf(view: StallView): readonly StallOffer[] {
 }
 
 /** Distinct listed tokens this page chose not to paint. */
-export function withheldListings(view: StallView): number {
+function withheldListings(view: StallView): number {
     const ids = new Set<string>();
     for (const offer of view.fetch?.kind === 'offers' ? view.fetch.offers : []) {
         if (isWithheldToken(offer.tokenId, view.tokens.get(offer.tokenId))) {
@@ -3504,13 +3504,19 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const parts: copy.SummaryPart[] = [];
         let size: number;
         if (removing) {
+            /*
+             * The removal and nothing else. `SummaryPart` is "a field the
+             * record will carry" and the record is `encodeRemovalHex(tokenId)`
+             * — the bare tombstone, which carries neither the shelf nor the
+             * price. Naming them beside a 40-byte count was one line saying
+             * two things (2026-09-20): before the meter was corrected both
+             * halves described the same wrong record, which hid it.
+             *
+             * What goes is not lost to the reader: `DESC_REMOVE_LEDE` stands
+             * directly above this, in words, and says the words, the shelf
+             * and the price all go.
+             */
             parts.push({ label: copy.SUMMARY_REMOVAL, value: name });
-            if (publishedShelf !== undefined) {
-                parts.push({ label: copy.SUMMARY_SHELF, value: publishedShelf });
-            }
-            if (published !== undefined) {
-                parts.push({ label: copy.SUMMARY_QUOTE, value: sayPrice(published) });
-            }
             // The bare tombstone, which is what `encodeRemovalHex(tokenId)`
             // above produces — the words, the shelf and the price go
             // together (owner, 2026-09-07). This counted the shelf's push
@@ -4435,31 +4441,30 @@ const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }
 export const WINDOW_MIN_PX = 680;
 
 /**
- * Whether the shop window's screen is what this viewport paints.
+ * Whether the shop window's screen is what this view paints.
  *
  * **One predicate, three readers** (2026-09-20). The render gate grew a
- * width term on 2026-09-18 — a phone is not a wall, and the wall layout at
- * 390px cost a thousand probe failures — and `overlayAllowed` kept the
- * width-blind clause it had. So below the floor the link fell back to the
- * ordinary stall AND kept refusing every sheet at the same time: measured
- * at 390px, seven controls on screen and not one of them opened anything,
- * while a Pay press still asked two third parties for a rate before
- * mounting nothing. `syncWindow` was blind the same way and kept an
- * unattended screen's timers running over a stall somebody was reading.
+ * width term on 2026-09-18 — a phone is not a wall — and `overlayAllowed`
+ * kept the width-blind clause it had, so below the floor a link fell back
+ * to the ordinary stall AND refused every sheet at the same time: measured
+ * at 390px, controls on screen and not one of them opening anything, while
+ * a Pay press still asked two third parties for a rate before mounting
+ * nothing. `syncWindow` was blind the same way.
  *
- * The width is an argument because the three callers hold three different
- * windows — a root's `ownerDocument`, this module's `document`, and the
- * app's global.
+ * **The width is not asked here.** It is decided once per load, where
+ * `view.window` is decided (`withUrlParams`), because a predicate reading a
+ * live measurement flips under a rotation: `holdsLivePaint` would answer
+ * false the moment a viewport crossed the floor with a sheet open, and the
+ * next socket tick would throw away a half-written record. This asks only
+ * what the view already settled.
  */
 export function shopWindowPaints(
     view: StallView,
-    innerWidth: number,
 ): view is StallView & { window: WindowParams } {
     return (
         view.window !== undefined &&
         view.route.kind !== 'invalid' &&
-        view.route.kind !== 'home' &&
-        innerWidth >= WINDOW_MIN_PX
+        view.route.kind !== 'home'
     );
 }
 
@@ -4478,7 +4483,7 @@ function overlayAllowed(view: StallView): boolean {
      * close it and nothing on screen to say why. The options sheet is the
      * seller's, on the ordinary stall, and never on the wall.
      */
-    if (shopWindowPaints(view, document.defaultView?.innerWidth ?? 0)) {
+    if (shopWindowPaints(view)) {
         return false;
     }
     if (view.route.kind !== 'pubkey') {
@@ -7649,8 +7654,8 @@ function hostsBox(triedAtMs: number, hosts: HostAttempt[]): HTMLElement {
         // failover stopped at the first node that answered rather than
         // running out of them. The sentence says that; the rows would have
         // had to invent it.
-        const said = el('div', 'hosts-said', copy.HOSTS_ONE_ANSWERED);
-        said.setAttribute('data-role', 'hosts-one-answered');
+        const said = el('div', 'hosts-said', copy.HOSTS_NOT_ATTRIBUTED);
+        said.setAttribute('data-role', 'hosts-not-attributed');
         box.append(said);
         return box;
     }

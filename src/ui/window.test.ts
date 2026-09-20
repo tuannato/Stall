@@ -981,60 +981,54 @@ describe('the-quote-code-is-a-switch-and-the-listings-code-is-not-its-business',
     });
 });
 
-describe('a-phone-falls-all-the-way-back-to-the-ordinary-stall', () => {
+describe('the-render-gate-and-the-overlay-gate-ask-one-question', () => {
     /**
      * The render gate grew a width term on 2026-09-18 — a phone is not a wall
-     * — and `overlayAllowed` kept the width-blind clause beside it. So below
-     * the floor a `?view=window` link painted the ordinary stall AND refused
-     * every sheet at the same time: measured 2026-09-20 at 390px, seven
-     * controls on screen and not one of them opened anything, while a Pay
-     * press still asked two third parties for a rate before mounting
-     * nothing. One predicate, `shopWindowPaints`, answers for the render
-     * gate, the overlay gate and `syncWindow`'s timers now.
+     * — and `overlayAllowed` kept the width-blind clause beside it. So a
+     * `?view=window` link opened narrow painted the ordinary stall AND
+     * refused every sheet at the same time: controls on screen, none of them
+     * opening anything, and a Pay press still asking two third parties for a
+     * rate before mounting nothing (measured 2026-09-20).
      *
-     * The fallback is the whole point of the gate, so what this pins is that
-     * it is a WHOLE fallback: an ordinary stall where the sheets work.
+     * Asking the width in each predicate fixed that and bought worse: a
+     * viewport crossing the floor with a sheet open flipped `holdsLivePaint`
+     * and the next socket tick threw the half-written record away. So the
+     * width left the predicates entirely — `boot` settles it once per page
+     * and writes it onto the view, and `app.window.test.ts` drives that end.
+     *
+     * What is left here is the invariant that was actually broken: the two
+     * gates ask ONE question of ONE view. Wherever the wall paints, no sheet
+     * mounts; wherever it does not, a sheet the reader asked for does.
      */
-    const atWidth = (px: number, run: () => void): void => {
-        const had = window.innerWidth;
-        Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
-        try {
-            run();
-        } finally {
-            Object.defineProperty(window, 'innerWidth', { value: had, configurable: true });
-        }
-    };
-
-    const withPaySheet = (): StallView =>
+    const withPaySheet = (over: Partial<StallView>): StallView =>
         ({
             ...windowView({ show: 'all', mode: 'cycle' }),
             overlay: { kind: 'pay', tokenId: BEANS },
             prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n }]]),
             descriptions: new Map([[BEANS, 'Half a kilo, roasted Tuesday']]),
+            ...over,
         }) as unknown as StallView;
 
-    it('paints the wall above the floor and mounts no sheet there', () => {
-        atWidth(1280, () => {
-            const view = withPaySheet();
-            const root = paint(view);
-            expect(root.querySelector('.stall.shop-window'), 'the wall').not.toBeNull();
-            expect(overlayMounts(view), 'the wall mounts no sheet').toBe(false);
-            expect(holdsLivePaint(view), 'and nothing on it holds the live paint').toBe(false);
-        });
+    it('paints the wall and mounts no sheet on it', () => {
+        const view = withPaySheet({});
+        const root = paint(view);
+        expect(root.querySelector('.stall.shop-window'), 'the wall').not.toBeNull();
+        expect(overlayMounts(view), 'the wall mounts no sheet').toBe(false);
+        expect(holdsLivePaint(view), 'and nothing on it holds the live paint').toBe(false);
     });
 
-    it('paints the ordinary stall below it, with its sheets working', () => {
-        atWidth(390, () => {
-            const view = withPaySheet();
-            const root = paint(view);
-            expect(root.querySelector('.stall.shop-window'), 'not the wall').toBeNull();
-            expect(overlayMounts(view), 'a sheet the reader asked for opens').toBe(true);
-            expect(holdsLivePaint(view), 'and it holds the live paint like any sheet').toBe(true);
-            expect(
-                root.querySelector('[data-role="sheet-scrim"]'),
-                'the sheet is in the tree, not merely allowed',
-            ).not.toBeNull();
-        });
+    it('paints the ordinary stall and mounts its sheets when the view is not a wall', () => {
+        // What `boot` hands a paint below the floor: the same link, the same
+        // route, and no `window` on the view.
+        const view = withPaySheet({ window: undefined });
+        const root = paint(view);
+        expect(root.querySelector('.stall.shop-window'), 'not the wall').toBeNull();
+        expect(overlayMounts(view), 'a sheet the reader asked for opens').toBe(true);
+        expect(holdsLivePaint(view), 'and it holds the live paint like any sheet').toBe(true);
+        expect(
+            root.querySelector('[data-role="sheet-scrim"]'),
+            'the sheet is in the tree, not merely allowed',
+        ).not.toBeNull();
     });
 });
 
@@ -1130,6 +1124,37 @@ describe('a-switch-says-which-way-it-is-set', () => {
         expect(state!.textContent, 'a second press turns it back off').toBe(
             copy.WINDOW_SWITCH_OFF,
         );
+    });
+
+    it('a press over a refused height does not strand the lock on', () => {
+        /*
+         * The `current` callback, pinned (QA, 2026-09-20: deleting
+         * `() => locked` left this file green, because the case above presses
+         * once and stops).
+         *
+         * Without it the press derives its next state from the attribute —
+         * which `settle` has just corrected to `false` over a height the
+         * parse refuses — so a second press sets `locked` true AGAIN instead
+         * of toggling it off. The seller then fixes the height and the link
+         * gains an `upto` they pressed twice to be rid of.
+         */
+        const root = sheetOf();
+        const press = root.querySelector<HTMLButtonElement>('[data-role="window-lock"]')!;
+        const field = root.querySelector<HTMLInputElement>('[data-role="window-lock-height"]')!;
+        const link = root.querySelector<HTMLInputElement>('[data-role="shop-window-link"]')!;
+
+        field.value = '874,213';
+        field.dispatchEvent(new Event('input'));
+        press.click(); // on, but refused — both halves read off
+        press.click(); // off, and it must MEAN off
+
+        field.value = '874213';
+        field.dispatchEvent(new Event('input'));
+        expect(
+            press.getAttribute('aria-pressed'),
+            'a readable height must not revive a lock that was pressed off',
+        ).toBe('false');
+        expect(link.value, 'and the link carries no upto nobody asked for').not.toContain('upto');
     });
 });
 

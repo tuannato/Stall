@@ -140,7 +140,7 @@ import {
     quotedItems,
     renderStall,
     holdsLivePaint,
-    shopWindowPaints,
+    WINDOW_MIN_PX,
 } from './ui';
 import {
     FIAT_GLANCE_MAX_AGE_MS,
@@ -236,7 +236,8 @@ function withUrlParams(state: AppState): AppState {
     const broadcast = parseBroadcastParams(location.search);
     // The two screens read the same `view` param, so they can never both be
     // asked for; the parse is still guarded rather than assumed, because a
-    // future third value must not silently be both.
+    // future third value must not silently be both. Whether this viewport is
+    // a WALL is not decided here — `boot` settles that once, at paint time.
     const window = broadcast === undefined ? parseWindowParams(location.search) : undefined;
     // Neither of the unattended screens mounts a sheet, so an item named on
     // one would open nothing and say nothing. The parameter is simply not
@@ -502,6 +503,15 @@ export function boot(
      */
     let shopTab: ShopTab = 'listings';
     /**
+     * Whether this page is wide enough to be a wall, read ONCE for the life
+     * of the page.
+     *
+     * A `const`, not a paint-time read, and that is the whole point: the
+     * predicates that decide the wall must not move under a rotation. See
+     * the paint-time view literal for what asking a live width cost.
+     */
+    const wallWidth = (globalThis.innerWidth ?? 0) >= WINDOW_MIN_PX;
+    /**
      * The shop window's own state, and it lives here for `shopTab`'s reason:
      * the heartbeat below is a full `refresh()`, which rebuilds the view from
      * `loadCurrent()`. A cursor rebuilt from a load would snap the carousel
@@ -721,6 +731,31 @@ export function boot(
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
             ...state.view,
+            /*
+             * A phone is not a wall, and this is where that is settled —
+             * ONCE, at paint time, beside `shopTab`, `fiatCode` and
+             * `view.pasted`, for the reason all three live here.
+             *
+             * The render gate took the width on 2026-09-18 and the overlay
+             * gate did not, so below the floor a link painted the ordinary
+             * stall with every sheet refused. Asking the width in each
+             * predicate fixed that and bought two worse things: a viewport
+             * crossing the floor with a sheet open flips `holdsLivePaint`,
+             * and the next socket tick throws away a half-written record —
+             * the one thing `a-live-update-does-not-clear-a-half-written-
+             * record` exists to stop, reachable by a rotation; and the beat's
+             * own `.finally` re-armed a cleared heartbeat, so a narrowed
+             * desktop kept a full `refresh()` and an ungated `paint()` every
+             * minute over a stall somebody was reading (measured by the QA
+             * that reviewed the first fix).
+             *
+             * So nothing downstream consults a live measurement: the view
+             * says whether this is a wall, and the render gate, the overlay
+             * gate and `syncWindow` all read the view. The cost, stated: a
+             * desktop narrowed mid-session keeps the wall until the next
+             * load, which is the same bargain `shopTab` takes.
+             */
+            ...(wallWidth ? {} : { window: undefined }),
             isDefaultStall: isSavedStall(identityOf(state.view)),
             // Same read-at-paint rule as the default flag: a pin toggles
             // without a refetch, and a stale list would lie about itself.
@@ -1112,21 +1147,12 @@ export function boot(
      */
     const syncWindow = (): void => {
         const params = state.view.window;
-        if (params === undefined) {
-            return;
-        }
-        /*
-         * The same predicate the render gate asks, or this arms an unattended
-         * screen's timers over a stall somebody is reading (2026-09-20).
-         * Below `WINDOW_MIN_PX` the link paints the ordinary stall, where a
-         * beat that rebuilds the socket every minute and a card timer that
-         * calls `paint()` — with no `holdsLivePaint` check, because the wall
-         * mounts no sheet — would throw away a reader's open sheet on a
-         * clock. Clearing rather than returning, because a desktop narrowed
-         * past the line has timers already armed from a wider paint.
-         */
-        if (!shopWindowPaints(state.view, window.innerWidth)) {
-            clearBroadcastTimers();
+        // `wallWidth` for the same reason the painted view asks it: the wall's
+        // three clocks belong to the wall. A narrow page never arms them, so
+        // there is nothing to clear later and nothing to re-arm — which is
+        // what the beat's own `.finally` guard could not manage while the
+        // answer could change under it.
+        if (params === undefined || !wallWidth) {
             return;
         }
         // The freeze is captured ONCE, on the first paint that has both a lock

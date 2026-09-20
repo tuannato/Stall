@@ -20,7 +20,6 @@ import {
     stallBaseUrl,
     tokenName,
     unreadableQuotes,
-    withheldListings,
     withheldQuotes,
 } from './render';
 import { ICON_HERO_SIZE, ICON_WALL_SIZE } from '../domain/icons';
@@ -181,12 +180,23 @@ function switchControl(
     onToggle: (on: boolean) => void,
     current?: () => boolean,
 ): HTMLButtonElement {
-    const button = el('button', 'mini sw-switch', label) as HTMLButtonElement;
+    const button = el('button', 'mini sw-switch') as HTMLButtonElement;
     button.type = 'button';
     button.setAttribute('data-role', role);
+    /*
+     * The words in their own span, so the contrast pass can sample them
+     * (2026-09-20). The button's box holds the state pill, which paints its
+     * own ground — the accent, when pressed — and `.mini`'s ink IS the
+     * accent on two of the three looks, so sampling the button measured the
+     * label's ink against the pill's background and read 1.00:1 on every
+     * look and width the day this sheet first met the probe. The same shape
+     * as the sign's address row on 2026-09-15: a container holding a control
+     * with its own ground stops being the target, and its text becomes one.
+     */
+    const words = el('span', 'sw-switch-label', label);
     const state = el('span', 'sw-switch-state');
     state.setAttribute('data-role', `${role}-state`);
-    button.append(state);
+    button.append(words, state);
     paintSwitch(button, on);
     button.addEventListener('click', () => {
         const now =
@@ -543,18 +553,13 @@ function statusBar(
                     rows: quotedItems(view).length,
                     hidden: withheldQuotes(view) + unreadableQuotes(view),
                 })
-              : copy.windowOutcome(view.fetch?.kind, undefined, {
-                    // What is on the strip, and how much this screen is not
-                    // showing — withheld (§4) and dropped by the freeze
-                    // counted together, because the only sentence they
-                    // produce says this SCREEN is not showing them and
-                    // nothing about the seller.
-                    rows: windowListings(view, params).length,
-                    hidden:
-                        withheldListings(view) +
-                        (listingsInShopOrder(view).length -
-                            windowListings(view, params).length),
-                });
+              : // What is on the strip. Only the empty case produces a
+                // sentence, so nothing else needs counting here.
+                copy.windowOutcome(
+                    view.fetch?.kind,
+                    undefined,
+                    windowListings(view, params).length,
+                );
     /*
      * The lock line is the listings rail's alone. The freeze is listings-only
      * by construction — `recordIsStalls` demands the stall's own signature

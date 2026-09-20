@@ -7958,7 +7958,22 @@ describe('the-summary-says-what-the-record-carries', () => {
         expect(off.size, 'the record signed is the bare tombstone').toBe(
             encodeRemovalHex(TOKEN_ID, {})!.length / 2,
         );
-        expect(off.said).toContain(descBytesLeft(off.size, OP_RETURN_BUDGET));
+        /*
+         * The WHOLE line, not a substring. The first version of this test
+         * asserted only that the byte count was in it, and a reviewer found
+         * the rest of the line still naming a shelf and a price the 40-byte
+         * record cannot carry — a drift this test was written to stop,
+         * sitting green underneath it.
+         */
+        expect(off.said, 'names the removal and nothing the record does not carry').toBe(
+            summaryLine(
+                [{ label: copy.SUMMARY_REMOVAL, value: tokenName(new Map([[TOKEN_ID, BEANS]]), TOKEN_ID) }],
+                off.size,
+                OP_RETURN_BUDGET,
+            ),
+        );
+        expect(off.said).not.toContain(copy.SUMMARY_SHELF);
+        expect(off.said).not.toContain(copy.SUMMARY_QUOTE);
 
         // Clearing every field by hand signs the same record, and the sibling
         // branch already counted it right — pinned so it stays that way.

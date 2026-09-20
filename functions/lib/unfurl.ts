@@ -4,9 +4,15 @@
  * (CLAUDE.md §9), and until this existed every /s/<seller> unfurled as the
  * same generic platform card.
  *
- * Everything here is string work on the seller parameter — no chain reads in
- * v1, so there is nothing to fail, nothing to rate-limit and nothing to
- * cache. `resolveStallName` in the function is the socket the manifest name
+ * Everything here is string work on the seller parameter — no chain reads,
+ * so there is nothing to fail, nothing to rate-limit and nothing to cache.
+ * It does import `p2pkhHashFromCashaddr` from `resolve.ts`, which is the
+ * module that DOES read the chain: the function itself is arithmetic on the
+ * string (charset index, polymod, a 5-to-8-bit regroup) and reaches no
+ * network, and sharing it is what makes this card and that walk agree about
+ * an address by construction rather than by two rules that happen to line
+ * up. Said out loud because "the pure half" would otherwise read as a claim
+ * about the import graph, which it is not (2026-09-20). `resolveStallName` in the function is the socket the manifest name
  * arrives through later; when it answers, the name goes through the same
  * legibility screen the app's own decoder uses, imported from the one module
  * that owns it.
