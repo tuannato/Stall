@@ -1672,6 +1672,22 @@ result.textContent = JSON.stringify(
          */
         portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
             .matches,
+        /*
+         * The other portrait block — `(orientation: portrait) and
+         * (max-height: 1200px)` — echoed back for its own pass's guard.
+         *
+         * It was reached only by the 390x844 mobile pass, and only because
+         * the wall fixtures ran there. Taking them out of that pass was
+         * right (the app cannot paint a wall at 390) and left this block
+         * executed by NOTHING, with two documents still describing it as
+         * covered (QA, 2026-09-20, measured in Chrome). That is
+         * `44720d3` again: half a layout behind a query no pass could
+         * enter. A counter tablet stood on end is 768 wide, which is over
+         * the wall's floor, so the screen is real and the pass is now its
+         * own.
+         */
+        portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
+            .matches,
         screensMeasured: measured,
         clipSkips,
         clipChecks,

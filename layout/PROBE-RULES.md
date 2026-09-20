@@ -442,8 +442,15 @@ Sampling amendments, each measured:
 reached two of them.
 
 - Landscape — the desk widths and the 1920x1080 canvas.
-- `(orientation: portrait) and (max-height: 1200px)` — the phone and the
-  counter tablet, which the 390x844 pass matches. Picture beside the text.
+- `(orientation: portrait) and (max-height: 1200px)` — the counter tablet,
+  which the 768x1024 `TABLET` pass matches. Picture beside the text.
+  **It was the 390x844 pass until 2026-09-20**, and only because the wall
+  fixtures ran there; the day they stopped — correctly, the app cannot
+  paint a wall at 390 — this block lost its only reader and this sentence
+  became false. Measured in Chrome against the real `window.css`: of the
+  five viewports in the matrix, 390x844 was the ONLY one entering it. A
+  pass removed is a pass that has to be replaced, not a line of prose that
+  can stay.
 - `(orientation: portrait)` with that max-height **not** matching — the
   stacked column a wall-mounted portrait screen paints. **No viewport
   reached it.**

@@ -45,7 +45,7 @@ const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
  *
  * `window.css` carries three layouts for the cycle card and only two were
  * ever measured: landscape, and `(orientation: portrait) and (max-height:
- * 1200px)` — the phone and the counter tablet, which the 390x844 pass
+ * 1200px)` — the counter tablet, which the `TABLET` pass below
  * matches. The third, `portrait` with that max-height NOT matching, is the
  * stacked column a wall-mounted portrait screen paints, and **no viewport
  * reached it**: a whole half of the layout this feature was asked for
@@ -60,6 +60,19 @@ const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
  * that silently stayed landscape fails instead of passing.
  */
 const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
+/*
+ * The counter tablet stood on end — the SHORT portrait block.
+ *
+ * `(orientation: portrait) and (max-height: 1200px)` was entered by one
+ * viewport in the whole matrix, 390x844, and only because the wall fixtures
+ * ran there. Taking them out of the narrow pass was right — the app cannot
+ * paint a wall at 390 — and it left that block measured by nothing while
+ * two documents went on describing it as covered (QA, 2026-09-20, measured
+ * against the real `window.css` in Chrome). 768 is over the wall's floor
+ * and CLAUDE §4 names the counter tablet, so the screen is real; this pass
+ * is what the mobile one was standing in for.
+ */
+const TABLET = { name: 'tablet', width: 768, height: 1024 };
 const WINDOW_SCREENS =
     'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
@@ -671,6 +684,60 @@ try {
                 failed = true;
                 console.error(`✗ ${label}: ${pv.failures.length} failure(s) — ${took()}`);
                 for (const f of pv.failures) {
+                    console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                }
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
+        }
+    }
+
+    /*
+     * Pass 2c: the counter tablet stood on end. See `TABLET` above — this
+     * exists because removing the wall fixtures from the 390px pass took
+     * the short-portrait block's only reader with them.
+     */
+    {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: TABLET.width, height: TABLET.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        const wanted = WINDOW_SCREENS.split(',').length;
+        const label = `tablet (${TABLET.width}x${TABLET.height}, shop window)`;
+        try {
+            const tv = await readVerdict(
+                cdp,
+                sessionId,
+                probeUrl(TABLET, `&screens=${WINDOW_SCREENS}`),
+            );
+            if (tv.viewport !== TABLET.width) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: asked for ${TABLET.width}px and the page measured ${tv.viewport}px.`,
+                );
+            } else if (tv.portraitShort !== true) {
+                // The same guard `portraitTall` gives the pass above: an
+                // emulation that applied a size while the query did not
+                // match would certify a layout this pass never painted.
+                failed = true;
+                console.error(
+                    `✗ ${label}: the page never entered the short-portrait block —` +
+                        ' this pass would certify a layout it did not paint.',
+                );
+            } else if ((tv.screensMeasured ?? []).length !== wanted) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: measured ${(tv.screensMeasured ?? []).length} of ${wanted}` +
+                        ' screens — vacuous green.',
+                );
+            } else if (tv.failures.length === 0) {
+                console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}`);
+            } else {
+                failed = true;
+                console.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${took()}`);
+                for (const f of tv.failures) {
                     console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                 }
             }

@@ -249,6 +249,75 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
         });
     });
 
+    it('a phone is not a wall on either axis, turned or not', async () => {
+        /*
+         * The floor is on the SHORT painted axis, and this is the guard it
+         * did not have: reverting the branch to a plain `innerWidth` test
+         * left the whole suite green (QA, 2026-09-20).
+         *
+         * Two directions, both of which a phone can reach:
+         *  - held LANDSCAPE, 844x390, a plain window link. A width test
+         *    passes 844 and paints the wall layout into a 390-tall frame.
+         *    This hole predates the round.
+         *  - held PORTRAIT, 390x844, a `turn=cw` link. `window.css` sizes a
+         *    turned frame `100vh x 100vw`, so the painted box is 844 wide by
+         *    390 TALL. A reviewer proposed asserting this one IS a wall; the
+         *    arithmetic says otherwise and is why it is here: at a container
+         *    height of 390 the code is `clamp(280px, 33cqh, 360px)` = 280
+         *    (72% of the frame) and the tile `clamp(200px, 34cqh, 460px)` =
+         *    200 (51%), leaving 110px for the sign, the row and the status
+         *    bar — clipped in silence by `overflow: hidden`.
+         *
+         * `min` of the two axes is the turn-independent form of "a phone is
+         * not a wall", which is a statement about the short side.
+         */
+        const sizes = async (w: number, h: number, search: string): Promise<boolean> => {
+            const hadW = Object.getOwnPropertyDescriptor(globalThis, 'innerWidth');
+            const hadH = Object.getOwnPropertyDescriptor(globalThis, 'innerHeight');
+            Object.defineProperty(globalThis, 'innerWidth', { value: w, configurable: true });
+            Object.defineProperty(globalThis, 'innerHeight', { value: h, configurable: true });
+            try {
+                vi.useFakeTimers();
+                window.history.replaceState(null, '', `${stallPath(ADDR)}${search}`);
+                const root = document.createElement('div');
+                boot(root, async () => windowState('cycle'));
+                await vi.advanceTimersByTimeAsync(0);
+                return root.querySelector('[data-role="shop-window"]') !== null;
+            } finally {
+                for (const [key, had] of [
+                    ['innerWidth', hadW],
+                    ['innerHeight', hadH],
+                ] as const) {
+                    if (had === undefined) {
+                        delete (globalThis as Record<string, unknown>)[key];
+                    } else {
+                        Object.defineProperty(globalThis, key, had);
+                    }
+                }
+            }
+        };
+
+        expect(
+            await sizes(844, 390, '?view=window&mode=cycle'),
+            'a phone held landscape is not a wall',
+        ).toBe(false);
+        expect(
+            await sizes(390, 844, '?view=window&mode=cycle&turn=cw'),
+            'nor turned: the painted frame is 390 tall',
+        ).toBe(false);
+        expect(
+            await sizes(390, 844, '?view=window&mode=cycle&turn=ccw'),
+            'the other direction paints the same box',
+        ).toBe(false);
+        // And the screens this feature is for are untouched, both ways up.
+        expect(await sizes(1920, 1080, '?view=window&mode=cycle'), 'a television').toBe(true);
+        expect(
+            await sizes(1080, 1920, '?view=window&mode=cycle&turn=cw'),
+            'one hung on its side',
+        ).toBe(true);
+        expect(await sizes(768, 1024, '?view=window&mode=cycle'), 'a counter tablet').toBe(true);
+    });
+
     it('an unreadable link arms no wall clock', async () => {
         /*
          * The route terms, which a hand-gathered guard dropped along with the
@@ -280,6 +349,11 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
             });
             await vi.advanceTimersByTimeAsync(0);
             expect(loads).toBe(1);
+            // The timer COUNT as well: `loads` proves the beat and says
+            // nothing about the card timer, which calls `paint()` — and the
+            // docblock above names both. Its sibling got this line in the
+            // same commit and this test did not (QA + critic, 2026-09-20).
+            expect(vi.getTimerCount(), 'no wall clock was armed at all').toBe(0);
             await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS * 3);
             expect(loads, 'an unreadable screen is not a wall and keeps no clock').toBe(1);
         });

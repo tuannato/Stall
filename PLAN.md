@@ -638,6 +638,16 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
+- **A screen shorter than the wall's floor stopped being a wall, and that
+  is a behaviour change.** The floor asks the short painted axis now
+  (2026-09-20), which is what makes "a phone is not a wall" true turned or
+  not. The cost lands on a class that is not a phone: a 1024x600 panel was
+  a wall and is not one now. The evidence says that is right — the code's
+  floor was measured off the bottom of a 768-tall screen, per
+  `layout/PROBE-RULES.md` — but nobody has held one, and if a seller has a
+  short landscape panel this is the line to move. Stated here rather than
+  buried in a fix, because it is what a seller would notice.
+
 - **A turned screen's floor is measured, its geometry still is not.** The
   wall's width floor now reads the axis the FRAME paints on — `window.css`
   sizes a turned frame `100vh × 100vw`, so a landscape phone opening a
@@ -646,10 +656,19 @@ money path this app can have, because nothing on it is derived.
   (critic, 2026-09-20). What is still true is CLAUDE §4's own note: the
   probe measures a turned screen's LAYOUT and not its rotation GEOMETRY,
   because `getBoundingClientRect` is axis-aligned. So the floor is right by
-  construction and unmeasured in a browser. The cheap check is a person
-  with a phone: open a `turn=cw` link in landscape and confirm it is the
-  ordinary stall, then in portrait and confirm it is the wall. Nothing in
-  the repo can do it.
+  construction and unmeasured in a browser. **The acceptance criterion in the first
+  version of this entry WAS the defect.** It said to open a `turn=cw` link
+  in portrait and confirm it is the wall — which is an 844x390 painted
+  frame, where the code's own floor (`clamp(280px, 33cqh, 360px)` = 280)
+  takes 72% of the height and the tile another 51%, clipped in silence by
+  `overflow: hidden`. A person checking would have confirmed the bug and
+  ticked it off. The floor asks the SHORT painted axis now, so the rule has
+  no direction to get backwards: a phone is not a wall, turned or not, and
+  `a phone is not a wall on either axis, turned or not` pins it. What is
+  left for a person: open a `turn=cw` link on a phone both ways up and
+  confirm the ordinary stall both times, then on a screen over the floor in
+  both axes and confirm the wall paints the right way round. Nothing in the
+  repo can do that last half.
 
 - **A shop screen that boots below the floor is never a wall, and nothing
   heals it.** `boot` reads the width once (on the frame's own axis) and

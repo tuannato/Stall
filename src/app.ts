@@ -55,6 +55,7 @@ import type {
     StallHistory,
     StallOffer,
     StallView,
+    WindowParams,
     TokenMeta,
     Overlay,
 } from './domain/state';
@@ -512,30 +513,34 @@ export function boot(
      * the paint-time view literal for what asking a live width cost.
      */
     /**
-     * Whether this page is wide enough to be a wall — read ONCE, at boot.
+     * Whether this page can be a wall at all — read ONCE, at boot, off the
+     * SHORT axis.
      *
      * Once, because a predicate that re-reads flips under a rotation: a
      * reader below the floor with a sheet open, widening the viewport, would
      * have `holdsLivePaint` answer false and the next socket tick would
      * throw the half-written record away. That is the hazard the first
      * rework was for, and re-reading per call brings it straight back — the
-     * test below is what caught that.
+     * test below caught that inside a minute.
      *
-     * The AXIS is the frame's, not the viewport's. `window.css`'s turn rule
-     * sizes the frame `100vh × 100vw` and rotates it, so on a turned screen
-     * the painted width is the viewport's HEIGHT — a landscape phone opening
-     * a `turn=cw` link measures 844 across while painting a 390px-wide wall,
-     * which is the layout that cost a thousand probe failures (critic,
-     * 2026-09-20). The turn comes from the URL, which is readable here.
+     * **The short axis, because "a phone is not a wall" is a statement about
+     * the short side.** A width test alone passed a phone held in landscape
+     * (844 across, 390 tall) and painted the wall layout into it. Reading
+     * the turn and swapping axes fixed that direction and opened its mirror:
+     * a phone held in PORTRAIT opening `?view=window&turn=cw` measured 844
+     * of height and painted a frame 844 wide by **390 tall**, where
+     * `window.css` gives the code `clamp(280px, 33cqh, 360px)` — 280 of a
+     * 390-tall frame that also carries the sign, a row and the status bar,
+     * clipped in silence by `overflow: hidden` (critic, 2026-09-20).
+     *
+     * `min` is the turn-independent form of the rule: turning swaps the two
+     * axes and `min` is symmetric, so this needs no URL and cannot be wrong
+     * about a direction. Stated cost: a screen shorter than the floor —
+     * a 1024x600 netbook — stops being a wall, which is the honest reading
+     * of a code whose own floor was measured off the bottom at 768.
      */
-    const wallWidth = ((): boolean => {
-        const asked = parseWindowParams(location.search);
-        const px =
-            asked === undefined || asked.turn === 'none'
-                ? globalThis.innerWidth
-                : globalThis.innerHeight;
-        return (px ?? 0) >= WINDOW_MIN_PX;
-    })();
+    const wallWidth =
+        Math.min(globalThis.innerWidth ?? 0, globalThis.innerHeight ?? 0) >= WINDOW_MIN_PX;
     /**
      * The view as every reader must see it: wall-ness settled in ONE place.
      *
@@ -554,6 +559,20 @@ export function boot(
      */
     const settled = (view: StallView = state.view): StallView =>
         view.window === undefined || wallWidth ? view : { ...view, window: undefined };
+    /**
+     * The wall's own params, settled, without building a view.
+     *
+     * `settled` fixed the four readers that were found; a reviewer then
+     * listed six more still asking `state.view.window` directly — four
+     * inert only because their timers cannot arm, and two reachable: the
+     * paint literal's cursor block, and `refresh`'s `sameStall`, which made
+     * a page that is NOT a wall take the wall's refresh semantics and skip
+     * the opening repaint a reader pressed Retry for. "A reader that was
+     * missed" is the defect class of this whole round, so every one of them
+     * goes through here.
+     */
+    const wallParams = (view: StallView = state.view): WindowParams | undefined =>
+        wallWidth ? view.window : undefined;
     /**
      * The shop window's own state, and it lives here for `shopTab`'s reason:
      * the heartbeat below is a full `refresh()`, which rebuilds the view from
@@ -823,7 +842,7 @@ export function boot(
             payQuantity,
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
-            ...(state.view.window === undefined
+            ...(wallParams() === undefined
                 ? {}
                 : {
                       windowCursor: windowCursorAt,
@@ -1230,7 +1249,7 @@ export function boot(
                 // guard is what keeps the two paths from arming two timers:
                 // on the ordinary path `syncWindow` has already set it.
                 void refresh().finally(() => {
-                    if (state.view.window !== undefined && windowBeat === undefined) {
+                    if (wallParams() !== undefined && windowBeat === undefined) {
                         windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
                     }
                 });
@@ -1271,7 +1290,7 @@ export function boot(
      * list it is not on.
      */
     const advanceWindowCard = (): void => {
-        const params = state.view.window;
+        const params = wallParams();
         if (params === undefined) {
             return;
         }
@@ -1307,7 +1326,7 @@ export function boot(
         const room = strip.scrollHeight - strip.clientHeight;
         if (room <= 1 || strip.scrollTop >= room - 1) {
             strip.scrollTop = 0;
-            if (state.view.window?.show !== 'all') {
+            if (wallParams()?.show !== 'all') {
                 return;
             }
             // A list that fits reaches this on every tick; one that scrolls
@@ -1817,7 +1836,7 @@ export function boot(
         // so. `stallPath` is the canonicaliser both sides already go through.
         const here = identityOf(state.view);
         const sameStall =
-            state.view.window !== undefined &&
+            wallParams() !== undefined &&
             here !== undefined &&
             stallPath(here) === location.pathname;
         if (!sameStall) {
@@ -2932,7 +2951,7 @@ export function boot(
         document.addEventListener(
             kind,
             () => {
-                if (state.view.window !== undefined) {
+                if (wallParams() !== undefined) {
                     windowTouchedAt = Date.now();
                 }
             },

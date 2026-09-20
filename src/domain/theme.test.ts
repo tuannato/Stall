@@ -10,6 +10,7 @@ import {
     MIN_CONTRAST,
     NEO_CITY_THEME_ID,
     RURAL_THEME_ID,
+    SHIPPED_THEMES,
     contrastRatio,
     decodeTheme,
     isShippedThemeId,
@@ -41,6 +42,39 @@ describe('decodeTheme', () => {
         expect(t.id).toBe(DEFAULT_THEME_ID);
         expect(t.known).toBe(true);
         expect(t.bg).toEqual(DEFAULT_THEME.bg);
+    });
+});
+
+describe('a-state-pill-reads-on-every-palette-it-can-wear', () => {
+    /**
+     * The one pair nothing else arbitrates, measured here because the pixel
+     * pass cannot.
+     *
+     * `.sheet .sw-switch[aria-pressed='true'] .sw-switch-state` paints
+     * `--s-surface` ink on an opaque `--s-accent` ground. `legibleOn`
+     * corrects the accent against `--s-bg` and never against `--s-surface`,
+     * and `--s-surface` is never arbitrated as an ink at all — so nothing
+     * in the shipped pipeline holds this pair. It was on the probe's
+     * contrast list for one day and came off again: it reported 1.00:1 on
+     * four of six look-and-decoration combinations, a reading nobody has
+     * explained and which no declared colour in the component can produce
+     * (`layout/PROBE-RULES.md`).
+     *
+     * A withdrawn guard with a hand measurement in a markdown file is the
+     * sentence AGENTS §3 exists about. This is the measurement, in the
+     * suite, over every palette a seller can actually put that pill on.
+     */
+    it('keeps the pressed pill over the probe’s own floor on every shipped look', () => {
+        // The floor the pixel pass uses for the same kind of figure.
+        const FLOOR = 3;
+        for (const row of SHIPPED_THEMES) {
+            const vars = themeVars(decodeTheme(row.id));
+            const got = contrastRatio(rgbOf(vars['--s-surface']!), rgbOf(vars['--s-accent']!));
+            expect(
+                got,
+                `${row.label}: the pressed state pill reads ${got.toFixed(2)}:1`,
+            ).toBeGreaterThanOrEqual(FLOOR);
+        }
     });
 });
 

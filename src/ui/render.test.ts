@@ -402,9 +402,21 @@ describe('a-hosts-box-draws-no-conclusion-about-what-answered', () => {
         for (const kind of ['unreachable', 'plugin-missing'] as const) {
             const text = failureText(kind);
             expect(text, kind).toContain(copy.HOSTS_NOT_ATTRIBUTED);
-            // The load-bearing property: it may not assert that a node
-            // answered, because one of these two screens says none did.
-            expect(text.includes('answered with this'), kind).toBe(false);
+            /*
+             * The PROPERTY, not a blacklist of one dead literal — a
+             * reviewer's point, and a fair one: the first version pinned
+             * the absence of the previous wording's exact phrase, which
+             * "a node replied with this" walks straight through.
+             *
+             * What may never appear is the CLAIM. The sentence prints on
+             * the screen headlined "No index answered", and it prints on
+             * paths where nothing answered at all, so any form of
+             * "answered" in it is the collapse this box exists to avoid.
+             */
+            expect(
+                /answer/i.test(copy.HOSTS_NOT_ATTRIBUTED),
+                'the sentence may not turn on whether a node answered',
+            ).toBe(false);
         }
         // And the two screens still say their own different thing, which is
         // what the sentence must not step on.

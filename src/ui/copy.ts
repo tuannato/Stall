@@ -364,7 +364,13 @@ export const TRIED = 'tried';
  * plugin was gone network-wide (2026-09-20). Two invented rows are worth
  * less than one sentence that is true.
  *
- * **It says nothing about what answered**, which the first wording did.
+ * **It says nothing about what answered**, which took two goes. The first
+ * wording claimed one of them had; the second explained the mechanism —
+ * "a read stops at the first node that answers, so…" — whose own premise
+ * is still that one answered, on a screen headlined "No index answered"
+ * and on paths where nothing did (a critic, the same day, on the second
+ * try). What is left is the only thing true on every path: this page
+ * cannot name them.
  * `hostsBox` paints on the `unreachable` screen as well as the
  * plugin-missing one, and `UNREACHABLE_BODY` directly above it reads "No
  * index answered" — so "one of the nodes answered with this" put two
@@ -376,7 +382,7 @@ export const TRIED = 'tried';
  * about whether one happened.
  */
 export const HOSTS_NOT_ATTRIBUTED =
-    'A read stops at the first node that answers, so this page cannot say which of them were asked.';
+    'This page cannot say which of the nodes were asked for this read.';
 
 export const OPEN_ANOTHER_STALL = 'Open another stall';
 
