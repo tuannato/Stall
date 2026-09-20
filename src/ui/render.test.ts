@@ -175,6 +175,9 @@ const OFFER: StallOffer = {
 
 function handlers() {
     return {
+        onOpenShopWindow: vi.fn(),
+        onOpenStream: vi.fn(),
+        onOpenEmbed: vi.fn(),
         onOpenItem: vi.fn(),
     onItemHow: vi.fn(),
         onRetry: vi.fn(),
@@ -947,9 +950,11 @@ describe('the-share-card-carries-an-embed-snippet', () => {
                 fetch: { kind: 'empty' },
                 panel: 'studio',
                 stallName: 'Riverside & "Co" <x>',
+                // The code lives on its own sheet since round 16.
+                overlay: { kind: 'embed' },
             }),
         );
-        const card = root.querySelector('[data-role="studio-card-share"]') as HTMLElement;
+        const card = root.querySelector('[data-role="embed-sheet"]') as HTMLElement;
         const field = card.querySelector('[data-role="embed-code"]') as HTMLTextAreaElement;
         expect(field).not.toBeNull();
         expect(field.readOnly).toBe(true);
@@ -990,16 +995,25 @@ describe('the-studio-is-three-cards-and-a-preference', () => {
         expect(name.querySelector('[data-role="studio-open-publish"]')?.textContent).toBe(copy.STUDIO_CHANGE);
         expect(name.querySelector('[data-role="studio-look-row"]')?.textContent).toContain('Modern');
         const share = body.querySelector('[data-role="studio-card-share"]')!;
+        expect(share.querySelector('.scard-t')?.textContent).toBe(copy.STUDIO_CARD_SHARE);
         expect(share.querySelector('[data-role="copy-link"]')).not.toBeNull();
-        expect(share.querySelector('[data-role="open-poster"]')).not.toBeNull();
-        const obs = share.querySelector('details[data-role="obs-guide-fold"]') as HTMLDetailsElement;
-        expect(obs, 'the OBS recipe folds under Share').not.toBeNull();
-        expect(obs.open).toBe(false);
-        // Its summary wears the card's primary-control dress, so a streamer
-        // finds it; it is still a fold, still closed.
-        expect(obs.classList.contains('fold-cta')).toBe(true);
-        expect(obs.querySelector('[data-role="obs-guide"]')).not.toBeNull();
-        expect(obs.textContent).toContain(OBS_GUIDE_TITLE);
+        // Four doors in one dress (round 16), each opening its own sheet; the
+        // recipe and the embed code left the card with them.
+        const doors = [...share.querySelectorAll('[data-role="studio-tools"] > button.tool')];
+        expect(doors.map((door) => door.getAttribute('data-role'))).toEqual([
+            'open-poster',
+            'studio-open-window',
+            'studio-open-stream',
+            'studio-open-embed',
+        ]);
+        expect(doors.map((door) => door.querySelector('.tool-t')?.textContent)).toEqual([
+            copy.POSTER_OPEN,
+            copy.WINDOW_OPEN,
+            OBS_GUIDE_TITLE,
+            copy.STUDIO_TOOL_EMBED,
+        ]);
+        expect(share.querySelector('[data-role="obs-guide"]')).toBeNull();
+        expect(share.querySelector('[data-role="embed-code"]')).toBeNull();
         const pref = body.querySelector('.studio-browser')!;
         expect(pref.querySelector('[data-role="studio-default-stall"]')).not.toBeNull();
         expect(pref.textContent).toContain(STUDIO_DEFAULT_HINT);
@@ -5358,18 +5372,15 @@ describe('the-stream-card-is-the-rest-state', () => {
                 h,
             );
             const open = root.querySelector('[data-role="open-poster"]') as HTMLButtonElement;
-            expect(open.textContent).toBe('Poster & images');
+            expect(open.querySelector('.tool-t')?.textContent).toBe('Poster & images');
             open.click();
             const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
             expect(sheet.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
                 'Poster & images',
             );
-            const format = sheet.querySelector(
-                '[data-role="poster-format"]',
-            ) as HTMLSelectElement;
-            expect(format, 'format chooser').not.toBeNull();
-            format.value = 'stream';
-            format.dispatchEvent(new Event('change'));
+            const strip = sheet.querySelector('[data-role="poster-formats"]');
+            expect(strip, 'format chooser').not.toBeNull();
+            (root.querySelector('[data-role="poster-format-stream"]') as HTMLButtonElement).click();
 
             const canvas = root.querySelector(
                 '[data-role="poster-png"] canvas',
@@ -5467,21 +5478,13 @@ describe('every-png-format-carries-the-qr-and-the-scan-line', () => {
                 h,
             );
             (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-            const chooser = root.querySelector(
-                '[data-role="poster-format"]',
-            ) as HTMLSelectElement;
-            expect([...chooser.options].map((o) => o.value)).toEqual([
-                'print',
-                'square',
-                'story',
-                'stream',
-            ]);
+            const formatsOf = (): string[] =>
+                [...root.querySelectorAll('[data-role="poster-formats"] .fmt')].map(
+                    (b) => b.getAttribute('data-role')!.replace('poster-format-', ''),
+                );
+            expect(formatsOf()).toEqual(['print', 'square', 'story', 'stream']);
             for (const kind of ['square', 'story', 'stream'] as const) {
-                const format = root.querySelector(
-                    '[data-role="poster-format"]',
-                ) as HTMLSelectElement;
-                format.value = kind;
-                format.dispatchEvent(new Event('change'));
+                (root.querySelector(`[data-role="poster-format-${kind}"]`) as HTMLButtonElement).click();
                 const png = root.querySelector('[data-role="poster-png"]') as HTMLElement;
                 const canvas = png.querySelector('canvas') as HTMLCanvasElement;
                 expect(canvas, kind).not.toBeNull();
@@ -5573,10 +5576,9 @@ describe('the-poster-is-painted-from-the-overlay-state', () => {
             );
             const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
             expect(sheet, 'the sheet mounts from the view, not from a click').not.toBeNull();
-            const format = sheet.querySelector(
-                '[data-role="poster-format"]',
-            ) as HTMLSelectElement;
-            expect(format.value).toBe('story');
+            expect(
+                sheet.querySelector('[data-role="poster-format-story"]')?.getAttribute('aria-pressed'),
+            ).toBe('true');
             expect(sheet.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe(
                 'story',
             );
@@ -10470,43 +10472,55 @@ describe('a-copied-control-keeps-its-icon', () => {
  * measure the screens it paints, and a control that loses its floor on a
  * screen nobody fixtures is exactly the one that goes unmeasured.
  */
-describe('the-shop-window-door-wears-the-stream-recipes-dress', () => {
+describe('the-four-doors-wear-one-dress', () => {
     /**
-     * The Share card offers two doors onto another screen — the stream
-     * recipe and the shop window — and the shop window shipped as
-     * `mini another`, the secondary dress, so it read as the lesser of the
-     * two (owner, 2026-09-19: "cho nó bằng và nổi bật như nút Stream
-     * overlay"). Two blocks that agree today is how they come apart, so
-     * they share ONE declaration and this is what fails when somebody
-     * splits them again.
+     * Round 16: the poster, the shop window, the stream overlay and the
+     * embed are four doors off one card, and they wear ONE rule — `.tool` —
+     * so none can come to read as the first or the second choice (the
+     * 2026-09-19 ruling for two doors, kept for four). No door carries
+     * `mini`: every look re-states `.t-* .mini` at (0,2,0), which would
+     * out-rank the door's own class; the rule declares the 44px floor.
      */
-    it('is dressed by the same rule as the stream recipe summary', () => {
-        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(
-            /\/\*[\s\S]*?\*\//g,
-            '',
+    it('paints four buttons with the one class and no other', () => {
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), panel: 'studio' }),
         );
-        const rule = css
-            .split('}')
-            .map((block) => block.split('{'))
-            .find(([selector]) => (selector ?? '').includes('.fold-cta > .fold-sum'));
-        expect(rule, 'the stream recipe summary still has a dress rule').toBeDefined();
-        expect(rule![0]).toContain('.studio-window');
-        // The half that makes it read as a primary control, not a pill.
-        expect(rule![1]).toMatch(/background:\s*var\(--s-accent\)/);
-        expect(rule![1]).toMatch(/min-height:\s*48px/);
+        const doors = [...root.querySelectorAll('[data-role="studio-tools"] > *')];
+        expect(doors).toHaveLength(4);
+        for (const door of doors) {
+            expect(door.tagName).toBe('BUTTON');
+            expect(door.className.split(/\s+/)).toEqual(['tool']);
+            expect(door.querySelector('.tool-t')).not.toBeNull();
+            expect(door.querySelector('.tool-lede')).not.toBeNull();
+            expect(door.querySelector('svg.ic')).not.toBeNull();
+        }
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const rule = css.match(/\n\.tool\s*\{([^}]+)\}/);
+        expect(rule, 'one rule dresses every door').not.toBeNull();
+        expect(rule![1]).toMatch(/min-height:\s*44px/);
+        expect(css).not.toMatch(/\.studio-window/);
     });
 
-    it('carries no secondary dress that a look would out-rank', () => {
+    it('each door opens its own sheet, and nothing on the card composes anything', () => {
+        const h = handlers();
         const root = document.createElement('div');
-        renderStall(root, idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio' }), {
-            ...handlers(),
-            onOpenShopWindow: vi.fn(),
-        });
-        const share = root.querySelector('[data-role="studio-card-share"]')!;
-        const door = share.querySelector('[data-role="studio-open-window"]');
-        expect(door, 'the shop window door paints on the Share card').not.toBeNull();
-        // `.t-* .mini` is (0,2,0) and would beat this button's own class.
-        expect(door!.className.split(/\s+/)).toEqual(['studio-window']);
+        renderStall(
+            root,
+            idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), panel: 'studio' }),
+            h,
+        );
+        (root.querySelector('[data-role="studio-open-stream"]') as HTMLButtonElement).click();
+        expect(h.onOpenStream).toHaveBeenCalledTimes(1);
+        (root.querySelector('[data-role="studio-open-embed"]') as HTMLButtonElement).click();
+        expect(h.onOpenEmbed).toHaveBeenCalledTimes(1);
+        (root.querySelector('[data-role="studio-open-window"]') as HTMLButtonElement).click();
+        expect(h.onOpenShopWindow).toHaveBeenCalledTimes(1);
+        (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
+        expect(h.onOpenPoster).toHaveBeenCalledTimes(1);
+        const card = root.querySelector('[data-role="studio-card-share"]')!;
+        for (const a of card.querySelectorAll('a')) {
+            expect(a.getAttribute('href') ?? '').not.toMatch(/^ecash:|op_return_raw/);
+        }
     });
 });
 
@@ -11880,6 +11894,18 @@ describe('the-mount-table-has-two-predicates', () => {
         expect(holdsLivePaint(idle)).toBe(false);
     });
 
+    it('mounts the stream and embed sheets and lets the live paint through them', () => {
+        for (const [kind, role] of [
+            ['stream', 'stream-sheet'],
+            ['embed', 'embed-sheet'],
+        ] as const) {
+            const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay: { kind } });
+            expect(overlayMounts(view), kind).toBe(true);
+            expect(holdsLivePaint(view), kind).toBe(false);
+            expect(paint(view).root.querySelector(`[data-role="${role}"]`), kind).not.toBeNull();
+        }
+    });
+
     it('mounts nothing on a broadcast, whatever the kind', () => {
         const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
             overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
@@ -12399,15 +12425,15 @@ describe('the-poster-sheet-offers-a-tag-per-quoted-item', () => {
         try {
             drivePoster(root, tagView(), h);
             (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-            const chooser = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
-            expect([...chooser.options].map((o) => o.value)).toContain('tag');
-            chooser.value = 'tag';
-            chooser.dispatchEvent(new Event('change'));
+            const tagButton = root.querySelector('[data-role="poster-format-tag"]') as HTMLButtonElement;
+            expect(tagButton, 'the tag is offered').not.toBeNull();
+            tagButton.click();
 
             const dialog = root.querySelector('[role="dialog"]') as HTMLElement;
             expect(dialog.getAttribute('data-format')).toBe('tag');
-            const format = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
-            expect(format.value).toBe('tag');
+            expect(
+                root.querySelector('[data-role="poster-format-tag"]')?.getAttribute('aria-pressed'),
+            ).toBe('true');
             const pick = root.querySelector('[data-role="poster-item"]') as HTMLSelectElement;
             expect(pick, 'the item picker').not.toBeNull();
             expect([...pick.options].map((o) => o.value)).toEqual([TOKEN_ID]);
@@ -12459,13 +12485,11 @@ describe('the-poster-sheet-offers-a-tag-per-quoted-item', () => {
         try {
             drivePoster(root, tagView({ prices: undefined }), h);
             (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-            const chooser = root.querySelector('[data-role="poster-format"]') as HTMLSelectElement;
-            expect([...chooser.options].map((o) => o.value)).toEqual([
-                'print',
-                'square',
-                'story',
-                'stream',
-            ]);
+            expect(
+                [...root.querySelectorAll('[data-role="poster-formats"] .fmt')].map((b) =>
+                    b.getAttribute('data-role')!.replace('poster-format-', ''),
+                ),
+            ).toEqual(['print', 'square', 'story', 'stream']);
         } finally {
             root.remove();
         }
@@ -12487,7 +12511,7 @@ describe('a-tag-with-no-item-is-not-a-blank-page', () => {
             tagView({ prices: undefined, overlay: { kind: 'poster', format: 'tag' } }),
         );
         expect(root.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe('print');
-        expect((root.querySelector('[data-role="poster-format"]') as HTMLSelectElement).value).toBe('print');
+        expect(root.querySelector('[data-role="poster-format-print"]')?.getAttribute('aria-pressed')).toBe('true');
         expect(root.querySelector('.poster-tag')).toBeNull();
         expect(root.querySelector('.poster-page .poster-name')?.textContent).toBe('Riverside Goods');
         expect(root.querySelector('[data-role="poster-item"]')).toBeNull();
@@ -12500,7 +12524,8 @@ describe('a-tag-with-no-item-is-not-a-blank-page', () => {
         );
         expect(root.querySelector('[role="dialog"]')?.getAttribute('data-format')).toBe('print');
         expect(root.querySelector('.poster-tag')).toBeNull();
-        expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+        // Scoped to the poster: the studio's own rows may print a quote behind it.
+        expect(root.querySelector('[data-role="poster"] [data-role="seller-price"]')).toBeNull();
     });
 
     it('an unnamed tag is the first quoted item, and a named one is that item', () => {
@@ -14154,5 +14179,111 @@ describe('the-paste-box-types-example-addresses-then-rests', () => {
             vi.useRealTimers();
             resetDoorTyping();
         }
+    });
+});
+
+describe('the-name-card-reads-the-whole-record-back', () => {
+    /**
+     * Round 16: the announcement under its chip, the look, and what is
+     * worn — in three states. `worn` is empty both when nothing is worn and
+     * when the holdings read never answered, so the row reads the holdings'
+     * own answer first (§4: an empty answer and no answer are two things).
+     */
+    it('paints the announcement, the look and the worn set', () => {
+        const worn = SHIPPED_ATTACHMENTS.filter((row) => row.themeId === DEFAULT_THEME_ID).slice(0, 2);
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                panel: 'studio',
+                announcement: 'Back on the 10th — orders ship then',
+                worn,
+                heldTokens: new Set(worn.flatMap((row) => (row.tokenId === undefined ? [] : [row.tokenId]))),
+            }),
+        );
+        const card = root.querySelector('[data-role="studio-card-name"]')!;
+        const ann = card.querySelector('[data-role="studio-announcement-row"]')!;
+        expect(ann.textContent).toContain(copy.ANNOUNCEMENT_CHIP);
+        expect(ann.textContent).toContain('Back on the 10th — orders ship then');
+        const wearing = card.querySelector('[data-role="studio-wearing-row"]')!;
+        expect([...wearing.querySelectorAll('.wchip')].map((c) => c.textContent)).toEqual(worn.map((row) => row.label));
+        expect(card.textContent).toContain(copy.DECOR_LEDE);
+    });
+
+    it('says nothing is worn only once the holdings answered, and not known before', () => {
+        const known = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', worn: [], heldTokens: new Set() })).root;
+        expect(known.querySelector('[data-role="studio-wearing-row"]')?.textContent).toContain(copy.STUDIO_WEARING_NONE);
+        const unknown = paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', worn: [] })).root;
+        const row = unknown.querySelector('[data-role="studio-wearing-row"]')!;
+        expect(row.textContent).toContain(copy.DECOR_ROW_UNKNOWN);
+        expect(row.textContent).not.toContain(copy.STUDIO_WEARING_NONE);
+        expect(unknown.querySelector('[data-role="studio-announcement-row"]')).toBeNull();
+    });
+});
+
+describe('a-studio-row-does-not-call-an-unread-book-not-listed', () => {
+    /**
+     * The state line (round 16) is derived from what this load read: the
+     * book only when it answered, the quote through `quoteFigure` under its
+     * own role, the words and the shelf from the records. Over a failed
+     * book a row says nothing about listing — never "not listed", which
+     * would be our failure printed as the seller's inventory (§4).
+     */
+    const QUOTED = '33'.repeat(32);
+    it('names the listing, the quote, the words and the shelf on a read book', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                // A fungible meta: `isPriceable` is affirmative, and TEA carries no type.
+                tokens: new Map([[TOKEN_ID, BEANS], [QUOTED, { ...TEA, tokenId: QUOTED, tokenType: BEANS.tokenType }]]),
+                descriptions: new Map([[TOKEN_ID, 'Dark roast']]),
+                shelves: new Map([[TOKEN_ID, 'Morning roast']]),
+                prices: new Map([[QUOTED, { code: 'usd', exponent: 2, amount: 500n }]]),
+                genesis: new Map([[QUOTED, 'attributed']]),
+                panel: 'studio',
+            }),
+        );
+        const rows = [...root.querySelectorAll('[data-role="studio-item"]')];
+        const beans = rows.find((row) => row.getAttribute('data-token-id') === TOKEN_ID)!;
+        const state = beans.querySelector('[data-role="studio-item-state"]')!;
+        expect(state.textContent).toContain(copy.STUDIO_STATE_LISTED);
+        expect(state.textContent).toContain(copy.STUDIO_STATE_WORDS);
+        expect(state.textContent).toContain(`${copy.STUDIO_STATE_SHELF}: Morning roast`);
+        expect(state.textContent).not.toContain(copy.STUDIO_STATE_NO_WORDS);
+        const tea = rows.find((row) => row.getAttribute('data-token-id') === QUOTED)!;
+        const teaState = tea.querySelector('[data-role="studio-item-state"]')!;
+        expect(teaState.textContent).not.toContain(copy.STUDIO_STATE_LISTED);
+        const figure = teaState.querySelector('[data-role="seller-price"]')!;
+        expect(figure.textContent).toBe('$5.00');
+        expect(teaState.textContent).toContain(copy.STUDIO_STATE_NO_WORDS);
+        expect(teaState.textContent).not.toMatch(/NFT|not listed/i);
+    });
+
+    it('says nothing about listing over a book that never answered', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'plugin-missing', triedAtMs: 0, hosts: [] } as unknown as StallView['fetch'],
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                descriptions: new Map([[TOKEN_ID, 'Dark roast']]),
+                panel: 'studio',
+            }),
+        );
+        const state = root.querySelector('[data-role="studio-item-state"]')!;
+        expect(state.textContent).not.toContain(copy.STUDIO_STATE_LISTED);
+        expect(state.textContent).not.toMatch(/not listed/i);
+        expect(state.textContent).toContain(copy.STUDIO_STATE_WORDS);
+    });
+
+    it('says a quote it cannot show is one, rather than dropping it', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                tokens: new Map([[QUOTED, { ...TEA, tokenId: QUOTED, tokenType: BEANS.tokenType }]]),
+                prices: new Map([[QUOTED, { code: 'zzz', exponent: 2, amount: 500n }]]),
+                panel: 'studio',
+            }),
+        );
+        const state = root.querySelector('[data-role="studio-item-state"]')!;
+        expect(state.textContent).toContain(copy.STUDIO_STATE_QUOTE_UNSHOWN);
+        expect(state.querySelector('[data-role="seller-price"]')).toBeNull();
     });
 });

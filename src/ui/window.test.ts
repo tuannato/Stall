@@ -335,7 +335,7 @@ describe('a-shop-window-mounts-no-sheet', () => {
      */
     it('refuses the mount and the paint hold, on the table and on the screen', () => {
         const onWindow = windowView({ show: 'all', mode: 'cycle' });
-        for (const kind of ['pay', 'describe', 'publish-name', 'poster'] as const) {
+        for (const kind of ['pay', 'describe', 'publish-name', 'poster', 'stream', 'embed'] as const) {
             const view = { ...onWindow, overlay: { kind } } as unknown as StallView;
             expect(overlayMounts(view), `${kind} mounts`).toBe(false);
             expect(holdsLivePaint(view), `${kind} holds`).toBe(false);
@@ -1218,5 +1218,32 @@ describe('a-screen-hung-sideways-turns-itself-and-the-layout-follows', () => {
         expect(pressed('none'), 'a screen that needs nothing is the default').toBe('true');
         expect(pressed('cw')).toBe('false');
         expect(pressed('ccw')).toBe('false');
+    });
+});
+
+describe('the-shop-window-sheet-groups-its-controls-and-copies-the-link', () => {
+    /**
+     * Round 16: the same controls, four groups — what the screen shows, a
+     * preview that follows the mode in words, the lock, and opening it —
+     * and a copy control beside the two ways to open, with the share
+     * link's own clipboard fallback.
+     */
+    it('paints the four groups in order and a preview caption that follows the pickers', () => {
+        const view = windowView({ show: 'all', mode: 'cycle' });
+        const root = document.createElement('div');
+        renderStall(root, { ...view, window: undefined, overlay: { kind: 'shop-window' } } as StallView, handlers());
+        const groups = [...root.querySelectorAll('[data-role^="window-group-"]')].map((g) => g.getAttribute('data-role'));
+        expect(groups).toEqual(['window-group-show', 'window-group-preview', 'window-group-lock', 'window-group-open']);
+        const cap = root.querySelector('[data-role="window-preview-cap"]')!;
+        expect(cap.textContent).toContain('Cycle');
+        expect(cap.textContent).toContain('All');
+        (root.querySelector('[data-role="window-mode-browse"]') as HTMLButtonElement).click();
+        expect(cap.textContent).toContain('Browse');
+        expect(root.querySelector('[data-role="window-preview"]')?.getAttribute('data-mode')).toBe('browse');
+        const copyBtn = root.querySelector('[data-role="shop-window-copy"]')!;
+        expect(copyBtn.closest('[data-role="window-group-open"]')).not.toBeNull();
+        expect(copyBtn.querySelector('svg.ic')).not.toBeNull();
+        const link = root.querySelector('[data-role="shop-window-link"]') as HTMLInputElement;
+        expect(link.value).toContain('mode=browse');
     });
 });

@@ -678,6 +678,99 @@
  * A shop window is the one surface where a reader cannot press anything, so a
  * reader who needs stillness has no way to ask for it beyond this.
  */
+/*
+ * The composing sheet's groups (round 16): one box per job, a small
+ * uppercase title each, on the sheet's own ground. The preview is a
+ * schematic of the wall — a dark frame, a pale card, a code — that follows
+ * the mode by attribute; it never renders the stall, which the link does.
+ */
+.sw-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sw-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: var(--s-radius);
+}
+
+.sw-group .fine {
+    margin: 0;
+}
+
+.sw-gt {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+}
+
+.sw-preview {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    aspect-ratio: 16 / 9;
+    background: #101318;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.sw-pv-wall {
+    position: absolute;
+    inset: 8%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6%;
+    padding: 6%;
+    background: var(--s-bg);
+    border-radius: 6px;
+}
+
+.sw-pv-wall i {
+    display: block;
+    background: var(--s-surface);
+    border: var(--s-card-border);
+    border-radius: 4px;
+}
+
+.sw-pv-wall .sw-pv-qr {
+    /* (0,2,0): the wall's own `i` rule paints the surface at (0,1,1). */
+    background:
+        linear-gradient(#111, #111) center / 60% 60% no-repeat,
+        #fff;
+}
+
+.sw-preview[data-mode='browse'] .sw-pv-wall {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 18%;
+    gap: 4%;
+    overflow: hidden;
+}
+
+.sw-preview[data-mode='browse'] .sw-pv-qr,
+.sw-preview[data-code='false'] .sw-pv-qr {
+    display: none;
+}
+
+.sw-preview-cap {
+    text-align: center;
+}
+
+@media (min-width: 680px) {
+    .sw-sheet {
+        max-width: 640px;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .stall.shop-window [data-marquee] > .mq-run {
         animation: none;

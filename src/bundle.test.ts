@@ -151,7 +151,13 @@ describe('served-weight-has-a-ceiling', () => {
     // for a whole rail. Deliberate, and the number to watch is the delta this
     // docblock records rather than the ceiling, which is only ever the alarm.
     // The 85 KB subset still fails, which is what the alarm is for.
-    const CEILING_BYTES = 840_000;
+    //
+    // Measured 842,838 after round 16 (2026-09-20): the door's deck and
+    // tiles, the studio's four doors and the two sheets that took the recipe
+    // and the embed code off the card — about 12 KB over the previous
+    // reading, most of it the door. Raised to 860,000 as the deliberate diff
+    // this docblock asks for; the delta is the number, the ceiling the alarm.
+    const CEILING_BYTES = 860_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

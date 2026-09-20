@@ -1062,11 +1062,7 @@ describe('the-poster-survives-a-live-repaint', () => {
 
         (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
         (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-        const chooser = root.querySelector(
-            '[data-role="poster-format"]',
-        ) as HTMLSelectElement;
-        chooser.value = 'story';
-        chooser.dispatchEvent(new Event('change'));
+        (root.querySelector('[data-role="poster-format-story"]') as HTMLButtonElement).click();
         expect(
             root.querySelector('[role="dialog"]')?.getAttribute('data-format'),
         ).toBe('story');
@@ -1082,8 +1078,8 @@ describe('the-poster-survives-a-live-repaint', () => {
             'and the format the seller chose is still the one on it',
         ).toBe('story');
         expect(
-            (still.querySelector('[data-role="poster-format"]') as HTMLSelectElement).value,
-        ).toBe('story');
+            still.querySelector('[data-role="poster-format-story"]')?.getAttribute('aria-pressed'),
+        ).toBe('true');
         expect(
             painted.view?.fetch?.kind,
             'the paint waited; the last frame is still the empty stall',
@@ -1132,11 +1128,7 @@ describe('the-poster-survives-a-fiat-answer', () => {
 
         (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
         (root.querySelector('[data-role="open-poster"]') as HTMLButtonElement).click();
-        const chooser = root.querySelector(
-            '[data-role="poster-format"]',
-        ) as HTMLSelectElement;
-        chooser.value = 'story';
-        chooser.dispatchEvent(new Event('change'));
+        (root.querySelector('[data-role="poster-format-story"]') as HTMLButtonElement).click();
         const sheet = root.querySelector('[data-role="poster"]') as HTMLElement;
         expect(sheet, 'Story is open before the rate lands').not.toBeNull();
         expect(

@@ -193,6 +193,15 @@ export type Overlay =
      * screen to say why.
      */
     | { kind: 'shop-window' }
+    /**
+     * The stream recipe and the embed code as sheets (round 16): each is a
+     * tool off the Studio's "Put it somewhere" card. Neither holds the live
+     * paint — the recipe's pickers live in module state and the embed code
+     * is readonly — so a socket tick rebuilds them under a seller and loses
+     * nothing typed.
+     */
+    | { kind: 'stream' }
+    | { kind: 'embed' }
     | { kind: 'publish-name' }
     /** One token's own record: words, shelf, quote. `tokenId` preselects. */
     | { kind: 'describe'; tokenId?: string }

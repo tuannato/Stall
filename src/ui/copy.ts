@@ -438,7 +438,42 @@ export const STUDIO_NO_NAME = 'No name published yet';
 export const STUDIO_NO_TAGLINE = 'No tagline';
 export const STUDIO_CARD_ITEMS = 'Items & prices';
 export const STUDIO_DESCRIBE_ROW = 'Describe & price';
-export const STUDIO_CARD_SHARE = 'Share';
+/**
+ * The third card is every way this stall is put somewhere else (round 16,
+ * 2026-09-20): the link first, then four doors in one dress — poster, shop
+ * window, stream overlay, embed. Each door opens its own sheet; nothing on
+ * the card composes anything.
+ */
+export const STUDIO_CARD_SHARE = 'Put it somewhere';
+/** The four doors' names and one-line ledes; the poster's and the window's ledes are theirs. */
+export const STUDIO_TOOL_STREAM_LEDE =
+    'A card with one item and a QR on your live video, as an OBS Browser Source.';
+export const STUDIO_TOOL_EMBED = 'Embed on your site';
+export const STUDIO_TOOL_EMBED_LEDE =
+    'One line of HTML: a picture of this look’s card that opens the stall.';
+/**
+ * The name card reads the whole record back (round 16): the announcement
+ * under its chip, the look, and the decorations worn — the same set the
+ * footer credit prints. "Wearing" is said only once the holdings read has
+ * answered; before that `DECOR_ROW_UNKNOWN` (the §4 rule: an empty answer
+ * and no answer are two things).
+ */
+export const STUDIO_ANNOUNCEMENT_ROW = 'Announcement';
+export const STUDIO_WEARING_ROW = 'Wearing';
+export const STUDIO_WEARING_NONE = 'Nothing worn';
+/**
+ * A row's state, derived from what this load read and nothing else: listed
+ * on Agora (from the book, said only when the book answered — an unread
+ * book says nothing, never "not listed"), the quote as `quoteFigure` prints
+ * it, words, shelf. A quote this page cannot paint (a unit it does not
+ * write, a genesis it could not read) is said as that, never dropped.
+ */
+export const STUDIO_STATE_LISTED = 'Listed on Agora';
+export const STUDIO_STATE_QUOTE = 'Quote';
+export const STUDIO_STATE_QUOTE_UNSHOWN = 'Quote this page cannot show';
+export const STUDIO_STATE_WORDS = 'Words';
+export const STUDIO_STATE_SHELF = 'Shelf';
+export const STUDIO_STATE_NO_WORDS = 'No words yet';
 /** The fold under a sheet's primary control: everything the record can also carry. */
 export const SHEET_MORE = 'More';
 /** The items card when the describe set is empty, and the way in for a token this stall minted but never listed. */
@@ -706,6 +741,15 @@ export const POSTER_FORMAT_STREAM = 'Stream card';
  * reading a walk that failed.
  */
 export const POSTER_FORMAT_TAG = 'Item tag';
+/** The poster sheet's groups (round 16): a strip of formats, then the page and its one control. */
+export const POSTER_GROUP_FORMAT = 'Format';
+export const POSTER_FORMAT_WHY =
+    'Print gives you an A4 page from this browser. The three image formats are saved on this device, in this look. An item tag needs a quoted item and carries no amount.';
+export const POSTER_GROUP_PAGE = 'This page';
+export const POSTER_PAGE_WHY =
+    'Black-on-white code with its quiet zone, your name, your tagline, the whole link. What you see here is what the printer gets.';
+export const POSTER_PRINT_TIP =
+    'Turn on “background graphics” in the print dialog if the code comes out without its box.';
 export const POSTER_ITEM_LABEL = 'Which item';
 export const TAG_SCAN = 'Scan to open this item';
 export const TAG_SNAPSHOT = 'This paper is a snapshot — scan for the quote as it stands.';
@@ -1017,6 +1061,12 @@ export const PUBLISH_QR_LEDE =
 export const SHARE_EMBED_LEDE =
     'To put this stall on a site of your own, paste this where the site takes HTML. The picture is this look\u2019s card and does not change; the link is what opens the stall.';
 export const COPY_EMBED = 'Copy the code';
+/** The embed sheet (round 16): the picture a visitor sees, then the code. */
+export const EMBED_PICTURE = 'What your visitors see';
+export const EMBED_PICTURE_NOTE =
+    'A still picture that opens your stall when pressed. It is not a live shop — it never shows an item or a price.';
+export const EMBED_CODE = 'The code';
+export const EMBED_FINE = 'One line of HTML, nothing else: no script, no frame, nothing that runs on your site.';
 export const EMBED_COPIED = 'Code copied';
 export const COPY_EMBED_FALLBACK = 'Select and copy this code.';
 /** The picture's alt text: the stall's name when it has one. */
@@ -1852,6 +1902,13 @@ export const WINDOW_LOCK_WHY =
 export const WINDOW_LINK_LABEL = 'Link';
 export const WINDOW_LINK_WHY =
     'Bookmark this on the shop’s own computer to open the same screen tomorrow.';
+/** The sheet's groups (round 16): what the screen shows, a preview, the lock, then open it. */
+export const WINDOW_GROUP_SHOW = 'What the screen shows';
+export const WINDOW_GROUP_PREVIEW = 'Preview';
+export const WINDOW_GROUP_OPEN = 'Open it';
+/** The preview's caption: which rail, which mode, and what that means on the wall. */
+export const windowPreviewCaption = (show: string, mode: string, cycle: boolean): string =>
+    `${mode} · ${show} · ${cycle ? 'one card and its code, 20 s each' : 'the whole catalogue, one code for the shop'}`;
 export const WINDOW_OPEN_HERE = 'Open here';
 export const WINDOW_OPEN_TAB = 'Open in a new tab';
 

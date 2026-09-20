@@ -1419,6 +1419,13 @@ const CONTRAST_TEXT = [
     '.door-more',
     '.pinned-name',
     '.deck-cap',
+    // The Studio's four doors and a row's state line (round 16): the door's
+    // name and its one line sit on the surface, the state under a name on
+    // the card; both are new ink on a public panel every look dresses.
+    '.tool-t',
+    '.tool-lede',
+    '.tstate',
+    '.wchip',
     /*
      * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was
      * added for exactly this class of defect and stopped at the Activity

@@ -790,6 +790,22 @@ export const SCREENS: Record<string, StallView> = {
      * on each look's sheet ground. Not the state pill: it was tried as a
      * target the same day and withdrawn — see `CONTRAST_TEXT`.
      */
+    /*
+     * The two tool sheets of round 16, over the shop with offers and a quote
+     * so the recipe has a stall to link and the embed has a name to alt. Both
+     * hold nothing; the probe measures their figures and controls like any
+     * other sheet.
+     */
+    'stream-sheet': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        overlay: { kind: 'stream' },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+    }),
+    'embed-sheet': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        overlay: { kind: 'embed' },
+    }),
     'shop-window-sheet': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         overlay: { kind: 'shop-window' },
@@ -1033,6 +1049,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-moved',
     'pay-dust',
     'item-quote',
+    // The two tool sheets: the same sheet shape over the same shop; the
+    // decoration interactions they could stage are `offers`' again.
+    'stream-sheet',
+    'embed-sheet',
 ]);
 
 /**
@@ -1049,6 +1069,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
  * be read in one place, and next to the reason each name is on it.
  */
 export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
+    // The embed sheet carries no money figure and no ink the record sheets'
+    // hex boxes and `pub` lines do not already put on the same ground; the
+    // contrast pass is 140 s of a 200 s ceiling, so this one is geometry.
+    'embed-sheet',
     'nothing-quoted',
     'quotes-failed',
     'quotes-truncated',

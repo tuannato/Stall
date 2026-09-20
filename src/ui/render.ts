@@ -107,7 +107,7 @@ import { stallMark } from './brand';
 import * as copy from './copy';
 import { renderBroadcastView } from './broadcast';
 import { renderShopWindow, shopWindowSheet } from './window';
-import { OBS_GUIDE_TITLE, paintObsGuide } from './obsGuide';
+import { OBS_GUIDE_TITLE, paintObsGuide, OBS_GUIDE_LEDE } from './obsGuide';
 import {
     drawPoster,
     posterSpec,
@@ -137,6 +137,9 @@ export type StallHandlers = {
      * itself is reached by the link that sheet composes.
      */
     onOpenShopWindow?: () => void;
+    /** The stream recipe and the embed code, each its own sheet (round 16). */
+    onOpenStream?: () => void;
+    onOpenEmbed?: () => void;
     /** Open one token's face on one rail — the expander raised to a surface. */
     onOpenItem: (tokenId: string, rail: 'listings' | 'quotes') => void;
     /** The item face's fold was opened or closed: state only, no paint. */
@@ -657,6 +660,10 @@ export function renderStall(
         } else if (view.overlay.kind === 'poster') {
             stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
+        } else if (view.overlay.kind === 'stream') {
+            stall.append(sheetOverlay(streamSheet(view, handlers), 'stream-sheet', handlers));
+        } else if (view.overlay.kind === 'embed') {
+            stall.append(sheetOverlay(embedSheet(view, handlers), 'embed-sheet', handlers));
         } else if (view.overlay.kind === 'shop-window') {
             stall.classList.add('has-sheet');
             stall.append(
@@ -4683,6 +4690,12 @@ const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }
     pay: { mounts: true, holds: true },
     poster: { mounts: true, holds: true },
     'shop-window': { mounts: true, holds: true },
+    // Neither holds anything typed: the recipe's pickers are module state
+    // (`obsGuide.ts`) and the embed code is readonly — the item face's rule.
+    // A copy field carries a focus key so a tick under a seller's finger
+    // puts the focus back.
+    stream: { mounts: true, holds: false },
+    embed: { mounts: true, holds: false },
 };
 
 /** This app's one breakpoint, and the shop window's own floor. */
@@ -6604,6 +6617,10 @@ function paintStudio(
     const body = el('main', 'stall-body studio');
     // The honest qualifier the dock label cannot carry.
     body.append(el('p', 'fine studio-lede', copy.STUDIO_LEDE));
+    // The studio reads a record back to its author, so it says when it
+    // could not: unreadable, unaddressed, truncated, an unknown look — the
+    // same notes the shop paints (round 16; they were the shop's alone).
+    settingsNotes(body, view);
     /*
      * Both launchers are gated on the address, and on nothing else:
      * `overlayMounts` refuses an overlay with no address, so a control offered
@@ -6624,14 +6641,29 @@ function paintStudio(
         name.head.append(change);
     }
     name.card.append(nameBlock(view.stallName ?? copy.STUDIO_NO_NAME, view.tagline ?? copy.STUDIO_NO_TAGLINE));
+    // The rest of the record, read back (round 16): the announcement under
+    // its chip, the look, and what is worn. One card, one record, one
+    // "Change" — the rack stays inside the sheet that signs it.
+    if (view.announcement !== undefined && view.announcement !== '') {
+        const row = el('div', 'kv kv-top');
+        row.setAttribute('data-role', 'studio-announcement-row');
+        row.append(el('span', undefined, copy.STUDIO_ANNOUNCEMENT_ROW));
+        const value = el('span', 'kv-ann');
+        value.append(el('span', 'chip ann-chip', copy.ANNOUNCEMENT_CHIP));
+        value.append(' ', view.announcement);
+        row.append(value);
+        name.card.append(row);
+    }
     const lookId = view.theme?.id ?? DEFAULT_THEME.id;
-    name.card.append(
-        kvRow(
-            copy.STUDIO_LOOK_ROW,
-            SHIPPED_THEMES.find((row) => row.id === lookId)?.label ?? String(lookId),
-            'studio-look-row',
-        ),
+    const look = kvRow(
+        copy.STUDIO_LOOK_ROW,
+        SHIPPED_THEMES.find((row) => row.id === lookId)?.label ?? String(lookId),
+        'studio-look-row',
     );
+    look.classList.add('kv-top');
+    name.card.append(look);
+    name.card.append(wearingRow(view));
+    name.card.append(el('p', 'fine', copy.DECOR_LEDE));
     if (!hasAddress || (openPublish === undefined && openDescribe === undefined)) {
         name.card.append(el('p', 'fine', copy.PUBLISH_UNAVAILABLE));
     }
@@ -6676,7 +6708,10 @@ function paintStudio(
         // Initials for a withheld token: its record stays editable, its
         // artwork stays off every surface this page paints.
         row.append(itemIcon(id, title, undefined, undefined, !isWithheldToken(id, view.tokens.get(id))));
-        row.append(el('div', 'nm', title));
+        const words = el('div', 'tbody');
+        words.append(el('div', 'nm', title));
+        words.append(itemState(view, id));
+        row.append(words);
         const acts = el('div', 'acts2');
         if (hasAddress && openDescribe !== undefined) {
             // One control: words, shelf and price are one record on one
@@ -6716,44 +6751,39 @@ function paintStudio(
     }
     body.append(items.card);
 
+    /*
+     * Put it somewhere (round 16): the link first — the one thing used every
+     * day — then four doors in one dress, each opening its own sheet. The
+     * card used to hold the five tools stacked, in four control dresses,
+     * with the embed code open for every seller; every door now says what
+     * it opens in two lines and nothing on the card composes anything.
+     */
     const share = studioCard('share', copy.STUDIO_CARD_SHARE);
     share.card.append(shareControl());
-    share.card.append(embedControl(view));
-    posterControl(share.card, view, handlers);
-    /*
-     * The shop window's one door, in the Share card because that card is one
-     * family: the link and its code, the embed box, the poster, the stream
-     * recipe — every way this stall is put somewhere else. It is desk-only,
-     * which `window.css` does by width and not by a render gate: a link
-     * already composed must open at whatever width it is opened at, because a
-     * shop screen hung in portrait is 1080 wide and a counter tablet is 768.
-     *
-     * One door and not two. Two controls opening one sheet read as two roads
-     * (owner, 2026-09-05, on the items card), so there is nothing for this on
-     * the Shop panel — what a seller bookmarks is the link, not this button.
-     */
-    const openWindow = handlers.onOpenShopWindow;
-    if (openWindow !== undefined) {
-        // Not `mini another`: those are the secondary dress, and every look
-        // re-states them at `.t-* .mini`, which would out-rank this button's
-        // own class. It wears the Share card's primary dress instead — the
-        // same rule as the stream recipe's summary, so the two doors off this
-        // card cannot come to look like a first and a second choice
-        // (owner, 2026-09-19).
-        const launch = el('button', 'studio-window', copy.WINDOW_OPEN);
-        launch.type = 'button';
-        launch.setAttribute('data-role', 'studio-open-window');
-        launch.addEventListener('click', () => openWindow());
-        share.card.append(launch);
+    const tools = el('div', 'tools');
+    tools.setAttribute('data-role', 'studio-tools');
+    const url = shareUrl();
+    // The doors paint whether or not a handler is wired — the showroom wires
+    // none, and a door the probe never measured is a door that ships
+    // unmeasured; a press with no handler does nothing. Two gates only, the
+    // poster's: the address (without one the sheet does not mount, and
+    // `onOpenPoster` must not set an overlay `livePaint` then waits on
+    // forever) and `fitsQr` (past the library's ceiling the poster would be
+    // a sheet of text; the share control already explains the long link).
+    if (hasAddress && fitsQr(url)) {
+        tools.append(toolDoor('poster', copy.POSTER_OPEN, copy.POSTER_LEDE, 'open-poster', handlers.onOpenPoster));
     }
-    // The stream overlay's recipe, folded: its strings live in the module
-    // itself, and it never navigates or stores.
-    const obs = el('div');
-    paintObsGuide(obs, view, handlers);
-    // Dressed as the card's one primary control (owner, 2026-09-05): a fold
-    // still — the recipe is long and nobody signs anything in it — but its
-    // summary is the button a streamer looks for, not a line among lines.
-    share.card.append(sheetFold('obs-guide-fold', OBS_GUIDE_TITLE, obs, 'fold-cta'));
+    // Desk-only by width, in CSS (`.tool[data-tool='window']`), never a
+    // render gate: a link already composed must open at whatever width it is
+    // opened at; what is desk-only is COMPOSING one.
+    tools.append(toolDoor('window', copy.WINDOW_OPEN, copy.WINDOW_LEDE, 'studio-open-window', handlers.onOpenShopWindow));
+    tools.append(
+        toolDoor('stream', OBS_GUIDE_TITLE, copy.STUDIO_TOOL_STREAM_LEDE, 'studio-open-stream', handlers.onOpenStream),
+    );
+    tools.append(
+        toolDoor('embed', copy.STUDIO_TOOL_EMBED, copy.STUDIO_TOOL_EMBED_LEDE, 'studio-open-embed', handlers.onOpenEmbed),
+    );
+    share.card.append(tools);
     body.append(share.card);
 
     const raw = identityOf(view);
@@ -6783,55 +6813,163 @@ function paintStudio(
 }
 
 /**
- * The poster: the share link made physical, for the stall that also exists as
- * a table on a street. Pure client — the QR is the same module matrix the
- * share control draws, nothing is fetched — and the print stylesheet in
- * stall.css shows the poster page alone. The QR stays black on white with its
- * quiet zone (§9); the sheet previews exactly what the printer gets.
+ * One door off the "Put it somewhere" card: a `<button>` holding its name,
+ * one line about what it opens, and the chevron. Four of them wear one
+ * dress (`.tool`), and none carries `mini` — every look re-states `.t-* .mini`
+ * at a specificity that would out-rank the door's own class.
  */
-function posterControl(body: HTMLElement, view: StallView, handlers: StallHandlers): void {
-    const url = shareUrl();
-    // Same address gate as the publish launcher: without one the sheet
-    // does not mount, and `onOpenPoster` must not set an overlay that
-    // `livePaint` then waits on forever. No QR, no poster: past the
-    // library's ceiling the poster would be a sheet of text, and the
-    // share control already explains the long link.
-    if (
-        view.address === undefined ||
-        view.address === '' ||
-        !fitsQr(url)
-    ) {
-        return;
+function toolDoor(
+    kind: 'poster' | 'window' | 'stream' | 'embed',
+    title: string,
+    lede: string,
+    role: string,
+    onPress: (() => void) | undefined,
+): HTMLButtonElement {
+    const door = el('button', 'tool');
+    door.type = 'button';
+    door.setAttribute('data-tool', kind);
+    door.setAttribute('data-role', role);
+    door.setAttribute('data-focus-key', role);
+    door.append(el('b', 'tool-t', title));
+    door.append(el('span', 'tool-lede', lede));
+    door.append(glyph('chevron', 'tool-ic'));
+    if (onPress !== undefined) {
+        door.addEventListener('click', () => onPress());
     }
-    const wrap = el('div', 'poster-launch');
-    wrap.append(el('p', 'fine', copy.POSTER_LEDE));
-    const open = el('button', 'mini another', copy.POSTER_OPEN);
-    open.type = 'button';
-    open.setAttribute('data-role', 'open-poster');
-    open.setAttribute('data-focus-key', 'open-poster');
-    const go = handlers.onOpenPoster;
-    if (go !== undefined) {
-        open.addEventListener('click', () => go());
-    }
-    wrap.append(open);
-    body.append(wrap);
+    return door;
 }
 
 /**
- * The look, resolved for a canvas. Everything crosses as a number or a plain
- * colour: `--s-radius` is parsed here rather than handed over as `14px`, and
- * the plate's edge is a colour or nothing, never a CSS shorthand — a canvas
- * has no cascade to fall back on when a string does not parse.
- *
- * The edge and the name's weight are keyed off the painted look's class, the
- * way `nameLines` already is. Radius follows the shipped table (14 / 0 / 8),
- * not the design cards' 24 / 0 / 12: the table is what every other corner in
- * the app is cut to.
- *
- * `--s-name-weight` is emitted but is the stall sign's weight at 30px
- * (650 / 700 / 600); the poster's name is 108px and the design cuts it at 800,
- * Rural 700. Two jobs, two numbers.
+ * What the stall wears, as the footer credit prints it — and, unlike the
+ * credit, said in three states: worn, nothing worn, and not known. `worn`
+ * is empty both when the seller wears nothing and when the holdings read
+ * never answered (`heldTokens` undefined → nothing is worn), so the row
+ * reads the holdings' own answer first: the §4 rule that an empty answer
+ * and no answer are two things, on the one card where it would be a claim
+ * about the seller's settings.
  */
+function wearingRow(view: StallView): HTMLElement {
+    const row = el('div', 'kv kv-top');
+    row.setAttribute('data-role', 'studio-wearing-row');
+    row.append(el('span', undefined, copy.STUDIO_WEARING_ROW));
+    const value = el('span', 'kv-chips');
+    if (view.heldTokens === undefined) {
+        value.append(copy.DECOR_ROW_UNKNOWN);
+    } else if ((view.worn ?? []).length === 0) {
+        value.append(copy.STUDIO_WEARING_NONE);
+    } else {
+        for (const worn of view.worn ?? []) {
+            value.append(el('span', 'wchip', worn.label));
+        }
+    }
+    row.append(value);
+    return row;
+}
+
+/**
+ * A token row's state, from what this load read and nothing else.
+ *
+ * Listed: from the book, and only when the book answered — every other
+ * outcome (`empty`, `unreachable`, `plugin-missing`, `unreadable`, opening)
+ * says NOTHING about a listing, never "not listed", because that would be
+ * our failure printed as the seller's inventory (§4). The raw book, not
+ * `offersOf`: a withheld token is listed on chain whatever the shop paints.
+ * Quote: the figure as `quoteFigure` prints it under `seller-price` — the
+ * one formatter, the one role — for a quote this page paints; a quote it
+ * cannot (a unit it does not write, a genesis it could not read) is said
+ * as that and never dropped. Words and shelf from the records. No kind is
+ * named: `isPriceable` refuses, it does not classify.
+ */
+function itemState(view: StallView, tokenId: string): HTMLElement {
+    const state = el('div', 'tstate');
+    state.setAttribute('data-role', 'studio-item-state');
+    const fetch = view.fetch;
+    if (fetch !== undefined && fetch.kind === 'offers' && fetch.offers.some((offer) => offer.tokenId === tokenId)) {
+        state.append(el('span', undefined, copy.STUDIO_STATE_LISTED));
+    }
+    const price = view.prices?.get(tokenId);
+    if (price !== undefined) {
+        if (quotedItems(view).some((item) => item.tokenId === tokenId)) {
+            const quote = el('span');
+            quote.append(copy.STUDIO_STATE_QUOTE, ' ');
+            const figure = el('span', 'sp', quoteFigure(price));
+            figure.setAttribute('data-role', 'seller-price');
+            quote.append(figure);
+            state.append(quote);
+        } else {
+            state.append(el('span', undefined, copy.STUDIO_STATE_QUOTE_UNSHOWN));
+        }
+    }
+    if (view.descriptions?.has(tokenId) === true) {
+        state.append(el('span', undefined, copy.STUDIO_STATE_WORDS));
+    } else {
+        state.append(el('span', 'no', copy.STUDIO_STATE_NO_WORDS));
+    }
+    const shelf = view.shelves?.get(tokenId);
+    if (shelf !== undefined && shelf !== '') {
+        state.append(el('span', undefined, `${copy.STUDIO_STATE_SHELF}: ${shelf}`));
+    }
+    return state;
+}
+
+/**
+ * The stream recipe as its own sheet (round 16). The recipe is
+ * `paintObsGuide`'s, unchanged — its pickers keep their state in module
+ * scope, which is why this sheet holds nothing and the stall keeps updating
+ * behind it. The head carries the lede, so the guide's own lead line is
+ * hidden by the sheet's stylesheet rather than painted twice.
+ */
+function streamSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const sheet = el('div', 'sheet stream-sheet');
+    sheet.setAttribute('data-role', 'stream-sheet');
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-label', OBS_GUIDE_TITLE);
+    sheet.append(sheetHead(OBS_GUIDE_TITLE, OBS_GUIDE_LEDE, handlers));
+    const body = el('div', 'sheet-body');
+    paintObsGuide(body, view, handlers);
+    sheet.append(body);
+    sheet.append(sheetFoot(handlers));
+    return sheet;
+}
+
+/**
+ * The embed code as its own sheet (round 16): first the picture a visitor
+ * sees — this look's own card at this origin, the same file the snippet
+ * names — with the sentence that it is a still and never a shop; then the
+ * code, readonly, with its copy control. The one line of HTML is the whole
+ * of it, and the foot says so.
+ */
+function embedSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const sheet = el('div', 'sheet embed-sheet');
+    sheet.setAttribute('data-role', 'embed-sheet');
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-label', copy.STUDIO_TOOL_EMBED);
+    sheet.append(sheetHead(copy.STUDIO_TOOL_EMBED, copy.SHARE_EMBED_LEDE, handlers));
+    const body = el('div', 'sheet-body embed-body');
+    const picture = el('div', 'embed-pic');
+    picture.append(el('p', 'pub', copy.EMBED_PICTURE));
+    const img = el('img');
+    img.src = embedImagePath(paintedThemeId(view));
+    img.alt = copy.embedAlt(view.stallName);
+    img.width = 600;
+    img.height = 315;
+    img.decoding = 'async';
+    img.setAttribute('data-role', 'embed-picture');
+    picture.append(img);
+    picture.append(el('p', 'fine', copy.EMBED_PICTURE_NOTE));
+    body.append(picture);
+    const code = el('div', 'embed-codebox');
+    code.append(el('p', 'pub', copy.EMBED_CODE));
+    code.append(embedControl(view, false));
+    code.append(el('p', 'fine', copy.EMBED_FINE));
+    body.append(code);
+    sheet.append(body);
+    sheet.append(sheetFoot(handlers));
+    return sheet;
+}
+
 function posterPaintFromStall(
     stall: HTMLElement,
     view: StallView,
@@ -7005,9 +7143,18 @@ function posterSheet(
     box.tabIndex = -1;
 
     const chooser = el('div', 'poster-chooser');
-    const select = el('select', 'paste-in');
-    select.setAttribute('data-role', 'poster-format');
-    select.setAttribute('aria-label', copy.POSTER_TITLE);
+    chooser.append(el('p', 'pub', copy.POSTER_GROUP_FORMAT));
+    /*
+     * The formats as a strip of buttons with their shapes (round 16): a
+     * `<select>` named five formats a seller could not tell apart. Each is
+     * pressed or not (`aria-pressed`), and the choice is the app's state —
+     * `onChoosePosterFormat` repaints the sheet — so the strip is rebuilt
+     * with the format it shows and cannot disagree with the page.
+     */
+    const strip = el('div', 'fmts');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', copy.POSTER_TITLE);
+    strip.setAttribute('data-role', 'poster-formats');
     const formats: Array<[PosterFormat, string]> = [
         ['print', copy.POSTER_FORMAT_PRINT],
         ['square', copy.POSTER_FORMAT_SQUARE],
@@ -7018,13 +7165,24 @@ function posterSheet(
     if (items.length > 0) {
         formats.push(['tag', copy.POSTER_FORMAT_TAG]);
     }
+    const choose = handlers.onChoosePosterFormat;
     for (const [value, text] of formats) {
-        const opt = el('option', undefined, text);
-        opt.value = value;
-        select.append(opt);
+        const button = el('button', 'fmt');
+        button.type = 'button';
+        button.setAttribute('data-role', `poster-format-${value}`);
+        button.setAttribute('data-focus-key', `poster-format-${value}`);
+        button.setAttribute('aria-pressed', String(value === format));
+        const shape = el('i', `fmt-shape fmt-${value}`);
+        shape.setAttribute('aria-hidden', 'true');
+        button.append(shape);
+        button.append(el('span', undefined, text));
+        if (choose !== undefined) {
+            button.addEventListener('click', () => choose(value));
+        }
+        strip.append(button);
     }
-    select.value = format;
-    chooser.append(select);
+    chooser.append(strip);
+    chooser.append(el('p', 'fine', copy.POSTER_FORMAT_WHY));
     if (format === 'tag' && item !== undefined) {
         const pick = el('select', 'paste-in');
         pick.setAttribute('data-role', 'poster-item');
@@ -7049,12 +7207,21 @@ function posterSheet(
     box.append(chooser);
 
     // One page at a time: the tag's or the stall's, never both — two
-    // `.poster-page`s print two sheets.
-    box.append(
+    // `.poster-page`s print two sheets. The page and its one control side by
+    // side from 680px (round 16), the page first in the DOM either way.
+    const pair = el('div', 'poster-pair');
+    pair.append(
         format === 'tag' && item !== undefined && tagItem !== undefined && landing !== undefined
             ? tagPage(item, tagItem, landing)
             : stallPage(view, url),
     );
+    const side = el('div', 'poster-side');
+    side.append(el('p', 'pub', copy.POSTER_GROUP_PAGE));
+    if (format === 'print') {
+        side.append(el('p', 'fine', copy.POSTER_PAGE_WHY));
+    }
+    pair.append(side);
+    box.append(pair);
 
     const png = el('div', 'poster-png');
     png.setAttribute('data-role', 'poster-png');
@@ -7066,7 +7233,7 @@ function posterSheet(
     save.type = 'button';
     save.setAttribute('data-role', 'poster-save');
     png.append(save);
-    box.append(png);
+    side.append(png);
 
     const pngKind: PosterKind = format === 'print' ? 'square' : format;
     // A tag's file names its item by the landing link's own prefix — a
@@ -7090,22 +7257,6 @@ function posterSheet(
     if (format !== 'print') {
         drawPoster(canvas, posterSpec(format, paint));
     }
-    const choose = handlers.onChoosePosterFormat;
-    if (choose !== undefined) {
-        select.addEventListener('change', () => {
-            const value = select.value;
-            if (
-                value === 'print' ||
-                value === 'square' ||
-                value === 'story' ||
-                value === 'stream' ||
-                value === 'tag'
-            ) {
-                choose(value);
-            }
-        });
-    }
-
     const controls = el('div', 'poster-controls');
     const print = el('button', 'buy', copy.POSTER_PRINT);
     print.type = 'button';
@@ -7131,7 +7282,11 @@ function posterSheet(
             }
         });
     }
-    controls.append(print, close);
+    side.append(print);
+    if (format === 'print') {
+        side.append(el('p', 'fine', copy.POSTER_PRINT_TIP));
+    }
+    controls.append(close);
     box.append(controls);
     scrim.append(box);
     trapTab(box);
@@ -8280,10 +8435,12 @@ export function stallBaseUrl(): string {
  * bare address — `stallBaseUrl()`, the search dropped. Readonly field,
  * copy control with the same fallback the link's has.
  */
-function embedControl(view: StallView): HTMLElement {
+function embedControl(view: StallView, withLede = true): HTMLElement {
     const wrap = el('div', 'share-embed-box');
     wrap.setAttribute('data-role', 'embed');
-    wrap.append(el('p', 'fine', copy.SHARE_EMBED_LEDE));
+    if (withLede) {
+        wrap.append(el('p', 'fine', copy.SHARE_EMBED_LEDE));
+    }
     const code = embedSnippet({
         stallUrl: stallBaseUrl(),
         imageUrl: `${location.origin}${embedImagePath(paintedThemeId(view))}`,
@@ -8300,6 +8457,9 @@ function embedControl(view: StallView): HTMLElement {
     const say = glyphLabel(btn, 'copy', copy.COPY_EMBED);
     btn.type = 'button';
     btn.setAttribute('data-role', 'embed-copy');
+    // The embed sheet holds nothing (`OVERLAY_TABLE`), so a live tick rebuilds
+    // it: the key is what puts a seller's focus back on this control.
+    btn.setAttribute('data-focus-key', 'embed-copy');
     const fallback = (): void => {
         field.focus();
         field.select();

@@ -7,6 +7,7 @@ import { offersWithinLock, suggestedLock } from '../domain/window';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
 import type { TokenListing } from './render';
+import { glyphLabel } from './glyphs';
 import {
     announcementNote,
     cheapestOf,
@@ -621,7 +622,7 @@ export function shopWindowSheet(
     const head = el('div', 'sheet-head');
     const title = el('div', 'sheet-head-t');
     title.append(el('h2', undefined, copy.WINDOW_TITLE));
-    title.append(el('p', 'note', copy.WINDOW_LEDE));
+    title.append(el('p', 'fine', copy.WINDOW_LEDE));
     head.append(title);
     const x = el('button', 'mini another sheet-x', copy.PUBLISH_CLOSE);
     x.type = 'button';
@@ -652,6 +653,10 @@ export function shopWindowSheet(
         const url = windowLinkFor(composed());
         linkField.value = url;
         openTab.setAttribute('href', url);
+        screen.setAttribute('data-mode', mode);
+        screen.setAttribute('data-show', show);
+        screen.setAttribute('data-code', String(payCode));
+        cap.textContent = copy.windowPreviewCaption(showWords[show], modeWords[mode], mode === 'cycle');
     };
 
     const picker = <T extends string>(
@@ -691,9 +696,22 @@ export function shopWindowSheet(
         return wrap;
     };
 
-    const form = el('form', 'paste');
+    const form = el('form', 'paste sw-form');
     form.addEventListener('submit', (event) => event.preventDefault());
-    form.append(
+    /*
+     * Four groups (round 16), each one job: what the screen shows, a
+     * preview of it with the code switch, the lock, and opening it. The
+     * controls and their roles are the ones the tests drive; only the
+     * grouping, the preview and the copy control are new.
+     */
+    const group = (role: string, title: string): HTMLElement => {
+        const box = el('div', 'sw-group');
+        box.setAttribute('data-role', `window-group-${role}`);
+        box.append(el('p', 'pub sw-gt', title));
+        return box;
+    };
+    const shows = group('show', copy.WINDOW_GROUP_SHOW);
+    shows.append(
         picker(
             copy.WINDOW_SHOW_LABEL,
             [
@@ -707,7 +725,7 @@ export function shopWindowSheet(
             },
         ),
     );
-    form.append(
+    shows.append(
         picker(
             copy.WINDOW_MODE_LABEL,
             [
@@ -720,9 +738,9 @@ export function shopWindowSheet(
             },
         ),
     );
-    form.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
+    shows.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
 
-    form.append(
+    shows.append(
         picker(
             copy.WINDOW_TURN_LABEL,
             [
@@ -736,7 +754,8 @@ export function shopWindowSheet(
             },
         ),
     );
-    form.append(el('p', 'fine', copy.WINDOW_TURN_WHY));
+    shows.append(el('p', 'fine', copy.WINDOW_TURN_WHY));
+    form.append(shows);
 
     /*
      * On, because the code is what the quotes rail is for. Off makes the
@@ -744,6 +763,30 @@ export function shopWindowSheet(
      * a whole way of using this feature, and one press rather than a second
      * link to compose by hand.
      */
+    // The preview: a schematic of the wall, never a render — one card and
+    // its code in cycle, a strip of rows in browse — captioned in words so
+    // the picture is not the only thing saying what was chosen.
+    const preview = group('preview', copy.WINDOW_GROUP_PREVIEW);
+    const screen = el('div', 'sw-preview');
+    screen.setAttribute('data-role', 'window-preview');
+    screen.setAttribute('aria-hidden', 'true');
+    const wall = el('div', 'sw-pv-wall');
+    wall.append(el('i', 'sw-pv-card'), el('i', 'sw-pv-qr'));
+    screen.append(wall);
+    preview.append(screen);
+    const cap = el('p', 'fine sw-preview-cap');
+    cap.setAttribute('data-role', 'window-preview-cap');
+    preview.append(cap);
+    const showWords: Record<WindowParams['show'], string> = {
+        listings: copy.WINDOW_SHOW_LISTINGS,
+        quotes: copy.WINDOW_SHOW_QUOTES,
+        all: copy.WINDOW_SHOW_ALL,
+    };
+    const modeWords: Record<WindowParams['mode'], string> = {
+        cycle: copy.WINDOW_MODE_CYCLE,
+        browse: copy.WINDOW_MODE_BROWSE,
+    };
+
     const codeSwitch = switchControl(
         copy.WINDOW_PAYCODE_SWITCH,
         'window-paycode-switch',
@@ -753,10 +796,11 @@ export function shopWindowSheet(
             sync();
         },
     );
-    form.append(codeSwitch);
-    form.append(el('p', 'fine', copy.WINDOW_PAYCODE_WHY));
+    preview.append(codeSwitch);
+    preview.append(el('p', 'fine', copy.WINDOW_PAYCODE_WHY));
+    form.append(preview);
 
-    form.append(el('label', 'paste-label', copy.WINDOW_LOCK_LABEL));
+    const lock = group('lock', copy.WINDOW_LOCK_LABEL);
     /*
      * The switch comes first, and the machinery only after it.
      *
@@ -772,8 +816,8 @@ export function shopWindowSheet(
         false,
         (on) => showLock(on),
     );
-    form.append(lockSwitch);
-    form.append(el('p', 'fine', copy.WINDOW_LOCK_SWITCH_WHY));
+    lock.append(lockSwitch);
+    lock.append(el('p', 'fine', copy.WINDOW_LOCK_SWITCH_WHY));
     const lockRow = el('div', 'sw-lock');
     /*
      * The control that actually decides `upto`, and it is a switch like the
@@ -819,9 +863,10 @@ export function shopWindowSheet(
     heightField.addEventListener('input', settle);
     lockRow.append(lockPress, heightField);
     const lockWhy = el('p', 'fine', copy.WINDOW_LOCK_WHY);
-    form.append(lockRow);
-    form.append(refused);
-    form.append(lockWhy);
+    lock.append(lockRow);
+    lock.append(refused);
+    lock.append(lockWhy);
+    form.append(lock);
     // Hidden until the switch is on, and turning it off takes the lock with
     // it — a link must never carry an `upto` from a control the seller can no
     // longer see.
@@ -838,18 +883,44 @@ export function shopWindowSheet(
     showLock(false);
     sheet.append(form);
 
-    const linkBox = el('div', 'share-box');
-    linkBox.append(el('label', 'paste-label', copy.WINDOW_LINK_LABEL));
-    linkBox.append(linkField);
-    linkBox.append(el('p', 'fine', copy.WINDOW_LINK_WHY));
-    sheet.append(linkBox);
-
+    const open = group('open', copy.WINDOW_GROUP_OPEN);
+    linkField.setAttribute('aria-label', copy.WINDOW_LINK_LABEL);
+    open.append(linkField);
+    open.append(el('p', 'fine', copy.WINDOW_LINK_WHY));
     openHere.addEventListener('click', () => {
         window.location.assign(windowLinkFor(composed()));
     });
+    // The copy control, for the shop's own computer: the same fallback the
+    // share link keeps — select the field and say so when the clipboard
+    // refuses.
+    const copyBtn = el('button', 'mini another');
+    copyBtn.type = 'button';
+    copyBtn.setAttribute('data-role', 'shop-window-copy');
+    const say = glyphLabel(copyBtn, 'copy', copy.COPY_LINK);
+    const fallback = (): void => {
+        linkField.focus();
+        linkField.select();
+        say(copy.COPY_LINK_FALLBACK);
+    };
+    copyBtn.addEventListener('click', () => {
+        const clipboard = navigator.clipboard;
+        if (clipboard !== undefined && typeof clipboard.writeText === 'function') {
+            void clipboard.writeText(linkField.value).then(
+                () => {
+                    say(copy.LINK_COPIED, 'check');
+                },
+                () => {
+                    fallback();
+                },
+            );
+            return;
+        }
+        fallback();
+    });
     const acts = el('div', 'acts');
-    acts.append(openHere, openTab);
-    sheet.append(acts);
+    acts.append(openHere, openTab, copyBtn);
+    open.append(acts);
+    sheet.append(open);
 
     const foot = el('div', 'sheet-foot');
     const close = el('button', 'mini another', copy.PUBLISH_CLOSE);

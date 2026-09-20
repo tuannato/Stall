@@ -876,6 +876,14 @@ export function boot(
                 };
                 paint();
             },
+            onOpenStream: () => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'stream' } } };
+                paint();
+            },
+            onOpenEmbed: () => {
+                state = { ...state, view: { ...state.view, overlay: { kind: 'embed' } } };
+                paint();
+            },
             onOpenItem: (tokenId, rail) => {
                 state = { ...state, view: { ...state.view, overlay: { kind: 'item', tokenId, rail } } };
                 paint();
