@@ -48,6 +48,33 @@ describe('the-unfurl-says-whose-link-this-is', () => {
         expect(sellerIdentity(`ff${'ab'.repeat(32)}`)).toBeUndefined();
     });
 
+    it('a-mistyped-address-is-not-a-seller-s-shop', () => {
+        /*
+         * The shape test had no checksum term — and `[a-z0-9]` is wider than
+         * the cashaddr charset, which excludes `b`, `i`, `o` and `1`. So a
+         * link with one character flipped, the ordinary way a shared address
+         * goes wrong, unfurled as a per-stall card naming that address and
+         * asserting a seller's shop was there, and then opened on the app's
+         * own "this link is unreadable" screen. Every case in the sibling
+         * test above fails on shape or length; none of them was 42
+         * characters of the right alphabet with a broken checksum
+         * (2026-09-20).
+         */
+        expect(sellerIdentity(DUMMY_BODY), 'the good address still gets its card').toBe(
+            DUMMY_SHORT,
+        );
+
+        // One character moved, everything else intact.
+        const flipped = DUMMY_BODY.slice(0, -1) + (DUMMY_BODY.endsWith('q') ? 'r' : 'q');
+        expect(flipped).toHaveLength(DUMMY_BODY.length);
+        expect(sellerIdentity(flipped), 'a broken checksum is not a shop').toBeUndefined();
+        expect(sellerIdentity(`ecash:${flipped}`)).toBeUndefined();
+
+        // And a string of the right shape that was never cashaddr at all —
+        // `b` is not in the charset, so the old regex let it through.
+        expect(sellerIdentity(`q${'b'.repeat(41)}`)).toBeUndefined();
+    });
+
     it('screens a manifest name exactly as the app screens it', () => {
         expect(usableName('Riverside Goods')).toBe('Riverside Goods');
         expect(usableName('gian hàng 1st')).toBe('gian hàng 1st');
