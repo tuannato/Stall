@@ -4984,9 +4984,14 @@ describe('the-door-remembers-what-this-browser-pinned', () => {
         expect(h.onTogglePin).toHaveBeenCalledWith(PK);
     });
 
-    it('an unpinned door carries no pinned section at all', () => {
+    it('an unpinned door keeps the card, with the gesture demo and no rows', () => {
+        // Since 2026-09-20 the empty card teaches the gesture instead of
+        // vanishing (`the-pinned-card-teaches-the-gesture-when-nothing-is-pinned`).
         const { root } = paint(homeView([]));
-        expect(root.querySelector('[data-role="pinned-stalls"]')).toBeNull();
+        const card = root.querySelector('[data-role="pinned-stalls"]');
+        expect(card).not.toBeNull();
+        expect(card!.querySelector('[data-role="pinned-empty"]')).not.toBeNull();
+        expect(card!.querySelector('[data-role="pinned-open"]')).toBeNull();
     });
 
     /**
@@ -14098,6 +14103,70 @@ describe('the-real-stall-card-is-the-embed-widget', () => {
         link.dispatchEvent(press);
         expect(press.defaultPrevented).toBe(true);
         expect(h.onOpenStall).toHaveBeenCalledWith(copy.DEMO_STALL_ADDRESS);
+    });
+});
+
+describe('the-pinned-card-teaches-the-gesture-when-nothing-is-pinned', () => {
+    /**
+     * Owner, 2026-09-20: a card that vanished when nothing was pinned said
+     * nothing about how to fill it. Empty, the card stays and shows the
+     * gesture — a fixture sign with the real drawn pin at its corner and the
+     * row it lands as — inert and hidden from readers, with the sentence
+     * under it; with a pin, the rows and no demo.
+     */
+    it('paints the demo sign and the sentence, and no control, when there are no pins', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
+        const card = root.querySelector('[data-role="pinned-stalls"]')!;
+        expect(card).not.toBeNull();
+        const empty = card.querySelector('[data-role="pinned-empty"]')!;
+        expect(empty).not.toBeNull();
+        expect(empty.textContent).toContain(copy.PINNED_EMPTY);
+        const demo = empty.querySelector('.pin-demo')!;
+        expect(demo.getAttribute('aria-hidden')).toBe('true');
+        expect(demo.querySelector('svg.ic.pin-ic'), 'the real drawn pin').not.toBeNull();
+        expect(demo.querySelector('.pin-demo-sign')?.textContent).toContain(copy.HOME_PREVIEW.name);
+        expect(demo.querySelector('.pin-demo-row')?.textContent).toContain(copy.HOME_PREVIEW.name);
+        expect(empty.querySelector('button, a, input')).toBeNull();
+        expect(card.querySelector('[data-role="pinned-open"]')).toBeNull();
+    });
+
+    it('paints the rows and no demo once something is pinned', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            {
+                route: { kind: 'home' },
+                overlay: { kind: 'idle' },
+                tokens: new Map(),
+                pinnedStalls: [copy.DEMO_STALL_ADDRESS],
+            },
+            h,
+        );
+        const card = root.querySelector('[data-role="pinned-stalls"]')!;
+        expect(card.querySelector('[data-role="pinned-empty"]')).toBeNull();
+        expect(card.querySelectorAll('[data-role="pinned-open"]')).toHaveLength(1);
+    });
+});
+
+describe('the-door-cards-stand-above-the-tiles', () => {
+    /** Owner, 2026-09-20: what a visitor does next before what a stall does. */
+    it('paints the pinned, real-stall and first-stall cards before "what a stall does"', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
+        const back = root.querySelector('.door-back')!;
+        const tiles = root.querySelector('.door-does')!;
+        expect(back).not.toBeNull();
+        expect(tiles).not.toBeNull();
+        expect(back.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect([...back.children].map((c) => c.getAttribute('data-role'))).toEqual([
+            'pinned-stalls',
+            'demo-soon',
+            'door-first-stall',
+        ]);
     });
 });
 

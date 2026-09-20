@@ -705,6 +705,12 @@ export const PINNED_TITLE = 'Pinned stalls';
 export const PINNED_LEDE =
     'Kept in this browser only — never on the chain. The name is the one the stall had when you pinned it.';
 export const PINNED_NO_NAME = 'No name published';
+/**
+ * The empty pinned card teaches the gesture (owner, 2026-09-20): a card
+ * that vanished when nothing was pinned said nothing about how to fill it.
+ */
+export const PINNED_EMPTY =
+    'Nothing pinned yet. On any stall, press the pin at the corner of its sign and it lands here.';
 export const PIN_TO_DOOR = 'Pin to the front door';
 export const PINNED_ON_DOOR = 'Pinned to the front door — remove';
 export const PIN_REMOVE = 'Unpin';

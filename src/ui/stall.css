@@ -5295,8 +5295,12 @@ textarea.share-embed {
 .door-unit {
     position: relative;
     z-index: 2;
-    display: flex;
-    flex-wrap: wrap;
+    /* A grid on a phone: the prefix and the field share the first line, the
+       button sits under them at the right, sized by its words (owner,
+       2026-09-20). From 680px the three are one flex row. */
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
     gap: 10px;
     margin-top: 22px;
     padding: 12px;
@@ -5327,7 +5331,7 @@ textarea.share-embed {
 }
 
 .door .door-paste-in {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     width: auto;
     height: 48px;
@@ -5341,7 +5345,17 @@ textarea.share-embed {
 }
 
 .door-open {
-    flex: 1 1 100%;
+    /* Sized by its words, never stretched (owner, 2026-09-20: the button
+       stood full-width under the field on a phone and 190px wide at desk,
+       most of it empty). `width: auto` is stated because `.buy` is drawn
+       full-width for the surfaces it came from; here it would take the row
+       and squeeze the field to nothing. On a phone the button is the grid's
+       second row, at the right. */
+    grid-column: 1 / -1;
+    justify-self: end;
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0 24px;
     height: 52px;
     border: 0;
     border-radius: 11px;
@@ -5742,6 +5756,171 @@ textarea.share-embed {
     margin-top: 12px;
 }
 
+/*
+ * The empty pinned card's gesture demo: a fixture sign with the real pin
+ * glyph at its corner, a tap ring, the pin going pressed, the row it lands
+ * as. Base styles ARE the end state (pin pressed, ring gone, row landed), so
+ * the reduce block's `animation: none` rests it there; the loop plays the
+ * gesture from idle. Tokens only — the door is painted under After hours in
+ * the probe's worn half. The ring and the pin are positioned real nodes,
+ * which the probe sweeps as decorations against every protected box.
+ */
+.pinned-empty {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.pin-demo {
+    display: grid;
+    gap: 8px;
+}
+
+.pin-demo-sign {
+    position: relative;
+    padding: 14px 56px 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 30%, transparent);
+    border-radius: 12px;
+    background: var(--s-bg);
+}
+
+.pin-demo-name {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.pin-demo-sub {
+    display: block;
+    margin-top: 2px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--s-muted);
+}
+
+.pin-demo-pin,
+.pin-demo-ring {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.pin-demo-pin {
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--s-accent) 14%, transparent);
+    color: var(--s-accent);
+    animation: pin-demo-press 4.5s ease-in-out infinite;
+}
+
+.pin-demo-pin .pin-ic {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linejoin: round;
+    animation: pin-demo-fill 4.5s steps(1, end) infinite;
+}
+
+.pin-demo-ring {
+    border: 2px solid var(--s-accent);
+    opacity: 0;
+    animation: pin-demo-tap 4.5s ease-out infinite;
+}
+
+.pin-demo-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: baseline;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    border-radius: 10px;
+    background: var(--s-surface);
+    animation: pin-demo-land 4.5s ease-out infinite;
+}
+
+.pin-demo-row b {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.pin-demo-row span {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--s-muted);
+}
+
+@keyframes pin-demo-tap {
+    0%,
+    28% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+
+    32% {
+        opacity: 0.9;
+        transform: scale(0.6);
+    }
+
+    48%,
+    100% {
+        opacity: 0;
+        transform: scale(1.7);
+    }
+}
+
+@keyframes pin-demo-press {
+    0%,
+    33% {
+        background: transparent;
+        color: var(--s-muted);
+        transform: scale(1);
+    }
+
+    36% {
+        transform: scale(0.86);
+    }
+
+    40%,
+    100% {
+        background: color-mix(in srgb, var(--s-accent) 14%, transparent);
+        color: var(--s-accent);
+        transform: scale(1);
+    }
+}
+
+@keyframes pin-demo-fill {
+    0%,
+    36% {
+        fill: transparent;
+    }
+
+    40%,
+    100% {
+        fill: currentColor;
+    }
+}
+
+@keyframes pin-demo-land {
+    0%,
+    44% {
+        visibility: hidden;
+        transform: translateY(-6px);
+    }
+
+    48%,
+    100% {
+        visibility: visible;
+        transform: translateY(0);
+    }
+}
+
 @keyframes door-wave {
     50% {
         transform: translateY(4px);
@@ -5856,6 +6035,7 @@ textarea.share-embed {
     }
 
     .door-unit {
+        display: flex;
         flex-wrap: nowrap;
         align-items: center;
         margin-top: 22px;
@@ -5863,7 +6043,7 @@ textarea.share-embed {
     }
 
     .door-open {
-        flex: 0 0 190px;
+        padding: 0 26px;
         height: 56px;
     }
 
@@ -6542,6 +6722,15 @@ textarea.share-embed {
        ellipsis, and nothing moves. The kill is here at the file's end
        because the base rule is above it at the same specificity. */
     [data-marquee] > .mq-run {
+        animation: none;
+    }
+
+    /* The pinned card's gesture demo rests at its end state — the pin
+       pressed, the ring gone, the row landed — which its base rules paint. */
+    .pin-demo-pin,
+    .pin-demo-pin .pin-ic,
+    .pin-demo-ring,
+    .pin-demo-row {
         animation: none;
     }
 }

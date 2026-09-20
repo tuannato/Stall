@@ -1534,8 +1534,11 @@ const CONTRAST_TEXT = [
     '.door-more',
     '.pinned-name',
     '.deck-cap',
-    // The real-stall card's name line under the widget (same evening).
+    // The real-stall card's name line under the widget (same evening), and
+    // the empty pinned card's gesture demo: its sign's name and its row.
     '.door-widget-name',
+    '.pin-demo-name',
+    '.pin-demo-row b',
     // The Studio's four doors and a row's state line (round 16): the door's
     // name and its one line sit on the surface, the state under a name on
     // the card; both are new ink on a public panel every look dresses.

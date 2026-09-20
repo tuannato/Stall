@@ -865,15 +865,15 @@ function paintHome(
     hero.append(left);
     hero.append(doorDeck());
     body.append(hero);
-    body.append(doorTiles());
+    // The three cards stand above the tiles (owner, 2026-09-20): what a
+    // visitor does next — open a pin, open the real stall, start their own
+    // — before what a stall does in general.
     const back = el('section', 'door-back');
-    const pinned = pinnedDoor(view, handlers);
-    if (pinned !== null) {
-        back.append(pinned);
-    }
+    back.append(pinnedDoor(view, handlers));
     back.append(realStallCard(handlers));
     back.append(firstStallCard());
     body.append(back);
+    body.append(doorTiles());
     stall.append(body);
 }
 
@@ -1196,16 +1196,17 @@ function stepsList(
  * is the one exception, and it is a snapshot (`saved.ts`): the name the
  * stall had when it was pinned, said so in the lede.
  */
-function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement | null {
+function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement {
     const pins = view.pinnedStalls ?? [];
-    if (pins.length === 0) {
-        return null;
-    }
     const names = view.pinnedNames ?? new Map<string, string>();
     const wrap = el('div', 'pinned door-card');
     wrap.setAttribute('data-role', 'pinned-stalls');
     wrap.append(el('h3', 'door-card-t', copy.PINNED_TITLE));
     wrap.append(el('p', 'fine', copy.PINNED_LEDE));
+    if (pins.length === 0) {
+        wrap.append(pinDemo());
+        return wrap;
+    }
     const list = el('div', 'pinned-list');
     for (const raw of pins) {
         const row = el('div', 'pinned-row');
@@ -1239,6 +1240,38 @@ function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement | nul
         list.append(row);
     }
     wrap.append(list);
+    return wrap;
+}
+
+/**
+ * The empty pinned card teaches the gesture instead of vanishing (owner,
+ * 2026-09-20). A fixture sign — the deck's own name over a sample token —
+ * with the real drawn pin at its corner, a tap ring, the pin going pressed,
+ * and the row it lands as, on a loop. Inert and `aria-hidden`: no control,
+ * nothing routes on the sample, and the sentence under it is the words a
+ * reader gets. Real nodes only (the probe refuses positioned pseudos), tokens
+ * only (the door is painted under After hours too), and the reduce block
+ * rests it at its end state — pin pressed, row landed.
+ */
+function pinDemo(): HTMLElement {
+    const wrap = el('div', 'pinned-empty');
+    wrap.setAttribute('data-role', 'pinned-empty');
+    const demo = el('div', 'pin-demo');
+    demo.setAttribute('aria-hidden', 'true');
+    const sign = el('div', 'pin-demo-sign');
+    sign.append(el('b', 'pin-demo-name', copy.HOME_PREVIEW.name));
+    sign.append(el('span', 'pin-demo-sub', shortStallToken(copy.HOME_PASTE_SAMPLES[0]!)));
+    const pin = el('span', 'pin-demo-pin');
+    pin.append(glyph('pin', 'pin-ic'));
+    sign.append(pin);
+    sign.append(el('span', 'pin-demo-ring'));
+    demo.append(sign);
+    const row = el('div', 'pin-demo-row');
+    row.append(el('b', undefined, copy.HOME_PREVIEW.name));
+    row.append(el('span', undefined, shortStallToken(copy.HOME_PASTE_SAMPLES[0]!)));
+    demo.append(row);
+    wrap.append(demo);
+    wrap.append(el('p', 'fine', copy.PINNED_EMPTY));
     return wrap;
 }
 
