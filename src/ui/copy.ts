@@ -353,6 +353,19 @@ export function unbuyableLine(minimum: string, left: string): string {
 export const DASHED_PRICE = '—';
 export const XEC = 'XEC';
 export const TRIED = 'tried';
+/**
+ * What the hosts box says when it cannot attribute the failure to a host.
+ *
+ * The box listed all three nodes with one error's verdict copied onto each,
+ * so a `plugin-missing` read — which stops at the first node that answers,
+ * because a chronik proto error carries no retryable code — reported three
+ * nodes without the plugin when only one had been asked, and not even
+ * necessarily the first in the list. An owner reading it concluded the
+ * plugin was gone network-wide (2026-09-20). Two invented rows are worth
+ * less than one sentence that is true.
+ */
+export const HOSTS_ONE_ANSWERED =
+    'One of the nodes answered with this and the read stopped there, so the others were not asked. Which one answered is not something this page is told.';
 
 export const OPEN_ANOTHER_STALL = 'Open another stall';
 

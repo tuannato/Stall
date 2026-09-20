@@ -3,7 +3,7 @@ import type { ChronikClient, PluginUtxos } from 'chronik-client';
 import { toHex } from 'ecash-lib';
 import { nanoSatsPerAtom } from '../domain/money';
 import type { FetchStatus, HostAttempt, StallOffer } from '../domain/state';
-import { isPluginMissing, isTimeout, isUnreachable, messageOf } from './errors';
+import { everyHostTried, isPluginMissing, isTimeout, isUnreachable, messageOf } from './errors';
 import { CHRONIK_HOSTS } from './hosts';
 import { AGORA_PLUGIN, stallGroup } from './live';
 
@@ -188,7 +188,24 @@ export async function loadOffers(
     return dropped > 0 ? { kind: 'offers', offers, dropped } : { kind: 'offers', offers };
 }
 
-function hostAttempts(err: unknown): HostAttempt[] {
+/**
+ * A row per host this page actually asked, and none it did not.
+ *
+ * This mapped ONE error across all three hosts, so the `plugin-missing`
+ * screen reported three nodes without the plugin when the failover had
+ * stopped at the first one that answered — two rows invented, and the one
+ * real row attributed to whichever host happens to be first in the list
+ * rather than to `_workingIndex`, where the loop actually starts. An owner
+ * reading that concluded the plugin was gone network-wide.
+ *
+ * So: when the library ran out of hosts, it tried them all and a verdict
+ * per host is observed. Otherwise one of them answered, this page cannot
+ * say which, and the honest list is empty — `hostsBox` says so in words.
+ */
+export function hostAttempts(err: unknown): HostAttempt[] {
+    if (!everyHostTried(err)) {
+        return [];
+    }
     const result: HostAttempt['result'] = isPluginMissing(err)
         ? 'plugin-missing'
         : isTimeout(err)

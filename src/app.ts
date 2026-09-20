@@ -64,6 +64,7 @@ import {
     createChronik,
     HISTORY_PAGE_SIZE,
     loadManifest,
+    hostAttempts,
     loadOffers,
     loadTokenMeta,
     resolveSeller,
@@ -132,7 +133,6 @@ import {
     type LiveHandle,
     type LiveTxStatus,
 } from './net/live';
-import { CHRONIK_HOSTS } from './net/hosts';
 import {
     broadcastCards,
     broadcastFigure,
@@ -2928,7 +2928,7 @@ async function loadCurrent(): Promise<AppState> {
     let route;
     try {
         route = await resolveSeller(parsed, chronik);
-    } catch {
+    } catch (routeErr) {
         if (parsed.kind === 'invalid') {
             return withUrlParams({
                 view: {
@@ -2947,7 +2947,7 @@ async function loadCurrent(): Promise<AppState> {
                         pubkeyHex: parsed.pubkeyHex,
                         address: p2pkhAddress(parsed.pubkeyHex),
                     },
-                    fetch: unreachableNow(),
+                    fetch: unreachableNow(routeErr),
                     overlay: { kind: 'idle' },
                     address: p2pkhAddress(parsed.pubkeyHex),
                     tokens: new Map(),
@@ -2958,7 +2958,7 @@ async function loadCurrent(): Promise<AppState> {
         return withUrlParams({
             view: {
                 route: { kind: 'unresolved', address: parsed.address },
-                fetch: unreachableNow(),
+                fetch: unreachableNow(routeErr),
                 overlay: { kind: 'idle' },
                 address: parsed.address,
                 tokens: new Map(),
@@ -3019,8 +3019,8 @@ async function loadCurrent(): Promise<AppState> {
     let fetch: FetchStatus;
     try {
         fetch = await loadOffers(reader, route.pubkeyHex);
-    } catch {
-        fetch = unreachableNow();
+    } catch (err) {
+        fetch = unreachableNow(err);
     }
 
     if (
@@ -3377,11 +3377,20 @@ function openingFromLocation(): AppState {
     });
 }
 
-function unreachableNow(): FetchStatus {
+/**
+ * The status painted when a read threw before `loadOffers` could classify it.
+ *
+ * It hard-coded three timeouts without looking at the error, so a chronik
+ * 400, a decode failure and a genuine outage all reported the same three
+ * observations nobody had made (2026-09-20). `hostAttempts` answers what was
+ * actually asked: three rows when the failover ran out of hosts, none when
+ * it stopped at the first that answered.
+ */
+function unreachableNow(err?: unknown): FetchStatus {
     return {
         kind: 'unreachable',
         triedAtMs: Date.now(),
-        hosts: CHRONIK_HOSTS.map((host) => ({ host, result: 'timeout' as const })),
+        hosts: hostAttempts(err),
     };
 }
 

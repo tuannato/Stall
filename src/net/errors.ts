@@ -31,6 +31,23 @@ function codesOf(err: unknown, into: string[]): void {
     }
 }
 
+/**
+ * Whether the failover proxy actually asked every host before this threw.
+ *
+ * `chronik-client`'s `_request` only moves to the next host when the error
+ * carries a `code` key (or one of two string shapes); a chronik **proto**
+ * error — which `404: Plugin "agora" not loaded` is — has none, so it is
+ * thrown from the first host that answered and the rest are never asked.
+ * Only when the loop runs out does the library throw this message, and only
+ * then is a per-host verdict something this app observed rather than
+ * assumed (2026-09-20).
+ */
+const EXHAUSTED_SNIPPET = 'Error connecting to known Chronik instances';
+
+export function everyHostTried(err: unknown): boolean {
+    return messageOf(err).includes(EXHAUSTED_SNIPPET);
+}
+
 export function isPluginMissing(err: unknown): boolean {
     return messageOf(err).includes(PLUGIN_MISSING_SNIPPET);
 }

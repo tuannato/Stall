@@ -7644,6 +7644,16 @@ function hostsBox(triedAtMs: number, hosts: HostAttempt[]): HTMLElement {
     line.append(document.createTextNode(`${copy.TRIED} `));
     line.append(el('span', 'hosts-time', formatTriedAt(triedAtMs)));
     box.append(line);
+    if (hosts.length === 0) {
+        // Nothing to attribute: `hostAttempts` answers an empty list when the
+        // failover stopped at the first node that answered rather than
+        // running out of them. The sentence says that; the rows would have
+        // had to invent it.
+        const said = el('div', 'hosts-said', copy.HOSTS_ONE_ANSWERED);
+        said.setAttribute('data-role', 'hosts-one-answered');
+        box.append(said);
+        return box;
+    }
     for (const host of hosts) {
         box.append(el('div', undefined, `${host.host} · ${host.result}`));
     }

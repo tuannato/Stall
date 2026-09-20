@@ -1,6 +1,7 @@
 import type { ChronikClient } from 'chronik-client';
 import { strToBytes, toHex } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
+import { CHRONIK_HOSTS } from './hosts';
 import { stallGroup } from './live';
 import { agoraOfferReader, loadOffers, type AgoraOfferReader, type AgoraOfferView } from './offers';
 
@@ -78,8 +79,38 @@ describe('loadOffers', () => {
             PK,
         );
         expect(status.kind).toBe('plugin-missing');
-        if (status.kind === 'plugin-missing') {
-            expect(status.hosts.some((h) => h.result === 'plugin-missing')).toBe(true);
+    });
+
+    it('a-failure-names-only-the-hosts-it-asked', async () => {
+        /*
+         * `chronik-client`'s `_request` moves to the next host only for an
+         * error carrying a `code` key; a chronik proto error — which
+         * `404: Plugin "agora" not loaded` is — has none, so it is thrown
+         * from the first host that answered and the others are never asked.
+         * This mapped that one error across all three, so the screen
+         * reported three nodes without the plugin, attributed to whichever
+         * host is first in the list rather than to `_workingIndex` where the
+         * loop starts. The old assertion was `.some(...)`, which is green at
+         * one row or three and could not see it.
+         */
+        const stopped = await loadOffers(
+            agoraWith(new Error('Failed getting /plugin/agora/50xx/utxos: 404: Plugin "agora" not loaded')),
+            PK,
+        );
+        expect(stopped.kind).toBe('plugin-missing');
+        if (stopped.kind === 'plugin-missing') {
+            expect(stopped.hosts, 'nothing observed, nothing claimed').toEqual([]);
+        }
+
+        // And when the library ran out of hosts, it really did ask them all.
+        const exhausted = await loadOffers(
+            agoraWith(new Error('Error connecting to known Chronik instances')),
+            PK,
+        );
+        expect(exhausted.kind).toBe('unreachable');
+        if (exhausted.kind === 'unreachable') {
+            expect(exhausted.hosts).toHaveLength(CHRONIK_HOSTS.length);
+            expect(exhausted.hosts.map((h) => h.host)).toEqual([...CHRONIK_HOSTS]);
         }
     });
 
