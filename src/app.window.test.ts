@@ -42,7 +42,8 @@ vi.mock('./net/live', async (importOriginal) => {
 });
 
 const { boot } = await import('./app');
-const { WINDOW_BEAT_MS, WINDOW_CARD_MS, WINDOW_IDLE_MS, WINDOW_SCROLL_MS } = await import('./app');
+const { BROADCAST_FIXED_MS, WINDOW_BEAT_MS, WINDOW_CARD_MS, WINDOW_IDLE_MS, WINDOW_SCROLL_MS } =
+    await import('./app');
 
 const PK_BYTES = (() => {
     const bytes = new Uint8Array(33);
@@ -110,6 +111,40 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    /**
+     * The magnitudes themselves, by value (2026-09-20).
+     *
+     * Every timing test in this file derives its expectation from the symbol
+     * it is testing — `advanceTimersByTimeAsync(WINDOW_CARD_MS - 1_000)` —
+     * so the rule each docblock states held at any number at all. Measured:
+     * `WINDOW_CARD_MS` changed from 20,000 to 2,000 leaves `pnpm test` green
+     * at 1,385 passes, `pnpm build` green, and the probe untouched because it
+     * imports `renderStall` and never `boot`. A card that turns in two
+     * seconds is the exact failure the constant exists to prevent, on an
+     * unattended screen where nobody can report it.
+     *
+     * The stream's side is already pinned this way — `the-carousel-waits-for-
+     * the-run-then-five-seconds` uses the literal `1_500 + 10_000 + 1_500`.
+     * This is that, for the wall.
+     *
+     * These are the owner's rulings, not measurements: changing one is a
+     * decision, and this is what makes it look like one.
+     */
+    it('holds the owner’s own magnitudes', () => {
+        // A customer notices the item, gets a phone out, unlocks it, opens a
+        // camera and aims. Deliberately the slowest thing on this screen, and
+        // deliberately not the stream's dwell.
+        expect(WINDOW_CARD_MS).toBe(20_000);
+        expect(WINDOW_CARD_MS).toBeGreaterThan(BROADCAST_FIXED_MS);
+        // The floor under a socket that died without saying so, on a screen
+        // no `visibilitychange` ever rescues.
+        expect(WINDOW_BEAT_MS).toBe(60_000);
+        // Yielding to a person standing still and reading, not walking past.
+        expect(WINDOW_IDLE_MS).toBe(45_000);
+        expect(WINDOW_IDLE_MS).toBeGreaterThan(WINDOW_CARD_MS);
+        expect(WINDOW_SCROLL_MS).toBe(6_000);
     });
 
     /**

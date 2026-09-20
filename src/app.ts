@@ -209,7 +209,7 @@ export const WINDOW_SCROLL_MS = 6_000;
  */
 const WINDOW_TOUCHES = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
 /** `mode=fixed` advances the cursor on this interval. */
-const BROADCAST_FIXED_MS = 8_000;
+export const BROADCAST_FIXED_MS = 8_000;
 /**
  * After a card's cut name or words have run through, it stays this long
  * before the next card (owner, 2026-09-09): the run first, then the wait,

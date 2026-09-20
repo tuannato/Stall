@@ -326,6 +326,69 @@ describe('a-quote-unit-table-the-display-table-cannot-move', () => {
         expect(isQuoteUnit('zzz')).toBe(false);
     });
 
+    /**
+     * The one rule that actually protects a published record, pinned by
+     * value (2026-09-20).
+     *
+     * Every assertion above is circular: `QUOTE_UNITS` is BUILT from
+     * `FIAT_CURRENCIES` with `ZERO_DECIMAL_CODES.has(code) ? 0 : 2`, which
+     * is `fiatFractionDigits` character for character over the same set. So
+     * "covers every shipped currency" reads its own source, and "an exponent
+     * the wire can carry" is satisfied by 0 and by 2 alike — move a code
+     * into or out of `ZERO_DECIMAL_CODES` for the display reason its own
+     * docblock gives ("Printing ¥1,200.00 is not wrong so much as foreign")
+     * and the exponent a permanent record is written at moves with it,
+     * every test still green, under a describe named for the rule that
+     * forbids exactly this.
+     *
+     * A literal table is the only thing that can see that. It may GROW —
+     * a new row is a new line here — and a row may never change its
+     * exponent, which is what this refuses.
+     */
+    it('pins every unit to its exponent by value, so the display table cannot move one', () => {
+        const PINNED: ReadonlyArray<readonly [string, number]> = [
+            ['xec', 2],
+            ['usd', 2],
+            ['aed', 2],
+            ['aud', 2],
+            ['bhd', 2],
+            ['brl', 2],
+            ['gbp', 2],
+            ['cad', 2],
+            ['clp', 0],
+            ['cny', 2],
+            ['eur', 2],
+            ['hkd', 2],
+            ['inr', 2],
+            ['idr', 0],
+            ['ils', 2],
+            ['jpy', 0],
+            ['krw', 0],
+            ['myr', 2],
+            ['ngn', 2],
+            ['nzd', 2],
+            ['nok', 2],
+            ['php', 2],
+            ['rub', 2],
+            ['twd', 2],
+            ['sar', 2],
+            ['zar', 2],
+            ['chf', 2],
+            ['try', 2],
+            ['vnd', 0],
+        ];
+        // Every pinned row is still written at the exponent it was pinned at.
+        for (const [code, exponent] of PINNED) {
+            expect(quoteUnitExponent(code), `${code} changed its exponent`).toBe(exponent);
+        }
+        // And none was dropped: a row leaving the table takes the editor's
+        // ability to restate a record already published in that unit.
+        const codes = new Set(QUOTE_UNITS.map((u) => u.code));
+        for (const [code] of PINNED) {
+            expect(codes.has(code), `${code} left the table`).toBe(true);
+        }
+    });
+
     it('writes every unit at an exponent the wire can carry', () => {
         for (const unit of QUOTE_UNITS) {
             expect(Number.isInteger(unit.exponent), unit.code).toBe(true);
