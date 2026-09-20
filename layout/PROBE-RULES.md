@@ -1191,3 +1191,15 @@ against the letters' ink — 2.20:1 bare and 1.18:1 under Sun-faded on Rural,
 2.64:1 on Neo — while every letters tile beside it read 5.7–12:1 and every
 empty tile 7–17:1 (pixels measured with the scratch script). There are no
 letters under a picture; nothing was unreadable.
+
+## The door's deck looks away from one rule, and says so
+
+Round 16 (2026-09-20) put three real `.stall` subtrees on the door at
+~0.6 scale (`doorDeck` in `render.ts`): the shop's own row anatomy over
+fixture words, `aria-hidden`, no control, no price role. The name-column
+floor (`.item-b` ≥ 64px) is measured against those rows too, and a column
+that is 90px on the phone screen is 57px in the picture — arithmetic, not
+collapse. The check skips `[data-role="door-deck"]` and nothing else: every
+row a buyer reads is still measured on every stall screen. Every other rule
+— cover, clip, sideways scroll, spills, contrast — runs over the deck as
+over anything else.

@@ -7,6 +7,7 @@ import {
     MAX_PINNED_STALLS,
     pinnedDoorIsFull,
     pinStall,
+    readPinnedNames,
     readPinnedStalls,
     hasSavedFiat,
     readSavedFiat,
@@ -207,5 +208,40 @@ describe('a-stall-saved-in-capitals-is-the-same-saved-stall', () => {
         expect(readPinnedStalls()).toEqual([]);
         localStorage.setItem('stall.pins', JSON.stringify([UPPER, ADDRESS]));
         expect(readPinnedStalls()).toEqual([ADDRESS]);
+    });
+});
+
+describe('a-pin-carries-the-name-it-was-pinned-with', () => {
+    /**
+     * The name is a snapshot taken at pin time (owner, 2026-09-20): the door
+     * fetches nothing, so it is the one chain-derived string storage holds
+     * beside the route token. Screened on the way out like every stored
+     * string, capped at the record's 32 code points, and never routed on.
+     */
+    it('stores the name beside the token and reads it back', () => {
+        pinStall(ADDRESS, 'Riverside Goods');
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+        expect(readPinnedNames().get(ADDRESS)).toBe('Riverside Goods');
+        unpinStall(ADDRESS);
+        expect(readPinnedNames().size).toBe(0);
+    });
+
+    it('reads the bare tokens every pin was before names', () => {
+        localStorage.setItem('stall.pins', JSON.stringify([ADDRESS]));
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+        expect(readPinnedNames().get(ADDRESS)).toBeUndefined();
+    });
+
+    it('drops a name it would not paint, and keeps the pin', () => {
+        pinStall(ADDRESS, 'Riv\u202eerside');
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+        expect(readPinnedNames().get(ADDRESS)).toBeUndefined();
+        unpinStall(ADDRESS);
+        pinStall(ADDRESS, 'x'.repeat(33));
+        expect(readPinnedNames().get(ADDRESS)).toBeUndefined();
+        unpinStall(ADDRESS);
+        localStorage.setItem('stall.pins', JSON.stringify([{ s: ADDRESS, n: 42 }]));
+        expect(readPinnedStalls()).toEqual([ADDRESS]);
+        expect(readPinnedNames().get(ADDRESS)).toBeUndefined();
     });
 });

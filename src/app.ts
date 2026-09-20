@@ -38,6 +38,7 @@ import {
     saveFiat,
     saveStall,
     unpinStall,
+    readPinnedNames,
 } from './saved';
 import {
     MAX_ACTIVITY_PAGES,
@@ -824,6 +825,7 @@ export function boot(
             // Same read-at-paint rule as the default flag: a pin toggles
             // without a refetch, and a stale list would lie about itself.
             pinnedStalls: readPinnedStalls(),
+            pinnedNames: readPinnedNames(),
             isPinnedStall: isPinnedStall(identityOf(state.view)),
             pinnedDoorFull: pinnedDoorIsFull(),
             fiatCode,
@@ -1026,7 +1028,9 @@ export function boot(
                 if (isPinnedStall(raw)) {
                     unpinStall(raw);
                 } else {
-                    pinStall(raw);
+                    // The name travels with the pin as a snapshot (`saved.ts`):
+                    // the door fetches nothing, so this is where it learns it.
+                    pinStall(raw, state.view.stallName);
                 }
                 paint();
             },

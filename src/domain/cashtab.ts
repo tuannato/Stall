@@ -27,6 +27,12 @@ const PAY_E_CASH_ORIGIN = 'https://pay.e.cash';
  * `#/etokens` renders Cashtab's Etokens screen.
  */
 export const CASHTAB_LIST_URL = `${CASHTAB_ORIGIN}/#/etokens`;
+/**
+ * Cashtab's front door, for the word "Cashtab" wherever the door names it
+ * (owner, 2026-09-20: every mention is a link). Not a token page and not a
+ * handoff — a plain navigation to the wallet's own site.
+ */
+export const CASHTAB_HOME_URL = CASHTAB_ORIGIN;
 const TOKEN_ID_RE = /^[0-9a-f]{64}$/;
 /**
  * Dust in XEC. 546 sats is 5.46 XEC; BIP21 `amount` is XEC, so writing

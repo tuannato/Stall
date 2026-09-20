@@ -13,6 +13,7 @@
  */
 import { DEFAULT_FIAT_CODE, isSupportedFiat } from './domain/fiat';
 import { parseSellerParam } from './domain/route';
+import { isLegibleText } from './domain/text';
 
 const KEY = 'stall.default';
 
@@ -90,10 +91,33 @@ const PINS_KEY = 'stall.pins';
 
 export const MAX_PINNED_STALLS = 12;
 
-/** A JSON array of route tokens can never legitimately be longer than this. */
-const MAX_PINS_RAW = (MAX_SAVED + 8) * MAX_PINNED_STALLS;
+/**
+ * A pinned name is a snapshot of the stall's `STL1` name at the moment of
+ * pinning (owner, 2026-09-20): the door fetches nothing, so this is the one
+ * chain-derived string storage holds, beside the route token and never
+ * instead of it. Nothing routes on it. It is screened on the way out like
+ * every other stored string — storage is user-writable — and capped at the
+ * record's own 32 code points.
+ */
+const MAX_PIN_NAME = 32;
 
-export function readPinnedStalls(): string[] {
+/** A stored entry: the legacy bare token, or the token with its name. */
+type PinEntry = { readonly stall: string; readonly name?: string };
+
+const MAX_PINS_RAW = (MAX_SAVED + 160) * MAX_PINNED_STALLS;
+
+function pinName(raw: unknown): string | undefined {
+    if (typeof raw !== 'string' || raw === '') {
+        return undefined;
+    }
+    const trimmed = raw.trim();
+    if (trimmed === '' || [...trimmed].length > MAX_PIN_NAME || !isLegibleText(trimmed)) {
+        return undefined;
+    }
+    return trimmed;
+}
+
+function readPinEntries(): PinEntry[] {
     let raw: string | null;
     try {
         raw = localStorage.getItem(PINS_KEY);
@@ -114,16 +138,25 @@ export function readPinnedStalls(): string[] {
     }
     // Each entry treated exactly like a pasted address, deduped, and capped
     // even on read: a hand-edited array must not become an unbounded door.
-    const pins: string[] = [];
+    // A bare string is the shape every pin had before names (2026-09-20).
+    const pins: PinEntry[] = [];
     for (const entry of parsed) {
-        if (typeof entry !== 'string' || entry.length > MAX_SAVED) {
+        const token =
+            typeof entry === 'string'
+                ? entry
+                : entry !== null && typeof entry === 'object' && typeof (entry as { s?: unknown }).s === 'string'
+                  ? (entry as { s: string }).s
+                  : undefined;
+        if (token === undefined || token.length > MAX_SAVED) {
             continue;
         }
-        const canonical = canonicalStall(entry);
-        if (canonical === undefined || pins.includes(canonical)) {
+        const canonical = canonicalStall(token);
+        if (canonical === undefined || pins.some((pin) => pin.stall === canonical)) {
             continue;
         }
-        pins.push(canonical);
+        const name =
+            typeof entry === 'object' && entry !== null ? pinName((entry as { n?: unknown }).n) : undefined;
+        pins.push(name === undefined ? { stall: canonical } : { stall: canonical, name });
         if (pins.length === MAX_PINNED_STALLS) {
             break;
         }
@@ -131,35 +164,54 @@ export function readPinnedStalls(): string[] {
     return pins;
 }
 
-function writePins(pins: readonly string[]): void {
+export function readPinnedStalls(): string[] {
+    return readPinEntries().map((pin) => pin.stall);
+}
+
+/** The names the pins were made with, by canonical token. */
+export function readPinnedNames(): Map<string, string> {
+    const names = new Map<string, string>();
+    for (const pin of readPinEntries()) {
+        if (pin.name !== undefined) {
+            names.set(pin.stall, pin.name);
+        }
+    }
+    return names;
+}
+
+function writePins(pins: readonly PinEntry[]): void {
     try {
         if (pins.length === 0) {
             localStorage.removeItem(PINS_KEY);
         } else {
-            localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+            localStorage.setItem(
+                PINS_KEY,
+                JSON.stringify(pins.map((pin) => (pin.name === undefined ? { s: pin.stall } : { s: pin.stall, n: pin.name }))),
+            );
         }
     } catch {
         // Nothing to tell the visitor: the stall on screen is unchanged.
     }
 }
 
-export function pinStall(raw: string): void {
+export function pinStall(raw: string, name?: string): void {
     const canonical = raw.length > MAX_SAVED ? undefined : canonicalStall(raw);
     if (canonical === undefined) {
         return;
     }
-    const pins = readPinnedStalls();
-    if (pins.includes(canonical) || pins.length >= MAX_PINNED_STALLS) {
+    const pins = readPinEntries();
+    if (pins.some((pin) => pin.stall === canonical) || pins.length >= MAX_PINNED_STALLS) {
         // Full is a refusal, never an eviction — the copy in the studio says
         // so, which keeps this silent return from being a silent failure.
         return;
     }
-    writePins([...pins, canonical]);
+    const kept = pinName(name);
+    writePins([...pins, kept === undefined ? { stall: canonical } : { stall: canonical, name: kept }]);
 }
 
 export function unpinStall(raw: string): void {
     const canonical = canonicalStall(raw);
-    writePins(readPinnedStalls().filter((pin) => pin !== canonical));
+    writePins(readPinEntries().filter((pin) => pin.stall !== canonical));
 }
 
 export function isPinnedStall(raw: string | undefined): boolean {

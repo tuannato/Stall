@@ -4849,11 +4849,19 @@ textarea.share-embed {
     background-repeat: no-repeat;
 }
 
+/*
+ * The awning. Blue and TRUE WHITE stripes, one half-disc hanging from each,
+ * and a shade along the hem: the white stripes were #f4f7fe on a #f2f2ef
+ * page, so their scallops vanished and the hem read as blue tongues with a
+ * notch between them (owner, on a phone, 2026-09-20). Both colours scallop
+ * now, and the shade is what makes the white ones read against the ground.
+ */
 .door-canopy {
     height: 58px;
     background:
+        linear-gradient(rgba(0, 0, 0, 0) 55%, rgba(20, 23, 26, 0.14)),
         linear-gradient(rgba(20, 23, 26, 0.1), rgba(0, 0, 0, 0) 8px),
-        repeating-linear-gradient(90deg, #2563eb 0 34px, #f4f7fe 34px 68px);
+        repeating-linear-gradient(90deg, #2563eb 0 34px, #ffffff 34px 68px);
     -webkit-mask:
         linear-gradient(#000 0 0) top / 100% calc(100% - 16px) no-repeat,
         radial-gradient(circle at 50% 0, #000 16.5px, rgba(0, 0, 0, 0) 17px)
@@ -4869,15 +4877,23 @@ textarea.share-embed {
     display: block;
     max-width: 430px;
     margin: 0 auto;
-    padding: 22px 16px 40px;
+    padding: 18px 16px 40px;
     gap: 0;
+}
+
+/* The site bar: the brand, the two guides, the workshop named as next. */
+.door-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 14px;
 }
 
 .door-brand {
     display: flex;
     align-items: center;
-    gap: 11px;
-    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .door-brand .stall-mark {
@@ -4893,11 +4909,66 @@ textarea.share-embed {
     letter-spacing: -0.01em;
 }
 
-.door-value {
-    margin: 6px 0 0;
-    width: 100%;
+.door-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 2px;
+    margin-left: -10px;
+}
+
+.door-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: var(--s-text);
+    font-weight: 600;
     font-size: 13.5px;
+}
+
+.door-nav a:hover {
+    background: color-mix(in srgb, var(--s-accent) 8%, transparent);
+}
+
+.door-soon {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 10px;
     color: var(--s-muted);
+    font-weight: 500;
+    font-size: 13.5px;
+}
+
+.door-soon small {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
+}
+
+.door-kicker {
+    margin: 18px 0 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--s-accent);
+}
+
+.door-lede {
+    margin: 12px 0 0;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--s-muted);
+    max-width: 44ch;
+    text-wrap: pretty;
 }
 
 /* A numbered checklist; the number is a node, never a counter pseudo. */
@@ -4970,14 +5041,9 @@ textarea.share-embed {
 }
 
 .door-paste {
-    margin-top: 26px;
+    margin-top: 4px;
 }
 
-/*
- * The display line. Sized by clamp, not a fixed 64px: "Open a stall" at 64px
- * with nowrap is 397px of glyphs — measured — and the probe rightly fails a
- * door that scrolls sideways at 390.
- */
 .door-display {
     display: block;
     font-size: clamp(40px, 15.5vw, 64px);
@@ -5052,11 +5118,6 @@ textarea.share-embed {
     background: #1d4fc4;
 }
 
-/*
- * The counter: full-bleed via the 50vw trick, which is why the door clips
- * overflow-x. White text on the darker end of the gradient: #fff on #1D4FC4
- * measures 6.4:1.
- */
 .door-slab {
     position: relative;
     margin: -22px calc(50% - 50vw) 58px;
@@ -5067,7 +5128,6 @@ textarea.share-embed {
     border-bottom: 4px solid #16389b;
 }
 
-/* A real node, never a positioned ::after — the probe refuses those. */
 .door-legs {
     position: absolute;
     top: 100%;
@@ -5104,21 +5164,20 @@ textarea.share-embed {
     display: flex;
     flex-wrap: wrap;
     gap: 2px 18px;
-    margin: 0;
+    margin: 14px 0 0;
     padding: 0;
     list-style: none;
 }
 
 /*
  * Facts are not styled as controls (round 8, item 6, owner 2026-09-15). The
- * three chips say what the product is; they wore the same outlined pill as
- * the door's buttons, one shape for a thing you press and a thing you read.
+ * chips say what the product is; they wore the same outlined pill as the
+ * door's buttons, one shape for a thing you press and a thing you read.
  * Words and weight stay; the border and the ground go — and with the ground
  * gone the ink follows the page's, so it is the accent token and not the
  * door's literal blue: the probe's worn half paints the door under Modern's
  * After-hours night, where `#1d4fc4` on a fact with no ground of its own
- * read 2.59:1 (2026-09-15). On the door as it paints, the token is the same
- * brand blue. Test: `the-doors-facts-are-not-styled-as-controls`.
+ * read 2.59:1 (2026-09-15). Test: `the-doors-facts-are-not-styled-as-controls`.
  */
 .door-chips li {
     padding: 4px 0;
@@ -5129,26 +5188,205 @@ textarea.share-embed {
     font-weight: 600;
 }
 
-.door-chips-fine {
-    margin: 12px 2px 0;
+/*
+ * The deck: three real `.stall` subtrees, each wearing a look and one of its
+ * decorations, at ~0.64 of the phone screen. `zoom` and not `transform`, so
+ * the card takes the room it paints. On a phone it is a row that scrolls
+ * inside its own box (never the page); from 960px it fans beside the counter.
+ */
+.door-deck {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.deck-row {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: x mandatory;
+    /* Inside the page's own padding, never full-bleed: a negative margin
+       here is a strip the probe reads as the hero spilling past its box. */
+    margin: 0;
+    padding: 6px 2px 10px;
+}
+
+.deck-look {
+    flex: 0 0 250px;
+    width: 250px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.deck-stall {
+    flex: none;
+    min-height: 0;
+    width: 390px;
+    zoom: 0.641;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow:
+        0 2px 6px rgba(20, 23, 26, 0.08),
+        0 10px 28px rgba(20, 23, 26, 0.12);
+    pointer-events: none;
+}
+
+.deck-cap-look,
+.deck-legend-look {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.deck-cap-look span,
+.deck-legend-look span {
+    color: var(--s-muted);
+    font-weight: 500;
+}
+
+.deck-legend {
+    display: none;
+}
+
+.deck-cap {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--s-muted);
+    max-width: 56ch;
+    text-wrap: pretty;
+}
+
+.deck-cap b {
+    color: var(--s-text);
+    font-weight: 600;
+}
+
+/* What a stall does: four tiles, each with one link into the manual. */
+.door-does {
+    margin-top: 36px;
+}
+
+.door-sec {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+}
+
+.door-tiles {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+}
+
+.door-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    background: var(--s-surface);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    border-radius: 14px;
+}
+
+.door-tile-ic {
+    width: 24px;
+    height: 24px;
+    stroke: var(--s-accent);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.door-tile h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.door-tile p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--s-muted);
+    text-wrap: pretty;
+}
+
+.door-more {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 4px;
+    min-height: 44px;
+    margin-top: auto;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--s-accent);
+    text-decoration: none;
+}
+
+.door-more .ic {
+    width: 14px;
+    height: 14px;
+}
+
+.cashtab-link {
+    color: var(--s-accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+/* The pins, the real stall and the first stall: three cards of one dress. */
+.door-back {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 30px;
+}
+
+.door-card {
+    background: var(--s-surface);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.door-card-t {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.door-card .fine {
+    margin: 0;
 }
 
 .door .pinned {
-    margin-top: 30px;
-    border: 0;
-    padding: 0;
+    margin: 0;
 }
 
 .door .pinned-list {
     margin-top: 12px;
-    background: #fff;
-    border: 1px solid rgba(95, 105, 117, 0.16);
-    border-radius: 14px;
+    background: var(--s-surface);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    border-radius: 12px;
     display: block;
     /*
      * A full door holds twelve pins, and twelve rows is over half a phone
      * screen: the panel scrolls its own rows instead of stretching the
-     * page (owner's call, 2026-08-30). Five and a half rows visible — the
+     * page (owner's call, 2026-08-30). Four and a half rows visible — the
      * cut row is what says there is more.
      */
     max-height: 260px;
@@ -5157,53 +5395,77 @@ textarea.share-embed {
 }
 
 .door .pinned-row {
+    display: flex;
+    align-items: stretch;
     justify-content: space-between;
-    padding: 13px 14px;
+    padding: 0;
 }
 
 .door .pinned-row + .pinned-row {
-    border-top: 1px solid rgba(95, 105, 117, 0.14);
+    border-top: 1px solid color-mix(in srgb, var(--s-muted) 18%, transparent);
 }
 
+/* The name over the short token; the whole row opens the stall. */
 .door .pinned-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    text-align: left;
+    padding: 8px 14px;
     border: 0;
     background: none;
-    padding: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 13.5px;
-    font-weight: 500;
-    color: #14171a;
-    flex: 0 1 auto;
+    color: var(--s-text);
+    font-family: inherit;
 }
 
 .door .pinned-open:hover {
-    color: #2563eb;
+    background: color-mix(in srgb, var(--s-accent) 5%, transparent);
 }
 
-.door-yours {
-    margin: 18px 2px 0;
+.pinned-name {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* The streamers' line under the chips: the guide is its own page. */
-.door-stream {
-    margin: 10px 2px 0;
+.pinned-name.none {
+    font-weight: 500;
+    color: var(--s-muted);
 }
 
-.door-stream a {
-    color: var(--s-accent);
-    font-weight: 600;
+.pinned-addr {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--s-muted);
+}
+
+.door .pinned-drop {
+    flex: none;
+    align-self: stretch;
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, var(--s-muted) 18%, transparent);
+    border-radius: 0;
+    padding: 0 14px;
 }
 
 .door .demo-soon {
-    margin-top: 26px;
-    padding: 18px;
-    background: rgba(255, 255, 255, 0.65);
-    border: 1px solid rgba(95, 105, 117, 0.2);
-    border-radius: 14px;
+    margin: 0;
 }
 
-.door-preview {
-    display: none;
+.door .demo-soon .mini {
+    margin-top: 12px;
+}
+
+.door-first .steps {
+    margin-top: 12px;
 }
 
 @keyframes door-wave {
@@ -5219,12 +5481,6 @@ textarea.share-embed {
     }
     50% {
         box-shadow: 0 8px 30px rgba(37, 99, 235, 0.6);
-    }
-}
-
-@keyframes door-floaty {
-    50% {
-        transform: rotate(2.5deg) translateY(-8px);
     }
 }
 
@@ -5255,8 +5511,9 @@ textarea.share-embed {
     .door-canopy {
         height: 84px;
         background:
+            linear-gradient(rgba(0, 0, 0, 0) 55%, rgba(20, 23, 26, 0.14)),
             linear-gradient(rgba(20, 23, 26, 0.1), rgba(0, 0, 0, 0) 8px),
-            repeating-linear-gradient(90deg, #2563eb 0 42px, #f4f7fe 42px 84px);
+            repeating-linear-gradient(90deg, #2563eb 0 42px, #ffffff 42px 84px);
         -webkit-mask:
             linear-gradient(#000 0 0) top / 100% calc(100% - 19px) no-repeat,
             radial-gradient(circle at 50% 0, #000 20.5px, rgba(0, 0, 0, 0) 21px)
@@ -5268,23 +5525,8 @@ textarea.share-embed {
     }
 
     .door-wrap {
-        display: grid;
-        max-width: 1200px;
-        padding: 40px 40px 64px;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        grid-template-areas:
-            'brand brand'
-            'paste paste'
-            'chips cfine'
-            'pinned pinned'
-            'yours demo';
-        column-gap: 40px;
-        row-gap: 0;
-        align-content: start;
-    }
-
-    .door-brand {
-        grid-area: brand;
+        max-width: 1120px;
+        padding: 22px 32px 64px;
     }
 
     .door-brand .stall-mark {
@@ -5296,25 +5538,24 @@ textarea.share-embed {
         font-size: 26px;
     }
 
-    .door-value {
-        width: auto;
-        margin: 0 0 0 10px;
-        font-size: 14.5px;
+    .door-nav a,
+    .door-soon {
+        font-size: 14px;
+        padding: 0 12px;
     }
 
-    .door-paste {
-        grid-area: paste;
-        margin-top: 34px;
+    .door-hero {
+        margin-top: 26px;
     }
 
     .door-display {
-        font-size: clamp(64px, 7.4vw, 92px);
+        font-size: 64px;
     }
 
     .door-unit {
         flex-wrap: nowrap;
         align-items: center;
-        margin-top: 28px;
+        margin-top: 22px;
         padding: 12px 12px 12px 18px;
     }
 
@@ -5329,234 +5570,133 @@ textarea.share-embed {
     }
 
     .door-slab {
-        margin: -24px 0 62px;
-        padding: 46px 28px 14px;
-        border-radius: 0 0 6px 6px;
+        margin: -22px 0 58px;
+        padding: 44px 28px 12px;
+        border-radius: 0 0 8px 8px;
     }
 
     .door-hint {
         font-size: 13.5px;
     }
 
-    .door-chips {
-        grid-area: chips;
-        align-self: start;
+    .door-does,
+    .door-back {
+        margin-top: 44px;
     }
 
-    .door-chips-fine {
-        grid-area: cfine;
-        margin: 6px 2px 0;
-        align-self: start;
+    .door-tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
     }
 
-    .door .pinned {
-        grid-area: pinned;
-        margin-top: 34px;
+    .door-back {
+        grid-template-columns: 1.2fr 1fr 1.2fr;
+    }
+}
+
+/*
+ * From 960px the deck fans beside the counter: three cards in flow, the
+ * outer two rotated and pulled in under the middle one. In flow and never
+ * `position: absolute` — the probe sweeps every absolutely positioned node
+ * as a decoration against the paste button's box, which is `.buy`. The
+ * fan is 2.1 card widths wide, which fits the hero's second column at
+ * every width from 960 (428px) to the wrap's ceiling (508px); the sizes
+ * step up once more at 1200.
+ */
+@media (min-width: 960px) {
+    .door-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 40px;
+        align-items: start;
     }
 
-    .door-yours {
-        grid-area: yours;
-        margin: 34px 2px 0;
-        padding: 16px;
-        background: rgba(255, 255, 255, 0.65);
-        border: 1px solid rgba(95, 105, 117, 0.2);
-        border-radius: 14px;
-        align-self: start;
-    }
-
-    .door .demo-soon {
-        grid-area: demo;
-        margin-top: 34px;
-        align-self: start;
-    }
-
-    .door-preview {
-        grid-area: pv;
-        display: none;
-        position: relative;
-        align-self: start;
-        margin-top: 8px;
-        pointer-events: none;
-    }
-
-    @media (min-width: 1100px) {
-        .door-wrap {
-            grid-template-columns:
-                minmax(0, 1.05fr) minmax(0, 0.95fr)
-                minmax(320px, 400px);
-            grid-template-areas:
-                'brand brand pv'
-                'paste paste pv'
-                'chips cfine pv'
-                'pinned yours demo';
-        }
-
-        .door-preview {
-            display: block;
-        }
-    }
-
-    .pv-card {
-        background: #fff;
-        border: 1px solid rgba(95, 105, 117, 0.18);
-        border-radius: 18px;
-        padding: 18px;
-        box-shadow:
-            0 3px 8px rgba(20, 23, 26, 0.07),
-            0 26px 60px rgba(20, 23, 26, 0.16);
-        transform: rotate(2.5deg);
-        animation: door-floaty 6.5s ease-in-out infinite;
-    }
-
-    .pv-head {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid rgba(95, 105, 117, 0.16);
-    }
-
-    .pv-head .stall-mark {
-        width: 24px;
-        height: 29px;
-        flex: none;
-    }
-
-    .pv-name {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-    }
-
-    .pv-tagline {
-        margin: 2px 0 0;
-        font-size: 11.5px;
-        color: #5f6975;
-    }
-
-    .pv-sub {
-        margin: 3px 0 0;
-        font-size: 11px;
-        font-weight: 600;
-        color: #1d4fc4;
-    }
-
-    .pv-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 11px 0;
-        border-bottom: 1px solid rgba(95, 105, 117, 0.12);
-    }
-
-    /*
-     * The tiles: one real icon (mingo, the owner's own token), recolored per
-     * row. The flat color underneath is the fallback the shop's own icon
-     * rule promises — a failed load leaves it, never a broken-image glyph.
-     */
-    .pv-ic {
-        width: 30px;
-        height: 30px;
-        border-radius: 8px;
-        flex: none;
-        overflow: hidden;
-    }
-
-    .pv-icimg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        image-rendering: pixelated;
-    }
-
-    .pv-i1 {
-        background: #bdd3f8;
-    }
-
-    .pv-i1 .pv-icimg {
-        filter: hue-rotate(120deg) saturate(0.8);
-    }
-
-    .pv-i2 {
-        background: #dbe6fb;
-    }
-
-    .pv-i2 .pv-icimg {
-        filter: hue-rotate(165deg) saturate(0.7) brightness(1.08);
-    }
-
-    .pv-i3 {
-        background: #f3d8cf;
-    }
-
-    .pv-i3 .pv-icimg {
-        filter: hue-rotate(-95deg) saturate(0.9) brightness(1.05);
-    }
-
-    .pv-b {
-        flex: 1;
+    .door-hero > * {
         min-width: 0;
     }
 
-    .pv-n {
-        display: block;
-        font-size: 13.5px;
-        font-weight: 600;
+    .door-kicker {
+        margin-top: 0;
     }
 
-    .pv-q {
-        display: block;
-        margin-top: 1px;
-        font-size: 11px;
-        color: #5f6975;
+    .door-deck {
+        margin-top: 0;
+        padding-top: 22px;
     }
 
-    .pv-p {
-        text-align: right;
+    .deck-row {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 0;
+        margin: 0;
+        padding: 10px 0 0;
+        overflow: visible;
     }
 
-    .pv-x {
-        display: block;
-        font-size: 15px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
+    .deck-look {
+        flex: 0 0 200px;
+        width: 200px;
     }
 
-    .pv-u {
-        display: block;
-        font-size: 10px;
-        font-weight: 600;
-        color: #5f6975;
+    .deck-stall {
+        zoom: 0.513;
     }
 
-    .pv-foot {
-        margin-top: 12px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        background: #f1f4fa;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 11px;
-        color: #454f59;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    .deck-look.l-neo {
+        transform: rotate(-6deg) translateY(10px);
+        margin-right: -90px;
     }
 
-    .pv-tag {
-        display: block;
-        margin-top: 16px;
-        text-align: center;
-        font-size: 12.5px;
-        font-style: italic;
-        color: #5f6975;
+    .deck-look.l-modern {
+        position: relative;
+        z-index: 1;
+    }
+
+    .deck-look.l-rural {
+        transform: rotate(6deg) translateY(10px);
+        margin-left: -90px;
+    }
+
+    .deck-look .deck-cap-look {
+        display: none;
+    }
+
+    .deck-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 22px;
+        margin: 0;
+    }
+
+    .door-tiles {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .deck-look {
+        flex: 0 0 236px;
+        width: 236px;
+    }
+
+    .deck-stall {
+        zoom: 0.605;
+    }
+
+    .deck-look.l-neo {
+        margin-right: -106px;
+    }
+
+    .deck-look.l-rural {
+        margin-left: -106px;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .door-canopy,
-    .door-open,
-    .pv-card {
+    .door-open {
         animation: none;
     }
 

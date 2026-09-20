@@ -846,6 +846,8 @@ export type StallView = WindowState & {
      * renders them; the apex never fetches, so each is a link, not a preview.
      */
     pinnedStalls?: readonly string[];
+    /** The name each pin was made with, by canonical token — a snapshot, never a fetch (`saved.ts`). */
+    pinnedNames?: ReadonlyMap<string, string>;
     /** True when this stall is on this browser's door. */
     isPinnedStall?: boolean;
     /** True when the door holds its full 12 and a new pin would be refused. */

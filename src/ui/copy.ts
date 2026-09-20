@@ -660,7 +660,16 @@ export const OPENING_BY_DEFAULT = 'Opens by default — stop';
  * broken, and a silent eviction would drop a pin somebody chose.
  */
 export const PINNED_TITLE = 'Pinned stalls';
-export const PINNED_LEDE = 'Kept in this browser only — never on the chain.';
+/**
+ * The name beside a pin is a snapshot: the door fetches nothing, so it is
+ * the name the stall had when it was pinned, kept in this browser with the
+ * route token (§2's one exception for a chain-derived string, owner
+ * 2026-09-20). The lede says so, because a renamed stall keeps its old name
+ * here until it is pinned again.
+ */
+export const PINNED_LEDE =
+    'Kept in this browser only — never on the chain. The name is the one the stall had when you pinned it.';
+export const PINNED_NO_NAME = 'No name published';
 export const PIN_TO_DOOR = 'Pin to the front door';
 export const PINNED_ON_DOOR = 'Pinned to the front door — remove';
 export const PIN_REMOVE = 'Unpin';
@@ -784,50 +793,104 @@ export function tokenTypeLabel(type: string, protocol: string): string | undefin
 
 /** The apex. No identity, because Stall has no account to show. */
 export const HOME_TITLE = 'Stall';
-export const HOME_LEDE = "A shop page for one seller's listings on eCash Agora.";
+/** One line over the display: what the page is, before what it does. */
+export const HOME_KICKER = 'A shop window for one eCash seller';
+/**
+ * The door's sentence covers both rails (owner, 2026-09-20; PLAN § Decided):
+ * listings from Agora and the seller's own quotes, on the address that is the
+ * shop. "Your wallet signs. Stall shows." is the whole trust model.
+ */
+export const HOME_LEDE =
+    'Listings from Agora and prices you set yourself, on a link that is your own address. Your wallet signs. Stall shows.';
 
 export const OPENING_SUB = 'Opening this stall';
 export const OPENING_BODY = 'Reading the chain for this seller.';
 
 /**
- * The door's three chips — the two intro paragraphs compressed to the three
- * facts a visitor actually scans for (Stall Design, direction D). The one
- * sentence kept in prose is the trust line under them.
- */
-/**
- * The third chip said "No signup, no install", which is true of a reader and
- * false of a seller (Cashtab lists, mints and signs) and of a buyer (a wallet
- * holding XEC pays). Since 2026-09-07 it says what is true of all three:
- * there is no account here, and a wallet the visitor already holds does the
- * signing.
+ * The facts under the counter, not styled as controls (round 8, item 6,
+ * owner 2026-09-15; test `the-doors-facts-are-not-styled-as-controls`).
+ * There were three; "One link" and "Prices straight from the chain" moved
+ * into the tiles (`HOME_TILES`), where each has room to be explained. The
+ * second said "No signup, no install" until 2026-09-07 — true of a reader,
+ * false of a seller and a buyer; it says what is true of all three.
  */
 export const HOME_CHIPS = [
-    'One link: /s/ + your address',
-    'Prices straight from the chain',
+    'Stall reads the chain and holds no keys',
     'No account here \u2014 your wallet signs',
 ] as const;
-export const HOME_CHIPS_FINE = 'Stall reads the chain and holds no keys.';
 
 /**
- * The tilted storefront preview on the wide door. Fixture words, painted
- * `aria-hidden` and inert: it illustrates the *shape* every stall opens as,
- * not a shop this origin claims exists — the caption says exactly that. The
- * address is the fixture dummy nobody holds; the prices are illustrative
- * round numbers the owner approved; the icon is a real token's (see
- * `DOOR_PREVIEW_ICON_TOKEN`), recolored per row.
+ * The deck beside the counter: three real looks over one fixture. Fixture
+ * words, painted `aria-hidden` and inert — it illustrates the *shape* every
+ * stall opens as, not a shop this origin claims exists. The address is the
+ * fixture dummy nobody holds; the prices are illustrative round numbers the
+ * owner approved; the icon is a real token's (`DOOR_PREVIEW_ICON_TOKEN`).
  */
 export const HOME_PREVIEW = {
     name: 'Riverside Goods',
     tagline: 'Fresh from the riverside — roasted and packed weekly',
     sub: '3 items for sale',
     items: [
-        { name: 'Roasted Beans', qty: 'ROAS · 24 left', price: 'from 1,200' },
-        { name: 'Green Tea', qty: 'GREE · 12 left', price: 'from 875' },
-        { name: 'Pixel #1', qty: 'PIXE · 12 left', price: 'from 500' },
+        { name: 'Roasted Beans', price: '1,200' },
+        { name: 'Green Tea', price: '875' },
+        { name: 'Pixel #1', price: '500' },
     ],
     address: 'ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09',
-    caption: 'Every stall opens as a page like this.',
 } as const;
+/** Under the deck, before `DECOR_LEDE` verbatim and the workshop line. */
+export const HOME_DECK_CAP =
+    'Three looks and a rack of decorations, chosen in the Studio and signed in your wallet.';
+/**
+ * The workshop is named on the door before it exists (owner, 2026-09-20:
+ * "cứ nhắc để có người biết là chức năng đó sẽ có"). Named as next, never
+ * dated: a date is the away-mode mistake, a promise nobody clears.
+ */
+export const HOME_WORKSHOP = 'Workshop';
+export const HOME_WORKSHOP_TAG = 'next';
+export const HOME_WORKSHOP_NEXT = 'The workshop, where other makers sell theirs, is next.';
+
+/** The site bar: the two guides, each a page of its own (§9). */
+export const HOME_NAV_LABEL = 'Guides';
+export const HOME_NAV_STREAM = 'On stream';
+export const HOME_STREAM_LINK = 'Put your stall on stream';
+export const HOME_GUIDE_LINK = 'How a stall works';
+/** The studio items card and the first-stall checklist point at the guide's chapters. */
+export const STUDIO_GUIDE_LINK = 'How quotes work';
+export const FIRST_STALL_GUIDE_LINK = 'How a stall works';
+
+/**
+ * Four tiles for what a stall does, each a door into the manual. The order
+ * is the product's: listings lead (PLAN § Decided), the seller's own quotes
+ * beside them, then the two ways a stall leaves the browser. "Cashtab" in a
+ * body is painted as a link (`linkCashtab`).
+ */
+export const HOME_DOES = 'What a stall does';
+export const HOME_TILES = [
+    {
+        title: 'Listings',
+        body: 'Your Agora offers under one link. Buying happens in Cashtab, from any wallet that speaks Agora.',
+        link: 'How listings work',
+        href: '/guide#listings',
+    },
+    {
+        title: 'Quotes',
+        body: 'Name a price for what you deliver yourself. A buyer’s wallet pays your address directly — no escrow.',
+        link: 'How quotes work',
+        href: '/guide#quotes',
+    },
+    {
+        title: 'On stream, in the shop',
+        body: 'One item and a QR on your live video, or on a screen in your shop that nobody has to touch.',
+        link: HOME_STREAM_LINK,
+        href: '/stream',
+    },
+    {
+        title: 'Poster & tags',
+        body: 'A poster for the street, a tag for one item. Every code opens this page — never a wallet.',
+        link: 'Share & print',
+        href: '/guide#share',
+    },
+] as const;
 
 export const HOME_PASTE_LABEL = 'Open a stall';
 export const HOME_PASTE_HINT =
@@ -835,22 +898,29 @@ export const HOME_PASTE_HINT =
 export const HOME_PASTE_SUBMIT = 'Open stall';
 export const HOME_PASTE_INVALID =
     'That is not an eCash address or a compressed public key.';
+/**
+ * What the paste box rests on, and the examples it types first
+ * (`doorTyping.ts`). Each example is the p2pkh address of a dummy key —
+ * `02` followed by one byte repeated (bb, cd, 7e) — so it is a real-looking,
+ * decodable address that nobody holds; the first is the fixture payer of
+ * `layout/fixtures.ts`. Never a real seller's (AGENTS §8).
+ */
+export const HOME_PASTE_PLACEHOLDER = 'your eCash address here';
+export const HOME_PASTE_SAMPLES = [
+    'ecash:qr9w00zzq6s88t3e97h3ktsuj32y3m87t5wzyf3kzq',
+    'ecash:qrtkzrddx0yu8jskvg4jnn24amhgw9tww5l76ax9uw',
+    'ecash:qrz9lrwa3rszvf466mqe07ywxv8dmws8vu3sjv0h93',
+] as const;
 export const HOME_SELLER =
     'If this is your stall: list your token in Cashtab, then paste your own eCash address here — the one Cashtab shows on its Receive screen. Your shop opens at a link that is yours to share.';
-
 /**
- * A placeholder for the live demo stall, which needs the owner to list from a
- * real maker first. Copy only — no fetch, no fake shop. The apex stays a door.
+ * The first-stall card on the door: the checklist's three step names
+ * (`FIRST_STALL_STEPS`), with the paste step marked as where a new seller
+ * is. Its status is the door's own — the checklist's says "opens here",
+ * which is true on the checklist and not on the door.
  */
-/** The door's one line for streamers: the guide is a page of its own (§9). */
-export const HOME_STREAM_LEAD = 'Streaming?';
-export const HOME_STREAM_LINK = 'Put your stall on stream';
-/** The door's one line for the general guide: a page of its own, like the stream guide (§9). */
-export const HOME_GUIDE_LEAD = 'New here?';
-export const HOME_GUIDE_LINK = 'How a stall works';
-/** The studio items card and the first-stall checklist point at the guide's chapters. */
-export const STUDIO_GUIDE_LINK = 'How quotes work';
-export const FIRST_STALL_GUIDE_LINK = 'How a stall works';
+export const HOME_FIRST_TITLE = 'Your first stall';
+export const HOME_FIRST_PASTE = 'Paste your address above; the Studio opens once the listing is read';
 
 export const HOME_DEMO_TITLE = 'See a real stall';
 /**

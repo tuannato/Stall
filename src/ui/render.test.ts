@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetDoorTyping } from './doorTyping';
 import { ICON_HERO_SIZE, ICON_HOST, iconUrl } from '../domain/icons';
 import {
     BANNED_THEME_PROPS,
@@ -668,7 +669,7 @@ describe('home is not an unreadable link', () => {
         expect(text).toContain(HOME_LEDE);
         // The two intro paragraphs became three chips and one trust line
         // (Stall Design, direction D) — the same facts, scannable.
-        expect(text).toContain(copy.HOME_CHIPS_FINE);
+        expect(text).toContain(copy.HOME_KICKER);
         for (const chip of copy.HOME_CHIPS) {
             expect(text).toContain(chip);
         }
@@ -2349,7 +2350,10 @@ describe('apex signposts a demo without becoming a shop', () => {
         // The door never paints a shop: no offer rows, no copy-link, no price.
         expect(root.querySelector('[data-role="price"]')).toBeNull();
         expect(root.querySelector('[data-role="copy-link"]')).toBeNull();
-        expect(root.querySelector('.item')).toBeNull();
+        // The deck's rows are the only `.item`s a door may carry: fixture, inert.
+        for (const item of root.querySelectorAll('.item')) {
+            expect(item.closest('[data-role="door-deck"]'), 'an item outside the deck').not.toBeNull();
+        }
     });
 });
 
@@ -2393,7 +2397,7 @@ describe('the-sellers-sign-carries-no-brand-mark', () => {
         expect(sign.firstElementChild?.classList.contains('stall-headings'), 'the headings lead the sign').toBe(true);
 
         const door = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }).root;
-        const brand = door.querySelector('header.door-brand') as HTMLElement;
+        const brand = door.querySelector('.door-brand') as HTMLElement;
         const mark = brand.querySelector('img.stall-mark') as HTMLImageElement;
         expect(mark, 'the door keeps the brand').not.toBeNull();
         expect(mark.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
@@ -4953,8 +4957,11 @@ describe('the-door-remembers-what-this-browser-pinned', () => {
         const opens = [...root.querySelectorAll('[data-role="pinned-open"]')];
         expect(opens).toHaveLength(2);
         // Glance length on screen; the click carries the untouched token.
-        expect(opens[0]!.textContent).toContain('…');
-        expect(opens[0]!.textContent!.length).toBeLessThan(20);
+        const addr = opens[0]!.querySelector('.pinned-addr')!;
+        expect(addr.textContent).toContain('…');
+        expect(addr.textContent!.length).toBeLessThan(20);
+        // No name stored with the pin: said so, never invented.
+        expect(opens[0]!.querySelector('.pinned-name')!.textContent).toBe(copy.PINNED_NO_NAME);
         (opens[0] as HTMLButtonElement).click();
         expect(h.onOpenStall).toHaveBeenCalledWith(ADDR);
         const unpins = [...root.querySelectorAll('[data-role="pinned-unpin"]')];
@@ -4965,6 +4972,22 @@ describe('the-door-remembers-what-this-browser-pinned', () => {
     it('an unpinned door carries no pinned section at all', () => {
         const { root } = paint(homeView([]));
         expect(root.querySelector('[data-role="pinned-stalls"]')).toBeNull();
+    });
+
+    /**
+     * The name is a snapshot the pin was made with (`saved.ts`), painted over
+     * the short token and named on the unpin control — never fetched: the
+     * door asks nothing of the chain, and the lede says the name may be old.
+     */
+    it('a-pin-carries-the-name-it-was-pinned-with', () => {
+        const { root } = paint({ ...homeView([ADDR, PK]), pinnedNames: new Map([[ADDR, 'Riverside Goods']]) });
+        const opens = [...root.querySelectorAll('[data-role="pinned-open"]')];
+        expect(opens[0]!.querySelector('.pinned-name')!.textContent).toBe('Riverside Goods');
+        expect(opens[0]!.querySelector('.pinned-addr')!.textContent).toContain('…');
+        expect(opens[1]!.querySelector('.pinned-name')!.textContent).toBe(copy.PINNED_NO_NAME);
+        const unpins = [...root.querySelectorAll('[data-role="pinned-unpin"]')];
+        expect(unpins[0]!.getAttribute('aria-label')).toBe(copy.unpinLabel('Riverside Goods'));
+        expect(root.textContent).toContain(copy.PINNED_LEDE);
     });
 });
 
@@ -6739,8 +6762,11 @@ describe('the-door-and-the-studio-link-to-the-stream-guide', () => {
         expect(link?.tagName).toBe('A');
         expect(link?.getAttribute('href')).toBe('/stream');
         expect(link?.textContent).toBe(HOME_STREAM_LINK);
-        // One link, not a control: nothing about the door's paste path changed.
-        expect(root.querySelectorAll('a[href="/stream"]')).toHaveLength(1);
+        // Two roads to the same page since round 16: the site bar's short word
+        // and the tile's full name, which is the one that carries the role.
+        // Neither is a control on the door's paste path.
+        expect(link?.closest('[data-role="door-tile"]')).not.toBeNull();
+        expect(root.querySelectorAll('a[href="/stream"]')).toHaveLength(2);
     });
 });
 
@@ -10496,7 +10522,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.door .pinned-open', '.door-nav a', '.door-more', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
@@ -13943,5 +13969,190 @@ describe('the-yard-is-as-wide-as-the-board', () => {
         expect(decl(stall, '.att-beetle', 'max-width')).toBe(boardMax);
         // And it is centred, never pinned to an edge.
         expect(decl(stall, '.att-beetle', 'margin')).toBe('10px auto 14px');
+    });
+});
+
+describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
+    /**
+     * Q8 of the 2026-09-20 board: the deck is painted by the real renderer —
+     * three `.stall` subtrees wearing the three looks and one minted
+     * decoration each — not three hand-drawn minis in the door's own CSS
+     * that no guard measures. Inert and fixture: no control, no price role,
+     * no marquee, and the only image is the vendored asset, because the apex
+     * asks nothing of any other service (§3).
+     */
+    it('paints Neo city, Modern and Rural as real subtrees over the fixture', () => {
+        const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        const deck = root.querySelector('[data-role="door-deck"]')!;
+        expect(deck.getAttribute('aria-hidden')).toBe('true');
+        const looks = [...deck.querySelectorAll('.deck-stall')];
+        expect(looks.map((look) => look.classList.contains('stall'))).toEqual([true, true, true]);
+        expect(looks.map((look) => [...look.classList].find((c) => c.startsWith('t-')))).toEqual([
+            't-neo',
+            't-modern',
+            't-rural',
+        ]);
+        expect(looks.map((look) => [...look.classList].filter((c) => c.startsWith('att-')))).toEqual([
+            ['att-rainfall'],
+            ['att-awning'],
+            [],
+        ]);
+        // Rural's Bunting is a node in the ornament strip, not a root class.
+        expect(looks[2]!.querySelector('.orn .att-bunting')).not.toBeNull();
+        for (const look of looks) {
+            expect((look as HTMLElement).style.getPropertyValue('--s-bg')).not.toBe('');
+            expect(look.querySelector('h1'), 'a mini keeps no outline').toBeNull();
+            expect(look.querySelector('.stall-name')?.textContent).toBe(copy.HOME_PREVIEW.name);
+            expect(look.querySelectorAll('.item')).toHaveLength(copy.HOME_PREVIEW.items.length);
+        }
+        expect(deck.querySelector('button, a, input')).toBeNull();
+        expect(deck.querySelector('[data-role="price"]')).toBeNull();
+        expect(deck.querySelector('[data-marquee]')).toBeNull();
+        for (const img of deck.querySelectorAll('img')) {
+            expect(img.getAttribute('src')).not.toMatch(/\/icon\//);
+        }
+        expect(deck.textContent).toContain(copy.HOME_DECK_CAP);
+        expect(deck.textContent).toContain(copy.DECOR_LEDE);
+        expect(deck.textContent).toContain(copy.HOME_WORKSHOP_NEXT);
+    });
+
+    it('does not claim the document for any of the three looks', () => {
+        document.documentElement.style.backgroundColor = '';
+        paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        // `applyTheme` paints <html>; the deck's `dressLook` must not.
+        expect(document.documentElement.style.backgroundColor).not.toMatch(/rgb\(5, 6, 13\)|rgb\(251, 242, 223\)/);
+    });
+});
+
+describe('the-door-tiles-open-the-manuals-chapters', () => {
+    it('paints four tiles, each a box with exactly one link into a guide', () => {
+        const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        const tiles = [...root.querySelectorAll('[data-role="door-tile"]')];
+        expect(tiles).toHaveLength(copy.HOME_TILES.length);
+        tiles.forEach((tile, i) => {
+            expect(tile.tagName).not.toBe('A');
+            expect(tile.querySelector('h3')?.textContent).toBe(copy.HOME_TILES[i]!.title);
+            const more = tile.querySelector('a.door-more')!;
+            expect(more.getAttribute('href')).toBe(copy.HOME_TILES[i]!.href);
+            expect(more.textContent).toBe(copy.HOME_TILES[i]!.link);
+            expect(more.querySelector('svg.ic')).not.toBeNull();
+        });
+        expect(root.textContent).toContain(copy.HOME_DOES);
+        // The two facts stayed facts.
+        for (const chip of copy.HOME_CHIPS) {
+            expect(root.querySelector('.door-chips')!.textContent).toContain(chip);
+        }
+        // The site bar: the guide link carries its role and the workshop is named, not linked.
+        const bar = root.querySelector('.door-bar')!;
+        expect(bar.querySelector('[data-role="door-guide-link"]')?.getAttribute('href')).toBe('/guide');
+        const soon = bar.querySelector('[data-role="door-workshop"]')!;
+        expect(soon.tagName).not.toBe('A');
+        expect(soon.textContent).toBe(copy.HOME_WORKSHOP + copy.HOME_WORKSHOP_TAG);
+    });
+});
+
+describe('every-cashtab-mention-on-the-door-is-a-link', () => {
+    /**
+     * Owner, 2026-09-20: wherever the door says "Cashtab", the word opens
+     * Cashtab. A plain navigation in a new tab with no opener — not a
+     * handoff, and never §2's deep link. The sentence stays the constant:
+     * the anchors hold only the word, so `textContent` is byte-identical.
+     */
+    it('links the word and leaves the sentences whole', () => {
+        const { root } = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
+        const links = [...root.querySelectorAll('[data-role="cashtab-link"]')];
+        expect(links.length).toBeGreaterThanOrEqual(4);
+        for (const link of links) {
+            expect(link.tagName).toBe('A');
+            expect(link.textContent).toBe('Cashtab');
+            expect(link.getAttribute('href')).toBe('https://cashtab.com');
+            expect(link.getAttribute('target')).toBe('_blank');
+            expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+        }
+        const first = root.querySelector('[data-role="door-first-stall"]')!;
+        expect(first.querySelector('p.fine')!.textContent).toBe(copy.HOME_SELLER);
+        expect(first.textContent).toContain(copy.FIRST_STALL_STEPS[0].step);
+        expect(first.textContent).toContain(copy.HOME_FIRST_PASTE);
+        expect(first.querySelector('li.now')?.getAttribute('aria-current')).toBe('step');
+        const tile = root.querySelector('[data-role="door-tile"] p')!;
+        expect(tile.textContent).toBe(copy.HOME_TILES[0]!.body);
+        expect(tile.querySelector('[data-role="cashtab-link"]')).not.toBeNull();
+    });
+});
+
+describe('the-paste-box-types-example-addresses-then-rests', () => {
+    /**
+     * `doorTyping.ts`: the placeholder types three dummy addresses in turn,
+     * then the instruction, and rests on it — never the value, stopped the
+     * moment the box is touched, still under reduced motion.
+     */
+    const home = { route: { kind: 'home' as const }, overlay: { kind: 'idle' as const }, tokens: new Map() };
+
+    it('types the samples and rests on the instruction', () => {
+        vi.useFakeTimers();
+        resetDoorTyping();
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(root, home, handlers());
+            const input = root.querySelector<HTMLInputElement>('.paste-in')!;
+            expect(input.value).toBe('');
+            vi.advanceTimersByTime(2000);
+            const typed = input.placeholder;
+            expect(typed.length).toBeGreaterThan(0);
+            expect(copy.HOME_PASTE_SAMPLES[0]!.startsWith(typed)).toBe(true);
+            vi.advanceTimersByTime(60_000);
+            expect(input.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+            expect(input.value).toBe('');
+        } finally {
+            root.remove();
+            vi.useRealTimers();
+            resetDoorTyping();
+        }
+    });
+
+    it('stops when the box is touched, and a repaint does not restart it', () => {
+        vi.useFakeTimers();
+        resetDoorTyping();
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(root, home, handlers());
+            const input = root.querySelector<HTMLInputElement>('.paste-in')!;
+            vi.advanceTimersByTime(1500);
+            input.dispatchEvent(new Event('focus'));
+            expect(input.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+            vi.advanceTimersByTime(5000);
+            expect(input.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+            renderStall(root, home, handlers());
+            vi.advanceTimersByTime(5000);
+            expect(root.querySelector<HTMLInputElement>('.paste-in')!.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+        } finally {
+            root.remove();
+            vi.useRealTimers();
+            resetDoorTyping();
+        }
+    });
+
+    it('is still under reduced motion', () => {
+        vi.useFakeTimers();
+        resetDoorTyping();
+        const original = window.matchMedia;
+        window.matchMedia = ((query: string) =>
+            ({ matches: query.includes('reduce'), media: query }) as MediaQueryList) as typeof window.matchMedia;
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            renderStall(root, home, handlers());
+            const input = root.querySelector<HTMLInputElement>('.paste-in')!;
+            expect(input.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+            vi.advanceTimersByTime(5000);
+            expect(input.placeholder).toBe(copy.HOME_PASTE_PLACEHOLDER);
+        } finally {
+            window.matchMedia = original;
+            root.remove();
+            vi.useRealTimers();
+            resetDoorTyping();
+        }
     });
 });

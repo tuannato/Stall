@@ -9,6 +9,7 @@ import {
     payECashPayUrl,
     payECashPublishUrl,
     publishBip21,
+    CASHTAB_HOME_URL,
 } from '../domain/cashtab';
 import {
     DEFAULT_FIAT_CODE,
@@ -54,6 +55,7 @@ import { shortAddress,
 } from '../domain/route';
 import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
 import { glyph, glyphLabel, SVG_NS } from './glyphs';
+import { armDoorTyping } from './doorTyping';
 import { isWithheldToken } from '../domain/withheld';
 import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
@@ -65,6 +67,7 @@ import {
     publishableFlags,
     wornAttachments,
     type ShippedAttachment,
+    SHIPPED_ATTACHMENTS,
 } from '../domain/attachments';
 import type {
     EventStatus,
@@ -750,20 +753,49 @@ const THEME_CLASS: Record<number, string> = {
     [RURAL_THEME_ID]: 't-rural',
 };
 
+/**
+ * Dress one element as a look: the `--s-*` vars inline, the look's class
+ * and the worn decorations' root classes. This half has no side effects
+ * beyond the element, so the door's deck can wear three looks on one page
+ * without any of them claiming the document (`applyTheme` does that part).
+ *
+ * A mood is merged before `themeVars`, never as a stylesheet block: every
+ * `--s-*` is written inline on this element, and an inline custom property
+ * beats any rule. Merging here also keeps `legibleOn` in the path, so a
+ * palette a seller bought still cannot hide the asked amount.
+ */
+function dressLook(
+    node: HTMLElement,
+    theme: DecodedTheme,
+    worn: readonly ShippedAttachment[],
+): Record<string, string> {
+    const vars = themeVars(withMood(theme, worn));
+    for (const [name, value] of Object.entries(vars)) {
+        node.style.setProperty(name, value);
+    }
+    for (const cls of [...node.classList]) {
+        if (cls.startsWith('att-') || cls.startsWith('t-')) {
+            node.classList.remove(cls);
+        }
+    }
+    /*
+     * The look's own stylesheet, by class (owner's ruling, 2026-08-30:
+     * the design files apply directly). The chain still supplies only a
+     * one-byte id — this maps it to a class over CSS we ship, exactly as
+     * the ornament kind always has. Unknown ids wear the default's class.
+     */
+    node.classList.add(THEME_CLASS[theme.id] ?? 't-modern');
+    node.classList.add(...attachmentClasses(worn));
+    return vars;
+}
+
 function applyTheme(
     stall: HTMLElement,
     theme: DecodedTheme,
     worn: readonly ShippedAttachment[] = [],
     opts: { ornament?: boolean } = {},
 ): void {
-    // A mood is merged before `themeVars`, never as a stylesheet block: every
-    // `--s-*` is written inline on this element, and an inline custom property
-    // beats any rule. Merging here also keeps `legibleOn` in the path, so a
-    // palette a seller bought still cannot hide the asked amount.
-    const vars = themeVars(withMood(theme, worn));
-    for (const [name, value] of Object.entries(vars)) {
-        stall.style.setProperty(name, value);
-    }
+    const vars = dressLook(stall, theme, worn);
     // The browser chrome joins the look: the static #0a1b33 in index.html is
     // the pre-paint colour, and a Rural stall framed by navy is somebody
     // else's page. Mood included — it went through the same merge above.
@@ -783,19 +815,6 @@ function applyTheme(
             child.remove();
         }
     }
-    for (const cls of [...stall.classList]) {
-        if (cls.startsWith('att-') || cls.startsWith('t-')) {
-            stall.classList.remove(cls);
-        }
-    }
-    /*
-     * The look's own stylesheet, by class (owner's ruling, 2026-08-30:
-     * the design files apply directly). The chain still supplies only a
-     * one-byte id — this maps it to a class over CSS we ship, exactly as
-     * the ornament kind always has. Unknown ids wear the default's class.
-     */
-    stall.classList.add(THEME_CLASS[theme.id] ?? 't-modern');
-    stall.classList.add(...attachmentClasses(worn));
     if (opts.ornament !== false) {
         const next = ornamentStrip(theme);
         if (next !== null) {
@@ -805,11 +824,16 @@ function applyTheme(
 }
 
 /**
- * The door, direction D from the Stall Design project ("Stall front"): the
- * paste box is the hero on a market-stall scene — canopy above, counter slab
- * under the box — with the old intro paragraphs compressed into three chips.
- * The scene is structure, not decoration, and it is door-only chrome: none
- * of it exists on a seller's stall, so none of it can cover a price.
+ * The door (round 16, owner 2026-09-20; the board and its critic report are
+ * `private/design/redesign-2026-09-20/`). The counter from round 1 — canopy,
+ * display line, paste box, slab, legs — stays; the product around it is
+ * redrawn: a site bar with the two guides and the workshop named as next; a
+ * kicker and a lede that name both rails; the two facts; a DECK of three
+ * real looks beside the counter where one hand-drawn preview stood; four
+ * tiles for what a stall does, each a door into the manual; then the pinned
+ * stalls, the real stall and the first-stall card. Door-only chrome: none
+ * of it exists on a seller's stall, so none of it can cover a price — and
+ * the apex still fetches nothing.
  */
 function paintHome(
     stall: HTMLElement,
@@ -821,46 +845,305 @@ function paintHome(
     canopy.setAttribute('aria-hidden', 'true');
     stall.append(canopy);
     const body = el('main', 'stall-body door-wrap');
-    const brand = el('header', 'door-brand');
-    brand.append(stallMark());
-    brand.append(el('h1', 'door-word', copy.HOME_TITLE));
-    brand.append(el('p', 'door-value', copy.HOME_LEDE));
-    body.append(brand);
-    body.append(pasteForm(handlers));
+    body.append(doorBar());
+    const hero = el('section', 'door-hero');
+    const left = el('div', 'door-hero-l');
+    left.append(el('p', 'door-kicker', copy.HOME_KICKER));
+    left.append(pasteForm(handlers, el('p', 'door-lede', copy.HOME_LEDE)));
     const chips = el('ul', 'door-chips');
     for (const chip of copy.HOME_CHIPS) {
         chips.append(el('li', undefined, chip));
     }
-    body.append(chips);
-    body.append(el('p', 'fine door-chips-fine', copy.HOME_CHIPS_FINE));
-    // One quiet line for streamers. A plain link to a document path: the
-    // guide is static and outside the app's router (§9), so this is a real
-    // navigation, not a pushState.
-    const stream = el('p', 'fine door-stream');
-    stream.append(copy.HOME_STREAM_LEAD, ' ');
-    const streamLink = el('a', undefined, copy.HOME_STREAM_LINK);
-    streamLink.setAttribute('href', '/stream');
-    streamLink.setAttribute('data-role', 'door-stream-link');
-    stream.append(streamLink);
-    body.append(stream);
-    // The general guide: listings and quotes on one static page (§9), a
-    // real navigation like the stream line above it.
-    const guide = el('p', 'fine door-stream');
-    guide.append(copy.HOME_GUIDE_LEAD, ' ');
-    const guideLink = el('a', undefined, copy.HOME_GUIDE_LINK);
-    guideLink.setAttribute('href', '/guide');
-    guideLink.setAttribute('data-role', 'door-guide-link');
-    guide.append(guideLink);
-    body.append(guide);
+    left.append(chips);
+    hero.append(left);
+    hero.append(doorDeck());
+    body.append(hero);
+    body.append(doorTiles());
+    const back = el('section', 'door-back');
     const pinned = pinnedDoor(view, handlers);
     if (pinned !== null) {
-        body.append(pinned);
+        back.append(pinned);
     }
-    const yours = el('p', 'fine door-yours', copy.HOME_SELLER);
-    body.append(yours);
-    body.append(demoSoon(handlers));
-    body.append(doorPreview());
+    back.append(demoSoon(handlers));
+    back.append(firstStallCard());
+    body.append(back);
     stall.append(body);
+}
+
+/**
+ * The site bar: the brand, then the two guides and the workshop. One bar on
+ * the door and on both static pages, so the three read as one site. The
+ * guide link carries the role the tests and the first-stall screen share;
+ * the stream link here is the short word, and the tile below carries the
+ * full name (`HOME_STREAM_LINK`, `door-stream-link`).
+ */
+function doorBar(): HTMLElement {
+    const bar = el('header', 'door-bar');
+    const brand = el('div', 'door-brand');
+    brand.append(stallMark());
+    brand.append(el('h1', 'door-word', copy.HOME_TITLE));
+    bar.append(brand);
+    const nav = el('nav', 'door-nav');
+    nav.setAttribute('aria-label', copy.HOME_NAV_LABEL);
+    const guide = el('a', undefined, copy.HOME_GUIDE_LINK);
+    guide.setAttribute('href', '/guide');
+    guide.setAttribute('data-role', 'door-guide-link');
+    const stream = el('a', undefined, copy.HOME_NAV_STREAM);
+    stream.setAttribute('href', '/stream');
+    // Named, not linked: there is nothing to open yet. A word with a tag,
+    // never a date (owner, 2026-09-20).
+    const soon = el('span', 'door-soon');
+    soon.setAttribute('data-role', 'door-workshop');
+    soon.append(copy.HOME_WORKSHOP);
+    soon.append(el('small', undefined, copy.HOME_WORKSHOP_TAG));
+    nav.append(guide, stream, soon);
+    bar.append(nav);
+    return bar;
+}
+
+/**
+ * The three looks the deck wears, and the one decoration each shows. Every
+ * row is a shipped, minted decoration of that look (`SHIPPED_ATTACHMENTS`);
+ * the deck finds it by class so a renamed row still paints.
+ */
+const DECK_LOOKS: ReadonlyArray<{ themeId: number; cls: string; slug: string }> = [
+    { themeId: NEO_CITY_THEME_ID, cls: 'att-rainfall', slug: 'neo' },
+    { themeId: DEFAULT_THEME_ID, cls: 'att-awning', slug: 'modern' },
+    { themeId: RURAL_THEME_ID, cls: 'att-bunting', slug: 'rural' },
+];
+
+/**
+ * The deck: three real looks over one fixture, beside the counter.
+ *
+ * "It is the stall, not a second product" (§4, the shop window's ruling):
+ * each card is a `.stall` subtree dressed by `dressLook` and the same
+ * `header()`, row classes and decoration nodes the shop paints — so a look
+ * that moves in its own sheet moves here, and nothing is drawn by hand.
+ * Inert and `aria-hidden`: no control, no `data-role="price"`, no marquee,
+ * and no icon fetch — the tile is the vendored mingo asset, because the apex
+ * asks nothing of any other service (§3). Scaled by CSS, not by a smaller
+ * stall: the cards are the 390px screen at ~0.64, which is why they read as
+ * the real thing.
+ */
+function doorDeck(): HTMLElement {
+    const aside = el('aside', 'door-deck');
+    aside.setAttribute('aria-hidden', 'true');
+    aside.setAttribute('data-role', 'door-deck');
+    const row = el('div', 'deck-row');
+    // A scroll container is focusable in Chrome, and a focusable node under
+    // `aria-hidden` is the trap the critic named: out of the tab order.
+    row.tabIndex = -1;
+    // A `div`, never a `<p>`: the items are paragraphs, and a paragraph
+    // cannot hold one — an HTML parser closes the outer one at the first
+    // inner, which is how the regen cards showed the legend unstyled.
+    const legend = el('div', 'deck-legend');
+    for (const spec of DECK_LOOKS) {
+        const theme = decodeTheme(spec.themeId);
+        const worn = SHIPPED_ATTACHMENTS.filter(
+            (attachment) => attachment.cls === spec.cls && attachment.themeId === spec.themeId,
+        );
+        const look = el('div', `deck-look l-${spec.slug}`);
+        const mini = el('div', 'stall deck-stall');
+        dressLook(mini, theme, worn);
+        const strip = ornamentStrip(theme);
+        if (strip !== null) {
+            mini.append(strip);
+        }
+        mini.append(
+            header(copy.HOME_PREVIEW.name, copy.HOME_PREVIEW.sub, undefined, copy.HOME_PREVIEW.tagline),
+        );
+        const main = el('div', 'stall-body');
+        const items = el('div', 'items');
+        for (const item of copy.HOME_PREVIEW.items) {
+            items.append(deckRow(item));
+        }
+        main.append(items);
+        mini.append(main);
+        placeAttachmentNodes(mini, worn);
+        demoteOutline(mini);
+        look.append(mini);
+        const label = SHIPPED_THEMES.find((row) => row.id === spec.themeId)?.label ?? '';
+        const wornLabel = worn[0]?.label;
+        look.append(deckCaption('deck-cap-look', label, wornLabel));
+        row.append(look);
+        legend.append(deckCaption('deck-legend-look', label, wornLabel));
+    }
+    aside.append(row);
+    aside.append(legend);
+    const cap = el('p', 'deck-cap');
+    cap.append(el('b', undefined, copy.HOME_DECK_CAP));
+    cap.append(' ', copy.DECOR_LEDE, ' ', copy.HOME_WORKSHOP_NEXT);
+    aside.append(cap);
+    return aside;
+}
+
+/**
+ * A mini is a picture of a stall, not a stall: its sign's `<h1>` and its
+ * `<header>` would be a second outline and a second banner on the door,
+ * which has one of each. Same classes, plain elements — the looks select
+ * by class, never by tag.
+ */
+function demoteOutline(mini: HTMLElement): void {
+    for (const node of [...mini.querySelectorAll('h1, header')]) {
+        const plain = el('div');
+        plain.className = node.className;
+        plain.append(...node.childNodes);
+        node.replaceWith(plain);
+    }
+}
+
+function deckCaption(cls: string, look: string, worn: string | undefined): HTMLElement {
+    const cap = el('p', cls);
+    cap.append(el('b', undefined, look));
+    if (worn !== undefined) {
+        cap.append(el('span', undefined, ` · ${worn}`));
+    }
+    return cap;
+}
+
+/**
+ * One row of the deck: the shop row's anatomy (`itemIcon`'s tile, the name,
+ * the rail label, `from` + figure + unit) in non-interactive elements, the
+ * shop window's pattern. No price role — the figure is fixture copy, not a
+ * covenant's — and the tile is the vendored asset rather than a Worker fetch.
+ */
+function deckRow(item: { readonly name: string; readonly price: string }): HTMLElement {
+    const card = el('div', 'item');
+    const head = el('div', 'item-head sw-row deck-head');
+    const tile = el('span', 'item-ic');
+    const img = el('img');
+    img.src = mingoIcon;
+    img.alt = '';
+    img.decoding = 'async';
+    tile.append(img);
+    head.append(tile);
+    const info = el('span', 'item-b');
+    info.append(el('span', 'item-n', item.name));
+    info.append(el('span', 'item-q rail-label', copy.ROW_LABEL_AGORA));
+    head.append(info);
+    const price = el('span', 'item-p');
+    const amount = el('span', 'item-a');
+    amount.append(el('span', 'item-from', copy.PRICE_FROM));
+    amount.append(el('span', 'item-x', item.price));
+    amount.append(el('span', 'item-u', copy.XEC));
+    price.append(amount);
+    head.append(price);
+    card.append(head);
+    return card;
+}
+
+/**
+ * Four tiles for what a stall does. Each is a box with one link into the
+ * manual — a box and not an anchor, because a body that names Cashtab links
+ * the word (`linkCashtab`) and an anchor cannot hold an anchor. The stream
+ * tile's link is the door's `door-stream-link`.
+ */
+function doorTiles(): HTMLElement {
+    const section = el('section', 'door-does');
+    section.append(el('h2', 'door-sec', copy.HOME_DOES));
+    const grid = el('div', 'door-tiles');
+    copy.HOME_TILES.forEach((tile, i) => {
+        const box = el('div', 'door-tile');
+        box.setAttribute('data-role', 'door-tile');
+        box.append(tileGlyph(i));
+        box.append(el('h3', undefined, tile.title));
+        const words = el('p');
+        words.append(linkCashtab(tile.body));
+        box.append(words);
+        const more = el('a', 'door-more');
+        more.setAttribute('href', tile.href);
+        more.append(tile.link);
+        more.append(glyph('chevron'));
+        if (tile.href === '/stream') {
+            more.setAttribute('data-role', 'door-stream-link');
+        }
+        box.append(more);
+        grid.append(box);
+    });
+    section.append(grid);
+    return section;
+}
+
+/** The tiles' glyphs: drawn, never typed (§6), and decorative. */
+const TILE_GLYPHS: readonly string[] = [
+    'M3 12l9-9h9v9l-9 9z M16 8h.01',
+    'M4 3h16v18H4z M8 8h8 M8 12h8 M8 16h5',
+    'M3 4h18v12H3z M8 20h8 M12 16v4 M10 8l5 2-5 2z',
+    'M5 3h14v18H5z M8 7h8 M8 10h8 M9 13h6v5H9z',
+];
+
+function tileGlyph(index: number): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'door-tile-ic');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', TILE_GLYPHS[index] ?? TILE_GLYPHS[0]!);
+    svg.append(path);
+    return svg;
+}
+
+/**
+ * Every "Cashtab" in a sentence becomes a link to Cashtab's own site (owner,
+ * 2026-09-20). A plain navigation off this origin, in a new tab with no
+ * opener: not a handoff, not §2's deep link, and the CSP carries no
+ * `navigate-to`, so nothing changes there. Text nodes and anchors only —
+ * the sentence stays the constant, character for character.
+ */
+function linkCashtab(text: string): DocumentFragment {
+    const frag = document.createDocumentFragment();
+    const parts = text.split('Cashtab');
+    parts.forEach((part, i) => {
+        if (part !== '') {
+            frag.append(part);
+        }
+        if (i < parts.length - 1) {
+            const link = el('a', 'cashtab-link', 'Cashtab');
+            link.setAttribute('href', CASHTAB_HOME_URL);
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+            link.setAttribute('data-role', 'cashtab-link');
+            frag.append(link);
+        }
+    });
+    return frag;
+}
+
+/**
+ * The first-stall card: `HOME_SELLER` over the checklist's three step
+ * names, the paste step marked as where a new seller is. The same words as
+ * the first-stall screen (`FIRST_STALL_STEPS`), so the door and the screen
+ * a paste lands on tell one story.
+ */
+function firstStallCard(): HTMLElement {
+    const card = el('div', 'door-card door-first');
+    card.setAttribute('data-role', 'door-first-stall');
+    card.append(el('h3', 'door-card-t', copy.HOME_FIRST_TITLE));
+    const lede = el('p', 'fine');
+    lede.append(linkCashtab(copy.HOME_SELLER));
+    card.append(lede);
+    const list = el('ol', 'steps');
+    const rows: ReadonlyArray<{ step: string; status?: string }> = [
+        { step: copy.FIRST_STALL_STEPS[0].step },
+        { step: copy.FIRST_STALL_STEPS[1].step, status: copy.HOME_FIRST_PASTE },
+        { step: copy.FIRST_STALL_STEPS[2].step, status: copy.FIRST_STALL_STEPS[2].status },
+    ];
+    rows.forEach((row, i) => {
+        const li = el('li', i === 1 ? 'now' : undefined);
+        if (i === 1) {
+            li.setAttribute('aria-current', 'step');
+        }
+        li.append(el('i', undefined, String(i + 1)));
+        const words = el('span');
+        words.append(linkCashtab(row.step));
+        if (row.status !== undefined) {
+            words.append(el('span', 'st', row.status));
+        }
+        li.append(words);
+        list.append(li);
+    });
+    card.append(list);
+    return card;
 }
 
 /**
@@ -892,80 +1175,45 @@ function stepsList(
 }
 
 /*
- * The door preview's tile art is the mingo token's icon (token
+ * The deck's tile art is the mingo token's icon (token
  * d6c88f410551f1eaa48cc65ee381cbec770d0797c508e10a75da835030024cdb, the
  * owner's own), vendored as a fingerprinted same-origin asset rather than
  * fetched from the icon Worker on every door load — the owner's call: the
- * apex stays a page that asks nothing of any other service. Recolored per
- * row with CSS filters; the flat tile underneath still covers a failed load.
+ * apex stays a page that asks nothing of any other service.
  */
 
 /**
- * The tilted storefront preview on the wide door: what a stall looks like,
- * shown instead of described. Decorative and inert — `aria-hidden`, no
- * controls, fixture content — because the door must not promise any real
- * shop's inventory (§3); the caption names it as the page's shape.
- */
-function doorPreview(): HTMLElement {
-    const aside = el('aside', 'door-preview');
-    aside.setAttribute('aria-hidden', 'true');
-    aside.setAttribute('data-role', 'door-preview');
-    const card = el('div', 'pv-card');
-    const head = el('div', 'pv-head');
-    head.append(stallMark());
-    const id = el('div');
-    id.append(el('p', 'pv-name', copy.HOME_PREVIEW.name));
-    id.append(el('p', 'pv-tagline', copy.HOME_PREVIEW.tagline));
-    id.append(el('p', 'pv-sub', copy.HOME_PREVIEW.sub));
-    head.append(id);
-    card.append(head);
-    copy.HOME_PREVIEW.items.forEach((item, i) => {
-        const row = el('div', 'pv-item');
-        const ic = el('i', `pv-ic pv-i${i + 1}`);
-        const img = el('img', 'pv-icimg');
-        img.src = mingoIcon;
-        img.alt = '';
-        img.addEventListener('error', () => img.remove());
-        ic.append(img);
-        row.append(ic);
-        const mid2 = el('span', 'pv-b');
-        mid2.append(el('span', 'pv-n', item.name));
-        mid2.append(el('span', 'pv-q', item.qty));
-        row.append(mid2);
-        const price = el('span', 'pv-p');
-        price.append(el('span', 'pv-x', item.price));
-        price.append(el('span', 'pv-u', copy.XEC));
-        row.append(price);
-        card.append(row);
-    });
-    card.append(el('div', 'pv-foot', copy.HOME_PREVIEW.address));
-    aside.append(card);
-    aside.append(el('span', 'pv-tag', copy.HOME_PREVIEW.caption));
-    return aside;
-}
-
-/**
- * The stalls this browser pinned. Route tokens from storage, painted as links
- * and nothing more: the apex never fetches, so no card here may promise a
- * name, a look or an inventory — that is the stall's own page to keep.
+ * The stalls this browser pinned. Route tokens from storage, painted as
+ * rows and nothing more: the apex never fetches, so no row here may promise
+ * a look or an inventory — that is the stall's own page to keep. The name
+ * is the one exception, and it is a snapshot (`saved.ts`): the name the
+ * stall had when it was pinned, said so in the lede.
  */
 function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement | null {
     const pins = view.pinnedStalls ?? [];
     if (pins.length === 0) {
         return null;
     }
-    const wrap = el('div', 'pinned');
+    const names = view.pinnedNames ?? new Map<string, string>();
+    const wrap = el('div', 'pinned door-card');
     wrap.setAttribute('data-role', 'pinned-stalls');
-    wrap.append(el('div', 'mid-t', copy.PINNED_TITLE));
+    wrap.append(el('h3', 'door-card-t', copy.PINNED_TITLE));
     wrap.append(el('p', 'fine', copy.PINNED_LEDE));
     const list = el('div', 'pinned-list');
     for (const raw of pins) {
         const row = el('div', 'pinned-row');
-        const open = el('button', 'pinned-open', shortStallToken(raw));
+        const open = el('button', 'pinned-open');
         open.type = 'button';
         open.setAttribute('data-role', 'pinned-open');
         // Value-compared by restoreFocus, never a selector — raw is storage.
         open.setAttribute('data-focus-key', `pin:${raw}`);
+        const name = names.get(raw);
+        const title = el('b', 'pinned-name', name ?? copy.PINNED_NO_NAME);
+        if (name === undefined) {
+            title.classList.add('none');
+        }
+        open.append(title);
+        open.append(el('span', 'pinned-addr', shortStallToken(raw)));
         const go = handlers.onOpenStall;
         if (go !== undefined) {
             open.addEventListener('click', () => go(raw));
@@ -975,7 +1223,7 @@ function pinnedDoor(view: StallView, handlers: StallHandlers): HTMLElement | nul
         drop.type = 'button';
         drop.setAttribute('data-role', 'pinned-unpin');
         drop.setAttribute('data-focus-key', `unpin:${raw}`);
-        drop.setAttribute('aria-label', copy.unpinLabel(shortStallToken(raw)));
+        drop.setAttribute('aria-label', copy.unpinLabel(name ?? shortStallToken(raw)));
         const toggle = handlers.onTogglePin;
         if (toggle !== undefined) {
             drop.addEventListener('click', () => toggle(raw));
@@ -1004,9 +1252,9 @@ function shortStallToken(raw: string): string {
  * copy, never an empty shop dressed as a demo.
  */
 function demoSoon(handlers: StallHandlers): HTMLElement {
-    const wrap = el('div', 'demo-soon');
+    const wrap = el('div', 'demo-soon door-card');
     wrap.setAttribute('data-role', 'demo-soon');
-    wrap.append(el('div', 'mid-t', copy.HOME_DEMO_TITLE));
+    wrap.append(el('h3', 'door-card-t', copy.HOME_DEMO_TITLE));
     wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
     // A real route into a real stall. Still no fetch here: the apex never reads
     // the chain, so this is a link, not a preview — the door cannot promise
@@ -6149,6 +6397,12 @@ function placeAttachmentNodes(
     worn: readonly ShippedAttachment[],
 ): void {
     for (const node of [...stall.querySelectorAll('[class^="att-"], [class*=" att-"]')]) {
+        // A nested `.stall` — the door's deck — owns its own decorations:
+        // the root's sweep must not strip a mini wearing `att-awning` as if
+        // it were a stray node of this stall's.
+        if (node.closest('.stall') !== stall) {
+            continue;
+        }
         if (node.parentElement !== null && !node.classList.contains('orn')) {
             node.remove();
         }
@@ -7908,7 +8162,7 @@ function draftFor(view: StallView): NameDraft | undefined {
 
 let doorDraft = '';
 
-function pasteForm(handlers: StallHandlers): HTMLFormElement {
+function pasteForm(handlers: StallHandlers, lede?: HTMLElement): HTMLFormElement {
     const form = el('form', 'paste door-paste');
     const label = el('label', 'door-display', copy.HOME_PASTE_LABEL);
     label.htmlFor = 'seller-input';
@@ -7933,6 +8187,11 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
     input.addEventListener('input', () => {
         doorDraft = input.value;
     });
+    // What goes in the box, shown by typing it (`doorTyping.ts`): three
+    // example addresses, then the instruction, which it rests on. The
+    // placeholder and never the value; still under reduced motion; stopped
+    // the moment the box is touched.
+    armDoorTyping(input, copy.HOME_PASTE_SAMPLES, copy.HOME_PASTE_PLACEHOLDER);
     const submit = el('button', 'buy door-open', copy.HOME_PASTE_SUBMIT);
     submit.type = 'submit';
     unit.append(pfx, input, submit);
@@ -7967,7 +8226,11 @@ function pasteForm(handlers: StallHandlers): HTMLFormElement {
         // on a stall reached from here and on no other (see `view.pasted`).
         handlers.onOpenStall?.(raw, true);
     });
-    form.append(label, unit, slab);
+    form.append(label);
+    if (lede !== undefined) {
+        form.append(lede);
+    }
+    form.append(unit, slab);
     return form;
 }
 

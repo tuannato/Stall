@@ -551,6 +551,15 @@ function measure(screen: string, themeLabel: string): Failure[] {
      * would read 26px on a short name with 140px of room.
      */
     for (const nameCol of overlay ? [] : surface.querySelectorAll('.item-b')) {
+        // The door's deck is a picture of three stalls at ~0.6 scale, inert and
+        // aria-hidden (round 16): its rows are the real anatomy over fixture
+        // words, and a name column that is 90px on a phone is 57px there by
+        // arithmetic, not by collapse. The rule guards a row a buyer reads;
+        // every such row is measured on every stall screen, so the deck is
+        // the one place it looks away, and it says so here.
+        if (nameCol.closest('[data-role="door-deck"]') !== null) {
+            continue;
+        }
         const box = nameCol.getBoundingClientRect();
         if (box.width === 0 || box.height === 0) {
             continue;
@@ -1397,6 +1406,19 @@ const CONTRAST_TEXT = [
     // claims of the design board, measured here rather than asserted.
     '.event-sum .event-ic',
     '.door-chips li',
+    // The door's other ink (round 16, 2026-09-20): the kicker and lede, the
+    // site bar, the four tiles and their links, a pin's name, the deck's
+    // caption. Every one is a token over the door's ground; the probe's worn
+    // half paints that ground under After hours, which is where a literal
+    // read 2.59:1 once.
+    '.door-kicker',
+    '.door-lede',
+    '.door-nav a',
+    '.door-tile h3',
+    '.door-tile p',
+    '.door-more',
+    '.pinned-name',
+    '.deck-cap',
     /*
      * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was
      * added for exactly this class of defect and stopped at the Activity

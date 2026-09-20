@@ -426,6 +426,12 @@ export const SCREENS: Record<string, StallView> = {
             PK,
             ...Array.from({ length: 10 }, (_, i) => `02${(0xb0 + i).toString(16).repeat(32)}`),
         ],
+        // Two pins with the name they were made with, ten without: both rows
+        // paint, and the probe measures the named one's ink.
+        pinnedNames: new Map([
+            [ADDR, 'Riverside Goods'],
+            [PK, 'Harbour Prints'],
+        ]),
     },
     /*
      * One item, nothing written: the sparse chrome at full strength — both
