@@ -980,6 +980,14 @@ export const HOME_DEMO_SOON =
 /** Where "See a real stall" goes. The owner's own stall, decided by the owner. */
 export const DEMO_STALL_ADDRESS = 'ecash:qpngxvfhtjuvehjm7la7m6xlwrw7230tzsl4d3vj8r';
 export const HOME_DEMO_OPEN = 'Open this stall';
+/**
+ * The real stall's name and look, as the owner published them — a snapshot
+ * like a pin's name (§2), because the door fetches nothing and cannot read
+ * the record. The owner's own stall; when its record changes, this changes
+ * by hand. `0x02` is Neo city.
+ */
+export const DEMO_STALL_NAME = 'STALL FITTINGS';
+export const DEMO_STALL_THEME = 0x02;
 
 /**
  * Conditional, because an empty stall is a link anyone can hold — a buyer who
@@ -1068,6 +1076,12 @@ export const EMBED_PICTURE_NOTE =
 export const EMBED_CODE = 'The code';
 export const EMBED_FINE = 'One line of HTML, nothing else: no script, no frame, nothing that runs on your site.';
 export const EMBED_COPIED = 'Code copied';
+/**
+ * Under the door's real-stall card, which IS the widget (2026-09-20): the
+ * picture the seller's own site would show, so the claim has to be exactly
+ * what the Studio hands out and nothing more — a still that opens the stall.
+ */
+export const HOME_DEMO_WIDGET = `This picture is the embed widget: one line of HTML from Studio → ${STUDIO_CARD_SHARE}, and your own site shows the same card, opening your stall.`;
 export const COPY_EMBED_FALLBACK = 'Select and copy this code.';
 /** The picture's alt text: the stall's name when it has one. */
 export const embedAlt = (name: string | undefined): string =>

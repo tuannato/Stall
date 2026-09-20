@@ -5420,9 +5420,12 @@ textarea.share-embed {
 
 /*
  * The deck: three real `.stall` subtrees, each wearing a look and one of its
- * decorations, at ~0.64 of the phone screen. `zoom` and not `transform`, so
+ * decorations, at 0.56 of the phone screen. `zoom` and not `transform`, so
  * the card takes the room it paints. On a phone it is a row that scrolls
  * inside its own box (never the page); from 960px it fans beside the counter.
+ * Smaller than the counter on purpose (owner, 2026-09-20: at 0.64 / 0.61 the
+ * three looks took the eye off the paste box, the one thing the door is for
+ * — measured at 1280, the deck stood 508x606 beside a 508x456 counter).
  */
 .door-deck {
     margin-top: 30px;
@@ -5444,8 +5447,8 @@ textarea.share-embed {
 }
 
 .deck-look {
-    flex: 0 0 250px;
-    width: 250px;
+    flex: 0 0 218px;
+    width: 218px;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
@@ -5456,7 +5459,7 @@ textarea.share-embed {
     flex: none;
     min-height: 0;
     width: 390px;
-    zoom: 0.641;
+    zoom: 0.56;
     border-radius: 14px;
     overflow: hidden;
     box-shadow:
@@ -5694,6 +5697,41 @@ textarea.share-embed {
     margin-top: 12px;
 }
 
+/* The widget on the real-stall card: the still, edged like the card, over
+   the stall's name and short token. The still is 600x315 by attribute and
+   scales to the column. */
+.door-widget {
+    display: block;
+    margin-top: 12px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
+    background: var(--s-bg);
+}
+
+.door-widget img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.door-widget-name {
+    margin: 8px 0 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: baseline;
+}
+
+.door-widget-name span {
+    color: var(--s-muted);
+    font-weight: 500;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+}
+
 .door-first .steps {
     margin-top: 12px;
 }
@@ -5858,14 +5896,15 @@ textarea.share-embed {
  * outer two rotated and pulled in under the middle one. In flow and never
  * `position: absolute` — the probe sweeps every absolutely positioned node
  * as a decoration against the paste button's box, which is `.buy`. The
- * fan is 2.1 card widths wide, which fits the hero's second column at
- * every width from 960 (428px) to the wrap's ceiling (508px); the sizes
- * step up once more at 1200.
+ * counter takes the wider column (1.15fr against 0.85fr): the paste box is
+ * what the door is for, and the deck is the exhibit beside it. The fan is
+ * 2.1 card widths wide, which fits that second column at every width from
+ * 960 (364px) to the wrap's ceiling (432px); the sizes step up once at 1200.
  */
 @media (min-width: 960px) {
     .door-hero {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
         gap: 40px;
         align-items: start;
     }
@@ -5894,17 +5933,17 @@ textarea.share-embed {
     }
 
     .deck-look {
-        flex: 0 0 200px;
-        width: 200px;
+        flex: 0 0 164px;
+        width: 164px;
     }
 
     .deck-stall {
-        zoom: 0.513;
+        zoom: 0.42;
     }
 
     .deck-look.l-neo {
         transform: rotate(-6deg) translateY(10px);
-        margin-right: -90px;
+        margin-right: -74px;
     }
 
     .deck-look.l-modern {
@@ -5914,7 +5953,7 @@ textarea.share-embed {
 
     .deck-look.l-rural {
         transform: rotate(6deg) translateY(10px);
-        margin-left: -90px;
+        margin-left: -74px;
     }
 
     .deck-look .deck-cap-look {
@@ -5936,20 +5975,20 @@ textarea.share-embed {
 
 @media (min-width: 1200px) {
     .deck-look {
-        flex: 0 0 236px;
-        width: 236px;
+        flex: 0 0 183px;
+        width: 183px;
     }
 
     .deck-stall {
-        zoom: 0.605;
+        zoom: 0.47;
     }
 
     .deck-look.l-neo {
-        margin-right: -106px;
+        margin-right: -82px;
     }
 
     .deck-look.l-rural {
-        margin-left: -106px;
+        margin-left: -82px;
     }
 }
 

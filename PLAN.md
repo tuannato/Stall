@@ -742,7 +742,12 @@ money path this app can have, because nothing on it is derived.
   relaxing that directive is a real decision with a real cost (clickjacking
   on whatever page hosts the frame). A script that renders into the host
   page, or a server-rendered card, should be priced before an iframe is
-  assumed.
+  assumed. **The still is shipped and dogfooded**: `embedSnippet`
+  (2026-09-07) is one line, a picture that opens the stall, and since
+  2026-09-20 the door's "See a real stall" card is that exact widget for the
+  Fittings stall — `the-real-stall-card-is-the-embed-widget` parses the
+  line and holds the card to it. What stays open is a widget that shows
+  live prices on somebody else's page.
 - **A chronik node of our own with the `agora` plugin.** (Decided 2026-09-07 that
   nothing is widened now — see **Decided**; this stays the long path.) Until then Stall
   depends on three community nodes run by one operator — one point of failure

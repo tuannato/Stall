@@ -140,6 +140,7 @@ import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { broadcastCards } from './broadcast';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
+import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
 import {
     lastDrawnPosterSpec,
     SQUARE_SIZE,
@@ -14046,6 +14047,56 @@ describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
         paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });
         // `applyTheme` paints <html>; the deck's `dressLook` must not.
         expect(document.documentElement.style.backgroundColor).not.toMatch(/rgb\(5, 6, 13\)|rgb\(251, 242, 223\)/);
+    });
+});
+
+describe('the-real-stall-card-is-the-embed-widget', () => {
+    /**
+     * Owner, 2026-09-20: the card stood nearly empty, and the widget the
+     * Studio hands out had no example anywhere. So the card IS the widget —
+     * parse the one line `embedSnippet` gives a seller for the same stall,
+     * and the door's picture must match it attribute for attribute: same
+     * href, same still, same alt, same size. Anything more on the picture
+     * would be a claim the seller's own site does not get.
+     */
+    it('paints exactly the snippet the Studio hands out, for the fittings stall', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
+        const card = root.querySelector('[data-role="demo-soon"]')!;
+        const link = card.querySelector('a[data-role="demo-widget"]') as HTMLAnchorElement;
+        const img = link.querySelector('img')!;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = embedSnippet({
+            stallUrl: stallPath(copy.DEMO_STALL_ADDRESS),
+            imageUrl: embedImagePath(copy.DEMO_STALL_THEME),
+            alt: copy.embedAlt(copy.DEMO_STALL_NAME),
+        });
+        const snippetLink = tpl.content.querySelector('a')!;
+        const snippetImg = snippetLink.querySelector('img')!;
+        expect(link.getAttribute('href')).toBe(snippetLink.getAttribute('href'));
+        for (const attr of ['src', 'alt', 'width', 'height']) {
+            expect(img.getAttribute(attr), attr).toBe(snippetImg.getAttribute(attr));
+        }
+        expect(img.getAttribute('width')).toBe(String(EMBED_WIDTH));
+        expect(img.getAttribute('height')).toBe(String(EMBED_HEIGHT));
+        // Below the fold at every width and ~245 KB: fetched when scrolled to.
+        expect(img.getAttribute('loading')).toBe('lazy');
+        // Still nothing from the icon host: the door fetches no stall.
+        for (const picture of root.querySelectorAll('img')) {
+            expect(picture.getAttribute('src')).not.toMatch(/\/icon\//);
+        }
+        // The name and the look are a snapshot the card says so about.
+        expect(card.textContent).toContain(copy.DEMO_STALL_NAME);
+        expect(card.textContent).toContain(copy.HOME_DEMO_WIDGET);
+        // One accessible road: the button. The picture's link is the widget's
+        // own navigation for a pointer and hidden from readers and the tab order.
+        expect(link.getAttribute('tabindex')).toBe('-1');
+        expect(link.getAttribute('aria-hidden')).toBe('true');
+        const press = new MouseEvent('click', { bubbles: true, cancelable: true });
+        link.dispatchEvent(press);
+        expect(press.defaultPrevented).toBe(true);
+        expect(h.onOpenStall).toHaveBeenCalledWith(copy.DEMO_STALL_ADDRESS);
     });
 });
 

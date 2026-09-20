@@ -1,5 +1,5 @@
 
-import { embedImagePath, embedSnippet } from '../domain/embed';
+import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
 import {
     CASHTAB_LIST_URL,
     cashtabPayUrl,
@@ -871,7 +871,7 @@ function paintHome(
     if (pinned !== null) {
         back.append(pinned);
     }
-    back.append(demoSoon(handlers));
+    back.append(realStallCard(handlers));
     back.append(firstStallCard());
     body.append(back);
     stall.append(body);
@@ -1254,18 +1254,45 @@ function shortStallToken(raw: string): string {
 }
 
 /**
- * A signpost for the live demo stall, not the stall itself: the apex never
- * fetches. It waits on the owner listing from a real maker; until then this is
- * copy, never an empty shop dressed as a demo.
+ * The real stall's card is the embed widget itself (owner, 2026-09-20: the
+ * card stood nearly empty, and the widget had no example anywhere). What is
+ * painted is exactly what `embedSnippet` hands a seller for their own site —
+ * the look's own still at this origin, the same alt, the stall's path as the
+ * href — so the door dogfoods the one line the Studio gives out, and a test
+ * parses that line and compares it to this card attribute for attribute.
+ * Still no fetch: the picture is a static file, `loading="lazy"` because the
+ * card is below the fold at every width and the still is ~245 KB; the name
+ * and the look are a snapshot (`DEMO_STALL_NAME`, `DEMO_STALL_THEME`),
+ * because the apex never reads the chain and cannot promise what that shop
+ * has in it — only that it is one. The picture's link is the widget's own
+ * road (a middle-click navigates, as it would on a seller's site) and a
+ * plain click opens in place; it is `tabindex=-1` and hidden from readers,
+ * so the one accessible control stays the button below it — a card with two
+ * named roads to one place is the two-doors mistake.
  */
-function demoSoon(handlers: StallHandlers): HTMLElement {
+function realStallCard(handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'demo-soon door-card');
     wrap.setAttribute('data-role', 'demo-soon');
     wrap.append(el('h3', 'door-card-t', copy.HOME_DEMO_TITLE));
     wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
-    // A real route into a real stall. Still no fetch here: the apex never reads
-    // the chain, so this is a link, not a preview — the door cannot promise
-    // what that shop has in it, only that it is one.
+    const link = document.createElement('a');
+    link.className = 'door-widget';
+    link.setAttribute('data-role', 'demo-widget');
+    link.href = stallPath(copy.DEMO_STALL_ADDRESS);
+    link.tabIndex = -1;
+    link.setAttribute('aria-hidden', 'true');
+    const img = document.createElement('img');
+    img.src = embedImagePath(copy.DEMO_STALL_THEME);
+    img.alt = copy.embedAlt(copy.DEMO_STALL_NAME);
+    img.width = EMBED_WIDTH;
+    img.height = EMBED_HEIGHT;
+    img.loading = 'lazy';
+    link.append(img);
+    const name = el('p', 'door-widget-name');
+    name.append(el('b', undefined, copy.DEMO_STALL_NAME));
+    name.append(el('span', undefined, shortStallToken(copy.DEMO_STALL_ADDRESS)));
+    wrap.append(link, name);
+    wrap.append(el('p', 'fine', copy.HOME_DEMO_WIDGET));
     const open = el('button', 'mini', copy.HOME_DEMO_OPEN);
     open.type = 'button';
     open.setAttribute('data-role', 'open-demo');
@@ -1273,6 +1300,10 @@ function demoSoon(handlers: StallHandlers): HTMLElement {
     if (handlers.onOpenStall !== undefined) {
         const go = handlers.onOpenStall;
         open.addEventListener('click', () => go(copy.DEMO_STALL_ADDRESS));
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            go(copy.DEMO_STALL_ADDRESS);
+        });
     }
     wrap.append(open);
     return wrap;
