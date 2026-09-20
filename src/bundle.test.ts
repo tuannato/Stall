@@ -43,6 +43,25 @@ describe('built-bundle-has-no-key-derivation', () => {
         'derivePath',
         'WatchOnlyWallet',
         'DEFAULT_GAP_LIMIT',
+        /*
+         * `eccScalar.js`, which `ecash-lib`'s barrel re-exports and which
+         * `pedersen.js` sits on. Stubbing the mnemonic and HD modules left
+         * `randomScalarBytes` — entropy to a valid secp256k1 private key by
+         * rejection sampling — in the script every visitor downloads, and
+         * this list could not see it: it grepped four names, none of which
+         * is in that module (read out of the built bytes, 2026-09-20).
+         *
+         * These two and not `randomScalarBytes`, because the bundle is
+         * minified: a local function's NAME does not survive, and the stub
+         * keeps the export name anyway, so grepping for it would be green
+         * either way. `CURVE_ORDER` is a property on `exports` and
+         * `getRandomValues` is a platform call — both survive minification,
+         * both were present before the stub and absent after. This origin
+         * holds no key and has nothing to randomise, so a hit on either is
+         * a conversation worth forcing.
+         */
+        'CURVE_ORDER',
+        'getRandomValues',
     ] as const;
 
     /** Proof the stubs are wired, so an empty result cannot read as a pass. */

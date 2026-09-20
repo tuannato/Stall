@@ -41,6 +41,23 @@ const KEY_MODULES: ReadonlyArray<readonly [RegExp, string]> = [
         /[/\\]ecash-lib[/\\]dist[/\\]blindSchnorr\.js$/,
         ['BlindSigner', 'BlindSignatureRequest', 'buildBlindSigRequests', 'finalizeBlindSigs'],
     ],
+    /*
+     * The scalar module `pedersen.js` sits on, and the one `index.js`
+     * re-exports to every visitor. Stubbing the two above kept `new Ecc()`
+     * from running; it left `randomScalarBytes` — entropy to a valid
+     * secp256k1 private key, by rejection sampling — in the served script
+     * (read out of the built bytes, 2026-09-20). Nothing in this app calls
+     * it and the Ecc proxy refuses every signing primitive, so nothing
+     * could be done with a scalar here; what it cost was the invariant
+     * CLAUDE §9 states and AGENTS §7 rests on, and the credibility of the
+     * test named as its proof. `CURVE_ORDER` is deliberately not stubbed:
+     * it is a bigint constant, nothing reads it, and the test greps for it
+     * as the name that survives minification.
+     */
+    [
+        /[/\\]ecash-lib[/\\]dist[/\\]eccScalar\.js$/,
+        ['modCurveOrder', 'scalarToBytes', 'randomScalarBytes'],
+    ],
     [
         /[/\\]ecash-lib[/\\]dist[/\\]pedersen\.js$/,
         [
