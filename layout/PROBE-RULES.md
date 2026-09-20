@@ -1240,3 +1240,28 @@ over a quarter of the target's box are dropped and the pass reads the paint
 as it is, so this can never excuse a cover. Extend the list only with an
 incident written here; the cue's own glyph is white on a 90% near-black disc
 and needs no sampler to prove it.
+
+## Sideways is not like down
+
+A box below the fold is reached by scrolling. A box past the viewport's side
+edge, or past an ancestor whose `overflow-x` is `hidden` or `clip`, is
+reached by nothing — unless some ancestor actually scrolls sideways (the
+door's deck row), or the page does, which "page scrolls sideways" already
+refuses. The incident, 2026-09-20, round 16's door: `.door-wrap` is a flex
+item of a column flex with auto side margins, so it is not stretched and its
+width is its own max-content capped at 430px — and the round gave it a nowrap
+site bar and a deck row whose max-content is past that. On a 390px phone the
+body came out 430 wide, flush left: the paste button's box ran 30–400, the
+counter's 16–414, the right 40px of every line cut by the shell's
+`overflow-x: clip`. Three rules were silent: the page did not scroll
+(`scrollWidth` 390); `text-spills` measures a block against its own box,
+and every box was intact; and `coveredBy` skipped the points past the edge
+as "off screen, the viewport check's failure" — which was no check. It
+shipped in `0c581e0` and was found by eye on a phone-width screenshot.
+`cutSideways` (`probe.ts`) now asks, for EVERY protected box in the geometry
+sweep and again inside `coveredBy`: does the box cross the viewport's side
+edge, or a `hidden`/`clip` ancestor's, with nothing that scrolls sideways
+above it? Proved red on the old sheet — 35 failures, all of them
+`button.buy.door-open runs past the viewport's side edge (30–400 of 390)` —
+and green once `.door-wrap` took `width: 100%`. Down stays tolerant: a
+`hidden` shell still reaches its content through `.stall-scroll`.

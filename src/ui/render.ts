@@ -1264,11 +1264,12 @@ function shortStallToken(raw: string): string {
  * card is below the fold at every width and the still is ~245 KB; the name
  * and the look are a snapshot (`DEMO_STALL_NAME`, `DEMO_STALL_THEME`),
  * because the apex never reads the chain and cannot promise what that shop
- * has in it — only that it is one. The picture's link is the widget's own
- * road (a middle-click navigates, as it would on a seller's site) and a
- * plain click opens in place; it is `tabindex=-1` and hidden from readers,
- * so the one accessible control stays the button below it — a card with two
- * named roads to one place is the two-doors mistake.
+ * has in it — only that it is one. **The picture is the one control** (the
+ * owner, the same evening, took the "Open this stall" button and the line
+ * explaining the widget off the card): a plain click opens the stall in
+ * place, a middle-click is the widget's own navigation, as it would be on a
+ * seller's site, and the link's accessible name is the picture's alt. The
+ * stall's name and short token caption it.
  */
 function realStallCard(handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'demo-soon door-card');
@@ -1277,10 +1278,9 @@ function realStallCard(handlers: StallHandlers): HTMLElement {
     wrap.append(el('p', 'fine', copy.HOME_DEMO_SOON));
     const link = document.createElement('a');
     link.className = 'door-widget';
-    link.setAttribute('data-role', 'demo-widget');
+    link.setAttribute('data-role', 'open-demo');
+    link.setAttribute('data-focus-key', 'open-demo');
     link.href = stallPath(copy.DEMO_STALL_ADDRESS);
-    link.tabIndex = -1;
-    link.setAttribute('aria-hidden', 'true');
     const img = document.createElement('img');
     img.src = embedImagePath(copy.DEMO_STALL_THEME);
     img.alt = copy.embedAlt(copy.DEMO_STALL_NAME);
@@ -1288,24 +1288,17 @@ function realStallCard(handlers: StallHandlers): HTMLElement {
     img.height = EMBED_HEIGHT;
     img.loading = 'lazy';
     link.append(img);
-    const name = el('p', 'door-widget-name');
-    name.append(el('b', undefined, copy.DEMO_STALL_NAME));
-    name.append(el('span', undefined, shortStallToken(copy.DEMO_STALL_ADDRESS)));
-    wrap.append(link, name);
-    wrap.append(el('p', 'fine', copy.HOME_DEMO_WIDGET));
-    const open = el('button', 'mini', copy.HOME_DEMO_OPEN);
-    open.type = 'button';
-    open.setAttribute('data-role', 'open-demo');
-    open.setAttribute('data-focus-key', 'open-demo');
     if (handlers.onOpenStall !== undefined) {
         const go = handlers.onOpenStall;
-        open.addEventListener('click', () => go(copy.DEMO_STALL_ADDRESS));
         link.addEventListener('click', (event) => {
             event.preventDefault();
             go(copy.DEMO_STALL_ADDRESS);
         });
     }
-    wrap.append(open);
+    const name = el('p', 'door-widget-name');
+    name.append(el('b', undefined, copy.DEMO_STALL_NAME));
+    name.append(el('span', undefined, shortStallToken(copy.DEMO_STALL_ADDRESS)));
+    wrap.append(link, name);
     return wrap;
 }
 

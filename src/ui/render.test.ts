@@ -2354,7 +2354,7 @@ describe('apex signposts a demo without becoming a shop', () => {
         expect(demo!.textContent).toContain(HOME_DEMO_SOON);
         // A real route now, not a "coming soon". Still a link: the apex never
         // fetches, so it cannot promise what that shop has in it.
-        const open = demo!.querySelector('[data-role="open-demo"]') as HTMLButtonElement;
+        const open = demo!.querySelector('[data-role="open-demo"]') as HTMLAnchorElement;
         expect(open).not.toBeNull();
         open.click();
         expect(h.onOpenStall).toHaveBeenCalledWith(DEMO_STALL_ADDRESS);
@@ -14064,7 +14064,7 @@ describe('the-real-stall-card-is-the-embed-widget', () => {
         const root = document.createElement('div');
         renderStall(root, { route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }, h);
         const card = root.querySelector('[data-role="demo-soon"]')!;
-        const link = card.querySelector('a[data-role="demo-widget"]') as HTMLAnchorElement;
+        const link = card.querySelector('a[data-role="open-demo"]') as HTMLAnchorElement;
         const img = link.querySelector('img')!;
         const tpl = document.createElement('template');
         tpl.innerHTML = embedSnippet({
@@ -14086,13 +14086,14 @@ describe('the-real-stall-card-is-the-embed-widget', () => {
         for (const picture of root.querySelectorAll('img')) {
             expect(picture.getAttribute('src')).not.toMatch(/\/icon\//);
         }
-        // The name and the look are a snapshot the card says so about.
+        // The name and the look are a snapshot; the caption names the stall.
         expect(card.textContent).toContain(copy.DEMO_STALL_NAME);
-        expect(card.textContent).toContain(copy.HOME_DEMO_WIDGET);
-        // One accessible road: the button. The picture's link is the widget's
-        // own navigation for a pointer and hidden from readers and the tab order.
-        expect(link.getAttribute('tabindex')).toBe('-1');
-        expect(link.getAttribute('aria-hidden')).toBe('true');
+        // The picture is the one control (owner, 2026-09-20 evening: no
+        // button beside it, no line explaining it): reachable, named by the
+        // alt, and a plain click opens in place rather than navigating.
+        expect(card.querySelector('button')).toBeNull();
+        expect(link.getAttribute('aria-hidden')).toBeNull();
+        expect(link.getAttribute('tabindex')).toBeNull();
         const press = new MouseEvent('click', { bubbles: true, cancelable: true });
         link.dispatchEvent(press);
         expect(press.defaultPrevented).toBe(true);

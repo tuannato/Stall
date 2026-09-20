@@ -202,8 +202,17 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
 export let clipSkips = 0;
 export let clipChecks = 0;
 
-function clipsOf(node: Element): DOMRect[] {
-    const rects: DOMRect[] = [];
+type Clip = {
+    rect: DOMRect;
+    el: Element;
+    /** `overflow-x: hidden | clip`: what lies past its side edge is gone, not scrolled to. */
+    cutsX: boolean;
+    /** A sideways scroller with something to scroll: what lies past its edge is reachable. */
+    scrollsX: boolean;
+};
+
+function clipsOf(node: Element): Clip[] {
+    const clips: Clip[] = [];
     let at: Element | null = node.parentElement;
     while (at !== null && at !== document.documentElement) {
         const style = getComputedStyle(at);
@@ -212,11 +221,57 @@ function clipsOf(node: Element): DOMRect[] {
             style.overflowY !== 'visible' ||
             style.overflowX !== 'visible'
         ) {
-            rects.push(at.getBoundingClientRect());
+            clips.push({
+                rect: at.getBoundingClientRect(),
+                el: at,
+                cutsX: style.overflowX === 'hidden' || style.overflowX === 'clip',
+                scrollsX:
+                    (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+                    at.scrollWidth > at.clientWidth + 1,
+            });
         }
         at = at.parentElement;
     }
-    return rects;
+    return clips;
+}
+
+/**
+ * Sideways is not like down (2026-09-20). A box below the fold is reached by
+ * scrolling; a box past the viewport's side edge, or past an ancestor whose
+ * `overflow-x` is hidden or clip, is reached by nothing — unless some
+ * ancestor actually scrolls sideways (the door's deck row), or the page
+ * itself does, which the sideways-scroll rule already refuses. The incident:
+ * the door's body is a flex item with auto side margins, so its width is its
+ * own max-content capped at 430px, and round 16 gave it a nowrap site bar
+ * and a deck row whose max-content is past that — at 390px the body came out
+ * 430 wide, flush left, the paste button's right edge at 400 and the counter
+ * at 414, cut by the shell's `overflow-x: clip`. No rule saw it: the page did
+ * not scroll (the shell clips), and `coveredBy` skipped the points past the
+ * edge as "off screen, the viewport check's failure", which was no check at
+ * all. Every protected box is asked, in the geometry sweep.
+ */
+function cutSideways(node: Element, box: DOMRect): string | undefined {
+    if (box.width === 0 || box.height === 0) {
+        return undefined;
+    }
+    const clips = clipsOf(node);
+    const reachable =
+        document.documentElement.scrollWidth > window.innerWidth + 1 ||
+        clips.some((clip) => clip.scrollsX);
+    if (reachable) {
+        return undefined;
+    }
+    const span = `${Math.round(box.left)}–${Math.round(box.right)}`;
+    if (box.left < -1 || box.right > window.innerWidth + 1) {
+        return `runs past the viewport's side edge (${span} of ${window.innerWidth}) with nothing to scroll`;
+    }
+    const cutter = clips.find(
+        (clip) => clip.cutsX && (box.left < clip.rect.left - 1 || box.right > clip.rect.right + 1),
+    );
+    if (cutter !== undefined) {
+        return `is cut sideways by ${describe(cutter.el)} (${span} inside ${Math.round(cutter.rect.left)}–${Math.round(cutter.rect.right)})`;
+    }
+    return undefined;
 }
 
 function coveredBy(node: Element): string | undefined {
@@ -236,15 +291,20 @@ function coveredBy(node: Element): string | undefined {
     // covered — it is reachable by scrolling, and the tab bar sits outside
     // the clip in flow, so it can never cover what is inside. Points within
     // the clip are still fully checked.
+    const cut = cutSideways(node, box);
+    if (cut !== undefined) {
+        return cut;
+    }
     const clips = clipsOf(node);
     for (const [x, y] of points) {
         if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
-            // Off screen is its own failure, reported by the viewport check.
+            // Below the fold is reached by scrolling; past a side edge was
+            // ruled on above, for the whole box.
             continue;
         }
         if (
             clips.some(
-                (clip) =>
+                ({ rect: clip }) =>
                     y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right,
             )
         ) {
@@ -486,6 +546,14 @@ function measure(screen: string, themeLabel: string): Failure[] {
         node: n,
         box: n.getBoundingClientRect(),
     }));
+    // Past a side edge with nothing to scroll is cut, not reachable — for
+    // every protected box, not only the two `coveredBy` hit-tests.
+    for (const g of guarded) {
+        const cut = cutSideways(g.node, g.box);
+        if (cut !== undefined) {
+            fail('a protected box is cut sideways', `${describe(g.node)} ${cut}`);
+        }
+    }
     for (const deco of decorations(surface)) {
         // A decoration that contains the thing, or sits inside it, is layout,
         // not cover: `.item` clips its own children, and the scrim *is* the

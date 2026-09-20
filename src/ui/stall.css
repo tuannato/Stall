@@ -5105,6 +5105,15 @@ textarea.share-embed {
 
 .door-wrap {
     display: block;
+    /* `width: 100%` is load-bearing (2026-09-20): this is a flex item of a
+       column flex with auto side margins, so it is not stretched, and its
+       cross size is its own max-content capped by `max-width`. Round 16
+       gave the door a nowrap site bar and a deck row whose max-content is
+       past 430px, so on a 390px phone the body came out 430 wide, flush
+       left, and the right 40px of every line — the paste box included —
+       were cut by the shell's clip with nothing to scroll. Measured on the
+       real door at 390: `.stall-body` 430px, `.door-unit` right edge 414. */
+    width: 100%;
     max-width: 430px;
     margin: 0 auto;
     padding: 18px 16px 40px;
@@ -5693,16 +5702,13 @@ textarea.share-embed {
     margin: 0;
 }
 
-.door .demo-soon .mini {
-    margin-top: 12px;
-}
-
 /* The widget on the real-stall card: the still, edged like the card, over
    the stall's name and short token. The still is 600x315 by attribute and
    scales to the column. */
 .door-widget {
     display: block;
     margin-top: 12px;
+    color: inherit;
     border-radius: 10px;
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--s-muted) 22%, transparent);
@@ -5716,7 +5722,7 @@ textarea.share-embed {
 }
 
 .door-widget-name {
-    margin: 8px 0 10px;
+    margin: 8px 0 0;
     font-size: 13.5px;
     font-weight: 600;
     display: flex;
