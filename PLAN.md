@@ -111,8 +111,8 @@ measures every screen in headless Chrome; CI on push.
 product complete at craft and unmeasured at use. Before any new surface:
 read the three record counts on chain (`STL1`, `STLD`, `STLP` — 9 / 13 / 3 on
 2026-09-14, 9 / 11 / 2 on 2026-09-08, 8 / 2 / 0 on 2026-09-04) and the distinct signers among them; read the CDN's own
-request counts for the unfurl function and the icon Worker; walk five real
-sellers through a stall by hand. Then the owner's decisions under **Open**
+request counts for the unfurl function and the icon Worker. Then the owner's
+decisions under **Open**
 (the honesty one-liners the evaluation left open landed on 2026-09-07).
 
 **Recommended, not yet decided:** no new LOKAD and no new tag for 90 days —
@@ -264,14 +264,15 @@ working accept, and there is no accept.
   ever refused the check goes absent and the pay rail does not notice.
   Privacy: one more host sees a visitor's IP at those moments — no referrer,
   no cookie, and a URL that names the asset, never the stall.
-- **Listings is the product sentence, provisionally** (owner, 2026-09-07).
-  The door, the first-stall checklist, the guide's chapter order and the
-  stream picker's default stay as they are: a shop page for one seller's
-  Agora listings, with the quotes rail one press away. Quotes was the
-  window's recommendation — the one rail Stall owns the money path of —
-  and the owner chose to keep Listings first until the five-seller walk
-  (§ Next action) says where a seller of real goods actually stops. Reopen
-  with that evidence; a swap is copy only, one commit, reversible.
+- **Listings leads, and the door's sentence covers both rails** (owner,
+  2026-09-20, replacing the 2026-09-07 "provisionally" entry). The door
+  says a stall carries listings from Agora and prices the seller sets
+  themselves; Listings stays first on the door, in the first-stall
+  checklist, in the guide's chapter order and as the stream picker's
+  default, with the quotes rail one press away. **No condition is attached
+  to this** — the owner removed the one that used to stand here on
+  2026-09-20 and does not want it raised again. Reopen only on a new reason
+  of the owner's; a swap is copy only, one commit, reversible.
 - **The item tag is a landing link on paper, never a BIP21** (2026-09-08,
   the owner's three answers): the poster sheet's fifth format, offered only
   where there is a quoted item, prints one item per A4 sheet with the real
@@ -888,14 +889,14 @@ the shared skeleton everywhere else.
 
 ## Next action
 
-1. **Measure.** The three record counts and their distinct signers; the CDN's
-   request counts for the unfurl function and the icon Worker; then five real
-   sellers walked through a stall by hand, with the token minted for them, so
-   the question "is the mint requirement the constraint or is demand" gets an
-   answer instead of an argument.
-2. **Walk the five sellers with the sentence as it stands** (Listings,
-   provisional — § Decided) and let them answer whether the mint step or the
-   listing step is where a seller of real goods stops.
+1. **Port the 2026-09-20 redesign** of the door, the Studio panel, `/guide`
+   and `/stream` from the approved board (owner's answers Q1–Q8 and five
+   additions, 2026-09-20; the board and its critic report live in
+   `private/design/redesign-2026-09-20/`), in the order door → Studio and
+   its four tool sheets → the two guides, each commit under the suite and
+   the layout probe.
+2. **Measure.** The three record counts and their distinct signers; the CDN's
+   request counts for the unfurl function and the icon Worker.
 
 Deploying needs nothing: a push to `main` builds and ships, and CI runs the
 build and the suite on the same push. What that does **not** cover are the
