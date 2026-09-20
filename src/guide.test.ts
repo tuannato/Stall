@@ -3,8 +3,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DUST_SATS } from './domain/money';
 import {
+    DECOR_LEDE,
     DESC_PRICE_LEDE,
     DESC_TITLE,
+    HOME_WORKSHOP_NEXT,
+    POSTER_LEDE,
+    SHARE_EMBED_LEDE,
+    STUDIO_CARD_SHARE,
+    WINDOW_LEDE,
     HANDOFF_FINE_PRINT,
     HANDOFF_MAY_PRESELECT,
     HANDOFF_PRICE_IS_NOT_THE_ROW,
@@ -82,10 +88,18 @@ describe('the-guide-quotes-the-apps-own-sentences', () => {
             QUOTE_MINTED_CHIP,
             QUOTE_NOT_MINTED_HERE,
             PAY_TOLERANCE_NONE,
+            // The two chapters of round 16 quote the app's own sentences: the
+            // decorations' rule, the three doors' ledes, the workshop line.
+            DECOR_LEDE,
+            POSTER_LEDE,
+            WINDOW_LEDE,
+            SHARE_EMBED_LEDE,
+            HOME_WORKSHOP_NEXT,
         ]) {
             expect(html, sentence).toContain(flat(sentence));
         }
         expect(html).toContain(flat(`Studio → ${STUDIO_CARD_ITEMS.replace('&', '&amp;')}`));
+        expect(html).toContain(flat(`Studio → ${STUDIO_CARD_SHARE}`));
         expect(html).toContain(flat(`“${DESC_TITLE}”`));
         expect(html).toContain(flat(STUDIO_DESCRIBE_ROW.replace('&', '&amp;')));
     });
@@ -157,5 +171,29 @@ describe('the-guide-promises-nothing', () => {
     it('does not promise safety, a guarantee or a refund', () => {
         const html = read('public', 'guide.html');
         expect(html).not.toMatch(/guarantee|secure|refund|risk-free/i);
+    });
+});
+
+describe('the-guide-figures-are-small-renders-captioned-as-examples', () => {
+    /**
+     * Two figures (round 16, Q5): renders of the app's own screens from the
+     * showroom, as JPEG under 60 KB each so `public/` keeps room for the
+     * fourth look's og card, and each captioned as an example — a picture is
+     * pinned by nothing, so a drifted figure in it must never read as this
+     * page's own number.
+     */
+    it('ships two JPEGs under 60 KB, referenced with their size and captioned as examples', () => {
+        const html = read('public', 'guide.html');
+        for (const name of ['offers-390.jpg', 'pay-390.jpg']) {
+            const buf = readFileSync(join(ROOT, 'public', 'guide', name));
+            expect(buf.subarray(0, 2).equals(Buffer.from([0xff, 0xd8])), `${name} is a JPEG`).toBe(true);
+            expect(buf.byteLength, `${name} bytes`).toBeLessThanOrEqual(60 * 1024);
+            expect(html).toContain(`src="/guide/${name}"`);
+        }
+        const captions = [...html.matchAll(/<figcaption>([\s\S]*?)<\/figcaption>/g)].map((m) => flat(m[1]!));
+        expect(captions).toHaveLength(2);
+        for (const caption of captions) {
+            expect(caption).toMatch(/example/i);
+        }
     });
 });

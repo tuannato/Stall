@@ -6,7 +6,7 @@ import {
     BROADCAST_RAIL_REST_MS,
     BROADCAST_AFTER_RUN_MS,
 } from './app';
-import { OBS_TRUTH_RAIL_RESTS } from './ui/obsGuide';
+import { OBS_RECIPE_POSITION, OBS_TRUTH_RAIL_RESTS } from './ui/obsGuide';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -82,6 +82,8 @@ describe('the-stream-guide-figures-are-the-apps-own', () => {
         expect(html).toContain('1080p');
         expect(html).toContain('720p');
         expect(html).toContain('Open your stall → Studio → Stream overlay');
+        // The settings table's "where it sits" row is the recipe's own sentence.
+        expect(html).toContain(OBS_RECIPE_POSITION);
         expect(html).toContain('Shutdown source when not visible');
         expect(html).toContain('Refresh browser when scene becomes active');
         expect(html).toContain('Open your stall');

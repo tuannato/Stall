@@ -1,52 +1,56 @@
-/* The general guide's own additions over stream.css: a small table of
-   contents, a lighter lede for each chapter, and a third heading level.
-   Same rules as stream.css — no webfont, no inline style, style-src 'self'.
-   Chapters are anchors, so the sticky-free layout scrolls each heading
-   into view with a little room above it. */
+/* The general guide's own additions over stream.css (the manual's shell):
+   a figure beside a chapter's text, the phone frame the two renders sit in,
+   and a one-column step list where the figure takes the other column. Same
+   rules as stream.css — no webfont, no inline style, style-src 'self'. The
+   figures are renders of the app's own screens (layout/fixtures.ts, the
+   showroom), regenerated with the design cards; each is captioned as an
+   example, never as this page's own number. */
 
-.toc {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 10px;
-    margin-top: 18px;
+.side {
+    display: grid;
+    gap: 18px;
 }
 
-.toc a {
-    display: inline-block;
-    padding: 8px 14px;
-    border: 1px solid rgba(37, 99, 235, 0.35);
-    border-radius: 999px;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 14px;
+.figure {
+    margin: 0;
+    display: grid;
+    gap: 10px;
+    justify-items: start;
 }
 
-.toc a:hover {
-    background: rgba(37, 99, 235, 0.08);
+.phone {
+    width: min(100%, 300px);
+    border: 6px solid #1c1f24;
+    border-radius: 26px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 14px 40px rgba(20, 23, 26, 0.18);
 }
 
-.block[id] {
-    scroll-margin-top: 24px;
+.phone img {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 
-.lede-sm {
-    margin: 0 0 18px;
-    font-size: 16px;
-    line-height: 1.5;
-    color: #3b4552;
-    max-width: 62ch;
-    text-wrap: pretty;
-}
-
-.sub-title {
-    margin: 28px 0 12px;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+.figure figcaption {
+    font-size: 12.5px;
     color: #5f6975;
+    max-width: 44ch;
 }
 
 .step-copy a {
     font-weight: 600;
+}
+
+@media (min-width: 860px) {
+    .side {
+        grid-template-columns: minmax(0, 1fr) 300px;
+        align-items: start;
+        gap: 32px;
+    }
+
+    .steps.steps-1 {
+        grid-template-columns: 1fr;
+    }
 }

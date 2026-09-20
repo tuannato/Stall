@@ -877,6 +877,18 @@ export const SCREENS: Record<string, StallView> = {
         broadcastPulse: true,
     }),
     /* `bg=transparent`: the OBS wire, and the only screen C13's rules read. */
+    /*
+     * The overlay at its plainest: one ordinary listing, no "+N more", on the
+     * transparent ground — the frame `/stream`'s hero is composed from (round
+     * 16, Q6: the hero used to show the stress fixture's hundred-million
+     * figure). A screen the shipped renderer paints, so the hero stays a
+     * real render; it costs the canvas pass one more cell per look.
+     */
+    'broadcast-hero': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        broadcast: { preset: 'corner', mode: 'fixed', transparent: true, cards: 'listings' },
+        broadcastState: 'live',
+    }),
     'broadcast-clear': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         broadcast: bc('corner', 'fixed', true),
@@ -1154,6 +1166,7 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
  */
 export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
+    'broadcast-hero',
     'broadcast-clear',
     'broadcast-quotes',
     'broadcast-quotes-clear',
@@ -1168,6 +1181,7 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
 
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
+    'broadcast-hero',
     'broadcast-clear',
     'broadcast-quotes',
     'broadcast-quotes-clear',

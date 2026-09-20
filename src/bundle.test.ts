@@ -266,11 +266,16 @@ describe('public-weight-has-a-ceiling', () => {
      * `served-weight-has-a-ceiling` builds with `write: false`, so nothing in
      * `public/` is counted — Pages serves every file there whether or not
      * anything links it (`_redirects` names no assets). Measured 947,955
-     * bytes on 2026-09-05 and 962,399 on 2026-09-20; the ceiling leaves
-     * about 37 KB of headroom on purpose, so the next hero image is
-     * noticed the day it lands.
+     * bytes on 2026-09-05 and 962,399 on 2026-09-20 against 1,000,000.
+     * Raised to 1,120,000 the same evening for round 16's two guide figures
+     * (`public/guide/*.jpg`, ~102 KB together) — a deliberate diff, and a
+     * trade the owner made knowingly: the headroom this eats is the room a
+     * fourth look's og card (~200 KB) would have needed, so that card now
+     * needs its own raise. Measured 1,108,312 after the round (the hero is
+     * 146 KB now, composed from `broadcast-hero`): about 12 KB of headroom,
+     * deliberately tight, so the next image is noticed the day it lands.
      */
-    const PUBLIC_CEILING_BYTES = 1_000_000;
+    const PUBLIC_CEILING_BYTES = 1_120_000;
 
     function sizeOf(dir: string): number {
         let total = 0;

@@ -8,111 +8,144 @@
   </head>
   <body>
     <div class="canopy" aria-hidden="true"></div>
-    <main class="wrap">
-      <div class="brand">
-        <a class="brand-home" href="/">
-          <img
-            class="brand-mark"
-            src="/stream-logo.png"
-            width="30"
-            height="36"
-            alt=""
-          />
-          <span class="brand-word">Stall</span>
-        </a>
-        <p class="brand-kicker">stream overlay</p>
-      </div>
+    <header class="bar">
+      <a class="brand" href="/">
+        <img class="brand-mark" src="/stream-logo.png" width="30" height="36" alt="" />
+        <span class="brand-word">Stall</span>
+      </a>
+      <nav class="nav" aria-label="Guides">
+        <a href="/guide">How a stall works</a>
+        <a href="/stream" aria-current="page">On stream</a>
+        <a class="cta" href="/"><span class="pfx mono">ecash:</span>Open your stall</a>
+      </nav>
+    </header>
+    <div class="page">
+      <nav class="toc" aria-label="On this page">
+        <span class="h">On this page</span>
+        <a href="#top">The overlay</a>
+        <a href="#steps">Three steps</a>
+        <a href="#source">Add the source</a>
+        <a href="#live">Before you go live</a>
+        <a href="/guide">How a stall works</a>
+      </nav>
+      <main class="doc">
+        <section class="chapter" id="top">
+          <p class="kicker">Stream overlay</p>
+          <h1 class="display">Put your stall on stream.</h1>
+          <p class="lede">
+            A card with one item and a QR, on your live video. Viewers scan, the
+            shop opens, Cashtab signs. Nothing to click on the stream — a stream
+            can’t be clicked.
+          </p>
+          <div class="hero">
+            <img
+              src="/stream-hero.png"
+              width="1220"
+              height="686"
+              alt="An example overlay on a sample stream: the shop's name and one listing on a card, and a QR that opens the stall"
+            />
+          </div>
+        </section>
 
-      <div class="lede-block">
-        <h1 class="display">Put your stall on stream.</h1>
-        <p class="lede">
-          A card with one item and a QR, on your live video. Viewers scan, the
-          shop opens, Cashtab signs. Nothing to click on the stream — a stream
-          can’t be clicked.
+        <section class="chapter" id="steps">
+          <h2>Three steps</h2>
+          <ol class="steps">
+            <li class="step">
+              <i>1</i>
+              <div>
+                <b>Open your stall → Studio → Stream overlay</b>
+                <span>Pick where it sits and how the price shows.</span>
+              </div>
+            </li>
+            <li class="step">
+              <i>2</i>
+              <div>
+                <b>Copy the link</b>
+                <span>It carries your address and the settings. Nothing else.</span>
+              </div>
+            </li>
+            <li class="step">
+              <i>3</i>
+              <div>
+                <b>Paste it into OBS as a Browser Source</b>
+                <span>Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active”.</span>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="chapter" id="source">
+          <h2>Two ways to add the source</h2>
+          <div class="two">
+            <div class="unit">
+              <div class="l">Drop-in</div>
+              <p class="f">1920 × 1080</p>
+              <p>The overlay sits in its own corner of the canvas.</p>
+            </div>
+            <div class="unit">
+              <div class="l">Sticker</div>
+              <p class="f">372 × 839 corner · 372 × 580 rail</p>
+              <p>Drag it, scale it — the QR scales with it. A vertical stream uses this.</p>
+            </div>
+          </div>
+          <h3>Browser Source settings</h3>
+          <div class="scroll">
+            <table class="table">
+              <thead>
+                <tr><th>Setting</th><th>Drop-in</th><th>Sticker</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>FPS</td><td class="fig">30</td><td class="fig">30</td></tr>
+                <tr><td>Custom CSS</td><td>Leave empty</td><td>Leave empty</td></tr>
+                <tr>
+                  <td>Where it sits</td>
+                  <td colspan="2">The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room.</td>
+                </tr>
+                <tr><td>Shutdown source when not visible</td><td>Off</td><td>Off</td></tr>
+                <tr><td>Refresh browser when scene becomes active</td><td>Off</td><td>Off</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="chapter" id="live">
+          <h2>Five things to know before you go live</h2>
+          <dl class="defs">
+            <div>
+              <dt>Phone viewers can’t read any overlay.</dt>
+              <dd>A 1080p frame on a phone is a fifth of its size. Put the same stall link in your stream description or a pinned comment.</dd>
+            </div>
+            <div>
+              <dt>The QR scans from a monitor at 1080p.</dt>
+              <dd>Whether it scans for viewers watching at 720p is not measured. Scale the source up if your viewers are on phones.</dd>
+            </div>
+            <div>
+              <dt>“Rest, then show a price” rests 3 seconds, then shows a card for 5.</dt>
+              <dd>A card whose name or words are cut runs them through first, then stays 5 seconds more — so a long sentence can hold a card for about 25 seconds. Pick “Always show a price” for a shop that should never rest; its cards wait for the run the same way.</dd>
+            </div>
+            <div>
+              <dt>Quote cards are opt-in.</dt>
+              <dd>Pick “Your quotes (paid to you)” under “Cards show” in Studio → Stream overlay — or add <b class="mono">cards=quotes</b> to the link by hand — and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.</dd>
+            </div>
+            <div>
+              <dt>Overlay stopped updating?</dt>
+              <dd>OBS shut the source down. Toggle the source’s visibility to bring it back.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <p class="cta-row">
+          <a class="cta" href="/">
+            <span class="cta-pref pfx mono">ecash:</span>
+            <span>Open your stall</span>
+          </a>
         </p>
-      </div>
-
-      <div class="hero">
-        <img
-          src="/stream-hero.png"
-          width="1220"
-          height="686"
-          alt="An example overlay on a sample stream: the shop's name and one listing on a card, and a QR that opens the stall"
-        />
-      </div>
-
-      <ol class="steps">
-        <li class="step">
-          <p class="step-n mono">01</p>
-          <p class="step-body">
-            <span class="step-title">Open your stall → Studio → Stream overlay</span>
-            <span class="step-copy">Pick where it sits and how the price shows.</span>
-          </p>
-        </li>
-        <li class="step">
-          <p class="step-n mono">02</p>
-          <p class="step-body">
-            <span class="step-title">Copy the link</span>
-            <span class="step-copy">It carries your address and the settings. Nothing else.</span>
-          </p>
-        </li>
-        <li class="step">
-          <p class="step-n mono">03</p>
-          <p class="step-body">
-            <span class="step-title">Paste it into OBS as a Browser Source</span>
-            <span class="step-copy">Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active”.</span>
-          </p>
-        </li>
-      </ol>
-
-      <section class="block">
-        <h2 class="section-title">Two ways to add the source</h2>
-        <div class="sizes">
-          <div class="unit">
-            <p class="unit-label">Drop-in</p>
-            <p class="unit-fig mono">1920 × 1080</p>
-            <p class="unit-copy">The overlay sits in its own corner of the canvas.</p>
-          </div>
-          <div class="unit">
-            <p class="unit-label">Sticker</p>
-            <p class="unit-fig mono">372 × 839 corner · 372 × 580 rail</p>
-            <p class="unit-copy">Drag it, scale it — the QR scales with it. A vertical stream uses this.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="block">
-        <h2 class="section-title">Five things to know before you go live</h2>
-        <div class="truths">
-          <div class="truth">
-            <p class="truth-title">Phone viewers can’t read any overlay.</p>
-            <p class="truth-copy">A 1080p frame on a phone is a fifth of its size. Put the same stall link in your stream description or a pinned comment.</p>
-          </div>
-          <div class="truth">
-            <p class="truth-title">The QR scans from a monitor at 1080p.</p>
-            <p class="truth-copy">Whether it scans for viewers watching at 720p is not measured. Scale the source up if your viewers are on phones.</p>
-          </div>
-          <div class="truth">
-            <p class="truth-title">“Rest, then show a price” rests 3 seconds, then shows a card for 5.</p>
-            <p class="truth-copy">A card whose name or words are cut runs them through first, then stays 5 seconds more — so a long sentence can hold a card for about 25 seconds. Pick “Always show a price” for a shop that should never rest; its cards wait for the run the same way.</p>
-          </div>
-          <div class="truth">
-            <p class="truth-title">Quote cards are opt-in.</p>
-            <p class="truth-copy">Pick “Your quotes (paid to you)” under “Cards show” in Studio → Stream overlay — or add <b class="mono">cards=quotes</b> to the link by hand — and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.</p>
-          </div>
-          <div class="truth">
-            <p class="truth-title">Overlay stopped updating?</p>
-            <p class="truth-copy">OBS shut the source down. Toggle the source’s visibility to bring it back.</p>
-          </div>
-        </div>
-      </section>
-
-      <p class="cta-row">
-        <a class="cta" href="/">
-          <span class="cta-pref mono">ecash:</span>
-          <span>Open your stall</span>
-        </a>
-      </p>
-    </main>
+      </main>
+    </div>
+    <footer class="foot">
+      <span>Stall reads the chain and holds no keys.</span>
+      <a href="/">Front door</a>
+      <a href="/guide">How a stall works</a>
+    </footer>
   </body>
 </html>
