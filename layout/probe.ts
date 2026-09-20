@@ -1314,9 +1314,56 @@ type ContrastTarget = {
      * 1.12:1 until the segments took their own radius.
      */
     r: number;
+    /**
+     * Chrome laid over the box — a control's cue drawn on a text box's
+     * corner — as boxes the sampler steps around, the way it steps past the
+     * border. `CHROME_ON_TEXT` says which elements count and why; the cap
+     * in `chromeOver` keeps the mechanism from ever excusing a cover.
+     */
+    holes: Hole[];
     /** What was measured, for a failure a person can find. */
     sel: string;
 };
+
+type Hole = { x: number; y: number; w: number; h: number };
+
+/**
+ * Elements that are chrome ON a measured text box, never its ground: the
+ * face's expand cue, a 22px badge on the hero tile's corner (2026-09-20). The
+ * pass blanks a target and its descendants and then reads every pixel left
+ * as the ground under the letters — and the cue is a sibling, so its own
+ * white stroke was read as the ground under Neo's cyan letters at 1.01:1,
+ * and its near-black disc as the ground under Modern's night-dark letters
+ * at 2.72:1. No paint can clear both: a pixel that contrasts 3:1 with a light
+ * ink and with a dark one does not exist, and the badge must be one badge on
+ * every look. The letters never touch it — two initials centred in the tile
+ * end well short of its corner — so the border's own rule applies: chrome is
+ * stepped around, not sampled. Extending this list needs the incident
+ * written in `PROBE-RULES.md`; the cap below is what stops it from ever
+ * hiding a real cover.
+ */
+const CHROME_ON_TEXT = '.face-ic-cue';
+
+/** No more than this share of a target's box may be stepped around. */
+const CHROME_HOLE_CAP = 0.25;
+
+function chromeOver(node: HTMLElement, box: Hole): Hole[] {
+    const holes: Hole[] = [];
+    let covered = 0;
+    for (const chrome of document.querySelectorAll<HTMLElement>(CHROME_ON_TEXT)) {
+        if (chrome === node || node.contains(chrome)) continue;
+        const c = chrome.getBoundingClientRect();
+        const x = Math.max(box.x, c.x);
+        const y = Math.max(box.y, c.y);
+        const w = Math.min(box.x + box.w, c.right) - x;
+        const h = Math.min(box.y + box.h, c.bottom) - y;
+        if (w <= 0 || h <= 0) continue;
+        holes.push({ x, y, w, h });
+        covered += w * h;
+    }
+    // Over the cap it is a cover, not a cue, and the pass reads it as such.
+    return covered > CHROME_HOLE_CAP * box.w * box.h ? [] : holes;
+}
 
 const CONTRAST_TEXT = [
     '[data-role="price"]',
@@ -1588,6 +1635,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             Number.parseFloat(style.borderLeftWidth) || 0,
         ),
         pad: insideTransform(node) ? 8 : 0,
+        holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
     };
 }

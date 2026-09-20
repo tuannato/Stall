@@ -1081,10 +1081,14 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
  * be read in one place, and next to the reason each name is on it.
  */
 export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
-    // The embed sheet carries no money figure and no ink the record sheets'
-    // hex boxes and `pub` lines do not already put on the same ground; the
-    // contrast pass is 140 s of a 200 s ceiling, so this one is geometry.
+    // The two tool sheets carry no money figure and no ink the record
+    // sheets' hex boxes, `pub` lines and `mini` controls do not already put
+    // on the same ground — the recipe's own text was never sampled under the
+    // studio either; and the hero's plate is `broadcast`'s. The contrast
+    // pass is 140 s of a 200 s ceiling, so these three are geometry.
     'embed-sheet',
+    'stream-sheet',
+    'broadcast-hero',
     'nothing-quoted',
     'quotes-failed',
     'quotes-truncated',

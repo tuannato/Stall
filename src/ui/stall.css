@@ -2220,6 +2220,16 @@ textarea.paste-in {
     border-radius: var(--s-hero-radius);
 }
 
+/*
+ * The cue is one badge on every look (2026-09-20): near-black, a light rim,
+ * a white glyph — literal ink and ground in ONE rule, because it sits on a
+ * tile whose letters are the page's ground on Modern and Rural and cyan on
+ * Neo, and a badge written in tokens was the letters' own colour on one of
+ * them. It was a disc of `--s-bg` before, invisible on Modern's own tile.
+ * Its legibility is its own: white on a 90% near-black disc over anything.
+ * The layout probe steps around it when it samples the tile's ground
+ * (`CHROME_ON_TEXT` in `layout/probe.ts`), as it steps past a border.
+ */
 .face-ic-cue {
     position: absolute;
     right: -7px;
@@ -2229,9 +2239,9 @@ textarea.paste-in {
     border-radius: 999px;
     display: grid;
     place-items: center;
-    background: color-mix(in srgb, var(--s-bg) 88%, transparent);
-    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
-    color: var(--s-text);
+    background: rgba(20, 23, 26, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    color: #ffffff;
 }
 
 .face-ic-cue .ic {

@@ -1203,3 +1203,40 @@ collapse. The check skips `[data-role="door-deck"]` and nothing else: every
 row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
+
+## The probe's browser is off the network
+
+Since 2026-09-20 the runner starts Chrome with
+`--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost`: nothing but the
+preview resolves. The incident: `item-listing`'s hero tile read between
+1.16:1 and 1.65:1 in four of nine runs that day and 3:1+ in the rest, on
+code that had not touched it. With the network on, the tile's `<img>` asked
+the icon host and, when the answer landed before the capture, the picture
+covered the letters the pass was sampling; when it did not, the pass read
+the face-icon cue — a disc of `--s-bg` on the tile's corner, the letters'
+own colour — against them. The guard reads the same pixels every run now,
+and the cue is the next entry. A guard that depends on the network is not a
+guard; a green that depends on a Worker answering in time is the false
+signal AGENTS §4 names.
+
+## A cue on a text box is chrome, and the sampler steps around it
+
+The contrast pass blanks a target and its descendants and reads every pixel
+left in the box as the ground under the letters. The face's expand cue is a
+22px badge on the hero tile's corner and a SIBLING of the tile, so nothing
+blanked it. Measured 2026-09-20 with the network off, in one run: the cue's
+white stroke read as the ground under Neo's cyan letters at 1.01:1, and its
+near-black disc as the ground under Modern's letters at 2.72:1 under After
+hours, where those letters are the night ground. The two cannot both be
+painted away — a pixel that clears 3:1 against a light ink and a dark one
+does not exist, the badge is one badge on every look, and a badge in tokens
+was the earlier defect (a disc of `--s-bg`, the letters' own colour). The
+letters never reach the badge: two initials centred in a 56px tile end more
+than ten pixels short of its corner. So the rule the border already has
+applies — chrome is not the text's ground — and `CHROME_ON_TEXT` in
+`probe.ts` names the cue, `targetFor` hands the runner its box as a hole,
+and `worstContrastInBox` skips the sample points inside it. Bounded: holes
+over a quarter of the target's box are dropped and the pass reads the paint
+as it is, so this can never excuse a cover. Extend the list only with an
+incident written here; the cue's own glyph is white on a 90% near-black disc
+and needs no sampler to prove it.
