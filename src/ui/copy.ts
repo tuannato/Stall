@@ -1895,6 +1895,17 @@ export const WINDOW_PAYCODE_SWITCH = 'Show a code that pays each quote';
 export const WINDOW_PAYCODE_WHY =
     'On by default. Turn it off for a screen that only shows prices, where a customer pays at the counter instead of from the wall. The listings keep their code either way: it opens the item in Cashtab and pays nobody.';
 
-export const WINDOW_LOCK_SWITCH = 'Lock the listings to a block';
+/**
+ * The switch REVEALS the setting; the control inside it sets the lock.
+ *
+ * It read "Lock the listings to a block · On" while the link carried no
+ * `upto` at all, with a height already suggested in the field beneath it —
+ * a switch stating a lock that was not set (2026-09-20). Two controls is
+ * the shape the owner chose on 2026-09-18 (the height lives behind one
+ * press, because most stalls never meet the problem), so the words move
+ * rather than the shape: this one names what turning it on does, and the
+ * `why` line names the second step so nobody stops at the first.
+ */
+export const WINDOW_LOCK_SWITCH = 'Show the block-lock setting';
 export const WINDOW_LOCK_SWITCH_WHY =
-    'Off by default. Turn it on only if somebody has hung something on your stall that you do not sell — anyone can, and it pays you rather than them.';
+    'Off by default. Turn it on only if somebody has hung something on your stall that you do not sell — anyone can, and it pays you rather than them. Showing it does not lock anything: the control below does, once a block height is in the field.';

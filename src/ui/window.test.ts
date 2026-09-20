@@ -723,6 +723,45 @@ describe('a-window-row-says-which-rail-it-is-on', () => {
     });
 });
 
+describe('the-lock-line-is-the-listings-rails-alone', () => {
+    /**
+     * The freeze is listings-only by construction: `recordIsStalls` demands
+     * the stall's own signature and a 546-sat self-output, so nobody can
+     * plant a quote, and the sheet that composes this link says it out loud
+     * — `WINDOW_LOCK_WHY`: "Your own quotes are never locked: nobody else
+     * can add one."
+     *
+     * `statusBar` passed `params.upto` for BOTH rails, so a `show=all` link
+     * with a freeze on — the sheet composes exactly that — printed
+     * "Showing quotes · locked at block 874,213" on a wall in a shop, the
+     * screen contradicting its own composer with nobody standing there to
+     * ask (2026-09-20). The string was asserted nowhere; it is asserted
+     * here, on both rails, so the two cannot drift apart again.
+     */
+    const stateOf = (rail: 'listings' | 'quotes'): string =>
+        paint(
+            windowView({ show: 'all', mode: 'cycle', upto: 874_213 }, {
+                windowRail: rail,
+                // A quote the rail can paint, so the outcome line stays out
+                // of the way and `windowState`'s own sentence is what is
+                // measured. With nothing quoted the rail says so instead,
+                // which is the case the sibling describe already covers.
+                prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                descriptions: new Map([[BEANS, 'Half a kilo, roasted Tuesday']]),
+            } as unknown as Partial<StallView>),
+        ).querySelector('[data-role="window-state"]')!.textContent!;
+
+    it('names the lock on the listings rail', () => {
+        expect(stateOf('listings')).toBe('Showing listings \u00b7 locked at block 874,213');
+    });
+
+    it('never names it on the quotes rail', () => {
+        const said = stateOf('quotes');
+        expect(said).toBe('Showing quotes');
+        expect(said, 'the sheet promises a quote is never locked').not.toContain('locked');
+    });
+});
+
 describe('the-window-quotes-rail-says-its-own-outcome', () => {
     /**
      * §4's rule — neither rail lends the other its words — reaching the one
@@ -948,6 +987,49 @@ describe('a-switch-says-which-way-it-is-set', () => {
             );
         });
     }
+
+    /**
+     * The control that actually decides `upto` was left out of the 09-19 fix
+     * (2026-09-20). It was a bare `.mini` whose whole state was
+     * `aria-pressed`, so on the one look that re-states nothing for that
+     * attribute — Neo — pressing the lock changed nothing on screen: the
+     * same defect, on the control where being wrong costs a seller a
+     * stranger's goods on their wall all afternoon.
+     *
+     * Its truth is conditional, which is why it is not in the loop above: a
+     * press over a height the parse refuses must leave BOTH halves saying
+     * off. Setting the attribute alone is the failure this rule is about,
+     * inverted — so the words are what this asserts.
+     */
+    it('window-lock carries its state in words, and a refused height leaves it off', () => {
+        const root = sheetOf();
+        const press = root.querySelector<HTMLButtonElement>('[data-role="window-lock"]')!;
+        const state = press.querySelector('[data-role="window-lock-state"]');
+        const field = root.querySelector<HTMLInputElement>('[data-role="window-lock-height"]')!;
+        expect(state, 'the lock states itself in content, not only in an attribute').not.toBeNull();
+        expect(state!.textContent).toBe(copy.WINDOW_SWITCH_OFF);
+
+        field.value = '874,213';
+        field.dispatchEvent(new Event('input'));
+        press.click();
+        expect(press.getAttribute('aria-pressed')).toBe('false');
+        expect(state!.textContent, 'a refused height leaves the words off too').toBe(
+            copy.WINDOW_SWITCH_OFF,
+        );
+
+        field.value = '874213';
+        field.dispatchEvent(new Event('input'));
+        expect(state!.textContent, 'and a height it can read turns them on').toBe(
+            copy.WINDOW_SWITCH_ON,
+        );
+
+        // And the press still toggles: the control asks its owner's flag, not
+        // the attribute `settle` may have corrected under it.
+        press.click();
+        expect(state!.textContent, 'a second press turns it back off').toBe(
+            copy.WINDOW_SWITCH_OFF,
+        );
+    });
 });
 
 describe('a-screen-hung-sideways-turns-itself-and-the-layout-follows', () => {

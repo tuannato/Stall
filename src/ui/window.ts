@@ -147,27 +147,51 @@ function shopLink(): string {
  * and a reader who cannot see colour — none of which a pressed tint does.
  * `aria-pressed` stays for the screen reader that already reads it.
  */
+/**
+ * The state of a switch, as content.
+ *
+ * Its own function so a caller whose state is decided elsewhere repaints the
+ * words and the attribute TOGETHER. Setting `aria-pressed` alone is the
+ * 2026-09-19 defect in miniature: the words then say one thing and the
+ * attribute another, which is worse than the colour-only state that bug was
+ * about.
+ */
+function paintSwitch(button: HTMLButtonElement, on: boolean): void {
+    button.setAttribute('aria-pressed', String(on));
+    const state = button.querySelector('.sw-switch-state');
+    if (state !== null) {
+        state.textContent = on ? copy.WINDOW_SWITCH_ON : copy.WINDOW_SWITCH_OFF;
+    }
+}
+
+/**
+ * `current` is for a switch whose truth lives outside the button.
+ *
+ * Without it the next press is derived from the attribute — and a control
+ * that can be repainted to `false` while its owner's flag is `true` (the
+ * lock over a height the parse refuses) would then read its own correction
+ * as the state and never toggle back. The lock passes its own flag; the
+ * paycode switch owns its state and passes nothing.
+ */
 function switchControl(
     label: string,
     role: string,
     on: boolean,
     onToggle: (on: boolean) => void,
+    current?: () => boolean,
 ): HTMLButtonElement {
     const button = el('button', 'mini sw-switch', label) as HTMLButtonElement;
     button.type = 'button';
     button.setAttribute('data-role', role);
     const state = el('span', 'sw-switch-state');
     state.setAttribute('data-role', `${role}-state`);
-    const paint = (next: boolean): void => {
-        button.setAttribute('aria-pressed', String(next));
-        state.textContent = next ? copy.WINDOW_SWITCH_ON : copy.WINDOW_SWITCH_OFF;
-    };
     button.append(state);
-    paint(on);
+    paintSwitch(button, on);
     button.addEventListener('click', () => {
-        const next = button.getAttribute('aria-pressed') !== 'true';
-        paint(next);
-        onToggle(next);
+        const now =
+            current === undefined ? button.getAttribute('aria-pressed') === 'true' : current();
+        paintSwitch(button, !now);
+        onToggle(!now);
     });
     return button;
 }
@@ -519,7 +543,19 @@ function statusBar(
                     hidden: withheldQuotes(view) + unreadableQuotes(view),
                 })
               : copy.windowOutcome(view.fetch?.kind);
-    const left = el('span', 'sw-state', copy.windowState(rail, params.upto, outcome));
+    /*
+     * The lock line is the listings rail's alone. The freeze is listings-only
+     * by construction — `recordIsStalls` demands the stall's own signature
+     * and a 546-sat self-output, so nobody can plant a quote and a freeze
+     * over that rail would be a control with nothing to do — and the sheet
+     * that composes this link says so in `WINDOW_LOCK_WHY`: "Your own quotes
+     * are never locked: nobody else can add one." Passing `upto` for both
+     * rails printed "Showing quotes · locked at block N" on a wall in a shop,
+     * contradicting the screen's own composer, with nobody standing there to
+     * ask (2026-09-20).
+     */
+    const lockLine = rail === 'listings' ? params.upto : undefined;
+    const left = el('span', 'sw-state', copy.windowState(rail, lockLine, outcome));
     left.setAttribute('data-role', 'window-state');
     bar.append(left);
     const fresh = copy.windowFreshness(view.readAtMs, Date.now());
@@ -722,10 +758,27 @@ export function shopWindowSheet(
     form.append(lockSwitch);
     form.append(el('p', 'fine', copy.WINDOW_LOCK_SWITCH_WHY));
     const lockRow = el('div', 'sw-lock');
-    const lockPress = el('button', 'mini', copy.WINDOW_LOCK_PRESS);
-    lockPress.type = 'button';
-    lockPress.setAttribute('aria-pressed', 'false');
-    lockPress.setAttribute('data-role', 'window-lock');
+    /*
+     * The control that actually decides `upto`, and it is a switch like the
+     * two above it (2026-09-20). It was a bare `.mini` carrying `aria-pressed`
+     * and nothing else — the exact hole `1d25685` closed for the other two,
+     * still open on the one that matters: `stall.css` has no base rule for
+     * that attribute and only two of the three looks re-state
+     * `.t-* .mini[aria-pressed='true']`, so on Neo pressing the lock changed
+     * nothing on screen. Its truth is `locked && height !== undefined`, which
+     * `settle` owns, so it is a CONTROLLED switch: the press asks `locked`
+     * rather than the attribute it may have been corrected through.
+     */
+    const lockPress = switchControl(
+        copy.WINDOW_LOCK_PRESS,
+        'window-lock',
+        false,
+        (on) => {
+            locked = on;
+            settle();
+        },
+        () => locked,
+    );
     const heightField = el('input', 'paste-in sw-block');
     heightField.setAttribute('inputmode', 'numeric');
     heightField.setAttribute('data-role', 'window-lock-height');
@@ -743,15 +796,10 @@ export function shopWindowSheet(
         const typed = heightField.value.trim();
         height = parseBlockParam(typed);
         refused.hidden = typed === '' || height !== undefined;
-        const on = locked && height !== undefined;
-        lockPress.setAttribute('aria-pressed', String(on));
+        paintSwitch(lockPress, locked && height !== undefined);
         sync();
     };
     heightField.addEventListener('input', settle);
-    lockPress.addEventListener('click', () => {
-        locked = !locked;
-        settle();
-    });
     lockRow.append(lockPress, heightField);
     const lockWhy = el('p', 'fine', copy.WINDOW_LOCK_WHY);
     form.append(lockRow);
@@ -766,7 +814,7 @@ export function shopWindowSheet(
         if (!on) {
             refused.hidden = true;
             locked = false;
-            lockPress.setAttribute('aria-pressed', 'false');
+            paintSwitch(lockPress, false);
         }
         sync();
     };
