@@ -638,6 +638,40 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
+- **A turned screen's floor is measured, its geometry still is not.** The
+  wall's width floor now reads the axis the FRAME paints on — `window.css`
+  sizes a turned frame `100vh × 100vw`, so a landscape phone opening a
+  `turn=cw` link measures 844 across while painting 390 — which closes a
+  hole the 2026-09-18 gate had and this session's first fix inherited
+  (critic, 2026-09-20). What is still true is CLAUDE §4's own note: the
+  probe measures a turned screen's LAYOUT and not its rotation GEOMETRY,
+  because `getBoundingClientRect` is axis-aligned. So the floor is right by
+  construction and unmeasured in a browser. The cheap check is a person
+  with a phone: open a `turn=cw` link in landscape and confirm it is the
+  ordinary stall, then in portrait and confirm it is the wall. Nothing in
+  the repo can do it.
+
+- **A shop screen that boots below the floor is never a wall, and nothing
+  heals it.** `boot` reads the width once (on the frame's own axis) and
+  writes the answer onto every view; a page that starts narrow paints the
+  ordinary stall for the life of the document. `refresh()` does not
+  re-enter `boot`, the beat is never armed on such a page, and
+  `visibilitychange` reads no width — so there is no self-heal path, on
+  exactly the machine nobody is standing next to (`WINDOW_BEAT_MS`'s own
+  docblock: "`visibilitychange` never fires on a kiosk that is visible
+  around the clock"). The reachable case is a panel whose browser reports a
+  small viewport at startup, or a window restored small before going
+  fullscreen. **Reading it once is deliberate** — a predicate that re-reads
+  flips under a rotation and the next socket tick throws away a
+  half-written record, which is the defect this replaced, reproduced and
+  now pinned. Options: leave (a reload fixes it, and the screen shows a
+  working stall meanwhile, just not the wall); re-read on `pageshow` or
+  `resize` **only while no overlay holds the paint**, which keeps the
+  rotation fix and heals the kiosk for one listener and one condition; or
+  say so on screen, which needs copy on a surface whose whole contract is
+  that it has none. Recommended: the second, but it is a decision about
+  what an unattended screen does, which is yours.
+
 - **The shop window sheet's reveal switch, worded by an agent and not by
   you.** "Lock the listings to a block · **On**" turned nothing on: the
   switch reveals the row, and the control inside it sets the lock. The false

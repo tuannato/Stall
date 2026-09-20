@@ -374,6 +374,62 @@ describe('plugin-missing-is-not-empty', () => {
     });
 });
 
+describe('a-hosts-box-draws-no-conclusion-about-what-answered', () => {
+    /**
+     * The box printed one error's verdict onto every host, so a
+     * `plugin-missing` read reported three nodes without the plugin when the
+     * failover had stopped at the first that answered. `hostAttempts` now
+     * answers an empty list for everything but the exhaustion error, and the
+     * box says a sentence instead.
+     *
+     * The FIRST wording of that sentence said "one of the nodes answered
+     * with this", which contradicted `UNREACHABLE_BODY` — "No index
+     * answered" — two paragraphs above it on the screen they share, and was
+     * simply false on every path that reaches an empty list without a node
+     * answering at all: a chronik 4xx, a decode failure, anything
+     * `resolveSeller` throws. Nothing asserted any of it, so the refuted
+     * claim could have been reinstated with the suite green (critic,
+     * 2026-09-20).
+     */
+    const failureText = (kind: 'unreachable' | 'plugin-missing'): string =>
+        paint(
+            idlePubkey({
+                fetch: { kind, triedAtMs: 1, hosts: [] },
+            }),
+        ).root.textContent ?? '';
+
+    it('says the mechanism on both failure screens and claims no answer', () => {
+        for (const kind of ['unreachable', 'plugin-missing'] as const) {
+            const text = failureText(kind);
+            expect(text, kind).toContain(copy.HOSTS_NOT_ATTRIBUTED);
+            // The load-bearing property: it may not assert that a node
+            // answered, because one of these two screens says none did.
+            expect(text.includes('answered with this'), kind).toBe(false);
+        }
+        // And the two screens still say their own different thing, which is
+        // what the sentence must not step on.
+        expect(failureText('unreachable')).toContain(copy.UNREACHABLE_BODY);
+        expect(failureText('plugin-missing')).toContain(copy.PLUGIN_MISSING_BODY);
+    });
+
+    it('prints observed rows instead when every host really was asked', () => {
+        const text =
+            paint(
+                idlePubkey({
+                    fetch: {
+                        kind: 'unreachable',
+                        triedAtMs: 1,
+                        hosts: [{ host: 'chronik.e.cash', result: 'error' }],
+                    },
+                }),
+            ).root.textContent ?? '';
+        expect(text).toContain('chronik.e.cash');
+        expect(text, 'a named row needs no sentence about attribution').not.toContain(
+            copy.HOSTS_NOT_ATTRIBUTED,
+        );
+    });
+});
+
 describe('invalid is not empty', () => {
     it('says the link is unreadable and shows the raw param', () => {
         const raw = 'not-a-seller';

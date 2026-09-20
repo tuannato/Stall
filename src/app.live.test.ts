@@ -885,6 +885,68 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
         );
     });
 
+    it('a narrow shop-window link protects its sheets like any other stall', async () => {
+        /*
+         * The two gates must be handed the SAME view (QA, 2026-09-20,
+         * reproduced with a red/green pair).
+         *
+         * Below the wall's floor a `?view=window` link paints the ordinary
+         * stall, sheets and all — that is the whole point of the fallback.
+         * But the first rework stripped `window` from the PAINTED view only
+         * and left `state.view` carrying it, so `livePaint` asked
+         * `holdsLivePaint(state.view)`, got "this is a wall, it holds
+         * nothing", and repainted over a sheet `renderStall` had mounted
+         * from the stripped view. A seller composing a permanent `STLD`
+         * record lost it to a stranger's dust.
+         */
+        const had = Object.getOwnPropertyDescriptor(globalThis, 'innerWidth');
+        Object.defineProperty(globalThis, 'innerWidth', { value: 390, configurable: true });
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&mode=cycle`);
+        try {
+            // The loader's own view carries `window`, exactly as
+            // `withUrlParams` gives it in production — which is the whole
+            // point: the strip must happen where every reader sees it, not
+            // on the way to the painter alone.
+            const { root } = bootStall(
+                stallEmpty({
+                    window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none' },
+                } as unknown as Partial<State['view']>),
+            );
+            await flush();
+            expect(
+                root.querySelector('[data-role="shop-window"]'),
+                'below the floor it is the ordinary stall',
+            ).toBeNull();
+
+            (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+            (root.querySelector('[data-role="studio-open-publish"]') as HTMLButtonElement).click();
+            const input = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+            expect(input, 'the sheet opens here, which is the fallback').not.toBeNull();
+            input.value = 'Half Written';
+
+            const txid = publish(
+                signedTx({
+                    txid: '0c'.repeat(32),
+                    outputs: [stl1Output('Ripe Beans')],
+                    height: 800_001,
+                }),
+            );
+            watches[0]!.hooks.onBurst?.([txid]);
+            await flush();
+
+            const still = root.querySelector('input[name="stall-name"]') as HTMLInputElement;
+            expect(still, 'the sheet is still mounted').not.toBeNull();
+            expect(still.value, 'and what the seller typed is still in it').toBe('Half Written');
+        } finally {
+            if (had === undefined) {
+                delete (globalThis as { innerWidth?: number }).innerWidth;
+            } else {
+                Object.defineProperty(globalThis, 'innerWidth', had);
+            }
+            window.history.replaceState(null, '', stallPath(PK));
+        }
+    });
+
     it('a paint the seller asked for is untouched', async () => {
         // Opening and closing the sheet still repaint immediately: only the
         // paints nobody asked for wait.

@@ -345,24 +345,6 @@ function describe(node: Element): string {
 function paint(screen: string, themeId: number, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
     const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId), worn };
-    /*
-     * The same thing `boot` does, for the same reason (2026-09-20).
-     *
-     * Whether a page is a wall used to be asked by `renderStall` itself, so a
-     * wall fixture at 390px quietly painted the ordinary stall here. The app
-     * settles it once per load now — a predicate that read a live width
-     * flipped under a rotation and threw away an open sheet — which left the
-     * probe as the only thing in the project still handing `renderStall` a
-     * wall view at a phone's width: a state the app can no longer produce,
-     * and 42 failures per look of a layout nobody will ever see.
-     *
-     * A fixture is not exempt from a rule the app obeys. Painting what
-     * production would paint is the only way the measurement means anything.
-     */
-    if (view.window !== undefined && window.innerWidth < WINDOW_MIN_PX) {
-        renderStall(root, { ...view, window: undefined }, handlers);
-        return;
-    }
     renderStall(root, view, handlers);
 }
 
@@ -1024,7 +1006,33 @@ function variantsFor(screen: string, themeId: number): readonly (readonly Shippe
  */
 function screensForViewport(): string[] {
     const canvas = new URLSearchParams(location.search).get('viewport') === 'canvas';
-    return Object.keys(SCREENS).filter((name) => CANVAS_SCREENS.has(name) === canvas);
+    /*
+     * A wall screen is not in a pass narrower than the wall's own floor
+     * (2026-09-20).
+     *
+     * `renderStall` used to take the width itself, so a wall fixture at
+     * 390px quietly painted the ordinary stall here and measured that. The
+     * app settles wall-ness once per load now — a predicate reading a live
+     * width flipped under a rotation and threw away an open sheet — which
+     * left this pass painting the wall layout at a phone's width: 42
+     * failures per look of a screen the app cannot produce there.
+     *
+     * The first fix stripped `window` inside `paint()`, and a reviewer was
+     * right to call that a guard taught to look away: it restated the app's
+     * rule by hand and hid a case rather than declaring it out of scope.
+     * This is the matrix saying so instead — the same shape as the canvas
+     * split above, and `screensMeasured` reports what actually ran, so a
+     * pass that quietly measured the wrong side can be refused.
+     *
+     * The sheet that COMPOSES a wall link is not a wall screen: it paints on
+     * an ordinary stall, carries no `window`, and stays in every pass.
+     */
+    const wallFits = window.innerWidth >= WINDOW_MIN_PX;
+    return Object.keys(SCREENS).filter(
+        (name) =>
+            CANVAS_SCREENS.has(name) === canvas &&
+            (wallFits || SCREENS[name]!.window === undefined),
+    );
 }
 
 /**
@@ -1339,13 +1347,22 @@ const CONTRAST_TEXT = [
      * ~17px tall, whose sample band the insets cannot reliably land inside.
      * It reported 1.00:1 on four of six look-and-decoration combinations —
      * and 1.00:1 is not a colour this component can produce. Pressed it is
-     * `--s-surface` ink on `--s-accent`; unpressed it inherits `--s-accent`
-     * over the button's `--s-surface`. Both pairs are arbitrated by
-     * `legibleOn` per palette and both are declared together in one rule
-     * with both sides tokens, which is what
-     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` reads.
-     * A figure the pass cannot sample is a false red, and a false red is as
-     * useless as a false green — the ledger's own words.
+     * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
+     * `--s-accent` over the button's `--s-surface`. **Measured across every
+     * shipped look and mood, the worst of those pairs is 4.05:1** (Rural
+     * under Sun-faded) against this pass's floor of 3 — not `legibleOn`,
+     * which arbitrates accent against `--s-bg` and never against
+     * `--s-surface`; the pair is held by the palettes' own numbers. Both
+     * sides are tokens declared in one rule, which
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` does
+     * read, and `window.css` is on that test's sheet list.
+     *
+     * **What produced 1.00 is unexplained**, and it is recorded as
+     * unexplained rather than as a theory: the first write-up blamed the
+     * sampler's insets, and the insets narrow horizontally only, by an
+     * amount that lands inside a pill this size. A false red is as useless
+     * as a false green — and a wrong reason for withdrawing a target is
+     * worse than both, because it is what stops the next person looking.
      */
     '.tab',
     // The "Publishes:" line on both record sheets. It is the only sentence

@@ -780,8 +780,9 @@ export const SCREENS: Record<string, StallView> = {
      *
      * Every rule this pass has wanted it for: the 44px floors on three
      * `.mini` controls, `text-spills` over an unstyled row, the sheet being
-     * bounded and scrollable, and the contrast of `.mini` and
-     * `.sw-switch-state` on each look's sheet ground.
+     * bounded and scrollable, and the contrast of the switches' own labels
+     * on each look's sheet ground. Not the state pill: it was tried as a
+     * target the same day and withdrawn — see `CONTRAST_TEXT`.
      */
     'shop-window-sheet': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },

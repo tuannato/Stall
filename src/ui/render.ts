@@ -4451,12 +4451,16 @@ export const WINDOW_MIN_PX = 680;
  * a Pay press still asked two third parties for a rate before mounting
  * nothing. `syncWindow` was blind the same way.
  *
- * **The width is not asked here.** It is decided once per load, where
- * `view.window` is decided (`withUrlParams`), because a predicate reading a
- * live measurement flips under a rotation: `holdsLivePaint` would answer
- * false the moment a viewport crossed the floor with a sheet open, and the
- * next socket tick would throw away a half-written record. This asks only
- * what the view already settled.
+ * **The width is not asked here.** `boot` reads it once at load — on the
+ * axis the FRAME paints on, so a turned screen is measured across the
+ * viewport's height — and `settled` writes the answer onto the view every
+ * reader gets. Once, because a predicate reading a live measurement flips
+ * under a rotation: `holdsLivePaint` would answer false the moment a
+ * viewport crossed the floor with a sheet open, and the next socket tick
+ * would throw away a half-written record. And onto the VIEW, because the
+ * first attempt stripped it for the painter alone and left `livePaint`
+ * reading the raw one — the two gates then disagreed and the record went
+ * anyway. This asks only what the view already settled.
  */
 export function shopWindowPaints(
     view: StallView,
@@ -7650,10 +7654,13 @@ function hostsBox(triedAtMs: number, hosts: HostAttempt[]): HTMLElement {
     line.append(el('span', 'hosts-time', formatTriedAt(triedAtMs)));
     box.append(line);
     if (hosts.length === 0) {
-        // Nothing to attribute: `hostAttempts` answers an empty list when the
-        // failover stopped at the first node that answered rather than
-        // running out of them. The sentence says that; the rows would have
-        // had to invent it.
+        // Nothing to attribute: `hostAttempts` answers an empty list for
+        // everything but the exhaustion error — a node that answered with a
+        // proto error, and equally a throw that was never a node's answer at
+        // all. The sentence states the mechanism and draws no conclusion
+        // about what answered, because this box also paints on the screen
+        // whose headline is "No index answered"; the rows would have had to
+        // invent one.
         const said = el('div', 'hosts-said', copy.HOSTS_NOT_ATTRIBUTED);
         said.setAttribute('data-role', 'hosts-not-attributed');
         box.append(said);

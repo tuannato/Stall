@@ -140,6 +140,7 @@ import {
     quotedItems,
     renderStall,
     holdsLivePaint,
+    shopWindowPaints,
     WINDOW_MIN_PX,
 } from './ui';
 import {
@@ -510,7 +511,49 @@ export function boot(
      * predicates that decide the wall must not move under a rotation. See
      * the paint-time view literal for what asking a live width cost.
      */
-    const wallWidth = (globalThis.innerWidth ?? 0) >= WINDOW_MIN_PX;
+    /**
+     * Whether this page is wide enough to be a wall — read ONCE, at boot.
+     *
+     * Once, because a predicate that re-reads flips under a rotation: a
+     * reader below the floor with a sheet open, widening the viewport, would
+     * have `holdsLivePaint` answer false and the next socket tick would
+     * throw the half-written record away. That is the hazard the first
+     * rework was for, and re-reading per call brings it straight back — the
+     * test below is what caught that.
+     *
+     * The AXIS is the frame's, not the viewport's. `window.css`'s turn rule
+     * sizes the frame `100vh × 100vw` and rotates it, so on a turned screen
+     * the painted width is the viewport's HEIGHT — a landscape phone opening
+     * a `turn=cw` link measures 844 across while painting a 390px-wide wall,
+     * which is the layout that cost a thousand probe failures (critic,
+     * 2026-09-20). The turn comes from the URL, which is readable here.
+     */
+    const wallWidth = ((): boolean => {
+        const asked = parseWindowParams(location.search);
+        const px =
+            asked === undefined || asked.turn === 'none'
+                ? globalThis.innerWidth
+                : globalThis.innerHeight;
+        return (px ?? 0) >= WINDOW_MIN_PX;
+    })();
+    /**
+     * The view as every reader must see it: wall-ness settled in ONE place.
+     *
+     * The first rework stripped `window` from the painted view alone and
+     * left `state.view` carrying it, which is two sources of truth for one
+     * fact — and both reviewers found what that costs. `livePaint` asked
+     * `holdsLivePaint(state.view)` and got "this is a wall, it holds
+     * nothing", while `renderStall` had been handed the stripped view and
+     * had MOUNTED a sheet: a seller typing a permanent record on a narrow
+     * `?view=window` page lost it to a stranger's dust (QA, reproduced with
+     * a red/green pair). And `syncWindow`, reading the raw view, armed the
+     * wall's three clocks over an unreadable link.
+     *
+     * So it is a function, it takes the view, and everything that decides
+     * anything about the wall goes through it.
+     */
+    const settled = (view: StallView = state.view): StallView =>
+        view.window === undefined || wallWidth ? view : { ...view, window: undefined };
     /**
      * The shop window's own state, and it lives here for `shopTab`'s reason:
      * the heartbeat below is a full `refresh()`, which rebuilds the view from
@@ -730,10 +773,13 @@ export function boot(
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
-            ...state.view,
+            ...settled(),
             /*
-             * A phone is not a wall, and this is where that is settled —
-             * ONCE, at paint time, beside `shopTab`, `fiatCode` and
+             * A phone is not a wall, and `settled` above is where that is
+             * decided — for the painter and for every other reader alike,
+             * which the first version of this got wrong.
+             *
+             * It belongs at paint time, beside `shopTab`, `fiatCode` and
              * `view.pasted`, for the reason all three live here.
              *
              * The render gate took the width on 2026-09-18 and the overlay
@@ -755,7 +801,6 @@ export function boot(
              * desktop narrowed mid-session keeps the wall until the next
              * load, which is the same bargain `shopTab` takes.
              */
-            ...(wallWidth ? {} : { window: undefined }),
             isDefaultStall: isSavedStall(identityOf(state.view)),
             // Same read-at-paint rule as the default flag: a pin toggles
             // without a refetch, and a stale list would lie about itself.
@@ -1040,7 +1085,7 @@ export function boot(
      * closing onto a re-read stall; the owner removed it — see `sheetFoot`.)
      */
     const livePaint = (): void => {
-        if (holdsLivePaint(state.view)) {
+        if (holdsLivePaint(settled())) {
             return;
         }
         paint();
@@ -1146,15 +1191,21 @@ export function boot(
      * this stops being a window.
      */
     const syncWindow = (): void => {
-        const params = state.view.window;
-        // `wallWidth` for the same reason the painted view asks it: the wall's
-        // three clocks belong to the wall. A narrow page never arms them, so
-        // there is nothing to clear later and nothing to re-arm — which is
-        // what the beat's own `.finally` guard could not manage while the
-        // answer could change under it.
-        if (params === undefined || !wallWidth) {
+        /*
+         * The SETTLED view, and `shopWindowPaints` rather than a width test
+         * of its own. Gathering the terms by hand dropped the two route ones
+         * with the width, so an unreadable link at desk width armed the
+         * wall's three clocks — a full `refresh()` every sixty seconds and a
+         * `paint()` every twenty, for ever, over a screen that is not the
+         * wall (QA, measured: four loads where there should be one). The
+         * wall's clocks belong to the wall, and one predicate is what says
+         * which pages those are.
+         */
+        const view = settled();
+        if (!shopWindowPaints(view)) {
             return;
         }
+        const params = view.window;
         // The freeze is captured ONCE, on the first paint that has both a lock
         // and a book. After that the remembered set is what filters, so an
         // item partly sold since — whose remaining utxo is now in a later
@@ -1616,7 +1667,7 @@ export function boot(
             // A sheet holds a half-written record or a buyer's own state; the
             // item face holds nothing typed, so the link replaces it — the
             // same table `livePaint` reads.
-            if (holdsLivePaint(next.view)) {
+            if (holdsLivePaint(settled(next.view))) {
                 return next;
             }
             // The rate comes from the same road the Pay control takes; the

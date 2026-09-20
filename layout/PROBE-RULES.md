@@ -888,6 +888,20 @@ had never been measured at all reporting zero. It carries **one more screen
 and 171 more contrast boxes than the 2,525-box run above** and is still
 faster than either of that day's earlier readings — the box, again.
 
+And the round after that, with the wall screens declared out of the narrow
+pass rather than stripped inside `paint()`:
+
+| run | matrix | contrast boxes | contrast | total |
+|---|---|---|---|---|
+| 6 | mobile 36 screens, desktop 39 | 2471 | 136.4s | **194.3s ✓** |
+
+**Green, ceiling included** — the first clean exit of the day. It came from
+correctness, not from pruning for speed: the three page-level wall screens
+cannot exist below `WINDOW_MIN_PX`, so the narrow pass stopped painting
+them, and with them went 225 contrast boxes and about nine seconds of
+measuring a layout the app cannot produce. A pass that measures an
+impossible state is paying for a wrong answer.
+
 **Two readings in this table are void and say so**, which is the point of
 writing them down: a `pnpm test` running beside the probe patches
 `vite.config.ts` for its own build and adds a competing vite build, so the
@@ -1137,19 +1151,32 @@ adding a contrast target that CONTAINS a coloured control is how a pass
 reports a false red, and this project has now done it twice — check for an
 inner ground before adding a container to the list.**
 
-The pill itself was tried as a target on the same day and **withdrawn**.
-`.sw-switch-state` is `border-radius: 999px` and about 17px tall, which is
-the shape the `r` clamp beside `worstContrastInBox` was written for and
-still cannot sample reliably: it reported 1.00:1 on four of the six
+The pill itself was tried as a target on the same day and **withdrawn —
+with the reason corrected the same evening, which is the part worth
+reading.** `.sw-switch-state` reported 1.00:1 on four of six
 look-and-decoration combinations. **1.00:1 is not a colour this component
-can produce** — pressed it is `--s-surface` ink on `--s-accent`, unpressed
-it inherits `--s-accent` over the button's own `--s-surface`, and neither
-pair is anywhere near equal on any shipped palette. So the pass was not
-measuring the pill. Its two pairs are arbitrated by `legibleOn` per palette
-and declared together in one rule with both sides tokens, which is what the
-static theme-sheet rule reads; the label beside it stays measured here. A
-false red is as useless as a false green, and leaving one in place teaches
-the next reader to ignore the pass.
+can produce**: pressed it is `--s-surface` ink on an opaque `--s-accent`,
+unpressed it inherits `--s-accent` over the button's own `--s-surface`, and
+the worst of those pairs measured across every shipped look and mood is
+**4.05:1** (Rural under Sun-faded) against this pass's floor of 3. So the
+pass was not measuring the pill, and no real contrast problem is hidden by
+taking it off the list — the label beside it stays measured here.
+
+**Two reasons written into the first version of this entry were false, and
+both were caught by review.** It said the sampler's insets could not land
+inside the pill: they narrow **horizontally only**, by `r` clamped to half
+the box, which for a ~40px pill leaves a band of about 18px in the middle —
+the insets land inside. And it said the pair is "arbitrated by `legibleOn`
+per palette": `themeVars` runs `legibleOn(theme.accent, bg)`, accent
+against **`--s-bg`**, never against `--s-surface`, which is emitted raw and
+arbitrated as an ink nowhere. The pair passes on today's palette numbers,
+not by construction.
+
+So **what produced the 1.00 is unexplained**, and this entry says so rather
+than offering a theory. A false red is as useless as a false green; a wrong
+reason for withdrawing a target is worse than either, because it is what
+stops the next person looking. If the pill goes back on the list, dump the
+box and the shot for one failing combination first.
 
 A target that wears a picture is skipped (`targetFor`, the same day): the
 Activity tile whose token image had landed sampled the image's own pixels

@@ -144,15 +144,22 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
         // Yielding to a person standing still and reading, not walking past.
         expect(WINDOW_IDLE_MS).toBe(45_000);
         /*
-         * `WINDOW_SCROLL_MS` and an ordering between the idle wait and the
-         * card dwell are deliberately NOT pinned. The scroll's own docblock
-         * says "one step every few seconds", which 4, 6 or 8 all satisfy;
-         * and the two constants govern different modes — the dwell only in
-         * `cycle`, the idle wait only in the `browse` roll — so they are
-         * never both in play on one screen and an ordering between them is
-         * a rule nobody wrote. A pin that would turn red for a seller who
-         * wants a slower shop is a tax, not a guard (critic, 2026-09-20).
+         * An ordering between the idle wait and the card dwell is
+         * deliberately NOT pinned: the two govern different modes — the
+         * dwell only in `cycle`, the idle wait only in the `browse` roll —
+         * so they are never both in play on one screen, and an ordering
+         * between them is a rule nobody wrote. A pin that would turn red for
+         * a seller who wants a slower shop is a tax, not a guard.
+         *
+         * `WINDOW_SCROLL_MS` keeps a FLOOR rather than a value. The first
+         * de-pinning cited its docblock as saying "a few seconds"; it does
+         * not — that phrase is in `syncWindow`'s body, and it carries the
+         * half that binds: "never a per-frame loop: this runs for hours on
+         * whatever computer is behind a shop's television." A rule that is
+         * written down needs a guard, and 4, 6 or 8 seconds all satisfy it
+         * where 16 milliseconds does not (critic, 2026-09-20).
          */
+        expect(WINDOW_SCROLL_MS).toBeGreaterThanOrEqual(1_000);
     });
 
     /**
@@ -232,9 +239,49 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
             expect(loads).toBe(1);
 
             // No beat, no card timer, no roll: the wall's clocks belong to
-            // the wall, and this is not one.
+            // the wall, and this is not one. The timer COUNT, not just the
+            // load count — `loads` alone proves the beat and says nothing
+            // about `windowCard`, which calls `paint()` rather than the
+            // loader, or about `windowRoll` (critic, 2026-09-20).
+            expect(vi.getTimerCount(), 'no wall clock was armed at all').toBe(0);
             await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS * 3);
             expect(loads, 'nothing re-read on a wall clock').toBe(1);
+        });
+    });
+
+    it('an unreadable link arms no wall clock', async () => {
+        /*
+         * The route terms, which a hand-gathered guard dropped along with the
+         * width (QA, measured: four loads where there should be one).
+         *
+         * `withUrlParams` returns early only for `home`, so an `invalid`
+         * route keeps `view.window` — and `syncWindow`, asking a width test
+         * of its own instead of `shopWindowPaints`, armed the beat and the
+         * card timer over a screen that says "this link is unreadable". A
+         * full `refresh()` every sixty seconds and a `paint()` every twenty,
+         * for ever, on a page that never changes.
+         */
+        await atWidth(1280, async () => {
+            vi.useFakeTimers();
+            window.history.replaceState(null, '', '/s/notanaddress?view=window&mode=cycle');
+            let loads = 0;
+            const root = document.createElement('div');
+            boot(root, async () => {
+                loads += 1;
+                return {
+                    view: {
+                        route: { kind: 'invalid' as const, raw: '/s/notanaddress' },
+                        overlay: { kind: 'idle' as const },
+                        tokens: new Map(),
+                        window: { show: 'listings' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const },
+                    },
+                    offers: [],
+                } as unknown as ReturnType<typeof windowState>;
+            });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(loads).toBe(1);
+            await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS * 3);
+            expect(loads, 'an unreadable screen is not a wall and keeps no clock').toBe(1);
         });
     });
 

@@ -198,9 +198,12 @@ export async function loadOffers(
  * rather than to `_workingIndex`, where the loop actually starts. An owner
  * reading that concluded the plugin was gone network-wide.
  *
- * So: when the library ran out of hosts, it tried them all and a verdict
- * per host is observed. Otherwise one of them answered, this page cannot
- * say which, and the honest list is empty — `hostsBox` says so in words.
+ * So: when the library ran out of hosts, it tried them all and the host
+ * NAMES are observed — the verdict is not, because that error discards each
+ * host's own and every row falls to `error`. Otherwise the list is empty,
+ * and `hostsBox` says the mechanism in words without claiming a node
+ * answered: the same empty list stands for a proto error one node returned
+ * and for a throw that was never a node's answer at all.
  */
 export function hostAttempts(err: unknown): HostAttempt[] {
     if (!everyHostTried(err)) {
