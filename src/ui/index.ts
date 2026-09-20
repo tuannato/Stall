@@ -6,6 +6,7 @@ export {
     renderStall,
     overlayMounts,
     holdsLivePaint,
+    shopWindowPaints,
     stallBaseUrl,
 } from './render';
 export type { QuotedItem } from './render';

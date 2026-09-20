@@ -140,6 +140,7 @@ import {
     quotedItems,
     renderStall,
     holdsLivePaint,
+    shopWindowPaints,
 } from './ui';
 import {
     FIAT_GLANCE_MAX_AGE_MS,
@@ -1112,6 +1113,20 @@ export function boot(
     const syncWindow = (): void => {
         const params = state.view.window;
         if (params === undefined) {
+            return;
+        }
+        /*
+         * The same predicate the render gate asks, or this arms an unattended
+         * screen's timers over a stall somebody is reading (2026-09-20).
+         * Below `WINDOW_MIN_PX` the link paints the ordinary stall, where a
+         * beat that rebuilds the socket every minute and a card timer that
+         * calls `paint()` — with no `holdsLivePaint` check, because the wall
+         * mounts no sheet — would throw away a reader's open sheet on a
+         * clock. Clearing rather than returning, because a desktop narrowed
+         * past the line has timers already armed from a wider paint.
+         */
+        if (!shopWindowPaints(state.view, window.innerWidth)) {
+            clearBroadcastTimers();
             return;
         }
         // The freeze is captured ONCE, on the first paint that has both a lock

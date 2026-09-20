@@ -84,6 +84,7 @@ import type {
     Overlay,
     PayRateAnswer,
     PayRateWhy,
+    WindowParams,
 } from '../domain/state';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
 import { EXPLORER_TX_URL } from '../domain/explorer';
@@ -487,25 +488,19 @@ export function renderStall(
      * footnote, and blown up on a wall in their shop for an afternoon it is
      * an advertisement standing over the seller's own name.
      */
-    if (
-        view.window !== undefined &&
-        view.route.kind !== 'invalid' &&
-        view.route.kind !== 'home' &&
-        // A phone is not a wall.
-        //
-        // This said "not width-gated" and rendered at every width, on the
-        // reasoning that a portrait screen is 1080 wide and a counter tablet
-        // is 768 — both true, and both above this line. What it also did was
-        // paint a wall layout at 390px, where the probe measured a thousand
-        // failures: a name column collapsed to nothing, figures over their
-        // clips, the asked amount covered. Nobody hangs a phone in a shop, and
-        // a link opened on one is a mistake that should land on the ordinary
-        // stall rather than on a broken copy of a television.
-        //
-        // 680 because it is this app's one breakpoint: the row caret, the
-        // address's long form and the sheets' QR all turn at it.
-        (root.ownerDocument.defaultView?.innerWidth ?? 0) >= 680
-    ) {
+    // A phone is not a wall.
+    //
+    // This said "not width-gated" and rendered at every width, on the
+    // reasoning that a portrait screen is 1080 wide and a counter tablet is
+    // 768 — both true, and both above the line. What it also did was paint a
+    // wall layout at 390px, where the probe measured a thousand failures: a
+    // name column collapsed to nothing, figures over their clips, the asked
+    // amount covered. Nobody hangs a phone in a shop, and a link opened on
+    // one is a mistake that should land on the ordinary stall rather than on
+    // a broken copy of a television. `WINDOW_MIN_PX` because it is this
+    // app's one breakpoint: the row caret, the address's long form and the
+    // sheets' QR all turn at it.
+    if (shopWindowPaints(view, root.ownerDocument.defaultView?.innerWidth ?? 0)) {
         applyTheme(
             stall,
             theme,
@@ -4436,6 +4431,38 @@ const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }
     'shop-window': { mounts: true, holds: true },
 };
 
+/** This app's one breakpoint, and the shop window's own floor. */
+export const WINDOW_MIN_PX = 680;
+
+/**
+ * Whether the shop window's screen is what this viewport paints.
+ *
+ * **One predicate, three readers** (2026-09-20). The render gate grew a
+ * width term on 2026-09-18 — a phone is not a wall, and the wall layout at
+ * 390px cost a thousand probe failures — and `overlayAllowed` kept the
+ * width-blind clause it had. So below the floor the link fell back to the
+ * ordinary stall AND kept refusing every sheet at the same time: measured
+ * at 390px, seven controls on screen and not one of them opened anything,
+ * while a Pay press still asked two third parties for a rate before
+ * mounting nothing. `syncWindow` was blind the same way and kept an
+ * unattended screen's timers running over a stall somebody was reading.
+ *
+ * The width is an argument because the three callers hold three different
+ * windows — a root's `ownerDocument`, this module's `document`, and the
+ * app's global.
+ */
+export function shopWindowPaints(
+    view: StallView,
+    innerWidth: number,
+): view is StallView & { window: WindowParams } {
+    return (
+        view.window !== undefined &&
+        view.route.kind !== 'invalid' &&
+        view.route.kind !== 'home' &&
+        innerWidth >= WINDOW_MIN_PX
+    );
+}
+
 function overlayAllowed(view: StallView): boolean {
     if (
         view.broadcast !== undefined &&
@@ -4451,11 +4478,7 @@ function overlayAllowed(view: StallView): boolean {
      * close it and nothing on screen to say why. The options sheet is the
      * seller's, on the ordinary stall, and never on the wall.
      */
-    if (
-        view.window !== undefined &&
-        view.route.kind !== 'invalid' &&
-        view.route.kind !== 'home'
-    ) {
+    if (shopWindowPaints(view, document.defaultView?.innerWidth ?? 0)) {
         return false;
     }
     if (view.route.kind !== 'pubkey') {

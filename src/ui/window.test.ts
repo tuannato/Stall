@@ -937,6 +937,63 @@ describe('the-quote-code-is-a-switch-and-the-listings-code-is-not-its-business',
     });
 });
 
+describe('a-phone-falls-all-the-way-back-to-the-ordinary-stall', () => {
+    /**
+     * The render gate grew a width term on 2026-09-18 — a phone is not a wall
+     * — and `overlayAllowed` kept the width-blind clause beside it. So below
+     * the floor a `?view=window` link painted the ordinary stall AND refused
+     * every sheet at the same time: measured 2026-09-20 at 390px, seven
+     * controls on screen and not one of them opened anything, while a Pay
+     * press still asked two third parties for a rate before mounting
+     * nothing. One predicate, `shopWindowPaints`, answers for the render
+     * gate, the overlay gate and `syncWindow`'s timers now.
+     *
+     * The fallback is the whole point of the gate, so what this pins is that
+     * it is a WHOLE fallback: an ordinary stall where the sheets work.
+     */
+    const atWidth = (px: number, run: () => void): void => {
+        const had = window.innerWidth;
+        Object.defineProperty(window, 'innerWidth', { value: px, configurable: true });
+        try {
+            run();
+        } finally {
+            Object.defineProperty(window, 'innerWidth', { value: had, configurable: true });
+        }
+    };
+
+    const withPaySheet = (): StallView =>
+        ({
+            ...windowView({ show: 'all', mode: 'cycle' }),
+            overlay: { kind: 'pay', tokenId: BEANS },
+            prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            descriptions: new Map([[BEANS, 'Half a kilo, roasted Tuesday']]),
+        }) as unknown as StallView;
+
+    it('paints the wall above the floor and mounts no sheet there', () => {
+        atWidth(1280, () => {
+            const view = withPaySheet();
+            const root = paint(view);
+            expect(root.querySelector('.stall.shop-window'), 'the wall').not.toBeNull();
+            expect(overlayMounts(view), 'the wall mounts no sheet').toBe(false);
+            expect(holdsLivePaint(view), 'and nothing on it holds the live paint').toBe(false);
+        });
+    });
+
+    it('paints the ordinary stall below it, with its sheets working', () => {
+        atWidth(390, () => {
+            const view = withPaySheet();
+            const root = paint(view);
+            expect(root.querySelector('.stall.shop-window'), 'not the wall').toBeNull();
+            expect(overlayMounts(view), 'a sheet the reader asked for opens').toBe(true);
+            expect(holdsLivePaint(view), 'and it holds the live paint like any sheet').toBe(true);
+            expect(
+                root.querySelector('[data-role="sheet-scrim"]'),
+                'the sheet is in the tree, not merely allowed',
+            ).not.toBeNull();
+        });
+    });
+});
+
 describe('a-switch-says-which-way-it-is-set', () => {
     /**
      * `aria-pressed` was the whole state and nothing painted it: `stall.css`
