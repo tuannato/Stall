@@ -147,6 +147,15 @@ working accept, and there is no accept.
 
 ## Decided — do not re-argue
 
+- **Three LOKADs, never a fourth (owner, 2026-09-21).** `STL1`, `STLD` and
+  `STLP` are the whole registry. A new kind of record is a new **shape**
+  under one of them (the multi-item memo is a second shape of `STLP`, told
+  apart by a push an old reader refuses). Why they were three and stay three:
+  the payment memo's index is written by strangers and grows with every sale,
+  so it must never dilute the seller's own records — "walk the smaller index"
+  depends on it; the two record LOKADs are permanent now that records exist
+  on chain (9 / 13 / 3 on 2026-09-04); and each has its own tag registry,
+  which cannot be renumbered.
 - **Tokens this page does not carry (2026-09-05).** A stall never paints a
   listing or a quote in FIRMA, fCHF, fEUR or XECX, nor in any token on eCash's
   impersonation blacklist, nor in one whose genesis name or ticker is a string
@@ -451,10 +460,38 @@ quote never wears "≈": that mark belongs to computed glances.
    there the token *is* the thing.
 
 **What this rail is not.** Not an escrow, not a checkout, not a receipt: Stall
-composes a BIP21 and a wallet signs it. There is no cart, no fiat or rate in
-the memo, no conversion of a quote, and no automatic verdict about whether a
-payment covered one — the seller's stated tolerance informs, and the seller
-decides.
+composes a BIP21 and a wallet signs it. No fiat or rate in the memo, no
+conversion of a quote outside the pay sheet, and no automatic verdict about
+whether a payment covered one — the seller's stated tolerance informs, and
+the seller decides.
+
+**Since 2026-09-21 the quotes rail composes one payment for several quotes**
+("Pay several" — the owner's ask, the clause "there is no cart" above
+retired by them the same day). Rules 1, 2, 4 and 5 bind every new surface:
+never two prices on one row, a quote is never converted outside the pay
+sheet, a payment is never "sold", a card carries one rail. The design and
+its three critic passes are `private/design/basket-2026-09-21/`
+(`MEMO-DESIGN.md` v7 is the spec). Two more decisions ride with it:
+
+- **A quote may carry a surcharge** — `STLD` tag `0x04`, one byte, 1–100,
+  riding the price entry like the tolerance; on the QUOTE record, never on
+  the stall's, because paper, a stream card and a shop-window card print the
+  quote beside a code and have no way to say "the stall's settings were not
+  read". It is a display convention on the figure this page composes, said
+  as the seller's record on every surface that prints the quote, and never
+  the word "tax". The describe sheet prefills the last **published** value
+  for that stall from `localStorage` (a named §2 exception: validated on
+  read, pin-capped, never a key, a published byte always wins).
+- **A multi-item payment memo is a second shape of `STLP`**, never a new
+  LOKAD: push 1 is a marker byte `0x00` and a list of 4-byte token-id
+  prefixes with quantities, which an un-updated reader refuses (it files the
+  payment as `other`, with no claim) — the § Firma rail's "bad trade" is
+  overridden here on the owner's reason: an amount with no items is nothing
+  to reconcile against. The app's prefix floor drops to 8 hex for the
+  `?pay=` link and the memo alike (0.001% odds that two of 300 quotes share
+  one). The memo holds 35 items; the pay sheet's scan code is drawn to 26 and
+  says "use the link" above that. Ships after the "Pay several" UI has been
+  used once.
 
 ---
 
