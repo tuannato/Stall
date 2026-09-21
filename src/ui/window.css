@@ -350,6 +350,14 @@
     font-size: 30px;
 }
 
+/* The surcharge line is a fact about the figure, read across a room: the
+   words' own scale, in ink, never the 11.5px the phone's foot uses. */
+.stall.shop-window[data-mode='cycle'] .sw-sur {
+    font-size: 26px;
+    line-height: 1.3;
+    color: var(--s-text);
+}
+
 /*
  * A SHORT landscape screen puts the code beside the price, not under it.
  *
@@ -512,6 +520,12 @@
 
 .stall.shop-window[data-mode='browse'] .item-foot-words {
     font-size: 26px;
+}
+
+.stall.shop-window[data-mode='browse'] .sw-sur {
+    font-size: 22px;
+    line-height: 1.3;
+    color: var(--s-text);
 }
 
 .stall.shop-window[data-mode='browse'] .sw-plate {

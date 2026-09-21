@@ -64,6 +64,8 @@ export type PosterItem = {
     initials: string;
     borrowed: boolean;
     stall: string;
+    /** The surcharge line, resolved by the caller; painted with the figure, never yielded. */
+    surcharge?: string;
 };
 
 /** `--s-sign-case`, resolved: the two values the shipped table holds. */
@@ -351,6 +353,8 @@ const TAG = {
     chipGap: 12,
     figure: 84,
     figureGap: 20,
+    surcharge: 30,
+    surchargeGap: 16,
     words: 36,
     wordsLines: 3,
     wordsGap: 16,
@@ -868,7 +872,8 @@ function paintStory(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
  * again (the `MAX_QR_CHARS` lesson). The foot is measured up from the bottom
  * as Square's is; the head is painted against the row it must clear, and
  * yields from the bottom up: the stall line, the borrowed line and the words
- * drop before the figure, and the figure and the name always paint.
+ * drop before the figure, and the figure, its surcharge line and the name
+ * always paint.
  */
 function paintTag(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
     const item = spec.item;
@@ -956,6 +961,17 @@ function paintTag(ctx: CanvasRenderingContext2D, spec: PosterSpec): void {
     ctx.fillStyle = spec.accent;
     ctx.fillText(item.figure, m.pad, y);
     y += Math.ceil(figureSize * NAME_LEAD) + m.figureGap;
+
+    // The surcharge rides the figure: painted in the figure's own pass and
+    // never in the yielding block below — a tag that kept the figure and
+    // dropped the "+5%" would print a lower price than the seller's record
+    // on a sticker nobody can correct.
+    if (item.surcharge !== undefined && item.surcharge !== '') {
+        ctx.fillStyle = spec.text;
+        ctx.font = `600 ${m.surcharge}px ${spec.font}`;
+        ctx.fillText(item.surcharge, m.pad, y);
+        y += m.surcharge + m.surchargeGap;
+    }
 
     // The words, as many lines as the row leaves room for, at most three —
     // with the borrowed-id line's room reserved first: where a buyer decides,

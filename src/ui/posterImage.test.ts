@@ -550,3 +550,46 @@ describe('the-item-rides-the-tag-spec-alone', () => {
         }
     });
 });
+
+describe('the-tag-keeps-the-surcharge-line-beside-the-figure', () => {
+    /**
+     * The tag yields from the bottom up — the stall line, the borrowed line
+     * and the words drop before the figure — and the surcharge is a fact
+     * about the figure, so it is painted in the figure's own pass and never
+     * in the yielding block: a tag that kept the figure and dropped the
+     * "+5%" would print a lower price than the seller's record on a sticker
+     * nobody can correct. The string is resolved by the caller, like the
+     * figure: this module paints what it is handed.
+     */
+    const SUR = '+5% surcharge \u00b7 the seller\u2019s record';
+
+    it('paints the line right under the figure and above the words', () => {
+        const rec = draw('tag', paint({ item: { ...ITEM, surcharge: SUR }, url: TAG_LINK }));
+        const figure = rec.texts.find((t) => t.text === '$5.00')!;
+        const line = rec.texts.find((t) => t.text === SUR);
+        expect(line).toBeDefined();
+        expect(line!.y).toBeGreaterThan(figure.y);
+        expect(line!.x).toBe(figure.x);
+        const words = rec.texts.find((t) => t.text.startsWith('Half kilo'))!;
+        expect(words.y).toBeGreaterThan(line!.y);
+    });
+
+    it('stays when the room is gone and the words have already dropped', () => {
+        const cramped = {
+            ...ITEM,
+            name: 'A token whose name wraps onto a second line',
+            borrowed: true,
+            words: 'Long words '.repeat(40),
+            surcharge: SUR,
+        };
+        const rec = draw('tag', paint({ item: cramped, url: TAG_LINK }));
+        expect(rec.texts.some((t) => t.text.startsWith('Long words')), 'the words yielded').toBe(false);
+        expect(rec.texts.some((t) => t.text === SUR), 'the surcharge did not').toBe(true);
+        expect(rec.texts.some((t) => t.text === '$5.00')).toBe(true);
+    });
+
+    it('paints nothing extra without one', () => {
+        const rec = draw('tag', paint({ item: ITEM, url: TAG_LINK }));
+        expect(rec.texts.some((t) => /surcharge/i.test(t.text))).toBe(false);
+    });
+});

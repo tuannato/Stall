@@ -13,6 +13,14 @@ import {
     STLD_HEX,
     TOLERANCE_FIELD_BYTES,
     TOLERANCE_TAG,
+    SURCHARGE_TAG,
+    isSurchargePct,
+    parseSurchargePct,
+    surchargedQuote,
+    SURCHARGE_FIELD_BYTES,
+    MAX_SURCHARGE_PCT,
+    MAX_SURCHARGE_DESCRIPTION_BYTES,
+    MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES,
     XEC_PRICE_CODE,
     decodeDescriptionPushes,
     descriptionBytes,
@@ -883,5 +891,199 @@ describe('removal-and-edits-carry-the-tolerance', () => {
 
         const edited = encodeDescriptionHex(TOKEN, 'New words', { shelf: 'Coffee', price })!;
         expect(decodeDescriptionPushes(pushesOf(edited))?.price).toEqual(price);
+    });
+});
+
+describe('a-surcharge-is-one-byte-one-to-one-hundred', () => {
+    /**
+     * Tag 0x04: the percentage the seller adds on top of this quote, read
+     * 1–100 (owner, 2026-09-21). It rides the price entry like the tolerance,
+     * because it is a fact about the quote: with no quote there is nothing
+     * to add to, and the reader has no default — an absent byte is "none",
+     * painted as nothing, never as "0%".
+     */
+    const priced = (over: Partial<TokenPrice> = {}): TokenPrice => ({
+        code: 'usd',
+        exponent: 2,
+        amount: 500n,
+        ...over,
+    });
+
+    it('round-trips every percent the field can hold', () => {
+        for (const surchargePct of [1, 5, 10, 50, 100]) {
+            const price = priced({ surchargePct });
+            const hex = encodeDescriptionHex(TOKEN, 'Beans', { price });
+            expect(hex, String(surchargePct)).toBeDefined();
+            const back = decodeDescriptionPushes(pushesOf(hex!));
+            expect(back?.price, String(surchargePct)).toEqual(price);
+        }
+    });
+
+    it('is exactly one byte under the tag, after the tolerance', () => {
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', {
+            shelf: 'Coffee',
+            price: priced({ tolerancePct: 2, surchargePct: 5 }),
+        })!;
+        const field = pushesOf(hex).find((p) => p[0] === SURCHARGE_TAG);
+        expect(field).toBeDefined();
+        expect(field!.length).toBe(SURCHARGE_FIELD_BYTES);
+        expect(field![1]).toBe(5);
+        const tags = pushesOf(hex)
+            .slice(3)
+            .map((p) => p[0]);
+        expect(tags).toEqual([SHELF_TAG, PRICE_TAG, TOLERANCE_TAG, SURCHARGE_TAG]);
+    });
+
+    it('voids the field alone on 0, on >100 and on any other length', () => {
+        const withField = (payload: readonly number[]): Uint8Array => {
+            const price = priced();
+            const hex = encodeDescriptionHex(TOKEN, 'Beans', { price })!;
+            const extra = [1 + payload.length, SURCHARGE_TAG, ...payload]
+                .map((b) => b.toString(16).padStart(2, '0'))
+                .join('');
+            return fromHex(`${hex}${extra}`);
+        };
+        for (const [label, payload] of [
+            ['zero', [0]],
+            ['over a hundred', [MAX_SURCHARGE_PCT + 1]],
+            ['two bytes', [0, 5]],
+            ['no bytes', []],
+        ] as const) {
+            const back = decodeDescriptionPushes(
+                getStackArray(`6a${toHex(withField(payload))}`).map((p) => fromHex(p)),
+            );
+            expect(back?.kind, label).toBe('text');
+            expect(back?.price, label).toEqual(priced());
+        }
+    });
+
+    it('refuses to write a value it could not read back', () => {
+        for (const surchargePct of [0, 101, -1, 2.5, Number.NaN]) {
+            expect(
+                encodeDescriptionHex(TOKEN, 'Beans', { price: priced({ surchargePct }) }),
+                String(surchargePct),
+            ).toBeUndefined();
+        }
+    });
+
+    it('goes nowhere without a price to ride', () => {
+        // A surcharge byte on a record with no price is a fact about nothing;
+        // the reader drops it rather than inventing a quote to hang it on.
+        const hex = encodeDescriptionHex(TOKEN, 'Beans')!;
+        const extra = [2, SURCHARGE_TAG, 5].map((b) => b.toString(16).padStart(2, '0')).join('');
+        const back = decodeDescriptionPushes(
+            getStackArray(`6a${hex}${extra}`).map((p) => fromHex(p)),
+        );
+        expect(back?.kind).toBe('text');
+        expect(back?.price).toBeUndefined();
+    });
+});
+
+describe('absent-surcharge-is-not-a-number', () => {
+    it('leaves the entry with no surcharge at all', () => {
+        const hex = encodeDescriptionHex(TOKEN, 'Beans', {
+            price: { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 },
+        })!;
+        const back = decodeDescriptionPushes(pushesOf(hex));
+        expect(back?.price).toEqual({ code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 });
+        expect(back?.price).not.toHaveProperty('surchargePct');
+    });
+});
+
+describe('same-price-sees-the-surcharge', () => {
+    it('tells a quote with a surcharge from the same quote without one', () => {
+        const base: TokenPrice = { code: 'usd', exponent: 2, amount: 500n };
+        expect(samePrice(base, { ...base, surchargePct: 5 })).toBe(false);
+        expect(samePrice({ ...base, surchargePct: 5 }, { ...base, surchargePct: 5 })).toBe(true);
+        expect(samePrice({ ...base, surchargePct: 5 }, { ...base, surchargePct: 6 })).toBe(false);
+    });
+});
+
+describe('tag-budget-counts-the-surcharge', () => {
+    /**
+     * Three more bytes, like the tolerance: push byte, tag, value. The maxima
+     * move with it and the meter is the encoder's own arithmetic.
+     */
+    const price: TokenPrice = {
+        code: 'usd',
+        exponent: 2,
+        amount: 500n,
+        tolerancePct: 2,
+        surchargePct: 5,
+    };
+
+    it('lands the maxima on the budget exactly', () => {
+        expect(MAX_SURCHARGE_DESCRIPTION_BYTES).toBe(MAX_TOLERANCE_DESCRIPTION_BYTES - 3);
+        expect(MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES).toBe(
+            MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES - 3,
+        );
+        const words = 'A'.repeat(MAX_SURCHARGE_DESCRIPTION_BYTES);
+        expect(descriptionRecordBytes(words, '', price)).toBe(OP_RETURN_BUDGET);
+        expect(encodeDescriptionHex(TOKEN, words, { price })).toBeDefined();
+        expect(encodeDescriptionHex(TOKEN, `${words}A`, { price })).toBeUndefined();
+
+        const shelved = 'A'.repeat(MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES);
+        const shelf = 'S'.repeat(MAX_SHELF_BYTES);
+        expect(descriptionRecordBytes(shelved, shelf, price)).toBe(OP_RETURN_BUDGET);
+        expect(encodeDescriptionHex(TOKEN, shelved, { shelf, price })).toBeDefined();
+        expect(encodeDescriptionHex(TOKEN, `${shelved}A`, { shelf, price })).toBeUndefined();
+    });
+
+    it('counts it from the price entry', () => {
+        const withoutIt = descriptionRecordBytes('Beans', '', {
+            code: 'usd',
+            exponent: 2,
+            amount: 500n,
+            tolerancePct: 2,
+        });
+        expect(descriptionRecordBytes('Beans', '', price)).toBe(withoutIt + 3);
+    });
+});
+
+describe('removal-and-edits-carry-the-surcharge', () => {
+    it('restates the surcharge on a words-only record and on the tombstone-with-tags', () => {
+        const price: TokenPrice = { code: 'usd', exponent: 2, amount: 500n, surchargePct: 5 };
+        const removal = encodeRemovalHex(TOKEN, { price })!;
+        const back = decodeDescriptionPushes(pushesOf(removal));
+        expect(back?.kind).toBe('tombstone');
+        expect(back?.price).toEqual(price);
+    });
+});
+
+describe('a-surcharged-quote-is-the-quote-plus-its-own-percent-rounded-up', () => {
+    it('applies the percent in minor units and never rounds down', () => {
+        const q = (amount: bigint, surchargePct?: number): TokenPrice => ({
+            code: 'usd',
+            exponent: 2,
+            amount,
+            ...(surchargePct === undefined ? {} : { surchargePct }),
+        });
+        expect(surchargedQuote(q(500n, 5)).amount).toBe(525n);
+        expect(surchargedQuote(q(999n, 1)).amount).toBe(1_009n);
+        expect(surchargedQuote(q(1n, 1)).amount).toBe(2n);
+        expect(surchargedQuote(q(500n)).amount).toBe(500n);
+        // Code and exponent ride through untouched: the line prints in the unit the seller wrote.
+        expect(surchargedQuote(q(500n, 5))).toMatchObject({ code: 'usd', exponent: 2, surchargePct: 5 });
+    });
+});
+
+describe('the-surcharge-field-is-read-as-a-whole-percent-or-nothing', () => {
+    /**
+     * The editor's parser and the store's guard share one rule, the wire's:
+     * an integer 1–100. "5.5", "0", "101", "5%" and " 5" are refused rather
+     * than rounded, trimmed or clamped — a byte on a permanent record is
+     * typed, never inferred.
+     */
+    it('accepts 1 to 100 as digits and refuses everything else', () => {
+        expect(parseSurchargePct('1')).toBe(1);
+        expect(parseSurchargePct('05')).toBe(5);
+        expect(parseSurchargePct('100')).toBe(100);
+        for (const bad of ['', '0', '101', '1000', '5.5', '5,5', '5%', ' 5', '-5', '+5', 'abc', '1e1']) {
+            expect(parseSurchargePct(bad), bad).toBeUndefined();
+        }
+        expect(isSurchargePct(5)).toBe(true);
+        for (const bad of [0, 101, 5.5, -1, Number.NaN, '5', null, undefined, 5n]) {
+            expect(isSurchargePct(bad), String(bad)).toBe(false);
+        }
     });
 });

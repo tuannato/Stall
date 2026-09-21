@@ -307,6 +307,14 @@ function quoteCard(view: StallView, price: TokenPrice, tokenId: string): HTMLEle
         row.setAttribute('data-tier', String(tier));
     }
     item.append(row);
+    // The seller's surcharge, said as their record: the page the code opens
+    // composes it, the card only says the byte is there (D5 — a stream has
+    // nobody to ask what the pay sheet will add).
+    if (price.surchargePct !== undefined) {
+        const surcharge = el('div', 'bc-sur', copy.streamSurchargeLine(price.surchargePct));
+        surcharge.setAttribute('data-role', 'quote-surcharge');
+        item.append(surcharge);
+    }
     item.append(el('div', 'bc-l', copy.BROADCAST_QUOTE_LINE));
     return item;
 }

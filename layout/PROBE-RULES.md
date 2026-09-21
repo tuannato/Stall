@@ -1265,3 +1265,17 @@ above it? Proved red on the old sheet — 35 failures, all of them
 `button.buy.door-open runs past the viewport's side edge (30–400 of 390)` —
 and green once `.door-wrap` took `width: 100%`. Down stays tolerant: a
 `hidden` shell still reaches its content through `.stall-scroll`.
+
+## The surcharge lines
+
+A quote may carry a surcharge (`STLD` tag `0x04`, 2026-09-21). Two nodes say
+it: `pay-surcharge` on the pay sheet — "+ 5% surcharge, the seller's record =
+$5.25", the composed figure's other half — and `quote-surcharge` beside
+every quote the app prints (the row's foot, the face, the printed tag, the
+stream card, the wall's row, the studio row, the editor's read-back). Both
+are protected boxes and contrast targets: a buyer who reads "$5.00" with the
+"+5%" under a control pays a figure the page never showed them, which is the
+covered-price incident with one line moved. The `pay` fixture's `T1` quote
+carries `surchargePct: 5` so the sheet, the row, the tag and the stream card
+all paint the lines; `quote-surcharge` on the wall wears the words' own scale
+(`.sw-sur`), never the phone foot's 11.5px, because it is read across a room.

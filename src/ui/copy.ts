@@ -1196,6 +1196,13 @@ export const DESC_OVER_BUDGET_PRICED =
  */
 export const DESC_OVER_BUDGET_TOLERANCE =
     'The description, the shelf, the price and the tolerance share one record, and together they are over its size. With both the words go up to 165 bytes \u2014 131 with a full shelf as well.';
+/**
+ * And with a surcharge byte on the quote: three bytes more again. The four
+ * maxima are the encoder's (`MAX_SURCHARGE_*_DESCRIPTION_BYTES` and the
+ * priced pair less three), pinned by the test that reads this sentence.
+ */
+export const DESC_OVER_BUDGET_SURCHARGE =
+    'The description, the shelf, the price and the surcharge share one record, and together they are over its size. With a price and a surcharge the words go up to 165 bytes \u2014 131 with a full shelf as well; with a tolerance too, 162 and 128.';
 export const DESC_TOO_LONG =
     'That is longer than one record holds. Shorten it until the counter is not over.';
 export const DESC_REFUSED =
@@ -1388,6 +1395,7 @@ export const SUMMARY_WORDS = 'words';
 export const SUMMARY_SHELF = 'shelf';
 export const SUMMARY_QUOTE = 'quote';
 export const SUMMARY_TOLERANCE = 'tolerance';
+export const SUMMARY_SURCHARGE = 'surcharge';
 /** The two records that take something away, named as what they do. */
 export const SUMMARY_REMOVAL = 'removal for';
 export const SUMMARY_CLEARS = 'clears every field for';
@@ -1562,6 +1570,39 @@ export const PAY_CAP_QUOTE = 'Seller\u2019s quote';
  */
 export const payQuoteEquals = (figure: string): string =>
     `= ${figure} (seller\u2019s quote)`;
+/**
+ * The quote as written, when a surcharge line follows it: the "=" moves to
+ * the surcharge line, because the figure above is the quote PLUS the
+ * seller's percent and an equals sign here would be false (critic,
+ * 2026-09-21).
+ */
+export const payQuoteAsWritten = (figure: string): string =>
+    `${figure} (seller\u2019s quote)`;
+/**
+ * The surcharge, said as the seller's record and never ruled: what the
+ * quote becomes with it, in the unit they wrote. The satoshis above are
+ * composed from the same percent (`satsWithSurcharge`).
+ */
+export const paySurchargeLine = (pct: number, figure: string): string =>
+    `+ ${pct}% surcharge, the seller\u2019s record = ${figure}`;
+/**
+ * Beside a quote on every surface that prints one — the row, the face, the
+ * tag, the stream card, the window card — so a figure printed next to a code
+ * is never silently short of what the code's page composes.
+ */
+export const quoteSurchargeLine = (pct: number): string =>
+    `+${pct}% surcharge \u00b7 the seller\u2019s record`;
+/**
+ * The stream card's form: the plate is 216px wide and the long line wrapped
+ * to three at Neo's mono, which grew the tallest card past the OBS sticker
+ * every streamer has typed by hand (`OBS_STICKER_HEIGHT`, the probe's
+ * `the-sticker-height-fits-the-tallest-card`, 2026-09-21). One line; the
+ * chip directly above it already says whose figure this is.
+ */
+export const streamSurchargeLine = (pct: number): string => `+${pct}% surcharge`;
+/** How the two seller numbers compose, said once where both are on the sheet. */
+export const PAY_FINE_SURCHARGE_TOLERANCE =
+    'The tolerance applies to the figure this page composes, surcharge included.';
 /** An XEC quote is the figure itself: no rate is involved anywhere in it. */
 export const PAY_XEC_QUOTE_NOTE =
     'Seller\u2019s quote, written in XEC \u2014 no rate involved';
@@ -1779,6 +1820,34 @@ export const DESC_TOLERANCE_FIXED =
  */
 export const DESC_TWO_PRICES =
     'Buyers see your Agora price in the Shop and this quote under Pay the seller; the two are not linked.';
+
+/**
+ * The seller's own surcharge control (STLD tag 0x04, 2026-09-21): a whole
+ * percent added on top of the quote when a buyer pays. On every unit \u2014 a
+ * surcharge is on the composed figure, and an XEC quote composes one too.
+ * Above the fold and named on the "Publishes:" line, because the field is
+ * PREFILLED from what this browser last signed on this stall (`saved.ts`):
+ * the 2026-09-07 lesson was a byte pressed under a closed fold, and a
+ * prefilled field a seller reads before signing is not that.
+ */
+export const DESC_SURCHARGE_LABEL = 'Surcharge on this quote, in % (optional)';
+/** The empty field's own word: absent is "none", never zero. */
+export const DESC_SURCHARGE_PLACEHOLDER = 'none';
+export const DESC_SURCHARGE_HINT =
+    'Added on top of the quote when a buyer pays: the pay sheet composes the figure, and every screen prints \u201c+N% surcharge \u00b7 the seller\u2019s record\u201d beside your quote. A whole percent, 1\u2013100; empty is none.';
+/** Said while the field holds a value the seller did not type this time. */
+export const descSurchargePrefilled = (pct: number): string =>
+    `Prefilled with the ${pct}% surcharge you last signed on this stall from this browser. Change or clear it before you sign.`;
+export const DESC_SURCHARGE_REFUSED =
+    'A surcharge is a whole number from 1 to 100 \u2014 \u201c5\u201d \u2014 or empty for none.';
+/** The percent inside the summary line and the Studio's memory line. */
+export const surchargePercent = (pct: number): string => `${pct}%`;
+/** The Studio's "This browser" block: what the next describe sheet opens with, and the control that forgets it. */
+export const studioSurchargeMemory = (pct: number): string =>
+    `This browser prefills a new quote on this stall with a ${pct}% surcharge \u2014 the last one you signed here.`;
+export const STUDIO_SURCHARGE_MEMORY_NONE =
+    'This browser prefills a new quote on this stall with no surcharge \u2014 the last quote you signed here carried none.';
+export const STUDIO_FORGET_SURCHARGE = 'Forget';
 
 /** The overlay's brand line. Ours, never the seller's. */
 export const BROADCAST_BRAND = 'stall.cash';

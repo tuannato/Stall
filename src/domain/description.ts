@@ -120,6 +120,39 @@ export const TOLERANCE_TAG = 0x03;
 /** Tag plus the one byte under it. */
 export const TOLERANCE_FIELD_BYTES = 2;
 
+/**
+ * Tag 0x04: the percentage the seller adds on top of this quote (owner,
+ * 2026-09-21 — "phụ thu"). One byte, read 1–100. It rides the price entry
+ * exactly as the tolerance does, because it is a fact about the quote: with
+ * no quote there is nothing to add to. On the QUOTE record and never on the
+ * stall's, because paper, a stream card and a shop-window card print the
+ * quote beside a code and have no way to say "the stall's settings were not
+ * read" — on the same record, figure and surcharge are one signed truth.
+ * **Absent is "none"**, painted as nothing, never as "0%".
+ */
+export const SURCHARGE_TAG = 0x04;
+export const MAX_SURCHARGE_PCT = 100;
+/** Tag byte plus one value byte. */
+export const SURCHARGE_FIELD_BYTES = 2;
+
+/** A whole percent the wire can carry: an integer, 1 to `MAX_SURCHARGE_PCT`. */
+export function isSurchargePct(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_SURCHARGE_PCT;
+}
+
+/**
+ * The editor's field, read: digits only, a whole percent in range, or
+ * nothing. "5.5", "0", "101" and "5%" are all refused rather than rounded or
+ * trimmed — a byte on a permanent record is typed, never inferred.
+ */
+export function parseSurchargePct(text: string): number | undefined {
+    if (!/^\d{1,3}$/.test(text)) {
+        return undefined;
+    }
+    const pct = Number(text);
+    return isSurchargePct(pct) ? pct : undefined;
+}
+
 const MAX_TOLERANCE_PCT = 100;
 
 /** A bound on the fractional digits a reader prints, not on the range. */
@@ -150,6 +183,11 @@ export type TokenPrice = {
      * here would be this app's policy wearing the seller's signature.
      */
     readonly tolerancePct?: number;
+    /**
+     * Tag 0x04: the percentage added to this quote, 1–100. **Absent is
+     * "none"** — the reader has no default, for the tolerance's reason.
+     */
+    readonly surchargePct?: number;
 };
 
 const TOKEN_ID_BYTES = 32;
@@ -167,6 +205,7 @@ const REQUIRED_PUSHES = 3;
 const RECORD_HEAD_BYTES = 38;
 const PRICE_PUSH_BYTES = PRICE_FIELD_BYTES + 1;
 const TOLERANCE_PUSH_BYTES = TOLERANCE_FIELD_BYTES + 1;
+const SURCHARGE_PUSH_BYTES = SURCHARGE_FIELD_BYTES + 1;
 const FULL_SHELF_PUSH_BYTES = 1 + 1 + MAX_SHELF_BYTES;
 const LONG_TEXT_PUSH_OVERHEAD = 2;
 
@@ -185,6 +224,14 @@ export const MAX_TOLERANCE_DESCRIPTION_BYTES =
 /** And with a full shelf on top of both. */
 export const MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES =
     MAX_PRICED_SHELVED_DESCRIPTION_BYTES - TOLERANCE_PUSH_BYTES;
+
+/** With a surcharge byte riding the price beside the tolerance: three fewer. */
+export const MAX_SURCHARGE_DESCRIPTION_BYTES =
+    MAX_TOLERANCE_DESCRIPTION_BYTES - SURCHARGE_PUSH_BYTES;
+
+/** And with a full shelf on top of all three. */
+export const MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES =
+    MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES - SURCHARGE_PUSH_BYTES;
 
 /**
  * A record says one of two things: here are the words, or take them away.
@@ -253,9 +300,9 @@ export function decodeDescriptionPushes(
     // The tolerance rides the price rather than standing on its own: it is a
     // fact about the quote, so with no quote to qualify there is nothing a
     // reader could say about it and it goes nowhere.
-    const price = withTolerance(
-        readPrice(extras.get(PRICE_TAG)),
-        readTolerance(extras.get(TOLERANCE_TAG)),
+    const price = withSurcharge(
+        withTolerance(readPrice(extras.get(PRICE_TAG)), readTolerance(extras.get(TOLERANCE_TAG))),
+        readSurcharge(extras.get(SURCHARGE_TAG)),
     );
     // A zero-length third push is the removal instruction, not a short record.
     // A shelf rides it unchanged: each record is the whole truth about one
@@ -376,6 +423,40 @@ function toleranceField(tolerancePct: number): Uint8Array | undefined {
         return undefined;
     }
     return Uint8Array.of(TOLERANCE_TAG, tolerancePct);
+}
+
+/**
+ * Tag 0x04, the reading half: one byte, 1–100, voiding this field alone on
+ * any other length, zero or a value above a hundred — the tolerance's rule.
+ */
+function readSurcharge(payload: Uint8Array | undefined): number | undefined {
+    if (payload === undefined || payload.length !== SURCHARGE_FIELD_BYTES - 1) {
+        return undefined;
+    }
+    const pct = payload[0]!;
+    return pct >= 1 && pct <= MAX_SURCHARGE_PCT ? pct : undefined;
+}
+
+function withSurcharge(
+    price: TokenPrice | undefined,
+    surchargePct: number | undefined,
+): TokenPrice | undefined {
+    if (price === undefined || surchargePct === undefined) {
+        return price;
+    }
+    return { ...price, surchargePct };
+}
+
+/** The same one byte, written. `undefined` when the value cannot be one. */
+function surchargeField(surchargePct: number): Uint8Array | undefined {
+    if (
+        !Number.isInteger(surchargePct) ||
+        surchargePct < 1 ||
+        surchargePct > MAX_SURCHARGE_PCT
+    ) {
+        return undefined;
+    }
+    return Uint8Array.of(SURCHARGE_TAG, surchargePct);
 }
 
 /** The same thirteen bytes, written. `undefined` when they cannot be. */
@@ -569,6 +650,9 @@ export function descriptionRecordBytes(
         if (price.tolerancePct !== undefined) {
             total += encodePush(new Uint8Array(TOLERANCE_FIELD_BYTES)).length;
         }
+        if (price.surchargePct !== undefined) {
+            total += encodePush(new Uint8Array(SURCHARGE_FIELD_BYTES)).length;
+        }
     }
     return total;
 }
@@ -651,8 +735,34 @@ function taggedPushes(
             }
             pushes.push(margin);
         }
+        // After the tolerance, for the same ascending-tag reason.
+        if (price.surchargePct !== undefined) {
+            const added = surchargeField(price.surchargePct);
+            if (added === undefined) {
+                return undefined;
+            }
+            pushes.push(added);
+        }
     }
     return pushes;
+}
+
+/**
+ * The quote with its own surcharge applied, in the seller's unit — the
+ * figure a line beside the quote prints ("= $5.25 with the 5% surcharge").
+ * Minor units, rounded up, the direction every composed figure rounds; the
+ * exponent and the code are untouched, so `quoteFigure` prints it as it
+ * prints the quote. A quote with no surcharge is returned as it is. This is
+ * a glance for the eye: the figure a wallet signs is the satoshis
+ * `satsWithSurcharge` composes, never this one.
+ */
+export function surchargedQuote(price: TokenPrice): TokenPrice {
+    if (price.surchargePct === undefined) {
+        return price;
+    }
+    const scaled = price.amount * BigInt(100 + price.surchargePct);
+    const amount = (scaled + 99n) / 100n;
+    return { ...price, amount };
 }
 
 /**
@@ -673,7 +783,8 @@ export function samePrice(
         a.code === b.code &&
         a.exponent === b.exponent &&
         a.amount === b.amount &&
-        a.tolerancePct === b.tolerancePct
+        a.tolerancePct === b.tolerancePct &&
+        a.surchargePct === b.surchargePct
     );
 }
 

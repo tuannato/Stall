@@ -11,7 +11,9 @@
  * stall not to paint. Every call here swallows that and behaves as if nothing
  * was ever saved.
  */
+import { isSurchargePct } from './domain/description';
 import { DEFAULT_FIAT_CODE, isSupportedFiat } from './domain/fiat';
+import type { RememberedSurcharge } from './domain/state';
 import { parseSellerParam } from './domain/route';
 import { isLegibleText } from './domain/text';
 
@@ -309,4 +311,125 @@ export function saveFiat(code: string): void {
     } catch {
         // Nothing to do: the choice simply is not remembered.
     }
+}
+
+/*
+ * The surcharge a seller last handed to a wallet on a stall's describe sheet.
+ *
+ * **Storage reaching the signing path, which is not §2's "display
+ * preference"** — so it is a named exception with fences (CLAUDE §2, the
+ * pin's name beside it), decided 2026-09-21 (D5): the sheet prefills an EMPTY
+ * surcharge field from it, visibly, above the fold, named on the "Publishes:"
+ * line, and a published byte always wins. Per stall by `canonicalStall`;
+ * a percent, or `none` once a quote without one was signed, so a seller who
+ * wants none does not clear a field that refills forever. Capped like the
+ * pins — `MAX_PINNED_STALLS` stalls, refuse rather than evict — with a
+ * raw-length belt on read; every entry validated on read as an integer 1–100
+ * the way `pinName` is screened; every read and write wrapped, so a throwing
+ * `localStorage` is an empty field. What this app observes is the press of a
+ * sign control, never the signature: "signed" here means handed to a wallet.
+ */
+const SURCHARGE_KEY = 'stall.surcharge';
+
+type SurchargeEntry = { readonly stall: string; readonly pct: RememberedSurcharge };
+
+/** `0` on the wire of this store is "none" — the one percent the record voids. */
+const NONE_STORED = 0;
+
+const MAX_SURCHARGE_RAW = (MAX_SAVED + 40) * MAX_PINNED_STALLS;
+
+function readSurchargeEntries(): SurchargeEntry[] {
+    let raw: string | null;
+    try {
+        raw = localStorage.getItem(SURCHARGE_KEY);
+    } catch {
+        return [];
+    }
+    if (raw === null || raw.length > MAX_SURCHARGE_RAW) {
+        return [];
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(parsed)) {
+        return [];
+    }
+    const entries: SurchargeEntry[] = [];
+    for (const entry of parsed) {
+        if (entry === null || typeof entry !== 'object') {
+            continue;
+        }
+        const { s: token, p: stored } = entry as { s?: unknown; p?: unknown };
+        if (typeof token !== 'string' || token.length > MAX_SAVED) {
+            continue;
+        }
+        const canonical = canonicalStall(token);
+        if (canonical === undefined || entries.some((known) => known.stall === canonical)) {
+            continue;
+        }
+        const pct: RememberedSurcharge | undefined =
+            stored === NONE_STORED ? 'none' : isSurchargePct(stored) ? stored : undefined;
+        if (pct === undefined) {
+            continue;
+        }
+        entries.push({ stall: canonical, pct });
+        if (entries.length === MAX_PINNED_STALLS) {
+            break;
+        }
+    }
+    return entries;
+}
+
+function writeSurchargeEntries(entries: readonly SurchargeEntry[]): void {
+    try {
+        if (entries.length === 0) {
+            localStorage.removeItem(SURCHARGE_KEY);
+        } else {
+            localStorage.setItem(
+                SURCHARGE_KEY,
+                JSON.stringify(entries.map((e) => ({ s: e.stall, p: e.pct === 'none' ? NONE_STORED : e.pct }))),
+            );
+        }
+    } catch {
+        // Nothing to tell the seller: the next sheet simply opens empty.
+    }
+}
+
+/** What this browser remembers for a stall, or nothing. */
+export function readRememberedSurcharge(raw: string | undefined): RememberedSurcharge | undefined {
+    if (raw === undefined) {
+        return undefined;
+    }
+    const canonical = canonicalStall(raw);
+    return canonical === undefined ? undefined : readSurchargeEntries().find((e) => e.stall === canonical)?.pct;
+}
+
+/**
+ * A quote was handed to a wallet with this surcharge (or none). A stall
+ * already remembered is updated in place; a new one is refused when the
+ * store is full — never evicted, the pins' rule.
+ */
+export function rememberSurcharge(raw: string, pct: RememberedSurcharge): void {
+    const canonical = raw.length > MAX_SAVED ? undefined : canonicalStall(raw);
+    if (canonical === undefined || (pct !== 'none' && !isSurchargePct(pct))) {
+        return;
+    }
+    const entries = readSurchargeEntries();
+    const at = entries.findIndex((e) => e.stall === canonical);
+    if (at >= 0) {
+        writeSurchargeEntries(entries.map((e, i) => (i === at ? { stall: canonical, pct } : e)));
+        return;
+    }
+    if (entries.length >= MAX_PINNED_STALLS) {
+        return;
+    }
+    writeSurchargeEntries([...entries, { stall: canonical, pct }]);
+}
+
+export function forgetSurcharge(raw: string): void {
+    const canonical = canonicalStall(raw);
+    writeSurchargeEntries(readSurchargeEntries().filter((e) => e.stall !== canonical));
 }

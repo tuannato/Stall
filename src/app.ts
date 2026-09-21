@@ -28,7 +28,10 @@ import {
 } from './domain/fiat';
 import {
     clearSavedStall,
+    forgetSurcharge,
     isPinnedStall,
+    readRememberedSurcharge,
+    rememberSurcharge,
     isSavedStall,
     pinnedDoorIsFull,
     pinStall,
@@ -47,6 +50,7 @@ import {
     type PayRateWhy,
 } from './domain/state';
 import type {
+    RememberedSurcharge,
     EventStatus,
     FetchStatus,
     RouteParse,
@@ -822,6 +826,13 @@ export function boot(
              * load, which is the same bargain `shopTab` takes.
              */
             isDefaultStall: isSavedStall(identityOf(state.view)),
+            // The same read-at-paint rule: what the describe sheet prefills
+            // is this browser's memory of the last quote handed to a wallet
+            // on this stall (§2's second named exception), never a loader's.
+            ...((): { rememberedSurcharge?: RememberedSurcharge } => {
+                const remembered = readRememberedSurcharge(identityOf(state.view));
+                return remembered === undefined ? {} : { rememberedSurcharge: remembered };
+            })(),
             // Same read-at-paint rule as the default flag: a pin toggles
             // without a refetch, and a stale list would lie about itself.
             pinnedStalls: readPinnedStalls(),
@@ -1023,6 +1034,23 @@ export function boot(
                     saveStall(raw);
                 }
                 paint();
+            },
+            // The describe sheet handed a quote to a wallet: what it carried
+            // is what the next quote on this stall opens with. No paint — the
+            // sheet is open and holds a half-written record; the Studio line
+            // reads storage on its next paint.
+            onRememberSurcharge: (pct) => {
+                const raw = identityOf(state.view);
+                if (raw !== undefined) {
+                    rememberSurcharge(raw, pct);
+                }
+            },
+            onForgetSurcharge: () => {
+                const raw = identityOf(state.view);
+                if (raw !== undefined) {
+                    forgetSurcharge(raw);
+                    paint();
+                }
             },
             onSwitchPanel: (panel) => {
                 // UI state only, never history.state: the popstate listener

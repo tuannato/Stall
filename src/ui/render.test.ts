@@ -85,6 +85,8 @@ import {
     MAX_DESCRIPTION_BYTES,
     MAX_PRICED_DESCRIPTION_BYTES,
     MAX_PRICED_SHELVED_DESCRIPTION_BYTES,
+    MAX_SURCHARGE_DESCRIPTION_BYTES,
+    MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES,
     MAX_TOLERANCE_DESCRIPTION_BYTES,
     MAX_TOLERANCE_SHELVED_DESCRIPTION_BYTES,
     encodeDescriptionHex,
@@ -124,7 +126,7 @@ import {
     setMarqueeClock,
     setMarqueeMeasure,
 } from './marquee';
-import { satsForQuote } from '../domain/fiat';
+import { satsForQuote, satsWithSurcharge } from '../domain/fiat';
 import { formatXec,
     formatXecUngrouped,
 } from '../domain/money';
@@ -12667,6 +12669,8 @@ describe('the-printed-tag-is-ink-on-white', () => {
             tagView({
                 tokens: new Map([[TOKEN_ID, { ...BEANS, ticker: 'BEAN' }]]),
                 genesis: new Map([[TOKEN_ID, 'not-attributed' as const]]),
+                // A surcharge, so the audit covers the line's class too.
+                prices: new Map([[TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }]]),
                 overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
             }),
         );
@@ -14411,5 +14415,461 @@ describe('a-studio-row-does-not-call-an-unread-book-not-listed', () => {
         const state = root.querySelector('[data-role="studio-item-state"]')!;
         expect(state.textContent).toContain(copy.STUDIO_STATE_QUOTE_UNSHOWN);
         expect(state.querySelector('[data-role="seller-price"]')).toBeNull();
+    });
+});
+
+describe('a-surcharge-rides-the-composed-figure-and-says-so', () => {
+    /**
+     * The seller's surcharge (`STLD` tag 0x04) is applied to the satoshis
+     * this page composes — the figure, both links and the code are one
+     * `bigint`, the rule `the-figure-on-screen-is-the-figure-in-the-link`
+     * keeps — and it is said as the seller's record on its own node, never
+     * inside the quote's: `seller-price` is the quote as written, and the
+     * "=" moves to the surcharge line because the figure above is no longer
+     * equal to the quote.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, ...over }));
+
+    it('composes the surcharged satoshis into the figure, both links and the memo-bearing BIP21', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }]]),
+        });
+        const base = satsForQuote(QUOTE_USD, 1n, PAY_RATE.rate)!;
+        const sats = satsWithSurcharge(base, 5)!;
+        expect(sats).toBe(26_250_000n);
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]');
+        expect(figure?.textContent).toBe(formatXec(sats));
+        const memo = encodePaymentMemoHex(TOKEN_ID, 1n)!;
+        expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, memo));
+        expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats, memo));
+    });
+
+    it('keeps the quote as written in its role and says the surcharge on its own node', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }]]),
+        });
+        const quote = root.querySelector('[data-role="pay"] [data-role="seller-price"]');
+        expect(quote?.textContent).toBe(copy.payQuoteAsWritten('$5.00'));
+        expect(quote?.textContent).not.toContain('=');
+        const line = root.querySelector('[data-role="pay"] [data-role="pay-surcharge"]') as HTMLElement;
+        expect(line).not.toBeNull();
+        expect(line.hidden).toBe(false);
+        expect(line.textContent).toBe(copy.paySurchargeLine(5, '$5.25'));
+        expect(line.textContent).not.toMatch(/\btax\b/i);
+    });
+
+    it('mounts the node hidden and keeps the "=" on the quote when the record carries none', () => {
+        const { root } = sheet();
+        const line = root.querySelector('[data-role="pay"] [data-role="pay-surcharge"]') as HTMLElement;
+        expect(line.hidden).toBe(true);
+        expect(line.textContent).toBe('');
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="seller-price"]')?.textContent,
+        ).toBe(copy.payQuoteEquals('$5.00'));
+    });
+
+    it('applies to an xec quote too, with no rate anywhere', () => {
+        const { root } = sheet({
+            prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }]]),
+        });
+        expect(root.querySelector('[data-role="pay"] [data-role="rate"]')).toBeNull();
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('5,250');
+        const line = root.querySelector('[data-role="pay"] [data-role="pay-surcharge"]') as HTMLElement;
+        expect(line.hidden).toBe(false);
+        expect(line.textContent).toBe(copy.paySurchargeLine(5, '5,250.00 XEC'));
+    });
+
+    it('says how the tolerance and the surcharge compose, only when both are on the record', () => {
+        const both = sheet({
+            prices: new Map([[TOKEN_ID, { ...QUOTE_USD, tolerancePct: 2, surchargePct: 5 }]]),
+        });
+        expect(both.root.textContent).toContain(copy.PAY_FINE_SURCHARGE_TOLERANCE);
+        const one = sheet({ prices: new Map([[TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }]]) });
+        expect(one.root.textContent).not.toContain(copy.PAY_FINE_SURCHARGE_TOLERANCE);
+    });
+});
+
+describe('every-quote-surface-prints-the-surcharge-line', () => {
+    /**
+     * A surcharge (`STLD` tag 0x04) is a fact about the quote, so every
+     * surface that prints `seller-price` says it beside the figure, in the
+     * seller's own words — the row, the face, the printed tag and its PNG,
+     * the stream card, the studio row and the editor's read-back (the wall
+     * is window.test.ts's) — under its own role `quote-surcharge`, never
+     * inside the `seller-price` node (the quote as written, the audit's key)
+     * and never as a composed figure: composing is the pay sheet's, where a
+     * quantity and a rate exist. Three of these surfaces are unattended
+     * (paper, stream, wall), which is why the byte lives on the quote's own
+     * record and not on the stall's (D5, 2026-09-21). Absent is "no
+     * surcharge stated": no byte, no node, on every surface.
+     */
+    const SURCHARGED = { ...QUOTE_USD, surchargePct: 5 };
+    const LINE = copy.quoteSurchargeLine(5);
+    const attributed = { genesis: new Map([[TOKEN_ID, 'attributed' as const]]) };
+
+    it('the row says it in the foot, after the words and before the provenance sentence', () => {
+        const { root } = paint(
+            payView({
+                prices: new Map([[TOKEN_ID, SURCHARGED]]),
+                descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
+                ...attributed,
+            }),
+        );
+        const row = root.querySelector('[data-role="pay-row"]')!;
+        expect(row.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(row.querySelector('.item-head [data-role="quote-surcharge"]')).toBeNull();
+        const foot = row.querySelector('.item-foot')!;
+        expect(
+            [...foot.children].map((node) => node.getAttribute('data-role')),
+        ).toEqual(['quote-words', 'quote-surcharge', 'quote-minted']);
+        expect(foot.querySelector('[data-role="quote-surcharge"]')?.textContent).toBe(LINE);
+    });
+
+    it('the face says it under the figure, before Pay', () => {
+        const { root } = paint(
+            quoteView({
+                prices: new Map([[TOKEN_ID, SURCHARGED]]),
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' },
+            }),
+        );
+        const face = root.querySelector('[data-role="item-face"]')!;
+        const line = face.querySelector('[data-role="quote-surcharge"]');
+        expect(line?.textContent).toBe(LINE);
+        expect(face.querySelector('.face-x')!.nextElementSibling).toBe(line);
+        expect(line!.nextElementSibling?.getAttribute('data-role')).toBe('pay-open');
+        expect(face.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+    });
+
+    it('the printed tag and its PNG carry it right after the figure', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const { root } = paint(
+            tagView({
+                prices: new Map([[TOKEN_ID, SURCHARGED]]),
+                overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID },
+            }),
+        );
+        const page = root.querySelector('.poster-tag')!;
+        const line = page.querySelector('.tag-surcharge');
+        expect(line?.textContent).toBe(LINE);
+        expect(line?.getAttribute('data-role')).toBe('quote-surcharge');
+        expect(page.querySelector('.tag-figure')!.nextElementSibling).toBe(line);
+        expect(page.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(lastDrawnPosterSpec()?.item?.surcharge).toBe(LINE);
+    });
+
+    it('the stream card carries it, in its one-line form, between the figure and the pay line, still with no rate', () => {
+        const { root } = paint(
+            quoteCardView({
+                prices: new Map([[TOKEN_ID, { ...USD_QUOTE, surchargePct: 5 }]]),
+                fiatCode: 'usd',
+                fiatRate: scaleRate(0.00002),
+            }),
+        );
+        const card = root.querySelector('.bc-ext') as HTMLElement;
+        // The plate's own one-line form: the chip above it says whose.
+        const streamLine = copy.streamSurchargeLine(5);
+        expect(card.querySelector('[data-role="quote-surcharge"]')?.textContent).toBe(streamLine);
+        expect(card.textContent).toBe(
+            `${BEANS.name}${copy.SELLER_QUOTE_CHIP}$5.00${streamLine}${copy.BROADCAST_QUOTE_LINE}`,
+        );
+        expect(root.querySelector('[data-role="rate"]')).toBeNull();
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+    });
+
+    it('the studio row says it beside the quote it reads back', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                prices: new Map([[TOKEN_ID, SURCHARGED]]),
+                ...attributed,
+                panel: 'studio',
+            }),
+        );
+        const state = root.querySelector('[data-role="studio-item-state"]')!;
+        expect(state.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        expect(state.querySelector('[data-role="quote-surcharge"]')?.textContent).toBe(LINE);
+    });
+
+    it('the editor reads it back under the published price, in the sheet and never the rail behind it', () => {
+        const { root } = describeSheetOf({ prices: new Map([[TOKEN_ID, SURCHARGED]]) });
+        const back = root.querySelector('[data-role="describe"] [data-role="quote-surcharge"]') as HTMLElement;
+        expect(back).not.toBeNull();
+        expect(back.hidden).toBe(false);
+        expect(back.textContent).toBe(LINE);
+        expect(
+            root.querySelector('[data-role="describe"] [data-role="seller-price"]')?.textContent,
+        ).toBe(copy.sellerPrice('5.00', 'USD'));
+        const none = describeSheetOf();
+        const bare = none.root.querySelector('[data-role="describe"] [data-role="quote-surcharge"]') as HTMLElement;
+        expect(bare.hidden).toBe(true);
+        expect(bare.textContent).toBe('');
+    });
+
+    it('no byte, no node: every surface stays as it was', () => {
+        window.history.pushState({}, '', `/s/${ADDR}`);
+        const screens = [
+            paint(payView({ descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]), ...attributed })).root,
+            paint(quoteView({ overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' } })).root,
+            paint(tagView({ overlay: { kind: 'poster', format: 'tag', tokenId: TOKEN_ID } })).root,
+            paint(quoteCardView()).root,
+            paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                    panel: 'studio',
+                }),
+            ).root,
+        ];
+        for (const root of screens) {
+            expect(root.querySelector('[data-role="seller-price"]'), 'the surface prints a quote').not.toBeNull();
+            expect(root.querySelector('[data-role="quote-surcharge"]:not([hidden])')).toBeNull();
+            expect(root.textContent).not.toMatch(/surcharge/i);
+        }
+        expect(lastDrawnPosterSpec()?.item?.surcharge).toBeUndefined();
+    });
+});
+
+describe('the-surcharge-field-prefills-visibly-and-names-itself', () => {
+    /**
+     * `STLD` tag 0x04 on the describe sheet (D5, 2026-09-21). The field
+     * stands above the fold — never under "More" — opens empty, writes the
+     * byte only over a price and only once a whole percent is typed, on
+     * every unit, and the "Publishes:" line names it; the encoder, the meter
+     * and the summary read one record. The prefill is the one thing that
+     * differs from the tolerance's "nothing by default": what this browser
+     * last handed to a wallet on this stall fills an EMPTY field, visibly
+     * and said so, and a published byte always wins over it.
+     */
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+    const field = (root: HTMLElement) => root.querySelector('[data-role="describe-surcharge"]') as HTMLInputElement;
+    const note = (root: HTMLElement) => root.querySelector('[data-role="describe-surcharge-note"]')?.textContent;
+    const hexOf = (root: HTMLElement) => root.querySelector('[data-role="describe-hex"]')?.textContent;
+    const typeInto = (input: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+        input.value = value;
+        input.dispatchEvent(new Event('input'));
+    };
+    const priced = (surchargePct?: number) => ({
+        code: 'usd' as const,
+        exponent: 2,
+        amount: 1250n,
+        ...(surchargePct === undefined ? {} : { surchargePct }),
+    });
+
+    it('stands above the fold, opens empty, and writes the byte only once a percent is typed over a price', () => {
+        const { root } = sheet();
+        const input = field(root);
+        expect(input).not.toBeNull();
+        expect(input.closest('details'), 'never under More').toBeNull();
+        expect(input.value).toBe('');
+        expect(input.placeholder).toBe(copy.DESC_SURCHARGE_PLACEHOLDER);
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
+        const control = root.querySelector('[data-role="describe-cashtab"]')!;
+        expect(input.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // A percent with no price goes nowhere, and the summary says nothing of it.
+        typeInto(input, '5');
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toContain(copy.SUMMARY_SURCHARGE);
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced(5) }));
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).toContain(
+            `${copy.SUMMARY_SURCHARGE} ${copy.surchargePercent(5)}`,
+        );
+        typeInto(input, '');
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced() }));
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toContain(copy.SUMMARY_SURCHARGE);
+    });
+
+    it('refuses anything but a whole percent from 1 to 100, in its own sentence, and signs nothing', () => {
+        const { root } = sheet();
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLElement;
+        for (const bad of ['0', '101', '5.5', '5%', 'abc', '-5']) {
+            typeInto(field(root), bad);
+            expect(err.hidden, bad).toBe(false);
+            expect(err.textContent, bad).toBe(copy.DESC_SURCHARGE_REFUSED);
+            expect(link.hidden, bad).toBe(true);
+            expect(root.querySelector('[data-role="describe-hex"]')?.textContent).toBe('');
+        }
+        typeInto(field(root), '100');
+        expect(err.hidden).toBe(true);
+        expect(link.hidden).toBe(false);
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced(100) }));
+    });
+
+    it('applies on an xec quote too, where the tolerance does not', () => {
+        const { root } = sheet();
+        const unit = root.querySelector('[data-role="describe-unit"]') as HTMLSelectElement;
+        unit.value = 'xec';
+        unit.dispatchEvent(new Event('change', { bubbles: true }));
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '450.00');
+        typeInto(field(root), '5');
+        expect((root.querySelector('[data-role="describe-tolerance"]') as HTMLElement).hidden).toBe(true);
+        expect((root.querySelector('[data-role="describe-surcharge-field"]') as HTMLElement).hidden).toBe(false);
+        expect(hexOf(root)).toBe(
+            encodeDescriptionHex(TOKEN_ID, '', {
+                price: { code: 'xec', exponent: 2, amount: 45_000n, surchargePct: 5 },
+            }),
+        );
+    });
+
+    it('reads a published byte back, restates it untouched, lets the seller clear it, and it beats the browser’s memory', () => {
+        const published = { ...QUOTE_USD, surchargePct: 7 };
+        const { root } = sheet({ prices: new Map([[TOKEN_ID, published]]), rememberedSurcharge: 5 });
+        expect(field(root).value).toBe('7');
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: published }));
+        // Untouched, the tag shortcut still stands: the form is the record.
+        expect((root.querySelector('[data-role="describe-tag"]') as HTMLElement).hidden).toBe(false);
+        typeInto(field(root), '');
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: QUOTE_USD }));
+        expect((root.querySelector('[data-role="describe-tag"]') as HTMLElement).hidden).toBe(true);
+    });
+
+    it('prefills an empty field from what this browser last signed on this stall, says so until touched, and "none" leaves it empty', () => {
+        const { root } = sheet({ rememberedSurcharge: 5 });
+        expect(field(root).value).toBe('5');
+        expect(note(root)).toBe(copy.descSurchargePrefilled(5));
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced(5) }));
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).toContain(
+            `${copy.SUMMARY_SURCHARGE} ${copy.surchargePercent(5)}`,
+        );
+        typeInto(field(root), '8');
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
+        // A published quote with no byte is an empty field too: the memory
+        // fills it, visibly, and the published record is no longer what the
+        // form restates — the tag shortcut says so by leaving.
+        const over = sheet({ prices: new Map([[TOKEN_ID, QUOTE_USD]]), rememberedSurcharge: 5 });
+        expect(field(over.root).value).toBe('5');
+        expect(note(over.root)).toBe(copy.descSurchargePrefilled(5));
+        expect((over.root.querySelector('[data-role="describe-tag"]') as HTMLElement).hidden).toBe(true);
+        const none = sheet({ rememberedSurcharge: 'none' });
+        expect(field(none.root).value).toBe('');
+        expect(note(none.root)).toBe(copy.DESC_SURCHARGE_HINT);
+    });
+
+    it('is hidden over a price this sheet only carries forward, and the byte rides that record verbatim', () => {
+        const other = { code: 'zzz', exponent: 2, amount: 900n, surchargePct: 9 } as const;
+        const { root } = sheet({ prices: new Map([[TOKEN_ID, other]]), rememberedSurcharge: 5 });
+        expect((root.querySelector('[data-role="describe-surcharge-field"]') as HTMLElement).hidden).toBe(true);
+        typeInto(root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement, 'New words');
+        expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, 'New words', { price: other }));
+        // And the summary names the byte the record carries: a line that
+        // omitted a field the encoder was handed would under-report the
+        // record being signed (the `0x04` fiat-hint rule on the name sheet).
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).toContain(
+            `${copy.SUMMARY_SURCHARGE} ${copy.surchargePercent(9)}`,
+        );
+    });
+
+    it('a press of either sign control remembers the byte, or that there was none — never for words alone or a removal', () => {
+        const remember = vi.fn();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                descriptions: new Map([[TOKEN_ID, 'Dark roast']]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+            }),
+            { ...handlers(), onRememberSurcharge: remember },
+        );
+        const press = (role: string) => {
+            const link = root.querySelector(`[data-role="${role}"]`) as HTMLAnchorElement;
+            link.addEventListener('click', (e) => e.preventDefault(), { once: true });
+            link.click();
+        };
+        // Words alone: nothing to remember.
+        press('describe-cashtab');
+        expect(remember).not.toHaveBeenCalled();
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        press('describe-cashtab');
+        expect(remember).toHaveBeenLastCalledWith('none');
+        typeInto(field(root), '5');
+        press('describe-pay');
+        expect(remember).toHaveBeenLastCalledWith(5);
+        expect(remember).toHaveBeenCalledTimes(2);
+        // Removal mode: the record carries no quote, so nothing is remembered.
+        (root.querySelector('[data-role="describe-remove"]') as HTMLButtonElement).click();
+        press('describe-cashtab');
+        expect(remember).toHaveBeenCalledTimes(2);
+    });
+
+    it('names the surcharge when the shared record overflows, with the maxima the encoder pins', () => {
+        const { root } = sheet();
+        typeInto(
+            root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement,
+            'D'.repeat(MAX_PRICED_DESCRIPTION_BYTES + 1),
+        );
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        typeInto(field(root), '5');
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.DESC_OVER_BUDGET_SURCHARGE);
+        expect(copy.DESC_OVER_BUDGET_SURCHARGE).toContain(String(MAX_PRICED_DESCRIPTION_BYTES - 3));
+        expect(copy.DESC_OVER_BUDGET_SURCHARGE).toContain(String(MAX_PRICED_SHELVED_DESCRIPTION_BYTES - 3));
+        expect(copy.DESC_OVER_BUDGET_SURCHARGE).toContain(String(MAX_SURCHARGE_DESCRIPTION_BYTES));
+        expect(copy.DESC_OVER_BUDGET_SURCHARGE).toContain(String(MAX_SURCHARGE_SHELVED_DESCRIPTION_BYTES));
+        expect(MAX_SURCHARGE_DESCRIPTION_BYTES).toBe(MAX_PRICED_DESCRIPTION_BYTES - 6);
+    });
+});
+
+describe('the-studio-says-what-this-browser-remembers-and-forgets-it', () => {
+    /**
+     * §2's second named storage exception is listed where the first one is:
+     * the Studio's "This browser" block says what the next describe sheet
+     * opens with, in words, and carries the one control that forgets it.
+     * Absent when nothing is remembered — a line about nothing is noise.
+     */
+    const studio = (over: Partial<StallView> = {}) => {
+        const forget = vi.fn();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                panel: 'studio',
+                ...over,
+            }),
+            { ...handlers(), onForgetSurcharge: forget },
+        );
+        return { root, forget };
+    };
+
+    it('says the remembered percent, or that none is remembered, beside the default-stall control', () => {
+        const pct = studio({ rememberedSurcharge: 5 });
+        const pref = pct.root.querySelector('.studio-browser')!;
+        expect(pref.querySelector('[data-role="studio-surcharge-memory"]')?.textContent).toBe(copy.studioSurchargeMemory(5));
+        const none = studio({ rememberedSurcharge: 'none' });
+        expect(none.root.querySelector('[data-role="studio-surcharge-memory"]')?.textContent).toBe(
+            copy.STUDIO_SURCHARGE_MEMORY_NONE,
+        );
+        const nothing = studio();
+        expect(nothing.root.querySelector('[data-role="studio-surcharge-memory"]')).toBeNull();
+        expect(nothing.root.querySelector('[data-role="studio-forget-surcharge"]')).toBeNull();
+    });
+
+    it('the forget control calls the handler, and wears the mini dress that has the 44px floor', () => {
+        const { root, forget } = studio({ rememberedSurcharge: 5 });
+        const button = root.querySelector('[data-role="studio-forget-surcharge"]') as HTMLButtonElement;
+        expect(button.textContent).toBe(copy.STUDIO_FORGET_SURCHARGE);
+        expect(button.classList.contains('mini')).toBe(true);
+        button.click();
+        expect(forget).toHaveBeenCalledTimes(1);
     });
 });

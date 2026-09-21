@@ -1247,3 +1247,37 @@ describe('the-shop-window-sheet-groups-its-controls-and-copies-the-link', () => 
         expect(link.value).toContain('mode=browse');
     });
 });
+
+describe('the-window-row-says-the-surcharge', () => {
+    /**
+     * The wall is one of the three unattended surfaces (paper, stream, wall)
+     * that print `seller-price`, which is why the surcharge byte lives on the
+     * quote's own record: a customer reading a figure off a screen in a shop
+     * has nobody to ask what the pay sheet will add. The line is the seller's
+     * record, in the foot under the figure; nothing here composes it — a
+     * composed figure needs a quantity, and a wall has no buyer at it.
+     */
+    it('prints the seller’s surcharge line under the quote and never a composed figure', () => {
+        const root = paint(
+            windowView({ show: 'quotes', mode: 'browse' }, {
+                prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }]]),
+            } as unknown as Partial<StallView>),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('5,000.00 XEC');
+        expect(root.querySelector('.item-foot [data-role="quote-surcharge"]')?.textContent).toBe(
+            copy.quoteSurchargeLine(5),
+        );
+        expect(root.textContent ?? '').not.toContain('5,250');
+        expect(root.querySelector('[data-role="quote-surcharge"] button, [data-role="quote-surcharge"] a')).toBeNull();
+    });
+
+    it('mounts no line when the record carries none', () => {
+        const root = paint(
+            windowView({ show: 'quotes', mode: 'browse' }, {
+                prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            } as unknown as Partial<StallView>),
+        );
+        expect(root.querySelector('[data-role="seller-price"]')).not.toBeNull();
+        expect(root.querySelector('[data-role="quote-surcharge"]')).toBeNull();
+    });
+});

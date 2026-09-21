@@ -371,6 +371,15 @@ function quoteRow(
         line.setAttribute('data-role', 'quote-words');
         foot.append(marqueeNode(line, 'words', item.tokenId));
     }
+    // The seller's surcharge as their record, under the figure a customer
+    // reads off the wall: the unattended surface is why the byte lives on
+    // the quote (D5). Never composed — a composed figure needs a quantity,
+    // and a wall has no buyer at it.
+    if (item.price.surchargePct !== undefined) {
+        const surcharge = el('span', 'pay-sub quote-surcharge sw-sur', copy.quoteSurchargeLine(item.price.surchargePct));
+        surcharge.setAttribute('data-role', 'quote-surcharge');
+        foot.append(surcharge);
+    }
     // One of the two provenance sentences, never displaced by the words —
     // the shop's foot rule, and a buyer at a wall has no fold to open.
     // Three states, three shapes (§5). `unknown` — and an absent map, which

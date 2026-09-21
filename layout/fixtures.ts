@@ -93,7 +93,9 @@ export const tokens = new Map<string, TokenMeta>([
  * guard that measures nothing.
  */
 export const QUOTES = new Map<string, TokenPrice>([
-    [T1, { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2 }],
+    // With a surcharge too (2026-09-21), so the pay sheet's composed line
+    // and the record's line on every quote surface are painted and measured.
+    [T1, { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2, surchargePct: 5 }],
     [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
 ]);
 

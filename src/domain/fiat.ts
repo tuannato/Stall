@@ -255,6 +255,33 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
 }
 
 /**
+ * The seller's surcharge, applied to the satoshis this page composes — after
+ * the quote has been converted, on one `bigint`, rounded **up** in the
+ * direction `satsForQuote` already rounds: a link that pays the seller less
+ * than the figure they published is the wrong error.
+ *
+ * `undefined` percent means the record carries none and the figure stands.
+ * A percent the record could not carry (zero, above a hundred, a fraction)
+ * is refused rather than guessed: nothing composes a payment on a number the
+ * reader would have voided.
+ */
+export function satsWithSurcharge(
+    sats: bigint | undefined,
+    surchargePct: number | undefined,
+): bigint | undefined {
+    if (sats === undefined || typeof sats !== 'bigint') {
+        return undefined;
+    }
+    if (surchargePct === undefined) {
+        return sats;
+    }
+    if (!Number.isInteger(surchargePct) || surchargePct < 1 || surchargePct > 100) {
+        return undefined;
+    }
+    return ceilDiv(sats * BigInt(100 + surchargePct), 100n);
+}
+
+/**
  * What one XEC costs, for the line that says where a converted figure came
  * from. `undefined` when there is no rate, or no such currency.
  *

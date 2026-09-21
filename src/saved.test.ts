@@ -2,7 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     clearSavedStall,
+    forgetSurcharge,
     isPinnedStall,
+    readRememberedSurcharge,
+    rememberSurcharge,
     isSavedStall,
     MAX_PINNED_STALLS,
     pinnedDoorIsFull,
@@ -243,5 +246,100 @@ describe('a-pin-carries-the-name-it-was-pinned-with', () => {
         localStorage.setItem('stall.pins', JSON.stringify([{ s: ADDRESS, n: 42 }]));
         expect(readPinnedStalls()).toEqual([ADDRESS]);
         expect(readPinnedNames().get(ADDRESS)).toBeUndefined();
+    });
+});
+
+describe('the-surcharge-a-seller-last-signed-is-remembered-per-stall', () => {
+    /**
+     * D5 (2026-09-21): the describe sheet prefills an empty surcharge field
+     * from what this browser last handed to a wallet on this stall — a
+     * percent, or `none` once a quote without one was signed. Storage on the
+     * signing path, so every fence the pins have: per stall by the canonical
+     * token, validated on read, capped and refusing rather than evicting,
+     * throw-safe, and gone without residue when nothing is remembered.
+     */
+    const SURCHARGE_KEY = 'stall.surcharge';
+    const pk = (i: number): string => `02${String(i).padStart(2, '0').repeat(32)}`;
+
+    it('round-trips a percent and "none", per stall, updating in place', () => {
+        expect(readRememberedSurcharge(ADDRESS)).toBeUndefined();
+        rememberSurcharge(ADDRESS, 5);
+        rememberSurcharge(pk(1), 'none');
+        expect(readRememberedSurcharge(ADDRESS)).toBe(5);
+        expect(readRememberedSurcharge(pk(1))).toBe('none');
+        expect(readRememberedSurcharge(pk(2))).toBeUndefined();
+        expect(readRememberedSurcharge(undefined)).toBeUndefined();
+        rememberSurcharge(ADDRESS, 'none');
+        expect(readRememberedSurcharge(ADDRESS)).toBe('none');
+        rememberSurcharge(ADDRESS, 12);
+        // The same stall in capitals is the same stall.
+        expect(readRememberedSurcharge(ADDRESS.toUpperCase())).toBe(12);
+        forgetSurcharge(ADDRESS);
+        expect(readRememberedSurcharge(ADDRESS)).toBeUndefined();
+        expect(readRememberedSurcharge(pk(1))).toBe('none');
+        forgetSurcharge(pk(1));
+        expect(localStorage.getItem(SURCHARGE_KEY)).toBeNull();
+    });
+
+    it('refuses what the wire refuses and what the paste box refuses', () => {
+        for (const bad of [0, 101, 5.5, -1, Number.NaN]) {
+            rememberSurcharge(ADDRESS, bad);
+        }
+        rememberSurcharge('not-a-stall', 5);
+        expect(localStorage.getItem(SURCHARGE_KEY)).toBeNull();
+    });
+
+    it('treats the stored array exactly like pasted input', () => {
+        localStorage.setItem(SURCHARGE_KEY, 'not-json{');
+        expect(readRememberedSurcharge(ADDRESS)).toBeUndefined();
+        localStorage.setItem(
+            SURCHARGE_KEY,
+            JSON.stringify([
+                { s: ADDRESS, p: 250 },
+                { s: ADDRESS, p: 7 },
+                { s: pk(1), p: '5' },
+                { s: pk(2), p: 0 },
+                { s: 'junk', p: 5 },
+                7,
+                { s: pk(3), p: 5.5 },
+            ]),
+        );
+        // A percent out of range voids that entry alone and a later good one
+        // for the same stall is read (the pins' rule); a string is not a
+        // number; 0 reads as none; a fraction is refused.
+        expect(readRememberedSurcharge(ADDRESS)).toBe(7);
+        expect(readRememberedSurcharge(pk(1))).toBeUndefined();
+        expect(readRememberedSurcharge(pk(2))).toBe('none');
+        expect(readRememberedSurcharge(pk(3))).toBeUndefined();
+        localStorage.setItem(SURCHARGE_KEY, `[${'{"s":"x","p":5},'.repeat(400)}]`);
+        expect(readRememberedSurcharge(ADDRESS)).toBeUndefined();
+    });
+
+    it('is capped like the pins: a full store refuses a new stall and never evicts one', () => {
+        for (let i = 0; i < MAX_PINNED_STALLS; i += 1) {
+            rememberSurcharge(pk(i), i + 1);
+        }
+        rememberSurcharge(pk(99), 9);
+        expect(readRememberedSurcharge(pk(99))).toBeUndefined();
+        expect(readRememberedSurcharge(pk(0))).toBe(1);
+        // A stall already remembered still updates when the store is full.
+        rememberSurcharge(pk(0), 'none');
+        expect(readRememberedSurcharge(pk(0))).toBe('none');
+        forgetSurcharge(pk(0));
+        rememberSurcharge(pk(99), 9);
+        expect(readRememberedSurcharge(pk(99))).toBe(9);
+    });
+
+    it('survives a throwing localStorage on every call', () => {
+        const boom = (): never => {
+            throw new Error('denied');
+        };
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(boom);
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(boom);
+        vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(boom);
+        expect(() => readRememberedSurcharge(ADDRESS)).not.toThrow();
+        expect(readRememberedSurcharge(ADDRESS)).toBeUndefined();
+        expect(() => rememberSurcharge(ADDRESS, 5)).not.toThrow();
+        expect(() => forgetSurcharge(ADDRESS)).not.toThrow();
     });
 });

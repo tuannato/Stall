@@ -12,6 +12,7 @@ import {
     RATE_WINDOWS,
     ratesDisagree,
     satsForQuote,
+    satsWithSurcharge,
     scaleRate,
 } from './fiat';
 import { XEC_PRICE_CODE, type TokenPrice } from './description';
@@ -439,5 +440,30 @@ describe('a-quote-in-any-unit-is-judged-in-usd', () => {
             kind: 'refused',
             why: 'no-answer',
         });
+    });
+});
+
+describe('a-surcharge-rounds-up-on-the-composed-figure', () => {
+    /**
+     * The seller's surcharge is applied to the satoshis this page composes,
+     * after the quote has been converted — one bigint, rounded up, the same
+     * direction `satsForQuote` rounds: a link that pays the seller less than
+     * the figure they published is the wrong error. Absent means the figure
+     * stands; anything the record could not carry (0, >100, a fraction) is
+     * refused rather than guessed.
+     */
+    it('adds the percent and rounds up', () => {
+        expect(satsWithSurcharge(250_000n, 5)).toBe(262_500n);
+        expect(satsWithSurcharge(1n, 5)).toBe(2n);
+        expect(satsWithSurcharge(999n, 1)).toBe(1_009n);
+        expect(satsWithSurcharge(250_000n, 100)).toBe(500_000n);
+    });
+
+    it('leaves the figure alone without a surcharge and refuses what the record cannot carry', () => {
+        expect(satsWithSurcharge(250_000n, undefined)).toBe(250_000n);
+        for (const pct of [0, 101, -1, 2.5, Number.NaN]) {
+            expect(satsWithSurcharge(250_000n, pct), String(pct)).toBeUndefined();
+        }
+        expect(satsWithSurcharge(undefined, 5)).toBeUndefined();
     });
 });

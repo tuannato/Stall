@@ -21,6 +21,7 @@ import {
     QUOTE_NOT_MINTED_HERE,
     STUDIO_CARD_ITEMS,
     STUDIO_DESCRIBE_ROW,
+    quoteSurchargeLine,
 } from './ui/copy';
 import { PAY_RATE_MAX_AGE_MS } from './ui/render';
 
@@ -88,6 +89,9 @@ describe('the-guide-quotes-the-apps-own-sentences', () => {
             QUOTE_MINTED_CHIP,
             QUOTE_NOT_MINTED_HERE,
             PAY_TOLERANCE_NONE,
+            // The surcharge line, as the app prints it beside a quote
+            // (2026-09-21), at the example percent the chapter uses.
+            quoteSurchargeLine(5),
             // The two chapters of round 16 quote the app's own sentences: the
             // decorations' rule, the three doors' ledes, the workshop line.
             DECOR_LEDE,

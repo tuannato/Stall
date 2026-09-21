@@ -195,6 +195,16 @@
     margin-top: 2px;
 }
 
+/* The seller's surcharge under the figure, in ink, on the card's one small
+   size. One line by its copy (`streamSurchargeLine`): a wrapped line grew the
+   tallest card past the sticker height every streamer typed (2026-09-21). */
+.stall.broadcast .bc-sur {
+    font-size: 22px;
+    line-height: 1.25;
+    color: var(--s-text);
+    margin-top: 4px;
+}
+
 .stall.broadcast .bc-l {
     font-size: 22px;
     line-height: 1.25;

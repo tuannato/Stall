@@ -13,14 +13,18 @@ export const OBS_STICKER_WIDTH = 372;
 /**
  * Corner card (bottom-right anchored): the card's box plus both insets.
  *
- * 839 measured 2026-09-09 on the tallest card there is — a quote card under
+ * 871 measured 2026-09-21 on the tallest card there is — a quote card under
  * a 32-byte name on Neo, which clamps the name at three lines where the
- * other looks stop at two, now carrying the seller's words line under the
- * chip (`bc-words`, one line). It was 820 before the words; a quote card is
- * two lines taller than a listing card (the chip and the words, and the
- * line under its rule), and the stresses stack: none alone reaches this,
- * which is why the fixture carries them all.
+ * other looks stop at two, carrying the seller's words line under the chip
+ * (`bc-words`, one line) and, since this date, the surcharge line under the
+ * figure (`bc-sur`, one line by its copy). It was 839 before the surcharge
+ * and 820 before the words; a quote card is three lines taller than a
+ * listing card (the chip, the words, the surcharge, and the line under its
+ * rule), and the stresses stack: none alone reaches this, which is why the
+ * fixture carries them all. **The cost, stated:** a Browser Source a
+ * streamer typed at 839 clips the top of a surcharge card by that
+ * difference until they retype the height the recipe now says.
  */
-export const OBS_STICKER_HEIGHT = 839;
+export const OBS_STICKER_HEIGHT = 871;
 /** Side rail (mid-right, centred): the rail's box plus both insets. */
 export const OBS_RAIL_STICKER_HEIGHT = 580;

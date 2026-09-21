@@ -64,6 +64,11 @@ const PROTECTED = [
     // It is a money figure a buyer reads before pressing Pay, and a covered
     // one reads as nothing — the same rule the covenant's price has.
     '[data-role="seller-price"]',
+    // The surcharge (2026-09-21): the composed line on the pay sheet and the
+    // record's line beside every quote. Half a price is a wrong price, so a
+    // covered "+5%" is covered money — `PROBE-RULES.md`, "The surcharge lines".
+    '[data-role="pay-surcharge"]',
+    '[data-role="quote-surcharge"]',
 ].join(', ');
 
 /**
@@ -1516,6 +1521,11 @@ const CONTRAST_TEXT = [
     '[data-role="seller-price"]',
     '.chip',
     '.pay-pointer',
+    // The surcharge lines (2026-09-21): the pay sheet's composed one and the
+    // record's line on the row, the face, the stream card and the wall — each
+    // a figure's other half, in muted or ink on its surface's own ground.
+    '[data-role="pay-surcharge"]',
+    '[data-role="quote-surcharge"]',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
     // claims of the design board, measured here rather than asserted.

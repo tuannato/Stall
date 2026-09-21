@@ -4667,6 +4667,13 @@ textarea.share-embed {
     white-space: nowrap;
 }
 
+.tag-surcharge {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 650;
+    color: #000000;
+}
+
 .tag-words {
     margin: 0;
     font-size: 14px;
@@ -5033,6 +5040,10 @@ textarea.share-embed {
 
     body:has(.poster-scrim) .tag-figure {
         font-size: 50px;
+    }
+
+    body:has(.poster-scrim) .tag-surcharge {
+        font-size: 22px;
     }
 
     body:has(.poster-scrim) .tag-words {

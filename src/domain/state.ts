@@ -591,6 +591,9 @@ export type PayRateAnswer =
     | { rate: bigint; atMs: number; check?: RateCheck; why?: undefined }
     | { rate?: undefined; why: PayRateWhy };
 
+/** What the describe sheet remembers of the last signed surcharge: a percent, or none. */
+export type RememberedSurcharge = number | 'none';
+
 export type StallView = WindowState & {
     route: RouteResolution;
     /**
@@ -651,6 +654,13 @@ export type StallView = WindowState & {
     settingsRefusedNewer?: boolean;
     /** True when the bare domain opens this stall for this browser. */
     isDefaultStall?: boolean;
+    /**
+     * The surcharge this browser last handed to a wallet on this stall's
+     * describe sheet — a percent, or `none` once a quote without one was
+     * signed — read at paint time from `saved.ts` like `isDefaultStall`. The
+     * describe sheet prefills an empty field from it; a published byte wins.
+     */
+    rememberedSurcharge?: RememberedSurcharge;
     /**
      * The fiat currency this browser chose, and one XEC in it as an integer
      * (see `domain/fiat.ts`). The rate is **absent** whenever the feed did not
