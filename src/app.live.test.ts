@@ -13,6 +13,7 @@ import { UNKNOWN_TXID } from './net/live';
 import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
+    SELECTION_DROPPED,
     HOME_LEDE,
     OPENING_BODY,
     PLUGIN_MISSING_BODY,
@@ -3561,6 +3562,114 @@ describe('an-xec-quote-asks-no-price-feed', () => {
         expect(check, 'nor the second').not.toHaveBeenCalled();
         expect(painted.view?.payRate).toBeUndefined();
         expect(painted.view?.payRateWhy).toBeUndefined();
+    });
+});
+
+describe('pay-several-at-the-app-level', () => {
+    /**
+     * The strip's state is boot closure state, so the rules about it live
+     * in app.ts: a selection survives a tab switch and a retry (the opening
+     * paint has no prices, and a prune over it would empty the selection and blame the
+     * seller — the critic's P1, 2026-09-21); a live re-read that takes a
+     * chosen quote off the rail prunes it and says so once; the several
+     * sheet asks both feeds for a USD selection and neither for XEC.
+     */
+    // `fungible` picks tickers the withheld fence does not refuse — "GT" is
+    // a top-500 coin's, and a token wearing it is not a row (§4).
+    const META = fungible(TOKEN, 'Ripe Beans');
+    const META_B = fungible(TOKEN_B, 'Green Tea');
+    const withQuotes = (prices: Map<string, { code: string; exponent: number; amount: bigint }>) =>
+        stallEmpty({
+            tokens: new Map([[TOKEN, META], [TOKEN_B, META_B]]),
+            prices,
+            shopTab: 'quotes',
+        });
+    const choose = (root: HTMLElement, tokenId: string, times = 1): void => {
+        for (let i = 0; i < times; i += 1) {
+            const more = [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')].find(
+                (b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`,
+            )!;
+            more.click();
+        }
+    };
+
+    it('a retry keeps the selection: the opening paint has no prices and prunes nothing', async () => {
+        const state = withQuotes(new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]));
+        const { root } = bootStall(state);
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        choose(root, TOKEN, 2);
+        expect(root.querySelector('[data-role="selection-total"]')?.textContent).toBe('$10.00');
+        // The quotes rail's own retry runs a full refresh().
+        // A failed walk paints the retry beside the rows; stage it and press it.
+        expect(painted.view?.selection?.get(TOKEN)).toBe(2n);
+        const before = painted.view;
+        (root.querySelector('[data-role="shop-tab-listings"]') as HTMLButtonElement).click();
+        (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement).click();
+        expect(painted.view?.selection?.get(TOKEN), 'a tab switch is a paint, not a prune').toBe(2n);
+        expect(painted.view?.selectionDropped).toBeUndefined();
+        expect(before).not.toBe(painted.view);
+    });
+
+    it('a live re-read that takes a chosen quote off the rail prunes it and says so', async () => {
+        const state = withQuotes(
+            new Map([
+                [TOKEN, { code: 'usd', exponent: 2, amount: 500n }],
+                [TOKEN_B, { code: 'usd', exponent: 2, amount: 300n }],
+            ]),
+        );
+        const { root } = bootStall(state);
+        await flush();
+        // Both quotes are on the chain, so the live walk finds them again.
+        pricedRecord('0b'.repeat(32), TOKEN, { code: 'usd', exponent: 2, amount: 500n });
+        pricedRecord('0c'.repeat(32), TOKEN_B, { code: 'usd', exponent: 2, amount: 300n });
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        choose(root, TOKEN, 1);
+        choose(root, TOKEN_B, 1);
+        expect(painted.view?.selection?.size).toBe(2);
+        // The seller republished B's record with no price, in a later block:
+        // B leaves the rail, A stays.
+        const hex = encodeDescriptionHex(TOKEN_B, 'Words only');
+        const txid = publish(signedTx({ txid: '0d'.repeat(32), outputs: [`6a${hex}`], height: 6 }));
+        watches[0]!.hooks.onBurst?.([txid]);
+        await flush();
+        expect(painted.view?.selection?.has(TOKEN_B)).toBe(false);
+        expect(painted.view?.selection?.get(TOKEN)).toBe(1n);
+        expect(painted.view?.selectionDropped).toBe(true);
+        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+        // Said until the selection next changes.
+        choose(root, TOKEN, 1);
+        expect(painted.view?.selectionDropped).toBeUndefined();
+    });
+
+    it('the several sheet asks both feeds for a USD selection and neither for XEC', async () => {
+        const fetch = vi.fn(async () => scaleRate(0.00003)!);
+        const check = vi.fn(async () => scaleRate(0.00003)!);
+        priceControl.fetch = fetch;
+        priceControl.check = check;
+        const usd = bootStall(withQuotes(new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]])));
+        await flush();
+        (usd.root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        choose(usd.root, TOKEN, 1);
+        const before = fetch.mock.calls.length;
+        (usd.root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(usd.root.querySelector('[data-role="pay-several"] [data-role="price"]')).not.toBeNull();
+        expect(fetch.mock.calls.length).toBeGreaterThan(before);
+        expect(check).toHaveBeenCalled();
+
+        fetch.mockClear();
+        check.mockClear();
+        const xec = bootStall(withQuotes(new Map([[TOKEN, { code: 'xec', exponent: 2, amount: 900n }]])));
+        await flush();
+        const boot = fetch.mock.calls.length;
+        (xec.root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        choose(xec.root, TOKEN, 3);
+        (xec.root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(xec.root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent).toBe('27');
+        expect(fetch.mock.calls.length, 'the first feed was not asked for the sheet').toBe(boot);
+        expect(check, 'nor the second').not.toHaveBeenCalled();
     });
 });
 

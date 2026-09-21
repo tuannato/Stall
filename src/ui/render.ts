@@ -337,6 +337,28 @@ function focusKeyOf(node: Element | null): string | null {
  * its opener rather than dropping a keyboard visitor at `<body>`, which
  * resets a screen reader to the top of the page.
  */
+/**
+ * Where focus goes when a "Pay several" control replaced itself: "−" at
+ * one → the question's No; Yes or No on a row → that row's "+" (the stepper
+ * is back, at zero or at one); Yes or No on Clear → Clear, then the toggle.
+ */
+function selectionFocusEdge(key: string | null): readonly string[] {
+    if (key === null) {
+        return [];
+    }
+    const step = /^selection-step:(.+):fewer$/.exec(key);
+    if (step !== null) {
+        return [`selection-no:${step[1]!}`];
+    }
+    const answer = /^selection-(?:yes|no):(.+)$/.exec(key);
+    if (answer !== null) {
+        return answer[1] === 'clear'
+            ? ['selection-clear', 'selection-toggle']
+            : [`selection-step:${answer[1]!}:more`];
+    }
+    return [];
+}
+
 function restoreFocus(root: HTMLElement, key: string | null): boolean {
     if (key === null) {
         return false;
@@ -765,6 +787,18 @@ export function renderStall(
     // resumes from the shop instead of from `<body>` at the top of the page.
     stall.tabIndex = -1;
     let landed = restoreFocus(root, keptFocus);
+    // "Pay several": a press that replaces its own control — "−" at one
+    // becomes the question, Yes and No become the stepper again — lands on
+    // the control that replaced it, never on the container (D13 has to be
+    // reachable from a keyboard).
+    if (!landed) {
+        for (const next of selectionFocusEdge(keptFocus)) {
+            if (restoreFocus(root, next)) {
+                landed = true;
+                break;
+            }
+        }
+    }
     // The face replaces the list in flow with no dialog to take focus, so
     // on its open edge the back control does: a keyboard reader who pressed
     // a row must land on the face, not on `<body>` where the row was.
@@ -2533,7 +2567,7 @@ export function quoteFigure(price: TokenPrice): string {
  */
 function quoteSurchargeNode(
     price: TokenPrice,
-    tag: 'span' | 'p' | 'div',
+    tag: 'span' | 'p' | 'div' | 'dd',
     className: string,
 ): HTMLElement | null {
     if (price.surchargePct === undefined) {
@@ -2667,7 +2701,9 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     // "Pay several" sits under the rail tabs, above the section's own head,
     // in the tabs' dress: a control that changes what every row below it
     // carries belongs above them, and only where there is a row to choose.
-    if (items.length > 0) {
+    // …and once more when a re-read took the last chosen item away: the
+    // open strip is the one place the sentence can be said.
+    if (items.length > 0 || (view.selectionOpen === true && view.selectionDropped === true)) {
         section.append(selectionStrip(view, handlers));
     }
     section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
@@ -2848,8 +2884,10 @@ function payRow(
     // ladder counts its width in price characters.
     // Three modes (2026-09-21): plain; `in` — the strip is open and this row
     // is in (or can join) the selection's unit, so Pay is NOT built and the
-    // ladder drops the pill's characters; `apart` — another unit, Pay stays
-    // and is named for what it does now.
+    // ladder drops the pill's characters; `apart` — another unit, Pay stays,
+    // is named for what it does now, and the ladder counts THAT pill's
+    // width (`PAY_APART_PILL_CHARS`): a wider control counted as the narrow
+    // one is how the probe found the name crushed to 40px.
     const mode = selectionModeOf(view, item);
     if (mode === 'in') {
         head.classList.add('sel-in');
@@ -2859,7 +2897,7 @@ function payRow(
         figureText,
         false,
         tierCharCeilings(paintedThemeId(view)),
-        mode === 'in' ? 0 : PAY_PILL_CHARS,
+        mode === 'in' ? 0 : mode === 'apart' ? PAY_APART_PILL_CHARS : PAY_PILL_CHARS,
     );
     if (tier > 0) {
         head.setAttribute('data-price-tier', String(tier));
@@ -4838,28 +4876,21 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 window.open(url, '_blank', 'noopener,noreferrer');
                 return;
             }
-            const before = satsForQuote(price, quantity, rate.rate);
+            // Measured on the figure this sheet composes — surcharge included —
+            // through the verdict both pay sheets share (`settleValve`).
+            const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-                const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
-                rate = answered;
+                const settled = settleValve(
+                    fresh,
+                    before,
+                    (r) => satsWithSurcharge(satsForQuote(price, quantity, r), price.surchargePct),
+                    price.tolerancePct,
+                );
+                rate = settled.rate;
                 asking = false;
-                payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
-                const after = satsForQuote(price, quantity, answered?.rate);
-                // A refused answer is its own outcome: the same collapse the
-                // mount path refuses must not come back on the press.
-                // Two feeds disagreeing outranks a move: it is the stronger
-                // doubt about the one figure the buyer is about to sign.
-                outcome =
-                    answered === undefined || after === undefined
-                        ? payWhy === 'implausible'
-                            ? 'implausible'
-                            : 'unavailable'
-                        : answered.check === 'disagree'
-                          ? 'disagree'
-                          : movedPastTolerance(before, after, price.tolerancePct)
-                            ? 'moved'
-                            : 'refreshed';
+                payWhy = settled.payWhy;
+                outcome = settled.outcome;
                 refresh();
             })();
         });
@@ -4870,18 +4901,17 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     refreshRate.addEventListener('click', () => {
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
-            rate = answered;
+            const settled = settleValve(
+                fresh,
+                undefined,
+                (r) => satsWithSurcharge(satsForQuote(price, quantity, r), price.surchargePct),
+                price.tolerancePct,
+            );
+            rate = settled.rate;
             asking = false;
-            payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
-            outcome =
-                answered === undefined
-                    ? payWhy === 'implausible'
-                        ? 'implausible'
-                        : 'unavailable'
-                    : answered.check === 'disagree'
-                      ? 'disagree'
-                      : 'refreshed';
+            payWhy = settled.payWhy;
+            // A refresh is never a "move": there was no figure to move from.
+            outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
             refresh();
         })();
     });
@@ -4901,10 +4931,15 @@ function selectionModeOf(view: StallView, item: QuotedItem): SelectionMode {
     return unit !== undefined && item.price.code !== unit ? 'apart' : 'in';
 }
 
-/** A quote's figure times a count, in the seller's unit and with the record's own surcharge. */
+/**
+ * A quote's figure times a count, in the seller's unit — the quote AS
+ * WRITTEN, so the "=" on the row is true; the record's own surcharge is
+ * the row's `quote-surcharge` line above it and the strip's note, and the
+ * several-items sheet prints the same line the same way (the critic,
+ * 2026-09-21: the first cut printed `2 × $5.00 = $10.50`).
+ */
 function lineFigure(price: TokenPrice, count: bigint): string {
-    const each = surchargedQuote(price);
-    return quoteFigure({ ...each, amount: each.amount * count });
+    return quoteFigure({ ...price, amount: price.amount * count });
 }
 
 /**
@@ -4966,7 +5001,7 @@ function selectionLineNode(
     const stepper = el('span', 'sel-step');
     const fewer = el('button', 'step');
     fewer.type = 'button';
-    fewer.setAttribute('aria-label', copy.selectionFewer(name));
+    fewer.setAttribute('aria-label', copy.selectionFewer(name, count.toString()));
     fewer.setAttribute('data-role', 'selection-fewer');
     fewer.setAttribute('data-focus-key', `selection-step:${item.tokenId}:fewer`);
     fewer.append(glyph('minus'));
@@ -4979,14 +5014,16 @@ function selectionLineNode(
         }
     });
     const shown = el('b', 'step-n', count.toString());
-    shown.setAttribute('aria-live', 'polite');
+    // No `aria-live`: this node is rebuilt with the paint it would announce
+    // (`announce`'s docblock); the count rides the two buttons' names.
+    shown.setAttribute('aria-hidden', 'true');
     shown.setAttribute('data-role', 'selection-count');
     if (view.selectionBumped === item.tokenId) {
         shown.classList.add('bump');
     }
     const more = el('button', 'step');
     more.type = 'button';
-    more.setAttribute('aria-label', copy.selectionMore(name));
+    more.setAttribute('aria-label', copy.selectionMore(name, count.toString()));
     more.setAttribute('data-role', 'selection-more');
     more.setAttribute('data-focus-key', `selection-step:${item.tokenId}:more`);
     more.append(glyph('plus'));
@@ -5106,9 +5143,14 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
 
 /**
  * The valve's verdict after a press-time refetch, shared by the two pay
- * sheets so they cannot disagree about what a fresh answer means: a refused
- * answer is its own outcome, two feeds disagreeing outranks a move, and a
- * move is measured against the tightest stated tolerance.
+ * sheets (`paySheet`'s `armValve` and its refresh control, and
+ * `paySeveralSheet`'s) so they cannot disagree about what a fresh answer
+ * means: a refused answer is its own outcome (the same collapse the mount
+ * path refuses must not come back on the press), two feeds disagreeing
+ * outranks a move (the stronger doubt about the one figure the buyer is
+ * about to sign), and a move is measured against the stated tolerance — the
+ * selection's tightest, the app's default counted for an item that states
+ * none.
  */
 function settleValve(
     fresh: PayRateAnswer | undefined,
@@ -5192,15 +5234,28 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     lines.setAttribute('data-role', 'pay-lines');
     for (const item of items) {
         const n = selection.get(item.tokenId)!;
+        // One group per item: the name × count, the line's figure, then the
+        // record's own lines as further `dd`s (a `dt` may carry several).
+        // The sub-lines are NOT inside the figure's `dd`: a column sized by
+        // "+5% surcharge · the seller's record" left the name 90px on Neo's
+        // mono and "Roasted Beans × 2" broke onto three lines (measured at
+        // 390, 2026-09-21); as their own row they span the whole line.
         const line = el('div', 'pay-line');
         line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
-        const value = el('dd');
+        const value = el('dd', 'pay-line-v');
         value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
-        const surcharge = quoteSurchargeNode(item.price, 'span', 'pay-line-s');
-        if (surcharge !== null) {
-            value.append(surcharge);
-        }
         line.append(value);
+        const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
+        if (surcharge !== null) {
+            line.append(surcharge);
+        }
+        // The borrowed-id warning stays where a buyer decides, per item
+        // (the single sheet's own rule): the genesis is another wallet's.
+        if (view.genesis?.get(item.tokenId) === 'not-attributed') {
+            const borrowed = el('dd', 'pay-line-s warn', copy.QUOTE_NOT_MINTED_HERE);
+            borrowed.setAttribute('data-role', 'quote-not-minted');
+            line.append(borrowed);
+        }
         lines.append(line);
     }
     card.append(lines);
@@ -5275,7 +5330,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         const pay = sats === undefined ? undefined : payECashPayUrl(address, sats);
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
-        cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTE : copy.PAY_CAP_SIGNS;
+        cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
         if (usesRate && unit !== undefined) {
             const glanceRate = formatXecRate(rate?.rate, unit);
             rateRow.hidden = glanceRate === undefined;
@@ -5290,7 +5345,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         }
         why.hidden = sats !== undefined && !subDust;
         why.textContent = subDust
-            ? copy.PAY_SUB_DUST
+            ? copy.PAY_SUB_DUST_SEVERAL
             : sats === undefined
               ? asking
                   ? copy.PAY_RATE_ASKING
@@ -5352,7 +5407,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
                     fresh,
                     before,
                     (fresh) => selectionSats(selection, prices, fresh),
-                    selectionTolerance(selection, prices),
+                    selectionTolerance(selection, prices, PAY_VALVE_DEFAULT_PCT),
                 );
                 rate = settled.rate;
                 asking = false;
@@ -6263,6 +6318,21 @@ function offerRow(
  * judge, on `plugin-missing-quotes`.
  */
 export const PAY_PILL_CHARS = 3;
+
+/**
+ * What the apart row's pill costs — `PAY_OPEN_APART`, "Pay on its own",
+ * in the same 14px pill. Measured at 390px on 2026-09-21: 132px on
+ * Modern, 152 on Neo's mono, 121 on Rural, against Pay's 57–59 — so the
+ * three characters above counted a pill less than half this one's width,
+ * and the probe found a `$5.00` apart row with 40–53px of name beside it.
+ * At the 21px rung Pay's 59px is three characters, so 152 is eight, Neo
+ * being the widest and the one that must fit. Eight puts every apart USD
+ * quote past the last ceiling on a phone (`$5.00` is thirteen), where the
+ * figure takes its own row under `ic name pay` and the name keeps
+ * 120–130px beside the pill — which is what the strip fixture already
+ * measured for its apart XEC row. Desk width reads none of it.
+ */
+export const PAY_APART_PILL_CHARS = 8;
 
 export function priceTier(
     figure: string,

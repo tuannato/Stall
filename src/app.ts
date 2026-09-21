@@ -829,13 +829,21 @@ export function boot(
         const bumped = selectionBumped;
         selectionEntered = false;
         selectionBumped = undefined;
-        const quotedNow = new Set(quotedItems(state.view).map((item) => item.tokenId));
-        const pruned = pruneSelection(selection, quotedNow);
-        if (pruned.dropped) {
-            selection = pruned.selection;
-            selectionDropped = true;
-            if (selectionAsk?.kind === 'remove' && !selection.has(selectionAsk.tokenId)) {
-                selectionAsk = undefined;
+        // Only over a definite read of the records: `refresh()` paints
+        // `opening` — no `prices` at all — before its load answers, and a
+        // prune over that would empty the selection and then blame the
+        // seller for it (the critic's P1, 2026-09-21). The same rule
+        // `applyDescriptions` keeps: a walk that answered nothing erases
+        // nothing.
+        if (state.view.prices !== undefined) {
+            const quotedNow = new Set(quotedItems(state.view).map((item) => item.tokenId));
+            const pruned = pruneSelection(selection, quotedNow, state.view.prices);
+            if (pruned.dropped) {
+                selection = pruned.selection;
+                selectionDropped = true;
+                if (selectionAsk?.kind === 'remove' && !selection.has(selectionAsk.tokenId)) {
+                    selectionAsk = undefined;
+                }
             }
         }
         // Read at paint time, not at load: the toggle changes it without a

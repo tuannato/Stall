@@ -1868,7 +1868,7 @@ export const SELECTION_LABEL = 'Pay several items at once';
 export const SELECTION_OPEN = 'Pay several';
 export const selectionOpenCount = (n: number): string =>
     `Pay several \u00b7 ${n} item${n === 1 ? '' : 's'}`;
-export const SELECTION_HINT = 'Pay several at once';
+export const SELECTION_HINT = 'One payment for several quotes';
 export const SELECTION_EMPTY = 'Add items below';
 export const selectionCountLine = (n: number): string => `${n} item${n === 1 ? '' : 's'}`;
 export const SELECTION_CLEAR = 'Clear';
@@ -1880,8 +1880,16 @@ export const SELECTION_NOT_CHOSEN = 'Not chosen';
 /** A chosen row's own line: count × the quote as written = the line's figure, surcharge included. */
 export const selectionLine = (count: string, figure: string, total: string): string =>
     `${count} \u00d7 ${figure} = ${total}`;
-export const selectionFewer = (name: string): string => `One fewer ${name}`;
-export const selectionMore = (name: string): string => `One more ${name}`;
+/**
+ * The stepper's names carry the count: `renderStall` rebuilds the tree on
+ * every paint, so an `aria-live` count would be a region a screen reader
+ * never hears (`announce`'s own reason); focus returns to the same control
+ * after the press and its name is read again.
+ */
+export const selectionFewer = (name: string, count: string): string =>
+    `One fewer ${name} (${count} chosen)`;
+export const selectionMore = (name: string, count: string): string =>
+    `One more ${name} (${count} chosen)`;
 export const selectionAskRemove = (name: string): string => `Remove ${name}?`;
 export const SELECTION_ASK_CLEAR = 'Remove every item?';
 export const SELECTION_YES = 'Yes';
@@ -1891,7 +1899,7 @@ export const PAY_OPEN_APART = 'Pay on its own';
 export const selectionApart = (unit: string): string =>
     `Quoted in ${unit} \u2014 paid on its own`;
 export const SELECTION_DROPPED =
-    'A chosen item left the seller\u2019s quotes and was taken out.';
+    'Something you chose is no longer quoted as it was and was taken out.';
 export const selectionFull = (n: number): string =>
     `Up to ${n} different items in one payment.`;
 /* The several-items sheet. */
@@ -1900,10 +1908,15 @@ export const paySeveralTitle = (n: number): string =>
 export const paySeveralSub = (stall: string): string =>
     `Paid to ${stall} directly, in one payment.`;
 export const PAY_SEVERAL_SUB_NO_NAME = 'Paid to the seller directly, in one payment.';
-export const paySeveralLine = (name: string, count: string): string => `${name} \u00d7 ${count}`;
+export const paySeveralLine = (name: string, count: string): string => `${name} \u00d7\u00a0${count}`;
 export const paySeveralTotal = (figure: string): string => `= ${figure} in total`;
 export const paySeveralTotalSurcharged = (figure: string): string =>
     `= ${figure} in total, surcharges included \u00b7 the seller\u2019s records`;
+/** The card's caption over the lines while no figure can be composed: several quotes, not one. */
+export const PAY_CAP_QUOTES = 'Seller\u2019s quotes';
+/** The dust floor on the sum: add items rather than raise a quantity. */
+export const PAY_SUB_DUST_SEVERAL =
+    'The total is under the network\u2019s dust floor, so no wallet would relay it. Add items, or ask the seller.';
 export const PAY_FINE_TOLERANCES_PER_ITEM =
     'Tolerances are per item: each item\u2019s own sheet shows the margin the seller\u2019s record states.';
 export const PAY_FINE_NO_MEMO =

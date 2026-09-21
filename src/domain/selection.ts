@@ -82,12 +82,29 @@ export function selectionGlance(
         } else if (exponent !== price.exponent) {
             return undefined;
         }
-        amount += surchargedQuote(price).amount * count;
+        // Per LINE, not per unit: the line is count × quote with the
+        // surcharge on the product, rounded up once — the same shape the
+        // satoshi figure takes (`satsWithSurcharge` over the line), so the
+        // strip's total and the sheet's total agree by construction.
+        amount += lineAmount(price, count);
     }
     if (exponent === undefined || amount <= 0n) {
         return undefined;
     }
     return { code: unit, exponent, amount };
+}
+
+/**
+ * One line's amount in the unit's minor units: count × the quote, then the
+ * record's own surcharge on the product, rounded up once (`surchargedQuote`
+ * rounds per unit, which over-prints by up to count − 1 minor units).
+ */
+export function lineAmount(price: TokenPrice, count: bigint): bigint {
+    const base = price.amount * count;
+    if (price.surchargePct === undefined) {
+        return base;
+    }
+    return surchargedQuote({ ...price, amount: base }).amount;
 }
 
 /** Whether any chosen item's record carries a surcharge — the strip's note. */
@@ -143,22 +160,24 @@ export function selectionNeedsNoRate(
 }
 
 /**
- * The tightest margin any chosen item states, for the press-time valve —
- * the app's own default stands in when none of them states one, exactly as
- * it does on the single sheet.
+ * The tightest margin over every chosen item, for the press-time valve: an
+ * item that states none counts at the app's own default (`fallbackPct`,
+ * the single sheet's `PAY_VALVE_DEFAULT_PCT`), so a selection of {A: 10%,
+ * B: none} is valved at the default and never at 10 (the critic, 2026-09-21).
  */
 export function selectionTolerance(
     selection: Selection,
     prices: ReadonlyMap<string, TokenPrice> | undefined,
-): number | undefined {
+    fallbackPct: number,
+): number {
     let tightest: number | undefined;
     for (const tokenId of selection.keys()) {
-        const pct = prices?.get(tokenId)?.tolerancePct;
-        if (pct !== undefined && (tightest === undefined || pct < tightest)) {
+        const pct = prices?.get(tokenId)?.tolerancePct ?? fallbackPct;
+        if (tightest === undefined || pct < tightest) {
             tightest = pct;
         }
     }
-    return tightest;
+    return tightest ?? fallbackPct;
 }
 
 /**
@@ -170,15 +189,28 @@ export function selectionTolerance(
 export function pruneSelection(
     selection: Selection,
     quoted: ReadonlySet<string>,
+    prices: ReadonlyMap<string, TokenPrice> | undefined,
 ): { selection: Map<string, bigint>; dropped: boolean } {
     const kept = new Map<string, bigint>();
     let dropped = false;
+    // The unit is the first KEPT item's: a re-read that took the first item
+    // out leaves the rest in their own unit; one that moved an item to
+    // another unit (a republished quote, USD → XEC) drops that item, or the
+    // selection would hold two units and every surface would go blank.
+    let unit: string | undefined;
     for (const [tokenId, count] of selection) {
-        if (quoted.has(tokenId)) {
-            kept.set(tokenId, count);
-        } else {
+        const price = prices?.get(tokenId);
+        if (!quoted.has(tokenId) || price === undefined) {
             dropped = true;
+            continue;
         }
+        if (unit === undefined) {
+            unit = price.code;
+        } else if (price.code !== unit) {
+            dropped = true;
+            continue;
+        }
+        kept.set(tokenId, count);
     }
     return { selection: kept, dropped };
 }

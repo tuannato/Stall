@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TokenPrice } from './description';
 import {
     MAX_SELECTION_ENTRIES,
+    lineAmount,
     pruneSelection,
     selectionCount,
     selectionGlance,
@@ -50,14 +51,19 @@ describe('the-selection-glance-is-the-records-in-the-sellers-unit', () => {
      * its count — the single sheet's arithmetic applied item by item — and
      * the sum in the unit's minor units, never a rate anywhere.
      */
-    it('sums counts × surcharged quotes, in minor units', () => {
+    it('sums the lines — count × quote, the surcharge on the product, rounded up once', () => {
         const prices = new Map([[A, USD5], [B, USD3_SUR]]);
-        // 2 × $5.00 + 1 × ceil($3.50 × 1.05 = $3.675 → $3.68) = $13.68
+        // 2 × $5.00 + ceil(1 × $3.50 × 1.05 = $3.675 → $3.68) = $13.68
         expect(selectionGlance(new Map([[A, 2n], [B, 1n]]), prices)).toEqual({
             code: 'usd',
             exponent: 2,
             amount: 1368n,
         });
+        // Per line, not per unit: 3 × $3.50 = $10.50 × 1.05 = $11.025 → $11.03,
+        // where rounding each unit first would print $11.04 over a figure
+        // worth $11.025 (the critic, 2026-09-21).
+        expect(lineAmount(USD3_SUR, 3n)).toBe(1103n);
+        expect(selectionGlance(new Map([[B, 3n]]), prices)?.amount).toBe(1103n);
         expect(selectionCount(new Map([[A, 2n], [B, 1n]]))).toBe(3n);
         expect(selectionHasSurcharge(new Map([[A, 2n]]), prices)).toBe(false);
         expect(selectionHasSurcharge(new Map([[A, 2n], [B, 1n]]), prices)).toBe(true);
@@ -86,21 +92,37 @@ describe('the-selection-figure-is-one-bigint-per-item-summed', () => {
         expect(selectionSats(new Map(), prices, RATE)).toBeUndefined();
     });
 
-    it('the valve takes the tightest stated tolerance, or none', () => {
+    it('the valve takes the tightest margin over every item, an unstated one counting at the default', () => {
         const prices = new Map([[A, USD5], [B, USD3_SUR], [C, { ...USD5, tolerancePct: 10 }]]);
-        expect(selectionTolerance(new Map([[A, 1n]]), prices)).toBeUndefined();
-        expect(selectionTolerance(new Map([[A, 1n], [B, 1n], [C, 1n]]), prices)).toBe(2);
-        expect(selectionTolerance(new Map([[C, 1n]]), prices)).toBe(10);
+        expect(selectionTolerance(new Map([[A, 1n]]), prices, 2)).toBe(2);
+        expect(selectionTolerance(new Map([[A, 1n], [B, 1n], [C, 1n]]), prices, 2)).toBe(2);
+        expect(selectionTolerance(new Map([[C, 1n]]), prices, 2)).toBe(10);
+        // {10%, none} is valved at the default, never at 10.
+        expect(selectionTolerance(new Map([[C, 1n], [A, 1n]]), prices, 2)).toBe(2);
+        expect(selectionTolerance(new Map([[B, 1n], [C, 1n]]), prices, 5)).toBe(2);
     });
 });
 
 describe('a-removed-quote-leaves-the-selection', () => {
     it('prunes what the rail no longer quotes and says so once', () => {
-        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Set([A]));
+        const prices = new Map([[A, USD5], [B, USD3_SUR]]);
+        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Set([A]), prices);
         expect([...pruned.selection]).toEqual([[A, 2n]]);
         expect(pruned.dropped).toBe(true);
-        const kept = pruneSelection(new Map([[A, 2n]]), new Set([A, B]));
+        const kept = pruneSelection(new Map([[A, 2n]]), new Set([A, B]), prices);
         expect(kept.dropped).toBe(false);
         expect(MAX_SELECTION_ENTRIES).toBe(35);
+    });
+
+    it('prunes an item a re-read moved to another unit, so a selection never holds two', () => {
+        // The seller republished B from USD to XEC under an open strip.
+        const moved = new Map([[A, USD5], [B, XEC]]);
+        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Set([A, B]), moved);
+        expect([...pruned.selection]).toEqual([[A, 2n]]);
+        expect(pruned.dropped).toBe(true);
+        // The unit is the first KEPT item's: A gone, B and C stay in theirs.
+        const first = pruneSelection(new Map([[A, 1n], [B, 1n], [C, 1n]]), new Set([B, C]), new Map([[B, XEC], [C, { ...XEC, amount: 1n }]]));
+        expect([...first.selection.keys()]).toEqual([B, C]);
+        expect(first.dropped).toBe(true);
     });
 });

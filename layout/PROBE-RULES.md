@@ -1297,3 +1297,15 @@ with the frozen rate). The strip is in flow and never sticky, so the
 decoration sweep never meets it; its entrance animates only on the paint
 after the press (`selectionEntered`), which the reduced-motion pass never
 sees armed — the kills sit in `stall.css`'s last block regardless.
+The strip between the phone and the desk (680–1280) is measured by hand,
+not by the probe: `pay-several-strip-xec` carries a `15,750.00 XEC` total,
+and the reading (no look clips the total or Pay at 680, 720, 800, 960 or
+1280; the names cell absorbs the squeeze) is in `private/MANUAL-CHECKS.md`.
+That fixture is also the one that stages an `apart` USD row — the pill
+reads "Pay on its own", 121–152px at 390 against Pay's 57–59, and with
+the ladder counting it as the narrow pill the name-floor rule measured
+40–53px of name beside `$5.00` on every look; `PAY_APART_PILL_CHARS` (8)
+puts that figure on the phone's own row — and, on Rural, the tier-3 row in
+selection mode (`.item-head-q.sel-in[data-price-tier='3']`: `5,000.00 XEC`
+is twelve characters against Rural's ceiling of eleven); on Modern and Neo
+the same row in selection mode is tier 2 with 143–145px of name.

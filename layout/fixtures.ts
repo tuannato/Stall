@@ -362,6 +362,20 @@ export const SCREENS: Record<string, StallView> = {
         selectionOpen: true,
         selection: new Map([[T1, 2n]]),
     }),
+    /*
+     * The strip with an XEC total: the memo's D15 condition (680–1280 with a
+     * long total) — the probe measures 390 and 1280; 680–800 is measured by
+     * hand (`private/MANUAL-CHECKS.md`).
+     */
+    'pay-several-strip-xec': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[QUOTED, 3n]]),
+    }),
     'pay-several-ask': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
@@ -1107,6 +1121,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // The three "Pay several" screens: the same rows and sheet shape, and the
     // decoration interactions they could stage are `offers`'.
     'pay-several-strip',
+    'pay-several-strip-xec',
     'pay-several-ask',
     'pay-several',
     'item-quote',

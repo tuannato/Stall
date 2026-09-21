@@ -111,6 +111,8 @@ import { ADDR_COPIED_MS,
     holdsLivePaint,
     qrSvg,
     quoteFigure,
+    PAY_PILL_CHARS,
+    PAY_APART_PILL_CHARS,
 } from './render';
 import {
     MARQUEE_HOLD_MS,
@@ -10731,6 +10733,16 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
             name: 'pay sheet',
             view: payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
         },
+        {
+            // The fourth composer (2026-09-21): several quotes, one payment.
+            name: 'several-items sheet',
+            view: payView({
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                payRate: PAY_RATE,
+            }),
+        },
     ];
 
     it('names the stall in every payment link on every screen that composes one', () => {
@@ -15146,9 +15158,11 @@ describe('the-pay-several-strip-sits-under-the-tabs-and-opens-a-tray', () => {
         expect(strip.querySelector('[data-role="seller-price"]')).toBeNull();
     });
 
-    it('says once that a re-read took a chosen item out', () => {
+    it('says once that a re-read took a chosen item out — even when it was the last quote', () => {
         const { root } = paint(payView({ selectionOpen: true, selection: new Map(), selectionDropped: true }));
         expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(copy.SELECTION_DROPPED);
+        const last = paint(payView({ prices: new Map(), selectionOpen: true, selection: new Map(), selectionDropped: true })).root;
+        expect(last.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(copy.SELECTION_DROPPED);
         const quiet = paint(payView({ selectionOpen: true, selection: new Map() })).root;
         expect(quiet.querySelector('[data-role="selection-dropped"]')).toBeNull();
     });
@@ -15184,13 +15198,19 @@ describe('a-quote-row-in-selection-mode-builds-no-pay-and-a-stepper', () => {
         const line = row.querySelector('.item-foot [data-role="selection-line"]')!;
         expect(line).not.toBeNull();
         expect(line.querySelector('[data-role="selection-count"]')?.textContent).toBe('2');
+        // The quote as written, so the "=" is true; the surcharge is the row's
+        // own line above and the strip's note, never folded into this figure.
         expect(line.querySelector('[data-role="selection-sub"]')?.textContent).toBe(
-            copy.selectionLine('2', '$5.00', '$10.50'),
+            copy.selectionLine('2', '$5.00', '$10.00'),
         );
         expect((line.querySelector('[data-role="selection-fewer"]') as HTMLButtonElement).disabled).toBe(false);
         expect(line.querySelector('[data-role="selection-fewer"]')?.getAttribute('aria-label')).toBe(
-            copy.selectionFewer('Roasted Beans'),
+            copy.selectionFewer('Roasted Beans', '2'),
         );
+        expect(line.querySelector('[data-role="selection-more"]')?.getAttribute('aria-label')).toBe(
+            copy.selectionMore('Roasted Beans', '2'),
+        );
+        expect(line.querySelector('[data-role="selection-count"]')?.getAttribute('aria-live')).toBeNull();
         expect(line.querySelector('[data-role="selection-more"]')?.getAttribute('data-focus-key')).toBe(
             `selection-step:${TOKEN_ID}:more`,
         );
@@ -15227,6 +15247,24 @@ describe('a-quote-row-in-selection-mode-builds-no-pay-and-a-stepper', () => {
             expect(row.querySelector('[data-role="pay-open"]')?.textContent).toBe(copy.PAY_OPEN);
             expect(row.querySelector('[data-role="selection-line"]')).toBeNull();
         }
+    });
+
+    /**
+     * The apart pill is "Pay on its own", 121–152px at 390px against Pay's
+     * 57–59, and the ladder counted it as the narrow one: the probe measured
+     * a `$5.00` apart row with 40–53px of name beside it on every look
+     * (2026-09-21). The ladder counts `PAY_APART_PILL_CHARS` for that pill,
+     * which puts a five-character figure on the phone's own-row rung; the
+     * same figure beside plain Pay keeps the rung it had.
+     */
+    it('an apart row counts its wider pill on the ladder and takes the figure’s own row', () => {
+        const closed = rowOf(twoQuotes().root, TOKEN_ID).querySelector('.item-head')!;
+        expect(closed.getAttribute('data-price-tier')).toBe('1');
+        const { root } = twoQuotes({ selectionOpen: true, selection: new Map([[OTHER, 1n]]) });
+        const apart = rowOf(root, TOKEN_ID);
+        expect(apart.querySelector('[data-role="pay-open"]')?.textContent).toBe(copy.PAY_OPEN_APART);
+        expect(apart.querySelector('.item-head')?.getAttribute('data-price-tier')).toBe('3');
+        expect(PAY_APART_PILL_CHARS).toBeGreaterThan(PAY_PILL_CHARS);
     });
 });
 
@@ -15297,6 +15335,34 @@ describe('the-stepper-and-the-questions-drive-the-handlers', () => {
         expect(h.onOpenPaySeveral).toHaveBeenCalledTimes(1);
     });
 
+    it('a press that replaces its own control lands focus on the one that replaced it', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            // "−" at one: the question takes the stepper's place, and No takes the focus.
+            renderStall(root, payView({ selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]) }), h);
+            (root.querySelector('[data-role="selection-fewer"]') as HTMLButtonElement).focus();
+            renderStall(
+                root,
+                payView({ selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]), selectionAsk: { kind: 'remove', tokenId: TOKEN_ID } }),
+                h,
+            );
+            expect(document.activeElement?.getAttribute('data-focus-key')).toBe(`selection-no:${TOKEN_ID}`);
+            // Yes: the stepper is back at zero, and "+" takes the focus.
+            (root.querySelector('[data-role="selection-yes"]') as HTMLButtonElement).focus();
+            renderStall(root, payView({ selectionOpen: true, selection: new Map() }), h);
+            expect(document.activeElement?.getAttribute('data-focus-key')).toBe(`selection-step:${TOKEN_ID}:more`);
+            // Clear's Yes: the selection is empty, the toggle takes the focus.
+            renderStall(root, payView({ selectionOpen: true, selection: new Map([[TOKEN_ID, 2n]]), selectionAsk: { kind: 'clear' } }), h);
+            (root.querySelector('[data-role="selection-ask"] [data-role="selection-yes"]') as HTMLButtonElement).focus();
+            renderStall(root, payView({ selectionOpen: true, selection: new Map() }), h);
+            expect(document.activeElement?.getAttribute('data-focus-key')).toBe('selection-toggle');
+        } finally {
+            root.remove();
+        }
+    });
+
     it('a stepper keeps focus across a repaint', () => {
         const h = handlers();
         const root = document.createElement('div');
@@ -15363,6 +15429,9 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(url).toBe(cashtabPayUrl(ADDR, sats));
         expect(url).not.toContain('op_return_raw');
         expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats));
+        expect(root.querySelector('[data-role="pay-qr"] path')?.getAttribute('d')).toBe(
+            qrPathOf(payBip21(ADDR, sats)!),
+        );
         expect(dialog.querySelector('[data-role="seller-price"]')).toBeNull();
         expect(dialog.textContent).toContain(copy.PAY_FINE_NO_MEMO);
         expect(dialog.textContent).toContain(copy.PAY_FINE_TOLERANCES_PER_ITEM);
@@ -15381,6 +15450,41 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(rows[1]!.querySelector('[data-role="quote-surcharge"]')).toBeNull();
         // 2 × $5.25 + $3.50 = $14.00
         expect(root.querySelector('[data-role="pay-total"]')?.textContent).toBe(copy.paySeveralTotalSurcharged('$14.00'));
+    });
+
+    it('composes one item exactly as the single sheet composes that item alone', () => {
+        // The load-bearing claim, compared across the two painted sheets
+        // rather than recomputed with the same helpers: the single sheet at
+        // quantity 2 and the several sheet with that item chosen twice
+        // print one figure.
+        const price = { ...QUOTE_USD, surchargePct: 5 };
+        const single = paint(
+            payView({
+                prices: new Map([[TOKEN_ID, price]]),
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: PAY_RATE,
+                payQuantity: 2n,
+            }),
+        ).root;
+        const several = paint(
+            payView({
+                prices: new Map([[TOKEN_ID, price]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                payRate: PAY_RATE,
+            }),
+        ).root;
+        const one = single.querySelector('[data-role="pay"] [data-role="price"]')?.textContent;
+        expect(one).toBeTruthy();
+        expect(several.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent).toBe(one);
+    });
+
+    it('says a borrowed id beside the item it is about', () => {
+        const { root } = sheet({ genesis: new Map([[OTHER, 'not-attributed' as const]]) });
+        const rows = [...root.querySelectorAll('[data-role="pay-lines"] .pay-line')];
+        expect(rows[0]!.querySelector('[data-role="quote-not-minted"]')).toBeNull();
+        expect(rows[1]!.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(copy.QUOTE_NOT_MINTED_HERE);
     });
 
     it('an xec selection mounts no rate and composes from the records alone', () => {
