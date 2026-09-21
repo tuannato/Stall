@@ -18,6 +18,20 @@
     justify-items: start;
 }
 
+/* Two screens of one phone, side by side from 600px: the top of the stall
+   and the same stall scrolled to its rows. Each is a 390x844 viewport, the
+   size a phone shows, never the whole page in one strip (owner, 2026-09-21). */
+.phones {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    width: 100%;
+}
+
+.phones .phone {
+    width: 100%;
+}
+
 .phone {
     width: min(100%, 300px);
     border: 6px solid #1c1f24;
@@ -43,11 +57,21 @@
     font-weight: 600;
 }
 
+@media (min-width: 600px) {
+    .phones {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 @media (min-width: 860px) {
     .side {
         grid-template-columns: minmax(0, 1fr) 300px;
         align-items: start;
         gap: 32px;
+    }
+
+    .side-2 {
+        grid-template-columns: minmax(0, 1fr) 460px;
     }
 
     .steps.steps-1 {

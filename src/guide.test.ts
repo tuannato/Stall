@@ -180,11 +180,14 @@ describe('the-guide-figures-are-small-renders-captioned-as-examples', () => {
      * showroom, as JPEG under 60 KB each so `public/` keeps room for the
      * fourth look's og card, and each captioned as an example — a picture is
      * pinned by nothing, so a drifted figure in it must never read as this
-     * page's own number.
+     * page's own number. Three pictures since 2026-09-21 (owner): phone-sized
+     * viewport captures — the stall at its top and scrolled to its rows, and
+     * the pay sheet cut to its card and controls — never the whole page in
+     * one strip inside a phone frame.
      */
-    it('ships two JPEGs under 60 KB, referenced with their size and captioned as examples', () => {
+    it('ships three JPEGs under 60 KB, referenced with their size and captioned as examples', () => {
         const html = read('public', 'guide.html');
-        for (const name of ['offers-390.jpg', 'pay-390.jpg']) {
+        for (const name of ['offers-a-390.jpg', 'offers-b-390.jpg', 'pay-390.jpg']) {
             const buf = readFileSync(join(ROOT, 'public', 'guide', name));
             expect(buf.subarray(0, 2).equals(Buffer.from([0xff, 0xd8])), `${name} is a JPEG`).toBe(true);
             expect(buf.byteLength, `${name} bytes`).toBeLessThanOrEqual(60 * 1024);
