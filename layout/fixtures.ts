@@ -96,7 +96,10 @@ export const QUOTES = new Map<string, TokenPrice>([
     // With a surcharge too (2026-09-21), so the pay sheet's composed line
     // and the record's line on every quote surface are painted and measured.
     [T1, { code: 'usd', exponent: 2, amount: 500n, tolerancePct: 2, surchargePct: 5 }],
-    [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+    // The XEC quote carries one too: `pay-xec` is the one screen where the
+    // composed figure has no rate beside it and the quote must still be
+    // printed as written (critic, 2026-09-21).
+    [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
 ]);
 
 /**

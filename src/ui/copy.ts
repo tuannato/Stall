@@ -1600,9 +1600,13 @@ export const quoteSurchargeLine = (pct: number): string =>
  * chip directly above it already says whose figure this is.
  */
 export const streamSurchargeLine = (pct: number): string => `+${pct}% surcharge`;
-/** How the two seller numbers compose, said once where both are on the sheet. */
+/**
+ * How the two seller numbers compose, said once where both are on the sheet
+ * — as this page's own reading, never as the record's rule: the wire says
+ * nothing about which figure the margin is measured against.
+ */
 export const PAY_FINE_SURCHARGE_TOLERANCE =
-    'The tolerance applies to the figure this page composes, surcharge included.';
+    'This page measures that margin against the figure it composes, surcharge included.';
 /** An XEC quote is the figure itself: no rate is involved anywhere in it. */
 export const PAY_XEC_QUOTE_NOTE =
     'Seller\u2019s quote, written in XEC \u2014 no rate involved';
@@ -1804,7 +1808,7 @@ export const DESC_TOLERANCE_LABEL = 'Tolerance';
 /** A preset on the segment, and the same figure inside the summary line. */
 export const tolerancePreset = (pct: number): string => `${pct}%`;
 export const DESC_TOLERANCE_HINT =
-    'A payment within this margin of your quote is one you accept as paid in full \u2014 rates move between glance and signature.';
+    'A payment within this margin of your quote is one you accept as paid in full \u2014 rates move between glance and signature. With a surcharge, this page measures the margin against the quote plus the surcharge.';
 export const DESC_TOLERANCE_NONE = 'No tolerance is stated on this quote yet.';
 /**
  * A published value none of the presets can express. Shown, disabled, and
@@ -1834,20 +1838,24 @@ export const DESC_SURCHARGE_LABEL = 'Surcharge on this quote, in % (optional)';
 /** The empty field's own word: absent is "none", never zero. */
 export const DESC_SURCHARGE_PLACEHOLDER = 'none';
 export const DESC_SURCHARGE_HINT =
-    'Added on top of the quote when a buyer pays: the pay sheet composes the figure, and every screen prints \u201c+N% surcharge \u00b7 the seller\u2019s record\u201d beside your quote. A whole percent, 1\u2013100; empty is none.';
-/** Said while the field holds a value the seller did not type this time. */
+    'Added on top of the quote when a buyer pays here: this page composes the figure, and every screen prints \u201c+N% surcharge \u00b7 the seller\u2019s record\u201d beside your quote. Only this page adds it \u2014 a buyer paying by another route pays the quote. A whole percent, 1\u2013100; empty is none.';
+/** A percent typed on a token with no price yet: said, never dropped in silence. */
+export const DESC_SURCHARGE_NO_PRICE =
+    'A surcharge rides a price. This quote has no figure yet, so nothing is published for it.';
+/** Said while the field holds a value the seller did not type this time. What this app observes is the press, never the signature. */
 export const descSurchargePrefilled = (pct: number): string =>
-    `Prefilled with the ${pct}% surcharge you last signed on this stall from this browser. Change or clear it before you sign.`;
+    `Prefilled with the ${pct}% surcharge this browser last handed to a wallet for this stall. Change or clear it before you sign.`;
 export const DESC_SURCHARGE_REFUSED =
     'A surcharge is a whole number from 1 to 100 \u2014 \u201c5\u201d \u2014 or empty for none.';
 /** The percent inside the summary line and the Studio's memory line. */
 export const surchargePercent = (pct: number): string => `${pct}%`;
 /** The Studio's "This browser" block: what the next describe sheet opens with, and the control that forgets it. */
 export const studioSurchargeMemory = (pct: number): string =>
-    `This browser prefills a new quote on this stall with a ${pct}% surcharge \u2014 the last one you signed here.`;
+    `This browser prefills a new quote on this stall with a ${pct}% surcharge \u2014 the last one it handed to a wallet here.`;
 export const STUDIO_SURCHARGE_MEMORY_NONE =
-    'This browser prefills a new quote on this stall with no surcharge \u2014 the last quote you signed here carried none.';
+    'This browser prefills a new quote on this stall with no surcharge \u2014 the last quote it handed to a wallet here carried none.';
 export const STUDIO_FORGET_SURCHARGE = 'Forget';
+export const STUDIO_FORGET_SURCHARGE_LABEL = 'Forget the surcharge this browser remembers for this stall';
 
 /** The overlay's brand line. Ours, never the seller's. */
 export const BROADCAST_BRAND = 'stall.cash';

@@ -132,6 +132,9 @@ try {
         chromeBin,
         [
             '--headless=new',
+            // Off the network, the layout probe's own rule (2026-09-20): a tag
+            // page asks the icon host for a picture it must paint without.
+            '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
             '--disable-gpu',
             '--no-sandbox',
             '--hide-scrollbars',

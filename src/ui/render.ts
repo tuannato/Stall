@@ -3477,6 +3477,13 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     });
     /** What a press of a sign control remembers: the record's byte, or that it carried none. */
     let signedSurcharge: RememberedSurcharge | undefined;
+    /**
+     * What the NEXT token on this sheet opens with. `view.rememberedSurcharge`
+     * is a paint-time snapshot and this sheet holds the live paint, so a
+     * press updates the closure too — or quoting three tokens in one sitting
+     * would prefill none of them (critic, 2026-09-21).
+     */
+    let rememberedNow: RememberedSurcharge | undefined = view.rememberedSurcharge;
     /*
      * The tolerance (STLD tag 0x03): the shortfall this seller accepts on a
      * quote that needs a rate. Presets only, because <1% is unpayable in
@@ -3637,14 +3644,21 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         link.target = '_blank';
         // The press is the one moment this page sees of a publish: what the
         // record carried is what the next quote on this stall opens with.
-        // Both press kinds, because a middle-click follows the link too.
-        for (const kind of ['click', 'auxclick'] as const) {
-            link.addEventListener(kind, () => {
-                if (signedSurcharge !== undefined) {
-                    handlers.onRememberSurcharge?.(signedSurcharge);
-                }
-            });
-        }
+        // A middle-click follows the link too, so `auxclick` counts — for
+        // the middle button ALONE: a right-click opens a menu and hands
+        // nothing to a wallet.
+        const handedToWallet = (): void => {
+            if (signedSurcharge !== undefined) {
+                rememberedNow = signedSurcharge;
+                handlers.onRememberSurcharge?.(signedSurcharge);
+            }
+        };
+        link.addEventListener('click', handedToWallet);
+        link.addEventListener('auxclick', (event) => {
+            if (event.button === 1) {
+                handedToWallet();
+            }
+        });
     }
     acts.append(web, app);
     // Never inside the fold: a phone reaches its wallet by this link.
@@ -3776,10 +3790,15 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const typedSurcharge = surchargeText === '' ? undefined : parseSurchargePct(surchargeText);
         const surchargeRefused = surchargeText !== '' && typedSurcharge === undefined;
         surchargeWrap.hidden = !surchargeEditable;
+        // The prefilled sentence first — the one a seller must read before
+        // signing — then the no-price sentence for a percent they typed
+        // themselves, then the hint.
         surchargeNote.textContent =
             surchargePrefilled && !surchargeTouched && typedSurcharge !== undefined
                 ? copy.descSurchargePrefilled(typedSurcharge)
-                : copy.DESC_SURCHARGE_HINT;
+                : typedSurcharge !== undefined && typedPrice === undefined
+                  ? copy.DESC_SURCHARGE_NO_PRICE
+                  : copy.DESC_SURCHARGE_HINT;
         /*
          * Which margin the record carries, and the whole rule in one place:
          * a **typed** figure takes the pressed preset and **none by default**,
@@ -3792,7 +3811,8 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * this sheet cannot express is shown disabled and carried forward
          * untouched — a publish restates the whole document, so a sheet that
          * dropped a field it merely could not edit would destroy a permanent
-         * record as a side effect of fixing a typo (the `0x04` rule).
+         * record as a side effect of fixing a typo (the name sheet's
+         * `STL1` `0x04` fiat-hint rule — not `STLD`'s `0x04`, the surcharge).
          */
         const carriedTolerance = published?.tolerancePct;
         const carriedIsPreset =
@@ -3868,7 +3888,8 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // error. A figure that was typed and cannot be written **is** asked of
         // it, so it does not count as untouched — otherwise the one refusal a
         // seller can reach with the other fields blank would print nothing.
-        const blank = text === '' && shelf === '' && price === undefined && !priceRefused;
+        const blank =
+            text === '' && shelf === '' && price === undefined && !priceRefused && !surchargeRefused;
         // Every field empty over a record that exists is a request — the bare
         // tombstone, which takes the words, the shelf and the price off this
         // page in one record. Over nothing it is still nothing asked.
@@ -3917,8 +3938,12 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const ready = hex !== undefined;
         // A quote handed to a wallet is what the next one opens with; a
         // removal, a clearing and a words-only record say nothing about it.
+        // Never over a record this sheet only carries forward: the field was
+        // hidden, so nothing on screen said what the byte was.
         signedSurcharge =
-            removing || clearing || price === undefined ? undefined : (price.surchargePct ?? 'none');
+            removing || clearing || price === undefined || carriedPrice !== undefined
+                ? undefined
+                : (price.surchargePct ?? 'none');
         err.hidden = removing || ready || empty;
         // Which rule bit, most specific first: the text's own caps, then the
         // price's own shape, then the shared record budget, then the text's
@@ -3932,14 +3957,14 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     ? copy.priceRefusedFor(editorExponent(priceCode))
                     : surchargeRefused
                       ? copy.DESC_SURCHARGE_REFUSED
-                    : descriptionRecordBytes(text, shelf, price) > OP_RETURN_BUDGET
-                      ? price === undefined
-                          ? copy.DESC_OVER_BUDGET
-                          : price.surchargePct !== undefined
-                            ? copy.DESC_OVER_BUDGET_SURCHARGE
-                            : price.tolerancePct === undefined
-                              ? copy.DESC_OVER_BUDGET_PRICED
-                              : copy.DESC_OVER_BUDGET_TOLERANCE
+                      : descriptionRecordBytes(text, shelf, price) > OP_RETURN_BUDGET
+                        ? price === undefined
+                            ? copy.DESC_OVER_BUDGET
+                            : price.surchargePct !== undefined
+                              ? copy.DESC_OVER_BUDGET_SURCHARGE
+                              : price.tolerancePct === undefined
+                                ? copy.DESC_OVER_BUDGET_PRICED
+                                : copy.DESC_OVER_BUDGET_TOLERANCE
                       : text !== '' && encodeDescriptionHex(tokenId, text) === undefined
                         ? copy.DESC_REFUSED
                         : copy.DESC_SHELF_REFUSED;
@@ -4175,17 +4200,20 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             (EDITABLE_PRICE_CODES as readonly string[]).includes(price.code);
         priceAmount.value = editable ? formatPriceFigure(price) : '';
         priceCode = editable ? price.code : DEFAULT_FIAT_CODE;
-        // The surcharge: the published byte when the record carries one,
-        // else what this browser remembers of the last quote signed here —
-        // into an EMPTY field only, and the note says so. A published byte
-        // always wins; "none" remembered leaves the field empty.
+        // The surcharge: the published byte when the record carries one;
+        // on a token with NO published price, what this browser remembers
+        // of the last quote handed to a wallet here — and the note says so.
+        // Never over a published quote without the byte: that record is
+        // restated verbatim, byte or no byte, like the tolerance's, and the
+        // tag shortcut stays (the narrow reading of D5 — the wide one is the
+        // owner's to take). "none" remembered leaves the field empty.
         const publishedSurcharge = price !== undefined && editable ? price.surchargePct : undefined;
-        const remembered = view.rememberedSurcharge;
-        surchargePrefilled = publishedSurcharge === undefined && typeof remembered === 'number';
+        const remembered = rememberedNow;
+        surchargePrefilled = price === undefined && typeof remembered === 'number';
         surchargeField.value =
             publishedSurcharge !== undefined
                 ? String(publishedSurcharge)
-                : typeof remembered === 'number'
+                : surchargePrefilled
                   ? String(remembered)
                   : '';
         surchargeTouched = false;
@@ -4537,7 +4565,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     if (tolerance !== null) {
         how.append(tolerance);
     }
-    if (price.tolerancePct !== undefined && price.surchargePct !== undefined) {
+    // Only under a tolerance line that is on the sheet: an XEC quote
+    // mounts none (§5), whatever byte the record carries.
+    // Both bytes on the record AND a tolerance line on the sheet: an XEC
+    // quote mounts none (§5), and "not stated" is a line about no margin.
+    if (tolerance !== null && price.tolerancePct !== undefined && price.surchargePct !== undefined) {
         how.append(el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE));
     }
     how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
@@ -4632,8 +4664,15 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * the top of the card.
          */
         const added = price.surchargePct;
+        // An XEC quote IS the figure, so the note stands in for a restated
+        // number — until a surcharge makes the figure above something this
+        // page computed: then the quote is printed as written, or the note
+        // would attach "seller's quote" to this page's arithmetic (critic,
+        // 2026-09-21).
         quote.textContent = !usesRate
-            ? copy.PAY_XEC_QUOTE_NOTE
+            ? added === undefined
+                ? copy.PAY_XEC_QUOTE_NOTE
+                : copy.payQuoteAsWritten(quoteFigure(price))
             : sats === undefined
               ? quoteFigure(price)
               : added === undefined
@@ -7067,6 +7106,7 @@ function paintStudio(
             memory.setAttribute('data-role', 'studio-surcharge-memory');
             const forget = el('button', 'mini another', copy.STUDIO_FORGET_SURCHARGE);
             forget.type = 'button';
+            forget.setAttribute('aria-label', copy.STUDIO_FORGET_SURCHARGE_LABEL);
             forget.setAttribute('data-role', 'studio-forget-surcharge');
             forget.setAttribute('data-focus-key', 'studio-forget-surcharge');
             forget.addEventListener('click', () => onForget());

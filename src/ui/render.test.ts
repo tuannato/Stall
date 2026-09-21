@@ -139,7 +139,7 @@ import {
     publishBip21,
 } from '../domain/cashtab';
 import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
-import { broadcastCards } from './broadcast';
+import { broadcastCards, broadcastFigure } from './broadcast';
 import { encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
@@ -14469,15 +14469,26 @@ describe('a-surcharge-rides-the-composed-figure-and-says-so', () => {
         ).toBe(copy.payQuoteEquals('$5.00'));
     });
 
-    it('applies to an xec quote too, with no rate anywhere', () => {
+    it('applies to an xec quote too, with no rate anywhere — and prints the quote as written, never the note', () => {
         const { root } = sheet({
             prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }]]),
         });
         expect(root.querySelector('[data-role="pay"] [data-role="rate"]')).toBeNull();
         expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('5,250');
+        // The 5,000 the seller signed must be on the sheet: with the figure
+        // above composed, the XEC note ("the quote is the figure") would
+        // attach "seller's quote" to this page's arithmetic (critic).
+        const quote = root.querySelector('[data-role="pay"] [data-role="seller-price"]');
+        expect(quote?.textContent).toBe(copy.payQuoteAsWritten('5,000.00 XEC'));
+        expect(quote?.textContent).not.toBe(copy.PAY_XEC_QUOTE_NOTE);
         const line = root.querySelector('[data-role="pay"] [data-role="pay-surcharge"]') as HTMLElement;
         expect(line.hidden).toBe(false);
         expect(line.textContent).toBe(copy.paySurchargeLine(5, '5,250.00 XEC'));
+        // Without a surcharge the note stands, as before.
+        const bare = sheet({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]) });
+        expect(bare.root.querySelector('[data-role="pay"] [data-role="seller-price"]')?.textContent).toBe(
+            copy.PAY_XEC_QUOTE_NOTE,
+        );
     });
 
     it('says how the tolerance and the surcharge compose, only when both are on the record', () => {
@@ -14487,6 +14498,15 @@ describe('a-surcharge-rides-the-composed-figure-and-says-so', () => {
         expect(both.root.textContent).toContain(copy.PAY_FINE_SURCHARGE_TOLERANCE);
         const one = sheet({ prices: new Map([[TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }]]) });
         expect(one.root.textContent).not.toContain(copy.PAY_FINE_SURCHARGE_TOLERANCE);
+        // An XEC quote mounts no tolerance line (§5), so it gets no sentence
+        // about one either, whatever bytes the record carries.
+        const xec = sheet({
+            prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n, tolerancePct: 2, surchargePct: 5 }]]),
+        });
+        expect(xec.root.querySelector('[data-role="pay-tolerance"]')).toBeNull();
+        expect(xec.root.textContent).not.toContain(copy.PAY_FINE_SURCHARGE_TOLERANCE);
+        // And it is this page's reading, never the record's rule.
+        expect(copy.PAY_FINE_SURCHARGE_TOLERANCE).toMatch(/^This page /);
     });
 });
 
@@ -14677,10 +14697,16 @@ describe('the-surcharge-field-prefills-visibly-and-names-itself', () => {
         expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
         const control = root.querySelector('[data-role="describe-cashtab"]')!;
         expect(input.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        // A percent with no price goes nowhere, and the summary says nothing of it.
+        // A percent with no price goes nowhere — and the note says so rather
+        // than leaving a value on screen that the record does not carry.
         typeInto(input, '5');
         expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toContain(copy.SUMMARY_SURCHARGE);
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_NO_PRICE);
         typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
+        // The hint says whose arithmetic this is: a buyer paying by another
+        // route pays the quote (the memo's own sentence, §1).
+        expect(copy.DESC_SURCHARGE_HINT).toContain('another route pays the quote');
         expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced(5) }));
         expect(root.querySelector('[data-role="describe-summary"]')?.textContent).toContain(
             `${copy.SUMMARY_SURCHARGE} ${copy.surchargePercent(5)}`,
@@ -14706,6 +14732,22 @@ describe('the-surcharge-field-prefills-visibly-and-names-itself', () => {
         expect(err.hidden).toBe(true);
         expect(link.hidden).toBe(false);
         expect(hexOf(root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: priced(100) }));
+    });
+
+    it('a refused surcharge alone still says why, and never leaves a dead sheet', () => {
+        // "0" is what a seller types for none. With every other field blank
+        // the record used to read as empty — controls hidden, counter
+        // "Nothing to publish yet", no sentence — the failure shape the price
+        // field's own `!priceRefused` exists to prevent (critic, 2026-09-21).
+        const { root } = sheet();
+        typeInto(field(root), '0');
+        const err = root.querySelector('[data-role="describe-invalid"]') as HTMLElement;
+        expect(err.hidden).toBe(false);
+        expect(err.textContent).toBe(copy.DESC_SURCHARGE_REFUSED);
+        expect(root.querySelector('[data-role="describe-summary"]')?.textContent).not.toBe(copy.SUMMARY_NOTHING);
+        expect((root.querySelector('[data-role="describe-cashtab"]') as HTMLElement).hidden).toBe(true);
+        typeInto(field(root), '');
+        expect(err.hidden).toBe(true);
     });
 
     it('applies on an xec quote too, where the tolerance does not', () => {
@@ -14748,13 +14790,17 @@ describe('the-surcharge-field-prefills-visibly-and-names-itself', () => {
         );
         typeInto(field(root), '8');
         expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
-        // A published quote with no byte is an empty field too: the memory
-        // fills it, visibly, and the published record is no longer what the
-        // form restates — the tag shortcut says so by leaving.
+        // A published quote WITHOUT the byte is not a new quote: it opens
+        // empty and is restated verbatim, byte or no byte, like the
+        // tolerance's rule — so the tag shortcut stands and a seller fixing a
+        // typo in the words arms exactly the record they published. The
+        // narrow reading of D5 (critic, 2026-09-21); the wide one — fill it
+        // here too — is the owner's to take.
         const over = sheet({ prices: new Map([[TOKEN_ID, QUOTE_USD]]), rememberedSurcharge: 5 });
-        expect(field(over.root).value).toBe('5');
-        expect(note(over.root)).toBe(copy.descSurchargePrefilled(5));
-        expect((over.root.querySelector('[data-role="describe-tag"]') as HTMLElement).hidden).toBe(true);
+        expect(field(over.root).value).toBe('');
+        expect(note(over.root)).toBe(copy.DESC_SURCHARGE_HINT);
+        expect(hexOf(over.root)).toBe(encodeDescriptionHex(TOKEN_ID, '', { price: QUOTE_USD }));
+        expect((over.root.querySelector('[data-role="describe-tag"]') as HTMLElement).hidden).toBe(false);
         const none = sheet({ rememberedSurcharge: 'none' });
         expect(field(none.root).value).toBe('');
         expect(note(none.root)).toBe(copy.DESC_SURCHARGE_HINT);
@@ -14807,6 +14853,99 @@ describe('the-surcharge-field-prefills-visibly-and-names-itself', () => {
         (root.querySelector('[data-role="describe-remove"]') as HTMLButtonElement).click();
         press('describe-cashtab');
         expect(remember).toHaveBeenCalledTimes(2);
+    });
+
+    it('a middle-click on a sign control remembers, a right-click remembers nothing', () => {
+        // `auxclick` fires for every non-primary button: the middle one
+        // follows the link, the right one opens a menu and hands nothing to
+        // a wallet (critic, 2026-09-21).
+        const remember = vi.fn();
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+            }),
+            { ...handlers(), onRememberSurcharge: remember },
+        );
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        typeInto(field(root), '5');
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement;
+        link.dispatchEvent(new MouseEvent('auxclick', { button: 2, bubbles: true }));
+        expect(remember).not.toHaveBeenCalled();
+        link.dispatchEvent(new MouseEvent('auxclick', { button: 1, bubbles: true }));
+        expect(remember).toHaveBeenCalledWith(5);
+    });
+
+    it('a record this sheet only carries forward remembers nothing: the field was never on screen', () => {
+        const remember = vi.fn();
+        const root = document.createElement('div');
+        const other = { code: 'zzz', exponent: 2, amount: 900n, surchargePct: 9 } as const;
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                prices: new Map([[TOKEN_ID, other]]),
+                overlay: { kind: 'describe' },
+                stallName: 'Riverside Goods',
+            }),
+            { ...handlers(), onRememberSurcharge: remember },
+        );
+        typeInto(root.querySelector('[data-role="describe-text"]') as HTMLTextAreaElement, 'New words');
+        const link = root.querySelector('[data-role="describe-cashtab"]') as HTMLAnchorElement;
+        link.addEventListener('click', (e) => e.preventDefault(), { once: true });
+        link.click();
+        expect(remember).not.toHaveBeenCalled();
+    });
+
+    it('a second quote in the same sheet opens with the first one’s surcharge', () => {
+        // The view's memory is a paint-time snapshot and this sheet holds the
+        // live paint, so the press updates the sheet's own closure too — or
+        // quoting three tokens in one sitting would prefill none of them
+        // (critic, 2026-09-21).
+        const other = '77'.repeat(32);
+        const root = document.createElement('div');
+        renderStall(
+            root,
+            idlePubkey({
+                fetch: {
+                    kind: 'offers',
+                    offers: [OFFER, { ...OFFER, outpoint: { txid: 'bc'.repeat(32), outIdx: 1 }, tokenId: other }],
+                },
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [other, { ...BEANS, tokenId: other, name: 'Green Tea' }],
+                ]),
+                overlay: { kind: 'describe', tokenId: TOKEN_ID },
+                stallName: 'Riverside Goods',
+            }),
+            { ...handlers(), onRememberSurcharge: vi.fn() },
+        );
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        expect(field(root).value).toBe('');
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '12.50');
+        typeInto(field(root), '5');
+        const link = root.querySelector('[data-role="describe-pay"]') as HTMLAnchorElement;
+        link.addEventListener('click', (e) => e.preventDefault(), { once: true });
+        link.click();
+        picker.value = other;
+        picker.dispatchEvent(new Event('change'));
+        expect(picker.value).toBe(other);
+        expect(field(root).value).toBe('5');
+        expect(note(root)).toBe(copy.descSurchargePrefilled(5));
+        // And a quote handed over without one leaves the next token empty.
+        typeInto(root.querySelector('[data-role="describe-price"]') as HTMLInputElement, '3.00');
+        typeInto(field(root), '');
+        link.addEventListener('click', (e) => e.preventDefault(), { once: true });
+        link.click();
+        picker.value = TOKEN_ID;
+        picker.dispatchEvent(new Event('change'));
+        expect(field(root).value).toBe('');
+        expect(note(root)).toBe(copy.DESC_SURCHARGE_HINT);
     });
 
     it('names the surcharge when the shared record overflows, with the maxima the encoder pins', () => {
@@ -14868,8 +15007,44 @@ describe('the-studio-says-what-this-browser-remembers-and-forgets-it', () => {
         const { root, forget } = studio({ rememberedSurcharge: 5 });
         const button = root.querySelector('[data-role="studio-forget-surcharge"]') as HTMLButtonElement;
         expect(button.textContent).toBe(copy.STUDIO_FORGET_SURCHARGE);
+        expect(button.getAttribute('aria-label')).toBe(copy.STUDIO_FORGET_SURCHARGE_LABEL);
         expect(button.classList.contains('mini')).toBe(true);
         button.click();
         expect(forget).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the-stream-card-counts-the-surcharge-in-what-a-scan-pays', () => {
+    /**
+     * Two comparators in `broadcast.ts` read `TokenPrice` (critic,
+     * 2026-09-21): the dust gate decides whether a scan can reach a payment
+     * at all, and the figure string is what a pulse compares. Both are about
+     * what the landing page composes, which includes the surcharge.
+     */
+    it('a surcharge that lifts an xec quote over the dust floor makes it a card', () => {
+        const under = paint(
+            quoteCardView({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500n }]]) }),
+        ).root;
+        expect(under.querySelector('[data-role="seller-price"]')).toBeNull();
+        const lifted = paint(
+            quoteCardView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500n, surchargePct: 10 }]]),
+            }),
+        ).root;
+        expect(satsWithSurcharge(500n, 10)).toBe(550n);
+        expect(lifted.querySelector('[data-role="seller-price"]')?.textContent).toBe(`5.00 ${copy.XEC}`);
+        expect(lifted.querySelector('[data-role="quote-surcharge"]')?.textContent).toBe(copy.streamSurchargeLine(10));
+    });
+
+    it('a republish that moves only the percent is a figure change', () => {
+        const at = (surchargePct?: number) =>
+            broadcastFigure({
+                kind: 'quote',
+                tokenId: TOKEN_ID,
+                price: { code: 'usd', exponent: 2, amount: 500n, ...(surchargePct === undefined ? {} : { surchargePct }) },
+            } as Parameters<typeof broadcastFigure>[0]);
+        expect(at(5)).not.toBe(at());
+        expect(at(5)).not.toBe(at(20));
+        expect(at(5)).toBe(at(5));
     });
 });

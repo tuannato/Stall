@@ -13,7 +13,10 @@ export const OBS_STICKER_WIDTH = 372;
 /**
  * Corner card (bottom-right anchored): the card's box plus both insets.
  *
- * 871 measured 2026-09-21 on the tallest card there is — a quote card under
+ * 871 since 2026-09-21 — 839 plus the surcharge line's 31.5px (22px at 1.25
+ * with its 4px margin), rounded up; the probe's rule asserts the card fits
+ * UNDER it, so this is a ceiling the tallest card fits, not a tightest
+ * measurement. The tallest card is a quote card under
  * a 32-byte name on Neo, which clamps the name at three lines where the
  * other looks stop at two, carrying the seller's words line under the chip
  * (`bc-words`, one line) and, since this date, the surcharge line under the

@@ -4670,6 +4670,7 @@ textarea.share-embed {
 .tag-surcharge {
     margin: 0;
     font-size: 13px;
+    line-height: 1.2;
     font-weight: 650;
     color: #000000;
 }
@@ -6465,6 +6466,16 @@ textarea.share-embed {
 .pay-eq {
     font-size: 15px;
     font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--s-text);
+}
+
+/* The composed figure's other half: a money line, tabular like every figure
+   on the card, on the card's own lead — tiered by spacing, never by size. */
+.pay-surcharge {
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: var(--s-text);
 }

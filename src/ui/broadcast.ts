@@ -4,7 +4,7 @@
  */
 import type { TokenPrice } from '../domain/description';
 import { XEC_PRICE_CODE } from '../domain/description';
-import { satsForQuote } from '../domain/fiat';
+import { satsForQuote, satsWithSurcharge } from '../domain/fiat';
 import { fitsQr } from '../domain/qr';
 import { DUST_SATS, formatAtoms, formatXec, isUnbuyable } from '../domain/money';
 import { payLandingUrl, stallPath } from '../domain/route';
@@ -100,7 +100,9 @@ function isPayableHere(price: TokenPrice): boolean {
     if (price.code !== XEC_PRICE_CODE) {
         return true;
     }
-    const sats = satsForQuote(price, 1n, undefined);
+    // The figure the landing page composes, surcharge included: a quote
+    // just under the floor whose surcharge lifts it over is payable.
+    const sats = satsWithSurcharge(satsForQuote(price, 1n, undefined), price.surchargePct);
     return sats !== undefined && sats >= DUST_SATS;
 }
 
@@ -110,9 +112,11 @@ function isPayableHere(price: TokenPrice): boolean {
  * encodes, and minor units a seller wrote.
  */
 export function broadcastFigure(card: BroadcastCard): string {
+    // The surcharge is part of what a scanner pays, so a republish that
+    // moves only the percent is a figure change and pulses.
     return card.kind === 'listing'
         ? String(cheapestOf(card.listing).askedSats)
-        : `${card.price.code} ${card.price.exponent} ${card.price.amount}`;
+        : `${card.price.code} ${card.price.exponent} ${card.price.amount} ${card.price.surchargePct ?? '-'}`;
 }
 
 function stallNameOf(view: StallView): string | undefined {
