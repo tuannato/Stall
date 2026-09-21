@@ -5400,6 +5400,9 @@ textarea.share-embed {
     line-height: 1.5;
     color: #fff;
     text-align: center;
+    /* Where it must wrap (a phone), two even lines and never an orphan
+       "key." (owner, 2026-09-21). */
+    text-wrap: balance;
 }
 
 .door-slab .ctx {
@@ -5416,6 +5419,10 @@ textarea.share-embed {
 .door-chips {
     display: flex;
     flex-wrap: wrap;
+    /* Centred under the counter, like the counter's own line (owner,
+       2026-09-21). */
+    justify-content: center;
+    text-align: center;
     gap: 2px 18px;
     margin: 14px 0 0;
     padding: 0;
@@ -6059,6 +6066,10 @@ textarea.share-embed {
     }
 
     .door-hint {
+        /* The sentence is 415px at this size and the slab's inside is 436px
+           at the narrowest desk column (960): one line, where a 400px cap
+           had been wrapping "key." alone at every desk width. */
+        max-width: 480px;
         font-size: 13.5px;
     }
 
