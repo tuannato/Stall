@@ -212,6 +212,15 @@ export type Overlay =
      */
     | { kind: 'pay'; tokenId: string }
     /**
+     * Several quoted items, and the one payment a buyer's own wallet would
+     * sign for the lot ("Pay several", 2026-09-21). The same disclosure as
+     * `pay`: this origin composes a BIP21 the wallet signs. It holds the
+     * live paint for the pay sheet's reason — it carries a frozen rate and a
+     * buyer's own state — and it carries **no memo yet** (the multi-item
+     * memo is `STLP`'s second shape, the build order's step 5).
+     */
+    | { kind: 'pay-several' }
+    /**
      * Printable poster and PNG formats. Same live-paint wait as the sheets.
      * `tokenId` names the quoted item a `tag` is about (absent: the first
      * quoted item; named but no longer quoted: no tag, never another item),
@@ -594,6 +603,9 @@ export type PayRateAnswer =
 /** What the describe sheet remembers of the last signed surcharge: a percent, or none. */
 export type RememberedSurcharge = number | 'none';
 
+/** The one question the "Pay several" strip may be asking (D13): remove one item, or clear all. */
+export type SelectionAsk = { kind: 'remove'; tokenId: string } | { kind: 'clear' };
+
 export type StallView = WindowState & {
     route: RouteResolution;
     /**
@@ -675,6 +687,24 @@ export type StallView = WindowState & {
      * buyer typed used to reset it to one. Cleared when a sheet opens.
      */
     payQuantity?: bigint;
+    /**
+     * "Pay several" (2026-09-21): the buyer's chosen quotes and counts,
+     * whether the strip under the rail tabs is open, and the one question it
+     * may be asking. `boot` closure state written at paint time like
+     * `shopTab` — a live repaint cannot empty it (the `payQuantity` lesson)
+     * and `refresh()` cannot lose it. Session only; reset when the stall
+     * changes. `selectionEntered` and `selectionBumped` are one-shots: the
+     * paint right after the press is the only one that animates the
+     * entrance or the count's bump — an animation on mount would replay on a
+     * stranger's dust. `selectionDropped` says once that a re-read took a
+     * chosen quote off the rail (D8).
+     */
+    selection?: ReadonlyMap<string, bigint>;
+    selectionOpen?: boolean;
+    selectionAsk?: SelectionAsk;
+    selectionEntered?: true;
+    selectionBumped?: string;
+    selectionDropped?: true;
     /**
      * Quoted tokens whose genesis the load is still reading, named by the
      * loader. The pay sheet asks for its own answer only for one of these —

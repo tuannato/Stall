@@ -29,6 +29,15 @@ import { fitsQr, qrMatrix } from '../domain/qr';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { encodePaymentMemoHex } from '../domain/payment';
 import {
+    MAX_SELECTION_ENTRIES,
+    selectionCount,
+    selectionGlance,
+    selectionHasSurcharge,
+    selectionSats,
+    selectionTolerance,
+    selectionUnit,
+} from '../domain/selection';
+import {
     MAX_DESCRIPTION_BYTES,
     XEC_PRICE_CODE,
     descriptionBytes,
@@ -73,6 +82,7 @@ import {
     SHIPPED_ATTACHMENTS,
 } from '../domain/attachments';
 import type {
+    SelectionAsk,
     RememberedSurcharge,
     EventStatus,
     FetchStatus,
@@ -90,6 +100,7 @@ import type {
     TokenMeta,
     Overlay,
     PayRateAnswer,
+    PayRateOutcome,
     PayRateWhy,
     WindowParams,
 } from '../domain/state';
@@ -203,6 +214,18 @@ export type StallHandlers = {
      * it rather than at one. Answers nothing and paints nothing.
      */
     onPayQuantity?: (tokenId: string, quantity: bigint) => void;
+    /**
+     * "Pay several" (2026-09-21): the strip under the rail tabs opens and
+     * closes, a row's stepper sets one item's count (zero removes it), the
+     * strip or a row asks its one question (undefined answers No), Clear
+     * empties the selection, and the sheet composes one payment for the
+     * lot. All of it is `boot` closure state written back at paint time.
+     */
+    onToggleSelection?: () => void;
+    onSelectionSet?: (tokenId: string, count: bigint) => void;
+    onSelectionAsk?: (ask: SelectionAsk | undefined) => void;
+    onSelectionClear?: () => void;
+    onOpenPaySeveral?: () => void;
     /**
      * One fresh rate for the pay sheet, or the reason there is none — a feed
      * that did not answer, or an answer this page refuses (CLAUDE §8). Bare
@@ -671,6 +694,9 @@ export function renderStall(
         } else if (view.overlay.kind === 'pay') {
             stall.classList.add('has-sheet');
             stall.append(sheetOverlay(paySheet(view, handlers), 'pay-sheet', handlers));
+        } else if (view.overlay.kind === 'pay-several') {
+            stall.classList.add('has-sheet');
+            stall.append(sheetOverlay(paySeveralSheet(view, handlers), 'pay-several-sheet', handlers));
         } else if (view.overlay.kind === 'poster') {
             stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
@@ -2638,6 +2664,12 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     const unreadable = unreadableQuotes(view);
     const section = el('section', 'pay-sec');
     section.setAttribute('data-role', 'pay-section');
+    // "Pay several" sits under the rail tabs, above the section's own head,
+    // in the tabs' dress: a control that changes what every row below it
+    // carries belongs above them, and only where there is a row to choose.
+    if (items.length > 0) {
+        section.append(selectionStrip(view, handlers));
+    }
     section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
     section.append(el('p', 'fine pay-lede', copy.PAY_SEC_LEDE));
     if (items.length > 0) {
@@ -2814,8 +2846,21 @@ function payRow(
     // pay-screen audit's key, so its text is never split into figure and unit.
     // The Pay pill sits where the listing's 16px caret does, so the tier
     // ladder counts its width in price characters.
+    // Three modes (2026-09-21): plain; `in` — the strip is open and this row
+    // is in (or can join) the selection's unit, so Pay is NOT built and the
+    // ladder drops the pill's characters; `apart` — another unit, Pay stays
+    // and is named for what it does now.
+    const mode = selectionModeOf(view, item);
+    if (mode === 'in') {
+        head.classList.add('sel-in');
+    }
     const figureText = quoteFigure(item.price);
-    const tier = priceTier(figureText, false, tierCharCeilings(paintedThemeId(view)), PAY_PILL_CHARS);
+    const tier = priceTier(
+        figureText,
+        false,
+        tierCharCeilings(paintedThemeId(view)),
+        mode === 'in' ? 0 : PAY_PILL_CHARS,
+    );
     if (tier > 0) {
         head.setAttribute('data-price-tier', String(tier));
     }
@@ -2826,15 +2871,19 @@ function payRow(
     amount.append(figure);
     price.append(amount);
     head.append(price);
-    const open = el('button', 'buy pay-btn', copy.PAY_OPEN);
-    open.type = 'button';
-    open.setAttribute('data-role', 'pay-open');
-    open.setAttribute('data-focus-key', `pay-open:${item.tokenId}`);
-    const onOpenPay = handlers.onOpenPay;
-    if (onOpenPay !== undefined) {
-        open.addEventListener('click', () => onOpenPay(item.tokenId));
+    if (mode !== 'in') {
+        // Never built rather than hidden in selection mode (the window's
+        // rule): a hidden control is still a control to a keyboard.
+        const open = el('button', 'buy pay-btn', mode === 'apart' ? copy.PAY_OPEN_APART : copy.PAY_OPEN);
+        open.type = 'button';
+        open.setAttribute('data-role', 'pay-open');
+        open.setAttribute('data-focus-key', `pay-open:${item.tokenId}`);
+        const onOpenPay = handlers.onOpenPay;
+        if (onOpenPay !== undefined) {
+            open.addEventListener('click', () => onOpenPay(item.tokenId));
+        }
+        head.append(open);
     }
-    head.append(open);
     row.append(head);
     // The foot, the quote's counterpart of the listing's pointer line: the
     // seller's words on one running line (the face and the sheet show them
@@ -2870,6 +2919,11 @@ function payRow(
         const borrowed = el('span', 'pay-sub', copy.QUOTE_NOT_MINTED_HERE);
         borrowed.setAttribute('data-role', 'quote-not-minted');
         foot.append(borrowed);
+    }
+    // The selection's own line, last in the foot: the stepper, the question
+    // it may be asking, or the sentence that this row pays on its own.
+    if (mode !== 'plain') {
+        foot.append(selectionLineNode(view, item, mode, named.title, handlers));
     }
     if (foot.childElementCount > 0) {
         row.append(foot);
@@ -4836,6 +4890,497 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     return wrap;
 }
 
+/** Which of the three row modes a quote row paints in (2026-09-21). */
+type SelectionMode = 'plain' | 'in' | 'apart';
+
+function selectionModeOf(view: StallView, item: QuotedItem): SelectionMode {
+    if (view.selectionOpen !== true) {
+        return 'plain';
+    }
+    const unit = selectionUnit(view.selection ?? new Map(), view.prices);
+    return unit !== undefined && item.price.code !== unit ? 'apart' : 'in';
+}
+
+/** A quote's figure times a count, in the seller's unit and with the record's own surcharge. */
+function lineFigure(price: TokenPrice, count: bigint): string {
+    const each = surchargedQuote(price);
+    return quoteFigure({ ...each, amount: each.amount * count });
+}
+
+/**
+ * The row's selection line: "count × quote = line" and the stepper, or the
+ * question "−" from one asks, or the sentence that a row in another unit
+ * pays on its own. `.step` is its own class — every look re-states `.mini`
+ * at (0,2,0) and would win on source order — and each control carries a
+ * focus key, or a stranger's dust drops focus mid-count. The entrance
+ * animates only on the paint after the press (`selectionEntered`), never
+ * on a repaint.
+ */
+function selectionLineNode(
+    view: StallView,
+    item: QuotedItem,
+    mode: SelectionMode,
+    name: string,
+    handlers: StallHandlers,
+): HTMLElement {
+    const line = el('div', 'sel-line');
+    line.setAttribute('data-role', 'selection-line');
+    if (view.selectionEntered === true) {
+        line.classList.add('sel-enter');
+        const at = quotedItems(view).findIndex((row) => row.tokenId === item.tokenId);
+        line.style.setProperty('--sel-i', String(Math.max(at, 0)));
+    }
+    if (mode === 'apart') {
+        line.append(el('span', 'sel-sub', copy.selectionApart(item.price.code.toUpperCase())));
+        return line;
+    }
+    const selection = view.selection ?? new Map<string, bigint>();
+    const count = selection.get(item.tokenId) ?? 0n;
+    const ask = view.selectionAsk;
+    if (ask?.kind === 'remove' && ask.tokenId === item.tokenId) {
+        line.classList.add('sel-ask');
+        line.append(el('span', 'sel-q', copy.selectionAskRemove(name)));
+        const yn = el('span', 'sel-yn');
+        const yes = el('button', 'mini', copy.SELECTION_YES);
+        yes.type = 'button';
+        yes.setAttribute('data-role', 'selection-yes');
+        yes.setAttribute('data-focus-key', `selection-yes:${item.tokenId}`);
+        yes.addEventListener('click', () => handlers.onSelectionSet?.(item.tokenId, 0n));
+        const no = el('button', 'mini another', copy.SELECTION_NO);
+        no.type = 'button';
+        no.setAttribute('data-role', 'selection-no');
+        no.setAttribute('data-focus-key', `selection-no:${item.tokenId}`);
+        no.addEventListener('click', () => handlers.onSelectionAsk?.(undefined));
+        yn.append(yes, no);
+        line.append(yn);
+        return line;
+    }
+    const sub = el(
+        'span',
+        count > 0n ? 'sel-sub in' : 'sel-sub',
+        count > 0n
+            ? copy.selectionLine(count.toString(), quoteFigure(item.price), lineFigure(item.price, count))
+            : copy.SELECTION_NOT_CHOSEN,
+    );
+    sub.setAttribute('data-role', 'selection-sub');
+    const stepper = el('span', 'sel-step');
+    const fewer = el('button', 'step');
+    fewer.type = 'button';
+    fewer.setAttribute('aria-label', copy.selectionFewer(name));
+    fewer.setAttribute('data-role', 'selection-fewer');
+    fewer.setAttribute('data-focus-key', `selection-step:${item.tokenId}:fewer`);
+    fewer.append(glyph('minus'));
+    fewer.disabled = count === 0n;
+    fewer.addEventListener('click', () => {
+        if (count === 1n) {
+            handlers.onSelectionAsk?.({ kind: 'remove', tokenId: item.tokenId });
+        } else {
+            handlers.onSelectionSet?.(item.tokenId, count - 1n);
+        }
+    });
+    const shown = el('b', 'step-n', count.toString());
+    shown.setAttribute('aria-live', 'polite');
+    shown.setAttribute('data-role', 'selection-count');
+    if (view.selectionBumped === item.tokenId) {
+        shown.classList.add('bump');
+    }
+    const more = el('button', 'step');
+    more.type = 'button';
+    more.setAttribute('aria-label', copy.selectionMore(name));
+    more.setAttribute('data-role', 'selection-more');
+    more.setAttribute('data-focus-key', `selection-step:${item.tokenId}:more`);
+    more.append(glyph('plus'));
+    // The cap counts distinct items: a new entry past it is refused, a
+    // count on an item already in never is.
+    more.disabled = count === 0n && selection.size >= MAX_SELECTION_ENTRIES;
+    more.addEventListener('click', () => handlers.onSelectionSet?.(item.tokenId, count + 1n));
+    stepper.append(fewer, shown, more);
+    line.append(sub, stepper);
+    return line;
+}
+
+/**
+ * The "Pay several" strip: the tabs' own dress (`.seg`), in flow under the
+ * rail tabs and never sticky. Closed, it is the control and a hint; open,
+ * the tray unfolds under it (phone) or beside it (desk) with the chosen
+ * names, the count and Clear, the total in the seller's unit with its
+ * surcharge note, and Pay. **The tray's contents are not built while it is
+ * closed** (D14): a `0fr` row with `overflow: hidden` keeps its children
+ * focusable. The total is a GLANCE — computed from the records for the eye
+ * and never for a link; the sheet is where a figure freezes.
+ */
+function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
+    const open = view.selectionOpen === true;
+    const selection = view.selection ?? new Map<string, bigint>();
+    const strip = el('div', 'seg sel-strip');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', copy.SELECTION_LABEL);
+    strip.setAttribute('data-role', 'selection-strip');
+    strip.classList.toggle('is-open', open);
+    if (view.selectionEntered === true) {
+        strip.classList.add('sel-enter');
+    }
+    const count = Number(selectionCount(selection));
+    const toggle = el('button', 'seg-b sel-btn', open && count > 0 ? copy.selectionOpenCount(count) : copy.SELECTION_OPEN);
+    toggle.type = 'button';
+    toggle.setAttribute('aria-pressed', open ? 'true' : 'false');
+    toggle.setAttribute('data-role', 'selection-toggle');
+    toggle.setAttribute('data-focus-key', 'selection-toggle');
+    toggle.addEventListener('click', () => handlers.onToggleSelection?.());
+    const hint = el('span', 'sel-hint', copy.SELECTION_HINT);
+    const tray = el('div', 'sel-tray');
+    tray.setAttribute('aria-hidden', open ? 'false' : 'true');
+    const trayIn = el('div', 'sel-tray-in');
+    tray.append(trayIn);
+    if (open) {
+        if (view.selectionDropped === true) {
+            const dropped = el('p', 'fine sel-dropped', copy.SELECTION_DROPPED);
+            dropped.setAttribute('data-role', 'selection-dropped');
+            trayIn.append(dropped);
+        }
+        if (count === 0) {
+            trayIn.append(el('div', 'sel-empty', copy.SELECTION_EMPTY));
+        } else {
+            const sum = el('div', 'sel-sum');
+            const names = quotedItems(view)
+                .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
+                .map((item) => `${quoteNaming(view, item.tokenId).title} ×${selection.get(item.tokenId)!.toString()}`)
+                .join(' · ');
+            const namesNode = el('span', 'sel-names', names);
+            namesNode.setAttribute('data-role', 'selection-names');
+            sum.append(namesNode);
+            const countCell = el('span', 'sel-count');
+            countCell.append(el('span', undefined, copy.selectionCountLine(count)));
+            const clear = el('button', 'mini another sel-clear', copy.SELECTION_CLEAR);
+            clear.type = 'button';
+            clear.setAttribute('aria-label', copy.SELECTION_CLEAR_LABEL);
+            clear.setAttribute('data-role', 'selection-clear');
+            clear.setAttribute('data-focus-key', 'selection-clear');
+            clear.addEventListener('click', () => handlers.onSelectionAsk?.({ kind: 'clear' }));
+            countCell.append(clear);
+            sum.append(countCell);
+            const glance = selectionGlance(selection, view.prices);
+            const totalBlock = el('span', 'sel-totalblk');
+            const total = el('b', 'sel-total', glance === undefined ? '' : quoteFigure(glance));
+            total.setAttribute('data-role', 'selection-total');
+            totalBlock.append(total);
+            if (selectionHasSurcharge(selection, view.prices)) {
+                totalBlock.append(el('small', 'sel-note', copy.SELECTION_NOTE_SURCHARGE));
+            }
+            sum.append(totalBlock);
+            const pay = el('button', 'buy pay-btn sel-pay', copy.SELECTION_PAY);
+            pay.type = 'button';
+            pay.setAttribute('data-role', 'pay-several-open');
+            pay.setAttribute('data-focus-key', 'pay-several-open');
+            pay.addEventListener('click', () => handlers.onOpenPaySeveral?.());
+            sum.append(pay);
+            trayIn.append(sum);
+            if (selection.size >= MAX_SELECTION_ENTRIES) {
+                trayIn.append(el('p', 'fine sel-full', copy.selectionFull(MAX_SELECTION_ENTRIES)));
+            }
+            if (view.selectionAsk?.kind === 'clear') {
+                // Under the summary it is about, never in its place (D13).
+                const ask = el('div', 'sel-ask');
+                ask.setAttribute('data-role', 'selection-ask');
+                ask.append(el('span', 'sel-q', copy.SELECTION_ASK_CLEAR));
+                const yn = el('span', 'sel-yn');
+                const yes = el('button', 'mini', copy.SELECTION_YES);
+                yes.type = 'button';
+                yes.setAttribute('data-role', 'selection-yes');
+                yes.setAttribute('data-focus-key', 'selection-yes:clear');
+                yes.addEventListener('click', () => handlers.onSelectionClear?.());
+                const no = el('button', 'mini another', copy.SELECTION_NO);
+                no.type = 'button';
+                no.setAttribute('data-role', 'selection-no');
+                no.setAttribute('data-focus-key', 'selection-no:clear');
+                no.addEventListener('click', () => handlers.onSelectionAsk?.(undefined));
+                yn.append(yes, no);
+                ask.append(yn);
+                trayIn.append(ask);
+            }
+        }
+    }
+    strip.append(toggle, hint, tray);
+    return strip;
+}
+
+/**
+ * The valve's verdict after a press-time refetch, shared by the two pay
+ * sheets so they cannot disagree about what a fresh answer means: a refused
+ * answer is its own outcome, two feeds disagreeing outranks a move, and a
+ * move is measured against the tightest stated tolerance.
+ */
+function settleValve(
+    fresh: PayRateAnswer | undefined,
+    before: bigint | undefined,
+    afterOf: (rate: bigint | undefined) => bigint | undefined,
+    tolerancePct: number | undefined,
+): { rate: StallView['payRate']; payWhy: PayRateWhy | undefined; outcome: PayRateOutcome } {
+    const answered = fresh !== undefined && fresh.rate !== undefined ? fresh : undefined;
+    const payWhy = answered !== undefined ? undefined : (fresh?.why ?? 'no-answer');
+    const after = afterOf(answered?.rate);
+    const outcome: PayRateOutcome =
+        answered === undefined || after === undefined
+            ? payWhy === 'implausible'
+                ? 'implausible'
+                : 'unavailable'
+            : answered.check === 'disagree'
+              ? 'disagree'
+              : movedPastTolerance(before, after, tolerancePct)
+                ? 'moved'
+                : 'refreshed';
+    return { rate: answered, payWhy, outcome };
+}
+
+/**
+ * Several items, one payment (2026-09-21). The pay sheet's shape over the
+ * chosen lines: the XEC figure the wallet signs, one line per item (the
+ * count × the quote as written, and the record's own surcharge line
+ * beside it), the total in the seller's unit, the rate row, the no-escrow
+ * note, the valve, the two Pay controls, the code and the fine print. No
+ * quantity row and no words row — the rows are where those were decided.
+ * **One bigint**: `selectionSats` composes every item the way the single
+ * sheet composes that item alone, and the figure, both links and the code
+ * are that sum. **No memo yet** (`STLP`'s second shape is the build order's
+ * step 5), and the fine print says so. Tolerances are per item and shown
+ * on each item's own sheet (D4); the valve measures against the tightest.
+ */
+function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+    const wrap = el('div', 'sheet');
+    wrap.setAttribute('data-role', 'pay-several');
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    const selection = view.selection ?? new Map<string, bigint>();
+    const prices = view.prices;
+    const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    const address = view.address ?? '';
+    const count = Number(selectionCount(selection));
+    wrap.setAttribute('aria-label', copy.paySeveralTitle(count));
+    if (items.length === 0) {
+        // A live prune emptied the selection under the sheet: say so, with
+        // the sheet's own way out, rather than composing nothing in silence.
+        wrap.append(sheetHead(copy.paySeveralTitle(0), copy.SELECTION_EMPTY, handlers));
+        wrap.append(el('p', 'ctx', copy.SELECTION_EMPTY));
+        wrap.append(payFoot(handlers));
+        return wrap;
+    }
+    const unit = selectionUnit(selection, prices);
+    const usesRate = unit !== XEC_PRICE_CODE;
+    let rate = usesRate ? view.payRate : undefined;
+    let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
+    let asking = usesRate && view.payRateAsking === true;
+    // The seller's own name when they set one; never the address in a
+    // sentence, which `displayName` would fall back to.
+    const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
+    wrap.append(
+        sheetHead(
+            copy.paySeveralTitle(count),
+            stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName),
+            handlers,
+        ),
+    );
+
+    const card = el('div', 'pay-amt');
+    const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
+    card.append(cap);
+    const figureRow = el('div', 'pay-x');
+    const figure = el('span', 'pay-x-n', '');
+    figure.setAttribute('data-role', 'price');
+    figureRow.append(figure, el('span', 'item-u', copy.XEC));
+    card.append(figureRow);
+    const lines = el('dl', 'pay-lines');
+    lines.setAttribute('data-role', 'pay-lines');
+    for (const item of items) {
+        const n = selection.get(item.tokenId)!;
+        const line = el('div', 'pay-line');
+        line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
+        const value = el('dd');
+        value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
+        const surcharge = quoteSurchargeNode(item.price, 'span', 'pay-line-s');
+        if (surcharge !== null) {
+            value.append(surcharge);
+        }
+        line.append(value);
+        lines.append(line);
+    }
+    card.append(lines);
+    const glance = selectionGlance(selection, prices);
+    const total = el('div', 'pay-total', '');
+    total.setAttribute('data-role', 'pay-total');
+    total.textContent =
+        glance === undefined
+            ? ''
+            : selectionHasSurcharge(selection, prices)
+              ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
+              : copy.paySeveralTotal(quoteFigure(glance));
+    card.append(total);
+    const rateRow = el('div', 'pay-rate-row');
+    const rateLabel = el('span', 'pay-rate', '');
+    rateLabel.setAttribute('data-role', 'rate');
+    const refreshRate = el('button', 'mini', copy.PAY_RATE_REFRESH);
+    refreshRate.type = 'button';
+    refreshRate.setAttribute('data-role', 'pay-refresh');
+    refreshRate.setAttribute('data-focus-key', 'pay-refresh');
+    rateRow.append(rateLabel, refreshRate);
+    if (usesRate) {
+        card.append(rateRow);
+    }
+    const why = el('p', 'fine', '');
+    why.hidden = true;
+    card.append(why);
+    card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
+    wrap.append(card);
+
+    const valve = el('p', 'note', '');
+    valve.setAttribute('data-role', 'pay-valve');
+    valve.hidden = true;
+    wrap.append(valve);
+
+    const how = el('div');
+    how.append(el('p', 'fine', copy.PAY_FINE_NO_MEMO));
+    how.append(el('p', 'fine', copy.PAY_FINE_TOLERANCES_PER_ITEM));
+    how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY_SEVERAL));
+    const final = el('p', 'fine', copy.PAY_NOTE_FINAL);
+    final.setAttribute('data-role', 'pay-final');
+
+    const acts = el('div', 'acts');
+    const web = el('button', 'buy', copy.PAY_CASHTAB);
+    web.type = 'button';
+    web.setAttribute('data-focus-key', 'pay-cashtab');
+    const app = el('button', 'mini another', copy.PAY_OTHER_WALLET);
+    app.type = 'button';
+    app.setAttribute('data-focus-key', 'pay-wallet');
+    let webUrl: string | undefined;
+    let appUrl: string | undefined;
+    acts.append(web, app);
+    wrap.append(acts);
+
+    const qrBody = el('div', 'publish-qr pay-qr-body');
+    const qrFold = sheetFold('pay-qr-fold', copy.PAY_QR_FOLD, qrBody);
+    (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
+    wrap.append(final);
+    wrap.append(qrFold);
+    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
+    wrap.append(payFoot(handlers));
+
+    let outcome: StallView['payRateOutcome'] =
+        view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
+
+    const refresh = (): void => {
+        clearPayQrTimer();
+        const sats = selectionSats(selection, prices, rate?.rate);
+        const subDust = sats !== undefined && sats < DUST_SATS;
+        const bip21 = sats === undefined ? undefined : payBip21(address, sats);
+        const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats);
+        const pay = sats === undefined ? undefined : payECashPayUrl(address, sats);
+        figureRow.hidden = sats === undefined;
+        figure.textContent = sats === undefined ? '' : formatXec(sats);
+        cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTE : copy.PAY_CAP_SIGNS;
+        if (usesRate && unit !== undefined) {
+            const glanceRate = formatXecRate(rate?.rate, unit);
+            rateRow.hidden = glanceRate === undefined;
+            rateLabel.textContent =
+                glanceRate === undefined || rate === undefined
+                    ? ''
+                    : copy.payRateLine(
+                          glanceRate,
+                          formatTriedAt(rate.atMs),
+                          copy.rateSources(rate.check, unit === DEFAULT_FIAT_CODE),
+                      );
+        }
+        why.hidden = sats !== undefined && !subDust;
+        why.textContent = subDust
+            ? copy.PAY_SUB_DUST
+            : sats === undefined
+              ? asking
+                  ? copy.PAY_RATE_ASKING
+                  : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
+              : '';
+        const linked = cashtab !== undefined && pay !== undefined;
+        webUrl = cashtab;
+        appUrl = pay;
+        web.hidden = !linked;
+        app.hidden = !linked;
+        web.textContent =
+            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+                ? copy.payFigure(formatXec(sats))
+                : copy.PAY_CASHTAB;
+        valve.hidden = outcome === undefined;
+        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
+        if (linked) {
+            web.setAttribute('data-role', 'pay-cashtab');
+            app.setAttribute('data-role', 'pay-wallet');
+        } else {
+            web.removeAttribute('data-role');
+            app.removeAttribute('data-role');
+        }
+        const aged =
+            usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
+        qrFold.hidden = bip21 === undefined;
+        if (bip21 !== undefined && !aged && fitsQr(bip21)) {
+            const box = el('div', 'pay-qr');
+            box.setAttribute('data-role', 'pay-qr');
+            box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
+            qrBody.replaceChildren(box);
+            if (usesRate && rate !== undefined) {
+                const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
+                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+            }
+        } else if (bip21 !== undefined) {
+            qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
+        } else {
+            qrBody.replaceChildren();
+        }
+    };
+
+    // The press-time valve, the single sheet's (its docblock says why a
+    // second press is always required), over the selection's arithmetic.
+    const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
+        control.addEventListener('click', () => {
+            const url = destination();
+            if (url === undefined) {
+                return;
+            }
+            if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+                return;
+            }
+            const before = selectionSats(selection, prices, rate.rate);
+            void (async () => {
+                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                const settled = settleValve(
+                    fresh,
+                    before,
+                    (fresh) => selectionSats(selection, prices, fresh),
+                    selectionTolerance(selection, prices),
+                );
+                rate = settled.rate;
+                asking = false;
+                payWhy = settled.payWhy;
+                outcome = settled.outcome;
+                refresh();
+            })();
+        });
+    };
+    armValve(web, () => webUrl);
+    armValve(app, () => appUrl);
+    refreshRate.addEventListener('click', () => {
+        void (async () => {
+            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            const settled = settleValve(fresh, undefined, (r) => selectionSats(selection, prices, r), undefined);
+            rate = settled.rate;
+            asking = false;
+            payWhy = settled.payWhy;
+            // A refresh is never a "move": there was no figure to move from.
+            outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
+            refresh();
+        })();
+    });
+
+    refresh();
+    return wrap;
+}
+
 /** happy-dom ships no `matchMedia`, and the honest fallback is the closed one. */
 function payQrFoldOpens(): boolean {
     const mq = (window as { matchMedia?: (query: string) => { matches: boolean } })
@@ -4969,6 +5514,9 @@ const OVERLAY_TABLE: Record<Overlay['kind'], { mounts: boolean; holds: boolean }
     'publish-name': { mounts: true, holds: true },
     describe: { mounts: true, holds: true },
     pay: { mounts: true, holds: true },
+    // Several items, one payment: the pay sheet's reason — a frozen rate
+    // and a buyer's own state on a surface a socket tick must not rebuild.
+    'pay-several': { mounts: true, holds: true },
     poster: { mounts: true, holds: true },
     'shop-window': { mounts: true, holds: true },
     // Neither holds anything typed: the recipe's pickers are module state

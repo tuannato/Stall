@@ -27,6 +27,12 @@ import {
     type RateCheck,
 } from './domain/fiat';
 import {
+    MAX_SELECTION_ENTRIES,
+    pruneSelection,
+    selectionNeedsNoRate,
+    selectionUnit,
+} from './domain/selection';
+import {
     clearSavedStall,
     forgetSurcharge,
     isPinnedStall,
@@ -50,6 +56,7 @@ import {
     type PayRateWhy,
 } from './domain/state';
 import type {
+    SelectionAsk,
     RememberedSurcharge,
     EventStatus,
     FetchStatus,
@@ -464,6 +471,26 @@ export function boot(
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
+     * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
+     * open state and its one question, all closure state written onto the
+     * view at paint time for `shopTab`'s reason; the two one-shots are
+     * consumed by the paint after the press. Reset with the stall.
+     */
+    let selection = new Map<string, bigint>();
+    let selectionOpen = false;
+    let selectionAsk: SelectionAsk | undefined;
+    let selectionEntered = false;
+    let selectionBumped: string | undefined;
+    let selectionDropped = false;
+    const resetSelection = (): void => {
+        selection = new Map();
+        selectionOpen = false;
+        selectionAsk = undefined;
+        selectionEntered = false;
+        selectionBumped = undefined;
+        selectionDropped = false;
+    };
+    /**
      * A `?pay=` link is answered once per page load. The URL is deliberately
      * not rewritten, so a reload of a scanned link reopens the sheet — but the
      * seller's "check now" is a refresh of the same load, and reopening a
@@ -794,6 +821,23 @@ export function boot(
     };
 
     const paint = (): void => {
+        // A quote that left the rail leaves the selection (D8), judged
+        // against what this paint will show — never a count on an item the
+        // seller no longer quotes.
+        // The two one-shots ride this paint only.
+        const entered = selectionEntered;
+        const bumped = selectionBumped;
+        selectionEntered = false;
+        selectionBumped = undefined;
+        const quotedNow = new Set(quotedItems(state.view).map((item) => item.tokenId));
+        const pruned = pruneSelection(selection, quotedNow);
+        if (pruned.dropped) {
+            selection = pruned.selection;
+            selectionDropped = true;
+            if (selectionAsk?.kind === 'remove' && !selection.has(selectionAsk.tokenId)) {
+                selectionAsk = undefined;
+            }
+        }
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
@@ -853,6 +897,12 @@ export function boot(
             payRateWhy,
             payRateAsking,
             payQuantity,
+            selection: new Map(selection),
+            selectionOpen,
+            ...(selectionAsk === undefined ? {} : { selectionAsk }),
+            ...(entered ? { selectionEntered: true as const } : {}),
+            ...(bumped === undefined ? {} : { selectionBumped: bumped }),
+            ...(selectionDropped ? { selectionDropped: true as const } : {}),
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
             ...(wallParams() === undefined
@@ -941,6 +991,41 @@ export function boot(
                 onOpenPay(tokenId);
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onToggleSelection: () => {
+                selectionOpen = !selectionOpen;
+                selectionAsk = undefined;
+                selectionDropped = false;
+                // The entrance is the press's, never a repaint's: consumed by
+                // the one paint that follows.
+                selectionEntered = selectionOpen;
+                paint();
+            },
+            onSelectionSet: (tokenId, count) => {
+                if (count <= 0n) {
+                    selection.delete(tokenId);
+                } else if (selection.has(tokenId) || selection.size < MAX_SELECTION_ENTRIES) {
+                    selection.set(tokenId, count);
+                } else {
+                    return;
+                }
+                selectionAsk = undefined;
+                selectionDropped = false;
+                selectionBumped = count > 0n ? tokenId : undefined;
+                paint();
+            },
+            onSelectionAsk: (ask) => {
+                selectionAsk = ask;
+                paint();
+            },
+            onSelectionClear: () => {
+                selection = new Map();
+                selectionAsk = undefined;
+                selectionDropped = false;
+                paint();
+            },
+            onOpenPaySeveral: () => {
+                onOpenPaySeveral();
+            },
             onPayQuantity: (tokenId, quantity) => {
                 if (state.view.overlay.kind === 'pay' && state.view.overlay.tokenId === tokenId) {
                     payQuantity = quantity;
@@ -1080,6 +1165,8 @@ export function boot(
                 // The reader's own choice, and it outlives the load: a
                 // re-read of this stall paints whichever side they are on.
                 shopTab = tab;
+                // The dropped-item sentence lives until the tab switches (D8).
+                selectionDropped = false;
                 paint();
             },
             onChangeFilter: (text) => {
@@ -1529,11 +1616,51 @@ export function boot(
      */
     const quoteUnitOnScreen = (): string => {
         const over = state.view.overlay;
+        if (over.kind === 'pay-several') {
+            // The selection's own unit — one per selection, its first item's.
+            const code = selectionUnit(selection, state.view.prices);
+            return code !== undefined && isQuoteUnit(code) ? code : DEFAULT_FIAT_CODE;
+        }
         if (over.kind !== 'pay') {
             return DEFAULT_FIAT_CODE;
         }
         const code = state.view.prices?.get(over.tokenId)?.code;
         return code !== undefined && isQuoteUnit(code) ? code : DEFAULT_FIAT_CODE;
+    };
+
+    /**
+     * "Pay several": the sheet over the whole selection, the single sheet's
+     * road — opens first, asks the feeds only when the unit needs a rate,
+     * repaints once for the sheet that asked.
+     */
+    const onOpenPaySeveral = (): void => {
+        if (selection.size === 0) {
+            return;
+        }
+        const claimed = generation;
+        payRate = undefined;
+        payRateWhy = undefined;
+        payQuantity = undefined;
+        selectionAsk = undefined;
+        const asks = !selectionNeedsNoRate(selection, state.view.prices);
+        const session = ++paySession;
+        payRateAsking = asks;
+        state = { ...state, view: { ...state.view, overlay: { kind: 'pay-several' } } };
+        paint();
+        if (!asks) {
+            return;
+        }
+        void (async () => {
+            await readPayRate(PAY_RATE_TIMEOUT_MS, session);
+            if (session !== paySession) {
+                return;
+            }
+            payRateAsking = false;
+            if (claimed !== generation || state.view.overlay.kind !== 'pay-several') {
+                return;
+            }
+            paint();
+        })();
     };
 
     /**
@@ -1919,6 +2046,8 @@ export function boot(
         if (next.pubkeyHex === undefined || next.pubkeyHex !== shopTabFor) {
             shopTab = openingShopTab(loaded.view);
             shopTabFor = next.pubkeyHex;
+            // A selection is one stall's (D7): a different seller starts empty.
+            resetSelection();
         }
         // A scanned link is answered from the records, and on a failure screen
         // those arrive after this paint — judging the hint against the state

@@ -123,10 +123,14 @@ export function publishBip21(
 export function payBip21(
     address: string,
     sats: bigint,
-    opReturnRawHex: string,
+    opReturnRawHex?: string,
 ): string | undefined {
     const dest = p2pkhEcashAddress(address);
-    if (dest === undefined || !isEncoderOpReturnRaw(opReturnRawHex)) {
+    // The memo is optional since 2026-09-21: "Pay several" composes one
+    // payment for several quotes and carries none until `STLP`'s second
+    // shape lands (the build order's step 5); the single-item road always
+    // passes one. A memo that is given is still checked as before.
+    if (dest === undefined || (opReturnRawHex !== undefined && !isEncoderOpReturnRaw(opReturnRawHex))) {
         return undefined;
     }
     // `typeof`, not a comparison: a `Number` here would compare fine and then
@@ -134,14 +138,15 @@ export function payBip21(
     if (typeof sats !== 'bigint' || sats < DUST_SATS) {
         return undefined;
     }
-    return `${dest}?amount=${formatXecUngrouped(sats)}&op_return_raw=${opReturnRawHex}`;
+    const memo = opReturnRawHex === undefined ? '' : `&op_return_raw=${opReturnRawHex}`;
+    return `${dest}?amount=${formatXecUngrouped(sats)}${memo}`;
 }
 
 /** Cashtab web takes the pay BIP21 raw in the fragment, as it does a publish. */
 export function cashtabPayUrl(
     address: string,
     sats: bigint,
-    opReturnRawHex: string,
+    opReturnRawHex?: string,
 ): string | undefined {
     const bip21 = payBip21(address, sats, opReturnRawHex);
     if (bip21 === undefined) {
@@ -154,7 +159,7 @@ export function cashtabPayUrl(
 export function payECashPayUrl(
     address: string,
     sats: bigint,
-    opReturnRawHex: string,
+    opReturnRawHex?: string,
 ): string | undefined {
     const bip21 = payBip21(address, sats, opReturnRawHex);
     if (bip21 === undefined) {

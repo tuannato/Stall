@@ -69,6 +69,11 @@ const PROTECTED = [
     // covered "+5%" is covered money — `PROBE-RULES.md`, "The surcharge lines".
     '[data-role="pay-surcharge"]',
     '[data-role="quote-surcharge"]',
+    // "Pay several" (2026-09-21): the strip's total in the seller's unit,
+    // and the sheet's lines and total — money a buyer reads before Pay.
+    '[data-role="selection-total"]',
+    '[data-role="pay-lines"]',
+    '[data-role="pay-total"]',
 ].join(', ');
 
 /**
@@ -1166,7 +1171,15 @@ for (const screen of measured) {
             failures.push(...checkOverTime(screen, theme.id, label, worn));
             // The tree `checkOverTime` measured is still mounted: it seeks the
             // animations it painted rather than repainting.
-            if (document.querySelector('[data-role="seller-price"]') !== null) {
+            // A pay screen owes a seller's figure. The several-items sheet
+            // has no single quote on it by design — its figure is the total
+            // under `pay-total` (2026-09-21) — so that role counts too; a
+            // sheet that mounted neither is still the green-over-nothing
+            // this set exists to refuse.
+            if (
+                document.querySelector('[data-role="seller-price"]') !== null ||
+                document.querySelector('[data-role="pay-total"]') !== null
+            ) {
                 withQuote.add(screen);
             }
         }
@@ -1526,6 +1539,13 @@ const CONTRAST_TEXT = [
     // a figure's other half, in muted or ink on its surface's own ground.
     '[data-role="pay-surcharge"]',
     '[data-role="quote-surcharge"]',
+    // "Pay several" (2026-09-21): the strip's total, the sheet's lines and
+    // total, the stepper's glyph on its own ground, and the row's line.
+    '[data-role="selection-total"]',
+    '[data-role="pay-lines"]',
+    '[data-role="pay-total"]',
+    '.step',
+    '.sel-sub',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
     // claims of the design board, measured here rather than asserted.

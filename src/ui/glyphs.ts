@@ -19,6 +19,7 @@ export type GlyphName =
     | 'external'
     | 'retry'
     | 'plus'
+    | 'minus'
     | 'expand';
 
 const GLYPH_PATHS: Record<GlyphName, string> = {
@@ -32,6 +33,7 @@ const GLYPH_PATHS: Record<GlyphName, string> = {
     external: 'M9 3h4v4M13 3L7 9M11 9v4H3V5h4',
     retry: 'M13.5 8A5.5 5.5 0 1 1 11.6 3.9M13.5 3v3.5H10',
     plus: 'M8 3v10M3 8h10',
+    minus: 'M3 8h10',
     // Four corners opening outward: the picture at full size (2026-09-18).
     expand: 'M6.2 2.6H2.6v3.6M9.8 2.6h3.6v3.6M9.8 13.4h3.6V9.8M6.2 13.4H2.6V9.8',
 };

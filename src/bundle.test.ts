@@ -157,7 +157,12 @@ describe('served-weight-has-a-ceiling', () => {
     // and the embed code off the card — about 12 KB over the previous
     // reading, most of it the door. Raised to 860,000 as the deliberate diff
     // this docblock asks for; the delta is the number, the ceiling the alarm.
-    const CEILING_BYTES = 860_000;
+    // Measured 872,918 on 2026-09-21 with the surcharge round and "Pay
+    // several" in — the strip, the rows' three modes, a second pay sheet and
+    // the selection's domain module, about 13 KB over the previous alarm,
+    // the direct-payment rail's own order of size again. Raised to 900,000
+    // as the deliberate diff; the delta is the number, the ceiling the alarm.
+    const CEILING_BYTES = 900_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

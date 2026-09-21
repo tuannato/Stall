@@ -11,7 +11,9 @@
  * So the naming convention is load-bearing and enforced here: a screen whose
  * name starts with `pay` or carries `quotes` is a screen about the pay rail,
  * and it must have mounted at least one `[data-role="seller-price"]` while it
- * was measured. Its own module so the rule can be tested without starting a
+ * was measured — or, on the several-items sheet, its own figure under
+ * `[data-role="pay-total"]` (2026-09-21): that sheet has no single quote on
+ * it by design, and the probe page counts either role. Its own module so the rule can be tested without starting a
  * browser; the runner is what calls it, because the page must not be the judge
  * of whether the page painted.
  */

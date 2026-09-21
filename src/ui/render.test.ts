@@ -10544,7 +10544,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.door .pinned-open', '.door-nav a', '.door-more', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.door .pinned-open', '.door-nav a', '.door-more', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed', '.step'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
@@ -10573,6 +10573,17 @@ describe('small-text-is-one-scale', () => {
             '.ctx': 12.5,
             '.warn': 12.5,
             '.pub': 12.5,
+            // "Pay several" (2026-09-21): the strip's and the rows' small faces.
+            '.sel-hint': 12.5,
+            '.sel-names': 12.5,
+            '.sel-count': 12.5,
+            '.sel-clear': 12.5,
+            '.sel-sub': 12.5,
+            '.sel-q': 12.5,
+            '.sel-empty': 12.5,
+            '.sel-ask': 12.5,
+            '.sel-note': 11,
+            '.pay-line-s': 11.5,
         };
         // Only the named blocks are resolved: `fontSizePx` refuses a size it
         // cannot read statically, and a `clamp()` elsewhere is not this rule's.
@@ -11519,6 +11530,25 @@ describe('nothing-stands-between-the-figure-and-the-pay-control', () => {
         '.acts',
     ];
 
+    it('fences the several-items sheet the same way: head, card, valve, then Pay', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                payRate: PAY_RATE,
+            }),
+        );
+        const sheet = root.querySelector('[data-role="pay-several"]') as HTMLElement;
+        const control = sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement;
+        expect(control).not.toBeNull();
+        const children = [...sheet.children];
+        const holder = children.find((child) => child.contains(control))!;
+        for (const child of children.slice(0, children.indexOf(holder) + 1)) {
+            expect(ALLOWED.some((selector) => child.matches(selector)), child.className).toBe(true);
+        }
+    });
+
     it('lets only the head, the card, the words, the quantity and the valve precede Pay', () => {
         const { root } = paint(
             payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }),
@@ -11892,6 +11922,7 @@ describe('the-mount-table-has-two-predicates', () => {
             { kind: 'publish-name' } as const,
             { kind: 'describe' } as const,
             { kind: 'pay', tokenId: TOKEN_ID } as const,
+            { kind: 'pay-several' } as const,
         ]) {
             const view = offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { overlay });
             expect(overlayMounts(view), overlay.kind).toBe(true);
@@ -15046,5 +15077,337 @@ describe('the-stream-card-counts-the-surcharge-in-what-a-scan-pays', () => {
         expect(at(5)).not.toBe(at());
         expect(at(5)).not.toBe(at(20));
         expect(at(5)).toBe(at(5));
+    });
+});
+
+/*
+ * "Pay several" (2026-09-21, the basket round's step 3): the strip under the
+ * rail tabs, the rows' three modes, and the sheet over the lot.
+ */
+describe('the-pay-several-strip-sits-under-the-tabs-and-opens-a-tray', () => {
+    const OTHER = '77'.repeat(32);
+    const twoQuotes = (over: Partial<StallView> = {}) =>
+        paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }],
+                    [OTHER, { code: 'xec', exponent: 2, amount: 500_000n }],
+                ]),
+                ...over,
+            }),
+        );
+
+    it('paints the strip in the tabs’ dress, closed by default, with nothing built in the tray', () => {
+        const { root } = paint(payView());
+        const tabs = root.querySelector('[data-role="shop-tabs"]')!;
+        const strip = root.querySelector('[data-role="selection-strip"]') as HTMLElement;
+        expect(strip).not.toBeNull();
+        expect(strip.classList.contains('seg')).toBe(true);
+        expect(strip.getAttribute('role')).toBe('group');
+        expect(tabs.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const toggle = strip.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement;
+        expect(toggle.textContent).toBe(copy.SELECTION_OPEN);
+        expect(toggle.getAttribute('aria-pressed')).toBe('false');
+        expect(strip.querySelector('.sel-tray')?.getAttribute('aria-hidden')).toBe('true');
+        expect(strip.querySelector('.sel-tray-in')?.childElementCount, 'the tray is not built while closed').toBe(0);
+        expect(root.querySelector('[data-role="pay-open"]'), 'Pay stays on the row while closed').not.toBeNull();
+        // Never sticky: read statically.
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const block = /\.sel-strip\s*\{([^}]*)\}/.exec(css)![1]!;
+        expect(block).not.toMatch(/position\s*:/);
+    });
+
+    it('is not painted on a rail with nothing to choose', () => {
+        const { root } = paint(payView({ prices: new Map() }));
+        expect(root.querySelector('[data-role="selection-strip"]')).toBeNull();
+    });
+
+    it('open and empty, it says to add items; with items it names them, counts them and totals them in the seller’s unit', () => {
+        const empty = paint(payView({ selectionOpen: true, selection: new Map() })).root;
+        expect(empty.querySelector('.sel-tray')?.getAttribute('aria-hidden')).toBe('false');
+        expect(empty.querySelector('.sel-empty')?.textContent).toBe(copy.SELECTION_EMPTY);
+        expect(empty.querySelector('[data-role="selection-total"]')).toBeNull();
+        const { root } = twoQuotes({ selectionOpen: true, selection: new Map([[TOKEN_ID, 2n]]) });
+        const strip = root.querySelector('[data-role="selection-strip"]')!;
+        expect(strip.querySelector('[data-role="selection-toggle"]')?.textContent).toBe(copy.selectionOpenCount(2));
+        expect(strip.querySelector('[data-role="selection-names"]')?.textContent).toBe('Roasted Beans ×2');
+        expect(strip.querySelector('.sel-count')?.textContent).toContain(copy.selectionCountLine(2));
+        expect(strip.querySelector('[data-role="selection-clear"]')?.textContent).toBe(copy.SELECTION_CLEAR);
+        // 2 × ($5.00 + 5% = $5.25) = $10.50 — a glance in the seller's unit, surcharge included.
+        expect(strip.querySelector('[data-role="selection-total"]')?.textContent).toBe('$10.50');
+        expect(strip.querySelector('.sel-note')?.textContent).toBe(copy.SELECTION_NOTE_SURCHARGE);
+        expect(strip.querySelector('[data-role="pay-several-open"]')?.textContent).toBe(copy.SELECTION_PAY);
+        // The strip carries no covenant price and no seller-price node.
+        expect(strip.querySelector('[data-role="price"]')).toBeNull();
+        expect(strip.querySelector('[data-role="seller-price"]')).toBeNull();
+    });
+
+    it('says once that a re-read took a chosen item out', () => {
+        const { root } = paint(payView({ selectionOpen: true, selection: new Map(), selectionDropped: true }));
+        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(copy.SELECTION_DROPPED);
+        const quiet = paint(payView({ selectionOpen: true, selection: new Map() })).root;
+        expect(quiet.querySelector('[data-role="selection-dropped"]')).toBeNull();
+    });
+});
+
+describe('a-quote-row-in-selection-mode-builds-no-pay-and-a-stepper', () => {
+    const OTHER = '77'.repeat(32);
+    const twoQuotes = (over: Partial<StallView> = {}) =>
+        paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }],
+                    [OTHER, { code: 'xec', exponent: 2, amount: 500_000n }],
+                ]),
+                ...over,
+            }),
+        );
+    const rowOf = (root: HTMLElement, tokenId: string) =>
+        [...root.querySelectorAll<HTMLElement>('[data-role="pay-row"]')].find(
+            (row) => row.querySelector('[data-focus-key]')?.getAttribute('data-focus-key')?.endsWith(tokenId),
+        )!;
+
+    it('in the selection’s unit the row loses Pay and gains a stepper; the count and the line follow the count', () => {
+        const { root } = twoQuotes({ selectionOpen: true, selection: new Map([[TOKEN_ID, 2n]]) });
+        const row = rowOf(root, TOKEN_ID);
+        expect(row.querySelector('[data-role="pay-open"]'), 'Pay is not built').toBeNull();
+        expect(row.querySelector('.item-head')?.classList.contains('sel-in')).toBe(true);
+        expect(row.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
+        const line = row.querySelector('.item-foot [data-role="selection-line"]')!;
+        expect(line).not.toBeNull();
+        expect(line.querySelector('[data-role="selection-count"]')?.textContent).toBe('2');
+        expect(line.querySelector('[data-role="selection-sub"]')?.textContent).toBe(
+            copy.selectionLine('2', '$5.00', '$10.50'),
+        );
+        expect((line.querySelector('[data-role="selection-fewer"]') as HTMLButtonElement).disabled).toBe(false);
+        expect(line.querySelector('[data-role="selection-fewer"]')?.getAttribute('aria-label')).toBe(
+            copy.selectionFewer('Roasted Beans'),
+        );
+        expect(line.querySelector('[data-role="selection-more"]')?.getAttribute('data-focus-key')).toBe(
+            `selection-step:${TOKEN_ID}:more`,
+        );
+        // The stepper wears `.step`, never `.mini`.
+        for (const button of line.querySelectorAll('button')) {
+            expect(button.classList.contains('step')).toBe(true);
+            expect(button.classList.contains('mini')).toBe(false);
+        }
+    });
+
+    it('a row not yet chosen says so, with "−" disabled; any unit may join an empty selection', () => {
+        const { root } = twoQuotes({ selectionOpen: true, selection: new Map() });
+        for (const id of [TOKEN_ID, OTHER]) {
+            const line = rowOf(root, id).querySelector('[data-role="selection-line"]')!;
+            expect(line.querySelector('[data-role="selection-sub"]')?.textContent).toBe(copy.SELECTION_NOT_CHOSEN);
+            expect((line.querySelector('[data-role="selection-fewer"]') as HTMLButtonElement).disabled).toBe(true);
+            expect((line.querySelector('[data-role="selection-more"]') as HTMLButtonElement).disabled).toBe(false);
+        }
+    });
+
+    it('an apart row keeps Pay, named for what it does, and says why', () => {
+        const { root } = twoQuotes({ selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]) });
+        const apart = rowOf(root, OTHER);
+        expect(apart.querySelector('[data-role="pay-open"]')?.textContent).toBe(copy.PAY_OPEN_APART);
+        const line = apart.querySelector('[data-role="selection-line"]')!;
+        expect(line.textContent).toBe(copy.selectionApart('XEC'));
+        expect(line.querySelector('button')).toBeNull();
+        expect(apart.querySelector('.item-head')?.classList.contains('sel-in')).toBe(false);
+    });
+
+    it('closed, the rows are what they were: Pay in one press and no line', () => {
+        const { root } = twoQuotes();
+        for (const row of root.querySelectorAll('[data-role="pay-row"]')) {
+            expect(row.querySelector('[data-role="pay-open"]')?.textContent).toBe(copy.PAY_OPEN);
+            expect(row.querySelector('[data-role="selection-line"]')).toBeNull();
+        }
+    });
+});
+
+describe('the-stepper-and-the-questions-drive-the-handlers', () => {
+    const drive = (over: Partial<StallView> = {}) => {
+        const h = {
+            ...handlers(),
+            onToggleSelection: vi.fn(),
+            onSelectionSet: vi.fn(),
+            onSelectionAsk: vi.fn(),
+            onSelectionClear: vi.fn(),
+            onOpenPaySeveral: vi.fn(),
+        };
+        const root = document.createElement('div');
+        renderStall(root, payView({ selectionOpen: true, selection: new Map(), ...over }), h);
+        return { root, h };
+    };
+    const press = (root: HTMLElement, role: string) =>
+        (root.querySelector(`[data-role="${role}"]`) as HTMLButtonElement).click();
+
+    it('"+" adds one, "−" takes one, and "−" at one asks', () => {
+        const zero = drive();
+        press(zero.root, 'selection-more');
+        expect(zero.h.onSelectionSet).toHaveBeenCalledWith(TOKEN_ID, 1n);
+        const two = drive({ selection: new Map([[TOKEN_ID, 2n]]) });
+        press(two.root, 'selection-fewer');
+        expect(two.h.onSelectionSet).toHaveBeenCalledWith(TOKEN_ID, 1n);
+        const one = drive({ selection: new Map([[TOKEN_ID, 1n]]) });
+        press(one.root, 'selection-fewer');
+        expect(one.h.onSelectionAsk).toHaveBeenCalledWith({ kind: 'remove', tokenId: TOKEN_ID });
+        expect(one.h.onSelectionSet).not.toHaveBeenCalled();
+    });
+
+    it('the remove question replaces the stepper, Yes removes and No puts it back', () => {
+        const { root, h } = drive({
+            selection: new Map([[TOKEN_ID, 1n]]),
+            selectionAsk: { kind: 'remove', tokenId: TOKEN_ID },
+        });
+        const line = root.querySelector('[data-role="selection-line"]')!;
+        expect(line.classList.contains('sel-ask')).toBe(true);
+        expect(line.textContent).toContain(copy.selectionAskRemove('Roasted Beans'));
+        expect(line.querySelector('[data-role="selection-more"]')).toBeNull();
+        press(root, 'selection-yes');
+        expect(h.onSelectionSet).toHaveBeenCalledWith(TOKEN_ID, 0n);
+        press(root, 'selection-no');
+        expect(h.onSelectionAsk).toHaveBeenCalledWith(undefined);
+    });
+
+    it('Clear asks under the summary, never in its place; Yes clears', () => {
+        const { root, h } = drive({ selection: new Map([[TOKEN_ID, 2n]]) });
+        press(root, 'selection-clear');
+        expect(h.onSelectionAsk).toHaveBeenCalledWith({ kind: 'clear' });
+        const asked = drive({ selection: new Map([[TOKEN_ID, 2n]]), selectionAsk: { kind: 'clear' } });
+        const sum = asked.root.querySelector('.sel-sum')!;
+        const ask = asked.root.querySelector('[data-role="selection-ask"]')!;
+        expect(ask.textContent).toContain(copy.SELECTION_ASK_CLEAR);
+        expect(sum.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(asked.root.querySelector('[data-role="selection-total"]'), 'the summary stands').not.toBeNull();
+        (ask.querySelector('[data-role="selection-yes"]') as HTMLButtonElement).click();
+        expect(asked.h.onSelectionClear).toHaveBeenCalledTimes(1);
+    });
+
+    it('the toggle opens and closes; Pay on the strip opens the several-items sheet', () => {
+        const { root, h } = drive({ selection: new Map([[TOKEN_ID, 2n]]) });
+        press(root, 'selection-toggle');
+        expect(h.onToggleSelection).toHaveBeenCalledTimes(1);
+        press(root, 'pay-several-open');
+        expect(h.onOpenPaySeveral).toHaveBeenCalledTimes(1);
+    });
+
+    it('a stepper keeps focus across a repaint', () => {
+        const h = handlers();
+        const root = document.createElement('div');
+        document.body.append(root);
+        try {
+            const view = payView({ selectionOpen: true, selection: new Map([[TOKEN_ID, 2n]]) });
+            renderStall(root, view, h);
+            (root.querySelector('[data-role="selection-more"]') as HTMLButtonElement).focus();
+            renderStall(root, view, h);
+            expect(document.activeElement?.getAttribute('data-focus-key')).toBe(`selection-step:${TOKEN_ID}:more`);
+        } finally {
+            root.remove();
+        }
+    });
+});
+
+describe('the-selection-figure-is-the-figure-in-the-link', () => {
+    /**
+     * The several-items sheet: one bigint per item (the single sheet's own
+     * arithmetic — the quote converted, then its surcharge, both rounding
+     * up), summed; that sum is the figure, both links and the code. No
+     * memo yet, and the fine print says so; no `seller-price` node, because
+     * there is no single quote on it.
+     */
+    const OTHER = '77'.repeat(32);
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, { ...QUOTE_USD, surchargePct: 5 }],
+                    [OTHER, { code: 'usd', exponent: 2, amount: 350n }],
+                ]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n], [OTHER, 1n]]),
+                payRate: PAY_RATE,
+                stallName: 'Riverside Goods',
+                ...over,
+            }),
+        );
+
+    it('names the seller only when they named themselves', () => {
+        const unnamed = sheet({ stallName: undefined });
+        expect(unnamed.root.querySelector('[data-role="pay-several"] .sheet-head')?.textContent).toContain(
+            copy.PAY_SEVERAL_SUB_NO_NAME,
+        );
+        expect(unnamed.root.querySelector('[data-role="pay-several"] .sheet-head')?.textContent).not.toContain('ecash:');
+    });
+
+    it('composes every item, sums them, and the figure is the link, with no memo', () => {
+        const { root } = sheet();
+        const a = satsWithSurcharge(satsForQuote({ ...QUOTE_USD, surchargePct: 5 }, 2n, PAY_RATE.rate), 5)!;
+        const b = satsForQuote({ code: 'usd', exponent: 2, amount: 350n }, 1n, PAY_RATE.rate)!;
+        const sats = a + b;
+        const dialog = root.querySelector('[data-role="pay-several"]') as HTMLElement;
+        expect(dialog.getAttribute('aria-label')).toBe(copy.paySeveralTitle(3));
+        expect(dialog.querySelector('.sheet-head')?.textContent).toContain(copy.paySeveralSub('Riverside Goods'));
+        expect(dialog.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
+        const url = pressForUrl(root, 'pay-cashtab');
+        expect(url).toBe(cashtabPayUrl(ADDR, sats));
+        expect(url).not.toContain('op_return_raw');
+        expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats));
+        expect(dialog.querySelector('[data-role="seller-price"]')).toBeNull();
+        expect(dialog.textContent).toContain(copy.PAY_FINE_NO_MEMO);
+        expect(dialog.textContent).toContain(copy.PAY_FINE_TOLERANCES_PER_ITEM);
+        expect(dialog.querySelector('[data-role="pay-quantity"]'), 'no quantity row').toBeNull();
+    });
+
+    it('prints one line per item and the total in the seller’s unit, surcharges included', () => {
+        const { root } = sheet();
+        const lines = root.querySelector('[data-role="pay-lines"]')!;
+        const rows = [...lines.querySelectorAll('.pay-line')];
+        expect(rows).toHaveLength(2);
+        expect(rows[0]!.querySelector('dt')?.textContent).toBe(copy.paySeveralLine('Roasted Beans', '2'));
+        expect(rows[0]!.querySelector('.pay-line-x')?.textContent).toBe('$10.00');
+        expect(rows[0]!.querySelector('[data-role="quote-surcharge"]')?.textContent).toBe(copy.quoteSurchargeLine(5));
+        expect(rows[1]!.querySelector('dt')?.textContent).toBe(copy.paySeveralLine('Green Tea', '1'));
+        expect(rows[1]!.querySelector('[data-role="quote-surcharge"]')).toBeNull();
+        // 2 × $5.25 + $3.50 = $14.00
+        expect(root.querySelector('[data-role="pay-total"]')?.textContent).toBe(copy.paySeveralTotalSurcharged('$14.00'));
+    });
+
+    it('an xec selection mounts no rate and composes from the records alone', () => {
+        const { root } = sheet({
+            prices: new Map([
+                [TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 10 }],
+                [OTHER, { code: 'xec', exponent: 2, amount: 100_000n }],
+            ]),
+            payRate: undefined,
+        });
+        const dialog = root.querySelector('[data-role="pay-several"]') as HTMLElement;
+        expect(dialog.querySelector('[data-role="rate"]')).toBeNull();
+        // 2 × 500,000 sats × 1.10 + 100,000 = 1,200,000 sats = 12,000 XEC
+        expect(dialog.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(1_200_000n));
+        expect(dialog.querySelector('[data-role="pay-total"]')?.textContent).toBe(
+            copy.paySeveralTotalSurcharged('12,000.00 XEC'),
+        );
+    });
+
+    it('holds the live paint, and an emptied selection says so rather than composing nothing', () => {
+        const view = payView({ overlay: { kind: 'pay-several' }, selection: new Map(), selectionOpen: true });
+        expect(overlayMounts(view)).toBe(true);
+        expect(holdsLivePaint(view)).toBe(true);
+        const { root } = paint(view);
+        const dialog = root.querySelector('[data-role="pay-several"]') as HTMLElement;
+        expect(dialog.textContent).toContain(copy.SELECTION_EMPTY);
+        expect(dialog.querySelector('[data-role="price"]')).toBeNull();
+        expect(dialog.querySelector('[data-role="pay-close"]')).not.toBeNull();
     });
 });

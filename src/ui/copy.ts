@@ -1857,6 +1857,60 @@ export const STUDIO_SURCHARGE_MEMORY_NONE =
 export const STUDIO_FORGET_SURCHARGE = 'Forget';
 export const STUDIO_FORGET_SURCHARGE_LABEL = 'Forget the surcharge this browser remembers for this stall';
 
+/*
+ * "Pay several" (2026-09-21): one payment for several quotes. The control is
+ * named for what it does and the word "basket" is in no copy (the design
+ * round's D1; the owner may take "giỏ" back knowingly). The strip sits
+ * under the rail tabs in the tabs' own dress; the sheet is the pay sheet's
+ * shape over the lines.
+ */
+export const SELECTION_LABEL = 'Pay several items at once';
+export const SELECTION_OPEN = 'Pay several';
+export const selectionOpenCount = (n: number): string =>
+    `Pay several \u00b7 ${n} item${n === 1 ? '' : 's'}`;
+export const SELECTION_HINT = 'Pay several at once';
+export const SELECTION_EMPTY = 'Add items below';
+export const selectionCountLine = (n: number): string => `${n} item${n === 1 ? '' : 's'}`;
+export const SELECTION_CLEAR = 'Clear';
+export const SELECTION_CLEAR_LABEL = 'Remove every chosen item';
+/** The strip's total already includes every chosen item's own surcharge; the note says so without a number, because the percents may differ. */
+export const SELECTION_NOTE_SURCHARGE = 'incl. surcharge \u00b7 the seller\u2019s record';
+export const SELECTION_PAY = 'Pay';
+export const SELECTION_NOT_CHOSEN = 'Not chosen';
+/** A chosen row's own line: count × the quote as written = the line's figure, surcharge included. */
+export const selectionLine = (count: string, figure: string, total: string): string =>
+    `${count} \u00d7 ${figure} = ${total}`;
+export const selectionFewer = (name: string): string => `One fewer ${name}`;
+export const selectionMore = (name: string): string => `One more ${name}`;
+export const selectionAskRemove = (name: string): string => `Remove ${name}?`;
+export const SELECTION_ASK_CLEAR = 'Remove every item?';
+export const SELECTION_YES = 'Yes';
+export const SELECTION_NO = 'No';
+/** A row in another unit than the selection's: it keeps its own Pay, named for what it does now. */
+export const PAY_OPEN_APART = 'Pay on its own';
+export const selectionApart = (unit: string): string =>
+    `Quoted in ${unit} \u2014 paid on its own`;
+export const SELECTION_DROPPED =
+    'A chosen item left the seller\u2019s quotes and was taken out.';
+export const selectionFull = (n: number): string =>
+    `Up to ${n} different items in one payment.`;
+/* The several-items sheet. */
+export const paySeveralTitle = (n: number): string =>
+    `${n} item${n === 1 ? '' : 's'} \u00b7 one payment`;
+export const paySeveralSub = (stall: string): string =>
+    `Paid to ${stall} directly, in one payment.`;
+export const PAY_SEVERAL_SUB_NO_NAME = 'Paid to the seller directly, in one payment.';
+export const paySeveralLine = (name: string, count: string): string => `${name} \u00d7 ${count}`;
+export const paySeveralTotal = (figure: string): string => `= ${figure} in total`;
+export const paySeveralTotalSurcharged = (figure: string): string =>
+    `= ${figure} in total, surcharges included \u00b7 the seller\u2019s records`;
+export const PAY_FINE_TOLERANCES_PER_ITEM =
+    'Tolerances are per item: each item\u2019s own sheet shows the margin the seller\u2019s record states.';
+export const PAY_FINE_NO_MEMO =
+    'This payment carries no memo yet: the seller sees the amount, not the items. Tell them what it was for.';
+export const PAY_FINE_DELIVERY_SEVERAL =
+    'Arrange delivery with the seller off-chain. This page cannot tell that a payment was for these items, and never that anything was delivered.';
+
 /** The overlay's brand line. Ours, never the seller's. */
 export const BROADCAST_BRAND = 'stall.cash';
 /** Under the QR. The payload is the shop. */

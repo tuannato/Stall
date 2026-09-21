@@ -1279,3 +1279,21 @@ covered-price incident with one line moved. The `pay` fixture's `T1` quote
 carries `surchargePct: 5` so the sheet, the row, the tag and the stream card
 all paint the lines; `quote-surcharge` on the wall wears the words' own scale
 (`.sw-sur`), never the phone foot's 11.5px, because it is read across a room.
+
+## "Pay several": the strip's total, the sheet's lines, the stepper
+
+One payment for several quotes (2026-09-21). Three new money boxes:
+`selection-total` — the strip's glance in the seller's unit, surcharges
+included, painted inside a `.seg` that carries `overflow: hidden` for the
+contrast sampler's sake, so a tray wider than the strip would clip the one
+figure a buyer reads before Pay — `pay-lines` and `pay-total` on the
+several-items sheet. All three are protected boxes and contrast targets;
+`.step` (the stepper's own class, 44px both ways) and `.sel-sub` (the
+row's "count × quote = line") are contrast targets. The fixtures:
+`pay-several-strip` (open, two of the USD quote chosen, the XEC quote
+painted as an "apart" row with its own Pay), `pay-several-ask` (the remove
+question in place of a stepper, geometry only) and `pay-several` (the sheet
+with the frozen rate). The strip is in flow and never sticky, so the
+decoration sweep never meets it; its entrance animates only on the paint
+after the press (`selectionEntered`), which the reduced-motion pass never
+sees armed — the kills sit in `stall.css`'s last block regardless.

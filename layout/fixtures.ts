@@ -344,6 +344,45 @@ export const SCREENS: Record<string, StallView> = {
         payRate: PAY_RATE,
         payRateOutcome: 'moved',
     }),
+    /*
+     * "Pay several" (2026-09-21): the strip open under the rail tabs with two
+     * items chosen on the USD quote, so the XEC quote paints as an "apart"
+     * row with its own Pay; the row's stepper; the strip's total under its
+     * own protected role. `pay-several-ask` is the remove question in place
+     * of a stepper (geometry only: its two words are the row's own ink);
+     * `pay-several` is the sheet over the lot, with the frozen rate.
+     */
+    'pay-several-strip': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 2n]]),
+    }),
+    'pay-several-ask': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+        selectionAsk: { kind: 'remove', tokenId: T1 },
+    }),
+    'pay-several': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([[T1, 2n]]),
+        overlay: { kind: 'pay-several' },
+        payRate: PAY_RATE,
+    }),
     'pay-dust': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         // One satoshi of XEC: no rate involved, and under `DUST_SATS`.
@@ -1065,6 +1104,11 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-xec',
     'pay-moved',
     'pay-dust',
+    // The three "Pay several" screens: the same rows and sheet shape, and the
+    // decoration interactions they could stage are `offers`'.
+    'pay-several-strip',
+    'pay-several-ask',
+    'pay-several',
     'item-quote',
     // The two tool sheets: the same sheet shape over the same shop; the
     // decoration interactions they could stage are `offers`' again.
@@ -1094,6 +1138,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'embed-sheet',
     'stream-sheet',
     'broadcast-hero',
+    // The remove question in place of a stepper: two words in the row's own
+    // ink, on the ground `pay-several-strip` already samples.
+    'pay-several-ask',
     'nothing-quoted',
     'quotes-failed',
     'quotes-truncated',
