@@ -14042,6 +14042,11 @@ describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
         for (const img of deck.querySelectorAll('img')) {
             expect(img.getAttribute('src')).not.toMatch(/\/icon\//);
         }
+        // One picture per item, each its own (owner, 2026-09-21): nine tiles
+        // wearing one token's icon read as one shop selling one thing.
+        const art = [...deck.querySelectorAll('.deck-stall .item-ic img')].map((i) => i.getAttribute('src'));
+        expect(art).toHaveLength(3 * copy.HOME_PREVIEW.items.length);
+        expect(new Set(art.slice(0, copy.HOME_PREVIEW.items.length)).size).toBe(copy.HOME_PREVIEW.items.length);
         expect(deck.textContent).toContain(copy.HOME_DECK_CAP);
         expect(deck.textContent).toContain(copy.DECOR_LEDE);
         expect(deck.textContent).toContain(copy.HOME_WORKSHOP_NEXT);

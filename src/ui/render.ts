@@ -124,7 +124,9 @@ import {
     marqueeNode,
     remeasureWhenFontsReady,
 } from './marquee';
-import mingoIcon from './mingo-icon.png';
+import deckBeans from './deck-beans.png';
+import deckTea from './deck-tea.png';
+import deckPixel from './deck-pixel.png';
 import './stall.css';
 import './theme-modern.css';
 import './theme-neo.css';
@@ -927,8 +929,8 @@ const DECK_LOOKS: ReadonlyArray<{ themeId: number; cls: string; slug: string }> 
  * `header()`, row classes and decoration nodes the shop paints — so a look
  * that moves in its own sheet moves here, and nothing is drawn by hand.
  * Inert and `aria-hidden`: no control, no `data-role="price"`, no marquee,
- * and no icon fetch — the tile is the vendored mingo asset, because the apex
- * asks nothing of any other service (§3). Scaled by CSS, not by a smaller
+ * and no icon fetch — the tiles are three vendored sprites, one per fixture
+ * item, because the apex asks nothing of any other service (§3). Scaled by CSS, not by a smaller
  * stall: the cards are the 390px screen at ~0.64, which is why they read as
  * the real thing.
  */
@@ -961,9 +963,9 @@ function doorDeck(): HTMLElement {
         );
         const main = el('div', 'stall-body');
         const items = el('div', 'items');
-        for (const item of copy.HOME_PREVIEW.items) {
-            items.append(deckRow(item));
-        }
+        copy.HOME_PREVIEW.items.forEach((item, i) => {
+            items.append(deckRow(item, DECK_ART[i]!));
+        });
         main.append(items);
         mini.append(main);
         placeAttachmentNodes(mini, worn);
@@ -1014,12 +1016,12 @@ function deckCaption(cls: string, look: string, worn: string | undefined): HTMLE
  * shop window's pattern. No price role — the figure is fixture copy, not a
  * covenant's — and the tile is the vendored asset rather than a Worker fetch.
  */
-function deckRow(item: { readonly name: string; readonly price: string }): HTMLElement {
+function deckRow(item: { readonly name: string; readonly price: string }, art: string): HTMLElement {
     const card = el('div', 'item');
     const head = el('div', 'item-head sw-row deck-head');
     const tile = el('span', 'item-ic');
     const img = el('img');
-    img.src = mingoIcon;
+    img.src = art;
     img.alt = '';
     img.decoding = 'async';
     tile.append(img);
@@ -1030,7 +1032,9 @@ function deckRow(item: { readonly name: string; readonly price: string }): HTMLE
     head.append(info);
     const price = el('span', 'item-p');
     const amount = el('span', 'item-a');
-    amount.append(el('span', 'item-from', copy.PRICE_FROM));
+    // No "from": the fixture rows are plain listings, and the word is the
+    // shop's for a partial offer's lowest figure — on nine tiles it was
+    // noise, and the column it cost is the name's (owner, 2026-09-21).
     amount.append(el('span', 'item-x', item.price));
     amount.append(el('span', 'item-u', copy.XEC));
     price.append(amount);
@@ -1182,12 +1186,17 @@ function stepsList(
 }
 
 /*
- * The deck's tile art is the mingo token's icon (token
- * d6c88f410551f1eaa48cc65ee381cbec770d0797c508e10a75da835030024cdb, the
- * owner's own), vendored as a fingerprinted same-origin asset rather than
- * fetched from the icon Worker on every door load — the owner's call: the
- * apex stays a page that asks nothing of any other service.
+ * The deck's tile art: three 16-cell pixel sprites drawn for the fixture
+ * items (a bean on tan, a leaf on blue-grey, an invader on navy), vendored
+ * as fingerprinted same-origin assets rather than fetched from the icon
+ * Worker on every door load — the apex stays a page that asks nothing of
+ * any other service. One picture per item, each its own colour (owner,
+ * 2026-09-21): the mingo token's icon on all nine tiles read as one shop
+ * selling one thing. Written by `scripts`-free Python in the session that
+ * added them; a real token's icon is never used here, so nothing on the
+ * door names a token that exists.
  */
+const DECK_ART: readonly string[] = [deckBeans, deckTea, deckPixel];
 
 /**
  * The stalls this browser pinned. Route tokens from storage, painted as

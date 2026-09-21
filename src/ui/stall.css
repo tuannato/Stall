@@ -6078,6 +6078,22 @@ textarea.share-embed {
 }
 
 /*
+ * From 680px the app's desk rules reach into the minis — the row grows a
+ * caret track, a desk icon, desk paddings and a desk figure — and a 390px
+ * mini wearing them crushed its name column to 13px on Modern, "Beans"
+ * printed over "from" (measured 2026-09-21 at 1280). Media queries read the
+ * viewport, so the mini cannot be a phone here; it is a 480px screen
+ * instead, wide enough for the desk row, and the zoom keeps the card the
+ * same width on the page. Below 680 it is the 390px phone it looks like.
+ */
+@media (min-width: 680px) {
+    .deck-stall {
+        width: 480px;
+        zoom: 0.454;
+    }
+}
+
+/*
  * From 960px the deck fans beside the counter: three cards in flow, the
  * outer two rotated and pulled in under the middle one. In flow and never
  * `position: absolute` — the probe sweeps every absolutely positioned node
@@ -6124,7 +6140,7 @@ textarea.share-embed {
     }
 
     .deck-stall {
-        zoom: 0.42;
+        zoom: 0.342;
     }
 
     .deck-look.l-neo {
@@ -6166,7 +6182,7 @@ textarea.share-embed {
     }
 
     .deck-stall {
-        zoom: 0.47;
+        zoom: 0.381;
     }
 
     .deck-look.l-neo {
