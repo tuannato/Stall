@@ -180,7 +180,7 @@ describe('a-malformed-broadcast-option-falls-back-to-its-default', () => {
         preset: 'corner',
         mode: 'rail',
         transparent: false,
-        cards: 'listings',
+        cards: 'listings', side: 'right', edge: 'bottom',
     } as const;
 
     it('view=broadcast with no options is the defaults', () => {
@@ -398,5 +398,47 @@ describe('the-sign-shortens-the-address-to-a-glance', () => {
         expect(shortAddress('ecash:qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09')).toBe('qpjqjm0l…c3j7hv09');
         expect(shortAddress('qpjqjm0lasd3k54dmuczp20sr05tsykrlyc3j7hv09')).toBe('qpjqjm0l…c3j7hv09');
         expect(shortAddress('ecash:short')).toBe('short');
+    });
+});
+
+describe('the-ticker-preset-and-its-two-placements-are-bounded', () => {
+    /**
+     * The third preset (2026-09-21): `preset=ticker` forces `fixed` — a
+     * resting ticker is a blank bar, which reads as a dead source — and
+     * reads two placements, each one word, anything else the default.
+     * `cards=all` is the third value of the existing switch and takes turns;
+     * it is read on every preset, and the rail ignores it as it ignores the
+     * other two (it mounts no card).
+     */
+    it('reads preset=ticker as fixed, and side/edge as one word each', () => {
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker')).toEqual({
+            preset: 'ticker',
+            mode: 'fixed',
+            transparent: false,
+            cards: 'listings',
+            side: 'right',
+            edge: 'bottom',
+        });
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker&mode=rail&side=left&edge=top')).toEqual({
+            preset: 'ticker',
+            mode: 'fixed',
+            transparent: false,
+            cards: 'listings',
+            side: 'left',
+            edge: 'top',
+        });
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker&side=Left&edge=TOP')?.side).toBe('right');
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker&side=Left&edge=TOP')?.edge).toBe('bottom');
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker&side=&edge=middle')).toMatchObject({
+            side: 'right',
+            edge: 'bottom',
+        });
+    });
+
+    it('cards=all is bounded to the one word, on every preset', () => {
+        expect(parseBroadcastParams('?view=broadcast&cards=all')?.cards).toBe('all');
+        expect(parseBroadcastParams('?view=broadcast&preset=ticker&cards=all')?.cards).toBe('all');
+        expect(parseBroadcastParams('?view=broadcast&cards=All')?.cards).toBe('listings');
+        expect(parseBroadcastParams('?view=broadcast&cards=both')?.cards).toBe('listings');
     });
 });

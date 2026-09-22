@@ -1653,7 +1653,7 @@ const BROADCAST_FIXED = {
     preset: 'corner' as const,
     mode: 'fixed' as const,
     transparent: false,
-    cards: 'listings' as const,
+    cards: 'listings' as const, side: 'right' as const, edge: 'bottom' as const
 };
 const BROADCAST_RETRY_MS = 30_000;
 const BROADCAST_FIXED_MS = 8_000;
@@ -1724,7 +1724,7 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
             transparent: true,
             // The switch the parser now answers with, off unless it is asked
             // for: this URL names no `cards`, so the carousel is the shop's.
-            cards: 'listings',
+            cards: 'listings', side: 'right' as const, edge: 'bottom' as const,
         });
         expect(root.querySelector('[data-role="broadcast"]')).not.toBeNull();
         expect(root.querySelector('.tabs')).toBeNull();
@@ -2643,7 +2643,7 @@ const BROADCAST_QUOTES = {
     preset: 'corner' as const,
     mode: 'fixed' as const,
     transparent: false,
-    cards: 'quotes' as const,
+    cards: 'quotes' as const, side: 'right' as const, edge: 'bottom' as const
 };
 
 const fungible = (tokenId: string, name: string) => ({
@@ -4071,7 +4071,7 @@ describe('a-new-card-under-an-armed-timer-gets-its-own-dwell', () => {
             bootStall(
                 stallEmpty({
                     fetch: { kind: 'offers', offers: [A, B] },
-                    broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings' },
+                    broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings', side: 'right' as const, edge: 'bottom' as const },
                 }),
             );
             await flush();

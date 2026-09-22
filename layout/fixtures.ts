@@ -218,7 +218,9 @@ const bc = (
     mode: BroadcastParams['mode'],
     transparent = false,
     cards: BroadcastParams['cards'] = 'listings',
-): BroadcastParams => ({ preset, mode, transparent, cards });
+    side: BroadcastParams['side'] = 'right',
+    edge: BroadcastParams['edge'] = 'bottom',
+): BroadcastParams => ({ preset, mode, transparent, cards, side, edge });
 
 export const SCREENS: Record<string, StallView> = {
     offers: base({
@@ -944,7 +946,7 @@ export const SCREENS: Record<string, StallView> = {
      */
     'broadcast-hero': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
-        broadcast: { preset: 'corner', mode: 'fixed', transparent: true, cards: 'listings' },
+        broadcast: bc('corner', 'fixed', true),
         broadcastState: 'live',
     }),
     'broadcast-clear': base({
@@ -1070,6 +1072,58 @@ export const SCREENS: Record<string, StallView> = {
         broadcast: bc('rail', 'rail'),
         broadcastState: 'live',
         stallName: 'W'.repeat(32),
+    }),
+    /*
+     * The ticker (2026-09-21). The ribbon is PINNED still at an offset where
+     * one whole listing item stands inside the clipping cell, because the
+     * probe measures a money figure at one instant and a figure that moved
+     * between the layout read and the pixel read is a figure sampled where
+     * the page painted something else. `-260` puts the first item's figure
+     * and the second item's name in the cell at every look's metrics.
+     */
+    'broadcast-ticker': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('ticker', 'fixed'),
+        broadcastState: 'live',
+        broadcastTickerAt: -260,
+    }),
+    /* The quotes pass: the chip beside every figure, the flag's line, the code left, the bar on top. */
+    'broadcast-ticker-quotes': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        broadcast: bc('ticker', 'fixed', false, 'quotes', 'left', 'top'),
+        broadcastState: 'live',
+        broadcastTickerAt: -120,
+    }),
+    /* The ribbon RUNNING: the reduced-motion pass proves the kill on it, and
+       the sticker rule reads the box as a streamer's source would. */
+    'broadcast-ticker-live': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        broadcast: bc('ticker', 'fixed'),
+        broadcastState: 'live',
+        stallName: 'W'.repeat(32),
+    }),
+    /* A STILL page under reduced motion — a layout with a width budget, not
+       the moving ribbon paused: one quote item, its figure and surcharge line
+       inside the cell, its words cut at the cell's edge (stated). Geometry
+       only; `cutSideways` applies here because `data-ribbon` is `still`. */
+    'broadcast-ticker-quotes-still': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        broadcast: bc('ticker', 'fixed', false, 'quotes'),
+        broadcastState: 'live',
+        broadcastTickerStill: true,
+    }),
+    /* The same bar on the OBS wire, where pass 5 reads it. */
+    'broadcast-ticker-clear': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        broadcast: bc('ticker', 'fixed', true, 'quotes'),
+        broadcastState: 'live',
+        broadcastTickerAt: -120,
     }),
 };
 
@@ -1247,6 +1301,11 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-empty',
     'broadcast-long-name',
     'broadcast-rail-long-name',
+    'broadcast-ticker',
+    'broadcast-ticker-quotes',
+    'broadcast-ticker-live',
+    'broadcast-ticker-quotes-still',
+    'broadcast-ticker-clear',
     'shop-window-wall',
 ]);
 
@@ -1262,4 +1321,9 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-empty',
     'broadcast-long-name',
     'broadcast-rail-long-name',
+    'broadcast-ticker',
+    'broadcast-ticker-quotes',
+    'broadcast-ticker-live',
+    'broadcast-ticker-quotes-still',
+    'broadcast-ticker-clear',
 ]);

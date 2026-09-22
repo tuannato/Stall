@@ -52,6 +52,8 @@ import {
     SHOP_TAB_LISTINGS,
     PLUGIN_MISSING_BODY,
     UNREACHABLE_BODY,
+    BROADCAST_TICKER_QUOTES_LINE,
+    BROADCAST_TICKER_LISTINGS,
 } from './ui/copy';
 import { DEFAULT_THEME } from './domain/theme';
 import type { DescriptionLookup } from './net/descriptions';
@@ -408,13 +410,13 @@ const BROADCAST_CORNER_FIXED = {
     transparent: false,
     // The carousel's list: the shop's own listings unless the link asks
     // for the seller's quotes.
-    cards: 'listings' as const,
+    cards: 'listings' as const, side: 'right' as const, edge: 'bottom' as const
 };
 const BROADCAST_RAIL = {
     preset: 'rail' as const,
     mode: 'rail' as const,
     transparent: false,
-    cards: 'listings' as const,
+    cards: 'listings' as const, side: 'right' as const, edge: 'bottom' as const
 };
 const BROADCAST_RETRY_MS = 30_000;
 const BROADCAST_FIXED_MS = 8_000;
@@ -513,7 +515,7 @@ describe('a-broadcast-retries-our-failure-on-its-own', () => {
                             preset: 'corner',
                             mode: 'rail',
                             transparent: false,
-                            cards: 'listings',
+                            cards: 'listings', side: 'right' as const, edge: 'bottom' as const,
                         },
                     },
                     [],
@@ -570,8 +572,8 @@ describe('a-broadcast-retries-our-failure-on-its-own', () => {
                         preset: 'corner' as const,
                         mode: 'rail' as const,
                         transparent: false,
-                        cards: 'listings' as const,
-                    },
+                        cards: 'listings' as const, side: 'right' as const, edge: 'bottom' as const
+},
                 },
                 offers: [],
             };
@@ -1606,5 +1608,219 @@ describe('the glance is asked for when it is on screen, and kept fresh while it 
             root.querySelector('[data-role="fiat"]'),
             'and the line goes with it',
         ).toBeNull();
+    });
+});
+
+describe('cards-all-takes-turns-at-the-wrap-on-the-corner-card', () => {
+    /**
+     * `cards=all` (owner, 2026-09-21): one rail per card, the turn at the
+     * wrap — the shop window's `nextCard` on the stream. The rail is
+     * explicit state written onto the view at paint time, so the card and
+     * the cursor cannot mean two different rows; and a token on both rails
+     * is two cards.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const fungible = (tokenId: string, name: string) =>
+        [tokenId, { tokenId, name, ticker: name.slice(0, 3).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }] as const;
+
+    it('shows the listings through, turns to the quotes, and turns back', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed&cards=all`);
+        const root = document.createElement('div');
+        boot(root, async () =>
+            overlayState({
+                tokens: new Map([fungible(TOKEN_A, 'Roasted Beans'), fungible(TOKEN_B, 'Green Tea')]),
+                prices: new Map([[TOKEN_A, { code: 'usd', exponent: 2, amount: 500n }]]),
+                broadcast: { ...BROADCAST_CORNER_FIXED, cards: 'all' as const },
+            }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        const kind = (): string =>
+            root.querySelector('[data-role="price"]') !== null
+                ? 'listing'
+                : root.querySelector('[data-role="seller-price"]') !== null
+                  ? 'quote'
+                  : 'none';
+        expect(kind()).toBe('listing');
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(kind(), 'the second listing').toBe('listing');
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(kind(), 'the wrap turns the rail').toBe('quote');
+        expect(root.querySelector('[data-role="price"]'), 'never both figures on one card').toBeNull();
+        await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+        expect(kind(), 'one quote shown through, back to the listings').toBe('listing');
+    });
+
+    it('with nothing quoted, all stays on the listings and never turns', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed&cards=all`);
+        const root = document.createElement('div');
+        boot(root, async () =>
+            overlayState({ broadcast: { ...BROADCAST_CORNER_FIXED, cards: 'all' as const } }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        for (let i = 0; i < 4; i += 1) {
+            await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+            expect(root.querySelector('[data-role="price"]')).not.toBeNull();
+            expect(root.querySelector('[data-role="seller-price"]')).toBeNull();
+        }
+    });
+});
+
+describe('a-reduce-toggle-mid-pass-does-not-freeze-the-ticker', () => {
+    /**
+     * The hold `livePaint` takes while a pass runs is released by the
+     * ribbon's own iteration event — and a reduce toggle mid-pass CANCELS
+     * the animation, which fires no iteration ever again. Without a
+     * listener on the media query the app believed a pass was in flight for
+     * the source's life and an idle stall's overlay froze on one frame (the
+     * critic's P1, 2026-09-22). The preference is one list read at boot and
+     * on `change`; the change repaints the ticker at once, still and
+     * paging, or moving again with the pager gone.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const T = (n: number): string => n.toString(16).padStart(2, '0').repeat(32);
+    const fungible = (tokenId: string, name: string) =>
+        [tokenId, { tokenId, name, ticker: name.slice(0, 3).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }] as const;
+    const names = (root: HTMLElement): string[] =>
+        [...root.querySelectorAll('.tk-it .tk-n')].map((n) => n.textContent ?? '');
+
+    it('a change to reduce stills the ribbon and pages it; a change back frees it', async () => {
+        vi.useFakeTimers();
+        const realMatch = window.matchMedia;
+        let reduce = false;
+        let onChange: ((event: { matches: boolean }) => void) | undefined;
+        window.matchMedia = ((query: string) =>
+            ({
+                get matches() {
+                    return query.includes('reduce') && reduce;
+                },
+                media: query,
+                addEventListener(_type: string, fn: (event: { matches: boolean }) => void) {
+                    onChange = fn;
+                },
+                removeEventListener() {},
+            }) as unknown as MediaQueryList) as typeof window.matchMedia;
+        try {
+            window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=ticker`);
+            const root = document.createElement('div');
+            const tenOffers = Array.from({ length: 10 }, (_, i) => offerAt(T(i + 1), BigInt(100_000 + i * 100), i));
+            boot(root, async () =>
+                overlayState(
+                    {
+                        tokens: new Map(Array.from({ length: 10 }, (_, i) => fungible(T(i + 1), `Item ${i + 1}`))),
+                        broadcast: { preset: 'ticker' as const, mode: 'fixed' as const, transparent: false, cards: 'listings' as const, side: 'right' as const, edge: 'bottom' as const },
+                    },
+                    tenOffers,
+                ),
+            );
+            await vi.advanceTimersByTimeAsync(0);
+            expect(onChange, 'the app listens to the media query').toBeDefined();
+            expect(root.querySelector('.tk-run')?.classList.contains('still')).toBe(false);
+            expect(names(root)).toHaveLength(8);
+
+            reduce = true;
+            onChange!({ matches: true });
+            expect(root.querySelector('.tk-run')?.classList.contains('still'), 'repainted still at once').toBe(true);
+            expect(names(root)).toEqual(['Item 1']);
+            await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS);
+            expect(names(root), 'and paging, with no wrap event to wait for').toEqual(['Item 2']);
+
+            reduce = false;
+            onChange!({ matches: false });
+            expect(root.querySelector('.tk-run')?.classList.contains('still'), 'moving again').toBe(false);
+            const shown = names(root).length;
+            await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS * 2);
+            expect(names(root), 'the pager is gone; only the wrap advances a moving ribbon').toHaveLength(shown);
+        } finally {
+            window.matchMedia = realMatch;
+        }
+    });
+});
+
+describe('the-ticker-pages-at-the-wrap-and-turns-the-rail-there', () => {
+    /**
+     * The ribbon's own iteration event is the scheduler's input: a pass
+     * runs through, the next page of items rides the next pass, and under
+     * `cards=all` the other rail comes once this one has been shown through.
+     * Under reduced motion there is no animation to end, so a timer at the
+     * fixed carousel's dwell pages the still ribbon instead.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const T = (n: number): string => n.toString(16).padStart(2, '0').repeat(32);
+    const fungible = (tokenId: string, name: string) =>
+        [tokenId, { tokenId, name, ticker: name.slice(0, 3).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }] as const;
+    const tenOffers = Array.from({ length: 10 }, (_, i) => offerAt(T(i + 1), BigInt(100_000 + i * 100), i));
+    const tickerState = (cards: 'listings' | 'all') =>
+        overlayState(
+            {
+                tokens: new Map(Array.from({ length: 10 }, (_, i) => fungible(T(i + 1), `Item ${i + 1}`))),
+                prices: new Map([[T(1), { code: 'usd', exponent: 2, amount: 500n }]]),
+                broadcast: { preset: 'ticker' as const, mode: 'fixed' as const, transparent: false, cards, side: 'right' as const, edge: 'bottom' as const },
+            },
+            tenOffers,
+        );
+    const wrap = (): void => {
+        const event = new Event('animationiteration', { bubbles: true });
+        Object.defineProperty(event, 'animationName', { value: 'tk-run' });
+        document.dispatchEvent(event);
+    };
+    const names = (root: HTMLElement): string[] =>
+        [...root.querySelectorAll('.tk-it .tk-n')].map((n) => n.textContent ?? '');
+
+    it('an iteration of the ribbon advances the page; the last page turns the rail; a foreign keyframe does nothing', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=ticker&cards=all`);
+        const root = document.createElement('div');
+        boot(root, async () => tickerState('all'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(names(root)).toHaveLength(8);
+        expect(root.querySelector('.tk-run')?.classList.contains('still')).toBe(false);
+        const other = new Event('animationiteration', { bubbles: true });
+        Object.defineProperty(other, 'animationName', { value: 'bc-pulse' });
+        document.dispatchEvent(other);
+        expect(names(root), 'the pulse is not the ribbon').toHaveLength(8);
+        wrap();
+        expect(names(root)).toEqual(['Item 9', 'Item 10']);
+        wrap();
+        expect(root.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(BROADCAST_TICKER_QUOTES_LINE);
+        expect(root.querySelectorAll('[data-role="seller-price"]')).toHaveLength(1);
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+        wrap();
+        expect(names(root), 'the quotes shown through, back to the first listings page').toHaveLength(8);
+        expect(root.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(BROADCAST_TICKER_LISTINGS);
+        expect(root.querySelectorAll('button, a, input')).toHaveLength(0);
+    });
+
+    it('under reduced motion the ribbon is still and pages one item at a time on the fixed dwell', async () => {
+        vi.useFakeTimers();
+        const realMatch = window.matchMedia;
+        window.matchMedia = ((query: string) =>
+            ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList) as typeof window.matchMedia;
+        try {
+            window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=ticker`);
+            const root = document.createElement('div');
+            boot(root, async () => tickerState('listings'));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(root.querySelector('.tk-run')?.classList.contains('still')).toBe(true);
+            expect(names(root)).toEqual(['Item 1']);
+            await vi.advanceTimersByTimeAsync(BROADCAST_FIXED_MS - 1);
+            expect(names(root)).toEqual(['Item 1']);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(names(root)).toEqual(['Item 2']);
+            wrap();
+            expect(names(root), 'no ribbon is running, so no iteration can arrive; the page stands').toEqual(['Item 2']);
+        } finally {
+            window.matchMedia = realMatch;
+        }
     });
 });

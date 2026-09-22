@@ -147,6 +147,42 @@ working accept, and there is no accept.
 
 ## Decided — do not re-argue
 
+- **The ticker preset carries the quotes rail, and rule 5 of § D is amended
+  for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
+  one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
+  a quote item carries the "Seller's quote" chip beside its own figure, the
+  fixed label plate at the ribbon's exit carries "Pays the seller · no
+  escrow" for the whole quotes pass, and the code at the bar's end is the
+  SHOP's landing link ("Scan to browse this shop on your phone"), never one
+  item's — a moving line cannot carry a code per item, and a code that
+  moved would not scan. Rule 5's three purposes each keep a home; what the
+  ticker cannot do (open one item) it does not claim. `cards=all` takes
+  turns per pass — one rail per pass, the turn at the wrap, never a merged
+  ribbon — on the ticker and the corner card alike, and never on the side
+  rail, which mounts no card. Item order on the ribbon is name · figure;
+  the 2–3 s in which a figure outlives its name at the exit edge is
+  accepted and stated. The QR is a 204px plate at the bar's end, side and
+  edge the streamer's (`side=left|right`, `edge=bottom|top`); a bar-height
+  code (1.4–1.8 px/module) was measured unscannable and is not offered.
+- **"Pay several" on a touch-screen shop window (owner, 2026-09-21).**
+  `touch=on` on the window's Browse mode, the quotes rail only; the wall
+  gains exactly five controls — plus and minus on each quote, Clear all,
+  Pay, Back — and nothing else, so § 4's "no controls, ever" becomes "no
+  controls unless `touch=on`, and then only these". The owner's rulings:
+  Clear all is ONE press with no question, and so is "−" at one; the
+  selection is NEVER cleared on idle — it stands until someone presses
+  Clear all (an abandoned choice stays on the wall; under `show=all` it pins
+  the screen to the quotes side); Pay is a press, and the press is where
+  the rate is asked in the seller's own unit; the plate is a snapshot taken
+  at that press and any change closes it; after two minutes the plate
+  closes and the shop's code returns, the strip keeping the selection;
+  the rail turn is held while something is chosen. Build order: after the
+  ticker port and BEFORE the multi-item memo (step 5) — the wall's only
+  road is its code, and ~100 bytes of memo pushes a 360px code below every
+  density this project has read; when the memo lands the wall gets its own
+  cap. This is a new surface built on the owner's direct ask, over PLAN's
+  "measure before building" gate, and says so. Design
+  `private/design/touch-2026-09-21/`.
 - **Three LOKADs, never a fourth (owner, 2026-09-21).** `STL1`, `STLD` and
   `STLP` are the whole registry. A new kind of record is a new **shape**
   under one of them (the multi-item memo is a second shape of `STLP`, told
@@ -438,7 +474,10 @@ quote never wears "≈": that mark belongs to computed glances.
    the chip), one line about what paying it does, and a code that opens **this
    page at that item** — no rate, no derived XEC, nothing a viewer could scan
    into a wallet holding a figure nobody explained. Quote in XEC for a stream
-   nobody is watching.
+   nobody is watching. **On the ticker preset (owner, 2026-09-21)** the
+   chip rides beside each quote figure, the "pays the seller" line rides
+   the fixed label plate for the pass, and the code is the shop's — the
+   amendment is recorded in § Decided.
 6. **The seller is told the two are not linked**, in the describe sheet, in
    one line.
 7. **A quote is written on a token this stall minted.** The editor refuses to

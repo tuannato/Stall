@@ -306,6 +306,8 @@ export function remeasureWhenFontsReady(
     root: ParentNode,
     stillCurrent: () => boolean,
     surface: MarqueeSurface,
+    /** Anything else measured off the same tree that the faces move (the ticker's ribbon). */
+    then?: (root: ParentNode) => void,
 ): void {
     const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
     const ready = fonts?.ready;
@@ -315,6 +317,7 @@ export function remeasureWhenFontsReady(
     void ready.then(() => {
         if (stillCurrent()) {
             applyMarquees(root, surface);
+            then?.(root);
         }
     });
 }

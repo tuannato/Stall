@@ -1309,3 +1309,82 @@ puts that figure on the phone's own row — and, on Rural, the tier-3 row in
 selection mode (`.item-head-q.sel-in[data-price-tier='3']`: `5,000.00 XEC`
 is twelve characters against Rural's ceiling of eleven); on Modern and Neo
 the same row in selection mode is tier 2 with 143–145px of name.
+
+## The ticker: a money figure on a moving node (2026-09-21)
+
+The third stream preset (`preset=ticker`, `private/design/ticker-2026-09-21/`)
+runs the shop's figures right-to-left inside a clipping cell, which is the
+first protected money on a node this guard has ever measured while it moves.
+Four things changed, each stated:
+
+- **A protected box inside a `moving` or `pinned` `[data-ribbon]` cell is
+  exempt from `cutSideways`.** The ribbon is clipped BY DESIGN: every
+  figure spends most of a pass outside the cell, and "sideways is
+  unreachable by definition" would refuse the whole surface. The
+  replacement proof is the fixture: `broadcast-ticker` and `-quotes` pin
+  the ribbon still (`broadcastTickerAt`) at an offset where **the protected
+  figure of one item stands wholly inside the cell** — not a whole item:
+  at `-120` the quotes fixture cuts the first item's name and the second's
+  words on every look, and what is enforced is the figure — so it is
+  measured where a viewer sees it; the sampler clamps to the cell and
+  skips a sliver under 16px, so a figure only partly in view is not
+  measured at all. The attribute's value is the exemption's scope: a
+  **`still`** page (reduced motion) is a layout, not a pass, and every
+  sideways rule applies to it (`broadcast-ticker-quotes-still`). The
+  attribute is written in one place, pinned by
+  `only-the-ticker-cell-carries-data-ribbon`.
+- **The contrast sampler clamps to the ribbon cell** (`targetFor`): a frozen
+  figure half outside it would otherwise be sampled over the code plate's
+  white or the transparent ground. `broadcast-ticker` is on the contrast
+  set; the quotes, still, live and clear screens are geometry (the same
+  ink). `.tk-rail`, `.tk-n` and `.tk-chip` are contrast targets — the chip
+  is `SELLER_QUOTE_CHIP` under a class of its own, and a semantic under a
+  class no list names is how `.item-ic`'s letters reached 1.10:1.
+- **The flag holds its own lines** (`the-tickers-flag-fits-its-lines`,
+  2026-09-22): the rail line is nowrap with no clip of its own, and a flag
+  capped at 420px painted "Seller's quotes · Pays the seller · no escrow"
+  27–50px across the divider into the ribbon's lane on all three looks —
+  read off the port's own shots — while `text-spills` stayed green: its
+  clipper is the bar (far right) and its overlap list names none of the
+  ribbon's classes. The flag sizes to its widest line now and the NAME is
+  what is capped (one line, an ellipsis at 376px — the design's two lines
+  do not fit an 80px bar; stated, and `broadcast-ticker-live` stages the
+  cut); the rule reads the flag's `scrollWidth` against its `clientWidth`.
+- **A still page shows one item, and its words may be cut at the cell**
+  (`TICKER_STILL_ITEMS`, 2026-09-22): the first port paged three, a count
+  and not a fit, and on the quotes rail one item's words already filled
+  the cell — two of every three items were clipped away unseen. One item
+  stands its name, figure, chip and surcharge line inside the cell on every
+  look; the words line is not a protected box and its cut is the accepted
+  cost, stated here rather than measured.
+- **Cost, measured 2026-09-22**: the five ticker screens took the run from
+  188.6s to 193.2s (canvas +0.2, contrast +3.0, transparency +1.6), leaving
+  6.8s under the 200s ceiling. Nothing was pruned: the contrast pass (139s)
+  is the whale and every ticker screen but one is already geometry-only;
+  the next screen added to the matrix prunes a page screen first. The
+  canvas clip-skip ratio is 102 of 1,130 (9%) now, from 0 — the ribbon's
+  figures outside the pinned cell, by design.
+- **The reduced-motion pass runs `broadcast-ticker-live`**, the one ticker
+  fixture whose ribbon is not pinned: `tk-run` is a keyframe in
+  `broadcast.css` and its kill sits in the sheet's last block; the pinned
+  screens animate nothing and would prove nothing. Under reduced motion
+  the app paints the ribbon still and pages it on `BROADCAST_FIXED_MS`.
+- **The sticker rule reads a per-preset table**: the ticker's box is the
+  canvas's full width at the 60px insets — 1800 × 311 (the design said 268;
+  the shop's caption is three lines on the 204px plate, and the probe is
+  what said so), the strip `OBS_TICKER_STICKER_WIDTH` ×
+  `OBS_TICKER_STICKER_HEIGHT` (1920 × 431) — and
+  the recipe says never to scale it down, because at 0.75× the 204px code
+  is 3.4 px a module, the unreadable end of the only bracket measured.
+- **Pass 5 shoots `broadcast-ticker-clear`** too: the bar and the code plate
+  are the only opaque pixels, and a figure this pass never shot is a figure
+  nobody proved legible over video.
+
+What this does not measure: the ribbon in motion. The pace (90 px/s, one
+number) and the pass length are computed from measured widths by
+`armTicker`, and the phase across a repaint is a unit test
+(`the-ribbons-pass-is-measured-and-continued-across-a-repaint`); no pixel of
+a moving frame is sampled. Nor the `animationiteration` boundary itself:
+the app's wrap is driven synthetically in `app.test.ts`, and the hold it
+releases has a ceiling of two passes (`tickerGuard`) precisely because a
+cancelled animation fires no iteration.

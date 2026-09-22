@@ -75,7 +75,7 @@
         </section>
 
         <section class="chapter" id="source">
-          <h2>Two ways to add the source</h2>
+          <h2>Three ways to add the source</h2>
           <div class="two">
             <div class="unit">
               <div class="l">Drop-in</div>
@@ -86,6 +86,11 @@
               <div class="l">Sticker</div>
               <p class="f">372 × 871 corner · 372 × 580 rail</p>
               <p>Drag it, scale it — the QR scales with it. A vertical stream uses this.</p>
+            </div>
+            <div class="unit">
+              <div class="l">Ticker strip</div>
+              <p class="f">1920 × 431, bottom or top</p>
+              <p>The “Ticker bar” preset cropped to its own strip. Never scale it down: the code is the shop’s and it stops scanning below full size.</p>
             </div>
           </div>
           <h3>Browser Source settings</h3>
@@ -99,7 +104,7 @@
                 <tr><td>Custom CSS</td><td>Leave empty</td><td>Leave empty</td></tr>
                 <tr>
                   <td>Where it sits</td>
-                  <td colspan="2">The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room.</td>
+                  <td colspan="2">The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room. The ticker runs the full width along the bottom (or the top) edge: drop it in at 1920 × 1080, or crop it to its own strip — and never scale that strip down, or the code stops scanning.</td>
                 </tr>
                 <tr><td>Shutdown source when not visible</td><td>Off</td><td>Off</td></tr>
                 <tr><td>Refresh browser when scene becomes active</td><td>Off</td><td>Off</td></tr>
@@ -109,7 +114,7 @@
         </section>
 
         <section class="chapter" id="live">
-          <h2>Five things to know before you go live</h2>
+          <h2>Six things to know before you go live</h2>
           <dl class="defs">
             <div>
               <dt>Phone viewers can’t read any overlay.</dt>
@@ -126,6 +131,10 @@
             <div>
               <dt>Quote cards are opt-in.</dt>
               <dd>Pick “Your quotes (paid to you)” under “Cards show” in Studio → Stream overlay — or add <b class="mono">cards=quotes</b> to the link by hand — and each card shows an item you have quoted on chain, paid to you directly, instead of an Agora listing. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.</dd>
+            </div>
+            <div>
+              <dt>The ticker is a loop.</dt>
+              <dd>Items run right to left at 90 px a second, at most 8 per pass, and the next pass carries the rest; with “Both, taking turns” each pass carries one side. A change to the shop lands at the end of the pass that is running, never under a viewer’s eye — up to a few minutes on a stall with long descriptions. The QR is the shop’s, not one item’s. A viewer who asked their system for less motion sees one item at a time instead. Pick “Ticker bar” under “Where it sits”; “QR side” and “Edge” appear for it alone — or add <b class="mono">preset=ticker</b>, <b class="mono">side=left</b> and <b class="mono">edge=top</b> to the link by hand.</dd>
             </div>
             <div>
               <dt>Overlay stopped updating?</dt>

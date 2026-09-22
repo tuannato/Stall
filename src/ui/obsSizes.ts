@@ -31,3 +31,19 @@ export const OBS_STICKER_WIDTH = 372;
 export const OBS_STICKER_HEIGHT = 871;
 /** Side rail (mid-right, centred): the rail's box plus both insets. */
 export const OBS_RAIL_STICKER_HEIGHT = 580;
+
+/**
+ * The ticker preset's strip, for a cropped Browser Source: the bar's box is
+ * `left: 60px; right: 60px; bottom: 60px` (or `top`) on the 1920 canvas —
+ * 1800 wide by the code plate's height — so the strip is the full width
+ * and that height plus 60 + 60, anchored to the edge the link named. The
+ * plate is 311 tall, not the design's 268: its caption is the shop's
+ * ("Scan to browse this shop on your phone", the owner's D-A), three lines
+ * at 18px in a 204px plate where the corner's "Scan to open" is one —
+ * measured by the probe on all three looks, 2026-09-21. **Never
+ * scaled down** (the recipe says so): at 0.75× the 204px code is 3.4 px a
+ * module, the unreadable end of the only bracket this project has measured.
+ * Asserted by the probe's sticker rule against the painted box, per preset.
+ */
+export const OBS_TICKER_STICKER_WIDTH = 1920;
+export const OBS_TICKER_STICKER_HEIGHT = 431;

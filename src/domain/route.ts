@@ -185,21 +185,30 @@ export function parseBroadcastParams(search: string): BroadcastParams | undefine
     if (broadcastParam(params, 'view') !== 'broadcast') {
         return undefined;
     }
-    const preset = broadcastParam(params, 'preset') === 'rail' ? 'rail' : 'corner';
+    const presetWord = broadcastParam(params, 'preset');
+    const preset = presetWord === 'rail' ? 'rail' : presetWord === 'ticker' ? 'ticker' : 'corner';
+    // The rail has no card and the ticker has no rest, so neither reads
+    // `mode`; a resting ticker would be a blank bar (a dead source).
     const mode =
         preset === 'rail'
             ? 'rail'
-            : broadcastParam(params, 'mode') === 'fixed'
+            : preset === 'ticker' || broadcastParam(params, 'mode') === 'fixed'
               ? 'fixed'
               : 'rail';
+    const cardsWord = broadcastParam(params, 'cards');
     return {
         preset,
         mode,
         transparent: broadcastParam(params, 'bg') === 'transparent',
-        // Opt-in, and off for anything but the one word: a streamer who
+        // Opt-in, and off for anything but the two words: a streamer who
         // mistyped it gets the shop they already had rather than a screen
-        // showing money from a different rail.
-        cards: broadcastParam(params, 'cards') === 'quotes' ? 'quotes' : 'listings',
+        // showing money from a different rail. `all` takes turns per pass
+        // (owner, 2026-09-21) and never merges the rails.
+        cards: cardsWord === 'quotes' ? 'quotes' : cardsWord === 'all' ? 'all' : 'listings',
+        // The ticker's two placements, bounded to one word each; anything
+        // else is the default, the rule every option on this wire follows.
+        side: broadcastParam(params, 'side') === 'left' ? 'left' : 'right',
+        edge: broadcastParam(params, 'edge') === 'top' ? 'top' : 'bottom',
     };
 }
 

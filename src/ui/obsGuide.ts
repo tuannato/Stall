@@ -24,11 +24,17 @@ import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
     OBS_STICKER_WIDTH,
+    OBS_TICKER_STICKER_HEIGHT,
+    OBS_TICKER_STICKER_WIDTH,
 } from './obsSizes';
+import { TICKER_ITEMS_PER_PASS, TICKER_SPEED_PX_PER_S } from './broadcast';
+import { SELLER_QUOTE_CHIP } from './copy';
 import './obsGuide.css';
 
-export type ObsPreset = 'corner' | 'rail';
+export type ObsPreset = 'corner' | 'rail' | 'ticker';
 export type ObsMode = 'fixed' | 'rail';
+export type ObsSide = 'left' | 'right';
+export type ObsEdge = 'bottom' | 'top';
 
 export const OBS_GUIDE_TITLE = 'Stream overlay';
 export const OBS_GUIDE_LEDE =
@@ -51,12 +57,20 @@ export const OBS_GUIDE_MORE_LINK = 'stall.cash/stream';
 export const OBS_PRESET_LABEL = 'Where it sits';
 export const OBS_PRESET_CORNER = 'Corner card';
 export const OBS_PRESET_RAIL = 'Side rail';
+export const OBS_PRESET_TICKER = 'Ticker bar';
+export const OBS_SIDE_LABEL = 'QR side';
+export const OBS_SIDE_RIGHT = 'Right';
+export const OBS_SIDE_LEFT = 'Left';
+export const OBS_EDGE_LABEL = 'Edge';
+export const OBS_EDGE_BOTTOM = 'Bottom';
+export const OBS_EDGE_TOP = 'Top';
 
 export const OBS_MODE_LABEL = 'Price display';
 /** The third picker: which rail the corner card shows. A link option since the quote card shipped; a picker since 2026-09-05. */
 export const OBS_CARDS_LABEL = 'Cards show';
 export const OBS_CARDS_LISTINGS = 'Agora listings';
 export const OBS_CARDS_QUOTES = 'Your quotes (paid to you)';
+export const OBS_CARDS_ALL = 'Both, taking turns';
 export const OBS_MODE_FIXED = 'Always show a price';
 export const OBS_MODE_RAIL = 'Rest, then show a price';
 
@@ -68,12 +82,12 @@ export const OBS_COPY_LINK_FALLBACK = 'Select and copy this link.';
 export const OBS_RECIPE_SOURCE = 'OBS → Sources → + → Browser.';
 export const OBS_RECIPE_URL = 'URL: the link above.';
 export const OBS_RECIPE_SIZE = 'Drop-in: Width 1920, Height 1080, FPS 30.';
-export const OBS_RECIPE_STICKER = `Sticker: Width ${OBS_STICKER_WIDTH}, Height ${OBS_STICKER_HEIGHT} (corner) / ${OBS_RAIL_STICKER_HEIGHT} (rail).`;
+export const OBS_RECIPE_STICKER = `Sticker: Width ${OBS_STICKER_WIDTH}, Height ${OBS_STICKER_HEIGHT} (corner) / ${OBS_RAIL_STICKER_HEIGHT} (rail). Ticker strip: Width ${OBS_TICKER_STICKER_WIDTH}, Height ${OBS_TICKER_STICKER_HEIGHT}, never scaled down.`;
 export const OBS_RECIPE_CSS = 'Leave Custom CSS empty.';
 export const OBS_RECIPE_TOGGLES =
     'Turn off “Shutdown source when not visible” and “Refresh browser when scene becomes active” — both close the source. The book updates over a live socket; if the index was down when the source started, the overlay retries on its own every 30 s. A shut-down source has neither.';
 export const OBS_RECIPE_POSITION =
-    'The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room.';
+    'The corner sits bottom-right; the rail sits mid-right, with space above and below. Drag and scale freely — the QR scales with it. A vertical stream uses the sticker, dragged wherever the app’s own UI leaves room. The ticker runs the full width along the bottom (or the top) edge: drop it in at 1920 × 1080, or crop it to its own strip — and never scale that strip down, or the code stops scanning.';
 
 /**
  * A 1080p frame read on a phone is a fifth of its size — this is the one
@@ -88,6 +102,12 @@ export const OBS_TRUTH_RAIL_RESTS =
     `“${OBS_MODE_RAIL}” rests without a price for 3 seconds, then shows a card for 5 — or, when a cut name or words are running, until they have run through plus 5 — pick “${OBS_MODE_FIXED}” for a shop that should never go quiet.`;
 export const OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE =
     'Side rail never shows a price — it is the name and the QR only.';
+export const OBS_TRUTH_TICKER_LOOPS =
+    `The ticker is a loop — items run right to left at ${TICKER_SPEED_PX_PER_S} px a second, at most ${TICKER_ITEMS_PER_PASS} per pass, and the next pass carries the rest; with “${OBS_CARDS_ALL}” each pass carries one side. A change to the shop lands at the end of the pass that is running, never under a viewer’s eye — up to a few minutes on a stall with long descriptions. A viewer who asked their system for less motion sees one item at a time instead.`;
+export const OBS_TRUTH_TICKER_QUOTES =
+    `On the ticker your quotes ride the bar — pick “${OBS_CARDS_QUOTES}” or “${OBS_CARDS_ALL}” under “${OBS_CARDS_LABEL}” and each quoted item carries its own “${SELLER_QUOTE_CHIP}” chip beside the figure, the bar’s label says the pass pays you directly, and the QR is the shop’s, never one item’s. Quote in XEC for a stream you are not watching: the page converts a USD quote when someone scans it, and your own reconciliation still needs a rate.`;
+export const OBS_TRUTH_QR_SCAN_TICKER =
+    'The QR is 204 px at 1× — the corner card’s own plate, at the bar’s end. The ticker strip is never scaled, so this is its size. Whether it scans for viewers watching at 720p is not measured.';
 /**
  * Where a streamer meets the quote cards: a picker ("Cards show") since
  * 2026-09-05 — it was a link option alone, and the owner could not find it —
@@ -109,6 +129,8 @@ const DEFAULT_MODE: ObsMode = 'rail';
 let selectedPreset: ObsPreset = DEFAULT_PRESET;
 let selectedMode: ObsMode = DEFAULT_MODE;
 let selectedCards: ObsCards = 'listings';
+let selectedSide: ObsSide = 'right';
+let selectedEdge: ObsEdge = 'bottom';
 
 /**
  * The selection above is file-scoped on purpose (see the module doc), which
@@ -119,18 +141,31 @@ export function resetObsGuideForTests(): void {
     selectedPreset = DEFAULT_PRESET;
     selectedMode = DEFAULT_MODE;
     selectedCards = 'listings';
+    selectedSide = 'right';
+    selectedEdge = 'bottom';
 }
 
-type ObsCards = 'listings' | 'quotes';
+type ObsCards = 'listings' | 'quotes' | 'all';
 
-function urlFor(raw: string, preset: ObsPreset, mode: ObsMode, cards: ObsCards = 'listings'): string {
+function urlFor(
+    raw: string,
+    preset: ObsPreset,
+    mode: ObsMode,
+    cards: ObsCards = 'listings',
+    side: ObsSide = 'right',
+    edge: ObsEdge = 'bottom',
+): string {
     const path = stallPath(raw);
     // The rail preset mounts no card, so neither the mode nor the cards
     // switch rides its link: the parser would ignore them, and a param that
-    // does nothing is a promise the overlay does not keep.
-    const modePart = preset === 'rail' ? '' : `&mode=${mode}`;
-    const cardsPart = preset !== 'rail' && cards === 'quotes' ? '&cards=quotes' : '';
-    return `${location.origin}${path}?view=broadcast&preset=${preset}${modePart}${cardsPart}&bg=transparent`;
+    // does nothing is a promise the overlay does not keep. The ticker has no
+    // rest state, so it carries no mode either; its two placements ride the
+    // link only when they are not the default, like every option here.
+    const modePart = preset === 'rail' || preset === 'ticker' ? '' : `&mode=${mode}`;
+    const cardsPart = preset !== 'rail' && cards !== 'listings' ? `&cards=${cards}` : '';
+    const sidePart = preset === 'ticker' && side === 'left' ? '&side=left' : '';
+    const edgePart = preset === 'ticker' && edge === 'top' ? '&edge=top' : '';
+    return `${location.origin}${path}?view=broadcast&preset=${preset}${modePart}${cardsPart}${sidePart}${edgePart}&bg=transparent`;
 }
 
 /**
@@ -146,9 +181,11 @@ export function broadcastGuideUrl(
     preset: ObsPreset,
     mode: ObsMode,
     cards: ObsCards = 'listings',
+    side: ObsSide = 'right',
+    edge: ObsEdge = 'bottom',
 ): string | undefined {
     const raw = identityOf(view);
-    return raw === undefined ? undefined : urlFor(raw, preset, mode, cards);
+    return raw === undefined ? undefined : urlFor(raw, preset, mode, cards, side, edge);
 }
 
 /** Which rail the corner card shows: the listings, or the seller's own quotes. */
@@ -160,6 +197,9 @@ function cardsPicker(onChange: () => void): HTMLElement {
     const options: Array<[ObsCards, string]> = [
         ['listings', OBS_CARDS_LISTINGS],
         ['quotes', OBS_CARDS_QUOTES],
+        // Taking turns (owner, 2026-09-21): one rail per card or per pass,
+        // the turn at the wrap; never a merged card.
+        ['all', OBS_CARDS_ALL],
     ];
     for (const [value, text] of options) {
         const opt = el('option', undefined, text);
@@ -229,7 +269,7 @@ const HEAD_SHORT = 14;
  * Geometry is in viewBox user units throughout; the placement transform
  * lives in `obsGuide.css`, where a user-unit translate scales with the box.
  */
-function diagram(preset: ObsPreset, mode: ObsMode): SVGElement {
+function diagram(preset: ObsPreset, mode: ObsMode, side: ObsSide = 'right', edge: ObsEdge = 'bottom'): SVGElement {
     const showsPrice = preset === 'corner' && mode === 'fixed';
     const root = svgEl('svg', 'obs-dia', {
         viewBox: '0 0 160 90',
@@ -237,13 +277,46 @@ function diagram(preset: ObsPreset, mode: ObsMode): SVGElement {
         'data-role': 'obs-diagram',
         'data-preset': preset,
     });
-    if (preset !== 'rail') {
+    if (preset === 'corner') {
         root.setAttribute('data-mode', mode);
     }
     // The stream's own picture, top-left: a window and a caption bar, so the
     // card reads as sitting over somebody else's video and not on a page.
-    root.append(svgEl('rect', 'd-frame', { x: 9, y: 9, width: 46, height: 27, rx: 2 }));
-    root.append(svgEl('rect', 'd-frame', { x: 9, y: 40, width: 15, height: 4, rx: 1 }));
+    // On the ticker it steps clear of the bar and the plate — under a top
+    // bar, right of a left plate — or the picture paints over the thing it
+    // is meant to sit beside (the critic, 2026-09-22).
+    const frameX = preset === 'ticker' && side === 'left' ? 32 : 9;
+    const frameY = preset === 'ticker' && edge === 'top' ? 20 : 9;
+    root.append(svgEl('rect', 'd-frame', { x: frameX, y: frameY, width: 46, height: 27, rx: 2 }));
+    root.append(svgEl('rect', 'd-frame', { x: frameX, y: frameY + 31, width: 15, height: 4, rx: 1 }));
+
+    if (preset === 'ticker') {
+        // The bar along the chosen edge, the flag at its exit end, the code
+        // plate at the chosen side — the same picture the overlay paints,
+        // in user units; no `.d-plate` transform, the bar is placed here.
+        root.setAttribute('data-side', side);
+        root.setAttribute('data-edge', edge);
+        const barY = edge === 'top' ? 6 : 76;
+        const plateY = edge === 'top' ? 6 : 62;
+        const qrX = side === 'left' ? 6 : 134;
+        const barX = side === 'left' ? 30 : 6;
+        root.append(svgEl('rect', 'd-card', { x: barX, y: barY, width: 124, height: 8, rx: 1 }));
+        root.append(svgEl('rect', 'd-brand', { x: barX + 3, y: barY + 2, width: 8, height: 1.5, rx: 0.5 }));
+        root.append(svgEl('rect', 'd-name', { x: barX + 3, y: barY + 4.5, width: 12, height: 2, rx: 0.5 }));
+        root.append(svgEl('rect', 'd-price', { x: barX + 40, y: barY + 3, width: 10, height: 2, rx: 0.5 }));
+        root.append(svgEl('rect', 'd-name', { x: barX + 54, y: barY + 3, width: 16, height: 2, rx: 0.5 }));
+        root.append(svgEl('rect', 'd-price', { x: barX + 84, y: barY + 3, width: 10, height: 2, rx: 0.5 }));
+        root.append(svgEl('rect', 'd-card', { x: qrX, y: plateY, width: 20, height: 22, rx: 1 }));
+        for (const [fx, fy] of [
+            [3, 3],
+            [12, 3],
+            [3, 12],
+        ] as const) {
+            root.append(svgEl('rect', 'd-qr-ink', { x: qrX + fx, y: plateY + fy, width: 5, height: 5 }));
+            root.append(svgEl('rect', 'd-qr-hole', { x: qrX + fx + 1, y: plateY + fy + 1, width: 3, height: 3 }));
+        }
+        return root;
+    }
 
     const headHeight = showsPrice ? HEAD_TALL : HEAD_SHORT;
     const card = svgEl('g', 'd-plate');
@@ -292,6 +365,7 @@ function presetPicker(onChange: () => void): HTMLElement {
     const options: Array<[ObsPreset, string]> = [
         ['corner', OBS_PRESET_CORNER],
         ['rail', OBS_PRESET_RAIL],
+        ['ticker', OBS_PRESET_TICKER],
     ];
     for (const [value, text] of options) {
         const opt = el('option', undefined, text);
@@ -301,6 +375,53 @@ function presetPicker(onChange: () => void): HTMLElement {
     }
     select.addEventListener('change', () => {
         selectedPreset = select.value as ObsPreset;
+        onChange();
+    });
+    label.append(select);
+    return label;
+}
+
+/** The ticker's two placements: which end the code plate stands on, which edge the bar hangs on. */
+function sidePicker(onChange: () => void): HTMLElement {
+    const label = el('label', 'paste-label obs-field', OBS_SIDE_LABEL);
+    const select = el('select', 'paste-in');
+    select.setAttribute('data-role', 'obs-side-picker');
+    select.setAttribute('data-focus-key', 'obs-side-picker');
+    const options: Array<[ObsSide, string]> = [
+        ['right', OBS_SIDE_RIGHT],
+        ['left', OBS_SIDE_LEFT],
+    ];
+    for (const [value, text] of options) {
+        const opt = el('option', undefined, text);
+        opt.value = value;
+        opt.selected = value === selectedSide;
+        select.append(opt);
+    }
+    select.addEventListener('change', () => {
+        selectedSide = select.value as ObsSide;
+        onChange();
+    });
+    label.append(select);
+    return label;
+}
+
+function edgePicker(onChange: () => void): HTMLElement {
+    const label = el('label', 'paste-label obs-field', OBS_EDGE_LABEL);
+    const select = el('select', 'paste-in');
+    select.setAttribute('data-role', 'obs-edge-picker');
+    select.setAttribute('data-focus-key', 'obs-edge-picker');
+    const options: Array<[ObsEdge, string]> = [
+        ['bottom', OBS_EDGE_BOTTOM],
+        ['top', OBS_EDGE_TOP],
+    ];
+    for (const [value, text] of options) {
+        const opt = el('option', undefined, text);
+        opt.value = value;
+        opt.selected = value === selectedEdge;
+        select.append(opt);
+    }
+    select.addEventListener('change', () => {
+        selectedEdge = select.value as ObsEdge;
         onChange();
     });
     label.append(select);
@@ -481,7 +602,19 @@ function truthsList(): HTMLElement {
                   OBS_TRUTH_SIDE_RAIL_HAS_NO_PRICE,
                   OBS_TRUTH_STALE_OVERLAY,
               ]
-            : [
+            : selectedPreset === 'ticker'
+              ? [
+                    // Its own two sentences where the card's would be wrong:
+                    // the ticker mounts no card, and its strip is never
+                    // scaled, so "scale the source to grow it" cannot be
+                    // taken (the critic, 2026-09-22).
+                    OBS_TRUTH_PHONE_VIEWERS,
+                    OBS_TRUTH_QR_SCAN_TICKER,
+                    OBS_TRUTH_TICKER_LOOPS,
+                    OBS_TRUTH_TICKER_QUOTES,
+                    OBS_TRUTH_STALE_OVERLAY,
+                ]
+              : [
                   OBS_TRUTH_PHONE_VIEWERS,
                   OBS_TRUTH_QR_SCAN,
                   OBS_TRUTH_RAIL_RESTS,
@@ -555,19 +688,27 @@ export function paintObsGuide(
 
         const where = stepBox(1, OBS_STEP_CHOOSE, 'obs-step-where');
         const choose = el('div', 'obs-choose');
-        choose.append(diagram(selectedPreset, selectedMode));
+        choose.append(diagram(selectedPreset, selectedMode, selectedSide, selectedEdge));
         const fields = el('div', 'obs-fields');
         fields.append(presetPicker(renderBody));
-        if (selectedPreset !== 'rail') {
+        if (selectedPreset === 'corner') {
             fields.append(modePicker(renderBody));
+        }
+        if (selectedPreset !== 'rail') {
             fields.append(cardsPicker(renderBody));
+        }
+        if (selectedPreset === 'ticker') {
+            fields.append(sidePicker(renderBody));
+            fields.append(edgePicker(renderBody));
         }
         choose.append(fields);
         where.append(choose);
         grid.append(where);
 
         const copyStep = stepBox(2, OBS_STEP_COPY, 'obs-step-copy');
-        copyStep.append(copyControl(urlFor(raw, selectedPreset, selectedMode, selectedCards)));
+        copyStep.append(
+            copyControl(urlFor(raw, selectedPreset, selectedMode, selectedCards, selectedSide, selectedEdge)),
+        );
         grid.append(copyStep);
 
         const source = stepBox(3, OBS_STEP_SOURCE, 'obs-step-source');

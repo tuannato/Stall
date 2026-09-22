@@ -11,7 +11,10 @@ import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
     OBS_STICKER_WIDTH,
+    OBS_TICKER_STICKER_HEIGHT,
+    OBS_TICKER_STICKER_WIDTH,
 } from './ui/obsSizes';
+import { TICKER_ITEMS_PER_PASS, TICKER_SPEED_PX_PER_S } from './ui/broadcast';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -108,5 +111,24 @@ describe('the-stream-guide-hero-exists', () => {
         ).toBe(true);
         expect(buf.byteLength, 'hero bytes').toBeLessThanOrEqual(250 * 1024);
         expect(buf.byteLength, 'hero is not empty').toBeGreaterThan(32);
+    });
+});
+
+describe('the-stream-guide-names-the-ticker-strip-and-its-loop', () => {
+    /**
+     * The third preset's strip size and its one truth, quoted from the
+     * app's own constants: a guide that carried a second set of numbers is
+     * a guide nobody re-reads.
+     */
+    it('carries the ticker strip size, the never-scale rule and the pace', () => {
+        const html = read('public', 'stream.html');
+        expect(html).toContain(`${OBS_TICKER_STICKER_WIDTH} × ${OBS_TICKER_STICKER_HEIGHT}`);
+        expect(html).toMatch(/[Nn]ever scale/);
+        expect(html).toContain(`${TICKER_SPEED_PX_PER_S} px a second`);
+        expect(html).toContain(`at most ${TICKER_ITEMS_PER_PASS} per pass`);
+        expect(html, 'a change lands at the wrap, said on the page too').toContain('lands at the end of the pass');
+        expect(html).toContain('one item at a time');
+        expect(html).toContain('preset=ticker');
+        expect(html).toContain('Ticker bar');
     });
 });

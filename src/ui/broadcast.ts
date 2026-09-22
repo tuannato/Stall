@@ -1,6 +1,21 @@
 /**
- * The stream overlay. One skeleton for both presets. Chain-derived strings
- * reach the DOM through textContent only — same freeze as the theme module.
+ * The stream overlay. One skeleton for the corner card and the side rail,
+ * and a second shape for the ticker. Chain-derived strings reach the DOM
+ * through textContent only — same freeze as the theme module.
+ *
+ * **The ticker is a loop, and the loop is a standing exception scoped to
+ * this surface.** `marquee.ts` bounds every run (three on a shop row, one on
+ * a stream card) because a mover that runs for ever beside content is what
+ * WCAG 2.2.2 names, and a loop is what that bound refuses. The exception is
+ * not that OBS has no compositor — it composites through CEF, and the URL is
+ * public, so a phone can open it. It is that **the broadcast root already
+ * loops**: the carousel re-arms for the source's life, the auto-updating
+ * surface with no pause control, decided and shipped. The ticker adds a
+ * second loop to a surface where the bound was already waived, and its one
+ * mitigation is reduced motion: under `prefers-reduced-motion` the ribbon
+ * does not scroll — it shows one page of items and cuts to the next every
+ * `BROADCAST_FIXED_MS`, which the probe's reduced-motion pass measures
+ * (`broadcast-ticker-live`). Stated here, once, and nowhere else.
  */
 import type { TokenPrice } from '../domain/description';
 import { XEC_PRICE_CODE } from '../domain/description';
@@ -8,10 +23,11 @@ import { satsForQuote, satsWithSurcharge } from '../domain/fiat';
 import { fitsQr } from '../domain/qr';
 import { DUST_SATS, formatAtoms, formatXec, isUnbuyable } from '../domain/money';
 import { payLandingUrl, stallPath } from '../domain/route';
-import type { StallView } from '../domain/state';
+import type { BroadcastParams, StallView } from '../domain/state';
 import { overlayTierCharCeilings } from '../domain/theme';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
+import { nextCard } from '../domain/window';
 import type { TokenListing } from './render';
 import {
     cheapestOf,
@@ -66,16 +82,8 @@ export type BroadcastCard =
  * seller who has published no quote this page can paint.
  */
 export function broadcastCards(view: StallView): BroadcastCard[] {
-    if (view.broadcast?.cards === 'quotes') {
-        const quotes = quotedItems(view)
-            .filter((item) => isPayableHere(item.price))
-            .map(
-                (item): BroadcastCard => ({
-                    kind: 'quote',
-                    tokenId: item.tokenId,
-                    price: item.price,
-                }),
-            );
+    if (broadcastRail(view) === 'quotes') {
+        const quotes = payableQuotes(view);
         if (quotes.length > 0) {
             return quotes;
         }
@@ -85,6 +93,107 @@ export function broadcastCards(view: StallView): BroadcastCard[] {
         tokenId: listing.tokenId,
         listing,
     }));
+}
+
+/** The pay set as cards: every quote this page paints whose scan can reach a payment. */
+function payableQuotes(view: StallView): BroadcastCard[] {
+    return quotedItems(view)
+        .filter((item) => isPayableHere(item.price))
+        .map(
+            (item): BroadcastCard => ({
+                kind: 'quote',
+                tokenId: item.tokenId,
+                price: item.price,
+            }),
+        );
+}
+
+/**
+ * Which rail the overlay is on — **the one derivation there is**, the shop
+ * window's rule (`windowRail`) on this surface.
+ *
+ * `cards=quotes` is the quotes; `cards=listings` (or nothing) the listings;
+ * `cards=all` (owner, 2026-09-21) takes turns and reads the explicit rail
+ * `boot` wrote onto the view at paint time — never a rail inferred from the
+ * cursor, which is how the cursor and the card come to mean different rows.
+ * **An empty rail turns itself off** (`nextCard`'s rule): under `all` a
+ * stall with nothing quoted stays on the listings, and one with nothing
+ * listed stays on the quotes, so "nothing listed yet" is never printed every
+ * other pass over a stall a viewer can pay.
+ */
+export function broadcastRail(view: StallView): 'listings' | 'quotes' {
+    const cards = view.broadcast?.cards;
+    if (cards === 'quotes') {
+        return 'quotes';
+    }
+    if (cards !== 'all') {
+        return 'listings';
+    }
+    const hasQuotes = payableQuotes(view).length > 0;
+    const hasListings = listingsInShopOrder(view).length > 0;
+    if ((view.broadcastRail ?? 'listings') === 'quotes') {
+        return hasQuotes ? 'quotes' : 'listings';
+    }
+    return hasListings || !hasQuotes ? 'listings' : 'quotes';
+}
+
+/** Under `cards=all`, both rails have something to show, so the wrap turns. */
+export function broadcastTurns(view: StallView): boolean {
+    return (
+        view.broadcast?.cards === 'all' &&
+        payableQuotes(view).length > 0 &&
+        listingsInShopOrder(view).length > 0
+    );
+}
+
+/**
+ * The step the carousel (or the ticker's wrap) takes: the next card — or the
+ * next page — and, under `cards=all`, the other rail once this one has been
+ * shown through. Pure, the window's own `nextCard`.
+ */
+export function broadcastStep(
+    view: StallView,
+    cursor: number,
+    length: number,
+): { cursor: number; rail: 'listings' | 'quotes' } {
+    const rail = broadcastRail(view);
+    // `all` turns only while the other rail has something to show: an empty
+    // rail turns itself off rather than trapping the stream on a blank.
+    const show = broadcastTurns(view) ? 'all' : rail;
+    return nextCard(cursor, length, show, rail);
+}
+
+/** How many items one ticker pass carries when the ribbon moves. */
+export const TICKER_ITEMS_PER_PASS = 8;
+/**
+ * A still page (reduced motion) shows ONE item: a still ribbon is a second
+ * layout with a hard width budget, not the moving one paused — three quote
+ * items with words never fit a 1,100–1,300px cell, and two of every three
+ * were clipped away unseen (the critic, 2026-09-22). One item's name,
+ * figure, chip and surcharge line stand inside the cell on every look; a
+ * long words line is cut at the cell's edge, stated in `PROBE-RULES.md`.
+ */
+export const TICKER_STILL_ITEMS = 1;
+/** The ribbon's pace: the stream marquee's words pace, one number and not a setting. */
+export const TICKER_SPEED_PX_PER_S = 90;
+
+export function tickerPageSize(still: boolean): number {
+    return still ? TICKER_STILL_ITEMS : TICKER_ITEMS_PER_PASS;
+}
+
+/** How many passes the ticker needs to show every card once; never zero. */
+export function tickerPages(cardCount: number, still: boolean): number {
+    return Math.max(1, Math.ceil(cardCount / tickerPageSize(still)));
+}
+
+/** The cards on the page at the cursor: at most one pass's worth, in shop order. */
+export function tickerItems(view: StallView): BroadcastCard[] {
+    const cards = broadcastCards(view);
+    const still = view.broadcastTickerStill === true;
+    const pages = tickerPages(cards.length, still);
+    const page = (((view.broadcastCursor ?? 0) % pages) + pages) % pages;
+    const size = tickerPageSize(still);
+    return cards.slice(page * size, page * size + size);
 }
 
 /**
@@ -132,6 +241,9 @@ function stallNameOf(view: StallView): string | undefined {
  */
 export function renderBroadcastView(view: StallView): HTMLElement {
     const params = view.broadcast!;
+    if (params.preset === 'ticker') {
+        return renderTicker(view, params);
+    }
     const root = el('div', 'bc');
     root.setAttribute('data-role', 'broadcast');
     root.setAttribute('data-preset', params.preset);
@@ -321,4 +433,223 @@ function quoteCard(view: StallView, price: TokenPrice, tokenId: string): HTMLEle
     }
     item.append(el('div', 'bc-l', copy.BROADCAST_QUOTE_LINE));
     return item;
+}
+
+/**
+ * The ticker: one bar a line high hung on the bottom (or top) edge, the
+ * items running right-to-left inside a clipping cell, a fixed label plate at
+ * the exit end saying whose figures are running past and which rail they
+ * are on, and the shop's code as a plate at the bar's end — the corner
+ * preset's own 204px code, because a bar-height code is 1.4–1.8 px a
+ * module on either route form and scans from nothing (measured, the design
+ * round's first point).
+ *
+ * One rail per pass, and `cards=all` turns at the wrap. A quote item wears
+ * the chip beside its own figure and the record's short surcharge line; the
+ * flag carries `BROADCAST_QUOTE_LINE` for the whole quotes pass, and the code
+ * is the shop's — PLAN § D rule 5 as the owner amended it for this surface.
+ * At most `TICKER_ITEMS_PER_PASS` items ride one pass; the rest come on the
+ * next, so a pass is one to four minutes whatever the stall holds.
+ *
+ * Our failures paint the label plate and the code alone (silence, the
+ * overlay's rule); a book that is `empty` with nothing quoted prints
+ * `BROADCAST_EMPTY` in the ribbon's place, still, once; a live re-read that
+ * failed leaves the last ribbon `stale`, dimmed like the card.
+ */
+function renderTicker(view: StallView, params: BroadcastParams): HTMLElement {
+    const root = el('div', 'bc tk');
+    root.setAttribute('data-role', 'broadcast');
+    root.setAttribute('data-preset', 'ticker');
+    root.setAttribute('data-mode', 'fixed');
+    root.setAttribute('data-state', view.broadcastState === 'stale' ? 'stale' : 'live');
+    root.setAttribute('data-side', params.side);
+    root.setAttribute('data-edge', params.edge);
+
+    const rail = broadcastRail(view);
+    const bar = el('div', 'plate tk-bar');
+    const flag = el('div', 'tk-lab');
+    flag.append(el('div', 'tk-brand', copy.BROADCAST_BRAND));
+    const name = stallNameOf(view);
+    if (name !== undefined) {
+        const nm = el('div', 'tk-name', name);
+        nm.setAttribute('data-role', 'stall-name');
+        flag.append(nm);
+    }
+    const railLine = el(
+        'div',
+        'tk-rail',
+        rail === 'quotes' ? copy.BROADCAST_TICKER_QUOTES_LINE : copy.BROADCAST_TICKER_LISTINGS,
+    );
+    railLine.setAttribute('data-role', 'ticker-rail');
+    flag.append(railLine);
+    bar.append(flag);
+
+    const clip = el('div', 'tk-clip');
+    // The probe's scoped exception, by value: a protected figure inside a
+    // MOVING or PINNED ribbon is clipped by design and exempt from
+    // `cutSideways`; a STILL page is a layout and is measured like one
+    // (`PROBE-RULES.md`, "The ticker"). The sampler clamps to the cell in
+    // all three.
+    clip.setAttribute(
+        'data-ribbon',
+        view.broadcastTickerAt !== undefined ? 'pinned' : view.broadcastTickerStill === true ? 'still' : 'moving',
+    );
+    const fetch = view.fetch;
+    const definite = fetch?.kind === 'offers' || fetch?.kind === 'empty';
+    if (definite) {
+        const items = tickerItems(view);
+        if (items.length > 0) {
+            const run = el('div', 'tk-run');
+            run.setAttribute('data-role', 'ticker-run');
+            // The pass's identity: the same key across repaints keeps the
+            // phase (`armTicker`); a new key is a new pass from the right.
+            run.setAttribute(
+                'data-tk-key',
+                `${rail}:${view.broadcastCursor ?? 0}:${items.map((c) => c.tokenId).join(',')}`,
+            );
+            for (const card of items) {
+                run.append(
+                    card.kind === 'listing'
+                        ? tickerListingItem(view, card.listing)
+                        : tickerQuoteItem(view, card.price, card.tokenId),
+                );
+            }
+            if (view.broadcastTickerStill === true) {
+                run.classList.add('still');
+            }
+            if (view.broadcastTickerAt !== undefined) {
+                // Pinned for the probe: no animation, one known offset.
+                run.classList.add('still');
+                run.style.transform = `translateX(${view.broadcastTickerAt}px)`;
+            }
+            clip.append(run);
+        } else if (fetch?.kind === 'empty') {
+            clip.append(el('div', 'tk-empty', copy.BROADCAST_EMPTY));
+        }
+    }
+    bar.append(clip);
+    root.append(bar);
+
+    const qrp = el('div', 'plate tk-qrp');
+    const identity = identityOf(view);
+    const shop = identity === undefined ? undefined : `${location.origin}${stallPath(identity)}`;
+    if (shop !== undefined && fitsQr(shop)) {
+        const svg = qrSvg(shop, copy.SHARE_QR_ALT);
+        svg.setAttribute('data-role', 'qr');
+        qrp.append(svg);
+    }
+    qrp.append(el('div', 'bc-cap', copy.WINDOW_SCAN_SHOP));
+    root.append(qrp);
+    return root;
+}
+
+/** A listing on the ribbon: the corner card's lines on one line. */
+function tickerListingItem(view: StallView, listing: TokenListing): HTMLElement {
+    const offer = cheapestOf(listing);
+    const item = el('span', 'tk-it');
+    item.append(el('span', 'tk-n', tokenName(view.tokens, listing.tokenId)));
+    if (isUnbuyable(offer)) {
+        const figure = el('span', 'tk-x', copy.DASHED_PRICE);
+        figure.setAttribute('data-role', 'price');
+        item.append(figure);
+        item.append(el('span', 'tk-w', copy.UNBUYABLE_BADGE));
+    } else {
+        if (offer.askedAtoms < offer.atoms) {
+            item.append(el('span', 'tk-from', copy.PRICE_FROM));
+        }
+        const figure = el('span', 'tk-x', formatXec(offer.askedSats));
+        figure.setAttribute('data-role', 'price');
+        item.append(figure);
+        item.append(el('span', 'tk-u', copy.XEC));
+    }
+    const known = knownDecimals(view.tokens, listing.tokenId);
+    if (known !== undefined) {
+        const totalAtoms = listing.offers.reduce((sum, o) => sum + o.atoms, 0n);
+        item.append(el('span', 'tk-w', copy.remainingAtoms(formatAtoms(totalAtoms, known))));
+    }
+    return item;
+}
+
+/** A quote on the ribbon: name · figure · the chip · the surcharge line · the words whole. */
+function tickerQuoteItem(view: StallView, price: TokenPrice, tokenId: string): HTMLElement {
+    const item = el('span', 'tk-it tk-q');
+    item.append(el('span', 'tk-n', tokenName(view.tokens, tokenId)));
+    const figure = el('span', 'tk-x', quoteFigure(price));
+    figure.setAttribute('data-role', 'seller-price');
+    item.append(figure);
+    item.append(el('span', 'tk-chip', copy.SELLER_QUOTE_CHIP));
+    if (price.surchargePct !== undefined) {
+        const surcharge = el('span', 'tk-sur', copy.streamSurchargeLine(price.surchargePct));
+        surcharge.setAttribute('data-role', 'quote-surcharge');
+        item.append(surcharge);
+    }
+    const words = view.descriptions?.get(tokenId);
+    if (words !== undefined && words !== '') {
+        item.append(el('span', 'tk-w', words));
+    }
+    return item;
+}
+
+/*
+ * The ribbon's phase. `renderStall` rebuilds the overlay on every paint, so a
+ * pass in flight is continued the marquee's way: a remembered start per pass
+ * key and a negative `animation-delay`. The pass duration is computed from
+ * the measured widths at `TICKER_SPEED_PX_PER_S` — the design's pace, not a
+ * percentage over a fixed time, which varies with content — and re-measured
+ * on `document.fonts.ready` without restarting the pass.
+ */
+type TickerPhase = { key: string; startedAtMs: number };
+let tickerPhase: TickerPhase | undefined;
+let tickerClock: () => number = () => Date.now();
+
+export function setTickerClock(next: (() => number) | undefined): void {
+    tickerClock = next ?? (() => Date.now());
+}
+
+export function resetTickerForTests(): void {
+    tickerPhase = undefined;
+    tickerClock = () => Date.now();
+}
+
+/** The pass a ribbon of `runPx` needs to cross a `clipPx` cell and leave it, in ms. */
+export function tickerPassMs(clipPx: number, runPx: number): number {
+    return Math.max(1, Math.round(((clipPx + runPx) / TICKER_SPEED_PX_PER_S) * 1000));
+}
+
+/**
+ * Measure the painted ribbon and arm (or continue) its pass. Returns the
+ * pass length in ms, or 0 when nothing moves (a still ribbon, or none).
+ */
+export function armTicker(root: ParentNode, now: number = tickerClock()): number {
+    const run = root.querySelector<HTMLElement>('.tk-run');
+    if (run === null || run.classList.contains('still')) {
+        return 0;
+    }
+    const clip = run.parentElement;
+    if (clip === null) {
+        return 0;
+    }
+    const clipPx = clip.getBoundingClientRect().width;
+    const runPx = run.getBoundingClientRect().width;
+    if (clipPx <= 0 || runPx <= 0) {
+        return 0;
+    }
+    const ms = tickerPassMs(clipPx, runPx);
+    const key = run.getAttribute('data-tk-key') ?? '';
+    if (tickerPhase === undefined || tickerPhase.key !== key) {
+        tickerPhase = { key, startedAtMs: now };
+    }
+    const elapsed = Math.max(0, now - tickerPhase.startedAtMs) % ms;
+    run.style.setProperty('--tk-clip', `${clipPx}px`);
+    run.style.setProperty('--tk-run', `${runPx}px`);
+    run.style.setProperty('--tk-ms', `${ms}ms`);
+    run.style.setProperty('--tk-delay', `-${elapsed}ms`);
+    return ms;
+}
+
+/** The wrap: the pass just ended, so the next paint of the SAME key starts from the right. */
+export function tickerWrapped(now: number = tickerClock()): void {
+    if (tickerPhase !== undefined) {
+        tickerPhase = { key: tickerPhase.key, startedAtMs: now };
+    }
 }

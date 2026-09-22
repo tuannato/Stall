@@ -154,7 +154,7 @@ import {
     renderStall,
     holdsLivePaint,
     shopWindowPaints,
-    WINDOW_MIN_PX,
+    WINDOW_MIN_PX, broadcastStep, broadcastTurns, tickerPages, tickerWrapped,
 } from './ui';
 import {
     FIAT_GLANCE_MAX_AGE_MS,
@@ -281,7 +281,7 @@ function withUrlParams(state: AppState): AppState {
  * place — the renderer indexes the same function, so the cursor and the card
  * cannot mean two different rows.
  */
-function shownCard(view: StallView): { tokenId: string; figure: string } | undefined {
+function shownCard(view: StallView): { kind: string; tokenId: string; figure: string } | undefined {
     const cards = broadcastCards(view);
     if (cards.length === 0) {
         return undefined;
@@ -289,7 +289,20 @@ function shownCard(view: StallView): { tokenId: string; figure: string } | undef
     const n = cards.length;
     const cursor = (((view.broadcastCursor ?? 0) % n) + n) % n;
     const card = cards[cursor]!;
-    return { tokenId: card.tokenId, figure: broadcastFigure(card) };
+    // The kind rides the identity (2026-09-21, `cards=all`): a token on both
+    // rails is two cards, and a turn from one to the other is a step.
+    return { kind: card.kind, tokenId: card.tokenId, figure: broadcastFigure(card) };
+}
+
+/**
+ * The viewer's motion preference, as one list this page can listen to.
+ * `boot` reads it once and again on every `change`, and writes the answer
+ * onto the view at paint time (`broadcastTickerStill`) — never a fresh
+ * `matchMedia` per reader, which is how the app's belief and the painted
+ * ribbon came to disagree (the critic, 2026-09-22).
+ */
+function motionQuery(): MediaQueryList | undefined {
+    return typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : undefined;
 }
 
 function isBroadcastFailure(kind: FetchStatus['kind'] | undefined): boolean {
@@ -384,11 +397,50 @@ export function boot(
     let windowCard: ReturnType<typeof setTimeout> | undefined;
     let windowBeat: ReturnType<typeof setTimeout> | undefined;
     let windowRoll: ReturnType<typeof setTimeout> | undefined;
+    /*
+     * The overlay's rail under `cards=all` (2026-09-21): explicit state,
+     * written onto the view at paint time (`broadcastRail`) and turned at
+     * the wrap — the shop window's `windowRailAt`, on the stream. And the
+     * ticker's own two: its reduced-motion pager (a timer, where the moving
+     * ribbon's wrap is the CSS animation's own iteration event), and the
+     * paint it is holding until that wrap.
+     */
+    let broadcastRailAt: 'listings' | 'quotes' = 'listings';
+    let tickerPager: ReturnType<typeof setTimeout> | undefined;
+    let tickerRunning = false;
+    /**
+     * The hold's ceiling. `tickerRunning` is released by the ribbon's own
+     * iteration event — and an animation that is cancelled (a reduce toggle
+     * mid-pass, a sheet that stills it) fires `animationcancel`, never
+     * another iteration, so the hold outlived the thing that releases it
+     * and an idle stall's overlay froze for good (the critic's P1,
+     * 2026-09-22). Two passes with no wrap is not a pass in flight: the
+     * guard drops the hold and paints.
+     */
+    let tickerGuard: ReturnType<typeof setTimeout> | undefined;
+    /** The viewer's motion preference, read from `motionQuery` at boot and on change. */
+    let tickerStill = motionQuery()?.matches === true;
+    /**
+     * Every broadcast derivation in this closure reads the view WITH the
+     * rail on it — `state.view` never carries it (it is written at paint
+     * time, like `shopTab`), and a derivation over the bare state answered
+     * the listings while the quotes were on screen: the ticker came back
+     * from its quotes pass onto the second page instead of the first.
+     */
+    const withRail = (view: StallView): StallView => ({ ...view, broadcastRail: broadcastRailAt });
 
     const clearBroadcastTimers = (): void => {
         if (carousel !== undefined) {
             clearTimeout(carousel);
             carousel = undefined;
+        }
+        if (tickerPager !== undefined) {
+            clearTimeout(tickerPager);
+            tickerPager = undefined;
+        }
+        if (tickerGuard !== undefined) {
+            clearTimeout(tickerGuard);
+            tickerGuard = undefined;
         }
         if (retry !== undefined) {
             clearTimeout(retry);
@@ -878,6 +930,11 @@ export function boot(
              * load, which is the same bargain `shopTab` takes.
              */
             isDefaultStall: isSavedStall(identityOf(state.view)),
+            // The overlay's rail and the ticker's motion mode, read at paint
+            // time like `wallWidth`: `broadcastRail` is turned by the wrap,
+            // and a reduced-motion ticker pages instead of scrolling.
+            broadcastRail: broadcastRailAt,
+            ...(tickerStill ? { broadcastTickerStill: true as const } : {}),
             // The same read-at-paint rule: what the describe sheet prefills
             // is this browser's memory of the last quote handed to a wallet
             // on this stall (§2's second named exception), never a loader's.
@@ -1188,6 +1245,28 @@ export function boot(
                 void readHistoryPage();
             },
         });
+        // The ticker's pass is what `livePaint` waits on: a moving ribbon was
+        // painted, so the next live paint holds until its wrap — for at most
+        // two passes, after which the guard paints regardless.
+        const ribbon = root.querySelector<HTMLElement>('.tk-run:not(.still)');
+        tickerRunning = ribbon !== null;
+        if (tickerGuard !== undefined) {
+            clearTimeout(tickerGuard);
+            tickerGuard = undefined;
+        }
+        if (ribbon !== null) {
+            const passMs = Number.parseInt(ribbon.style.getPropertyValue('--tk-ms'), 10);
+            if (passMs > 0) {
+                tickerGuard = setTimeout(() => {
+                    tickerGuard = undefined;
+                    tickerRunning = false;
+                    paint();
+                }, 2 * passMs);
+            }
+        }
+        // Idempotent, and here so a paint the ribbon's wrap did not schedule
+        // (the reduce toggle, the guard) still arms or disarms the pager.
+        syncTicker();
         // One-shots: the paint that showed them consumes them, same
         // discipline as `justChanged`. A later fiat answer or live
         // re-read must not replay the fade or the pulse.
@@ -1242,6 +1321,16 @@ export function boot(
         if (holdsLivePaint(settled())) {
             return;
         }
+        /*
+         * The ticker holds the live paint until the wrap (2026-09-21): the
+         * ribbon is rebuilt only between passes, never under a viewer's eye
+         * — the card carousel's `cardReplaced` discipline. State is already
+         * updated; the paint `advanceTicker` makes at the wrap carries it,
+         * at most one pass away (one to four minutes).
+         */
+        if (state.view.broadcast?.preset === 'ticker' && tickerRunning) {
+            return;
+        }
         paint();
     };
 
@@ -1264,16 +1353,20 @@ export function boot(
         if (params === undefined || params.preset !== 'corner') {
             return;
         }
-        const n = broadcastCards(state.view).length;
-        if (n < 2) {
+        const n = broadcastCards(withRail(state.view)).length;
+        // One card and nothing to turn to stands; one card on each rail
+        // under `all` still takes turns.
+        if (n < 2 && !broadcastTurns(withRail(state.view))) {
             return;
         }
         if (params.mode === 'fixed') {
+            const step = broadcastStep(withRail(state.view), state.view.broadcastCursor ?? 0, n);
+            broadcastRailAt = step.rail;
             state = {
                 ...state,
                 view: {
                     ...state.view,
-                    broadcastCursor: ((state.view.broadcastCursor ?? 0) + 1) % n,
+                    broadcastCursor: step.cursor,
                     broadcastState: 'live',
                     broadcastStepped: true,
                 },
@@ -1283,11 +1376,13 @@ export function boot(
             return;
         }
         if (state.view.broadcastState === 'live') {
+            const step = broadcastStep(withRail(state.view), state.view.broadcastCursor ?? 0, n);
+            broadcastRailAt = step.rail;
             state = {
                 ...state,
                 view: {
                     ...state.view,
-                    broadcastCursor: ((state.view.broadcastCursor ?? 0) + 1) % n,
+                    broadcastCursor: step.cursor,
                     broadcastState: 'rest',
                 },
             };
@@ -1307,10 +1402,70 @@ export function boot(
         carousel = setTimeout(carouselTick, cardDwell(BROADCAST_RAIL_LIVE_MS));
     };
 
-    const syncCarousel = (): void => {
+    /**
+     * The ticker's wrap: the next page of items — and, under `cards=all`,
+     * the other rail once this one has been shown through — painted between
+     * passes, with whatever live paint was held meanwhile.
+     */
+    const advanceTicker = (): void => {
         const params = state.view.broadcast;
-        const n = broadcastCards(state.view).length;
-        const want = params !== undefined && params.preset === 'corner' && n >= 2;
+        if (params === undefined || params.preset !== 'ticker') {
+            return;
+        }
+        const cards = broadcastCards(withRail(state.view));
+        const pages = tickerPages(cards.length, tickerStill);
+        const step = broadcastStep(withRail(state.view), state.view.broadcastCursor ?? 0, pages);
+        broadcastRailAt = step.rail;
+        state = { ...state, view: { ...state.view, broadcastCursor: step.cursor } };
+        paint();
+    };
+
+    /** The moving ribbon's own iteration event: one pass has run through. */
+    const onTickerWrap = (): void => {
+        if (state.view.broadcast?.preset !== 'ticker' || !tickerRunning) {
+            return;
+        }
+        tickerWrapped();
+        advanceTicker();
+    };
+
+    /**
+     * Idempotent, like `syncCarousel`. A moving ribbon needs no timer — the
+     * CSS animation's `animationiteration` is the scheduler's input. Under
+     * reduced motion the ribbon is still and pages on `BROADCAST_FIXED_MS`,
+     * the fixed carousel's own dwell, which is what the rhythm test pins.
+     */
+    const syncTicker = (): void => {
+        const params = state.view.broadcast;
+        const want = params !== undefined && params.preset === 'ticker' && tickerStill;
+        if (!want) {
+            if (tickerPager !== undefined) {
+                clearTimeout(tickerPager);
+                tickerPager = undefined;
+            }
+            return;
+        }
+        if (tickerPager !== undefined) {
+            return;
+        }
+        tickerPager = setTimeout(function page() {
+            tickerPager = undefined;
+            if (state.view.broadcast?.preset !== 'ticker' || !tickerStill) {
+                return;
+            }
+            advanceTicker();
+            tickerPager = setTimeout(page, BROADCAST_FIXED_MS);
+        }, BROADCAST_FIXED_MS);
+    };
+
+    const syncCarousel = (): void => {
+        syncTicker();
+        const params = state.view.broadcast;
+        const n = broadcastCards(withRail(state.view)).length;
+        const want =
+            params !== undefined &&
+            params.preset === 'corner' &&
+            (n >= 2 || broadcastTurns(withRail(state.view)));
         // A card replaced under an armed timer takes its own dwell: the
         // armed one was measured on the card that left (2026-09-09).
         const rearm = cardReplaced;
@@ -1508,7 +1663,7 @@ export function boot(
         if (state.view.broadcast === undefined) {
             return;
         }
-        if (broadcastCards(state.view).length === 0) {
+        if (broadcastCards(withRail(state.view)).length === 0) {
             return;
         }
         if (state.view.broadcastState === 'stale') {
@@ -1535,24 +1690,30 @@ export function boot(
      * Mutates `next` in place, the way the apply that calls it builds it.
      */
     const carryBroadcastCursor = (
-        prevCard: { tokenId: string; figure: string } | undefined,
+        prevCard: { kind: string; tokenId: string; figure: string } | undefined,
         next: StallView,
     ): void => {
         const params = next.broadcast;
         if (params === undefined) {
             return;
         }
-        const n = broadcastCards(next).length;
+        const cards = broadcastCards(withRail(next)).length;
+        // The ticker's cursor is a PAGE, and its ribbon is rebuilt at the
+        // wrap with no step and no pulse — the whole pass is the rebuild.
+        const n = params.preset === 'ticker' ? tickerPages(cards, tickerStill) : cards;
         next.broadcastCursor =
             n === 0 ? 0 : (((state.view.broadcastCursor ?? 0) % n) + n) % n;
         if (state.view.broadcastState === 'stale') {
             next.broadcastState = params.mode === 'fixed' ? 'live' : 'rest';
         }
-        const nextCard = shownCard(next);
+        if (params.preset === 'ticker') {
+            return;
+        }
+        const nextCard = shownCard(withRail(next));
         if (prevCard === undefined || nextCard === undefined) {
             return;
         }
-        if (prevCard.tokenId !== nextCard.tokenId) {
+        if (prevCard.tokenId !== nextCard.tokenId || prevCard.kind !== nextCard.kind) {
             next.broadcastStepped = true;
             cardReplaced = true;
         } else if (prevCard.figure !== nextCard.figure) {
@@ -2025,6 +2186,7 @@ export function boot(
             windowLockSet = undefined;
             windowCursorAt = 0;
             windowRailAt = 'listings';
+            broadcastRailAt = 'listings';
             windowTurnedAt = 0;
             windowTouchedAt = 0;
             bookReadAt = 0;
@@ -2655,7 +2817,7 @@ export function boot(
             return;
         }
         const prevCard =
-            state.view.broadcast !== undefined ? shownCard(state.view) : undefined;
+            state.view.broadcast !== undefined ? shownCard(withRail(state.view)) : undefined;
         /*
          * The walk's free genesis answers, folded in rather than replaced.
          * `refreshDescriptions` builds its maps from scratch every time, and a
@@ -2982,7 +3144,7 @@ export function boot(
                             : undefined;
                         const prevCard =
                             state.view.broadcast !== undefined
-                                ? shownCard(state.view)
+                                ? shownCard(withRail(state.view))
                                 : undefined;
                         const nextFetch: StallView = {
                             ...state.view,
@@ -3124,6 +3286,34 @@ export function boot(
      *
      * `mousemove` is not on the list on purpose — see `WINDOW_TOUCHES`.
      */
+    /*
+     * The ticker's wrap (2026-09-21). Delegated on the document, capturing,
+     * because `renderStall` throws the tree away on every paint and a
+     * listener on the ribbon would be lost with it. Only the ribbon's own
+     * keyframe counts: the pulse and the card fade fire the same event.
+     */
+    document.addEventListener(
+        'animationiteration',
+        (event) => {
+            if ((event as AnimationEvent).animationName === 'tk-run') {
+                onTickerWrap();
+            }
+        },
+        { capture: true },
+    );
+    /*
+     * A reduce toggle mid-pass cancels the ribbon's animation, so no wrap
+     * ever arrives to release the hold; the preference is re-read here and
+     * the ticker repainted at once — still and paging, or moving again.
+     */
+    motionQuery()?.addEventListener?.('change', (event) => {
+        tickerStill = event.matches;
+        if (state.view.broadcast?.preset === 'ticker') {
+            tickerRunning = false;
+            paint();
+        }
+    });
+
     for (const kind of WINDOW_TOUCHES) {
         document.addEventListener(
             kind,

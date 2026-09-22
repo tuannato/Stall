@@ -795,7 +795,11 @@ try {
         // whose name button and words line carry the marquee — without it the
         // kill for those two would be proved on no screen at all.
         { vp: VIEWPORTS[0], screens: 'offers,plugin-missing-quotes,publish-name,describe,pay' },
-        { vp: CANVAS, screens: 'broadcast,broadcast-quotes' },
+        // `broadcast-ticker-live` since 2026-09-21: the ribbon's own
+        // keyframe (`tk-run`), running in this fixture and killed in the
+        // sheet's last block — the pinned ticker screens animate nothing
+        // and would prove nothing here.
+        { vp: CANVAS, screens: 'broadcast,broadcast-quotes,broadcast-ticker-live' },
     ];
     for (const pass of REDUCED) {
         await cdp.send(
@@ -1028,7 +1032,7 @@ try {
      * on the other — and a card this pass never shot is a card nobody proved
      * legible over video.
      */
-    const CLEAR_SCREENS = ['broadcast-clear', 'broadcast-quotes-clear'];
+    const CLEAR_SCREENS = ['broadcast-clear', 'broadcast-quotes-clear', 'broadcast-ticker-clear'];
     try {
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',

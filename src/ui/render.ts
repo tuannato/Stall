@@ -120,7 +120,7 @@ import {
 } from '../domain/theme';
 import { stallMark } from './brand';
 import * as copy from './copy';
-import { renderBroadcastView } from './broadcast';
+import { armTicker, renderBroadcastView } from './broadcast';
 import { renderShopWindow, shopWindowSheet } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide, OBS_GUIDE_LEDE } from './obsGuide';
 import {
@@ -528,9 +528,11 @@ export function renderStall(
         frame.append(stall);
         root.append(frame);
         // The cards' lines run at the stream's pace; measured now, and again
-        // when the real faces land.
+        // when the real faces land. The ticker's ribbon the same: its pass is
+        // computed from the measured widths and continued across a repaint.
         applyMarquees(root, STREAM_MARQUEE);
-        remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_MARQUEE);
+        armTicker(root);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, STREAM_MARQUEE, armTicker);
         overlayWasOpen = overlayOpen;
         return;
     }

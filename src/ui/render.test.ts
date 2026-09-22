@@ -5935,7 +5935,7 @@ const BROADCAST: BroadcastParams = {
     preset: 'corner',
     mode: 'rail',
     transparent: false,
-    cards: 'listings',
+    cards: 'listings', side: 'right', edge: 'bottom',
 };
 
 function broadcastView(over: Partial<StallView> = {}): StallView {
@@ -6432,7 +6432,7 @@ const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n } as const;
 
 function quoteCardView(over: Partial<StallView> = {}): StallView {
     return broadcastView({
-        broadcast: { ...BROADCAST, mode: 'fixed', cards: 'quotes' },
+        broadcast: { ...BROADCAST, mode: 'fixed', cards: 'quotes', side: 'right', edge: 'bottom' },
         prices: new Map([[TOKEN_ID, USD_QUOTE]]),
         ...over,
     });
@@ -6879,7 +6879,7 @@ describe('an-agora-row-never-carries-the-sellers-quote', () => {
                     preset: 'corner',
                     mode: 'fixed',
                     transparent: false,
-                    cards: 'listings',
+                    cards: 'listings', side: 'right', edge: 'bottom',
                 },
             }),
         );
@@ -9878,7 +9878,7 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
                     preset: 'corner',
                     mode: 'fixed',
                     transparent: false,
-                    cards: 'quotes',
+                    cards: 'quotes', side: 'right', edge: 'bottom',
                 },
                 broadcastState: 'live',
                 descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
@@ -9904,7 +9904,7 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
     it('a listing card carries no words', () => {
         const { root } = paint(
             offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
-                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings' },
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
                 broadcastState: 'live',
                 descriptions: new Map([[TOKEN_ID, 'Half kilo of beans']]),
             }),
@@ -9921,7 +9921,7 @@ describe('the-stream-card-keeps-the-genesis-name', () => {
         setMarqueeMeasure(() => 300);
         const { root } = paint(
             quoteView({
-                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes', side: 'right', edge: 'bottom' },
                 broadcastState: 'live',
                 descriptions: new Map([[TOKEN_ID, 'A sentence long enough to be cut on the plate']]),
             }),
@@ -10009,7 +10009,7 @@ describe('a-genesis-name-is-screened-like-every-other-chain-string', () => {
                     preset: 'corner',
                     mode: 'fixed',
                     transparent: false,
-                    cards: 'quotes',
+                    cards: 'quotes', side: 'right', edge: 'bottom',
                 },
                 broadcastState: 'live',
             }),
@@ -11442,7 +11442,7 @@ describe('a-withheld-card-is-never-at-the-cursor', () => {
         expect(listings.map((card) => card.tokenId)).toEqual([TOKEN_ID]);
         const quotes = broadcastCards(
             broadcastView({
-                broadcast: { ...BROADCAST, cards: 'quotes' },
+                broadcast: { ...BROADCAST, cards: 'quotes', side: 'right', edge: 'bottom' },
                 fetch: { kind: 'empty' },
                 tokens: new Map([[TOKEN_ID, BEANS], [LOOKALIKE_ID, LOOKALIKE_META]]),
                 prices: new Map([[TOKEN_ID, QUOTE_USD], [LOOKALIKE_ID, QUOTE_USD]]),
@@ -13309,7 +13309,7 @@ describe('a-card-back-at-the-cursor-runs-its-name-again', () => {
                 [TWIN, QUOTE_USD],
             ]),
             stallName: 'Riverside Goods',
-            broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+            broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes', side: 'right', edge: 'bottom' },
             broadcastState: 'live',
             broadcastCursor: cursor,
         });
@@ -13387,7 +13387,7 @@ describe('a-pass-holds-at-the-end-of-the-text-before-it-returns', () => {
         setMarqueeMeasure(() => 300);
         paint(
             quoteView({
-                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes' },
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'quotes', side: 'right', edge: 'bottom' },
                 broadcastState: 'live',
             }),
         );

@@ -321,13 +321,239 @@ html.bc-clear .stall.broadcast {
 }
 
 /*
+ * The ticker (2026-09-21, `private/design/ticker-2026-09-21/`): one bar 80px
+ * tall along the bottom edge (or the top, `data-edge`), the code as a 311px
+ * plate at the bar's end (`data-side`; the shop's caption is three lines),
+ * the whole box 1800 × 311 at the canvas's 60px insets — the strip the OBS
+ * recipe names as 1920 × 431.
+ * The root keeps `.bc` so `stale` dims it like the card; the ticker's own
+ * placement overrides the card's 252px column.
+ */
+.stall.broadcast .bc.tk {
+    left: 60px;
+    right: 60px;
+    bottom: 60px;
+    width: auto;
+    flex-direction: row;
+    align-items: flex-end;
+}
+
+.stall.broadcast .bc.tk[data-edge='top'] {
+    top: 60px;
+    bottom: auto;
+    align-items: flex-start;
+}
+
+.stall.broadcast .bc.tk[data-side='left'] .tk-qrp {
+    order: -1;
+}
+
+.stall.broadcast .tk-bar {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 80px;
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+/* The flag: brand, the stall's name, the rail — fixed at the exit end so a
+   viewer arriving mid-pass knows whose figures are running past. It sizes
+   to its widest line: the quotes pass's rail line is ~470px and a 420px cap
+   painted it 27–50px across the divider into the ribbon's lane on every
+   look (the critic, 2026-09-22). The NAME is what is capped, below. */
+.stall.broadcast .tk-lab {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 0 22px;
+    border-right: 1px solid color-mix(in srgb, var(--s-muted) 28%, transparent);
+}
+
+.stall.broadcast .tk-brand {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-accent);
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+/* One line, cut with an ellipsis at 376px (a 420px flag on the listings
+   pass, the design's number): the design asked for two lines at 24px, and
+   an 80px bar holding brand, name and rail has no second line to give —
+   the corner card's clamp is the precedent that does not transfer. Stated
+   in CLAUDE §4 and PROBE-RULES; `broadcast-ticker-live` stages the cut. */
+.stall.broadcast .tk-name {
+    max-width: 376px;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stall.t-neo.broadcast .tk-name {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stall.broadcast .tk-rail {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+/* The clipping cell: the ribbon moves by transform inside it and never by
+   position, so the probe reads the ribbon as content and not a decoration. */
+.stall.broadcast .tk-clip {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+/*
+ * The ribbon enters from the cell's right edge and leaves at the flag. The
+ * two widths and the pass length are measured by `armTicker` and written as
+ * custom properties; the negative delay continues a pass across a repaint.
+ * `infinite` because the pass repeats from the right with the bar's width
+ * as the gap between passes — one node, never a duplicated ribbon.
+ */
+.stall.broadcast .tk-run {
+    /* Declared at rest so every var() below resolves before `armTicker`
+       writes the measured values inline (`a-var-read-at-rest-resolves-at-rest`). */
+    --tk-clip: 1550px;
+    --tk-run: 2400px;
+    --tk-ms: 40s;
+    --tk-delay: 0ms;
+    display: inline-flex;
+    align-items: baseline;
+    white-space: nowrap;
+    will-change: transform;
+    animation: tk-run var(--tk-ms) linear infinite;
+    animation-delay: var(--tk-delay);
+}
+
+@keyframes tk-run {
+    from {
+        transform: translateX(var(--tk-clip));
+    }
+    to {
+        transform: translateX(calc(-1 * var(--tk-run)));
+    }
+}
+
+/* Still: the reduced-motion page, or the probe's pinned offset (inline). */
+.stall.broadcast .tk-run.still {
+    animation: none;
+    padding-left: 22px;
+}
+
+.stall.broadcast .tk-empty {
+    padding: 0 22px;
+    font-size: 22px;
+    color: var(--s-muted);
+}
+
+.stall.broadcast .tk-it {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 0 30px;
+    font-size: 30px;
+    line-height: 1.2;
+}
+
+/* The mark between items: a static pseudo, never positioned. */
+.stall.broadcast .tk-it + .tk-it::before {
+    content: '\25c6';
+    color: var(--s-accent);
+    font-size: 14px;
+    margin-left: -30px;
+    margin-right: 16px;
+    align-self: center;
+}
+
+.stall.broadcast .tk-n {
+    font-weight: 800;
+}
+
+.stall.broadcast .tk-x {
+    font-weight: 800;
+    color: var(--s-accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.stall.broadcast .tk-from,
+.stall.broadcast .tk-u {
+    color: var(--s-muted);
+    font-weight: 600;
+    font-size: 22px;
+}
+
+.stall.broadcast .tk-chip {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--s-muted);
+    border: 1px solid color-mix(in srgb, var(--s-muted) 45%, transparent);
+    border-radius: 999px;
+    padding: 3px 10px;
+    align-self: center;
+}
+
+.stall.broadcast .tk-sur {
+    font-size: 20px;
+    color: var(--s-text);
+    font-weight: 600;
+}
+
+.stall.broadcast .tk-w {
+    font-size: 22px;
+    color: var(--s-muted);
+}
+
+.stall.broadcast .tk-qrp {
+    flex: 0 0 auto;
+    width: 240px;
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.stall.broadcast .tk-qrp .bc-cap {
+    font-size: 18px;
+}
+
+/*
  * THIS BLOCK STAYS LAST IN THE FILE. It names every animation and
- * transition the sheet declares so reduced motion actually stills them.
+ * transition the sheet declares so reduced motion actually stills them —
+ * the ticker's ribbon included: under reduced motion it does not scroll,
+ * it pages (`broadcastTickerStill`, the app's timer).
  */
 @media (prefers-reduced-motion: reduce) {
     .stall.broadcast .bc-ext.in,
     .stall.broadcast [data-role='price'].pulse,
-    .stall.broadcast [data-role='seller-price'].pulse {
+    .stall.broadcast [data-role='seller-price'].pulse,
+    .stall.broadcast .tk-run {
         animation: none;
+    }
+
+    .stall.broadcast .tk-run {
+        padding-left: 22px;
     }
 }

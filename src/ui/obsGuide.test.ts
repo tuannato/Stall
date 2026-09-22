@@ -42,6 +42,11 @@ import {
     OBS_CARDS_LABEL,
     OBS_CARDS_LISTINGS,
     OBS_CARDS_QUOTES,
+    OBS_CARDS_ALL,
+    OBS_PRESET_TICKER,
+    OBS_TRUTH_TICKER_LOOPS,
+    OBS_TRUTH_TICKER_QUOTES,
+    OBS_TRUTH_QR_SCAN_TICKER,
 } from './obsGuide';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
@@ -539,7 +544,7 @@ describe('the-cards-picker-writes-the-link', () => {
         expect(picker()).not.toBeNull();
         expect(new URL(field().value).searchParams.get('cards')).toBeNull();
         const options = [...picker()!.options].map((o) => o.textContent);
-        expect(options).toEqual([OBS_CARDS_LISTINGS, OBS_CARDS_QUOTES]);
+        expect(options).toEqual([OBS_CARDS_LISTINGS, OBS_CARDS_QUOTES, OBS_CARDS_ALL]);
 
         picker()!.value = 'quotes';
         picker()!.dispatchEvent(new Event('change'));
@@ -550,6 +555,91 @@ describe('the-cards-picker-writes-the-link', () => {
         presetSelect.value = 'rail';
         presetSelect.dispatchEvent(new Event('change'));
         expect(picker(), 'the rail mounts no card').toBeNull();
+        expect(new URL(field().value).searchParams.get('cards')).toBeNull();
+    });
+});
+
+describe('the-ticker-preset-has-its-own-two-pickers-and-writes-the-link', () => {
+    /**
+     * The third preset (2026-09-21): "Ticker bar" under "Where it sits";
+     * "QR side" and "Edge" appear for it alone; the mode picker leaves (a
+     * ticker has no rest); the cards picker stays and gains "Both, taking
+     * turns". The link carries `side` and `edge` only when they are not the
+     * default, `cards=all` when chosen, and never `mode`.
+     */
+    it('offers the ticker, shows side and edge for it alone, and composes the link from them', () => {
+        const section = document.createElement('section');
+        paintObsGuide(section, view(), handlers());
+        const field = () => section.querySelector('.share-url') as HTMLInputElement;
+        const presetSelect = () => section.querySelector('[data-role="obs-preset-picker"]') as HTMLSelectElement;
+        expect([...presetSelect().options].map((o) => o.textContent)).toContain(OBS_PRESET_TICKER);
+        expect(section.querySelector('[data-role="obs-side-picker"]')).toBeNull();
+        expect(section.querySelector('[data-role="obs-edge-picker"]')).toBeNull();
+
+        presetSelect().value = 'ticker';
+        presetSelect().dispatchEvent(new Event('change'));
+        const url = () => new URL(field().value);
+        expect(url().searchParams.get('preset')).toBe('ticker');
+        expect(url().searchParams.get('mode'), 'a ticker has no rest, so no mode').toBeNull();
+        expect(url().searchParams.get('side')).toBeNull();
+        expect(url().searchParams.get('edge')).toBeNull();
+        expect(section.querySelector('[data-role="obs-mode-picker"]')).toBeNull();
+        const side = section.querySelector('[data-role="obs-side-picker"]') as HTMLSelectElement;
+        const edge = section.querySelector('[data-role="obs-edge-picker"]') as HTMLSelectElement;
+        expect(side).not.toBeNull();
+        expect(edge).not.toBeNull();
+
+        side.value = 'left';
+        side.dispatchEvent(new Event('change'));
+        expect(url().searchParams.get('side')).toBe('left');
+        const edgeAgain = section.querySelector('[data-role="obs-edge-picker"]') as HTMLSelectElement;
+        edgeAgain.value = 'top';
+        edgeAgain.dispatchEvent(new Event('change'));
+        expect(url().searchParams.get('edge')).toBe('top');
+        expect(url().searchParams.get('side'), 'the side survives the re-render').toBe('left');
+
+        const cards = section.querySelector('[data-role="obs-cards-picker"]') as HTMLSelectElement;
+        cards.value = 'all';
+        cards.dispatchEvent(new Event('change'));
+        expect(url().searchParams.get('cards')).toBe('all');
+        const dia = section.querySelector('[data-role="obs-diagram"]')!;
+        expect(dia.getAttribute('data-preset')).toBe('ticker');
+        expect(dia.getAttribute('data-side')).toBe('left');
+        expect(dia.getAttribute('data-edge')).toBe('top');
+        expect(dia.hasAttribute('data-mode')).toBe(false);
+        expect(dia.querySelector('.d-plate'), 'the bar is placed in user units, not by the card transform').toBeNull();
+
+        const truths = [...section.querySelectorAll('[data-role="obs-truths"] p')].map((n) => n.textContent);
+        expect(truths).toContain(OBS_TRUTH_TICKER_LOOPS);
+        expect(OBS_TRUTH_TICKER_LOOPS).toContain(OBS_CARDS_ALL);
+        expect(OBS_TRUTH_TICKER_LOOPS, 'a change lands at the wrap, said').toMatch(/end of the pass/);
+        // The card's two sentences are wrong for a ribbon and are replaced,
+        // never shown: no card is mounted, and the strip is never scaled.
+        expect(truths).toContain(OBS_TRUTH_TICKER_QUOTES);
+        expect(truths).toContain(OBS_TRUTH_QR_SCAN_TICKER);
+        expect(truths).not.toContain(OBS_TRUTH_QUOTE_CARDS);
+        expect(truths).not.toContain(OBS_TRUTH_QR_SCAN);
+        expect(OBS_TRUTH_QR_SCAN_TICKER).toMatch(/204/);
+        expect(OBS_TRUTH_QR_SCAN_TICKER).toMatch(/not measured/);
+        expect(OBS_TRUTH_QR_SCAN_TICKER).not.toMatch(/scale the source/);
+        expect(OBS_TRUTH_TICKER_QUOTES).not.toMatch(/each card/);
+        expect(OBS_TRUTH_TICKER_QUOTES).toContain(OBS_CARDS_ALL);
+        // The stream's picture steps clear of a top bar and a left plate.
+        const frames = [...dia.querySelectorAll('.d-frame')].map((r) => [Number(r.getAttribute('x')), Number(r.getAttribute('y'))]);
+        expect(frames.every(([x, y]) => x >= 32 && y >= 20), `frames ${JSON.stringify(frames)} clear the bar and the plate`).toBe(true);
+    });
+
+    it('cards=all rides the corner link too, and never the rail', () => {
+        const section = document.createElement('section');
+        paintObsGuide(section, view(), handlers());
+        const field = () => section.querySelector('.share-url') as HTMLInputElement;
+        const cards = section.querySelector('[data-role="obs-cards-picker"]') as HTMLSelectElement;
+        cards.value = 'all';
+        cards.dispatchEvent(new Event('change'));
+        expect(new URL(field().value).searchParams.get('cards')).toBe('all');
+        const presetSelect = section.querySelector('[data-role="obs-preset-picker"]') as HTMLSelectElement;
+        presetSelect.value = 'rail';
+        presetSelect.dispatchEvent(new Event('change'));
         expect(new URL(field().value).searchParams.get('cards')).toBeNull();
     });
 });

@@ -23,6 +23,8 @@ import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
     OBS_STICKER_WIDTH,
+    OBS_TICKER_STICKER_HEIGHT,
+    OBS_TICKER_STICKER_WIDTH,
 } from '../src/ui/obsSizes';
 import {
     CANVAS_SCREENS,
@@ -262,6 +264,18 @@ function clipsOf(node: Element): Clip[] {
  */
 function cutSideways(node: Element, box: DOMRect): string | undefined {
     if (box.width === 0 || box.height === 0) {
+        return undefined;
+    }
+    // The one scoped exception (2026-09-21, the ticker): a protected figure
+    // inside a MOVING or PINNED ribbon cell is clipped BY DESIGN — the ribbon
+    // runs through the cell and every figure spends most of a pass outside
+    // it. The replacement proof is the fixture, which pins the ribbon at an
+    // offset where the protected figure of one item stands wholly inside the
+    // cell, and the contrast sampler, which clamps to the cell (`targetFor`)
+    // and skips a sliver. A STILL page (reduced motion) is a layout, not a
+    // pass, and is measured like one. `PROBE-RULES.md`, "The ticker".
+    const ribbon = node.closest('[data-ribbon]');
+    if (ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still') {
         return undefined;
     }
     const clips = clipsOf(node);
@@ -840,28 +854,51 @@ function measure(screen: string, themeLabel: string): Failure[] {
         } else {
             const box = bc.getBoundingClientRect();
             const inset = Number.parseFloat(getComputedStyle(bc).right) || 0;
-            const rail = bc.getAttribute('data-preset') === 'rail';
-            const ceiling = rail ? OBS_RAIL_STICKER_HEIGHT : OBS_STICKER_HEIGHT;
-            const named = rail ? 'OBS_RAIL_STICKER_HEIGHT' : 'OBS_STICKER_HEIGHT';
+            const preset = bc.getAttribute('data-preset') ?? 'corner';
+            // Per preset (2026-09-21): the ticker is a full-width strip and
+            // its width is the canvas — a strip a streamer scales down is a
+            // code that stops scanning, so the recipe says do not.
+            const table: Record<string, { ceiling: number; named: string; width: number; widthName: string }> = {
+                corner: { ceiling: OBS_STICKER_HEIGHT, named: 'OBS_STICKER_HEIGHT', width: OBS_STICKER_WIDTH, widthName: 'OBS_STICKER_WIDTH' },
+                rail: { ceiling: OBS_RAIL_STICKER_HEIGHT, named: 'OBS_RAIL_STICKER_HEIGHT', width: OBS_STICKER_WIDTH, widthName: 'OBS_STICKER_WIDTH' },
+                ticker: { ceiling: OBS_TICKER_STICKER_HEIGHT, named: 'OBS_TICKER_STICKER_HEIGHT', width: OBS_TICKER_STICKER_WIDTH, widthName: 'OBS_TICKER_STICKER_WIDTH' },
+            };
+            const row = table[preset] ?? table.corner!;
             const w = Math.round(box.width) + 2 * inset;
             const h = Math.ceil(box.height) + 2 * inset;
             const seen =
                 `.bc is ${Math.round(box.width)}x${Math.ceil(box.height)} ` +
                 `at inset ${inset}`;
-            if (h > ceiling) {
+            if (h > row.ceiling) {
                 fail(
                     'the-sticker-height-fits-the-tallest-card',
-                    `${seen}, so the ${rail ? 'rail' : 'corner'} sticker needs ` +
-                        `${w}x${h} — ${named} is ${ceiling}`,
+                    `${seen}, so the ${preset} sticker needs ` +
+                        `${w}x${h} — ${row.named} is ${row.ceiling}`,
                 );
             }
-            if (w !== OBS_STICKER_WIDTH) {
+            if (w !== row.width) {
                 fail(
                     'the-sticker-width-is-the-plate-plus-both-insets',
                     `${seen}, so the sticker needs ${w} wide — ` +
-                        `OBS_STICKER_WIDTH is ${OBS_STICKER_WIDTH}`,
+                        `${row.widthName} is ${row.width}`,
                 );
             }
+        }
+        /*
+         * The ticker's flag holds its own lines (2026-09-22). The rail line is
+         * nowrap with no clip of its own, and a flag capped at 420px painted
+         * "Seller's quotes · Pays the seller · no escrow" 27–50px across the
+         * divider into the ribbon's lane on every look — a spill `text-spills`
+         * could not see, because its clipper is the bar and its overlap list
+         * names none of the ribbon's classes. The name is capped and clipped
+         * inside its own box, so what this reads is the flag's other lines.
+         */
+        const flag = root.querySelector<HTMLElement>('.tk-lab');
+        if (flag !== null && flag.scrollWidth > flag.clientWidth + 1) {
+            fail(
+                'the-tickers-flag-fits-its-lines',
+                `.tk-lab holds ${flag.scrollWidth}px of lines in ${flag.clientWidth}px`,
+            );
         }
     }
 
@@ -1545,6 +1582,13 @@ const CONTRAST_TEXT = [
     '[data-role="pay-lines"]',
     '[data-role="pay-total"]',
     '.step',
+    // The ticker (2026-09-22): the flag's rail line, the item's name and the
+    // provenance chip — the chip is `copy.SELLER_QUOTE_CHIP` under its own
+    // class, and a semantic under a class no list names is how `.item-ic`'s
+    // letters reached 1.10:1.
+    '.tk-rail',
+    '.tk-n',
+    '.tk-chip',
     '.sel-sub',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
@@ -1631,7 +1675,12 @@ declare global {
  */
 window.__contrastScreens = screensForViewport().filter(
     (name) =>
-        (!NO_DECOR_SCREENS.has(name) || name === 'broadcast') &&
+        // `broadcast-ticker` since 2026-09-21: the ribbon's figures are the
+        // first money on a moving node, sampled at the pinned offset the
+        // fixture holds them at. The other three ticker screens are geometry
+        // (the quotes pass and pass 5 share its ink; `-live` is the reduce
+        // pass's) — `PROBE-RULES.md`, "The ticker".
+        (!NO_DECOR_SCREENS.has(name) || name === 'broadcast' || name === 'broadcast-ticker') &&
         !GEOMETRY_ONLY_SCREENS.has(name),
 );
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
@@ -1674,8 +1723,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
     // and the sheet are the same boundary wearing two class names.
     let clipper: HTMLElement | null = node.parentElement;
     while (clipper !== null) {
-        const oy = getComputedStyle(clipper).overflowY;
+        const cs = getComputedStyle(clipper);
+        const oy = cs.overflowY;
         if ((oy === 'auto' || oy === 'scroll') && clipper.scrollHeight > clipper.clientHeight + 1) {
+            break;
+        }
+        // A cell that CUTS (the ticker's ribbon cell, 2026-09-21) clamps the
+        // same way: a frozen figure half outside it would otherwise be
+        // sampled over the code plate's white or the transparent ground.
+        if (clipper.hasAttribute('data-ribbon') && (cs.overflowX === 'hidden' || cs.overflowX === 'clip')) {
             break;
         }
         clipper = clipper.parentElement;

@@ -234,8 +234,15 @@ export type Overlay =
  * A new name on purpose: `overlay` is CLAUDE.md §4's third layer.
  */
 export type BroadcastParams = {
-    preset: 'corner' | 'rail';
-    /** Rest/live cycle. Ignored when `preset` is `rail`. */
+    /**
+     * `ticker` (2026-09-21, design `private/design/ticker-2026-09-21/`): one
+     * bar a line high along the bottom or top edge, the items running
+     * right-to-left, a label plate at the exit end and the shop's code as a
+     * plate at the bar's end. It has no rest state — a resting ticker is a
+     * blank bar, which reads as a dead source — so it forces `fixed`.
+     */
+    preset: 'corner' | 'rail' | 'ticker';
+    /** Rest/live cycle. Ignored when `preset` is `rail`; `fixed` on `ticker`. */
     mode: 'fixed' | 'rail';
     /** `bg=transparent` on the wire. Absent is the theme ground. */
     transparent: boolean;
@@ -247,7 +254,14 @@ export type BroadcastParams = {
      * asked amount and a seller's quote are two different transactions, and a
      * viewer scanning a code has no way to ask which one they are looking at.
      */
-    cards: 'listings' | 'quotes';
+    cards: 'listings' | 'quotes' | 'all';
+    /**
+     * Which end of the ticker's bar the code plate stands on. `side=left` on
+     * the wire; anything else is right. Read by the ticker alone.
+     */
+    side: 'left' | 'right';
+    /** Which edge the ticker hangs on. `edge=top` on the wire; anything else is bottom. */
+    edge: 'bottom' | 'top';
 };
 
 /**
@@ -938,6 +952,26 @@ export type StallView = WindowState & {
     broadcast?: BroadcastParams;
     /** Which listing the carousel is showing. App-owned; modulo after a book apply. */
     broadcastCursor?: number;
+    /**
+     * Which rail is on screen under `cards=all` — explicit state written by
+     * `boot` at paint time, the shop window's own rule (`windowRail`): a rail
+     * derived at paint time from a cursor is how the cursor and the card
+     * come to mean different rows. Absent is the listings.
+     */
+    broadcastRail?: 'listings' | 'quotes';
+    /**
+     * The ticker's ribbon pinned still at this offset, in px from the
+     * clip's left edge. Fixture-staged only: the probe measures a moving
+     * money figure at one known instant, and the ribbon at rest is not a
+     * state the stream ever shows.
+     */
+    broadcastTickerAt?: number;
+    /**
+     * The ticker under reduced motion: the ribbon does not scroll, it shows
+     * one page of items and cuts to the next. Written by `boot` from the
+     * media query at paint time, like `wallWidth`.
+     */
+    broadcastTickerStill?: true;
     /** `stale` is a last-good card after a failed re-read — a dim, never copy. */
     broadcastState?: 'live' | 'rest' | 'stale';
     /**

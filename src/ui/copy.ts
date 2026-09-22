@@ -1937,6 +1937,13 @@ export const BROADCAST_EMPTY = 'nothing listed yet';
  * is rather than what the shop hopes for.
  */
 export const BROADCAST_QUOTE_LINE = 'Pays the seller \u00b7 no escrow';
+/* The ticker's label plate (2026-09-21): whose figures the pass carries. On
+   the quotes pass the flag also carries what paying them does — PLAN § D
+   rule 5's line, at the ribbon's exit for the whole pass, since a moving
+   item cannot carry it (the owner's amendment, § Decided). */
+export const BROADCAST_TICKER_LISTINGS = 'Listings';
+export const BROADCAST_TICKER_QUOTES = 'Seller\u2019s quotes';
+export const BROADCAST_TICKER_QUOTES_LINE = `${BROADCAST_TICKER_QUOTES} \u00b7 ${BROADCAST_QUOTE_LINE}`;
 /** The code on a quote card opens this page at that item — never a wallet. */
 export const BROADCAST_QUOTE_QR_ALT = 'QR code for this item at this stall';
 /** Listings beyond the shown card. `n` is listings − 1. */
