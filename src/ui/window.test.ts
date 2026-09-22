@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
-import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, windowItemLink, windowLinkFor } from './window';
+import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, shopWindowSheet, windowItemLink, windowLinkFor } from './window';
+import type { TokenPrice } from '../domain/description';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { qrMatrix } from '../domain/qr';
 import { payLandingUrl } from '../domain/route';
@@ -17,6 +18,9 @@ const ADDR = 'ecash:qpjq0dcnn4j0c7lnrjqxpqk3z2qz0mfvyv8qyqz3hn';
 const BEANS = 'a'.repeat(64);
 const TEA = 'b'.repeat(64);
 const JUNK = 'c'.repeat(64);
+/** One quote in each of two units: the touch wall's `in` row and its `apart` row. */
+const QUOTE_USD: TokenPrice = { code: 'usd', exponent: 2, amount: 500n, surchargePct: 5 };
+const QUOTE_XEC: TokenPrice = { code: 'xec', exponent: 2, amount: 500_000n };
 
 function handlers(): StallHandlers {
     return {
@@ -28,6 +32,10 @@ function handlers(): StallHandlers {
         onSwitchShopTab: vi.fn(),
         onZoomIcon: vi.fn(),
         onClosePublish: vi.fn(),
+        onSelectionSet: vi.fn(),
+        onSelectionClear: vi.fn(),
+        onWallPay: vi.fn(),
+        onWallBack: vi.fn(),
     } as unknown as StallHandlers;
 }
 
@@ -62,13 +70,14 @@ function tokenMeta(tokenId: string, name: string): [string, TokenMeta] {
  * that is not about the code says nothing about it — and the two tests that
  * ARE about it pass the field and read like what they assert.
  */
-type WindowOpts = Omit<WindowParams, 'payCode' | 'turn'> & {
+type WindowOpts = Omit<WindowParams, 'payCode' | 'turn' | 'touch'> & {
     payCode?: boolean;
     turn?: WindowParams['turn'];
+    touch?: boolean;
 };
 
 function windowView(opts: WindowOpts, over: Partial<StallView> = {}): StallView {
-    const params: WindowParams = { payCode: true, turn: 'none', ...opts };
+    const params: WindowParams = { payCode: true, turn: 'none', touch: false, ...opts };
     return {
         route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
         overlay: { kind: 'idle' },
@@ -83,9 +92,13 @@ function windowView(opts: WindowOpts, over: Partial<StallView> = {}): StallView 
 
 function paint(view: StallView): HTMLElement {
     const root = document.createElement('div');
-    renderStall(root, view, handlers());
+    paintedHandlers = handlers();
+    renderStall(root, view, paintedHandlers);
     return root;
 }
+
+/** The handlers the last `paint` passed, so a press on the wall is observable. */
+let paintedHandlers: StallHandlers = handlers();
 
 describe('a-shop-window-carries-no-controls', () => {
     /**
@@ -105,6 +118,46 @@ describe('a-shop-window-carries-no-controls', () => {
             expect(root.querySelector('.tabs')).toBeNull();
             expect(root.querySelector('.stall-foot')).toBeNull();
             expect(root.querySelector('[data-role="shop-tabs"]')).toBeNull();
+        }
+    });
+
+    /**
+     * The rule loses its "ever" on the owner's ask (2026-09-21), and what
+     * replaces it is an ALLOW-LIST rather than a count: with `touch=on` the
+     * wall carries exactly the selection's five roles and nothing else —
+     * never a dock, a tab, a rail switch, a row that opens a face, a link
+     * or a field. A count would pass the day somebody adds a sixth.
+     */
+    it('with touch on, carries exactly the selection’s controls and no other', () => {
+        const root = paint(
+            windowView(
+                { show: 'quotes', mode: 'browse', touch: true },
+                { prices: new Map([[BEANS, QUOTE_USD]]), selection: new Map([[BEANS, 2n]]) },
+            ),
+        );
+        const window = root.querySelector('[data-role="shop-window"]')!;
+        const controls = [...window.querySelectorAll('button, a, input, select, textarea')];
+        expect(controls.length).toBeGreaterThan(0);
+        const allowed = new Set(['window-step-fewer', 'window-step-more', 'window-clear', 'window-pay', 'window-back']);
+        for (const node of controls) {
+            expect(node.tagName, 'every control is a button').toBe('BUTTON');
+            const role = node.getAttribute('data-role') ?? '';
+            expect(allowed.has(role), `${role || node.outerHTML.slice(0, 60)} is not one of the five`).toBe(true);
+        }
+        expect(root.querySelector('.tabs')).toBeNull();
+        expect(root.querySelector('.stall-foot')).toBeNull();
+        expect(root.querySelector('[data-role="shop-tabs"]')).toBeNull();
+        // Cycle has no list to choose from, and the listings rail's road off
+        // this wall is Cashtab's token page: neither paints a control.
+        for (const off of [
+            windowView({ show: 'quotes', mode: 'cycle', touch: true }, { prices: new Map([[BEANS, QUOTE_USD]]) }),
+            windowView({ show: 'listings', mode: 'browse', touch: true }),
+            windowView({ show: 'quotes', mode: 'browse' }, { prices: new Map([[BEANS, QUOTE_USD]]) }),
+        ]) {
+            expect(
+                paint(off).querySelectorAll('[data-role="shop-window"] button'),
+                'no control outside Browse + quotes + the switch',
+            ).toHaveLength(0);
         }
     });
 });
@@ -156,8 +209,14 @@ describe('the-window-shows-one-rail-and-rotates-between-them', () => {
                     windowRail: rail,
                 } as Partial<StallView>),
             );
-            const covenant = root.querySelectorAll('[data-role="price"]').length;
-            const quoted = root.querySelectorAll('[data-role="seller-price"]').length;
+            // The ROWS, not the screen: a touch wall's payment plate mounts
+            // the XEC figure a wallet signs under `price` — the pay sheet's
+            // stated inversion (§8) — and counting it here would have made
+            // this rule quietly blind on the one screen it was written for
+            // (the critic's P2-12). The plate is asserted below instead.
+            const strip = root.querySelector('.sw-strip')!;
+            const covenant = strip.querySelectorAll('[data-role="price"]').length;
+            const quoted = strip.querySelectorAll('[data-role="seller-price"]').length;
             // Both counts are asserted, so a screen that painted NEITHER
             // cannot pass the way the first version let it.
             expect(covenant + quoted, `${rail} paints figures at all`).toBeGreaterThan(0);
@@ -167,6 +226,34 @@ describe('the-window-shows-one-rail-and-rotates-between-them', () => {
         // And the two halves painted DIFFERENT rails, or the rotation is a
         // rotation in name only.
         expect(seen.listings).not.toBe(seen.quotes);
+    });
+
+    it('a touch wall’s plate carries the signed figure, and the rows stay one rail', () => {
+        const root = paint(
+            windowView(
+                { show: 'quotes', mode: 'browse', touch: true },
+                {
+                    prices: new Map([[BEANS, QUOTE_USD]]),
+                    selection: new Map([[BEANS, 2n]]),
+                    windowPaying: {
+                        sats: 52_500_000n,
+                        uri: `${ADDR}?amount=525000.00`,
+                        selection: new Map([[BEANS, 2n]]),
+                        prices: new Map([[BEANS, QUOTE_USD]]),
+                        names: new Map([[BEANS, 'Roasted Beans']]),
+                        borrowed: new Set<string>(),
+                        unit: 'usd',
+                        atMs: Date.now(),
+                    },
+                } as unknown as Partial<StallView>,
+            ),
+        );
+        const strip = root.querySelector('.sw-strip')!;
+        expect(strip.querySelectorAll('[data-role="price"]'), 'the rows are the quotes rail').toHaveLength(0);
+        expect(strip.querySelectorAll('[data-role="seller-price"]').length).toBeGreaterThan(0);
+        const plate = root.querySelector('[data-role="window-paying"]')!;
+        expect(plate.querySelectorAll('[data-role="price"]'), 'the figure a wallet signs').toHaveLength(1);
+        expect(plate.querySelectorAll('[data-role="seller-price"]'), 'and never a quote beside it').toHaveLength(0);
     });
 });
 
@@ -308,14 +395,14 @@ describe('the-shop-window-sheet-composes-a-link-and-signs-nothing', () => {
      */
     it('omits every default and names every choice', () => {
         const base = 'https://stall.cash/s/qpjq';
-        expect(windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none' }, base)).toBe(
+        expect(windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none', touch: false }, base)).toBe(
             `${base}?view=window`,
         );
         expect(
-            windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213, payCode: true, turn: 'none' }, base),
+            windowLinkFor({ show: 'quotes', mode: 'browse', upto: 874_213, payCode: true, turn: 'none', touch: false }, base),
         ).toBe(`${base}?view=window&show=quotes&mode=browse&upto=874213`);
         // The code is on by default, so only OFF is written.
-        expect(windowLinkFor({ show: 'quotes', mode: 'cycle', payCode: false, turn: 'none' }, base)).toBe(
+        expect(windowLinkFor({ show: 'quotes', mode: 'cycle', payCode: false, turn: 'none', touch: false }, base)).toBe(
             `${base}?view=window&show=quotes&paycode=off`,
         );
     });
@@ -1193,13 +1280,13 @@ describe('a-screen-hung-sideways-turns-itself-and-the-layout-follows', () => {
     it('names the direction in the link and omits the default', () => {
         const base = 'https://stall.cash/s/qpjq';
         expect(
-            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'cw' }, base),
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'cw', touch: false }, base),
         ).toBe(`${base}?view=window&turn=cw`);
         expect(
-            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'ccw' }, base),
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'ccw', touch: false }, base),
         ).toBe(`${base}?view=window&turn=ccw`);
         expect(
-            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none' }, base),
+            windowLinkFor({ show: 'all', mode: 'cycle', payCode: true, turn: 'none', touch: false }, base),
         ).toBe(`${base}?view=window`);
     });
 
@@ -1279,5 +1366,243 @@ describe('the-window-row-says-the-surcharge', () => {
         );
         expect(root.querySelector('[data-role="seller-price"]')).not.toBeNull();
         expect(root.querySelector('[data-role="quote-surcharge"]')).toBeNull();
+    });
+});
+
+describe('the-touch-walls-controls-keep-their-own-floor', () => {
+    /**
+     * `every-tappable-control-keeps-a-44px-floor` reads `stall.css` alone,
+     * and the wall's controls live in `window.css` — so two documents said
+     * this was pinned here and nothing was (the critic's P2-8). A wall's
+     * control is pressed at arm's length rather than by a thumb at reading
+     * distance, so the floor is 72px rather than 44, declared in each
+     * control's own block the way the shared list demands.
+     */
+    it('declares 72px in window.css for the stepper and the strip’s two buttons', () => {
+        const css = readFileSync(
+            join(dirname(fileURLToPath(import.meta.url)), 'window.css'),
+            'utf8',
+        );
+        const blockOf = (selector: string): string => {
+            const at = css.indexOf(selector);
+            expect(at, `${selector} has a block of its own`).toBeGreaterThan(-1);
+            return css.slice(at, css.indexOf('}', at));
+        };
+        const stepper = blockOf(".sw-step-b {");
+        expect(stepper, 'the stepper is square and at least 72px').toMatch(/min-width:\s*72px/);
+        expect(stepper).toMatch(/min-height:\s*72px/);
+        expect(blockOf(".sw-sel-btn {"), 'Clear all and Pay').toMatch(/min-height:\s*clamp\(72px/);
+        // The phone's 44px is a thumb's floor and belongs to `stall.css`;
+        // nothing in this sheet may declare a control smaller than the
+        // wall's own.
+        expect(stepper).not.toMatch(/min-(?:width|height):\s*(?:[0-6]?\d)px/);
+    });
+});
+
+describe('a-touch-wall-counts-in-one-unit-and-says-the-other-rails-road', () => {
+    /**
+     * The customer's own half (2026-09-21, the owner's ask; the design is
+     * `private/design/touch-2026-09-21/`). One unit per payment — the
+     * phone's `selectionUnit`, the same code — so a row in another unit
+     * paints no stepper and names the road it does have: in `browse` no row
+     * carries a code of its own, so the phone's "paid on its own" would
+     * point at nothing (the critic's P2-13).
+     */
+    const wall = (over: Partial<StallView> = {}) =>
+        paint(
+            windowView(
+                { show: 'quotes', mode: 'browse', touch: true },
+                {
+                    prices: new Map([
+                        [BEANS, QUOTE_USD],
+                        [TEA, QUOTE_XEC],
+                    ]),
+                    ...over,
+                },
+            ),
+        );
+    const rowOf = (root: HTMLElement, tokenId: string): HTMLElement =>
+        [...root.querySelectorAll<HTMLElement>('.item')].find((row) =>
+            row.querySelector(`[data-role="window-step-more"][data-focus-key$="${tokenId}"]`) !== null ||
+            (row.textContent ?? '').includes(tokenId === BEANS ? 'Roasted Beans' : 'Green Tea'),
+        )!;
+
+    it('every row steps while nothing is chosen, and one unit closes the other out', () => {
+        const empty = wall();
+        expect(empty.querySelectorAll('[data-role="window-step-more"]')).toHaveLength(2);
+        expect(empty.querySelector('.sw-apart')).toBeNull();
+
+        const chosen = wall({ selection: new Map([[BEANS, 2n]]) });
+        const beans = rowOf(chosen, BEANS);
+        const tea = rowOf(chosen, TEA);
+        expect(beans.querySelector('[data-role="window-step-more"]')).not.toBeNull();
+        expect(beans.querySelector('.item-head')?.classList.contains('sw-in')).toBe(true);
+        expect(beans.querySelector('.sw-step-n')?.textContent).toBe('2');
+        expect(beans.querySelector('.sw-step-n')?.getAttribute('aria-hidden')).toBe('true');
+        expect(tea.querySelector('[data-role="window-step-more"]'), 'another unit steps nothing').toBeNull();
+        expect(tea.querySelector('.sw-apart')?.textContent).toBe(copy.windowApart('XEC'));
+        // The count rides the two buttons' names, the phone's rule.
+        expect(beans.querySelector('[data-role="window-step-fewer"]')?.getAttribute('aria-label')).toBe(
+            copy.selectionFewer('Roasted Beans', '2'),
+        );
+    });
+
+    it('the steppers drive the phone’s own handler, and “−” at one asks nothing', () => {
+        const root = wall({ selection: new Map([[BEANS, 1n]]) });
+        const set = paintedHandlers.onSelectionSet as unknown as ReturnType<typeof vi.fn>;
+        const fewer = rowOf(root, BEANS).querySelector('[data-role="window-step-fewer"]') as HTMLButtonElement;
+        expect(fewer.disabled).toBe(false);
+        fewer.click();
+        expect(set).toHaveBeenCalledWith(BEANS, 0n);
+        // No question anywhere on the wall: the owner's ruling (T-B).
+        expect(root.querySelector('[data-role="selection-yes"]')).toBeNull();
+        expect(root.querySelector('[data-role="selection-no"]')).toBeNull();
+    });
+});
+
+describe('a-touch-wall-strip-says-the-total-and-composes-one-payment', () => {
+    /**
+     * The strip is a row of the frame's own grid — in flow, never sticky —
+     * with the glance in the seller's unit (surcharges included, for the eye
+     * and never for a link), Clear all, and Pay. The plate that press makes
+     * is a SNAPSHOT: nothing on it is read from the view again.
+     */
+    const chosen = new Map([[BEANS, 2n]]);
+    const wall = (over: Partial<StallView> = {}) =>
+        paint(
+            windowView(
+                { show: 'quotes', mode: 'browse', touch: true },
+                { prices: new Map([[BEANS, QUOTE_USD]]), selection: chosen, ...over },
+            ),
+        );
+
+    it('empty, it says how to start; chosen, it totals the records and offers the two controls', () => {
+        const empty = wall({ selection: new Map() });
+        expect(empty.querySelector('[data-role="window-selection"]')?.textContent).toContain(
+            copy.WINDOW_TOUCH_EMPTY,
+        );
+        expect(empty.querySelector('[data-role="window-pay"]'), 'nothing to pay for').toBeNull();
+
+        const root = wall();
+        const bar = root.querySelector('[data-role="window-selection"]')!;
+        expect(bar.querySelector('.sw-sel-n')?.textContent).toBe('Roasted Beans ×2');
+        expect(bar.querySelector('.sw-sel-c')?.textContent).toBe(copy.selectionCountLine(2));
+        // 2 × $5.00, the surcharge on the product, rounded once: $10.50.
+        expect(bar.querySelector('[data-role="selection-total"]')?.textContent).toBe('$10.50');
+        expect(bar.querySelector('.sw-sel-s')?.textContent).toBe(copy.SELECTION_NOTE_SURCHARGE);
+        expect(bar.querySelector('[data-role="window-clear"]')?.textContent).toBe(copy.WINDOW_CLEAR_ALL);
+        expect(bar.querySelector('[data-role="window-pay"]')?.textContent).toBe(copy.WINDOW_PAY);
+        // In flow: the strip is a grid row, never an absolutely placed bar.
+        expect(bar.parentElement?.getAttribute('data-role')).toBe('shop-window');
+    });
+
+    it('says it is asking between the press and the code, and says why a feed refused', () => {
+        const asking = wall({ payRateAsking: true } as Partial<StallView>);
+        expect(asking.querySelector('[data-role="window-pay-why"]')?.textContent).toBe(copy.WINDOW_PAY_ASKING);
+        // The wall's own sentences: the phone's name a link this screen does
+        // not have, and the control they name here is one a customer can press.
+        expect(copy.WINDOW_PAY_ASKING).not.toContain('link');
+        for (const why of ['no-answer', 'implausible'] as const) {
+            const refused = wall({ payRateWhy: why } as Partial<StallView>);
+            expect(refused.querySelector('[data-role="window-pay-why"]')?.textContent).toBe(
+                copy.WINDOW_PAY_WHY_TEXT[why],
+            );
+            expect(copy.WINDOW_PAY_WHY_TEXT[why]).toContain(copy.WINDOW_PAY);
+        }
+        // A figure the network would not relay is said, not swallowed.
+        const dust = wall({ windowPaySubDust: true } as Partial<StallView>);
+        expect(dust.querySelector('[data-role="window-pay-why"]')?.textContent).toBe(
+            copy.PAY_SUB_DUST_SEVERAL,
+        );
+        // With a payment standing, the refusal that priced it is history.
+        const paid = wall({
+            payRateWhy: 'no-answer',
+            windowPaying: {
+                sats: 52_500_000n,
+                uri: `${ADDR}?amount=525000.00`,
+                selection: chosen,
+                prices: new Map([[BEANS, QUOTE_USD]]),
+                names: new Map([[BEANS, 'Roasted Beans']]),
+                borrowed: new Set<string>(),
+                unit: 'usd',
+                atMs: Date.now(),
+            },
+        } as unknown as Partial<StallView>);
+        expect(paid.querySelector('[data-role="window-pay-why"]')).toBeNull();
+    });
+
+    it('the plate paints the snapshot, carries the URI where the payee sweep reads it, and gives the slot back', () => {
+        const paying = {
+            sats: 525_000n,
+            uri: `ecash:${ADDR.slice(6)}?amount=5250.00`,
+            selection: chosen,
+            prices: new Map([[BEANS, QUOTE_USD]]),
+            names: new Map([[BEANS, 'Roasted Beans']]),
+            borrowed: new Set<string>(),
+            unit: 'usd',
+            rate: { rate: 2_000n, atMs: Date.UTC(2026, 8, 21, 12, 3, 20) },
+            atMs: Date.UTC(2026, 8, 21, 12, 3, 20),
+        };
+        const root = wall({ windowPaying: paying } as Partial<StallView>);
+        const plate = root.querySelector('[data-role="window-paying"]')!;
+        expect(plate.getAttribute('data-pay-uri'), 'the sweep can read the payee').toBe(paying.uri);
+        expect(plate.querySelector('[data-role="price"]')?.textContent).toContain('5,250');
+        expect(plate.querySelectorAll('[data-role="pay-lines"] .sw-pay-line')).toHaveLength(1);
+        expect(plate.querySelector('[data-role="pay-total"]')?.textContent).toBe(
+            copy.paySeveralTotalSurcharged('$10.50'),
+        );
+        expect(plate.querySelector('[data-role="rate"]')?.textContent).toContain(copy.windowPayGoodFor(2));
+        expect(plate.textContent).toContain(copy.PAY_NOTE_FINAL);
+        expect(plate.querySelector('[data-role="window-back"]')?.textContent).toBe(copy.WINDOW_PAY_BACK);
+        // The wall hands off to nothing: no wallet control, no quantity.
+        expect(plate.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+        expect(plate.querySelector('[data-role="pay-quantity"]')).toBeNull();
+        // One code at a time: the shop's plate is gone while this is up.
+        expect(root.querySelector('.sw-plate:not(.sw-paying)')).toBeNull();
+        // Over a standing code the press composes the same selection again,
+        // which "Pay" says; "Pay again for a fresh price" belongs to the
+        // state where the price IS stale — after the rate aged out.
+        expect(root.querySelector('[data-role="window-pay"]')?.textContent).toBe(copy.WINDOW_PAY);
+        expect(
+            wall({ windowPayAged: true } as Partial<StallView>).querySelector('[data-role="window-pay"]')
+                ?.textContent,
+        ).toBe(copy.WINDOW_PAY_AGAIN);
+        // And with no payment the shop's own code is back.
+        expect(wall().querySelector('.sw-plate')?.classList.contains('sw-paying')).toBe(false);
+    });
+});
+
+describe('the-touch-switch-is-the-sellers-and-needs-the-pay-code', () => {
+    /**
+     * One switch on the composing sheet, revealed by Browse (cycle has no
+     * list to choose from) and refused while the pay code is off: a price
+     * board that takes payment at the counter has nowhere to put a code
+     * that pays the quotes a customer picked (the critic's P2-10).
+     */
+    it('appears under Browse, writes touch=on, and turns itself off with the code', () => {
+        const sheet = shopWindowSheet(windowView({ show: 'all', mode: 'cycle' }), () => {});
+        const field = () => sheet.querySelector('[data-role="shop-window-link"]') as HTMLInputElement;
+        const row = () => sheet.querySelector('[data-role="window-touch-switch"]')!.closest('.sw-touch') as HTMLElement;
+        const touch = () => sheet.querySelector('[data-role="window-touch-switch"]') as HTMLButtonElement;
+        const state = () => sheet.querySelector('[data-role="window-touch-switch-state"]')?.textContent;
+        expect(row().hidden, 'hidden outside Browse, never a control that does nothing').toBe(true);
+
+        (sheet.querySelector('[data-role="window-mode-browse"]') as HTMLButtonElement).click();
+        expect(row().hidden).toBe(false);
+        expect(state()).toBe(copy.WINDOW_SWITCH_OFF);
+        expect(new URL(field().value).searchParams.get('touch')).toBeNull();
+
+        touch().click();
+        expect(state()).toBe(copy.WINDOW_SWITCH_ON);
+        expect(new URL(field().value).searchParams.get('touch')).toBe('on');
+
+        // The pay code off contradicts it: the switch says off and says why.
+        (sheet.querySelector('[data-role="window-paycode-switch"]') as HTMLButtonElement).click();
+        expect(state(), 'the correction is painted, not just dropped from the link').toBe(copy.WINDOW_SWITCH_OFF);
+        expect(new URL(field().value).searchParams.get('touch')).toBeNull();
+        expect(
+            (sheet.querySelector('[data-role="window-touch-why"]') as HTMLElement).hidden,
+            'the reason is on screen while the code is off',
+        ).toBe(false);
     });
 });

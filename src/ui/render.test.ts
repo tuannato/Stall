@@ -10693,6 +10693,13 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
      * every link a screen actually mounted, so a composer added later is
      * covered on the day it paints.
      */
+    /**
+     * The touch wall composes a payment into a QR and nothing else — `qrSvg`
+     * puts a path in the DOM, so a code with no sibling would be the first
+     * composed payment on this origin this sweep cannot see (the critic's
+     * P1-3). The plate carries the URI on `data-pay-uri`, and that is read
+     * here beside every anchor and both press roles.
+     */
     const payeeOf = (href: string): string | undefined => {
         let text = href;
         try {
@@ -10713,6 +10720,28 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
 
     /** Every screen this app composes a payment URI on. */
     const screens: { name: string; view: StallView }[] = [
+        {
+            name: 'touch wall',
+            view: {
+                ...idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                    selection: new Map([[TOKEN_ID, 2n]]),
+                }),
+                wallWidth: true,
+                window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+                windowPaying: {
+                    sats: 52_500_000n,
+                    uri: `${ADDR}?amount=525000.00`,
+                    selection: new Map([[TOKEN_ID, 2n]]),
+                    prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                    names: new Map([[TOKEN_ID, 'Roasted Beans']]),
+                    borrowed: new Set<string>(),
+                    unit: 'usd',
+                    atMs: Date.now(),
+                },
+            } as unknown as StallView,
+        },
         {
             name: 'name sheet',
             view: idlePubkey({
@@ -10760,6 +10789,11 @@ describe('every-composed-bip21-pays-the-stall-address', () => {
                     expect(handed, `${role} handed nothing to a wallet`).toBeDefined();
                     hrefs.push(handed!);
                 }
+            }
+            // The touch wall hands a wallet nothing: its payment is a code,
+            // and the URI beside it is what this sweep reads.
+            for (const plate of root.querySelectorAll('[data-pay-uri]')) {
+                hrefs.push(plate.getAttribute('data-pay-uri')!);
             }
             const payees = hrefs
                 .map((href) => payeeOf(href))

@@ -74,7 +74,11 @@ const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
  */
 const TABLET = { name: 'tablet', width: 768, height: 1024 };
 const WINDOW_SCREENS =
-    'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall';
+    'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall,' +
+    // The touch wall (2026-09-21): the strip and its steppers, and the
+    // payment the press froze. Both passes below read this list, so both
+    // the portrait screen and the counter tablet measure them.
+    'shop-window-touch-quotes,shop-window-touch-quotes-pay';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>

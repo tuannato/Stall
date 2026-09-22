@@ -910,7 +910,7 @@ describe('a-live-update-does-not-clear-a-half-written-record', () => {
             // on the way to the painter alone.
             const { root } = bootStall(
                 stallEmpty({
-                    window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none' },
+                    window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
                 } as unknown as Partial<State['view']>),
             );
             await flush();

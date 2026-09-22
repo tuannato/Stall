@@ -30,6 +30,7 @@ import {
     MAX_SELECTION_ENTRIES,
     pruneSelection,
     selectionNeedsNoRate,
+    selectionSats,
     selectionUnit,
 } from './domain/selection';
 import {
@@ -67,6 +68,7 @@ import type {
     StallHistory,
     StallOffer,
     StallView,
+    WallPayment,
     WindowParams,
     TokenMeta,
     Overlay,
@@ -94,7 +96,7 @@ import {
     type GenesisDecision,
 } from './domain/genesis';
 import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
-import { XEC_PRICE_CODE, type TokenPrice } from './domain/description';
+import { XEC_PRICE_CODE, samePrice, type TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
     NO_FACTS,
@@ -140,6 +142,8 @@ function changedTokens(
     return out;
 }
 import { p2pkhOutputScript } from './net/script';
+import { payBip21 } from './domain/cashtab';
+import { DUST_SATS } from './domain/money';
 import {
     isDefiniteResult,
     watchStall,
@@ -154,12 +158,19 @@ import {
     renderStall,
     holdsLivePaint,
     shopWindowPaints,
-    WINDOW_MIN_PX, broadcastStep, broadcastTurns, tickerPages, tickerWrapped,
+    WINDOW_MIN_PX,
+    broadcastStep,
+    broadcastTurns,
+    tickerPages,
+    tickerWrapped,
+    tokenName,
+    wallTouches,
 } from './ui';
 import {
     FIAT_GLANCE_MAX_AGE_MS,
     FIAT_GLANCE_TIMEOUT_MS,
     PAY_CHECK_TIMEOUT_MS,
+    PAY_RATE_MAX_AGE_MS,
     PAY_RATE_TIMEOUT_MS,
 } from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
@@ -446,7 +457,7 @@ export function boot(
             clearTimeout(retry);
             retry = undefined;
         }
-        for (const timer of [windowCard, windowBeat, windowRoll]) {
+        for (const timer of [windowCard, windowBeat, windowRoll, windowPayingTimer]) {
             if (timer !== undefined) {
                 clearTimeout(timer);
             }
@@ -454,6 +465,7 @@ export function boot(
         windowCard = undefined;
         windowBeat = undefined;
         windowRoll = undefined;
+        windowPayingTimer = undefined;
     };
     /**
      * One currency above the table (CLAUDE §8). `readSavedFiat` answers `usd`
@@ -685,6 +697,26 @@ export function boot(
      */
     let windowTurnedAt = 0;
     /**
+     * The touch wall's frozen payment (2026-09-21). The wall holds no paint,
+     * so the plate is a SNAPSHOT taken at the press: `prices` moves on any
+     * records re-read and the selection is pruned at paint time, and a
+     * camera pointed at the code must decode what the screen is showing
+     * (the critic's P1-2). Any change to a chosen item closes it rather
+     * than redrawing it, and it empties whenever the selection does —
+     * including the reset a heartbeat that came back with no pubkey makes.
+     */
+    let windowPaying: WallPayment | undefined;
+    /** Its own expiry, so a wall nobody touches still gives the slot back. */
+    let windowPayingTimer: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * The rate that priced a payment aged out, so the plate closed: the
+     * strip's control then says it composes again at a fresh price (T-D).
+     * Cleared by the next press and by any change to the selection.
+     */
+    let windowPayAged = false;
+    /** The press composed a figure under the dust floor: the strip says so. */
+    let windowPaySubDust = false;
+    /**
      * When this page last read the chain, by this browser's clock. Stamped
      * where a read LANDS — the load and the live re-read — never at paint, or
      * a repaint over a dead socket would keep saying the screen is current.
@@ -893,8 +925,33 @@ export function boot(
             if (pruned.dropped) {
                 selection = pruned.selection;
                 selectionDropped = true;
+                // A chosen item moved or left: the wall's plate is a frozen
+                // figure over records that no longer stand, so the slot goes
+                // back to the shop's code rather than showing a payment
+                // nobody can now be asked to make (rule 9).
+                cancelWallPayment();
                 if (selectionAsk?.kind === 'remove' && !selection.has(selectionAsk.tokenId)) {
                     selectionAsk = undefined;
+                }
+            }
+        }
+        /*
+         * A republished quote in the SAME unit does not prune — the item is
+         * still quoted and still in the selection's unit — so the plate kept
+         * a frozen figure while the strip beside it read the new record:
+         * `selection-total` and `pay-total` said two different things about
+         * the same two items, on the screen with nobody to ask (the critic's
+         * P1-2). Any chosen item whose record moved closes the plate.
+         */
+        if (windowPaying !== undefined && state.view.prices !== undefined) {
+            // Over a DEFINITE read only, the prune's own rule: `refresh()`
+            // paints `opening` with no prices before its load answers, and a
+            // comparison against that closed the plate every sixty seconds
+            // on a wall nobody had touched.
+            for (const [tokenId, price] of windowPaying.prices) {
+                if (!samePrice(price, state.view.prices.get(tokenId))) {
+                    cancelWallPayment();
+                    break;
                 }
             }
         }
@@ -975,6 +1032,9 @@ export function boot(
                 : {
                       windowCursor: windowCursorAt,
                       windowRail: windowRailAt,
+                      ...(windowPaying === undefined ? {} : { windowPaying }),
+                      ...(windowPayAged ? { windowPayAged: true as const } : {}),
+                      ...(windowPaySubDust ? { windowPaySubDust: true as const } : {}),
                       ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }),
                   }),
             // From the entry's own state, at paint time: a loader never fills
@@ -1066,6 +1126,12 @@ export function boot(
                 paint();
             },
             onSelectionSet: (tokenId, count) => {
+                // A change to the selection closes the wall's plate AND
+                // cancels a press still waiting on a feed: the figure a
+                // phone scans is the figure the Pay press made, never one
+                // rebuilt under a scanning camera (T-A, rule 9), and never
+                // one composed from a selection the presser never saw.
+                cancelWallPayment();
                 if (count <= 0n) {
                     selection.delete(tokenId);
                 } else if (selection.has(tokenId) || selection.size < MAX_SELECTION_ENTRIES) {
@@ -1083,6 +1149,7 @@ export function boot(
                 paint();
             },
             onSelectionClear: () => {
+                cancelWallPayment();
                 selection = new Map();
                 selectionAsk = undefined;
                 selectionDropped = false;
@@ -1090,6 +1157,13 @@ export function boot(
             },
             onOpenPaySeveral: () => {
                 onOpenPaySeveral();
+            },
+            onWallPay: () => {
+                onWallPay();
+            },
+            onWallBack: () => {
+                cancelWallPayment();
+                paint();
             },
             onPayQuantity: (tokenId, quantity) => {
                 if (state.view.overlay.kind === 'pay' && state.view.overlay.tokenId === tokenId) {
@@ -1523,6 +1597,37 @@ export function boot(
             windowLockSet = tokensAtBlock(state.offers, params.upto);
         }
 
+        /*
+         * The code lives as long as the rate that priced it (T-D). At expiry
+         * the plate closes and the shop's code comes back — the phone's
+         * `aged` rule (the scan code is the one destination the valve does
+         * not guard) plus the wall's own: a dead plate must not hold the one
+         * road a passer-by has onto this stall. The selection and its total
+         * stay on the strip, whose Pay control then says it composes again
+         * at a fresh price.
+         */
+        // An XEC payment reads no rate, so nothing about it goes stale and
+        // the code never ages (rule 8) — the phone's `xec` sheet says the
+        // same about its own.
+        const ages = windowPaying?.rate !== undefined;
+        if (ages && Date.now() - windowPaying!.atMs >= PAY_RATE_MAX_AGE_MS) {
+            windowPaying = undefined;
+            windowPayAged = true;
+            paint();
+            return;
+        }
+        if (windowPayingTimer === undefined && ages) {
+            const left = PAY_RATE_MAX_AGE_MS - (Date.now() - windowPaying!.atMs);
+            windowPayingTimer = setTimeout(() => {
+                windowPayingTimer = undefined;
+                if (windowPaying !== undefined) {
+                    windowPaying = undefined;
+                    windowPayAged = true;
+                    paint();
+                }
+            }, Math.max(0, left));
+        }
+
         if (windowBeat === undefined) {
             const beat = (): void => {
                 // A full refresh rather than a book re-read: the thing this is
@@ -1609,6 +1714,7 @@ export function boot(
      * tab to press to ask which figure is which.
      */
     const rollWindow = (): void => {
+        const params = wallParams();
         const strip = root.querySelector('.sw-strip') as HTMLElement | null;
         if (strip === null) {
             return;
@@ -1616,12 +1722,21 @@ export function boot(
         const room = strip.scrollHeight - strip.clientHeight;
         if (room <= 1 || strip.scrollTop >= room - 1) {
             strip.scrollTop = 0;
-            if (wallParams()?.show !== 'all') {
+            if (params?.show !== 'all') {
                 return;
             }
             // A list that fits reaches this on every tick; one that scrolls
             // reaches it once it has been read. Either way the turn is paced
             // by the card's dwell, never by the scroll step.
+            // The strip is the quotes rail's, so a turn under a customer's
+            // hands would take their rows and their total away (T-C). The
+            // hold ends when the selection empties — Clear all, or the last
+            // "−" — and with no idle clearing (the owner's ruling) an
+            // abandoned choice pins a `show=all` screen to the quotes side
+            // until someone presses Clear all, which is stated.
+            if (wallTouches(params) && selection.size > 0) {
+                return;
+            }
             const now = Date.now();
             if (now - windowTurnedAt < WINDOW_CARD_MS) {
                 return;
@@ -1833,6 +1948,149 @@ export function boot(
     };
 
     /**
+     * The touch wall's Pay press: the sheets' MOUNT path, and then a freeze.
+     *
+     * The same four things `onOpenPaySeveral` does — clear the held rate,
+     * bump the session, say "asking", paint — so a second press five seconds
+     * later cannot be answered by the first press's feed (the critic's
+     * P2-6). The unit is passed explicitly (P1-1). The valve does not run: a
+     * first press has no figure to move from, and `movedPastTolerance` with
+     * no `before` answers "moved"; a re-press over a standing plate composes
+     * the same selection again at a fresh rate, which is what the control
+     * says it does. An XEC selection asks no feed at all.
+     */
+    /**
+     * Close the wall's payment and cancel any press still waiting on a feed.
+     * Bumping the session is what makes the cancellation real: `readPayRate`
+     * writes nothing for a superseded ask, and `freezeWallPayment` refuses
+     * to compose one.
+     */
+    const cancelWallPayment = (): void => {
+        windowPaying = undefined;
+        windowPayAged = false;
+        windowPaySubDust = false;
+        if (payRateAsking) {
+            payRateAsking = false;
+            paySession += 1;
+        }
+        if (windowPayingTimer !== undefined) {
+            clearTimeout(windowPayingTimer);
+            windowPayingTimer = undefined;
+        }
+    };
+
+    const onWallPay = (): void => {
+        const params = wallParams();
+        if (params === undefined || selection.size === 0) {
+            return;
+        }
+        const claimed = generation;
+        windowPaying = undefined;
+        windowPayAged = false;
+        payRate = undefined;
+        payRateWhy = undefined;
+        /*
+         * The PRESS owns the payment, not the answer that lands eight seconds
+         * later. The freeze is composed from what was chosen at this instant
+         * — a tap during the ask used to be absorbed and then re-open the
+         * plate from the new selection, and if that tap changed the unit the
+         * code was composed at the old currency's rate: the cross-unit bug
+         * the explicit unit argument was added to make impossible, back
+         * through the door (the critic's P1-1, 2026-09-22). Every selection
+         * handler bumps `paySession` too, so the answer to a cancelled press
+         * is written nowhere.
+         */
+        const captured = {
+            selection: new Map(selection),
+            prices: new Map(state.view.prices ?? []),
+        };
+        const unit = selectionUnit(captured.selection, captured.prices);
+        const asks = !selectionNeedsNoRate(captured.selection, captured.prices);
+        const session = ++paySession;
+        payRateAsking = asks;
+        if (!asks) {
+            freezeWallPayment(session, captured);
+            paint();
+            return;
+        }
+        paint();
+        void (async () => {
+            await readPayRate(PAY_RATE_TIMEOUT_MS, session, unit ?? DEFAULT_FIAT_CODE);
+            if (session !== paySession || claimed !== generation) {
+                return;
+            }
+            payRateAsking = false;
+            freezeWallPayment(session, captured);
+            paint();
+        })();
+    };
+
+    /**
+     * The snapshot itself: the satoshi sum, the URI, and the records and
+     * names as they stand at this instant. Nothing on the plate is read from
+     * the view again, so a records re-read cannot move a figure a camera is
+     * pointed at; a prune or a price change closes the plate instead.
+     */
+    const freezeWallPayment = (
+        session: number,
+        captured: { selection: Map<string, bigint>; prices: Map<string, TokenPrice> },
+    ): void => {
+        if (session !== paySession) {
+            return;
+        }
+        const { prices } = captured;
+        const unit = selectionUnit(captured.selection, prices);
+        const sats = selectionSats(captured.selection, prices, payRate?.rate);
+        const address = state.view.address;
+        if (unit === undefined || address === undefined) {
+            return;
+        }
+        if (sats === undefined) {
+            // A figure this page will not compose — no rate for the unit, or
+            // a mixed selection. The strip's own line says which; a press
+            // that quietly did nothing is what a customer presses again.
+            return;
+        }
+        // Under the dust floor the network will not relay the output, so the
+        // code would fail inside a wallet after the scan (§8): the strip says
+        // so instead of composing one.
+        if (sats < DUST_SATS) {
+            windowPaySubDust = true;
+            return;
+        }
+        windowPaySubDust = false;
+        const uri = payBip21(address, sats);
+        if (uri === undefined) {
+            return;
+        }
+        const frozenPrices = new Map<string, TokenPrice>();
+        const names = new Map<string, string>();
+        const borrowed = new Set<string>();
+        for (const tokenId of captured.selection.keys()) {
+            const price = prices.get(tokenId);
+            if (price === undefined) {
+                continue;
+            }
+            frozenPrices.set(tokenId, price);
+            names.set(tokenId, tokenName(state.view.tokens, tokenId));
+            if (state.view.genesis?.get(tokenId) === 'not-attributed') {
+                borrowed.add(tokenId);
+            }
+        }
+        windowPaying = {
+            sats,
+            uri,
+            selection: new Map(captured.selection),
+            prices: frozenPrices,
+            names,
+            borrowed,
+            unit,
+            ...(payRate === undefined ? {} : { rate: { ...payRate } }),
+            atMs: Date.now(),
+        };
+    };
+
+    /**
      * One fresh rate for the pay sheet: remembered here and handed back, with
      * **no paint**. The sheet holds the buyer's own quantity in a closure, and
      * `renderStall` opens with `replaceChildren()` — so a paint from this path
@@ -1841,6 +2099,14 @@ export function boot(
     const readPayRate = async (
         timeoutMs?: number,
         session: number = paySession,
+        /**
+         * The unit the figure is composed in. Passed explicitly wherever the
+         * caller knows it — the wall has no overlay, and `quoteUnitOnScreen`
+         * would have answered `usd` for a VND selection, composing a figure
+         * in one currency from another's rate: the one mistake this rail is
+         * built to make impossible (the critic's P1-1).
+         */
+        unit: string = quoteUnitOnScreen(),
     ): Promise<PayRateAnswer> => {
         // Two feeds, asked together, wherever this runs (the open, the `?pay=`
         // landing, the press-time valve, the refresh control). The second
@@ -1858,7 +2124,7 @@ export function boot(
         // alone, so that pair is the only place the fence and the
         // disagreement rule can run (`judgeQuoteRates`). A USD quote asks
         // exactly the two it always did.
-        const code = quoteUnitOnScreen();
+        const code = unit;
         const [primary, check, figure] = await Promise.all([
             fetchXecPrice(DEFAULT_FIAT_CODE, timeoutMs === undefined ? undefined : { timeoutMs }),
             withDeadline(
@@ -2218,6 +2484,7 @@ export function boot(
             shopTabFor = next.pubkeyHex;
             // A selection is one stall's (D7): a different seller starts empty.
             resetSelection();
+            windowPaying = undefined;
         }
         // A scanned link is answered from the records, and on a failure screen
         // those arrive after this paint — judging the hint against the state

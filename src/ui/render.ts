@@ -121,7 +121,7 @@ import {
 import { stallMark } from './brand';
 import * as copy from './copy';
 import { armTicker, renderBroadcastView } from './broadcast';
-import { renderShopWindow, shopWindowSheet } from './window';
+import { renderShopWindow, shopWindowSheet, wallTouches } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide, OBS_GUIDE_LEDE } from './obsGuide';
 import {
     drawPoster,
@@ -226,6 +226,15 @@ export type StallHandlers = {
     onSelectionAsk?: (ask: SelectionAsk | undefined) => void;
     onSelectionClear?: () => void;
     onOpenPaySeveral?: () => void;
+    /**
+     * The touch wall's own two (2026-09-21): the Pay press, which freezes a
+     * payment and paints it into the wall's one code slot, and Back, which
+     * gives the slot to the shop's code again. The steppers and Clear all
+     * are the phone's `onSelectionSet` / `onSelectionClear`, because they
+     * do the same thing to the same state.
+     */
+    onWallPay?: () => void;
+    onWallBack?: () => void;
     /**
      * One fresh rate for the pay sheet, or the reason there is none — a feed
      * that did not answer, or an answer this page refuses (CLAUDE §8). Bare
@@ -583,6 +592,12 @@ export function renderStall(
         // down matched nothing at all (378 probe failures, and every one of
         // them was this).
         stall.setAttribute('data-mode', view.window.mode);
+        // The touch wall's rules are scoped to this attribute on the ROOT,
+        // beside the mode: a stylesheet scoped one level down is how 378
+        // probe failures arrived once (CLAUDE §4's own record).
+        if (wallTouches(view.window)) {
+            stall.setAttribute('data-touch', 'on');
+        }
         // The turn goes on the same root and for the same reason: it sizes
         // and rotates the frame, and the frame IS the container every
         // orientation rule in `window.css` asks. No attribute when there is
@@ -591,7 +606,7 @@ export function renderStall(
         if (view.window.turn !== 'none') {
             stall.setAttribute('data-turn', view.window.turn);
         }
-        stall.append(renderShopWindow(view, view.window));
+        stall.append(renderShopWindow(view, view.window, handlers));
         placeAttachmentNodes(stall, view.worn ?? []);
         frame.append(stall);
         root.append(frame);
@@ -610,6 +625,18 @@ export function renderStall(
         }
         applyMarquees(root, WINDOW_MARQUEE);
         remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE);
+        // A touch wall has controls, so it has focus to keep: every socket
+        // tick and the sixty-second heartbeat rebuild this tree, and without
+        // the restore a customer counting on the stepper lost the control
+        // under their finger (the critic's P3-17). The ordinary wall mounts
+        // none, so this costs it nothing.
+        if (!restoreFocus(root, keptFocus)) {
+            for (const next of selectionFocusEdge(keptFocus)) {
+                if (restoreFocus(root, next)) {
+                    break;
+                }
+            }
+        }
         overlayWasOpen = overlayOpen;
         return;
     }
@@ -2567,7 +2594,7 @@ export function quoteFigure(price: TokenPrice): string {
  * that composes the figure, on its own `pay-surcharge` node. Null without
  * the byte: absent is "no surcharge stated", never zero (§5).
  */
-function quoteSurchargeNode(
+export function quoteSurchargeNode(
     price: TokenPrice,
     tag: 'span' | 'p' | 'div' | 'dd',
     className: string,
@@ -9142,7 +9169,7 @@ const MONTHS = [
  * a cached failure both outlive midnight in a tab left open, so a stamp from
  * another day names that day.
  */
-function formatTriedAt(ms: number): string {
+export function formatTriedAt(ms: number): string {
     const d = new Date(ms);
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');

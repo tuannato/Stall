@@ -1388,3 +1388,48 @@ a moving frame is sampled. Nor the `animationiteration` boundary itself:
 the app's wrap is driven synthetically in `app.test.ts`, and the hold it
 releases has a ceiling of two passes (`tickerGuard`) precisely because a
 cancelled animation fires no iteration.
+
+## The touch wall: money on a screen with controls (2026-09-21)
+
+`?view=window&mode=browse&touch=on` (the owner's ask; the design is
+`private/design/touch-2026-09-21/`) is the first wall with controls on it,
+and the first with a payment composed on the screen rather than on a phone.
+Two fixtures, both on `WINDOW_SCREENS`, so the portrait pass (1080×1920) and
+the tablet pass (768×1024) each measure them, and both on `CANVAS_SCREENS`:
+
+- `shop-window-touch-quotes-pay` — the payment the press froze, in the
+  wall's one code slot. **Sampled**, because it is the only screen that
+  paints `.sw-pay-v` (each item's figure) and `.sw-pay-s` (the surcharge
+  line and the borrowed-token warning): those two sat on `CONTRAST_TEXT`
+  while the screen that mounts them sat in `GEOMETRY_ONLY_SCREENS`, so the
+  plate's own money text was sampled by nothing and this ledger said it was
+  "already sampled" (the critic, 2026-09-22).
+- `shop-window-touch-quotes` — the strip and its steppers over a chosen
+  item, with one row standing apart in another unit. **Geometry**, and it
+  is the prune that pays for the screen above: it is `shop-window-quotes`
+  with a chosen row and a strip, the same ink on the same ground, and
+  `.sw-sel-n`, `.sw-sel-s` and `.sw-step-n` are painted on the paying screen
+  beside it. What both window passes are here for is its geometry.
+
+The protected boxes it adds are the strip's `selection-total` and the
+plate's `price`, `pay-lines`, `pay-total` and `.qr` — every one of them
+already on the list for the phone, which is why the wall needed no new
+entry. The stepper and the two strip controls declare their own floor in
+`window.css` and are pinned in `window.test.ts` against that file, because
+`every-tappable-control-keeps-a-44px-floor` reads `stall.css` alone.
+
+**The payment code's density, measured 2026-09-22** on the vendored
+encoder at the level `qrMatrix` uses (`M`), over `payBip21`'s real shape
+(`ecash:` + a 42-char payload + `?amount=…`, 63–67 characters whatever the
+figure): 37 data modules, a 45 span painted. At the wall's 360px box that
+is **8.0 px a module**, at the 280px floor a counter tablet paints
+(`WINDOW_QR_MIN_PX`) **6.2** — both above the only density this project has
+read from a phone (4.94; 3.37 was refused). With step 5's memo the code
+grows with the item count, and the wall's own cap comes from this box then,
+never from `MAX_SELECTION_ENTRIES`.
+
+What this does not measure: a touch. The presses are driven in
+`app.window.test.ts` (the freeze, the close on a change, the expiry at
+`PAY_RATE_MAX_AGE_MS`) and in `window.test.ts` (the handlers, the allow-list
+of five roles); nothing here observes a finger, and the sizes are the
+argument that one will land.

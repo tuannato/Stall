@@ -1589,6 +1589,14 @@ const CONTRAST_TEXT = [
     '.tk-rail',
     '.tk-n',
     '.tk-chip',
+    // The touch wall (2026-09-21): the strip's names and its note, the
+    // stepper's count, and the plate's own lines. Money and the words
+    // beside it, on a screen nobody attends.
+    '.sw-sel-n',
+    '.sw-sel-s',
+    '.sw-step-n',
+    '.sw-pay-v',
+    '.sw-pay-s',
     '.sel-sub',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast

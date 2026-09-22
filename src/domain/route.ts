@@ -277,6 +277,9 @@ export function parseWindowParams(search: string): WindowParams | undefined {
     return {
         show: show === 'listings' || show === 'quotes' ? show : 'all',
         mode: broadcastParam(params, 'mode') === 'browse' ? 'browse' : 'cycle',
+        // Opt-in and the exact word, the broadcast's rule: anything else is
+        // the wall as it is today, which is the screen nobody touches.
+        touch: broadcastParam(params, 'touch') === 'on',
         // Opt-OUT, and only the exact word: the code is what the quotes rail
         // is for, so anything malformed falls back to showing it — the
         // broadcast's rule, and here it errs towards the screen doing its job

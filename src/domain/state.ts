@@ -275,6 +275,34 @@ export type BroadcastParams = {
  * shop screen hung in portrait is 1080 wide and a counter tablet is 768. A
  * width test here would refuse exactly the devices the feature is for.
  */
+/**
+ * A payment composed on a touch wall, frozen at the press (2026-09-21).
+ *
+ * The phone's several sheet is safe under a live paint because it HOLDS the
+ * paint; the wall holds nothing, and of the three inputs to the figure only
+ * the rate would be frozen — `prices` moves on any records re-read and the
+ * selection is pruned at paint time. So the press takes a SNAPSHOT and the
+ * plate paints it verbatim: a camera pointed at the code decodes what the
+ * screen is showing, never a figure rebuilt under it (the critic, P1-2).
+ * Any change to a chosen item closes the plate rather than redrawing it.
+ */
+export type WallPayment = {
+    /** What the code carries, and what a wallet will be asked to sign. */
+    sats: bigint;
+    uri: string;
+    /** The selection and the records as the press saw them — never re-read. */
+    selection: ReadonlyMap<string, bigint>;
+    prices: ReadonlyMap<string, TokenPrice>;
+    names: ReadonlyMap<string, string>;
+    /** Items whose genesis names another wallet: the warning is per item. */
+    borrowed: ReadonlySet<string>;
+    /** The seller's own unit for this selection, and the rate that priced it. */
+    unit: string;
+    rate?: { rate: bigint; atMs: number; check?: RateCheck };
+    /** When the press happened: the code lives `PAY_RATE_MAX_AGE_MS` from here. */
+    atMs: number;
+};
+
 export type WindowParams = {
     /**
      * Which rail the screen shows. `all` **rotates** between them and never
@@ -289,6 +317,14 @@ export type WindowParams = {
      * with no touch.
      */
     mode: 'cycle' | 'browse';
+    /**
+     * "Pay several" on a touch screen (owner, 2026-09-21; the design is
+     * `private/design/touch-2026-09-21/`). Opt-in, and read only under
+     * `browse`: one card at a time has no list to choose from. On, the wall
+     * gains exactly five controls — plus and minus on each quote, Clear all,
+     * Pay, Back — and nothing else; off, it is the screen nobody touches.
+     */
+    touch: boolean;
     /**
      * Whether a quote card carries the code that opens its pay sheet.
      * `paycode=off` on the wire; on by default, because the code is what the
@@ -950,6 +986,15 @@ export type StallView = WindowState & {
      * Absent is the ordinary stall. Not `overlay`.
      */
     broadcast?: BroadcastParams;
+    /**
+     * The payment a touch wall's Pay press froze, or nothing. App-owned
+     * closure state written at paint time, like `windowCursor`.
+     */
+    windowPaying?: WallPayment;
+    /** The rate that priced one aged out, so the plate closed: the control says so. */
+    windowPayAged?: true;
+    /** The press composed a figure under the dust floor, which relays nowhere. */
+    windowPaySubDust?: true;
     /** Which listing the carousel is showing. App-owned; modulo after a book apply. */
     broadcastCursor?: number;
     /**

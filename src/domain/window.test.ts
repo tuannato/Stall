@@ -127,18 +127,21 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
             mode: 'cycle',
             payCode: true,
             turn: 'none',
+            touch: false,
         });
         expect(parseWindowParams('?view=window&show=nonsense&mode=nonsense')).toEqual({
             show: 'all',
             mode: 'cycle',
             payCode: true,
             turn: 'none',
+            touch: false,
         });
         expect(parseWindowParams('?view=window&show=quotes&mode=browse')).toEqual({
             show: 'quotes',
             mode: 'browse',
             payCode: true,
             turn: 'none',
+            touch: false,
         });
     });
 
@@ -186,6 +189,7 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
                 mode: 'cycle',
                 payCode: true,
                 turn: 'none',
+                touch: false,
             });
         }
         expect(parseWindowParams('?view=window&upto=874213')).toEqual({
@@ -193,6 +197,7 @@ describe('a-shop-window-link-falls-back-per-option-and-never-invents-a-lock', ()
             mode: 'cycle',
             payCode: true,
             turn: 'none',
+            touch: false,
             upto: 874_213,
         });
     });

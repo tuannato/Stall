@@ -164,7 +164,7 @@ working accept, and there is no accept.
   accepted and stated. The QR is a 204px plate at the bar's end, side and
   edge the streamer's (`side=left|right`, `edge=bottom|top`); a bar-height
   code (1.4–1.8 px/module) was measured unscannable and is not offered.
-- **"Pay several" on a touch-screen shop window (owner, 2026-09-21).**
+- **"Pay several" on a touch-screen shop window — BUILT 2026-09-22.**
   `touch=on` on the window's Browse mode, the quotes rail only; the wall
   gains exactly five controls — plus and minus on each quote, Clear all,
   Pay, Back — and nothing else, so § 4's "no controls, ever" becomes "no

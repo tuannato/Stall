@@ -882,13 +882,13 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-cycle': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none' },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     'shop-window-browse': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'browse', upto: 874_213, payCode: true, turn: 'none' },
+        window: { show: 'listings', mode: 'browse', upto: 874_213, payCode: true, turn: 'none', touch: false },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
@@ -900,7 +900,7 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-quotes': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none' },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: false },
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
@@ -912,6 +912,49 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
+     * The touch wall (2026-09-21): Browse, the quotes, one USD item chosen
+     * ×2 and one XEC row standing apart with its own sentence. The steppers
+     * and the strip are the only controls the wall ever mounts, and the
+     * name carries "quotes" so the pay-screen audit sees the screen
+     * (`isPayScreen`; the critic's P2-8).
+     */
+    'shop-window-touch-quotes': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 2n]]),
+        shopTab: 'quotes',
+    }),
+    /*
+     * The payment the press froze, in the wall's one code slot: the figure a
+     * wallet signs, one line per item, the total, the rate and its lifetime.
+     * A snapshot, so the fixture states it rather than deriving it.
+     */
+    'shop-window-touch-quotes-pay': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 2n]]),
+        shopTab: 'quotes',
+        windowPaying: {
+            sats: 52_500_000n,
+            uri: `${ADDR}?amount=525000.00`,
+            selection: new Map([[T1, 2n]]),
+            prices: new Map([[T1, QUOTES.get(T1)!]]),
+            names: new Map([[T1, 'Roasted Beans']]),
+            borrowed: new Set<string>(),
+            unit: 'usd',
+            rate: { rate: PAY_RATE.rate, atMs: PAY_RATE.atMs },
+            atMs: PAY_RATE.atMs,
+        },
+    }),
+    /*
      * The same screen at the size it is actually hung at. The page pass runs
      * the three above at 390 and 1280 — a phone, where the render gate hands
      * back the ordinary stall, and a small shop television. This one is the
@@ -920,7 +963,7 @@ export const SCREENS: Record<string, StallView> = {
      */
     'shop-window-wall': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none' },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
@@ -1199,6 +1242,13 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
  * be read in one place, and next to the reason each name is on it.
  */
 export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
+    // Pruned from the contrast pass to pay for the touch wall's payment
+    // plate, which had to join it (2026-09-22): this screen is
+    // `shop-window-quotes` with a chosen row and a strip — the same ink on
+    // the same ground, and the strip's own classes are sampled on the
+    // paying screen beside it. Its geometry is what the two window passes
+    // are here for.
+    'shop-window-touch-quotes',
     // The two tool sheets carry no money figure and no ink the record
     // sheets' hex boxes, `pub` lines and `mini` controls do not already put
     // on the same ground — the recipe's own text was never sampled under the
@@ -1307,6 +1357,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-quotes-still',
     'broadcast-ticker-clear',
     'shop-window-wall',
+    'shop-window-touch-quotes',
+    'shop-window-touch-quotes-pay',
 ]);
 
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([

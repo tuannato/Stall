@@ -42,6 +42,7 @@ vi.mock('./net/live', async (importOriginal) => {
 });
 
 const { boot } = await import('./app');
+const { PAY_RATE_MAX_AGE_MS } = await import('./ui/render');
 const { BROADCAST_FIXED_MS, WINDOW_BEAT_MS, WINDOW_CARD_MS, WINDOW_IDLE_MS, WINDOW_SCROLL_MS } =
     await import('./app');
 
@@ -100,7 +101,7 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
                 address: ADDR,
                 stallName: 'Riverside Goods',
                 tokens: WINDOW_TOKENS,
-                window: { show: 'listings' as const, mode, payCode: true, turn: 'none' as const },
+                window: { show: 'listings' as const, mode, payCode: true, turn: 'none', touch: false as const },
             },
             offers: WINDOW_OFFERS,
         };
@@ -342,7 +343,7 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
                         route: { kind: 'invalid' as const, raw: '/s/notanaddress' },
                         overlay: { kind: 'idle' as const },
                         tokens: new Map(),
-                        window: { show: 'listings' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const },
+                        window: { show: 'listings' as const, mode: 'cycle' as const, payCode: true, turn: 'none', touch: false as const },
                     },
                     offers: [],
                 } as unknown as ReturnType<typeof windowState>;
@@ -471,5 +472,171 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
         Object.defineProperty(after!, 'clientHeight', { value: 800, configurable: true });
         await vi.advanceTimersByTimeAsync(WINDOW_SCROLL_MS * 2);
         expect(scrolls, 'then takes the screen back').toBeGreaterThan(before);
+    });
+});
+
+/**
+ * "Pay several" on a touch wall (2026-09-21, the owner's ask; the design is
+ * `private/design/touch-2026-09-21/`, T-A…T-E decided).
+ *
+ * The press is the sheets' own MOUNT path — clear the held rate, bump the
+ * session, say "asking", paint, then read both feeds **in the seller's own
+ * unit**, which is passed explicitly because the wall has no overlay for
+ * `quoteUnitOnScreen` to read (the critic's P1-1). What it leaves behind is
+ * a SNAPSHOT: the wall holds no paint, so a figure recomputed from the view
+ * would move under a camera pointed at the code (P1-2).
+ */
+describe('a-touch-wall-freezes-the-payment-its-press-composed', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    /** A wall is 680px or wider; `boot` reads the width once (CLAUDE §4). */
+    const atWall = async (run: () => Promise<void>): Promise<void> => {
+        const had = Object.getOwnPropertyDescriptor(globalThis, 'innerWidth');
+        Object.defineProperty(globalThis, 'innerWidth', { value: 1920, configurable: true });
+        try {
+            await run();
+        } finally {
+            if (had === undefined) {
+                delete (globalThis as { innerWidth?: number }).innerWidth;
+            } else {
+                Object.defineProperty(globalThis, 'innerWidth', had);
+            }
+        }
+    };
+
+    const QUOTE_TOKEN = 'cd'.repeat(32);
+    // `quotedItems` is affirmative: a token whose genesis never named a
+    // fungible kind is not a row (CLAUDE §5), so the meta says so.
+    const quoteMeta = {
+        tokenId: QUOTE_TOKEN,
+        name: 'Roasted Beans',
+        ticker: 'RB',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    } as unknown as TokenMeta;
+    const wallState = (over: Partial<StallView> = {}) => ({
+        view: {
+            route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+            fetch: { kind: 'offers' as const, offers: [OFFER] },
+            overlay: { kind: 'idle' as const },
+            address: ADDR,
+            stallName: 'Riverside Goods',
+            tokens: new Map([
+                [TOKEN, TOKEN_META],
+                [QUOTE_TOKEN, quoteMeta],
+            ]),
+            prices: new Map([[QUOTE_TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
+            window: { show: 'quotes' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: true },
+            ...over,
+        } as unknown as StallView,
+        offers: [OFFER],
+        pubkeyHex: PK,
+    });
+
+    const press = (root: HTMLElement, role: string): void => {
+        (root.querySelector(`[data-role="${role}"]`) as HTMLButtonElement | null)?.click();
+    };
+    const plate = (root: HTMLElement) => root.querySelector('[data-role="window-paying"]');
+
+    it('asks the feeds in the selection’s own unit, freezes the figure, and closes on any change', async () => {
+      await atWall(async () => {
+        vi.useFakeTimers();
+        const asked: string[] = [];
+        vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+            const url = String(input);
+            asked.push(url);
+            return {
+                ok: true,
+                json: async () => ({ ecash: { vnd: 0.0005, usd: 0.00002 }, quotes: { VND: { price: 0.0005 }, USD: { price: 0.00002 } } }),
+            } as unknown as Response;
+        });
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&mode=browse&show=quotes&touch=on`);
+        const root = document.createElement('div');
+        boot(root, async () => wallState({ prices: new Map([[QUOTE_TOKEN, { code: 'vnd', exponent: 0, amount: 120_000n }]]) }) as never);
+        await vi.advanceTimersByTimeAsync(0);
+        press(root, 'window-step-more');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('[data-role="selection-total"]')).not.toBeNull();
+        expect(plate(root), 'the first + asks no feed and composes nothing').toBeNull();
+        expect(asked, 'a wall nobody has pressed Pay at asks no third party').toHaveLength(0);
+
+        press(root, 'window-pay');
+        await vi.advanceTimersByTimeAsync(50);
+        // The seller's unit, never the overlay's default: a VND selection
+        // composed from a USD rate is the one mistake this rail forbids.
+        expect(asked.some((url) => url.includes('vnd')), `asked ${asked.join(' ')}`).toBe(true);
+        const frozen = plate(root);
+        expect(frozen, 'the press left a payment on the wall').not.toBeNull();
+        const uri = frozen!.getAttribute('data-pay-uri') ?? '';
+        expect(uri.startsWith(`${ADDR}?`), uri).toBe(true);
+
+        // Any change to the selection gives the slot back to the shop's code.
+        press(root, 'window-step-more');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(plate(root), 'a stepper press closes the plate').toBeNull();
+        expect(root.querySelector('.sw-plate')).not.toBeNull();
+      });
+    });
+
+    it('gives the code slot back when the rate that priced it ages out', async () => {
+      await atWall(async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', async () =>
+            ({ ok: true, json: async () => ({ ecash: { usd: 0.00002 }, quotes: { USD: { price: 0.00002 } } }) }) as unknown as Response,
+        );
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&mode=browse&show=quotes&touch=on`);
+        const root = document.createElement('div');
+        boot(root, async () => wallState() as never);
+        await vi.advanceTimersByTimeAsync(0);
+        press(root, 'window-step-more');
+        await vi.advanceTimersByTimeAsync(0);
+        press(root, 'window-pay');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(plate(root)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(PAY_RATE_MAX_AGE_MS - 100);
+        expect(plate(root), 'inside the rate’s own lifetime the code stands').not.toBeNull();
+        await vi.advanceTimersByTimeAsync(200);
+        // The shop's own code is the one road a passer-by has onto this
+        // stall, so a dead plate must not hold it (T-D); the selection and
+        // its total stay, and the control says it composes again.
+        expect(plate(root)).toBeNull();
+        expect(root.querySelector('.sw-plate')).not.toBeNull();
+        expect(root.querySelector('[data-role="selection-total"]')).not.toBeNull();
+      });
+    });
+
+    /**
+     * The heartbeat is a full `refresh()`, and a read that came back with no
+     * route resets the selection — so the plate over it must go too, or the
+     * wall would stand showing a payment for a selection that no longer
+     * exists (the critic's P3-18).
+     */
+    it('a re-read that lost the route leaves no payment plate', async () => {
+      await atWall(async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', async () =>
+            ({ ok: true, json: async () => ({ ecash: { usd: 0.00002 }, quotes: { USD: { price: 0.00002 } } }) }) as unknown as Response,
+        );
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&mode=browse&show=quotes&touch=on`);
+        const root = document.createElement('div');
+        let routed = true;
+        boot(root, async () =>
+            (routed
+                ? wallState()
+                : { ...wallState(), pubkeyHex: undefined, view: { ...wallState().view, prices: undefined } }) as never,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        press(root, 'window-step-more');
+        await vi.advanceTimersByTimeAsync(0);
+        press(root, 'window-pay');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(plate(root)).not.toBeNull();
+        routed = false;
+        await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS + 50);
+        expect(plate(root), 'no payment stands over a selection that was reset').toBeNull();
+      });
     });
 });

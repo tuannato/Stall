@@ -1,8 +1,16 @@
 import './window.css';
 import { cashtabTokenUrl } from '../domain/cashtab';
+import { formatXecRate } from '../domain/fiat';
 import { formatXec, isUnbuyable } from '../domain/money';
 import { parseBlockParam, payLandingUrl } from '../domain/route';
-import type { StallView, WindowParams } from '../domain/state';
+import type { StallView, WallPayment, WindowParams } from '../domain/state';
+import type { StallHandlers } from './render';
+import {
+    selectionCount,
+    selectionGlance,
+    selectionHasSurcharge,
+    selectionUnit,
+} from '../domain/selection';
 import { offersWithinLock, suggestedLock } from '../domain/window';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
@@ -24,6 +32,7 @@ import {
     withheldQuotes,
 } from './render';
 import { ICON_HERO_SIZE, ICON_WALL_SIZE } from '../domain/icons';
+import { PAY_RATE_MAX_AGE_MS, formatTriedAt, quoteSurchargeNode } from './render';
 
 /**
  * The shop window: this stall on a screen in a physical shop.
@@ -123,6 +132,12 @@ export function windowLinkFor(params: WindowParams, base = stallBaseUrl()): stri
     }
     if (params.turn !== 'none') {
         query.set('turn', params.turn);
+    }
+    // Only under Browse, where it means something: `cycle` shows one card at
+    // a time and has no list to choose from, so the painter and the composer
+    // both read it there alone.
+    if (params.touch && params.mode === 'browse') {
+        query.set('touch', 'on');
     }
     return `${base}?${query.toString()}`;
 }
@@ -318,11 +333,19 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
  * the card keeps its size and loses its code — so folding them back together
  * would shrink the picture on a price board for no reason anyone could name.
  */
+type WallTouch = {
+    /** The selection's unit, or nothing while it is empty: every row is then `in`. */
+    unit: string | undefined;
+    selection: ReadonlyMap<string, bigint>;
+    handlers: Partial<StallHandlers>;
+};
+
 function quoteRow(
     item: { tokenId: string; price: Parameters<typeof quoteFigure>[0] },
     view: StallView,
     cycle: boolean,
     withCode: boolean,
+    touch?: WallTouch,
 ): HTMLElement {
     // The words come from the descriptions map through the shop's own helper.
     // They are NOT on `QuotedItem`, which carries a token and a price — the
@@ -359,6 +382,21 @@ function quoteRow(
             head.append(codePlate(link, copy.WINDOW_SCAN_ITEM, 'sw-qr'));
         }
     }
+    /*
+     * The customer's own control, and the only one a quote row ever gets:
+     * − · count · + at arm's length. One unit per payment (`selectionUnit`,
+     * the phone's rule and the same code), so a row in another unit paints
+     * no stepper and names its road in the foot instead — in `browse` no row
+     * carries a code of its own, so the phone's "paid on its own" would
+     * point at nothing (the critic's P2-13).
+     */
+    const apart = touch !== undefined && touch.unit !== undefined && touch.unit !== item.price.code;
+    if (touch !== undefined && !apart) {
+        head.append(stepper(item.tokenId, name, touch));
+        if ((touch.selection.get(item.tokenId) ?? 0n) > 0n) {
+            head.classList.add('sw-in');
+        }
+    }
     card.append(head);
 
     // The seller's own words, on the rail where the item is off-chain and the
@@ -380,6 +418,9 @@ function quoteRow(
         surcharge.setAttribute('data-role', 'quote-surcharge');
         foot.append(surcharge);
     }
+    if (apart) {
+        foot.append(el('span', 'sw-apart fine', copy.windowApart(item.price.code.toUpperCase())));
+    }
     // One of the two provenance sentences, never displaced by the words —
     // the shop's foot rule, and a buyer at a wall has no fold to open.
     // Three states, three shapes (§5). `unknown` — and an absent map, which
@@ -394,6 +435,274 @@ function quoteRow(
     }
     card.append(foot);
     return card;
+}
+
+/**
+ * The stepper: − · count · +, at arm's length rather than a thumb's.
+ *
+ * Real `<button>`s named for what they do (`selectionFewer` / `selectionMore`,
+ * the phone's own copy) with the count `aria-hidden` and riding those names —
+ * an `aria-live` region rebuilt with the paint it would announce is one a
+ * screen reader never hears. **No question at "−"**: the phone asks because
+ * the press is destructive, and the owner's ruling for the wall is that a
+ * question on a wall is a question somebody has to read (T-B). Focus keys,
+ * so the sixty-second heartbeat does not drop focus mid-count.
+ */
+function stepper(tokenId: string, name: string, touch: WallTouch): HTMLElement {
+    const at = touch.selection.get(tokenId) ?? 0n;
+    const box = el('span', 'sw-step');
+    const set = touch.handlers.onSelectionSet;
+    const button = (
+        role: string,
+        label: string,
+        words: string,
+        to: bigint,
+        disabled: boolean,
+    ): HTMLButtonElement => {
+        const node = el('button', 'sw-step-b') as HTMLButtonElement;
+        node.type = 'button';
+        node.textContent = words;
+        node.setAttribute('data-role', role);
+        node.setAttribute('aria-label', label);
+        node.setAttribute('data-focus-key', `${role}:${tokenId}`);
+        node.disabled = disabled;
+        if (set !== undefined && !disabled) {
+            node.addEventListener('click', () => set(tokenId, to));
+        }
+        return node;
+    };
+    box.append(
+        button('window-step-fewer', copy.selectionFewer(name, at.toString()), '\u2212', at - 1n, at <= 0n),
+    );
+    const count = el('span', 'sw-step-n', String(at));
+    count.setAttribute('aria-hidden', 'true');
+    box.append(count);
+    box.append(button('window-step-more', copy.selectionMore(name, at.toString()), '+', at + 1n, false));
+    return box;
+}
+
+/**
+ * The strip: a row of the frame's own grid between the list and the status
+ * bar — in flow, never sticky or fixed (the probe sweeps every absolutely
+ * positioned node against every protected box, and a grid row is neither),
+ * so it is on screen while the list scrolls itself.
+ *
+ * The glance is the records' own figure in the seller's unit, surcharges
+ * included, for the eye and never for a link (`selectionGlance`); the code
+ * the Pay press composes is the satoshi sum, the same bigint the phone's
+ * sheet composes (`selectionSats`), and the two agree by construction
+ * because both round per line.
+ */
+function selectionBar(
+    view: StallView,
+    selection: ReadonlyMap<string, bigint>,
+    handlers: Partial<StallHandlers>,
+): HTMLElement {
+    const bar = el('div', 'sw-sel');
+    bar.setAttribute('data-role', 'window-selection');
+    const names = el('div', 'sw-sel-names');
+    if (selection.size === 0) {
+        names.append(el('span', 'sw-sel-empty', copy.WINDOW_TOUCH_EMPTY));
+        if (view.selectionDropped === true) {
+            const said = el('span', 'sw-sel-drop', copy.SELECTION_DROPPED);
+            said.setAttribute('data-role', 'selection-dropped');
+            names.append(said);
+        }
+        bar.append(names);
+        return bar;
+    }
+    const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    const line = items
+        .map((item) => `${quoteNaming(view, item.tokenId).title} \u00d7${(selection.get(item.tokenId) ?? 0n).toString()}`)
+        .join(' \u00b7 ');
+    const namesRow = el('span', 'sw-sel-n', line);
+    names.append(namesRow);
+    names.append(el('span', 'sw-sel-c', copy.selectionCountLine(Number(selectionCount(selection)))));
+    /*
+     * Between the press and the code, and after a feed that would not price
+     * it: a wall with a Pay control that did nothing for eight seconds is a
+     * wall a customer presses again. Both sentences are the wall's own —
+     * the phone's name a link this screen does not have.
+     */
+    const why =
+        view.payRateAsking === true
+            ? copy.WINDOW_PAY_ASKING
+            : view.windowPaySubDust === true
+              ? // Below the dust floor the network relays nothing, so no code
+                // is composed at all — said here rather than left as a press
+                // that did nothing (§8's floor, the phone's own sentence).
+                copy.PAY_SUB_DUST_SEVERAL
+              : view.windowPaying === undefined && view.payRateWhy !== undefined
+                ? copy.WINDOW_PAY_WHY_TEXT[view.payRateWhy]
+                : undefined;
+    if (why !== undefined) {
+        const said = el('span', 'sw-sel-why', why);
+        said.setAttribute('data-role', 'window-pay-why');
+        names.append(said);
+    }
+    if (view.selectionDropped === true) {
+        const said = el('span', 'sw-sel-drop', copy.SELECTION_DROPPED);
+        said.setAttribute('data-role', 'selection-dropped');
+        names.append(said);
+    }
+    bar.append(names);
+
+    const glance = selectionGlance(selection, view.prices);
+    const totals = el('div', 'sw-sel-tot');
+    const total = el('span', 'sw-sel-t', glance === undefined ? '' : quoteFigure(glance));
+    total.setAttribute('data-role', 'selection-total');
+    totals.append(total);
+    if (selectionHasSurcharge(selection, view.prices)) {
+        totals.append(el('span', 'sw-sel-s', copy.SELECTION_NOTE_SURCHARGE));
+    }
+    bar.append(totals);
+
+    const buttons = el('div', 'sw-sel-btns');
+    const clear = el('button', 'sw-sel-btn sw-sel-clear', copy.WINDOW_CLEAR_ALL) as HTMLButtonElement;
+    clear.type = 'button';
+    clear.setAttribute('data-role', 'window-clear');
+    clear.setAttribute('data-focus-key', 'window-clear');
+    if (handlers.onSelectionClear !== undefined) {
+        clear.addEventListener('click', handlers.onSelectionClear);
+    }
+    buttons.append(clear);
+    /*
+     * "Pay again for a fresh price" belongs to the state where the price IS
+     * stale — after the rate aged out and the plate closed (T-D) — and the
+     * first version had it exactly the wrong way round, saying it over a
+     * code composed seconds ago and plain "Pay" once that code had gone
+     * (the critic's P2-5). Over a standing plate the press composes the
+     * same selection again, which is what "Pay" already says.
+     */
+    const pay = el(
+        'button',
+        'sw-sel-btn sw-sel-pay',
+        view.windowPayAged === true ? copy.WINDOW_PAY_AGAIN : copy.WINDOW_PAY,
+    ) as HTMLButtonElement;
+    pay.type = 'button';
+    pay.setAttribute('data-role', 'window-pay');
+    pay.setAttribute('data-focus-key', 'window-pay');
+    if (handlers.onWallPay !== undefined) {
+        pay.addEventListener('click', handlers.onWallPay);
+    }
+    buttons.append(pay);
+    bar.append(buttons);
+    return bar;
+}
+
+/**
+ * The payment, in the wall's one code slot: the phone's several sheet minus
+ * what a wall cannot do — no wallet buttons (a wall hands off to nothing),
+ * no quantity field, no fold, and never the valve's "press again" sentences.
+ *
+ * Every figure here comes from the snapshot the press took, never from the
+ * view: a camera pointed at the code must decode what the screen shows.
+ */
+function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTMLElement {
+    const box = el('div', 'sw-plate sw-paying');
+    box.setAttribute('data-role', 'window-paying');
+    // The composed URI where the payee sweep can read it: `qrSvg` puts a
+    // path in the DOM and nothing else, and a wall code with no sibling
+    // would be the first composed payment on this origin that
+    // `every-composed-bip21-pays-the-stall-address` cannot see (P1-3).
+    box.setAttribute('data-pay-uri', paying.uri);
+    const count = Number(selectionCount(paying.selection));
+    box.append(qrSvg(paying.uri, copy.windowPayCaption(count)));
+    /*
+     * Two text columns beside the code, not one under it: what a customer
+     * reads first (what to do, what it costs, what they chose) and what
+     * they read second (the rate's own life, the two truths, the way back).
+     * Measured at 1920×1080 with one column: the band ran 576px and left
+     * 140px of list — the shelf a customer was choosing from vanished
+     * behind the code they had just asked for.
+     */
+    const what = el('div', 'sw-pay-a');
+    const how = el('div', 'sw-pay-b');
+    box.append(what, how);
+    what.append(el('div', 'sw-cap', copy.windowPayCaption(count)));
+
+    const figure = el('div', 'sw-pay-fig', formatXec(paying.sats));
+    figure.setAttribute('data-role', 'price');
+    figure.append(el('span', 'item-u', copy.XEC));
+    what.append(figure);
+
+    const lines = el('dl', 'sw-pay-lines');
+    lines.setAttribute('data-role', 'pay-lines');
+    for (const [tokenId, at] of paying.selection) {
+        const price = paying.prices.get(tokenId);
+        if (price === undefined) {
+            continue;
+        }
+        const row = el('div', 'sw-pay-line');
+        row.append(el('dt', undefined, copy.paySeveralLine(paying.names.get(tokenId) ?? tokenId, at.toString())));
+        row.append(el('dd', 'sw-pay-v', quoteFigure({ ...price, amount: price.amount * at })));
+        const surcharge = quoteSurchargeNode(price, 'dd', 'sw-pay-s');
+        if (surcharge !== null) {
+            row.append(surcharge);
+        }
+        if (paying.borrowed.has(tokenId)) {
+            const borrowed = el('dd', 'sw-pay-s warn', copy.QUOTE_NOT_MINTED_HERE);
+            borrowed.setAttribute('data-role', 'quote-not-minted');
+            row.append(borrowed);
+        }
+        lines.append(row);
+    }
+    what.append(lines);
+
+    const glance = selectionGlance(paying.selection, paying.prices);
+    const total = el(
+        'div',
+        'sw-pay-tot',
+        glance === undefined
+            ? ''
+            : selectionHasSurcharge(paying.selection, paying.prices)
+              ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
+              : copy.paySeveralTotal(quoteFigure(glance)),
+    );
+    total.setAttribute('data-role', 'pay-total');
+    what.append(total);
+
+    /*
+     * The rate that priced this figure, and how long the code lives. A
+     * customer at a wall has no refresh control to press, so the lifetime is
+     * said in advance rather than discovered when the plate goes.
+     */
+    const glanceRate = formatXecRate(paying.rate?.rate, paying.unit);
+    if (paying.rate !== undefined && glanceRate !== undefined) {
+        const minutes = Math.round(PAY_RATE_MAX_AGE_MS / 60_000);
+        const line = el(
+            'div',
+            'sw-pay-rate',
+            `${copy.payRateLine(
+                glanceRate,
+                formatTriedAt(paying.rate.atMs),
+                copy.rateSources(paying.rate.check, paying.unit === 'usd'),
+            )} \u00b7 ${copy.windowPayGoodFor(minutes)}`,
+        );
+        line.setAttribute('data-role', 'rate');
+        how.append(line);
+        // Two feeds past the line: said, never a refusal — the figure stands
+        // and the reader is told (§8's D9(b), on the one surface where
+        // nobody can ask). The valve's own sentence, because it is the same
+        // fact about the same pair.
+        if (paying.rate.check === 'disagree') {
+            const said = el('div', 'sw-pay-note warn', copy.PAY_RATE_DISAGREE);
+            said.setAttribute('data-role', 'pay-valve');
+            how.append(said);
+        }
+    }
+    how.append(el('div', 'sw-pay-note', copy.PAY_NOTE_DIRECT));
+    how.append(el('div', 'sw-pay-note', copy.PAY_NOTE_FINAL));
+
+    const back = el('button', 'sw-sel-btn sw-pay-back', copy.WINDOW_PAY_BACK) as HTMLButtonElement;
+    back.type = 'button';
+    back.setAttribute('data-role', 'window-back');
+    back.setAttribute('data-focus-key', 'window-back');
+    if (handlers.onWallBack !== undefined) {
+        back.addEventListener('click', handlers.onWallBack);
+    }
+    how.append(back);
+    return box;
 }
 
 /**
@@ -465,8 +774,18 @@ export function windowRail(
     return show === 'all' ? rail : show;
 }
 
+/** Whether this wall takes a customer's touch: Browse, the quotes, the seller's switch. */
+export function wallTouches(params: WindowParams): boolean {
+    return params.touch && params.mode === 'browse';
+}
+
 /** The scrolling half of the screen, for the mode that is on. */
-export function renderShopWindow(view: StallView, params: WindowParams): HTMLElement {
+export function renderShopWindow(
+    view: StallView,
+    params: WindowParams,
+    /** Only the touch wall's five ever fire; every other screen passes none. */
+    handlers: Partial<StallHandlers> = {},
+): HTMLElement {
     const scroll = el('div', 'stall-scroll sw');
     scroll.setAttribute('data-role', 'shop-window');
     scroll.setAttribute('data-show', params.show);
@@ -493,12 +812,20 @@ export function renderShopWindow(view: StallView, params: WindowParams): HTMLEle
     const strip = el('div', 'items sw-strip');
     const rail = windowRail(params.show, view.windowRail ?? 'listings');
     const cycle = params.mode === 'cycle';
+    // The customer's own half, on the quotes rail alone: a listing's road off
+    // this wall is Cashtab's token page, and "Pay several" is the quotes
+    // rail's feature (`private/design/touch-2026-09-21/`).
+    const touch = wallTouches(params) && rail === 'quotes';
+    const selection = view.selection ?? new Map<string, bigint>();
 
     if (rail === 'quotes') {
         const items = quotedItems(view);
         const at = cycle ? [items[windowCursor(view, items.length)]].filter(Boolean) : items;
+        const unit = selectionUnit(selection, view.prices);
         for (const item of at) {
-            strip.append(quoteRow(item!, view, cycle, cycle && params.payCode));
+            strip.append(
+                quoteRow(item!, view, cycle, cycle && params.payCode, touch ? { unit, selection, handlers } : undefined),
+            );
         }
     } else {
         const items = windowListings(view, params);
@@ -509,13 +836,34 @@ export function renderShopWindow(view: StallView, params: WindowParams): HTMLEle
     }
     body.append(strip);
 
-    // A catalogue gets ONE code — the shop's. Five identical plates down a wall
-    // read as a wall of codes rather than as goods, and a code per row at the
-    // size this screen needs would leave no room for the goods themselves.
+    /*
+     * A catalogue gets ONE code — the shop's. Five identical plates down a
+     * wall read as a wall of codes rather than as goods, and a code per row
+     * at the size this screen needs would leave no room for the goods
+     * themselves. While a touch wall's payment is composed, that one slot
+     * carries the payment instead: the wall's own rule, and the reason an
+     * aged plate gives the slot back rather than holding the shop's only
+     * road (the critic's P2-11).
+     */
     if (!cycle) {
-        body.append(codePlate(shopLink(), copy.WINDOW_SCAN_SHOP, 'sw-plate'));
+        const paying = touch ? view.windowPaying : undefined;
+        body.append(
+            paying === undefined
+                ? codePlate(shopLink(), copy.WINDOW_SCAN_SHOP, 'sw-plate')
+                : payingPlate(paying, handlers),
+        );
+        if (paying !== undefined) {
+            // The payment's column is wider than the shop code's: stacked in
+            // 400px it ran 1004px tall and the rate line, both notes and Back
+            // were cut off the bottom of a 1080 screen — and a wall is the
+            // one surface where nothing below the fold is reachable.
+            scroll.setAttribute('data-paying', 'on');
+        }
     }
     scroll.append(body);
+    if (touch) {
+        scroll.append(selectionBar(view, selection, handlers));
+    }
     scroll.append(statusBar(view, params, rail));
     return scroll;
 }
@@ -619,6 +967,7 @@ export function shopWindowSheet(
     let show: WindowParams['show'] = 'all';
     let mode: WindowParams['mode'] = 'cycle';
     let payCode = true;
+    let touch = false;
     let turn: WindowParams['turn'] = 'none';
     let locked = false;
     let height = tipHeight === undefined ? undefined : suggestedLock(tipHeight);
@@ -656,8 +1005,27 @@ export function shopWindowSheet(
         mode,
         payCode,
         turn,
+        // The switch's truth, not the variable's: with the pay code off the
+        // link must not carry `touch=on` either, or the switch would say one
+        // thing and the link set another — the 2026-09-19 defect, which the
+        // touch round's own test caught again here.
+        touch: touch && payCode,
         ...(locked && height !== undefined ? { upto: height } : {}),
     });
+    /**
+     * The switch's truth is `touch && payCode`, and `settle` owns it: a press
+     * over a pay code that is off paints the correction rather than a state
+     * the link does not carry. The row is hidden outside Browse, where the
+     * option means nothing — never disabled, which reads as a control that
+     * does nothing (`modePicker`'s own rule on the stream guide).
+     */
+    const settleTouch = (): void => {
+        touchRow.hidden = mode !== 'browse';
+        touchWhy.hidden = payCode;
+        paintSwitch(touchSwitch, touch && payCode);
+        sync();
+    };
+
     const sync = (): void => {
         const url = windowLinkFor(composed());
         linkField.value = url;
@@ -744,10 +1112,37 @@ export function shopWindowSheet(
             () => mode,
             (value) => {
                 mode = value;
+                settleTouch();
             },
         ),
     );
     shows.append(el('p', 'fine', copy.WINDOW_MODE_WHY));
+    /*
+     * "Pay several" on a touch screen (owner, 2026-09-21). Revealed by
+     * Browse — `cycle` shows one card and has no list to choose from — and
+     * a CONTROLLED switch whose truth is `touch && payCode`: a price board
+     * that takes payment at the counter has nowhere to put a code that pays
+     * the quotes a customer picked, so turning the code off turns this off
+     * and the line beside it says why (the critic's P2-10; the 2026-09-19
+     * defect was a switch that said one thing and set another).
+     */
+    const touchRow = el('div', 'sw-touch');
+    const touchSwitch = switchControl(
+        copy.WINDOW_TOUCH_SWITCH,
+        'window-touch-switch',
+        false,
+        (on) => {
+            touch = on;
+            settleTouch();
+        },
+        () => touch && payCode,
+    );
+    touchRow.append(touchSwitch);
+    touchRow.append(el('p', 'fine', copy.WINDOW_TOUCH_WHY));
+    const touchWhy = el('p', 'fine', copy.WINDOW_TOUCH_NEEDS_CODE);
+    touchWhy.setAttribute('data-role', 'window-touch-why');
+    touchRow.append(touchWhy);
+    shows.append(touchRow);
 
     shows.append(
         picker(
@@ -802,7 +1197,7 @@ export function shopWindowSheet(
         true,
         (on) => {
             payCode = on;
-            sync();
+            settleTouch();
         },
     );
     preview.append(codeSwitch);
@@ -939,6 +1334,6 @@ export function shopWindowSheet(
     foot.append(close);
     sheet.append(foot);
 
-    sync();
+    settleTouch();
     return sheet;
 }

@@ -163,7 +163,13 @@ describe('served-weight-has-a-ceiling', () => {
     // of 842,838, about 1.6× the direct-payment rail's 19 KB. Raised to
     // 900,000 as the deliberate diff; the delta is the number, the ceiling
     // the alarm.
-    const CEILING_BYTES = 900_000;
+    // 2026-09-22: the ticker preset and the touch wall took it to 900,403 —
+    // +27,485 over the basket round's 872,918, of which the ticker is a
+    // renderer, a scheduler and a stylesheet block and the wall is a second
+    // render branch with five controls and a frozen payment. Raised to
+    // 940,000, which is the same deliberate 4% headroom the last two
+    // readings were given; the delta is the number, the ceiling the alarm.
+    const CEILING_BYTES = 940_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });

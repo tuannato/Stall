@@ -2237,6 +2237,52 @@ export function windowQuotesOutcome(read: {
 export const WINDOW_SWITCH_ON = 'On';
 export const WINDOW_SWITCH_OFF = 'Off';
 
+/*
+ * "Pay several" on a touch wall (2026-09-21, the owner's ask; the design is
+ * `private/design/touch-2026-09-21/`). The switch's own line says the whole
+ * of what the screen gains, because a seller composing this link is not
+ * standing at the wall when a customer meets it.
+ */
+export const WINDOW_TOUCH_SWITCH = 'Let customers pick several quotes and pay in one scan';
+export const WINDOW_TOUCH_WHY =
+    'For a touch screen only. The screen gains plus and minus on each quote, Clear all and Pay \u2014 nothing else. A customer\u2019s choice stays until someone presses Clear all, and the code that pays it takes the shop\u2019s own code slot while it is up.';
+/** Why the switch is refused while the pay code is off: the two contradict. */
+export const WINDOW_TOUCH_NEEDS_CODE =
+    'Turn the pay code on first: this composes a code that pays the quotes a customer picked, and a price board that pays at the counter has nowhere to put it.';
+export const WINDOW_TOUCH_EMPTY = 'Tap + on the items you want to pay for together';
+export const WINDOW_CLEAR_ALL = 'Clear all';
+export const WINDOW_PAY = 'Pay';
+/** Over a standing plate: the press composes the same figure again at a fresh rate. */
+export const WINDOW_PAY_AGAIN = 'Pay again for a fresh price';
+export const WINDOW_PAY_BACK = 'Back';
+/*
+ * What the wall says between the press and the code (2026-09-21). The
+ * phone's own two sentences name "the link and the code", and a wall hands
+ * off to nothing — it has a code and a Pay control and no link at all — so
+ * these are its own, and they name the control a customer can actually
+ * press rather than one that is not there.
+ */
+export const WINDOW_PAY_ASKING =
+    'Asking the price feeds for a rate\u2026 the code appears when one arrives.';
+export const WINDOW_PAY_WHY_TEXT: Readonly<Record<PayRateWhy, string>> = {
+    'no-answer':
+        'No price feed answered just now, so there is no code to scan. Tap Pay again in a moment.',
+    implausible:
+        'A price feed answered with a rate far outside anything XEC has traded at, so this page will not turn it into an amount. Tap Pay again in a moment.',
+};
+export const windowPayCaption = (count: number): string =>
+    `Scan with your phone wallet to pay ${count} ${count === 1 ? 'item' : 'items'}`;
+/** Said in advance, because a customer at a wall has no refresh control to press. */
+export const windowPayGoodFor = (minutes: number): string =>
+    `good for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+/**
+ * A quote in another unit than the selection's, on the wall. The phone says
+ * "paid on its own" beside a Pay control; in `browse` no row carries a code
+ * of its own, so that sentence would point at nothing (the critic, P2-13).
+ */
+export const windowApart = (unit: string): string =>
+    `Quoted in ${unit} \u2014 scan the shop\u2019s code and pay it from your phone`;
+
 export const WINDOW_PAYCODE_SWITCH = 'Show a code that pays each quote';
 export const WINDOW_PAYCODE_WHY =
     'On by default. Turn it off for a screen that only shows prices, where a customer pays at the counter instead of from the wall. The listings keep their code either way: it opens the item in Cashtab and pays nobody.';
