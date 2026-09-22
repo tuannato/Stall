@@ -398,6 +398,72 @@ function parsePolygon(clip: string, w: number, h: number): [number, number][] | 
     return out.length >= 3 ? out : undefined;
 }
 
+/**
+ * The widest axis-aligned band that is paint at EVERY height of a clipped
+ * box — the horizontal range the contrast sampler may read.
+ *
+ * A `clip-path` is invisible to the sampler: the clipped-away corners keep
+ * their pixels in the bounding rect, and what the camera finds there is the
+ * page behind. Neo's announcement chip is a parallelogram
+ * (`polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)`), so on every
+ * screen it paints, both its top-left and bottom-right corners are the
+ * look's near-black ground: the first run after `.notice-chip` joined
+ * `CONTRAST_TEXT` reported **1.12–1.26:1 on fourteen figures**, against a
+ * hex-level pair that is 6.10:1 and glyphs that sit wholly inside the
+ * polygon — the clip-path containment rule above already proves that.
+ *
+ * So the guard was wrong, not the look, and the honest fix narrows the
+ * sample rather than withdrawing the target: measure the text against the
+ * paint it actually has. For a convex polygon the safe range is the
+ * rightmost left-crossing and the leftmost right-crossing over the box's
+ * whole height — for Neo's chip, exactly 6px off each side.
+ *
+ * **Convex only, and non-convex fails loudly** (the `parsePolygon` rule):
+ * for a notch or a star the two crossings bracket a gap that is not paint,
+ * and a sample band quietly laid across it is the false green this whole
+ * pass exists to prevent. Such a target is refused instead.
+ */
+function clipBand(poly: [number, number][], h: number): { x0: number; x1: number } | undefined {
+    // Convexity: every cross product of consecutive edges shares one sign.
+    let sign = 0;
+    for (let i = 0; i < poly.length; i += 1) {
+        const [ax, ay] = poly[i]!;
+        const [bx, by] = poly[(i + 1) % poly.length]!;
+        const [cx, cy] = poly[(i + 2) % poly.length]!;
+        const cross = (bx - ax) * (cy - by) - (by - ay) * (cx - bx);
+        if (Math.abs(cross) < 1e-9) continue;
+        const s = cross > 0 ? 1 : -1;
+        if (sign === 0) sign = s;
+        else if (s !== sign) return undefined;
+    }
+    let x0 = -Infinity;
+    let x1 = Infinity;
+    // Both edges of the band and 32 heights between them: a clip whose
+    // widest constriction is in the middle is not one of ours, but sampling
+    // only the two ends would miss it if it ever is.
+    for (let i = 0; i <= 32; i += 1) {
+        const y = (h * i) / 32;
+        let left = Infinity;
+        let right = -Infinity;
+        for (let j = 0, k = poly.length - 1; j < poly.length; k = j, j += 1) {
+            const [xj, yj] = poly[j]!;
+            const [xk, yk] = poly[k]!;
+            if (yj === yk) continue;
+            const lo = Math.min(yj, yk);
+            const hi = Math.max(yj, yk);
+            if (y < lo || y > hi) continue;
+            const x = xj + ((y - yj) * (xk - xj)) / (yk - yj);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+        }
+        if (left === Infinity) continue;
+        x0 = Math.max(x0, left);
+        x1 = Math.min(x1, right);
+    }
+    if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 - x0 < 2) return undefined;
+    return { x0, x1 };
+}
+
 /** Ray casting, with a half-pixel tolerance for glyph rects on the edge. */
 function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean {
     let inside = false;
@@ -1599,6 +1665,39 @@ const CONTRAST_TEXT = [
     '[data-role="seller-price"]',
     '.chip',
     '.pay-pointer',
+    /*
+     * The announcement's chip (recorded 2026-09-22, acted on the same day).
+     * It is `<span class="notice-chip">` and NOT `.chip`, so the line above
+     * never matched it — the seller's own "From the seller" label, on the
+     * shop, the empty screen and the wall, was measured by nothing.
+     *
+     * No look was defective when it was added — but the pass went red
+     * anyway, twice, and both times the SAMPLER was wrong: a `clip-path`
+     * it could not see (fixed in `clipBand` above) and two far edges that
+     * rounded outward onto the box's own antialiased row (fixed in the
+     * runner). `PROBE-RULES.md`, "Rendered-pixel contrast", carries both
+     * with the numbers and the red proof.
+     *
+     * The looks themselves: all three declare BOTH
+     * halves as literals in their own block — white on #2563eb (5.17:1),
+     * #1a070e on #ff4d7a (6.10:1), #fff3ea on #9e4620 (5.75:1) — and a pair
+     * of literals cannot come apart under a mood, which is the failure
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` exists
+     * for and the reason that test is silent here too. It is on the list so
+     * the next look, or the first one to reach for a token on one half,
+     * is measured rather than trusted.
+     *
+     * Its SIZE is still measured by nothing, and that gap is not this
+     * list's to close: `small-text-is-one-scale` and
+     * `muted-text-is-not-microscopic` both read `stall.css` alone, so the
+     * three looks' 10 / 10.5 / 10.5px overrides of the base rule's 11 are
+     * invisible to both. The chip's ink is not `--s-muted`, so the second
+     * test is correctly out of scope; the first one simply cannot see a
+     * theme file. Written down, not fixed — widening either guard to the
+     * theme sheets is a change with its own blast radius (§6: a look may
+     * set any metric), and the decision is the owner's.
+     */
+    '.notice-chip',
     // The surcharge lines (2026-09-21): the pay sheet's composed one and the
     // record's line on the row, the face, the stream card and the wall — each
     // a figure's other half, in muted or ink on its surface's own ground.
@@ -1797,6 +1896,25 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         return undefined;
     }
     const style = getComputedStyle(node);
+    // The element's OWN clip, narrowing the band to paint (see `clipBand`).
+    // Resolved against `full`, which is the box a polygon's coordinates are
+    // relative to, then intersected with whatever the scroll clamp left.
+    const ownClip = style.clipPath;
+    if (ownClip.startsWith('polygon(')) {
+        const poly = parsePolygon(ownClip, full.width, full.height);
+        if (poly === undefined) {
+            throw new Error(`unreadable clip-path on a contrast target: ${ownClip}`);
+        }
+        const band = clipBand(poly, full.height);
+        if (band === undefined) {
+            // Non-convex, or nothing left: refused rather than guessed at.
+            return undefined;
+        }
+        const x = Math.max(box.x, full.x + band.x0);
+        const right = Math.min(box.x + box.width, full.x + band.x1);
+        if (right - x < 2) return undefined;
+        box = { x, y: box.y, width: right - x, height: box.height };
+    }
     // The colour the glyphs would paint in: read from the blanking backup,
     // because a re-read after `__contrastPrepare` sees `transparent`.
     const ink = node.style.color === 'transparent' ? node.dataset['probeInk']! : style.color;

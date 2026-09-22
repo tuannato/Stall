@@ -297,6 +297,77 @@ the pressed-state controls the sheets are made of. A pressed segment inks
 itself on `--s-accent` and a pressed chip on a wash of it; no other screen
 puts a label on either ground.
 
+**`.notice-chip` joined on 2026-09-22 with no incident behind it — and
+produced two of its own within the hour.** The announcement's "From the seller" label is
+`<span class="notice-chip">` and not `.chip`, so the line that had been in
+this list since the quote chip never matched it: the seller's own label, on
+the shop, the empty screen and the wall, was measured by nothing. Measured
+before adding it, all three looks pass comfortably — white on `#2563eb` is
+5.17:1, `#1a070e` on `#ff4d7a` is 6.10:1, `#fff3ea` on `#9e4620` is 5.75:1 —
+because each look declares BOTH halves as literals in one block, and a pair
+of literals cannot come apart under a mood. That is also why
+`a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` is silent here:
+it fires on a literal ink over a token ground. The selector is on the list so
+the first look to reach for a token on one half is measured rather than
+trusted. That was the whole of the intent; what it actually bought is
+below.
+
+**Adding it found two defects in the SAMPLER, not in any look.** Both were
+pre-existing and general; the chip only exposed them, because it is the
+first target that paints its own saturated ground against a near-black page
+while carrying a clip.
+
+1. **A `clip-path` was invisible to the sampler.** Neo's chip is a
+   parallelogram, `polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)`,
+   so its top-left and bottom-right corners keep their pixels in the
+   bounding rect while painting nothing — and what the camera finds there
+   is the look's near-black page. Fourteen figures at **1.12–1.26:1**
+   against a declared pair of 6.10:1, with the glyphs wholly inside the
+   polygon (the containment rule above already proves that). `clipBand` in
+   the probe now narrows the sample to the widest band that is paint at
+   every height of the box — for this chip, exactly 6px off each side. It
+   reuses `parsePolygon`, so it inherits that function's "refuse a grammar
+   you cannot read" rule, and it is **convex only**: across a notch the two
+   crossings bracket a gap that is not paint, and a band quietly laid over
+   one is the false green this pass exists to prevent. A non-convex target
+   is refused instead.
+
+2. **The two far edges rounded outward.** `x1`/`y1` were
+   `ceil(edge) - 1`, so a box ending at `y + h = 340.5` sampled row 340 —
+   the row Chrome paints half element, half page. The near edges never had
+   it, since `floor(edge) + 1` steps past their partial row by
+   construction; the far ones had been asymmetric with them for as long as
+   this sampler existed. Four figures survived the clip fix at
+   **1.20–2.84:1**, every one at its box's own bottom row, on grounds
+   `rgb(42,28,42)` and `rgb(147,53,83)` — the pink blended into the page.
+   Both far edges `floor` now. An antialiased edge is the element's own
+   boundary and not a reading surface, which is the reason `bw` already
+   steps around a border; most targets never showed it because they sit on
+   the same ground as the page behind them, or carry a border whose
+   `bw + 1` was covering for it.
+
+**Proved red**, after both fixes, by moving Neo's chip ink from `#1a070e`
+to `#a33f5c` — 1.93:1 against its own pink: **14 figures, every one
+reporting exactly 1.93**. Reading the declared pair back to two decimals on
+all fourteen is the evidence that neither fix made the pass blind; a
+sampler still reading a blended edge could not produce that number.
+
+**`LAYOUT_WHY=1` is what found both.** It prints, beside each failing
+figure, the worst pixel's position, the ground rgb actually there, the ink
+compared against, and the band that was walked. A contrast figure with no
+pixel behind it cannot be told from a sampler bug — and both of these were
+sampler bugs that read, at hex level, as a look shipping unreadable text.
+
+**What the same walk found and did NOT close**: the chip's SIZE is measured
+by nothing. `small-text-is-one-scale` and `muted-text-is-not-microscopic`
+both read `stall.css` alone, so the base rule's 11px — whose own comment
+calls 11 the floor — is overridden to 10.5 (Modern), 10 (Neo) and 10.5
+(Rural) invisibly. The second test is correctly out of scope, since the
+chip's ink is not `--s-muted`. The first simply cannot see a theme file, and
+widening it there is a change with its own blast radius: §6 says a look may
+set any metric, so a size table that reached into the theme sheets would be
+the cage §6 exists to refuse. Recorded, not fixed; the call is the owner's.
+
 **The shop tile's letters joined on 2026-09-20, and the incident is the
 reason the list is never "done".** `stall.css` paints `.item-ic`'s initials
 in `color: var(--s-bg)` over a gradient of both accents, with a comment

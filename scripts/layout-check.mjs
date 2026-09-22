@@ -331,10 +331,28 @@ function worstContrastInBox(img, target, textColor) {
     // The border's own pixels are chrome, never the text's ground: a dashed
     // pill edge blended to 2.2:1 against its ink is not a reading surface.
     const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.pad ?? 0);
+    /*
+     * Both far edges use `floor`, not `ceil` (2026-09-22). A box rarely
+     * lands on whole pixels: at `y + h = 340.5` the last row Chrome paints
+     * is half the element and half the page behind it, and `ceil(340.5) - 1`
+     * is 340 — that partial row. The near edges never had the bug, because
+     * `floor(y) + 1` steps past their partial row by construction; the far
+     * ones were asymmetric with them for as long as this sampler existed.
+     *
+     * Found by `.notice-chip` joining `CONTRAST_TEXT`: Neo sets it as near
+     * black on `#ff4d7a` — 6.10:1 — and four figures reported **1.20 to
+     * 2.84:1**, every one of them at the box's own bottom row, on grounds
+     * `rgb(42,28,42)` and `rgb(147,53,83)` that are the pink blended into
+     * the look's near-black page. An antialiased edge is the element's own
+     * boundary, not a reading surface, which is the reason `bw` already
+     * steps around a border. It surfaced here and not earlier because most
+     * targets sit on the same ground as the page behind them, or carry a
+     * border whose `bw + 1` was covering for this.
+     */
     const x0 = Math.max(0, Math.floor(target.x + r + bw) + 1);
     const y0 = Math.max(0, Math.floor(target.y + bw) + 1);
-    const x1 = Math.min(img.width - 1, Math.ceil(target.x + target.w - r - bw) - 1);
-    const y1 = Math.min(img.height - 1, Math.ceil(target.y + target.h - bw) - 1);
+    const x1 = Math.min(img.width - 1, Math.floor(target.x + target.w - r - bw) - 1);
+    const y1 = Math.min(img.height - 1, Math.floor(target.y + target.h - bw) - 1);
     if (x1 <= x0 || y1 <= y0) return undefined;
     let worst = Infinity;
     const stepX = Math.max(1, Math.floor((x1 - x0) / 12));
@@ -349,7 +367,20 @@ function worstContrastInBox(img, target, textColor) {
             }
             const i = (y * img.width + x) * img.bpp;
             const lum = luminance(img.data[i], img.data[i + 1], img.data[i + 2]);
-            worst = Math.min(worst, contrast(textLum, lum));
+            const c = contrast(textLum, lum);
+            if (c < worst) {
+                worst = c;
+                // `LAYOUT_WHY=1` names the worst pixel: its position, the
+                // ground rgb found there, the ink compared against, and the
+                // band that was walked. A contrast figure with no pixel
+                // behind it cannot be told from a sampler bug — which is
+                // exactly what the two defects of 2026-09-22 turned out to
+                // be — and this repository's rule is that a false red is as
+                // useless as a false green.
+                if (process.env.LAYOUT_WHY) {
+                    globalThis.__why = `worst ${c.toFixed(2)} at ${x},${y} ground rgb(${img.data[i]},${img.data[i + 1]},${img.data[i + 2]}) ink ${textColor} band x[${x0}..${x1}] y[${y0}..${y1}]`;
+                }
+            }
         }
     }
     return worst;
@@ -968,7 +999,8 @@ try {
                             if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                                 dim.push(
                                     `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
-                                        `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1`,
+                                        `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
+                                        (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
                                 );
                             }
                         }
