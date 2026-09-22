@@ -5403,10 +5403,19 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         const bip21 = sats === undefined ? undefined : payBip21(address, sats, memo);
         const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats, memo);
         const pay = sats === undefined ? undefined : payECashPayUrl(address, sats, memo);
+        /*
+         * **The "too many" sentence names a cause, so it is said only over
+         * that cause.** The encoder refuses a record over the 222 bytes a
+         * wallet takes — the everyday one, since an entry grows with its own
+         * count — and also two quotes whose ids share their first four
+         * bytes, which is ~0 on a real stall and is not "too many items".
+         * The neutral sentence carries that one.
+         */
+        const distinct = new Set(entries.map((e) => e.tokenId.slice(0, 8))).size;
         memoLine.textContent =
             memo !== undefined
                 ? copy.PAY_FINE_MEMO_NAMES
-                : entries.length > 1
+                : entries.length > 1 && distinct === entries.length
                   ? copy.PAY_FINE_MEMO_TOO_MANY
                   : copy.PAY_FINE_NO_MEMO;
         figureRow.hidden = sats === undefined;

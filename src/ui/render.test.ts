@@ -30,6 +30,7 @@ import type {
     StallView,
     TokenMeta,
 } from '../domain/state';
+import type { TokenPrice } from '../domain/description';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS } from '../domain/state';
 import { EXPLORER_TX_URL } from '../domain/explorer';
 import { OBS_GUIDE_TITLE } from './obsGuide';
@@ -15614,6 +15615,23 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(pressForUrl(over.root, 'pay-cashtab')).not.toContain('op_return_raw');
         expect(pressForUrl(over.root, 'pay-cashtab')).toBeDefined();
         expect(sheet().root.textContent).toContain(copy.PAY_FINE_MEMO_NAMES);
+        // A refusal that is not about size does not borrow the size
+        // sentence: two quotes sharing their first four bytes is ~0 on a
+        // real stall, and it is not "too many items".
+        const twin = `${TOKEN_ID.slice(0, 8)}${'ab'.repeat(28)}`;
+        const clash = sheet({
+            tokens: new Map([
+                [TOKEN_ID, BEANS],
+                [twin, { ...BEANS, tokenId: twin, name: 'Twin' }],
+            ]),
+            prices: new Map<string, TokenPrice>([
+                [TOKEN_ID, QUOTE_USD],
+                [twin, { code: 'usd', exponent: 2, amount: 350n }],
+            ]),
+            selection: new Map([[TOKEN_ID, 1n], [twin, 1n]]),
+        });
+        expect(clash.root.textContent).toContain(copy.PAY_FINE_NO_MEMO);
+        expect(clash.root.textContent).not.toContain(copy.PAY_FINE_MEMO_TOO_MANY);
     });
 
     it('prints one line per item and the total in the seller’s unit, surcharges included', () => {
