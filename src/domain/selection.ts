@@ -23,9 +23,15 @@ export type Selection = ReadonlyMap<string, bigint>;
 
 /**
  * The most distinct items one selection holds. The memo's second shape
- * (`STLP`, D10) carries 35 entries in the 222-byte budget at 4-byte
- * prefixes; the UI stops there so the memo never has to drop an item the
- * buyer chose (step 5 of the build order lands the memo).
+ * (`STLP`, PLAN § D) carries 35 entries in the 222-byte budget at 4-byte
+ * prefixes **and one-byte quantities**; step 5 of the build order lands it.
+ *
+ * **It is a floor, not a promise** (corrected 2026-09-22, the critic): an
+ * entry grows with its own count, so the budget holds 35 items at counts
+ * under 256, 30 at two bytes, 16 at eight — a 35-item selection where four
+ * counts passed 255 is over 222 and the memo is what gives way, never the
+ * payment. The byte count is the authority and this number is only the cap
+ * a stepper can reach; the sheet says which of the two it is composing.
  */
 export const MAX_SELECTION_ENTRIES = 35;
 
