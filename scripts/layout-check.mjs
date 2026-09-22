@@ -475,9 +475,14 @@ let failed = false;
 // decoration on (`CANVAS_SCREENS`), which is the most expensive cell in the
 // matrix, and the run measured 183s with every rule green — a command that
 // fails for its own cost is a command people stop running, which is the one
-// thing this number exists to prevent. Still enforcement: if it grows again,
-// prune the matrix before touching it, and the per-pass costs printed below
-// are how to choose what to prune.
+// thing this number exists to prevent. Raised 200 → 300 on 2026-09-22, the
+// owner's call, after the basket round left 2.9s of margin (197.1s measured;
+// the memo's fixtures paint a real pay code on every pay screen now and the
+// touch wall's two screens ride the portrait and tablet passes): the
+// alternative was pruning screens that had each earned their place that
+// week. Still enforcement: the per-pass costs printed below are how to choose
+// what to prune the next time, and the contrast pass (140s of it) is where
+// the cost is.
 /*
  * How much of the cover check the clip tolerance may eat before the pass
  * stops meaning anything. `clipsOf` skips a point outside every clipping
@@ -495,7 +500,7 @@ let failed = false;
  */
 const CLIP_SKIP_CEILING = 0.3;
 
-const RUNTIME_CEILING_S = 200;
+const RUNTIME_CEILING_S = 300;
 const startedAt = Date.now();
 /*
  * Each pass says what it cost. The budget rule is "prune the matrix before
