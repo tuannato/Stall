@@ -286,8 +286,17 @@ describe('public-weight-has-a-ceiling', () => {
      * needs its own raise. Measured 1,108,312 after the round (the hero is
      * 146 KB now, composed from `broadcast-hero`): about 12 KB of headroom,
      * deliberately tight, so the next image is noticed the day it lands.
+     *
+     * **Raised to 1,340,000 on 2026-09-22 — the raise that paragraph asked
+     * for, taken by the owner** for the fourth look (round 17, `Ink wash`).
+     * The three shipped og cards are 195 / 222 / 245 KB, so the reserve is
+     * one card of the same order plus the jitter a re-shoot brings. It is
+     * still enforcement and still tight on purpose: a FIFTH look needs the
+     * next raise, and the question that raise asks is whether four cards of
+     * a quarter of a megabyte each are what `public/` should be for, or
+     * whether the cards should be generated smaller.
      */
-    const PUBLIC_CEILING_BYTES = 1_120_000;
+    const PUBLIC_CEILING_BYTES = 1_340_000;
 
     function sizeOf(dir: string): number {
         let total = 0;

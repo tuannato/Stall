@@ -211,6 +211,44 @@ const lastDecl = (body: string, props: string[]): string | undefined => {
     return found;
 };
 
+describe('the-second-accent-is-ornament-and-never-ink', () => {
+    /**
+     * `themeVars` emits `--s-accent-2` **raw**, where every other colour role
+     * goes through `legibleOn` — and `legibleOn` answers with a shipped INK.
+     * Asking it about a colour nothing paints as text cost Rural its harvest
+     * gold for 23 days: the ribbon documented as "Gold as the ribbon's
+     * border" wore a hard black outline, and the price tag documented as "a
+     * bg/gold mix" was grey, with the pixel pass and the ink/ground rule both
+     * agreeing (2026-09-22).
+     *
+     * This is the condition that made removing the fence safe, so this is
+     * where the argument happens the day somebody writes `color:
+     * var(--s-accent-2)`: either use a token that is fenced, or put a fence
+     * back. A border, a gradient stop and a `color-mix` ground are all fine —
+     * the figure sitting on that ground is sampled by the contrast pass.
+     */
+    it('is never painted as text in any sheet', () => {
+        const offences: string[] = [];
+        for (const file of SHEETS) {
+            const css = stripped(file);
+            // `color:` but not `background-color:`/`border-color:`/`--x-color:`
+            for (const match of css.matchAll(/(^|[;{\s])color\s*:\s*([^;}]+)/g)) {
+                if (match[2]!.includes('--s-accent-2')) {
+                    offences.push(`${file}: color: ${match[2]!.trim()}`);
+                }
+            }
+        }
+        expect(offences).toEqual([]);
+    });
+
+    it('reaches the stylesheet as the table wrote it, fence or no fence', () => {
+        // Rural's gold is the case: 2.64 against its own cream, which the ink
+        // fence refused. It is a border and a mix, so it paints as written.
+        const rural = themeVars(decodeTheme(RURAL_THEME_ID));
+        expect(rural['--s-accent-2']).toBe('rgb(201, 138, 44)');
+    });
+});
+
 describe('a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground', () => {
     /**
      * The rule the .mini defect taught (2.31:1 under After hours): when one

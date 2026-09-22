@@ -858,7 +858,30 @@ export function themeVars(theme: DecodedTheme): Record<string, string> {
         '--s-muted': rgbCss(legibleOn(theme.muted, bg, surface)),
         '--s-accent': rgbCss(legibleOn(theme.accent, bg)),
         '--s-danger': rgbCss(legibleOn(theme.danger, surface)),
-        '--s-accent-2': rgbCss(legibleOn(theme.accentTwo, bg)),
+        /*
+         * **The second accent is ornament, and ornament is not fenced as
+         * ink** (owner, 2026-09-22). `legibleOn` answers with a shipped
+         * INK — its own docblock says so — and it was being asked about a
+         * colour no rule in this app ever paints as text: `--s-accent-2` is
+         * a border, a gradient stop and a mix, never a `color`.
+         *
+         * What it cost: Rural's table names harvest gold, the gold measures
+         * 2.64 against that look's cream, and every reader of this token
+         * painted `rgb(20,23,26)` instead — so the announcement ribbon whose
+         * own shape rule says "Gold as the ribbon's border" wore a hard black
+         * outline, and the craft-fair price tag documented as "a bg/gold mix"
+         * was grey. Shipped that way from 2026-08-30 to 2026-09-22 with every
+         * guard agreeing: the pixel pass is happy (black on cream is 12:1)
+         * and the ink/ground rule never fires, because both halves are tokens.
+         *
+         * What still protects a reader: the price's own ground is a MIX of
+         * this token, and the rendered-pixel contrast pass samples the figure
+         * against whatever that mix paints. The fence this removes was
+         * guarding nothing, and `the-second-accent-is-ornament-and-never-ink`
+         * keeps it that way — the day a rule paints text in it, that test is
+         * where the argument happens.
+         */
+        '--s-accent-2': rgbCss(theme.accentTwo),
         '--s-backdrop': theme.backdrop ?? 'none',
         '--s-sign-glow': theme.signGlow ?? 'none',
         '--s-font': FONT_STACKS[clampIndex(theme.fontIndex, FONT_STACKS.length)]!,
