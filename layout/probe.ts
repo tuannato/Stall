@@ -757,6 +757,61 @@ function measure(screen: string, themeLabel: string): Failure[] {
     }
 
     /*
+     * **A zoomed picture fills its frame, and wears none of the shelf's
+     * framing.** `zoomSheet` exists to show the seller's artwork square and
+     * uncropped, whatever the look's tile does to it on a row — and for as
+     * long as it existed it did neither, because `.zoom-ic` IS `.item-ic`
+     * and the reset carried one class where every look re-states
+     * `.t-* .item-ic` with two, in a file imported after `stall.css`.
+     *
+     * Reported by the owner as a picture "bị lệch" and measured in Chrome at
+     * 390x844 on 2026-09-22: a 320x320 frame holding a 320x**270** icon,
+     * bottom-aligned, with a 50px band of `--s-surface` above it — pure
+     * white on Modern. The cause is `grid-area: ic` riding in from the row:
+     * `.zoom-frame` names no areas, so `ic` is a line that does not exist,
+     * the icon lands in an implicit track and its `height: 100%` resolves
+     * against that. Beside it, `.t-rural .item-ic`'s `border-radius: 50%`
+     * cut the artwork to an ELLIPSE, Neo drew a 1px cyan border around it,
+     * and `--s-icon-clip` chamfered its corner — the shelf's framing on the
+     * seller's picture, which is the one thing this surface promises not to
+     * do.
+     *
+     * No guard could see any of it: nothing covers anything, so the box
+     * sweep and the hit test are both silent, and happy-dom lays out
+     * nothing. This measures the two boxes against each other and reads the
+     * computed framing off the icon.
+     */
+    for (const frame of surface.querySelectorAll<HTMLElement>('.zoom-frame')) {
+        const fb = frame.getBoundingClientRect();
+        if (fb.width === 0 || fb.height === 0) {
+            continue;
+        }
+        const ic = frame.querySelector<HTMLElement>('.zoom-ic');
+        if (ic === null) {
+            continue;
+        }
+        const ib = ic.getBoundingClientRect();
+        // A half-pixel each way: a fractional viewport lands boxes off the
+        // grid, and this rule is about a 50px band, not a rounding.
+        if (fb.width - ib.width > 1 || fb.height - ib.height > 1) {
+            fail(
+                'the zoomed picture does not fill its frame',
+                `${describe(ic)} is ${Math.round(ib.width)}x${Math.round(ib.height)} in a ${Math.round(fb.width)}x${Math.round(fb.height)} frame`,
+            );
+        }
+        const cs = getComputedStyle(ic);
+        const radius = Number.parseFloat(cs.borderTopLeftRadius) || 0;
+        const border = Number.parseFloat(cs.borderTopWidth) || 0;
+        const clip = cs.clipPath;
+        if (radius > 0 || border > 0 || (clip !== 'none' && clip !== '')) {
+            fail(
+                'the zoomed picture wears the shelf\'s framing',
+                `${describe(ic)} has radius ${cs.borderTopLeftRadius}, border ${cs.borderTopWidth}, clip ${clip}`,
+            );
+        }
+    }
+
+    /*
      * **A pay code is as wide as the gate was told.** The sheet decides
      * whether to draw one by asking whether it still reaches the density a
      * phone has read here, in a box width written down as a constant — and

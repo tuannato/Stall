@@ -2294,14 +2294,48 @@ textarea.paste-in {
     place-items: center;
 }
 
-.zoom-frame .zoom-ic {
+/*
+ * Everything the shelf's tile does, undone — and at (0,3,0), because every
+ * look re-states `.t-* .item-ic` at (0,2,0) in a file imported AFTER this
+ * one (`render.ts` loads stall.css, then the three looks), so the version
+ * of this rule that carried one class lost every property a look happened
+ * to name. What it lost, measured 2026-09-22 in Chrome at 390x844 with a
+ * 900x620 picture:
+ *
+ *  - `grid-area: ic`. This is the one the owner photographed. `.zoom-frame`
+ *    is a grid with no named areas, so `ic` is a line name that does not
+ *    exist: the icon is placed in an implicit track and its `height: 100%`
+ *    resolves against THAT, not against the frame's 320px square. Measured
+ *    icon 320x270 inside a 320x320 frame, bottom-aligned — a 50px band of
+ *    the frame's own `--s-surface` above the picture, which on Modern is
+ *    `rgb(255, 255, 255)`. `place-items: stretch`, `align-self: stretch`
+ *    and `min-height: 100%` were each tried and each still measured 270;
+ *    only `grid-area: auto` fills the frame.
+ *  - `border-radius`. `.t-rural .item-ic` sets `50%`, so a seller's picture
+ *    was cut to an ELLIPSE — the exact thing the block above promises does
+ *    not happen, since a square box at 50% is not a circle.
+ *  - `border`. Neo 1px cyan, Rural 2px umber, drawn around the artwork.
+ *  - `clip-path`. Never reset anywhere: `.item-ic` reads `--s-icon-clip`,
+ *    and Neo's is `polygon(0 0, 100% 0, 100% 74%, 74% 100%, 0 100%)`, so
+ *    the shelf's chamfer cut the corner off the seller's picture.
+ *
+ * The background stays: it is what the INITIALS are read on when a token
+ * has no picture (`color: var(--s-bg)` on the accent run), and dropping it
+ * would put those letters on `--s-surface`, which on Modern is the same
+ * white. So a wide picture is letterboxed on the accent rather than on the
+ * frame's surface — stated, and the owner's to change.
+ */
+.zoom-frame .zoom-ic.item-ic {
+    grid-area: auto;
     width: 100%;
     height: 100%;
+    border: 0;
     border-radius: 0;
+    clip-path: none;
     font-size: 64px;
 }
 
-.zoom-frame .zoom-ic img {
+.zoom-frame .zoom-ic.item-ic img {
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -2316,7 +2350,15 @@ textarea.paste-in {
     text-wrap: pretty;
 }
 
-.zoom-close {
+/*
+ * The close is a ghost on the scrim, and it needs (0,3,0) for the same
+ * reason the picture does: `.zoom-close` alone is (0,1,0) and every look's
+ * `.t-* .mini` is (0,2,0) in a later file, so these three declarations were
+ * dead. Measured on Modern the same day: ink `rgb(37, 99, 235)` on a solid
+ * `rgb(255, 255, 255)` — the look's mini, which on a 78% black scrim reads
+ * as the primary action of the screen rather than the way out of a picture.
+ */
+.zoom-close.mini.another {
     color: #fff;
     border-color: rgba(255, 255, 255, 0.55);
     background: rgba(255, 255, 255, 0.12);

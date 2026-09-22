@@ -275,6 +275,57 @@ the positive provenance line and the quote's age moved into it, and the
 moved state rides the view (`payRateOutcome`) so a fixture can stage it.
 Measured alone, cold: **2,601 boxes and 141.7s**.
 
+## A zoomed picture fills its frame, and wears none of the shelf's framing
+
+Two rules in one sweep over `.zoom-frame`, added 2026-09-22 after the owner
+photographed the defect on the live origin.
+
+`zoomSheet` exists to show the seller's artwork **square and uncropped,
+whatever the look does to that token's tile on a row** — its own docblock
+says so, and had said so since it shipped. It did neither, for one reason
+with four faces: `.zoom-ic` **is** `.item-ic`, the reset was written
+`.zoom-frame .zoom-ic` at (0,2,0), and every look re-states
+`.t-* .item-ic` at the same (0,2,0) in a file `render.ts` imports **after**
+`stall.css`. Equal specificity, later file: the look won every property it
+happened to name, and `stall.css` won only the ones no look mentions.
+
+Measured in Chrome at 390×844 with a 900×620 picture and the real
+`themeVars` output:
+
+| | shipped | after |
+|---|---|---|
+| frame | 320×320 | 320×320 |
+| icon | **320×270, bottom-aligned** | 320×320, `dy=0` |
+| Rural radius | **50% — an ellipse** | 0 |
+| Neo border | **1px cyan** | 0 |
+| Neo clip | **the shelf's chamfer** | none |
+| close ink / ground (Modern) | **`rgb(37,99,235)` on solid white** | `#fff` on `rgba(255,255,255,.12)` |
+
+The 270 is the one a reader sees, and its cause is `grid-area: ic` riding
+in from the row: `.zoom-frame` names no areas, so `ic` is a line that does
+not exist, the icon is placed in an implicit track, and its `height: 100%`
+resolves against that instead of the frame's square. **`place-items:
+stretch`, `align-self: stretch` and `min-height: 100%` were each measured
+and each still gave 270** — only `grid-area: auto` fills the frame. What
+showed in the 50px gap was the frame's own `--s-surface`, which on Modern
+is `rgb(255, 255, 255)`: a white band above the picture, which is what the
+photograph shows.
+
+**Nothing could have caught it.** No box covers another, so the decoration
+sweep and the five-point hit test are both silent; `item-zoom` is in
+`GEOMETRY_ONLY_SCREENS` so the contrast pass never ran there — and would
+not have spoken anyway, since Modern's close was blue on white and
+perfectly readable, merely the wrong control. happy-dom lays nothing out,
+so no unit test could see a box. The rule that fits the incident is the one
+that compares the two boxes and reads the computed framing off the icon,
+and it is cheap: one `querySelectorAll` on a screen already rendered.
+
+**Proved red** by returning the selector to its shipped one-class form:
+**217 failures**, reporting `div.item-ic.zoom-ic is 203x208 in a 320x320
+frame` — the probe's fixture paints initials rather than a picture, so the
+defect was there to be measured with no network at all, on every look and
+every mood, from the day the surface shipped.
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels
