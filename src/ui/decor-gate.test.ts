@@ -67,7 +67,7 @@ const FOLLOWS: Readonly<Record<string, 'palette' | 'art'>> = {
     'att-beetle': 'art',
     'att-sunburst': 'palette',
     'att-bunting': 'art',
-    'att-confetti': 'palette',
+    'att-confetti': 'art',
 };
 
 /**
@@ -86,6 +86,8 @@ const ART_UNDER_A_MOOD: Readonly<Record<string, string>> = {
         "Rural's own inks under Sun-faded, which is a gentle wash rather than a night: the mismatch is small and the owner has not asked for it.",
     'att-bunting':
         'Same look, same wash, same judgement — and its three inks are the craft-fair palette itself, which a tint would muddy.',
+    'att-confetti':
+        "Paper, not palette, since v5 (2026-09-22): the owner's reference is a torn scrap with a folded corner, and no CSS gradient draws one small and sparse — a conic wedge runs to its tile's edge, so a small scrap needs a small tile and a small tile repeats every few pixels. Tried at three tile sizes and photographed before this was written. The mismatch under Sun-faded is the stall fading while the paper does not, which is what new paper on an old stall looks like; and the legibility that a mood WOULD have moved is already fixed, because every scrap colour clears 3:1 against both palettes' inks (paper 5.07, pale gold 3.70, sage 3.28) — which is also why the reference's saturated rust and green are not in the tiles.",
 };
 
 type Rule = { selector: string; body: string };

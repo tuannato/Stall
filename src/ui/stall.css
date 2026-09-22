@@ -1013,118 +1013,76 @@ body {
 }
 
 /*
- * Rural · badge · Confetti, **v4 (2026-09-22, the owner: "sửa lại cho đúng
- * và đẹp hơn")**. v3 made the scraps bigger and the owner was still looking
- * at smudges. Photographed and diagnosed rather than re-tuned:
+ * Rural · badge · Confetti, **v5 (2026-09-22)** — torn paper, from the
+ * owner's own reference: angular scraps with a ragged edge and one folded
+ * corner. v4 got the behaviour right and the silhouette wrong, and the
+ * owner said so: "nó phải giống như trong hình chứ không phải oval".
  *
- * 1. **They had no edge.** `transparent 72%` on a radial gradient fades over
- *    the outer quarter of every piece, so paper read as a stain on the
- *    cloth. Paper has a hard edge: the stops are `0 100%, transparent 0`.
- * 2. **One of the four was ink.** `--s-text` at 24% on cream is a grey
- *    smudge — the piece that made the whole thing read as dirt. The palette
- *    is the fair's now: rust, gold, and the paper white of `--s-surface`,
- *    which is what confetti actually looks like on a warm ground.
- * 3. **The gold was black.** `--s-accent-2` was fenced as ink and swallowed
- *    (`themeVars`, same day), so a third of the pieces were near-black
- *    whatever this rule asked for. Fixed there, and this is the surface that
- *    shows it.
- * 4. **Everything fell at one speed.** Four layers, one travel: a sheet
- *    sliding, not paper falling. Three planes now, each travelling its own
- *    tile — near fastest, far slowest.
- * 5. **A scrap is a ground that text can land on.** The probe caught the
- *    first cut at 1.58:1 — muted ink over a rust scrap on the Activity list
- *    and the wall's payment plate, both of which set text on the page's own
- *    ground rather than on a card. Measured against Rural's own inks: muted
- *    ink clears 3:1 over gold up to 72% on the base palette — but this look
- *    ships **Sun-faded**, where `accentTwo` bleaches to `rgb(118,104,84)`
- *    and the ink to `rgb(96,84,66)`: nearly the same colour, so the same
- *    scrap is safe only to 58% there. Solved by deriving each ceiling
- *    against BOTH palettes and taking the lower: paper `--s-surface` is safe
- *    at any strength (it is lighter than either ground), gold carries the
- *    colour at 52%, rust is a tint at 38% against a 44% ceiling.
+ * **Why these are drawn art and not gradients.** A background layer paints
+ * whatever its gradient paints, tiled — so an angular scrap needs an angular
+ * gradient, and CSS has none that is also small and sparse: a conic wedge
+ * always runs from its apex to the tile's edge, so a small triangle needs a
+ * small tile, and a small tile repeats every few pixels. Tried and
+ * photographed at three tile sizes before this was written; the wedges read
+ * as slivers, never as paper.
  *
- *    **The rule, for the next decoration:** a decoration a reader can stand
- *    on is capped by the look's own ink, under every mood that look ships —
- *    and on this screen they can: the wall's payment plate sets text with no
- *    ground of its own, every ancestor transparent to `.stall`.
- * 6. **It ignored `--s-decor-scale`.** On the shop window (scale 2) a 12px
- *    scrap stayed 12px on a 1920 wall. Every number here is multiplied by
- *    it, and the travel is written as the same token as the tile, which is
- *    what the decor gate reads as proof (§4).
+ * So: three tiles from `private/design/tools/torn-paper.mjs`, deterministic
+ * (a seeded RNG, so a re-run emits the same file and a diff is somebody's
+ * decision). The shape rules came from the reference — a few vertices,
+ * stretched and turned so a scrap is a kite rather than a blob, SOME edges
+ * torn and the rest cut clean, and a fold at one corner in a darker shade of
+ * the same paper, which is what gives the reference its depth.
  *
- * Six pieces over three planes, the far ones smaller and paler. Still a root
- * background: the only shape that falls behind every surface without a box
- * that could cover one, and the slow drift is what pays for the repaint.
- * Colours stay palette roles, so Sun-faded bleaches the paper along with the
- * stall it falls on.
+ * **The cost, stated: art cannot follow a mood.** A mood paints no class
+ * (§4: a class would reach the broadcast overlay), so nothing in CSS can ask
+ * whether Sun-faded is worn, and these scraps do not bleach with the stall
+ * they fall on — the lesson that deleted Modern's Awning, accepted here with
+ * its own reason: the stall has stood a season, the paper was thrown today.
+ * Neo's rain is the same standing exception.
+ *
+ * **What the palette had to obey anyway.** A root-painted decoration is a
+ * ground the look's ink lands on, and the wall's payment plate sets text
+ * with no ground of its own. Every scrap colour clears 3:1 against every ink
+ * that can sit over it — Rural's base muted and text, and Sun-faded's:
+ * paper 5.07, pale gold 3.70, sage 3.28, pale sage 3.81. The reference's own
+ * saturated rust (2.24) and deep green (2.63) cannot be used at all on a
+ * light look, which is the finding and not a compromise.
+ *
+ * Three planes, each travelling its own tile so the near paper falls fastest,
+ * every number through `--s-decor-scale` so the 1920 wall gets scraps rather
+ * than specks, and still a root background — the only shape that falls
+ * behind every surface without a box that could cover one.
  */
 .stall.att-confetti,
 .stall.att-sunburst.att-confetti {
     /* The three planes, as one declaration multiplied by the scale. */
-    --att-conf-near: calc(330px * var(--s-decor-scale, 1));
-    --att-conf-mid: calc(255px * var(--s-decor-scale, 1));
-    --att-conf-far: calc(195px * var(--s-decor-scale, 1));
-    --att-conf-nw: calc(310px * var(--s-decor-scale, 1));
-    --att-conf-mw: calc(245px * var(--s-decor-scale, 1));
-    --att-conf-fw: calc(185px * var(--s-decor-scale, 1));
+    --att-conf-near: calc(360px * var(--s-decor-scale, 1));
+    --att-conf-mid: calc(285px * var(--s-decor-scale, 1));
+    --att-conf-far: calc(215px * var(--s-decor-scale, 1));
+    --att-conf-nw: calc(340px * var(--s-decor-scale, 1));
+    --att-conf-mw: calc(270px * var(--s-decor-scale, 1));
+    --att-conf-fw: calc(205px * var(--s-decor-scale, 1));
 }
 
 .stall.att-confetti {
     background-image:
-        radial-gradient(
-            calc(14px * var(--s-decor-scale, 1)) calc(4.8px * var(--s-decor-scale, 1))
-                at calc(40px * var(--s-decor-scale, 1)) calc(52px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 92%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(2.8px * var(--s-decor-scale, 1)) calc(9.5px * var(--s-decor-scale, 1))
-                at calc(232px * var(--s-decor-scale, 1)) calc(198px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent-2) 52%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(10px * var(--s-decor-scale, 1)) calc(3.6px * var(--s-decor-scale, 1))
-                at calc(168px * var(--s-decor-scale, 1)) calc(74px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 84%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(2.2px * var(--s-decor-scale, 1)) calc(7px * var(--s-decor-scale, 1))
-                at calc(52px * var(--s-decor-scale, 1)) calc(186px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent-2) 52%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(5.5px * var(--s-decor-scale, 1)) calc(5.5px * var(--s-decor-scale, 1))
-                at calc(138px * var(--s-decor-scale, 1)) calc(38px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 66%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(8px * var(--s-decor-scale, 1)) calc(3px * var(--s-decor-scale, 1))
-                at calc(28px * var(--s-decor-scale, 1)) calc(140px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent) 38%, transparent) 0 100%,
-            transparent 0
-        ),
+        url('decor/confetti-near.svg'),
+        url('decor/confetti-mid.svg'),
+        url('decor/confetti-far.svg'),
         var(--s-backdrop);
     /*
      * Per layer, never one token holding the list: the decor gate reads the
-     * tile of the layer whose travel it is checking, and a compressed
-     * `--att-conf-sizes` made every tile unreadable (it caught this the hour
-     * v4 was written). The travel in the keyframes is the SAME token as the
-     * height here, which is the proof that gate asks for.
+     * tile of the layer whose travel it is checking. The travel in the
+     * keyframes is the SAME token as the height here, which is the proof
+     * that gate asks for.
      */
     background-size:
         var(--att-conf-nw) var(--att-conf-near),
-        var(--att-conf-nw) var(--att-conf-near),
         var(--att-conf-mw) var(--att-conf-mid),
-        var(--att-conf-mw) var(--att-conf-mid),
-        var(--att-conf-fw) var(--att-conf-far),
         var(--att-conf-fw) var(--att-conf-far),
         auto,
         auto;
-    background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat;
+    background-repeat: repeat, repeat, repeat, repeat, repeat;
     animation: att-confetti-fall 26s linear infinite;
 }
 
@@ -1132,61 +1090,23 @@ body {
     to {
         background-position:
             0 var(--att-conf-near),
-            0 var(--att-conf-near),
             0 var(--att-conf-mid),
-            0 var(--att-conf-mid),
-            0 var(--att-conf-far),
             0 var(--att-conf-far),
             0 0,
             0 0;
     }
 }
 
-
 /*
  * Both rural root rows worn together — the same erasure class the neo pair
- * had: written out, paper over rays over ground. The six scraps and their
- * three planes come from the shared block above, so v4's numbers are stated
- * once and this rule adds only the sun.
+ * had: written out, paper over rays over ground. The three planes come from
+ * the shared block above, so v5's numbers are stated once.
  */
 .stall.att-sunburst.att-confetti {
     background-image:
-        radial-gradient(
-            calc(14px * var(--s-decor-scale, 1)) calc(4.8px * var(--s-decor-scale, 1))
-                at calc(40px * var(--s-decor-scale, 1)) calc(52px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 92%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(2.8px * var(--s-decor-scale, 1)) calc(9.5px * var(--s-decor-scale, 1))
-                at calc(232px * var(--s-decor-scale, 1)) calc(198px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent-2) 52%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(10px * var(--s-decor-scale, 1)) calc(3.6px * var(--s-decor-scale, 1))
-                at calc(168px * var(--s-decor-scale, 1)) calc(74px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 84%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(2.2px * var(--s-decor-scale, 1)) calc(7px * var(--s-decor-scale, 1))
-                at calc(52px * var(--s-decor-scale, 1)) calc(186px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent-2) 52%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(5.5px * var(--s-decor-scale, 1)) calc(5.5px * var(--s-decor-scale, 1))
-                at calc(138px * var(--s-decor-scale, 1)) calc(38px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-surface) 66%, transparent) 0 100%,
-            transparent 0
-        ),
-        radial-gradient(
-            calc(8px * var(--s-decor-scale, 1)) calc(3px * var(--s-decor-scale, 1))
-                at calc(28px * var(--s-decor-scale, 1)) calc(140px * var(--s-decor-scale, 1)),
-            color-mix(in srgb, var(--s-accent) 38%, transparent) 0 100%,
-            transparent 0
-        ),
+        url('decor/confetti-near.svg'),
+        url('decor/confetti-mid.svg'),
+        url('decor/confetti-far.svg'),
         radial-gradient(
             circle 620px at 50% 110px,
             transparent 0 30%,
@@ -1200,16 +1120,13 @@ body {
         var(--s-backdrop);
     background-size:
         var(--att-conf-nw) var(--att-conf-near),
-        var(--att-conf-nw) var(--att-conf-near),
         var(--att-conf-mw) var(--att-conf-mid),
-        var(--att-conf-mw) var(--att-conf-mid),
-        var(--att-conf-fw) var(--att-conf-far),
         var(--att-conf-fw) var(--att-conf-far),
         auto,
         auto,
         auto,
         auto;
-    background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, no-repeat, repeat, repeat, repeat;
+    background-repeat: repeat, repeat, repeat, no-repeat, repeat, repeat, repeat;
     animation:
         att-confetti-sun-fall 26s linear infinite,
         att-sunburst-spin 70s linear infinite;
@@ -1219,10 +1136,7 @@ body {
     to {
         background-position:
             0 var(--att-conf-near),
-            0 var(--att-conf-near),
             0 var(--att-conf-mid),
-            0 var(--att-conf-mid),
-            0 var(--att-conf-far),
             0 var(--att-conf-far),
             0 0,
             0 0,
