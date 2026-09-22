@@ -3143,15 +3143,26 @@ function sortedListings(
  * The find box and the sort, painted only over a big shop. Rebuilt on every
  * keystroke like everything else; the focus-key machinery keeps the caret's
  * field, and `restoreFocus` puts the caret back at the end of it.
+ *
+ * **Two fields and nothing else, on one row.** The sort wore a `<label>`
+ * stacked above it, so the strip was 123px tall at 390px — a find box, a
+ * word and a select on three lines, above the first card on the one screen
+ * where the sign is already on a diet (§4). The select carries its label as
+ * its accessible name instead, which is the find box's own pattern, and the
+ * options say what each ordering is (copy's own note). The row never wraps:
+ * the select keeps its width and the find box takes what is left, measured
+ * at 159–204px on the three looks at 390px and capped at 420 for desk width.
  */
 function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
     const wrap = el('div', 'shop-tools');
     wrap.setAttribute('data-role', 'shop-tools');
+    const box = el('span', 'shop-find-box');
+    box.append(glyph('search', 'shop-find-ic'));
     const find = el('input', 'paste-in shop-find');
     find.type = 'search';
     find.maxLength = 64;
     find.placeholder = copy.SHOP_FILTER_HINT;
-    find.setAttribute('aria-label', copy.SHOP_FILTER_HINT);
+    find.setAttribute('aria-label', copy.SHOP_FILTER_LABEL);
     find.value = view.shopFilter ?? '';
     find.setAttribute('data-role', 'shop-filter');
     find.setAttribute('data-focus-key', 'shop-filter');
@@ -3159,10 +3170,11 @@ function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
     if (onFilter !== undefined) {
         find.addEventListener('input', () => onFilter(find.value));
     }
-    wrap.append(find);
-    const label = el('label', 'paste-label shop-sort-label', copy.SHOP_SORT_LABEL);
+    box.append(find);
+    wrap.append(box);
     const select = el('select', 'paste-in shop-sort');
     select.name = 'shop-sort';
+    select.setAttribute('aria-label', copy.SHOP_SORT_LABEL);
     select.setAttribute('data-role', 'shop-sort');
     select.setAttribute('data-focus-key', 'shop-sort');
     const options: { value: ShopSort; label: string }[] = [
@@ -3189,8 +3201,7 @@ function shopTools(view: StallView, handlers: StallHandlers): HTMLElement {
             }
         });
     }
-    label.append(select);
-    wrap.append(label);
+    wrap.append(select);
     return wrap;
 }
 

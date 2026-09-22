@@ -20,7 +20,8 @@ export type GlyphName =
     | 'retry'
     | 'plus'
     | 'minus'
-    | 'expand';
+    | 'expand'
+    | 'search';
 
 const GLYPH_PATHS: Record<GlyphName, string> = {
     close: 'M4 4l8 8M12 4l-8 8',
@@ -36,6 +37,9 @@ const GLYPH_PATHS: Record<GlyphName, string> = {
     minus: 'M3 8h10',
     // Four corners opening outward: the picture at full size (2026-09-18).
     expand: 'M6.2 2.6H2.6v3.6M9.8 2.6h3.6v3.6M9.8 13.4h3.6V9.8M6.2 13.4H2.6V9.8',
+    // The find box's own mark (2026-09-22): a lens on the 16-grid, centred at
+    // (7,7) so the handle ends inside the box rather than on its edge.
+    search: 'M11.5 7A4.5 4.5 0 1 1 2.5 7a4.5 4.5 0 1 1 9 0M10.3 10.3L13.8 13.8',
 };
 
 /**

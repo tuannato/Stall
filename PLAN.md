@@ -183,6 +183,22 @@ working accept, and there is no accept.
   cap. This is a new surface built on the owner's direct ask, over PLAN's
   "measure before building" gate, and says so. Design
   `private/design/touch-2026-09-21/`.
+- **The listings strip is one row, and the labels shrank to fit it — BUILT
+  2026-09-22.** The basket board's item 3 (`private/design/basket-2026-09-21/`,
+  C11): the find field and the sort select on one row at every width, a drawn
+  lens in the field, the orphan label line gone. Ported with one measured
+  deviation. The board folded the word "Sort" into each option ("Sort · Price,
+  low first"); its mock was Modern at 390px, and Neo's mono runs ~9.6px a
+  character, so that option is a 264px select on a 366px strip and the find
+  box is left 92px. So the word is the select's `aria-label` instead, and the
+  options each name an ordering on their own ("By shelf", "Low price first",
+  "High price first", "By name"). The same measurement took the placeholder to
+  one word: with the lens in the field, Neo has 115px of text room and "Find
+  an item" is 116. What this bought, measured at 390px on the three looks: the
+  strip is 44px tall against 123, the field 159–204px and the select 140–197px,
+  with nothing cut. What it cost: "Price on card" is gone from the sort, so
+  the words no longer say which figure on a row they order by — this rail
+  paints no other, and C11 said nothing rests on the old wording.
 - **Three LOKADs, never a fourth (owner, 2026-09-21).** `STL1`, `STLD` and
   `STLP` are the whole registry. A new kind of record is a new **shape**
   under one of them (the multi-item memo is a second shape of `STLP`, told

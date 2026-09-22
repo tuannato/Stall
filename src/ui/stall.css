@@ -4471,26 +4471,60 @@ textarea.share-embed {
  * The big-shop tools. Fields borrow `.paste-in` (the 16px iOS floor with it),
  * so only the row shape lives here. In flow above the shelves, never sticky:
  * a bar that overlays scrolling content covers whatever passes under it.
+ *
+ * One row at every width, and it never wraps (2026-09-22): the sort's own
+ * label used to stand above it and the row wrapped under 500px, which put
+ * 123px of tools between the sign and the first card on a phone. The select
+ * keeps its intrinsic width — its options are short enough that no look's
+ * face needs more than 197px of the 354–366px strip — and the find box takes
+ * whatever is left, down to a 120px basis.
  */
 .shop-tools {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-bottom: 6px;
 }
 
-.shop-find {
-    flex: 1 1 200px;
-    width: auto;
+/*
+ * The find box wears a lens, and the lens is the box's own child rather than
+ * a background image: it is stroked in `currentColor` like every other glyph,
+ * so a look's own stroke weight reaches it. Absolute inside a relative
+ * wrapper, `pointer-events: none` — a mark over a field must not eat the tap
+ * that focuses it — and the field pads out of its way.
+ */
+.shop-find-box {
+    position: relative;
+    display: flex;
+    flex: 1 1 120px;
+    /*
+     * Capped at desk width: the field grew to 628px at 1280px, which is a
+     * lot of empty box behind a one-word placeholder. It never binds on a
+     * phone, where the field is 159–204px and the cap is what the row has
+     * left after the select.
+     */
+    max-width: 420px;
     min-width: 0;
 }
 
-.shop-sort-label {
-    flex: 0 1 auto;
+.shop-find {
+    width: 100%;
+    min-width: 0;
+    padding-left: 34px;
+}
+
+.shop-find-ic {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--s-muted);
+    pointer-events: none;
 }
 
 .shop-sort {
+    flex: 0 0 auto;
     width: auto;
 }
 

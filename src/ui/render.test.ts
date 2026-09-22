@@ -5213,6 +5213,48 @@ describe('big-shop-tools', () => {
         expect(h.onChangeSort).toHaveBeenCalledWith('price-asc');
     });
 
+    /*
+     * The strip is one row, so it is two controls and nothing else: a label
+     * node stacked over the select is what made it three lines and 123px tall
+     * at 390px. A fence over the children rather than a height assertion —
+     * happy-dom lays nothing out, and the width this buys is the probe's to
+     * measure. The select's name moves to `aria-label`, the find box's own
+     * pattern, and every option is a phrase that names an ordering, because
+     * the chosen one is all a sighted reader sees.
+     */
+    it('the-listings-strip-is-two-fields-on-one-row', () => {
+        const { root } = paint(bigShop());
+        const strip = root.querySelector('[data-role="shop-tools"]') as HTMLElement;
+        expect([...strip.children].map((n) => n.className)).toEqual([
+            'shop-find-box',
+            'paste-in shop-sort',
+        ]);
+        expect(strip.querySelector('label')).toBeNull();
+        // The lens is the field's own mark: drawn, decorative, and inside the
+        // box with the field, so nothing stands between the two controls.
+        const lens = strip.querySelector('.shop-find-ic') as SVGElement;
+        expect(lens.getAttribute('aria-hidden')).toBe('true');
+        expect(lens.parentElement).toBe(strip.firstElementChild);
+        // Neither field carries a visible label, so each says its own name:
+        // the find box's spoken name opens with the words its placeholder
+        // shows, or the two readers are naming one control differently.
+        const find = strip.querySelector('[data-role="shop-filter"]') as HTMLInputElement;
+        expect(find.placeholder).toBe(copy.SHOP_FILTER_HINT);
+        expect(find.getAttribute('aria-label')).toBe(copy.SHOP_FILTER_LABEL);
+        expect(copy.SHOP_FILTER_LABEL.startsWith(copy.SHOP_FILTER_HINT)).toBe(true);
+        const sort = strip.querySelector('[data-role="shop-sort"]') as HTMLSelectElement;
+        expect(sort.getAttribute('aria-label')).toBe(copy.SHOP_SORT_LABEL);
+        expect([...sort.options].map((o) => o.textContent)).toEqual([
+            copy.SHOP_SORT_CURATED,
+            copy.SHOP_SORT_PRICE_ASC,
+            copy.SHOP_SORT_PRICE_DESC,
+            copy.SHOP_SORT_NAME,
+        ]);
+        for (const option of sort.options) {
+            expect(option.textContent!.length).toBeLessThanOrEqual(17);
+        }
+    });
+
     it('the filter narrows the shelves and never the tab count', () => {
         const { root } = paint(bigShop({ shopFilter: 'apple' }));
         expect(cardNames(root)).toEqual(['Apple']);

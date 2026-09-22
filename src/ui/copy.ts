@@ -775,13 +775,39 @@ export const TAG_LEDE =
  * drops offers, so "lowest on Agora" is unprovable here). The empty-filter
  * line blames the filter, never the stall: an emptied shelf under a typed
  * word must not read as an empty shop.
+ *
+ * **Every option is a phrase that names an ordering**, because the control
+ * wears no visible label: `SHOP_SORT_LABEL` is the select's accessible name
+ * (the find box's own pattern — it has no visible label either), and what a
+ * sighted reader sees is whichever option is chosen. "Name" alone read as a
+ * noun in that position, so it is "By name" beside "By shelf".
+ *
+ * **And they are short because the strip is one row at 390px** (2026-09-22):
+ * the two fields and the label line stood 123px tall above the first card on
+ * a phone, and "Price on card — low first" is what forced the wrap — measured
+ * in each look's own face at 16px, the widest option was 172–250px against a
+ * 354–366px strip. It is a copy change and nothing rests on the old wording:
+ * "on card" said which figure on a row a phrase beside a covenant's asked
+ * amount meant, and this rail paints no other figure.
  */
-export const SHOP_FILTER_HINT = 'Find in this stall';
+/**
+ * The find box's two strings. The placeholder is one word because that is
+ * what the field holds at its narrowest: on Neo's mono at 390px the field is
+ * 159px once the strip is one row, and the lens takes 24 of the 139 left, so
+ * "Find in this stall" (193px) and "Find an item" (116px against 115px of
+ * room) were each cut mid-phrase there — measured 2026-09-22. The lens beside
+ * it says what kind of field it is. The accessible name says the whole
+ * sentence and **opens with the placeholder's own word**, so a reader who
+ * sees only the short one and a reader who hears only the long one name the
+ * same control (WCAG 2.5.3).
+ */
+export const SHOP_FILTER_HINT = 'Find';
+export const SHOP_FILTER_LABEL = 'Find an item in this stall';
 export const SHOP_SORT_LABEL = 'Sort';
 export const SHOP_SORT_CURATED = 'By shelf';
-export const SHOP_SORT_PRICE_ASC = 'Price on card — low first';
-export const SHOP_SORT_PRICE_DESC = 'Price on card — high first';
-export const SHOP_SORT_NAME = 'Name';
+export const SHOP_SORT_PRICE_ASC = 'Low price first';
+export const SHOP_SORT_PRICE_DESC = 'High price first';
+export const SHOP_SORT_NAME = 'By name';
 export const SHOP_FILTER_NONE =
     'Nothing listed here matches that. Clear the find box to see the whole stall.';
 
