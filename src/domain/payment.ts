@@ -112,6 +112,9 @@ export const QUANTITY_TAG = 0x01;
 /** Eight unsigned bytes, the same ceiling the price field's amount has. */
 export const MAX_QUANTITY_BYTES = 8;
 
+/** What `encodePush` can frame with `OP_PUSHDATA1`'s single length byte. */
+const MAX_PUSH_BYTES = 255;
+
 const MAX_QUANTITY = (1n << 64n) - 1n;
 const TOKEN_ID_BYTES = 32;
 const TOKEN_ID_RE = /^[0-9a-f]{64}$/;
@@ -278,41 +281,54 @@ export function encodePaymentMemoHex(
 }
 
 /**
+ * Why a list could not be written. **The caller reads the reason from here
+ * rather than re-deriving it from the same entries**: "too many items" names
+ * a cause, and a sheet that guessed at it from outside would say it over a
+ * prefix clash too (the meter's own rule — one count, from the call that
+ * produced the record).
+ */
+export type MemoRefusal =
+    /** One item is the shape that already exists; compose that instead. */
+    | 'one-item'
+    /** Past `MAX_MEMO_ITEMS`, or a token id or quantity this cannot write. */
+    | 'malformed'
+    /** Two ids share their first `MEMO_PREFIX_BYTES` — ~0 on a real stall. */
+    | 'prefix-clash'
+    /** Over `OP_RETURN_BUDGET`: an entry grows with its own count. */
+    | 'too-big';
+
+/**
  * The `op_return_raw` payload for the second shape: one payment naming
- * several quoted items. `undefined` when the list cannot be represented, so
- * a caller never hands a wallet a memo this app could not read back — and
- * the caller's own job when that happens is to compose the payment **with no
- * memo**, never to refuse the payment.
- *
- * Refused: fewer than two items (one item is the shape that already exists
- * and every un-updated reader understands — compose that instead), more than
- * `MAX_MEMO_ITEMS`, a token id that is not 64 lowercase hex, two ids sharing
- * a four-byte prefix, a quantity outside 1…2^64-1, and **a record over
- * `OP_RETURN_BUDGET`**, which is the authority: an entry grows with its own
- * count, so 35 items fit only while every count is under 256.
+ * several quoted items — `{ hex }`, or `{ why }` when the list cannot be
+ * represented, so a caller never hands a wallet a memo this app could not
+ * read back. **A refusal costs the memo and never the payment**: the caller
+ * composes without one and says which reason it was.
  */
 export function encodeMultiPaymentMemoHex(
     items: readonly { readonly tokenId: string; readonly quantity: bigint }[],
-): string | undefined {
-    if (!Array.isArray(items) || items.length < 2 || items.length > MAX_MEMO_ITEMS) {
-        return undefined;
+): { readonly hex: string } | { readonly why: MemoRefusal } {
+    if (!Array.isArray(items) || items.length < 2) {
+        return { why: 'one-item' };
+    }
+    if (items.length > MAX_MEMO_ITEMS) {
+        return { why: 'too-big' };
     }
     const parts: Uint8Array[] = [];
     const seen = new Set<string>();
     for (const item of items) {
         const id = item?.tokenId;
         if (typeof id !== 'string' || !TOKEN_ID_RE.test(id)) {
-            return undefined;
+            return { why: 'malformed' };
         }
         const quantity = item.quantity;
         // `typeof`, not a comparison: a `Number` would compare fine here and
         // lose the low bits of an eight-byte count on the way to the wire.
         if (typeof quantity !== 'bigint' || quantity < 1n || quantity > MAX_QUANTITY) {
-            return undefined;
+            return { why: 'malformed' };
         }
         const prefix = id.slice(0, MEMO_PREFIX_BYTES * 2);
         if (seen.has(prefix)) {
-            return undefined;
+            return { why: 'prefix-clash' };
         }
         seen.add(prefix);
         const digits = minimalBytes(quantity);
@@ -324,22 +340,44 @@ export function encodeMultiPaymentMemoHex(
             ]),
         );
     }
+    const list = concat(parts);
+    // **The push's own length byte, checked before it is written.** The
+    // budget below happens to refuse every list past 213 bytes, so a payload
+    // over `encodePush`'s 255 ceiling is unreachable — but that is an
+    // arithmetic coincidence and this is the first caller that could build
+    // one, so the framing is bounded where it is built, not downstream.
+    if (list.length > MAX_PUSH_BYTES) {
+        return { why: 'too-big' };
+    }
     const record = concat([
         encodePush(lokadBytes()),
         encodePush(Uint8Array.from([MULTI_MARKER])),
-        encodePush(concat(parts)),
+        encodePush(list),
     ]);
     if (record.length > OP_RETURN_BUDGET) {
-        return undefined;
+        return { why: 'too-big' };
     }
-    const hex = toHex(record);
-    // Decode back before answering, the describe encoder's own guard: what a
-    // wallet is handed has to be what this app reads on the way in.
-    const back = decodePaymentPushes([lokadBytes(), Uint8Array.from([MULTI_MARKER]), concat(parts)]);
+    /*
+     * Decode back before answering, the describe encoder's guard — and
+     * **field for field**, not by counting: a prefix or a count that encoded
+     * wrong while the length held would pass a count check, and what a wallet
+     * is handed has to be what this app reads on the way in.
+     */
+    const back = decodePaymentPushes([lokadBytes(), Uint8Array.from([MULTI_MARKER]), list]);
     if (back === undefined || back.kind !== 'items' || back.items.length !== items.length) {
-        return undefined;
+        return { why: 'malformed' };
     }
-    return hex;
+    for (let i = 0; i < items.length; i += 1) {
+        const wrote = back.items[i]!;
+        const meant = items[i]!;
+        if (
+            wrote.prefix !== meant.tokenId.slice(0, MEMO_PREFIX_BYTES * 2) ||
+            wrote.quantity !== meant.quantity
+        ) {
+            return { why: 'malformed' };
+        }
+    }
+    return { hex: toHex(record) };
 }
 
 /** The tag and the minimal big-endian bytes of the number under it. */

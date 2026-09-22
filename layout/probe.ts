@@ -12,7 +12,7 @@
  * in a real browser, and writes a verdict into the DOM for the runner to read.
  * It asserts what only a browser can see.
  */
-import { renderStall, WINDOW_MIN_PX } from '../src/ui/render';
+import { PAY_QR_NARROWEST_PX, renderStall, WINDOW_MIN_PX } from '../src/ui/render';
 import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
 import {
     attachmentsForTheme,
@@ -686,6 +686,34 @@ function measure(screen: string, themeLabel: string): Failure[] {
             fail(
                 'a row tile covers its own line',
                 `${describe(tile)} is ${Math.round(box.width)}px wide and ends at ${Math.round(box.right)}, the kind starts at ${Math.round(text.left)}`,
+            );
+        }
+    }
+
+    /*
+     * **A pay code is as wide as the gate was told.** The sheet decides
+     * whether to draw one by asking whether it still reaches the density a
+     * phone has read here, in a box width written down as a constant — and
+     * that constant was read off the wrong node once, saying 318 where the
+     * truth was 300, which drew codes at 4.92px a module under a gate that
+     * computed 5.21 (2026-09-22). Nothing in the suite could see it: happy-dom
+     * lays nothing out. This measures the painted box — the element's width
+     * minus its own padding — and fails under the number the gate uses, so a
+     * stylesheet change that shrinks the plate turns red here instead of
+     * quietly making every scan sentence optimistic.
+     */
+    for (const code of surface.querySelectorAll<SVGElement>('[data-role="pay-qr"] svg.qr')) {
+        const box = code.getBoundingClientRect();
+        if (box.width === 0) {
+            continue;
+        }
+        const cs = getComputedStyle(code);
+        const painted =
+            box.width - Number.parseFloat(cs.paddingLeft) - Number.parseFloat(cs.paddingRight);
+        if (painted + 0.5 < PAY_QR_NARROWEST_PX) {
+            fail(
+                'a pay code is narrower than the gate was told',
+                `${describe(code)} paints ${Math.round(painted)}px against ${PAY_QR_NARROWEST_PX}`,
             );
         }
     }

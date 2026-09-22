@@ -114,6 +114,7 @@ import { ADDR_COPIED_MS,
     quoteFigure,
     PAY_PILL_CHARS,
     PAY_APART_PILL_CHARS,
+    PAY_QR_NARROWEST_PX,
 } from './render';
 import {
     MARQUEE_HOLD_MS,
@@ -8418,6 +8419,43 @@ describe('a-payment-row-says-paid-and-never-sold', () => {
         expect(root.querySelector('.event-ic-empty')).not.toBeNull();
     });
 
+    /**
+     * **Two quotes matching the same four bytes name nothing.** Guessing one
+     * would put a name nobody wrote under the label that says the payer wrote
+     * it — and the branch that refuses is the whole reason a prefix may be
+     * short, so it is tested rather than derived.
+     */
+    it('names nothing when the payer’s four bytes match two of this stall’s quotes', () => {
+        const twin = `${TOKEN_ID.slice(0, 8)}${'ab'.repeat(28)}`;
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS], [twin, { ...BEANS, tokenId: twin, name: 'Twin' }]]), {
+                panel: 'activity',
+                prices: new Map<string, TokenPrice>([
+                    [TOKEN_ID, QUOTE_USD],
+                    [twin, { code: 'usd', exponent: 2, amount: 350n }],
+                ]),
+                events: [
+                    {
+                        ...PAID,
+                        payment: {
+                            kind: 'items' as const,
+                            items: [
+                                { prefix: TOKEN_ID.slice(0, 8), quantity: 2n },
+                                { prefix: '99999999', quantity: 1n },
+                            ],
+                        },
+                    },
+                ],
+            }),
+        );
+        const claims = [...root.querySelectorAll('[data-role="payment-claim"]')];
+        expect(claims[0]?.textContent).toBe(
+            copy.paymentClaimPart(TOKEN_ID.slice(0, 8), copy.paymentQuantity('2')),
+        );
+        expect(root.textContent).not.toContain('Roasted Beans');
+        expect(root.textContent).not.toContain('Twin');
+    });
+
     it('says only "to the seller" when no amount could be added up', () => {
         const { root } = paint(
             offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
@@ -15550,11 +15588,12 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         // selection's own order, and it rides every road out of this sheet:
         // both links and the code are one string, the way the figure is one
         // bigint. A selection of one composes the shape that already exists.
-        const memo = encodeMultiPaymentMemoHex([
+        const composed = encodeMultiPaymentMemoHex([
             { tokenId: TOKEN_ID, quantity: 2n },
             { tokenId: OTHER, quantity: 1n },
-        ])!;
-        expect(memo).toBeDefined();
+        ]);
+        expect(composed).toHaveProperty('hex');
+        const memo = 'hex' in composed ? composed.hex : undefined;
         const url = pressForUrl(root, 'pay-cashtab');
         expect(url).toBe(cashtabPayUrl(ADDR, sats, memo));
         expect(url).toContain('op_return_raw');
@@ -15594,6 +15633,16 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         const few = sheet();
         expect(few.root.querySelector('.pay-qr-body svg.qr')).not.toBeNull();
         expect(few.root.querySelector('[data-role="pay-qr-why"]')).toBeNull();
+        /*
+         * **The box the gate is told, by value.** It is a browser
+         * measurement (Modern 316, Neo 318, Rural 308 at 390px; 440 at desk
+         * width) and it shipped wrong once — read off the wrong node as 318
+         * when the plate painted 300 — so it is pinned here and measured on
+         * the painted node by the probe's "a pay code is as wide as the gate
+         * was told". A test deriving its expectation from the symbol would
+         * have stayed green at either number.
+         */
+        expect(PAY_QR_NARROWEST_PX).toBe(308);
     });
 
     /**
@@ -15632,6 +15681,19 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         });
         expect(clash.root.textContent).toContain(copy.PAY_FINE_NO_MEMO);
         expect(clash.root.textContent).not.toContain(copy.PAY_FINE_MEMO_TOO_MANY);
+        /*
+         * And nothing is said about a payment this page did not compose: with
+         * no rate the sheet has no figure, no links and no code, and "this
+         * payment carries the items in its memo" over that is the
+         * empty-versus-unreachable collapse on the money screen.
+         */
+        const noRate = sheet({ payRate: undefined });
+        expect(
+            noRate.root.querySelector('[data-role="pay-cashtab"]'),
+            'no control carries a payment',
+        ).toBeNull();
+        const line = noRate.root.querySelector('[data-role="pay-memo-line"]') as HTMLElement;
+        expect(line.hidden).toBe(true);
     });
 
     it('prints one line per item and the total in the seller’s unit, surcharges included', () => {

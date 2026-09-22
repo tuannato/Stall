@@ -216,8 +216,10 @@ export type Overlay =
      * sign for the lot ("Pay several", 2026-09-21). The same disclosure as
      * `pay`: this origin composes a BIP21 the wallet signs. It holds the
      * live paint for the pay sheet's reason — it carries a frozen rate and a
-     * buyer's own state — and it carries **no memo yet** (the multi-item
-     * memo is `STLP`'s second shape, the build order's step 5).
+     * buyer's own state — and since 2026-09-22 it carries a memo naming the
+     * items (`STLP`'s second shape; one item composes the shape that already
+     * existed). A memo the encoder refuses costs the memo and never the
+     * payment, and the sheet's fold says which of the three it is.
      */
     | { kind: 'pay-several' }
     /**
@@ -576,8 +578,10 @@ export type StallEvent = {
      * The token a `description` row's record names, or the wanted token a
      * `token-move` row moved — a fact of the transaction, read from its own
      * bytes, so the row can wear the token's icon. A `payment` row's token
-     * is the memo's (`payment.tokenId`) and stays there: that one is the
-     * payer's claim, not the transaction's.
+     * is the memo's and stays there: that one is the payer's claim, not the
+     * transaction's — and it exists only on the single-item shape, since a
+     * memo naming several names no one token and its row wears the empty
+     * tile (`eventIcon`).
      */
     tokenId?: string;
 };

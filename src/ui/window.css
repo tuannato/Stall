@@ -1018,6 +1018,21 @@
     font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The plate's own code slot when there is no code to draw — unreachable
+ * while the wall composes no memo, and dressed anyway because the branch
+ * exists to stop a throw blanking the whole screen. It takes the code's own
+ * grid area so the two text columns keep their places.
+ */
+.stall.shop-window[data-touch='on'] .sw-pay-why {
+    grid-area: qr;
+    align-self: center;
+    max-width: 360px;
+    font-size: 20px;
+    line-height: 1.35;
+    color: var(--s-text);
+}
+
 /* Both in ink: the rate line read 2.96:1 muted on the same measurement,
    and a wall is read across a room rather than at arm's length. */
 .stall.shop-window[data-touch='on'] .sw-pay-rate,

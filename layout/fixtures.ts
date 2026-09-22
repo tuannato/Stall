@@ -137,8 +137,16 @@ export const QUOTE_WORDS = new Map<string, string>([
     [T1, 'Half kilo of beans, roasted on the day it ships'],
 ]);
 
-/** The rate the pay sheet froze, at the fixture's own frozen instant. */
-const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: 1_756_400_000_000 };
+/**
+ * The rate the pay sheet froze. **Stamped now, not at a frozen instant**
+ * (2026-09-22): a stamp from 2025 is past `PAY_RATE_MAX_AGE_MS` on every run,
+ * so every pay screen painted `PAY_QR_STALE` where its code belongs and the
+ * probe has never measured a pay code at all — which is how a 300px plate
+ * went unseen under a constant that said 318. The screens that read the
+ * stamp's VALUE stage their own (`pay-moved` and the wall's own fixtures);
+ * this one exists so a code is on screen to measure.
+ */
+const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: Date.now() };
 
 /** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
 export const UNBROKEN = 'A'.repeat(178);

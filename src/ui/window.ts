@@ -619,6 +619,10 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
      */
     if (fitsQr(paying.uri)) {
         box.append(qrSvg(paying.uri, copy.windowPayCaption(count)));
+    } else {
+        // Never blank: the caption below says "scan", and a plate saying that
+        // over an empty box is a wall telling a customer to scan nothing.
+        box.append(el('div', 'sw-pay-why', copy.WINDOW_PAY_NO_CODE));
     }
     /*
      * Two text columns beside the code, not one under it: what a customer

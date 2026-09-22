@@ -1431,9 +1431,27 @@ encoder at the level `qrMatrix` uses (`M`), over `payBip21`'s real shape
 figure): 37 data modules, a 45 span painted. At the wall's 360px box that
 is **8.0 px a module**, at the 280px floor a counter tablet paints
 (`WINDOW_QR_MIN_PX`) **6.2** — both above the only density this project has
-read from a phone (4.94; 3.37 was refused). With step 5's memo the code
-grows with the item count, and the wall's own cap comes from this box then,
-never from `MAX_SELECTION_ENTRIES`.
+read from a phone (4.94; 3.37 was refused). **Step 5 landed and the wall
+composes no memo** (2026-09-22), so this code does not grow with the items
+at all: measured at the 280px floor, a two-item memo is 5.28px a module and
+a three-item one 4.91, under the density above — a memo that existed at two
+items and vanished at three is worse than none. If the wall is ever given
+one, its cap comes from this box and never from `MAX_SELECTION_ENTRIES`.
+
+**A pay code is as wide as the gate was told** (2026-09-22). The pay sheets
+decide whether to draw a code by asking whether it still reaches the one
+density a phone has read here, in a box width written down as
+`PAY_QR_NARROWEST_PX` — and that constant was read off the wrong node on the
+day it shipped, saying 318 where the truth was 300: `.pay-qr` had no rule at
+all, so it shrink-wrapped to the SVG's own intrinsic 300px while the record
+sheets' plate painted 440. Five-to-seven-item codes were drawn at 4.92px a
+module under a gate that computed 5.21. No unit test could see it (happy-dom
+lays nothing out) and the probe could not either, because every pay fixture
+carried a rate stamped in 2025 and painted `PAY_QR_STALE` where its code
+belongs. So the fixture's stamp is `Date.now()` now, and this rule measures
+the painted box — width minus the element's own padding — and fails under the
+constant. Proved red by raising the constant to 500: 252 failures on the
+mobile pass, naming the 316px Modern paints.
 
 What this does not measure: a touch. The presses are driven in
 `app.window.test.ts` (the freeze, the close on a change, the expiry at

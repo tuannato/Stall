@@ -87,9 +87,14 @@ export function stallPath(raw: string): string {
  *
  * A **prefix of a token id**, not the whole thing, because a QR that carries
  * this link has to stay at the module count the share link already scans at.
- * Twelve hex characters is 48 bits inside one stall's own price map, which
- * cannot collide in practice — and the ambiguous case is handled anyway, by
- * opening nothing.
+ * Twelve hex characters — what this app writes — is 48 bits inside one
+ * stall's own price map, which cannot collide in practice. The PARSE accepts
+ * from eight, which is 32 bits: measured over one stall's own quotes, the
+ * odds that some pair shares an eight-hex prefix are ~0 at 30 quotes,
+ * 0.0001% at 100 and 0.001% at 300 — and the ambiguous case is handled
+ * anyway, by opening nothing. Eight is the memo's own width
+ * (`MEMO_PREFIX_BYTES`), so an entry a reader could not resolve pastes back
+ * into a link.
  *
  * **The floor and the writer are two numbers, decided apart** (owner,
  * 2026-09-22, over the measurement). The memo's second shape names its items

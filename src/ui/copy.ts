@@ -1984,6 +1984,15 @@ export const PAY_FINE_NO_MEMO =
  * a code nobody's phone will take. It names the way out that still works:
  * both Pay controls are above it.
  */
+/**
+ * The wall's own version, on the one screen with no link to fall back to and
+ * nobody to ask. Unreachable while the wall composes no memo — its URI is
+ * ~68 characters — and painted rather than left blank because a plate that
+ * said "Scan to pay" over an empty box would be a wall telling a customer to
+ * scan nothing.
+ */
+export const WINDOW_PAY_NO_CODE =
+    'This payment is too long for a code on this screen. Ask the seller.';
 export const PAY_QR_TOO_MANY =
     'Too many items for a scan code. Use a Pay button above, or open this page on the phone that will pay.';
 export const PAY_FINE_DELIVERY_SEVERAL =

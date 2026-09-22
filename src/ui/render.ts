@@ -1514,19 +1514,25 @@ function paintUnresolvable(
 }
 
 /**
- * The narrowest box the pay sheet's code is ever painted in, measured
- * 2026-09-22 on the three looks: the plate is `width: 100%` capped at 460px
- * with 10px of border-box padding, so it paints **440px at desk width and
- * 318px on a 390px phone** — that sheet's code is deliberately not a desk
- * fold (the single sheet's own note: it is worth reaching on a phone).
+ * The narrowest box a pay sheet's code is painted in, **measured in a browser
+ * on the three looks and not derived from the stylesheet** — the first
+ * version of this constant was read off the wrong node and said 318 where
+ * the truth was 300, which drew five-to-seven-item codes at 4.92px a module
+ * under a gate that computed 5.21 (the critic, 2026-09-22; §9's own 2026-09-21
+ * lesson repeated, and the reason the probe now measures this box).
  *
- * The narrow one decides, because one sheet draws one code at both widths
- * and a code that cannot be read where it is drawn is not worth drawing. The
- * cost, stated: at desk width a memo naming up to twenty-six items would
+ * At 390px, painted: Modern 316, Neo 318, **Rural 308** — the sheets' own
+ * paddings differ. At desk width all three are 440, the record sheet's
+ * number, because `.pay-qr` now takes the column (it shrink-wrapped to the
+ * SVG's intrinsic 300px until the same day). The narrowest decides, because
+ * one sheet draws one code at every width and a code that cannot be read
+ * where it is drawn is not worth drawing.
+ *
+ * The cost, stated: at desk width a memo naming up to twenty-six items would
  * still scan at 5.18px a module, and this floor stops drawing it at about
- * seven — above that the fold says so and both Pay controls are above it.
+ * seven — above that the fold says so, and both Pay controls are above it.
  */
-export const PAY_QR_NARROWEST_PX = 318;
+export const PAY_QR_NARROWEST_PX = 308;
 
 /**
  * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built
@@ -5394,28 +5400,42 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
          * the code are composed without it and the fold says which happened.
          */
         const entries = [...selection].map(([tokenId, quantity]) => ({ tokenId, quantity }));
-        const memo =
+        const composed =
             entries.length === 0
                 ? undefined
                 : entries.length === 1
                   ? encodePaymentMemoHex(entries[0]!.tokenId, entries[0]!.quantity)
                   : encodeMultiPaymentMemoHex(entries);
+        // **The reason comes from the encoder, never from a second reading of
+        // the same entries here.** "Too many items" names a cause, and the
+        // encoder refuses for more than one (a prefix clash, a quantity it
+        // cannot write) — the meter's own "one count, from the call that
+        // produced the record" rule, applied to a sentence.
+        const memo =
+            typeof composed === 'string'
+                ? composed
+                : composed !== undefined && 'hex' in composed
+                  ? composed.hex
+                  : undefined;
+        const refusal =
+            typeof composed === 'string' || composed === undefined || 'hex' in composed
+                ? undefined
+                : composed.why;
         const bip21 = sats === undefined ? undefined : payBip21(address, sats, memo);
         const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats, memo);
         const pay = sats === undefined ? undefined : payECashPayUrl(address, sats, memo);
         /*
-         * **The "too many" sentence names a cause, so it is said only over
-         * that cause.** The encoder refuses a record over the 222 bytes a
-         * wallet takes — the everyday one, since an entry grows with its own
-         * count — and also two quotes whose ids share their first four
-         * bytes, which is ~0 on a real stall and is not "too many items".
-         * The neutral sentence carries that one.
+         * **A sentence about this payment is said only where there is one.**
+         * With no rate, an implausible one or a sum under the dust floor the
+         * sheet composes nothing and says so on the card — and "this payment
+         * carries the items in its memo" over that is the
+         * empty-versus-unreachable collapse on a new surface (the critic).
          */
-        const distinct = new Set(entries.map((e) => e.tokenId.slice(0, 8))).size;
+        memoLine.hidden = bip21 === undefined;
         memoLine.textContent =
             memo !== undefined
                 ? copy.PAY_FINE_MEMO_NAMES
-                : entries.length > 1 && distinct === entries.length
+                : refusal === 'too-big'
                   ? copy.PAY_FINE_MEMO_TOO_MANY
                   : copy.PAY_FINE_NO_MEMO;
         figureRow.hidden = sats === undefined;

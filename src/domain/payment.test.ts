@@ -23,6 +23,7 @@ const pushesOf = (hex: string): Uint8Array[] =>
 const push = (bytes: readonly number[]): Uint8Array =>
     Uint8Array.from([bytes.length, ...bytes]);
 
+
 const lokad = (): Uint8Array => push([...'STLP'].map((c) => c.charCodeAt(0)));
 const idPush = (): Uint8Array =>
     push([...Array.from({ length: 32 }, () => 0xcd)]);
@@ -152,6 +153,10 @@ describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
     const items = (n: number, quantity = 1n): { tokenId: string; quantity: bigint }[] =>
         Array.from({ length: n }, (_, i) => ({ tokenId: idOf(i), quantity }));
     const prefixOf = (id: string): string => id.slice(0, MEMO_PREFIX_BYTES * 2);
+    /** The hex, or `undefined` — the tests that care about the reason read it. */
+    const hexOf = (
+        out: { readonly hex: string } | { readonly why: string },
+    ): string | undefined => ('hex' in out ? out.hex : undefined);
 
     /**
      * The whole compatibility story, asserted as the predicate every
@@ -166,7 +171,7 @@ describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
 
     it('writes a marker push an old reader refuses, at every list size', () => {
         for (const n of [2, 3, 5, 12, MAX_MEMO_ITEMS]) {
-            const hex = encodeMultiPaymentMemoHex(items(n));
+            const hex = hexOf(encodeMultiPaymentMemoHex(items(n)));
             expect(hex, String(n)).toBeDefined();
             const pushes = pushesOf(hex!);
             expect(pushes, String(n)).toHaveLength(3);
@@ -184,7 +189,7 @@ describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
             { tokenId: idOf(0), quantity: 300n },
             { tokenId: idOf(1), quantity: 2n ** 63n },
         ];
-        const back = decodePaymentPushes(pushesOf(encodeMultiPaymentMemoHex(written)!));
+        const back = decodePaymentPushes(pushesOf(hexOf(encodeMultiPaymentMemoHex(written))!));
         expect(back).toEqual({
             kind: 'items',
             items: written.map((w) => ({ prefix: prefixOf(w.tokenId), quantity: w.quantity })),
@@ -192,33 +197,63 @@ describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
         // Order is the buyer's own and never canonicalised: two orders are
         // two records, and both read back as what they say.
         const other = decodePaymentPushes(
-            pushesOf(encodeMultiPaymentMemoHex([...written].reverse())!),
+            pushesOf(hexOf(encodeMultiPaymentMemoHex([...written].reverse()))!),
         );
         expect(other?.kind === 'items' && other.items[0]!.prefix).toBe(prefixOf(idOf(1)));
     });
 
-    it('composes nothing for one item: that is the shape every reader already has', () => {
-        expect(encodeMultiPaymentMemoHex(items(1))).toBeUndefined();
-        expect(encodeMultiPaymentMemoHex([])).toBeUndefined();
+    /**
+     * The reason rides the answer, so a caller never re-derives it from the
+     * same entries: "too many items" names a cause and the encoder refuses
+     * for more than one.
+     */
+    it('composes nothing for one item, and says which refusal each one is', () => {
+        expect(encodeMultiPaymentMemoHex(items(1))).toEqual({ why: 'one-item' });
+        expect(encodeMultiPaymentMemoHex([])).toEqual({ why: 'one-item' });
+        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS + 1))).toEqual({ why: 'too-big' });
+        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS, 300n))).toEqual({ why: 'too-big' });
+        const twin = `${idOf(3).slice(0, MEMO_PREFIX_BYTES * 2)}${'ab'.repeat(28)}`;
+        expect(
+            encodeMultiPaymentMemoHex([
+                { tokenId: idOf(3), quantity: 1n },
+                { tokenId: twin, quantity: 2n },
+            ]),
+        ).toEqual({ why: 'prefix-clash' });
+        expect(
+            encodeMultiPaymentMemoHex([
+                { tokenId: idOf(0), quantity: 1n },
+                { tokenId: 'nothex', quantity: 1n },
+            ]),
+        ).toEqual({ why: 'malformed' });
+        expect(
+            encodeMultiPaymentMemoHex([
+                { tokenId: idOf(0), quantity: 1n },
+                { tokenId: idOf(1), quantity: 0n },
+            ]),
+        ).toEqual({ why: 'malformed' });
     });
 
     it('is capped by the budget, and the item count is only a floor', () => {
-        const full = encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS));
+        const full = hexOf(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS)));
         expect(full).toBeDefined();
         expect(full!.length / 2).toBeLessThanOrEqual(OP_RETURN_BUDGET);
-        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS + 1))).toBeUndefined();
         // An entry grows with its own count, so a full list of two-byte
         // counts is over 222 — the byte check is the authority.
-        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS, 300n))).toBeUndefined();
-        expect(encodeMultiPaymentMemoHex(items(30, 300n))).toBeDefined();
+        expect(hexOf(encodeMultiPaymentMemoHex(items(30, 300n)))).toBeDefined();
+        expect(hexOf(encodeMultiPaymentMemoHex(items(16, 2n ** 63n)))).toBeDefined();
+        expect(hexOf(encodeMultiPaymentMemoHex(items(20, 2n ** 63n)))).toBeUndefined();
     });
 
     it('refuses a duplicate prefix, on the way out and on the way in', () => {
-        const same = idOf(3).slice(0, 8) + 'ab'.repeat(28);
-        expect(encodeMultiPaymentMemoHex([
-            { tokenId: idOf(3), quantity: 1n },
-            { tokenId: same, quantity: 2n },
-        ])).toBeUndefined();
+        const same = idOf(3).slice(0, MEMO_PREFIX_BYTES * 2) + 'ab'.repeat(28);
+        expect(
+            hexOf(
+                encodeMultiPaymentMemoHex([
+                    { tokenId: idOf(3), quantity: 1n },
+                    { tokenId: same, quantity: 2n },
+                ]),
+            ),
+        ).toBeUndefined();
         const entry = (prefix: readonly number[], q: number): number[] => [...prefix, 1, q];
         expect(
             decodePaymentPushes(
@@ -256,6 +291,28 @@ describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
         }
         // The marker with no list at all is not a memo either.
         expect(decodePaymentPushes(rawPushes([lokad(), push([MULTI_MARKER])]))).toBeUndefined();
+        /*
+         * The reader's own cap, which is not the encoder's: a record on chain
+         * must not become unreadable when a UI ceiling moves. It is defence
+         * in depth — a 36-entry record is 226 bytes of OP_RETURN and the
+         * chain's own 223-byte rule refuses it before any reader sees it
+         * (`getStackArray` throws on exactly that, which is why this case is
+         * built as a push array rather than through `pushesOf`).
+         */
+        const listOf = (n: number): Uint8Array => {
+            const bytes: number[] = [];
+            for (let i = 0; i < n; i += 1) {
+                bytes.push(0, 0, (i >> 8) & 0xff, i & 0xff, 1, 1);
+            }
+            return Uint8Array.from(bytes);
+        };
+        const marker = Uint8Array.from([MULTI_MARKER]);
+        const lokadBytes = Uint8Array.from('STLP', (c) => c.charCodeAt(0));
+        expect(
+            decodePaymentPushes([lokadBytes, marker, listOf(MAX_MEMO_ITEMS + 1)]),
+        ).toBeUndefined();
+        const ok35 = decodePaymentPushes([lokadBytes, marker, listOf(MAX_MEMO_ITEMS)]);
+        expect(ok35?.kind === 'items' && ok35.items.length).toBe(MAX_MEMO_ITEMS);
         // A marker byte that is not the marker is not this shape.
         expect(
             decodePaymentPushes(rawPushes([lokad(), push([0x02]), push(ok)])),
