@@ -142,7 +142,7 @@ import {
 } from '../domain/cashtab';
 import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { broadcastCards, broadcastFigure } from './broadcast';
-import { encodePaymentMemoHex } from '../domain/payment';
+import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
 import {
@@ -8327,7 +8327,7 @@ describe('a-payment-row-says-paid-and-never-sold', () => {
         kind: 'payment' as const,
         seenAtMs: 1_756_400_000_000,
         sats: 25_000_000n,
-        payment: { tokenId: TOKEN_ID, quantity: 3n },
+        payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 3n },
     };
 
     it('names the payment, the amount and who it went to', () => {
@@ -8364,13 +8364,57 @@ describe('a-payment-row-says-paid-and-never-sold', () => {
         const { root } = paint(
             offersView([OFFER], new Map(), {
                 panel: 'activity',
-                events: [{ ...PAID, payment: { tokenId: TOKEN_ID } }],
+                events: [{ ...PAID, payment: { kind: 'item' as const, tokenId: TOKEN_ID } }],
             }),
         );
         const claim = root.querySelector('[data-role="payment-claim"]');
         expect(claim?.textContent).toBe(
             copy.paymentClaim(TOKEN_ID, copy.PAYMENT_QUANTITY_UNSTATED),
         );
+    });
+
+    /**
+     * A memo naming several items (`STLP`'s second shape) is one line per
+     * entry, and **each prints the four bytes the payer signed beside
+     * whatever this page made of them**: the name is this page's reading of
+     * a prefix and can change under the same row when the seller
+     * republishes, while the label above says the payer wrote the line. A
+     * prefix that names no quote here, or two, prints its hex alone — and
+     * the row wears the empty tile, because it names no one token.
+     */
+    it('prints one line per item of a several-item claim, with the hex the payer wrote', () => {
+        const other = '77'.repeat(32);
+        const { root } = paint(
+            offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), {
+                panel: 'activity',
+                prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                events: [
+                    {
+                        ...PAID,
+                        payment: {
+                            kind: 'items' as const,
+                            items: [
+                                { prefix: TOKEN_ID.slice(0, 8), quantity: 2n },
+                                { prefix: other.slice(0, 8), quantity: 1n },
+                            ],
+                        },
+                    },
+                ],
+            }),
+        );
+        const claims = [...root.querySelectorAll('[data-role="payment-claim"]')];
+        expect(claims).toHaveLength(2);
+        expect(claims[0]?.textContent).toBe(
+            copy.paymentClaimNamedPart('Roasted Beans', TOKEN_ID.slice(0, 8), copy.paymentQuantity('2')),
+        );
+        expect(claims[1]?.textContent).toBe(
+            copy.paymentClaimPart(other.slice(0, 8), copy.paymentQuantity('1')),
+        );
+        expect(root.textContent).toContain(copy.EVENT_PAYMENT_CLAIM_LABEL);
+        expect(root.textContent).toContain(copy.EVENT_PAYMENT_NOT_PROOF);
+        // No tile claims a token: the row names several.
+        expect(root.querySelector('[data-role="event-icon"]')).toBeNull();
+        expect(root.querySelector('.event-ic-empty')).not.toBeNull();
     });
 
     it('says only "to the seller" when no amount could be added up', () => {
@@ -10934,7 +10978,7 @@ describe('a-strangers-record-row-says-what-to-do-if-it-was-you', () => {
         expect(hint(row({ recordAuthority: 'unaddressed' })), 'not a stranger: no stranger hint').toBeNull();
         expect(hint(row({}))).toBeNull();
         expect(
-            hint(row({ kind: 'payment', sats: 1_000n, payment: { tokenId: TOKEN_ID, quantity: 1n } })),
+            hint(row({ kind: 'payment', sats: 1_000n, payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n } })),
         ).toBeNull();
     });
 });
@@ -10953,7 +10997,7 @@ describe('a-transaction-is-shown-once-across-both-clocks', () => {
         kind: 'payment',
         seenAtMs: 1_756_400_000_000,
         sats: 25_000_000n,
-        payment: { tokenId: TOKEN_ID, quantity: 1n },
+        payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n },
     };
     const walkedTwin: StallEvent = { ...seen, seenAtMs: undefined, chainTimeS: 1_756_399_999 };
     const older: StallEvent = {
@@ -10961,7 +11005,7 @@ describe('a-transaction-is-shown-once-across-both-clocks', () => {
         kind: 'payment',
         chainTimeS: 1_756_300_000,
         sats: 10_000_000n,
-        payment: { tokenId: TOKEN_ID, quantity: 1n },
+        payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n },
     };
 
     it('paints the ring row once and leaves the walked twin out of the history list', () => {
@@ -11004,7 +11048,7 @@ describe('the-payers-address-is-offered-as-a-citation', () => {
         kind: 'payment',
         status: { kind: 'finalized', avalanche: false },
         sats: 25_000_000n,
-        payment: { tokenId: TOKEN_ID, quantity: 1n },
+        payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n },
         ...over,
     });
     const panel = (event: StallEvent) =>
@@ -12903,8 +12947,8 @@ describe('an-activity-row-wears-the-token-the-transaction-names', () => {
                 events: [
                     { txid: 'a1'.repeat(32), kind: 'description', seenAtMs: AT, tokenId: TOKEN_ID, recordAuthority: 'stalls' },
                     { txid: 'a2'.repeat(32), kind: 'token-move', seenAtMs: AT - 1, tokenId: TOKEN_ID },
-                    { txid: 'a3'.repeat(32), kind: 'payment', seenAtMs: AT - 2, sats: 25_000_000n, payment: { tokenId: TOKEN_ID, quantity: 1n } },
-                    { txid: 'a4'.repeat(32), kind: 'payment', seenAtMs: AT - 3, sats: 25_000_000n, payment: { tokenId: OTHER } },
+                    { txid: 'a3'.repeat(32), kind: 'payment', seenAtMs: AT - 2, sats: 25_000_000n, payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n } },
+                    { txid: 'a4'.repeat(32), kind: 'payment', seenAtMs: AT - 3, sats: 25_000_000n, payment: { kind: 'item' as const, tokenId: OTHER } },
                     { txid: 'a5'.repeat(32), kind: 'book', seenAtMs: AT - 4, book: 'consumed' },
                     { txid: 'a6'.repeat(32), kind: 'settings', seenAtMs: AT - 5, recordAuthority: 'stalls' },
                 ],
@@ -13127,7 +13171,7 @@ describe('a-withheld-tokens-picture-never-paints-on-activity', () => {
                 kind: 'payment',
                 seenAtMs: AT,
                 sats: 1_000n,
-                payment: { tokenId, quantity: 1n },
+                payment: { kind: 'item' as const, tokenId, quantity: 1n },
             })!;
             expect(tile, tokenId).not.toBeNull();
             expect(tile.getAttribute('data-token-id'), tokenId).toBeNull();
@@ -13138,7 +13182,7 @@ describe('a-withheld-tokens-picture-never-paints-on-activity', () => {
             kind: 'payment',
             seenAtMs: AT,
             sats: 1_000n,
-            payment: { tokenId: TOKEN_ID, quantity: 1n },
+            payment: { kind: 'item' as const, tokenId: TOKEN_ID, quantity: 1n },
         })!;
         expect(honest.getAttribute('data-token-id')).toBe(TOKEN_ID);
     });
@@ -15459,9 +15503,9 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
     /**
      * The several-items sheet: one bigint per item (the single sheet's own
      * arithmetic — the quote converted, then its surcharge, both rounding
-     * up), summed; that sum is the figure, both links and the code. No
-     * memo yet, and the fine print says so; no `seller-price` node, because
-     * there is no single quote on it.
+     * up), summed; that sum is the figure, both links and the code. The
+     * memo is `STLP`'s second shape over the same entries; no `seller-price`
+     * node, because there is no single quote on it.
      */
     const OTHER = '77'.repeat(32);
     const sheet = (over: Partial<StallView> = {}) =>
@@ -15492,7 +15536,7 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(unnamed.root.querySelector('[data-role="pay-several"] .sheet-head')?.textContent).not.toContain('ecash:');
     });
 
-    it('composes every item, sums them, and the figure is the link, with no memo', () => {
+    it('composes every item, sums them, and the figure is the link the memo names', () => {
         const { root } = sheet();
         const a = satsWithSurcharge(satsForQuote({ ...QUOTE_USD, surchargePct: 5 }, 2n, PAY_RATE.rate), 5)!;
         const b = satsForQuote({ code: 'usd', exponent: 2, amount: 350n }, 1n, PAY_RATE.rate)!;
@@ -15501,17 +15545,75 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(dialog.getAttribute('aria-label')).toBe(copy.paySeveralTitle(3));
         expect(dialog.querySelector('.sheet-head')?.textContent).toContain(copy.paySeveralSub('Riverside Goods'));
         expect(dialog.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
+        // The memo is `STLP`'s second shape over the same two entries, in the
+        // selection's own order, and it rides every road out of this sheet:
+        // both links and the code are one string, the way the figure is one
+        // bigint. A selection of one composes the shape that already exists.
+        const memo = encodeMultiPaymentMemoHex([
+            { tokenId: TOKEN_ID, quantity: 2n },
+            { tokenId: OTHER, quantity: 1n },
+        ])!;
+        expect(memo).toBeDefined();
         const url = pressForUrl(root, 'pay-cashtab');
-        expect(url).toBe(cashtabPayUrl(ADDR, sats));
-        expect(url).not.toContain('op_return_raw');
-        expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats));
+        expect(url).toBe(cashtabPayUrl(ADDR, sats, memo));
+        expect(url).toContain('op_return_raw');
+        expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats, memo));
         expect(root.querySelector('[data-role="pay-qr"] path')?.getAttribute('d')).toBe(
-            qrPathOf(payBip21(ADDR, sats)!),
+            qrPathOf(payBip21(ADDR, sats, memo)!),
         );
         expect(dialog.querySelector('[data-role="seller-price"]')).toBeNull();
-        expect(dialog.textContent).toContain(copy.PAY_FINE_NO_MEMO);
+        expect(dialog.textContent).toContain(copy.PAY_FINE_MEMO_NAMES);
         expect(dialog.textContent).toContain(copy.PAY_FINE_TOLERANCES_PER_ITEM);
         expect(dialog.querySelector('[data-role="pay-quantity"]'), 'no quantity row').toBeNull();
+    });
+
+    /**
+     * **The code's gate is the composed string, never an item count** (the
+     * critic's P2-6, 2026-09-22): a memo grows with the counts as well as
+     * the items, so the same twenty-six items draw at 5.18px a module at
+     * small counts and 4.73 at large ones. The sheet asks `qrScansInBox` at
+     * the narrowest box it paints in, and the sentence it prints instead is
+     * about the code — never `PAY_QR_STALE`, which is about the rate and is
+     * where a too-long link used to fall.
+     */
+    it('draws the code only while it scans, and says which of the two it is', () => {
+        const ids = Array.from({ length: 8 }, (_, i) => (0x40 + i).toString(16).repeat(32));
+        const many = sheet({
+            tokens: new Map(ids.map((id) => [id, { ...BEANS, tokenId: id, name: `Crate ${id.slice(0, 2)}` }])),
+            prices: new Map(ids.map((id) => [id, { code: 'usd', exponent: 2, amount: 350n } as const])),
+            selection: new Map(ids.map((id) => [id, 1n])),
+        });
+        const body = many.root.querySelector('.pay-qr-body')!;
+        expect(body.querySelector('svg.qr'), 'eight items is past the density').toBeNull();
+        expect(body.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(copy.PAY_QR_TOO_MANY);
+        // The memo still rides the links: only the code has a size limit.
+        expect(pressForUrl(many.root, 'pay-cashtab')).toContain('op_return_raw');
+        expect(many.root.textContent).toContain(copy.PAY_FINE_MEMO_NAMES);
+        // Two items keep both.
+        const few = sheet();
+        expect(few.root.querySelector('.pay-qr-body svg.qr')).not.toBeNull();
+        expect(few.root.querySelector('[data-role="pay-qr-why"]')).toBeNull();
+    });
+
+    /**
+     * Three states, three sentences: the memo rides along, it did not fit in
+     * the 222 bytes a wallet takes, or there is none. "Carries no memo yet"
+     * was a sentence about this project's roadmap and could not be left
+     * standing for a payment that carries one.
+     */
+    it('says the memo names the items, and says so differently when it did not fit', () => {
+        const ids = Array.from({ length: 35 }, (_, i) => (0x40 + i).toString(16).repeat(32));
+        const over = sheet({
+            tokens: new Map(ids.map((id) => [id, { ...BEANS, tokenId: id, name: 'Crate' }])),
+            prices: new Map(ids.map((id) => [id, { code: 'usd', exponent: 2, amount: 350n } as const])),
+            // Four counts past 255 push the record over 222 bytes: the memo
+            // is what gives way, never the payment.
+            selection: new Map(ids.map((id, i) => [id, i < 4 ? 300n : 1n])),
+        });
+        expect(over.root.textContent).toContain(copy.PAY_FINE_MEMO_TOO_MANY);
+        expect(pressForUrl(over.root, 'pay-cashtab')).not.toContain('op_return_raw');
+        expect(pressForUrl(over.root, 'pay-cashtab')).toBeDefined();
+        expect(sheet().root.textContent).toContain(copy.PAY_FINE_MEMO_NAMES);
     });
 
     it('prints one line per item and the total in the seller’s unit, surcharges included', () => {

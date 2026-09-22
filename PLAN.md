@@ -537,16 +537,33 @@ its three critic passes are `private/design/basket-2026-09-21/`
   the word "tax". The describe sheet prefills the last **published** value
   for that stall from `localStorage` (a named §2 exception: validated on
   read, pin-capped, never a key, a published byte always wins).
-- **A multi-item payment memo is a second shape of `STLP`**, never a new
-  LOKAD: push 1 is a marker byte `0x00` and a list of 4-byte token-id
-  prefixes with quantities, which an un-updated reader refuses (it files the
-  payment as `other`, with no claim) — the § Firma rail's "bad trade" is
-  overridden here on the owner's reason: an amount with no items is nothing
-  to reconcile against. The app's prefix floor drops to 8 hex for the
-  `?pay=` link and the memo alike (0.001% odds that two of 300 quotes share
-  one). The memo holds 35 items; the pay sheet's scan code is drawn to 26 and
-  says "use the link" above that. Ships after the "Pay several" UI has been
-  used once.
+- **A multi-item payment memo is a second shape of `STLP`** — BUILT
+  2026-09-22, never a new LOKAD: push 1 is a marker byte `0x00` **on its own
+  push**, then a list of 4-byte token-id prefixes with quantities, which an
+  un-updated reader refuses (it files the payment as `other`, with no claim)
+  — the § Firma rail's "bad trade" is overridden here on the owner's reason:
+  an amount with no items is nothing to reconcile against. Three things moved
+  at the port, each measured and each recorded in
+  `private/design/basket-2026-09-21/PORT-STLP-SHAPE-2.md`. **The marker is
+  its own push**: inline, an ordinary five-item selection with one count past
+  255 lands the list on exactly 32 bytes, which an old reader would read as a
+  single-item claim; its own push makes the refusal structural and deletes
+  the pad rule. **The prefix floor and the link's own width are two numbers**
+  (owner, over the measurement): the parse accepts from 8 hex so a memo's
+  prefix pastes back, and the link keeps 12, because 8 buys no QR modules on
+  any route form — 37 / 41 / 41 either way — while 32 bits is grindable and a
+  printed tag whose quote is later removed would resolve to somebody else's
+  item. **The scan code is gated by the composed string, not by an item
+  count**: a memo grows with the counts too, so the sheet asks whether the
+  code still reaches the one density this project has proved (4.94px a
+  module) at the narrowest box it paints in (318px on a phone), which is
+  about seven items; above that it says so, and the payment is unaffected.
+  The memo holds 35 items at counts under 256 and the byte budget is the
+  authority above that. **The touch wall composes no memo**: its code is read
+  across a room at 280–360px, where three items are already under the proved
+  density. The gate this entry carried — ships after the UI has been used
+  once — was put to the owner on 2026-09-22 with nothing pushed yet, and they
+  chose to build the wire now.
 
 ---
 

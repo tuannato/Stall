@@ -685,7 +685,7 @@ describe('an-stlp-payment-wakes-no-fact-reader', () => {
         const paid = tx({ outputs: [STALL, memoScript(TOKEN_OTHER, 2n)] });
         expect(classifyTx(paid, STALL, WANTED)).toEqual(NO_FACTS);
         const memo = paymentMemoOf(paid, STALL);
-        expect(memo).toEqual({ tokenId: TOKEN_OTHER, quantity: 2n });
+        expect(memo).toEqual({ kind: 'item', tokenId: TOKEN_OTHER, quantity: 2n });
         expect(eventKindOf(paid, classifyTx(paid, STALL, WANTED), memo)).toBe('payment');
     });
 
@@ -735,7 +735,7 @@ describe('a-payment-outranks-a-token-move', () => {
         const paid = tx({ outputs: [STALL, `6a${encodePaymentMemoHex(TOKEN_OTHER, 4n)!}`] });
         const row = historyEventOf(paid, CTX);
         expect(row.kind).toBe('payment');
-        expect(row.payment).toEqual({ tokenId: TOKEN_OTHER, quantity: 4n });
+        expect(row.payment).toEqual({ kind: 'item', tokenId: TOKEN_OTHER, quantity: 4n });
     });
 });
 

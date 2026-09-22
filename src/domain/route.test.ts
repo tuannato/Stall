@@ -319,6 +319,26 @@ describe('a-malformed-pay-param-is-ignored', () => {
         expect(parsePayParam('?m=abc')).toBeUndefined();
         expect(MAX_PAY_PARAM_CHARS).toBe(64);
     });
+
+    /**
+     * Both by value, beside the ceiling that always was. Every other
+     * assertion here derives its arrange AND its expectation from the symbol
+     * it tests, so the floor could be set to four by accident and stay green
+     * — the magnitude lesson `WINDOW_CARD_MS` earned. The two numbers are
+     * decided apart (the owner, 2026-09-22): the parser accepts a memo's own
+     * eight-hex prefix pasted back, and every link this app writes keeps 48
+     * bits, because eight buys no QR modules on any route form.
+     */
+    it('pins the floor and the writer by value, and they are not one number', () => {
+        expect(MIN_PAY_PARAM_CHARS).toBe(8);
+        expect(PAY_PARAM_PREFIX).toBe(12);
+        const id = 'cd'.repeat(32);
+        expect(payLandingUrl('https://stall.cash/s/abc', id)).toContain(
+            `?pay=${id.slice(0, 12)}`,
+        );
+        expect(parsePayParam(`?pay=${id.slice(0, 8)}`)).toBe(id.slice(0, 8));
+        expect(parsePayParam(`?pay=${id.slice(0, 7)}`)).toBeUndefined();
+    });
 });
 
 describe('a-landing-link-names-an-item-by-a-prefix', () => {

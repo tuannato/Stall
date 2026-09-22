@@ -2059,6 +2059,17 @@ export function boot(
             return;
         }
         windowPaySubDust = false;
+        /*
+         * **The wall's payment carries no memo, and that is a measurement**
+         * (2026-09-22, the critic's P1-1). `STLP`'s second shape names the
+         * items, and the phone sheet composes it — but the wall's one road
+         * is a code read across a room, painted at 280–360px (`WINDOW_QR_PX`
+         * and its floor), where a two-item memo is 5.28px a module and a
+         * three-item one 4.91, under the only density this project has
+         * proved (4.94). A memo that existed at two items and vanished at
+         * three is worse than none; the payment always composes, and the
+         * seller reads the items off the screen the customer chose them on.
+         */
         const uri = payBip21(address, sats);
         if (uri === undefined) {
             return;

@@ -574,6 +574,21 @@ export const paymentClaim = (item: string, quantity: string): string =>
     `${item} · ${quantity}`;
 export const paymentQuantity = (count: string): string => `× ${count}`;
 /**
+ * One line of a memo that names several items (`STLP`'s second shape). The
+ * payer wrote four bytes of a token id, so both halves are printed: the
+ * eight hex they signed, and — when exactly one quote on this stall starts
+ * with them and its genesis name was read — the name this page made of it.
+ * Never the name alone: the label above says the payer wrote the line, and a
+ * republish can change what those bytes resolve to under the same row.
+ */
+export const paymentClaimPart = (prefix: string, quantity: string): string =>
+    `${prefix} · ${quantity}`;
+export const paymentClaimNamedPart = (
+    item: string,
+    prefix: string,
+    quantity: string,
+): string => `${item} · ${prefix} · ${quantity}`;
+/**
  * Absent means one; a field that was written and could not be read means the
  * quantity is not stated. Words, never a number — a guessed one would sit
  * beside a figure somebody actually paid.
@@ -1945,8 +1960,32 @@ export const PAY_SUB_DUST_SEVERAL =
     'The total is under the network\u2019s dust floor, so no wallet would relay it. Add items, or ask the seller.';
 export const PAY_FINE_TOLERANCES_PER_ITEM =
     'Tolerances are per item: each item\u2019s own sheet shows the margin the seller\u2019s record states.';
+/**
+ * Three states, three sentences (2026-09-22, the critic's P2-8). The memo is
+ * built now, so "carries no memo **yet**" — a sentence about this project's
+ * roadmap — may not stand in for "this selection is too large to itemise",
+ * which is a sentence about this payment. `NAMES` is said when the memo
+ * rides along; `TOO_MANY` when the record would pass the 222 bytes a wallet
+ * takes and the payment goes without it; `NO_MEMO` remains for a selection
+ * this page could not compose one for at all, which is the same silence the
+ * rail had before.
+ */
+export const PAY_FINE_MEMO_NAMES =
+    'This payment carries the items in its memo: the seller sees what it was for, as your claim. Nothing on chain checks it.';
+export const PAY_FINE_MEMO_TOO_MANY =
+    'Too many items to fit in the memo, so this payment carries none: the seller sees the amount, not the items. Tell them what it was for.';
 export const PAY_FINE_NO_MEMO =
-    'This payment carries no memo yet: the seller sees the amount, not the items. Tell them what it was for.';
+    'This payment carries no memo: the seller sees the amount, not the items. Tell them what it was for.';
+/**
+ * The scan code is the one destination the press-time valve does not guard,
+ * and it is also the one that has to be READ across a shop or a desk. A memo
+ * grows the code with the items it names, so past the density this project
+ * has proved (`QR_PROVEN_PX_PER_MODULE`) the fold says so instead of drawing
+ * a code nobody's phone will take. It names the way out that still works:
+ * both Pay controls are above it.
+ */
+export const PAY_QR_TOO_MANY =
+    'Too many items for a scan code. Use a Pay button above, or open this page on the phone that will pay.';
 export const PAY_FINE_DELIVERY_SEVERAL =
     'Arrange delivery with the seller off-chain. This page cannot tell that a payment was for these items, and never that anything was delivered.';
 

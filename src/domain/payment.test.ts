@@ -1,14 +1,19 @@
 import { fromHex, getStackArray } from 'ecash-lib';
 import { describe, expect, it } from 'vitest';
 import {
+    MAX_MEMO_ITEMS,
     MAX_QUANTITY_BYTES,
+    MEMO_PREFIX_BYTES,
+    MULTI_MARKER,
     PAYMENT_REQUIRED_PUSHES,
     QUANTITY_TAG,
     STLP_HEX,
     decodePaymentPushes,
+    encodeMultiPaymentMemoHex,
     encodePaymentMemoHex,
     isStlp,
 } from './payment';
+import { OP_RETURN_BUDGET } from './manifest';
 
 const TOKEN = 'cd'.repeat(32);
 const pushesOf = (hex: string): Uint8Array[] =>
@@ -47,6 +52,7 @@ describe('stlp-required-pushes-are-two', () => {
         // One at quantity 1 writes no field: absent already means one.
         expect(pushesOf(hex!)).toHaveLength(PAYMENT_REQUIRED_PUSHES);
         expect(decodePaymentPushes(pushesOf(hex!))).toEqual({
+            kind: 'item',
             tokenId: TOKEN,
             quantity: 1n,
         });
@@ -69,6 +75,7 @@ describe('a-quantity-is-minimal-big-endian', () => {
             const hex = encodePaymentMemoHex(TOKEN, quantity);
             expect(hex, String(quantity)).toBeDefined();
             expect(decodePaymentPushes(pushesOf(hex!)), String(quantity)).toEqual({
+                kind: 'item',
                 tokenId: TOKEN,
                 quantity,
             });
@@ -94,7 +101,7 @@ describe('a-quantity-is-minimal-big-endian', () => {
             const back = decodePaymentPushes(rawPushes([lokad(), idPush(), field]));
             // The record still reads — a malformed field voids itself alone —
             // and the quantity is **not stated**, never silently one.
-            expect(back, label).toEqual({ tokenId: TOKEN });
+            expect(back, label).toEqual({ kind: 'item', tokenId: TOKEN });
         }
     });
 
@@ -130,12 +137,155 @@ describe('a-memo-is-a-claim-not-a-receipt', () => {
         const back = decodePaymentPushes(
             rawPushes([lokad(), idPush(), stranger, push([QUANTITY_TAG, 0x02])]),
         );
-        expect(back).toEqual({ tokenId: TOKEN, quantity: 2n });
+        expect(back).toEqual({ kind: 'item', tokenId: TOKEN, quantity: 2n });
     });
 
     it('is not a record when the id is not 32 bytes', () => {
         expect(
             decodePaymentPushes(rawPushes([lokad(), push([0x01, 0x02]), push([QUANTITY_TAG, 0x01])])),
         ).toBeUndefined();
+    });
+});
+
+describe('a-multi-item-memo-is-a-second-shape-an-old-reader-refuses', () => {
+    const idOf = (i: number): string => (0x10 + i).toString(16).repeat(32);
+    const items = (n: number, quantity = 1n): { tokenId: string; quantity: bigint }[] =>
+        Array.from({ length: n }, (_, i) => ({ tokenId: idOf(i), quantity }));
+    const prefixOf = (id: string): string => id.slice(0, MEMO_PREFIX_BYTES * 2);
+
+    /**
+     * The whole compatibility story, asserted as the predicate every
+     * un-updated build applies rather than as a comment: `decodePaymentPushes`
+     * has always required push 1 to be exactly 32 bytes, so a one-byte marker
+     * is refused outright and an old reader makes NO claim — it does not read
+     * a garbage token id as a single item. The marker is its own push for
+     * exactly this: inline, an ordinary basket lands the list on 32 bytes.
+     */
+    const oldReader = (pushes: Uint8Array[]): boolean =>
+        pushes.length >= 2 && isStlp(pushes) && pushes[1]!.length === 32;
+
+    it('writes a marker push an old reader refuses, at every list size', () => {
+        for (const n of [2, 3, 5, 12, MAX_MEMO_ITEMS]) {
+            const hex = encodeMultiPaymentMemoHex(items(n));
+            expect(hex, String(n)).toBeDefined();
+            const pushes = pushesOf(hex!);
+            expect(pushes, String(n)).toHaveLength(3);
+            expect(pushes[1], String(n)).toEqual(Uint8Array.from([MULTI_MARKER]));
+            expect(oldReader(pushes), String(n)).toBe(false);
+            const back = decodePaymentPushes(pushes);
+            expect(back?.kind, String(n)).toBe('items');
+            expect(back?.kind === 'items' && back.items.length, String(n)).toBe(n);
+        }
+    });
+
+    it('round-trips the prefixes and the counts in the order they were written', () => {
+        const written = [
+            { tokenId: idOf(2), quantity: 1n },
+            { tokenId: idOf(0), quantity: 300n },
+            { tokenId: idOf(1), quantity: 2n ** 63n },
+        ];
+        const back = decodePaymentPushes(pushesOf(encodeMultiPaymentMemoHex(written)!));
+        expect(back).toEqual({
+            kind: 'items',
+            items: written.map((w) => ({ prefix: prefixOf(w.tokenId), quantity: w.quantity })),
+        });
+        // Order is the buyer's own and never canonicalised: two orders are
+        // two records, and both read back as what they say.
+        const other = decodePaymentPushes(
+            pushesOf(encodeMultiPaymentMemoHex([...written].reverse())!),
+        );
+        expect(other?.kind === 'items' && other.items[0]!.prefix).toBe(prefixOf(idOf(1)));
+    });
+
+    it('composes nothing for one item: that is the shape every reader already has', () => {
+        expect(encodeMultiPaymentMemoHex(items(1))).toBeUndefined();
+        expect(encodeMultiPaymentMemoHex([])).toBeUndefined();
+    });
+
+    it('is capped by the budget, and the item count is only a floor', () => {
+        const full = encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS));
+        expect(full).toBeDefined();
+        expect(full!.length / 2).toBeLessThanOrEqual(OP_RETURN_BUDGET);
+        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS + 1))).toBeUndefined();
+        // An entry grows with its own count, so a full list of two-byte
+        // counts is over 222 — the byte check is the authority.
+        expect(encodeMultiPaymentMemoHex(items(MAX_MEMO_ITEMS, 300n))).toBeUndefined();
+        expect(encodeMultiPaymentMemoHex(items(30, 300n))).toBeDefined();
+    });
+
+    it('refuses a duplicate prefix, on the way out and on the way in', () => {
+        const same = idOf(3).slice(0, 8) + 'ab'.repeat(28);
+        expect(encodeMultiPaymentMemoHex([
+            { tokenId: idOf(3), quantity: 1n },
+            { tokenId: same, quantity: 2n },
+        ])).toBeUndefined();
+        const entry = (prefix: readonly number[], q: number): number[] => [...prefix, 1, q];
+        expect(
+            decodePaymentPushes(
+                rawPushes([
+                    lokad(),
+                    push([MULTI_MARKER]),
+                    push([...entry([1, 2, 3, 4], 1), ...entry([1, 2, 3, 4], 2)]),
+                ]),
+            ),
+        ).toBeUndefined();
+    });
+
+    /**
+     * Half a list beside an amount somebody paid is worse than no list: a
+     * record that is not exactly consumed by whole entries is not a shorter
+     * claim, it is one this reader cannot read.
+     */
+    it('voids the memo on an empty, ragged or malformed list', () => {
+        const ok = [1, 2, 3, 4, 1, 7];
+        const cases: [string, number[]][] = [
+            ['empty', []],
+            ['trailing byte', [...ok, 0x00]],
+            ['short entry', [1, 2, 3, 4, 1]],
+            ['zero width', [1, 2, 3, 4, 0]],
+            ['width past eight', [1, 2, 3, 4, MAX_QUANTITY_BYTES + 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            ['leading zero', [1, 2, 3, 4, 2, 0x00, 0x07]],
+            ['zero quantity', [1, 2, 3, 4, 1, 0x00]],
+            ['width runs off the end', [1, 2, 3, 4, 4, 1, 2]],
+        ];
+        for (const [label, list] of cases) {
+            expect(
+                decodePaymentPushes(rawPushes([lokad(), push([MULTI_MARKER]), push(list)])),
+                label,
+            ).toBeUndefined();
+        }
+        // The marker with no list at all is not a memo either.
+        expect(decodePaymentPushes(rawPushes([lokad(), push([MULTI_MARKER])]))).toBeUndefined();
+        // A marker byte that is not the marker is not this shape.
+        expect(
+            decodePaymentPushes(rawPushes([lokad(), push([0x02]), push(ok)])),
+        ).toBeUndefined();
+    });
+
+    /**
+     * `STL1`'s rule, settled here before the first record exists: a reader
+     * skips what it does not know rather than refusing the record, or the
+     * day a field is added every memo already on chain becomes unreadable.
+     */
+    it('ignores pushes after the list rather than refusing the record', () => {
+        const back = decodePaymentPushes(
+            rawPushes([
+                lokad(),
+                push([MULTI_MARKER]),
+                push([1, 2, 3, 4, 1, 9]),
+                push([0x7f, 0xaa, 0xbb]),
+            ]),
+        );
+        expect(back?.kind).toBe('items');
+        expect(back?.kind === 'items' && back.items).toEqual([
+            { prefix: '01020304', quantity: 9n },
+        ]);
+    });
+
+    it('reads a one-entry list, because a reader is not the spec for other writers', () => {
+        const back = decodePaymentPushes(
+            rawPushes([lokad(), push([MULTI_MARKER]), push([1, 2, 3, 4, 1, 1])]),
+        );
+        expect(back).toEqual({ kind: 'items', items: [{ prefix: '01020304', quantity: 1n }] });
     });
 });

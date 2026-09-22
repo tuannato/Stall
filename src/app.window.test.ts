@@ -572,6 +572,15 @@ describe('a-touch-wall-freezes-the-payment-its-press-composed', () => {
         expect(frozen, 'the press left a payment on the wall').not.toBeNull();
         const uri = frozen!.getAttribute('data-pay-uri') ?? '';
         expect(uri.startsWith(`${ADDR}?`), uri).toBe(true);
+        /*
+         * **No memo on the wall, and it is a measurement** (2026-09-22): the
+         * phone sheet composes `STLP`'s second shape, but this screen's one
+         * road is a code read across a room at 280–360px, where a two-item
+         * memo is 5.28px a module and a three-item one 4.91 — under the only
+         * density this project has proved. A memo that existed at two items
+         * and vanished at three is worse than none.
+         */
+        expect(uri, 'the wall composes no memo').not.toContain('op_return_raw');
 
         // Any change to the selection gives the slot back to the shop's code.
         press(root, 'window-step-more');

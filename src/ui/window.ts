@@ -2,6 +2,7 @@ import './window.css';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { formatXecRate } from '../domain/fiat';
 import { formatXec, isUnbuyable } from '../domain/money';
+import { fitsQr } from '../domain/qr';
 import { parseBlockParam, payLandingUrl } from '../domain/route';
 import type { StallView, WallPayment, WindowParams } from '../domain/state';
 import type { StallHandlers } from './render';
@@ -607,7 +608,18 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
     // `every-composed-bip21-pays-the-stall-address` cannot see (P1-3).
     box.setAttribute('data-pay-uri', paying.uri);
     const count = Number(selectionCount(paying.selection));
-    box.append(qrSvg(paying.uri, copy.windowPayCaption(count)));
+    /*
+     * The throw fence, and nothing more: `qrMatrix` throws past
+     * `MAX_QR_CHARS`, `renderStall` has already emptied the root by the time
+     * this runs, and every repaint would throw again — a blank wall for the
+     * life of the screen, heartbeat included. What this plate composes is a
+     * bare BIP21 with no memo (`freezeWallPayment` says why), so the branch
+     * is unreachable today and is here because the cost of being wrong is
+     * the whole screen.
+     */
+    if (fitsQr(paying.uri)) {
+        box.append(qrSvg(paying.uri, copy.windowPayCaption(count)));
+    }
     /*
      * Two text columns beside the code, not one under it: what a customer
      * reads first (what to do, what it costs, what they chose) and what

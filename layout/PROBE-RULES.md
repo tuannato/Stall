@@ -678,9 +678,16 @@ identity nobody holds, at the production origin.
 | share (`/s/<seller>`) | pubkey | 87 | 41 | 4.16 |
 | share | address (`%3A`, before 2026-09-06) | 71 | 37 | 4.53 |
 | share | address (no prefix, shipped) | 63 | 37 | 4.53 |
-| landing (`?pay=<12 hex>`) | pubkey | 104 | 41 | 4.16 |
+| landing (`?pay=<12 hex>`, the width a link still carries) | pubkey | 104 | 41 | 4.16 |
 | landing | address (`%3A`, before 2026-09-06) | 88 | 41 | 4.16 |
 | landing | address (no prefix, shipped) | 80 | 37 | 4.53 |
+
+**Re-measured 2026-09-22, when the parse floor dropped to eight hex.** The
+WRITER stays at twelve and this table is unchanged: measured over the same
+three route forms, an eight-hex parameter produces the same 37 / 41 / 41
+modules — no form changes version, so the shorter link buys nothing and the
+owner kept the twelve it costs nothing to write (`MIN_PAY_PARAM_CHARS` is
+the floor a memo's own eight-hex prefix is pasted back through).
 
 **Re-measured 2026-09-06, when `stallPath` dropped the `ecash:` prefix from
 the address form.** Before it, the landing link was 41 modules in every

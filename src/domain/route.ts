@@ -91,15 +91,27 @@ export function stallPath(raw: string): string {
  * cannot collide in practice — and the ambiguous case is handled anyway, by
  * opening nothing.
  *
+ * **The floor and the writer are two numbers, decided apart** (owner,
+ * 2026-09-22, over the measurement). The memo's second shape names its items
+ * by four bytes (`MEMO_PREFIX_BYTES`), and an entry a reader cannot resolve
+ * prints its eight hex for pasting back here — so the parser accepts from
+ * eight. The writer stays at twelve: measured with the vendored
+ * `qrcode-generator` at level M over every route form this app writes, eight
+ * hex buys **no** modules at all — an address link is 37 either way, a
+ * pubkey link and a pages.dev address link 41 — while 32 bits is a prefix a
+ * stranger can grind, and a printed tag whose own quote is later removed
+ * would then resolve to exactly one match that is somebody else's item. The
+ * saving the shorter link was decided for does not exist; the cost does.
+ *
  * Bounded and lowercase-hex or nothing. The value never reaches a request:
  * it is compared against records this page already holds, never looked up on
  * chain. The bound is here so an unbounded search string never becomes the
  * comparison in the first place.
  */
-export const MIN_PAY_PARAM_CHARS = 12;
+export const MIN_PAY_PARAM_CHARS = 8;
 export const MAX_PAY_PARAM_CHARS = 64;
 
-/** How much of an id a link this app writes carries. The parser accepts more. */
+/** How much of an id a link this app writes carries. The parser accepts less. */
 export const PAY_PARAM_PREFIX = 12;
 
 /**

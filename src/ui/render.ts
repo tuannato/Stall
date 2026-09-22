@@ -25,9 +25,9 @@ import {
 import { isPriceable, sectionsOf, type Category } from '../domain/category';
 import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
 import { tokenUrl, tokenUrlHost } from '../domain/tokenlink';
-import { fitsQr, qrMatrix } from '../domain/qr';
+import { fitsQr, qrMatrix, qrScansInBox } from '../domain/qr';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
-import { encodePaymentMemoHex } from '../domain/payment';
+import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import {
     MAX_SELECTION_ENTRIES,
     selectionCount,
@@ -1512,6 +1512,21 @@ function paintUnresolvable(
     // No share: the link here opens this screen.
     stall.append(stallFooter(address, view, handlers, { share: false }));
 }
+
+/**
+ * The narrowest box the pay sheet's code is ever painted in, measured
+ * 2026-09-22 on the three looks: the plate is `width: 100%` capped at 460px
+ * with 10px of border-box padding, so it paints **440px at desk width and
+ * 318px on a 390px phone** — that sheet's code is deliberately not a desk
+ * fold (the single sheet's own note: it is worth reaching on a phone).
+ *
+ * The narrow one decides, because one sheet draws one code at both widths
+ * and a code that cannot be read where it is drawn is not worth drawing. The
+ * cost, stated: at desk width a memo naming up to twenty-six items would
+ * still scan at 5.18px a module, and this floor stops drawing it at about
+ * seven — above that the fold says so and both Pay controls are above it.
+ */
+export const PAY_QR_NARROWEST_PX = 318;
 
 /**
  * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built
@@ -5332,7 +5347,12 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     wrap.append(valve);
 
     const how = el('div');
-    how.append(el('p', 'fine', copy.PAY_FINE_NO_MEMO));
+    // Written by `refresh()`, because which of the three sentences is true
+    // depends on the record this selection composes: it rides along, it did
+    // not fit, or there is none at all.
+    const memoLine = el('p', 'fine', copy.PAY_FINE_NO_MEMO);
+    memoLine.setAttribute('data-role', 'pay-memo-line');
+    how.append(memoLine);
     how.append(el('p', 'fine', copy.PAY_FINE_TOLERANCES_PER_ITEM));
     how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY_SEVERAL));
     const final = el('p', 'fine', copy.PAY_NOTE_FINAL);
@@ -5365,9 +5385,30 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         clearPayQrTimer();
         const sats = selectionSats(selection, prices, rate?.rate);
         const subDust = sats !== undefined && sats < DUST_SATS;
-        const bip21 = sats === undefined ? undefined : payBip21(address, sats);
-        const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats);
-        const pay = sats === undefined ? undefined : payECashPayUrl(address, sats);
+        /*
+         * The memo names the items this payment covers (`STLP`'s second
+         * shape). **One item composes the shape that already exists**, which
+         * every un-updated reader understands; two or more compose the list.
+         * A record the encoder refuses — too many bytes once the counts grow
+         * — costs the memo and never the payment: the figure, the links and
+         * the code are composed without it and the fold says which happened.
+         */
+        const entries = [...selection].map(([tokenId, quantity]) => ({ tokenId, quantity }));
+        const memo =
+            entries.length === 0
+                ? undefined
+                : entries.length === 1
+                  ? encodePaymentMemoHex(entries[0]!.tokenId, entries[0]!.quantity)
+                  : encodeMultiPaymentMemoHex(entries);
+        const bip21 = sats === undefined ? undefined : payBip21(address, sats, memo);
+        const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats, memo);
+        const pay = sats === undefined ? undefined : payECashPayUrl(address, sats, memo);
+        memoLine.textContent =
+            memo !== undefined
+                ? copy.PAY_FINE_MEMO_NAMES
+                : entries.length > 1
+                  ? copy.PAY_FINE_MEMO_TOO_MANY
+                  : copy.PAY_FINE_NO_MEMO;
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
@@ -5412,7 +5453,17 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         const aged =
             usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
         qrFold.hidden = bip21 === undefined;
-        if (bip21 !== undefined && !aged && fitsQr(bip21)) {
+        /*
+         * **The gate is the composed string, never an item count.** A memo
+         * grows with the counts as well as the items, so twenty-six items
+         * draw at 5.18px a module at small counts and 4.73 at large ones —
+         * below the one density a phone has read here — while the count says
+         * twenty-six either way (`qrScansInBox`, `CLAUDE.md` §9). The stale
+         * sentence is about the rate and must not answer for size: that was
+         * the branch a too-long link fell into before this shipped.
+         */
+        const scans = bip21 !== undefined && qrScansInBox(bip21, PAY_QR_NARROWEST_PX);
+        if (bip21 !== undefined && !aged && scans) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
             box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
@@ -5422,7 +5473,9 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
                 payQrTimer = setTimeout(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
-            qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
+            const line = el('p', 'fine', aged ? copy.PAY_QR_STALE : copy.PAY_QR_TOO_MANY);
+            line.setAttribute('data-role', 'pay-qr-why');
+            qrBody.replaceChildren(line);
         } else {
             qrBody.replaceChildren();
         }
@@ -8602,12 +8655,45 @@ function eventIcon(event: StallEvent, view: StallView): { tokenId: string; pictu
         // (`wantedTokenIds`); a stranger cannot name one.
         return event.tokenId === undefined ? undefined : { tokenId: event.tokenId, picture: true };
     }
-    if (event.kind === 'payment' && event.payment !== undefined) {
+    if (event.kind === 'payment' && event.payment?.kind === 'item') {
         const id = event.payment.tokenId;
         const named = view.prices?.has(id) === true || view.descriptions?.has(id) === true;
         return { tokenId: id, picture: named && !isWithheldToken(id, view.tokens.get(id)) };
     }
+    // A memo naming several items wears the empty tile, like every row that
+    // names no one token: two hex characters of an id are not initials, and
+    // picking one of the several to wear would be this page choosing which
+    // item a payment "was".
     return undefined;
+}
+
+/**
+ * The one token this stall quotes whose id starts with `prefix`, or nothing.
+ *
+ * **Against `view.prices`, the seller's own records** — not `quotedItems`,
+ * which `applyPayHint` resolves against: a `?pay=` link decides which sheet
+ * to OPEN and must refuse a token this page would not paint, while this is a
+ * citation of what a payer wrote, and §4 already lets a withheld token's
+ * name be cited on this panel. Ambiguity names nothing: two matching quotes
+ * mean the payer's four bytes do not pick one, and guessing would put a name
+ * nobody wrote under the label that says the payer wrote it.
+ */
+function quotedByPrefix(view: StallView, prefix: string): string | undefined {
+    const prices = view.prices;
+    if (prices === undefined) {
+        return undefined;
+    }
+    let found: string | undefined;
+    for (const id of prices.keys()) {
+        if (!id.startsWith(prefix)) {
+            continue;
+        }
+        if (found !== undefined) {
+            return undefined;
+        }
+        found = id;
+    }
+    return found;
 }
 
 function eventRow(event: StallEvent, view: StallView): HTMLElement {
@@ -8696,22 +8782,59 @@ function eventRow(event: StallEvent, view: StallView): HTMLElement {
     // nothing checks it against the amount above.
     if (event.payment !== undefined) {
         const claimed = event.payment;
-        const name = view.tokens.has(claimed.tokenId)
-            ? tokenName(view.tokens, claimed.tokenId)
-            : claimed.tokenId;
         dl.append(el('dt', 'event-dt', copy.EVENT_PAYMENT_CLAIM_LABEL));
-        const claim = el(
-            'dd',
-            'event-dd',
-            copy.paymentClaim(
-                name,
-                claimed.quantity === undefined
-                    ? copy.PAYMENT_QUANTITY_UNSTATED
-                    : copy.paymentQuantity(claimed.quantity.toString()),
-            ),
-        );
-        claim.setAttribute('data-role', 'payment-claim');
-        dl.append(claim);
+        if (claimed.kind === 'item') {
+            const name = view.tokens.has(claimed.tokenId)
+                ? tokenName(view.tokens, claimed.tokenId)
+                : claimed.tokenId;
+            const claim = el(
+                'dd',
+                'event-dd',
+                copy.paymentClaim(
+                    name,
+                    claimed.quantity === undefined
+                        ? copy.PAYMENT_QUANTITY_UNSTATED
+                        : copy.paymentQuantity(claimed.quantity.toString()),
+                ),
+            );
+            claim.setAttribute('data-role', 'payment-claim');
+            dl.append(claim);
+        } else {
+            /*
+             * One line per entry, and **each prints what the payer wrote
+             * beside whatever this page made of it**: the memo's second shape
+             * names an item by four bytes, so the name is this page's reading
+             * of the payer's bytes and the label above says the payer wrote
+             * the line. Printing the name alone would attribute our
+             * resolution to them — and it can change under the same row, when
+             * the seller republishes. No total: the record carries no amount,
+             * and one summed from quotes would be our arithmetic under their
+             * claim.
+             */
+            for (const item of claimed.items) {
+                const id = quotedByPrefix(view, item.prefix);
+                const name =
+                    id !== undefined && view.tokens.has(id)
+                        ? tokenName(view.tokens, id)
+                        : undefined;
+                const line = el(
+                    'dd',
+                    'event-dd',
+                    name === undefined
+                        ? copy.paymentClaimPart(
+                              item.prefix,
+                              copy.paymentQuantity(item.quantity.toString()),
+                          )
+                        : copy.paymentClaimNamedPart(
+                              name,
+                              item.prefix,
+                              copy.paymentQuantity(item.quantity.toString()),
+                          ),
+                );
+                line.setAttribute('data-role', 'payment-claim');
+                dl.append(line);
+            }
+        }
         /*
          * Where the money came from, for a seller who wants to send some of it
          * back by hand. **A citation and nothing else**: this panel is public
