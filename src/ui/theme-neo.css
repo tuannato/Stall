@@ -367,6 +367,12 @@
     color: #ff8fb0;
 }
 
+/* The glance's source, at the glance's own size, in the rate line's ink. */
+.t-neo .item-fiat-src {
+    font-size: 10.5px;
+    color: #8aa6c9;
+}
+
 .t-neo .item-lots {
     font-size: 9.5px;
     color: #8aa6c9;

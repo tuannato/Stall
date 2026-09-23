@@ -6718,9 +6718,18 @@ function itemFace(
     how.append(rateLine(offer, view));
     const fiat = formatFiat(offer.askedSats, view.fiatRate, view.fiatCode ?? '');
     if (fiat !== undefined) {
+        // One line: the figure, then whose figure it is (owner, 2026-09-23 —
+        // CoinGecko named beside every CoinGecko figure, never on a line of
+        // its own). Two sibling spans, because `[data-role="fiat"]` holds the
+        // converted figure and nothing else; the source mounts only here, so
+        // it leaves with the figure when the feed did not answer.
+        const row = el('span', 'item-fiat-row');
         const fiatLine = el('span', 'item-fiat', fiat);
         fiatLine.setAttribute('data-role', 'fiat');
-        how.append(fiatLine);
+        const source = el('span', 'item-fiat-src', copy.FIAT_SOURCE);
+        source.setAttribute('data-role', 'fiat-source');
+        row.append(fiatLine, source);
+        how.append(row);
     }
     if (listing.offers.length > 1) {
         how.append(el('span', 'item-lots', copy.lowestOfListings(listing.offers.length)));

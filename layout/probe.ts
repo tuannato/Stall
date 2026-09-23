@@ -1131,6 +1131,34 @@ function measure(screen: string, themeLabel: string): Failure[] {
             );
         }
     }
+    /*
+     * CoinGecko is named beside a CoinGecko figure on that figure's own line
+     * (owner, 2026-09-23: no line pushed down for it). happy-dom lays nothing
+     * out, so `the-coingecko-figure-names-coingecko-on-its-own-line` can pin
+     * only the structure — two inline siblings in one row. This reads the
+     * line boxes: each span is exactly one, the source starts where the
+     * figure ends, and the two overlap vertically — so a `display: block` on
+     * either, or a row too narrow for both, fails here.
+     */
+    for (const source of root.querySelectorAll<HTMLElement>('[data-role="fiat-source"]')) {
+        const figure = source.previousElementSibling;
+        if (figure === null || figure.getAttribute('data-role') !== 'fiat') {
+            fail('the fiat source is not beside its figure', describe(source));
+            continue;
+        }
+        const a = figure.getClientRects();
+        const b = source.getClientRects();
+        const one = a.length === 1 && b.length === 1;
+        const sameLine =
+            one && b[0]!.top < a[0]!.bottom && a[0]!.top < b[0]!.bottom && b[0]!.left >= a[0]!.right - 1;
+        if (!sameLine) {
+            fail(
+                'the fiat source pushed a line',
+                `${a.length} + ${b.length} line box(es): figure ${JSON.stringify(a[0]?.toJSON())}, ` +
+                    `source ${JSON.stringify(b[0]?.toJSON())}`,
+            );
+        }
+    }
     return out;
 }
 
@@ -1653,6 +1681,10 @@ const CONTRAST_TEXT = [
     '[data-role="describe-hex"]',
     '[data-role="fiat"]',
     '[data-role="rate"]',
+    // Whose figure the fiat glance is (owner, 2026-09-23): a span of its own
+    // beside `fiat`, muted where `fiat` wears the look's accent, so the
+    // figure's measurement says nothing about it.
+    '[data-role="fiat-source"]',
     // The Activity fold's amount, on the fold's own ground, which no other
     // screen puts a figure on.
     '[data-role="receipt-amount"]',

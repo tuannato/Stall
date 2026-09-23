@@ -285,6 +285,11 @@
     color: var(--s-accent);
 }
 
+/* The glance's source, at the glance's own size, in the rate line's ink. */
+.t-rural .item-fiat-src {
+    font-size: 11px;
+}
+
 .t-rural .item-lots {
     font-size: 10px;
     color: var(--s-muted);

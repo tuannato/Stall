@@ -1652,14 +1652,29 @@ export const PAY_FINE_SURCHARGE_TOLERANCE =
 export const PAY_XEC_QUOTE_NOTE =
     'Seller\u2019s quote, written in XEC \u2014 no rate involved';
 /**
- * The two feeds by name. The first prices the figure; the second is asked
- * beside it and can only speak about it (`judgeRates`). The rate line names
- * the feeds that were consulted, so "one feed" and "two feeds agreed" are
- * both visible on the node that already carries the rate — no new line on
- * the amount card, and no silence to interpret.
+ * The two feeds by name. The first prices the figure; the second, when
+ * `SECOND_FEED` is on, is asked beside it and can only speak about it
+ * (`judgeRates`). The rate line names the feeds that were consulted, so
+ * "one feed" and "two feeds agreed" are both visible on the node that
+ * already carries the rate — no new line on the amount card, and no
+ * silence to interpret. With the check paused (2026-09-23) `check` is
+ * always `'none'`, so the line names CoinGecko alone.
+ *
+ * **CoinGecko is named beside every CoinGecko figure, on that figure's own
+ * line, and never on a line of its own** (owner, 2026-09-23: the name, or
+ * "Powered by" it, and no line pushed down for it). Text only — no link,
+ * no logo. The rate lines already carry it; the listing face's fiat glance
+ * carries `FIAT_SOURCE` in a sibling span on the same line.
  */
 export const RATE_SOURCE_PRIMARY = 'CoinGecko';
 export const RATE_SOURCE_CHECK = 'CoinPaprika';
+/**
+ * The fiat glance's source, beside the figure and never inside its node —
+ * `[data-role="fiat"]` holds the converted figure and nothing else. The
+ * leading space and the dot are this span's own, so the two read as one
+ * line: "$0.04 · CoinGecko".
+ */
+export const FIAT_SOURCE = ` \u00b7 ${RATE_SOURCE_PRIMARY}`;
 /**
  * `both` is false when the figure's own rate came from the first feed alone
  * — a quote written in a unit the second feed does not answer for. The two
@@ -1672,8 +1687,12 @@ export const rateSources = (check: RateCheck | undefined, both = true): string =
     both && (check === 'agree' || check === 'disagree')
         ? `${RATE_SOURCE_PRIMARY} \u00b7 ${RATE_SOURCE_CHECK}`
         : RATE_SOURCE_PRIMARY;
-/** Where the converted figure came from. `\u2248`: a glance, never a second price. */
-export const payRateLine = (rate: string, at: string, sources = RATE_SOURCE_PRIMARY): string =>
+/**
+ * Where the converted figure came from. `\u2248`: a glance, never a second
+ * price. `sources` is required: a CoinGecko figure names CoinGecko on its
+ * own line, so no caller may paint the rate without saying whose it is.
+ */
+export const payRateLine = (rate: string, at: string, sources: string): string =>
     `\u2248 at 1 ${XEC} = ${rate} \u00b7 ${sources} \u00b7 ${at}`;
 export const PAY_RATE_REFRESH = 'Get a fresh price';
 /**

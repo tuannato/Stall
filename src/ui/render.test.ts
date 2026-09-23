@@ -11971,6 +11971,111 @@ describe('a-disagreeing-check-is-said-and-the-figure-stands', () => {
     });
 });
 
+describe('the-coingecko-figure-names-coingecko-on-its-own-line', () => {
+    /**
+     * Owner, 2026-09-23: CoinGecko is named beside every figure it priced,
+     * on that figure's own line — the name, no link, no logo, and no line
+     * pushed down for it. The pay sheet, "Pay several" and the touch wall's
+     * plate already say it inside the rate line they carry; the listing
+     * face's fiat glance says it in a sibling span of the figure's own row,
+     * because `[data-role="fiat"]` holds the figure and nothing else.
+     * happy-dom lays nothing out, so "its own line" is asserted here as
+     * structure — one node, or two siblings in one inline row — and the
+     * layout probe measures the row on every look.
+     */
+    const cited = (surface: Element): void => {
+        const line = surface.querySelector('[data-role="rate"]');
+        expect(line, 'the surface paints its rate line').not.toBeNull();
+        // Between the rate and the time, on the line that carries the rate.
+        expect(line!.textContent).toContain(` · ${copy.RATE_SOURCE_PRIMARY} · `);
+        // Said once on the surface: no second line of its own anywhere.
+        expect(surface.textContent!.split(copy.RATE_SOURCE_PRIMARY)).toHaveLength(2);
+        // Text only.
+        expect(surface.querySelector('a[href*="coingecko" i], img[src*="coingecko" i]')).toBeNull();
+    };
+
+    it('the pay sheet says it inside the rate line', () => {
+        const { root } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE }));
+        cited(root.querySelector('[data-role="pay"]')!);
+    });
+
+    it('"Pay several" says it inside the rate line', () => {
+        const { root } = paint(
+            payView({
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                payRate: PAY_RATE,
+            }),
+        );
+        cited(root.querySelector('[data-role="pay-several"]')!);
+    });
+
+    it('the touch wall’s plate says it inside the rate line', () => {
+        const { root } = paint({
+            ...idlePubkey({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                selection: new Map([[TOKEN_ID, 2n]]),
+            }),
+            wallWidth: true,
+            window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+            windowPaying: {
+                sats: 52_500_000n,
+                uri: `${ADDR}?amount=525000.00`,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                prices: new Map([[TOKEN_ID, QUOTE_USD]]),
+                names: new Map([[TOKEN_ID, 'Roasted Beans']]),
+                borrowed: new Set<string>(),
+                unit: 'usd',
+                rate: { ...PAY_RATE },
+                atMs: Date.now(),
+            },
+        } as unknown as StallView);
+        cited(root.querySelector('[data-role="window-paying"]')!);
+    });
+
+    const glance = (over: Partial<StallView> = {}) =>
+        idlePubkey({
+            fetch: { kind: 'offers', offers: [OFFER] },
+            tokens: new Map([[TOKEN_ID, BEANS]]),
+            overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+            fiatCode: 'usd',
+            fiatRate: scaleRate(0.00003),
+            ...over,
+        });
+
+    it('the listing face’s glance says it beside the figure, never inside it', () => {
+        const { root } = paint(glance());
+        const fiat = root.querySelector('[data-role="fiat"]') as HTMLElement;
+        const source = root.querySelector('[data-role="fiat-source"]') as HTMLElement;
+        expect(fiat.textContent, 'the figure node holds the figure alone').toBe('$0.04');
+        expect(source.textContent).toBe(copy.FIAT_SOURCE);
+        expect(copy.FIAT_SOURCE).toContain(copy.RATE_SOURCE_PRIMARY);
+        expect(fiat.contains(source)).toBe(false);
+        // One row, the two in reading order: "$0.04 · CoinGecko".
+        expect(source.parentElement).toBe(fiat.parentElement);
+        expect(fiat.nextElementSibling).toBe(source);
+        const row = fiat.parentElement!;
+        expect(row.tagName, 'an inline row, not a block of its own').toBe('SPAN');
+        expect(row.children).toHaveLength(2);
+        expect(row.textContent).toBe(`$0.04${copy.FIAT_SOURCE}`);
+        // Inside the fold that carries the glance, and said nowhere else.
+        expect(row.closest('[data-role="item-how"]')).not.toBeNull();
+        expect(root.textContent!.split(copy.RATE_SOURCE_PRIMARY)).toHaveLength(2);
+        expect(root.querySelector('a[href*="coingecko" i], img[src*="coingecko" i]')).toBeNull();
+    });
+
+    it('leaves with the fiat line', () => {
+        for (const over of [{ fiatRate: undefined }, { fiatCode: undefined }, { fiatCode: 'xyz' }]) {
+            const { root } = paint(glance(over));
+            expect(root.querySelector('[data-role="fiat"]'), JSON.stringify(over)).toBeNull();
+            expect(root.querySelector('[data-role="fiat-source"]'), JSON.stringify(over)).toBeNull();
+            expect(root.textContent, JSON.stringify(over)).not.toContain(copy.RATE_SOURCE_PRIMARY);
+        }
+    });
+});
+
 describe('an-xec-quote-says-nothing-about-a-price-source', () => {
     /**
      * No rate is involved in an XEC quote (`PAY_XEC_QUOTE_NOTE`), so no feed

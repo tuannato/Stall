@@ -1580,3 +1580,30 @@ What this does not measure: a touch. The presses are driven in
 `PAY_RATE_MAX_AGE_MS`) and in `window.test.ts` (the handlers, the allow-list
 of five roles); nothing here observes a finger, and the sizes are the
 argument that one will land.
+
+## The fiat glance says whose figure it is, on its own line (2026-09-23)
+
+The owner's rule: CoinGecko is named beside every CoinGecko figure, and no
+line is pushed down for it. The rate lines already carried the name; the
+listing face's fiat glance gained `span[data-role="fiat-source"]` (" ·
+CoinGecko"), a sibling of `[data-role="fiat"]` inside one inline row. Two
+things only a browser can see, so two entries here:
+
+- **`[data-role="fiat-source"]` is on `CONTRAST_TEXT`.** It is not `fiat`:
+  the figure wears each look's accent and the source is muted (the rate
+  line's ink — `--s-muted`, and Neo's `#8aa6c9` literal at 10.5px), so the
+  figure's measurement says nothing about it. `item-listing` stages a fiat
+  rate and the fold is opened before sampling, so it is measured on every
+  look at both widths.
+- **"the fiat source pushed a line"** (geometry, every screen): each span is
+  exactly one line box, the source starts where the figure ends, and the
+  two overlap vertically. happy-dom lays nothing out, so the unit test
+  (`the-coingecko-figure-names-coingecko-on-its-own-line`) can pin only the
+  structure; a `display: block` on either span, or a row too narrow for
+  both, is this rule's to catch.
+
+**Proved red** by planting `display: block` and `color: var(--s-surface)`
+on `.item-fiat-src`: 504 geometry failures (`item-listing`, and `item-zoom`,
+whose face stands behind the zoom scrim — every look and decoration at 390
+and 1280) and 12 contrast figures at 1.00:1 (`item-listing`, three looks,
+bare and worn, both widths). Green again with the plant reverted.
