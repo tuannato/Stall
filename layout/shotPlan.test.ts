@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WINDOW_MIN_PX } from '../src/ui/render';
 import { CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
-import type { Look } from './looks';
-import { SHOT_VIEWPORTS, shotPlan, type ShotJob } from './shotPlan';
+import { shippedLooks, type Look } from './looks';
+import { DEFAULT_THEME_ID } from '../src/domain/theme';
+import { SHOT_VIEWPORTS, diffPlan, shotPlan, type ShotJob } from './shotPlan';
 import { lookFromJson, parseWorkshopLook } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
 
@@ -129,5 +130,46 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         const clear = Object.keys(SCREENS).filter((name) => SCREENS[name]!.broadcast?.transparent === true).length;
         expect(shotPlan(skeleton).length).toBe(cells + clear);
         expect(shotPlan(skeleton).every((job) => job.variant === 'bare' && job.flags === 0)).toBe(true);
+    });
+});
+
+/**
+ * What `pnpm looks:diff <ref>` shoots on both builds: every shipped look on
+ * every cell the kit's shot plan photographs, plus the door under the one
+ * look that wears it, bare and fully worn — held against the fixture table
+ * and the shot plan rather than against `diffPlan` itself, so a screen the
+ * probe measures cannot drop out of the proof unnoticed.
+ */
+describe('the-diff-plan-shoots-every-probed-screen-under-every-shipped-look', () => {
+    const looks = shippedLooks();
+    const jobs = diffPlan(looks);
+    const cells = (list: readonly { viewport: { name: string }; screen: string }[]): Set<string> =>
+        new Set(list.map((job) => `${job.viewport.name}/${job.screen}`));
+
+    it('covers the shot plan’s cells, and the door at the phone and the desk', () => {
+        const kitCells = cells(shotPlan(skeleton));
+        const diffCells = cells(jobs);
+        for (const cell of kitCells) {
+            expect(diffCells.has(cell), cell).toBe(true);
+        }
+        const extra = [...diffCells].filter((cell) => !kitCells.has(cell)).sort();
+        expect(extra).toEqual(['desk/door', 'phone/door']);
+    });
+
+    it('shoots every shipped look bare and fully worn, the door under the default look alone', () => {
+        expect(looks.length).toBeGreaterThan(0);
+        for (const cell of cells(jobs)) {
+            const [viewport, screen] = cell.split('/');
+            const here = jobs.filter((job) => job.viewport.name === viewport && job.screen === screen);
+            const wearers = screen === 'door' ? looks.filter((look) => look.id === DEFAULT_THEME_ID) : looks;
+            expect(here.map((job) => `${job.look}:${job.variant}`).sort(), cell).toEqual(
+                wearers.flatMap((look) => [`${look.id}:bare`, `${look.id}:worn`]).sort(),
+            );
+        }
+        for (const job of jobs) {
+            expect(job.flags).toBe(job.variant === 'bare' ? 0 : 0xffff);
+        }
+        // One stem per shot: the before / after / diff files never collide.
+        expect(new Set(jobs.map((job) => job.file)).size).toBe(jobs.length);
     });
 });

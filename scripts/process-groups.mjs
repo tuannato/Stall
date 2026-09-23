@@ -1,8 +1,8 @@
 /**
  * The preview servers and headless Chromes that `layout-check.mjs`,
- * `print-measure.mjs` and the workshop kit (`workshop.mjs`) start: each one
- * its own process group, stopped whole on every way out, on a port nothing
- * else answered on.
+ * `print-measure.mjs`, the workshop kit (`workshop.mjs`) and `looks-diff.mjs`
+ * start: each one its own process group, stopped whole on every way out, on
+ * a port nothing else answered on.
  *
  * A child spawned `detached` leads its own process group, so the terminal's
  * Ctrl-C — sent to the foreground group — never reaches it. With cleanup only
@@ -70,15 +70,17 @@ function plain(text) {
 }
 
 /**
- * Start `command` as the leader of its own process group. stdin is never
- * the terminal (a background group that reads it is stopped by SIGTTIN);
+ * Start `command` as the leader of its own process group, in `cwd` when
+ * given. stdin is never the terminal (a background group that reads it is
+ * stopped by SIGTTIN);
  * stdout is `'ignore'` or `'inherit'`; stderr is kept as a tail
  * (`'tail'`, the default), or `'ignore'` / `'inherit'`.
  */
-export function spawnGroup(name, command, args, { env = process.env, stdout = 'ignore', stderr = 'tail' } = {}) {
+export function spawnGroup(name, command, args, { env = process.env, cwd, stdout = 'ignore', stderr = 'tail' } = {}) {
     const child = spawn(command, args, {
         detached: true,
         env,
+        cwd,
         stdio: ['ignore', stdout, stderr === 'tail' ? 'pipe' : stderr],
     });
     const group = { name, child, tail: '', exit: undefined, stopping: false };
@@ -175,24 +177,37 @@ export function onTeardown(fn) {
     cleanups.push(fn);
 }
 
+/** SIGTERM `list`, SIGKILL whatever outlives the grace, and forget every group that is down. */
+async function stopList(list) {
+    for (const group of list) {
+        group.stopping = true;
+        signalGroup(group, 'SIGTERM');
+    }
+    const graceEnds = Date.now() + GRACE_MS;
+    while (list.some(up) && Date.now() < graceEnds) await sleep(50);
+    for (const group of list) {
+        if (up(group)) signalGroup(group, 'SIGKILL');
+    }
+    const killEnds = Date.now() + 2000;
+    while (list.some(up) && Date.now() < killEnds) await sleep(50);
+    for (const group of list) {
+        if (!up(group)) groups.delete(group);
+    }
+}
+
+/**
+ * Stop one group mid-run — a preview whose port the next one needs — the
+ * way `stopGroups` stops them all, and throw if any of it is still up.
+ */
+export async function stopGroup(group) {
+    await stopList([group]);
+    if (up(group)) throw new Error(`${group.name} would not stop`);
+}
+
 /** Stop every group — SIGTERM, then SIGKILL after the grace — and run the cleanups. One teardown at a time. */
 export function stopGroups() {
     teardown ??= (async () => {
-        const list = [...groups];
-        for (const group of list) {
-            group.stopping = true;
-            signalGroup(group, 'SIGTERM');
-        }
-        const graceEnds = Date.now() + GRACE_MS;
-        while (list.some(up) && Date.now() < graceEnds) await sleep(50);
-        for (const group of list) {
-            if (up(group)) signalGroup(group, 'SIGKILL');
-        }
-        const killEnds = Date.now() + 2000;
-        while (list.some(up) && Date.now() < killEnds) await sleep(50);
-        for (const group of list) {
-            if (!up(group)) groups.delete(group);
-        }
+        await stopList([...groups]);
         for (const fn of cleanups.splice(0)) {
             try {
                 await fn();

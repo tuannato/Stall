@@ -220,6 +220,14 @@ const SHOP_OFFERS: StallOffer[] = [
     offer(LONGER, 5, 10_000_000_000n),
 ];
 
+/**
+ * A listing nobody can take: its covenant's minimum accept (13) is more than
+ * the 12 atoms left on the UTXO — the remainder of a partial fill, as it is
+ * met in the wild (`isUnbuyable`). The row, the face and the wall paint a dash
+ * where the figure goes.
+ */
+const UNBUYABLE_OFFER: StallOffer = offer(T2, 1, 87_500n, { minAcceptedAtoms: 13n });
+
 /** The wire the overlay is painted from. `parseBroadcastParams`' shape. */
 const bc = (
     preset: BroadcastParams['preset'],
@@ -270,6 +278,22 @@ export const SCREENS: Record<string, StallView> = {
             offers: [offer(T1, 0, 120_000n), offer(T2, 1, 87_500n)],
         },
         overlay: { kind: 'item', tokenId: T1, rail: 'listings', zoom: true },
+    }),
+    /*
+     * The unbuyable dash beside a buyable figure (2026-09-23). T2's only
+     * listing asks a minimum take its remainder cannot meet (`isUnbuyable`),
+     * so its row paints the dash; T1's is an ordinary whole-lot ask at tier 0
+     * on every look. No screen painted an unbuyable offer before, so the dash
+     * was measured by nothing and had no picture `pnpm looks:diff` could
+     * compare a change to it against. The face below, and a wall row and the
+     * wall's card further down, stage the dash in the other places it paints.
+     */
+    unbuyable: base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
+    }),
+    'item-unbuyable': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
+        overlay: { kind: 'item', tokenId: T2, rail: 'listings' },
     }),
     /*
      * The two record sheets, one screen each. They were one screen while they
@@ -920,6 +944,27 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
+     * The unbuyable dash on a wall: Browse, an unbuyable row beside a buyable
+     * one, no lock — the wall sizes its figure, and so what sits in its
+     * place, neither as the shop nor as the face does.
+     */
+    'shop-window-unbuyable': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    /*
+     * And on the wall's one big card (Cycle): the unbuyable listing alone, so
+     * it is the card at the cursor. The largest figure the app paints — up to
+     * 112px, 124px on a tall screen — is `shop-window-cycle`'s at the same
+     * width.
+     */
+    'shop-window-cycle-unbuyable': base({
+        fetch: { kind: 'offers', offers: [UNBUYABLE_OFFER] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    /*
      * The touch wall (2026-09-21): Browse, the quotes, one USD item chosen
      * ×2 and one XEC row standing apart with its own sentence. The steppers
      * and the strip are the only controls the wall ever mounts, and the
@@ -1234,6 +1279,12 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // decoration interactions they could stage are `offers`' again.
     'stream-sheet',
     'embed-sheet',
+    // The unbuyable dash's screens exist for the dash; the decoration
+    // interactions they could stage are `offers`' again.
+    'unbuyable',
+    'item-unbuyable',
+    'shop-window-unbuyable',
+    'shop-window-cycle-unbuyable',
 ]);
 
 /**
@@ -1315,6 +1366,14 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // The checklist is `unresolvable`'s ground with numbered steps on it;
     // its muted status lines are not contrast targets. Geometry only.
     'first-stall',
+    // The unbuyable dash (2026-09-23): the dash and its badge are muted ink
+    // no contrast target names, beside `offers`' own figure on its ground,
+    // and on the face and the wall the same. What they are here for is the
+    // dash's geometry.
+    'unbuyable',
+    'item-unbuyable',
+    'shop-window-unbuyable',
+    'shop-window-cycle-unbuyable',
 ]);
 
 /**

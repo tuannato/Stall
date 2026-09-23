@@ -5,6 +5,8 @@ dist
 # each in its own outDir so neither empties `dist/` under the other.
 .probe-dist
 .workshop-dist
+# `pnpm looks:diff <ref>`: its builds and its before / after / diff PNGs.
+.looks-diff
 .vite
 coverage
 *.log

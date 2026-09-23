@@ -29,7 +29,7 @@
  * Test: `the-shots-cover-every-probed-screen-and-variant`.
  */
 import { NO_DECOR_SCREENS } from './fixtures';
-import type { Look } from './looks';
+import { canWear, type Look } from './looks';
 import { clearScreens, screensAt, wallScreens } from './screenSplit';
 
 export type ShotViewport = {
@@ -69,9 +69,13 @@ function slug(label: string): string {
     return out === '' ? 'row' : out;
 }
 
-/** The screens each shot viewport photographs, in the probe's split. */
-export function shotScreens(): readonly (readonly [ShotViewport, readonly string[]])[] {
-    const notDoor = (name: string): boolean => name !== 'door';
+/**
+ * The screens each shot viewport photographs, in the probe's split — the door
+ * left out unless asked for: the kit's look never wears it, and
+ * `pnpm looks:diff` shoots it under the one look that does (`diffPlan`).
+ */
+export function shotScreens(withDoor = false): readonly (readonly [ShotViewport, readonly string[]])[] {
+    const notDoor = (name: string): boolean => withDoor || name !== 'door';
     const { phone, desk, canvas, portrait, tablet } = SHOT_VIEWPORTS;
     return [
         [phone, screensAt(phone.width, false).filter(notDoor)],
@@ -109,6 +113,54 @@ export function shotPlan(look: Look): ShotJob[] {
                         flags,
                         ...(ground === undefined ? {} : { ground }),
                         file: `${viewport.name}/${screen}--${variant}${ground === undefined ? '' : `--${ground}`}.png`,
+                    });
+                }
+            }
+        }
+    }
+    return jobs;
+}
+
+/** One paint `pnpm looks:diff` shoots on both builds and compares. */
+export type DiffJob = {
+    readonly viewport: ShotViewport;
+    readonly screen: string;
+    /** The look's id, as `__paint` takes it. */
+    readonly look: number;
+    readonly lookLabel: string;
+    readonly variant: 'bare' | 'worn';
+    /** `0`, or every decoration at once — the probe's `wornAll` (`wornOf(look, 0xffff)`). */
+    readonly flags: number;
+    /** The stem the before / after / diff PNGs are written under. */
+    readonly file: string;
+};
+
+/**
+ * What `pnpm looks:diff` shoots: every look it is given, on every screen the
+ * probe measures that look on, at the width the probe measures it — the
+ * phone and the desk for the page screens (the wall screens only where the
+ * wall fits), the canvas for the canvas screens, and the shop window's two
+ * portrait sizes — bare and fully worn. The door is shot under the one look
+ * it can wear (`canWear`). A look with no decorations is shot bare alone.
+ */
+export function diffPlan(looks: readonly Look[]): DiffJob[] {
+    const jobs: DiffJob[] = [];
+    for (const [viewport, screens] of shotScreens(true)) {
+        for (const screen of screens) {
+            for (const look of looks) {
+                if (!canWear(look, screen)) {
+                    continue;
+                }
+                const variants = look.rows.length === 0 ? (['bare'] as const) : (['bare', 'worn'] as const);
+                for (const variant of variants) {
+                    jobs.push({
+                        viewport,
+                        screen,
+                        look: look.id,
+                        lookLabel: look.label,
+                        variant,
+                        flags: variant === 'bare' ? 0 : 0xffff,
+                        file: `${viewport.name}/${screen}--${slug(look.label)}--${variant}`,
                     });
                 }
             }

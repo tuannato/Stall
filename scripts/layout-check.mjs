@@ -24,7 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inflateSync } from 'node:zlib';
+import { CHROMES, decodePng, devtools, findChrome } from './browser.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 import {
     earlyExit,
@@ -179,22 +179,16 @@ const WINDOW_SCREENS =
     // The touch wall (2026-09-21): the strip and its steppers, and the
     // payment the press froze. Both passes below read this list, so both
     // the portrait screen and the counter tablet measure them.
-    'shop-window-touch-quotes,shop-window-touch-quotes-pay';
+    'shop-window-touch-quotes,shop-window-touch-quotes-pay,' +
+    // The unbuyable dash on a wall (2026-09-23), in a Browse row and on the
+    // Cycle card: the tall wall re-cuts both sizes.
+    'shop-window-unbuyable,shop-window-cycle-unbuyable';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
     `http://localhost:${PORT}/${PROBE_PAGE}?viewport=${vp === CANVAS ? 'canvas' : 'page'}${extra}`;
 const PORT = process.env.LAYOUT_PORT ?? '4319';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9339';
-const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
-
-function findChrome() {
-    for (const bin of CHROMES) {
-        if (spawnSync('which', [bin]).status === 0) return bin;
-    }
-    return undefined;
-}
-
 /**
  * Throws rather than exits. `process.exit` skips `finally`, and the preview
  * server and Chrome this script starts are stopped there — a failed build must
@@ -208,35 +202,6 @@ function run(cmd, args, opts = {}) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** The smallest CDP client that does this job: request/response plus events. */
-function devtools(url) {
-    const ws = new WebSocket(url);
-    let nextId = 1;
-    const waiting = new Map();
-    ws.addEventListener('message', (ev) => {
-        const msg = JSON.parse(ev.data);
-        const pending = msg.id !== undefined ? waiting.get(msg.id) : undefined;
-        if (pending === undefined) return;
-        waiting.delete(msg.id);
-        if (msg.error) pending.reject(new Error(JSON.stringify(msg.error)));
-        else pending.resolve(msg.result);
-    });
-    return {
-        opened: new Promise((resolve, reject) => {
-            ws.addEventListener('open', resolve, { once: true });
-            ws.addEventListener('error', reject, { once: true });
-        }),
-        send(method, params = {}, sessionId) {
-            const id = nextId++;
-            return new Promise((resolve, reject) => {
-                waiting.set(id, { resolve, reject });
-                ws.send(JSON.stringify({ id, method, params, sessionId }));
-            });
-        },
-        close: () => ws.close(),
-    };
-}
 
 async function devtoolsUrl(watch) {
     return waitUntil(
@@ -295,84 +260,6 @@ async function waitForFlag(cdp, sessionId, flag) {
         await sleep(100);
     }
     throw new Error(`${flag} never became true`);
-}
-
-/*
- * A minimal PNG reader for Chrome screenshots: 8-bit, RGB or RGBA,
- * non-interlaced — which is what `Page.captureScreenshot` emits. Node's zlib
- * does the heavy half, so this stays dependency-free like the CDP client
- * above. Anything outside that shape throws rather than guessing.
- */
-function decodePng(buf) {
-    let pos = 8;
-    let width = 0;
-    let height = 0;
-    let bpp = 0;
-    const idat = [];
-    while (pos + 8 <= buf.length) {
-        const len = buf.readUInt32BE(pos);
-        const type = buf.toString('ascii', pos + 4, pos + 8);
-        const data = buf.subarray(pos + 8, pos + 8 + len);
-        if (type === 'IHDR') {
-            width = data.readUInt32BE(0);
-            height = data.readUInt32BE(4);
-            const bitDepth = data[8];
-            const colorType = data[9];
-            const interlace = data[12];
-            if (bitDepth !== 8 || interlace !== 0 || (colorType !== 6 && colorType !== 2)) {
-                throw new Error(
-                    `unexpected PNG shape: depth ${bitDepth}, colour ${colorType}, interlace ${interlace}`,
-                );
-            }
-            bpp = colorType === 6 ? 4 : 3;
-        } else if (type === 'IDAT') {
-            idat.push(data);
-        } else if (type === 'IEND') {
-            break;
-        }
-        pos += 12 + len;
-    }
-    if (width === 0 || bpp === 0) throw new Error('PNG carried no IHDR');
-    const raw = inflateSync(Buffer.concat(idat));
-    const stride = width * bpp;
-    const out = Buffer.alloc(height * stride);
-    for (let y = 0; y < height; y += 1) {
-        const filter = raw[y * (stride + 1)];
-        const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
-        const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : undefined;
-        const cur = out.subarray(y * stride, (y + 1) * stride);
-        for (let x = 0; x < stride; x += 1) {
-            const a = x >= bpp ? cur[x - bpp] : 0;
-            const b = prev !== undefined ? prev[x] : 0;
-            const c = x >= bpp && prev !== undefined ? prev[x - bpp] : 0;
-            let v = line[x];
-            switch (filter) {
-                case 0:
-                    break;
-                case 1:
-                    v = (v + a) & 0xff;
-                    break;
-                case 2:
-                    v = (v + b) & 0xff;
-                    break;
-                case 3:
-                    v = (v + ((a + b) >> 1)) & 0xff;
-                    break;
-                case 4: {
-                    const p = a + b - c;
-                    const pa = Math.abs(p - a);
-                    const pb = Math.abs(p - b);
-                    const pc = Math.abs(p - c);
-                    v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
-                    break;
-                }
-                default:
-                    throw new Error(`PNG filter ${filter}`);
-            }
-            cur[x] = v;
-        }
-    }
-    return { width, height, bpp, data: out };
 }
 
 /* The same WCAG arithmetic as `contrastRatio` in src/domain/theme.ts. */

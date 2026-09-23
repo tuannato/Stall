@@ -45,6 +45,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CHROMES, devtools, findChrome } from './browser.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -66,7 +67,6 @@ const WORKSHOP_CONFIG = 'vite.workshop.config.ts';
 const KIT_LOOK_ID = 0xff;
 const SHOTS_OUT = '.workshop-dist/shots-out';
 const CDP_PORT = process.env.WORKSHOP_CDP_PORT ?? '9342';
-const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
 
 function usage(message) {
     if (message !== undefined) console.error(`workshop: ${message}\n`);
@@ -305,42 +305,6 @@ async function probe() {
 }
 
 /* ---------- shots ---------- */
-
-function findChrome() {
-    for (const bin of CHROMES) {
-        if (spawnSync('which', [bin]).status === 0) return bin;
-    }
-    return undefined;
-}
-
-/** The smallest CDP client that does this job — `layout-check.mjs` carries the same. */
-function devtools(url) {
-    const ws = new WebSocket(url);
-    let nextId = 1;
-    const waiting = new Map();
-    ws.addEventListener('message', (ev) => {
-        const msg = JSON.parse(ev.data);
-        const pending = msg.id !== undefined ? waiting.get(msg.id) : undefined;
-        if (pending === undefined) return;
-        waiting.delete(msg.id);
-        if (msg.error) pending.reject(new Error(JSON.stringify(msg.error)));
-        else pending.resolve(msg.result);
-    });
-    return {
-        opened: new Promise((resolve, reject) => {
-            ws.addEventListener('open', resolve, { once: true });
-            ws.addEventListener('error', reject, { once: true });
-        }),
-        send(method, params = {}, sessionId) {
-            const id = nextId++;
-            return new Promise((resolve, reject) => {
-                waiting.set(id, { resolve, reject });
-                ws.send(JSON.stringify({ id, method, params, sessionId }));
-            });
-        },
-        close: () => ws.close(),
-    };
-}
 
 async function evaluate(cdp, sessionId, expression) {
     const r = await cdp.send(

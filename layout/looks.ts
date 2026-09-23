@@ -115,8 +115,12 @@ export function lookById(id: number): Look {
  * all, which is right: its deck is three shipped looks by design (Q8).
  */
 export function looksFor(screen: string): readonly Look[] {
-    const measured = measuredLooks();
-    return screen === 'door' ? measured.filter((look) => look.id === DEFAULT_THEME_ID) : measured;
+    return measuredLooks().filter((look) => canWear(look, screen));
+}
+
+/** Whether `look` can wear `screen` at all — `looksFor`'s rule, for a caller holding its own list of looks. */
+export function canWear(look: Look, screen: string): boolean {
+    return screen !== 'door' || look.id === DEFAULT_THEME_ID;
 }
 
 /** The decorations `flags` puts on a look — `wornAttachments`' rule, over the look's own rows. */

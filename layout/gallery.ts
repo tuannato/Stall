@@ -23,13 +23,15 @@
  *   __seek(ms)                      — pause every animation at an instant
  *   __sheetClasses()                — the `t-*` classes the painted stall wears
  *   __shotPlan()                    — the workshop look's shot list (`shotPlan.ts`)
+ *   __diffPlan()                    — the shipped looks' before/after list (`pnpm looks:diff`)
+ *   __screens()                     — every fixture screen this build paints
  *   __galleryReady                  — true once the module has evaluated
  */
 import { renderStall } from '../src/ui/render';
 import { WORKSHOP_THEME_ID } from '../src/domain/theme';
 import { SCREENS, handlers } from './fixtures';
-import { galleryLooks, kitLook, lookById, registerWorkshopLook, wornOf, type Look } from './looks';
-import { shotPlan, type ShotJob } from './shotPlan';
+import { galleryLooks, kitLook, lookById, registerWorkshopLook, shippedLooks, wornOf, type Look } from './looks';
+import { diffPlan, shotPlan, type DiffJob, type ShotJob } from './shotPlan';
 import { loadKitLook } from './workshopKit';
 // After the app's own sheets (imported through `render`), so the kit's sheet
 // lands where a shipped look's does: last among equals in the cascade.
@@ -225,6 +227,8 @@ declare global {
         __seek: (ms: number) => number;
         __sheetClasses: () => string[];
         __shotPlan: () => ShotJob[];
+        __diffPlan: () => DiffJob[];
+        __screens: () => string[];
         __galleryReady: boolean;
     }
 }
@@ -248,4 +252,6 @@ window.__shotPlan = () => {
     }
     return shotPlan(kit);
 };
+window.__diffPlan = () => diffPlan(shippedLooks());
+window.__screens = () => Object.keys(SCREENS);
 window.__galleryReady = true;
