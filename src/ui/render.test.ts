@@ -15,8 +15,7 @@ import {
     SHIPPED_THEMES,
     decodeTheme,
     themeVars,
-    tierCharCeilings,
-    overlayTierCharCeilings,
+    type DecodedTheme,
 } from '../domain/theme';
 
 import { qrMatrix } from '../domain/qr';
@@ -5841,8 +5840,8 @@ describe('a-long-price-steps-down-before-it-moves-rows', () => {
      * rides the figure's line, so it counts (as two characters), and the
      * ceilings are the look's own — Rural's tag chrome seats one fewer.
      */
-    const MODERN = tierCharCeilings(DEFAULT_THEME_ID);
-    const RURAL = tierCharCeilings(RURAL_THEME_ID);
+    const MODERN = decodeTheme(DEFAULT_THEME_ID).tierCeilings;
+    const RURAL = decodeTheme(RURAL_THEME_ID).tierCeilings;
 
     it('walks the ladder in order and only concedes the row at the end', () => {
         expect(priceTier('1,200', false, MODERN)).toBe(0);
@@ -6709,9 +6708,9 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
      * overlay's own ceilings absorb that `from` is 22px here, not the
      * shop's 10.5px tag. `100,000,000` with `from` is past every look.
      */
-    const MODERN = overlayTierCharCeilings(DEFAULT_THEME_ID);
-    const NEO = overlayTierCharCeilings(NEO_CITY_THEME_ID);
-    const RURAL = overlayTierCharCeilings(RURAL_THEME_ID);
+    const MODERN = decodeTheme(DEFAULT_THEME_ID).overlayTierCeilings;
+    const NEO = decodeTheme(NEO_CITY_THEME_ID).overlayTierCeilings;
+    const RURAL = decodeTheme(RURAL_THEME_ID).overlayTierCeilings;
     const longOffer = (over: Partial<StallOffer> = {}): StallOffer => ({
         ...OFFER,
         askedSats: 10_000_000_000n,
@@ -6808,6 +6807,88 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
                 /flex-wrap:\s*wrap/.test(body!),
         );
         expect(rowWraps, 'tier 3 splits from+XEC onto their own line').toBe(true);
+    });
+});
+
+describe('a-look-is-painted-from-its-row', () => {
+    /**
+     * The look a paint wears is the object on the view, never a second table
+     * keyed by its id: the sheet class, both price ladders and the name a
+     * screen reads back all ride the row. So a look whose id no table ships,
+     * handed in as an object, is painted as itself — the seam a harness hands
+     * a look through — and an id with no row still decodes to the default's
+     * row whole, so nothing a production path produces moves.
+     *
+     * The ladders are tight enough that every site tiers `1,200` / `$5.00`
+     * differently from Modern: the listing head, the quote head, and both
+     * cards on the stream overlay.
+     */
+    const ROW: DecodedTheme = {
+        ...decodeTheme(DEFAULT_THEME_ID),
+        id: 0xfd,
+        known: true,
+        sheetClass: 't-x',
+        label: 'Test look',
+        tierCeilings: [2, 3, 4],
+        overlayTierCeilings: [2, 3, 4],
+    };
+    const UNKNOWN = decodeTheme(0xfe);
+    const quoteCards = { ...BROADCAST, cards: 'quotes', side: 'right', edge: 'bottom' } as const;
+    const studioLook = (theme: DecodedTheme): string | null | undefined =>
+        paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', theme }))
+            .root.querySelector('[data-role="studio-look-row"]')
+            ?.children[1]?.textContent;
+    const summary = (theme: DecodedTheme): string | null | undefined =>
+        paint(
+            quoteView({ theme, panel: 'studio', overlay: { kind: 'publish-name' } }),
+        ).root.querySelector('[data-role="publish-summary"]')?.textContent;
+
+    it('paints its own class, its own ladders and its own name', () => {
+        const shop = paint(offersView([OFFER], undefined, { theme: ROW })).root;
+        const stall = shop.querySelector('.stall')!;
+        expect(stall.classList.contains('t-x')).toBe(true);
+        expect([...stall.classList].filter((c) => c.startsWith('t-'))).toEqual(['t-x']);
+        // `from 1,200` is seven characters: past this row's last ceiling.
+        expect(shop.querySelector('.item-head')?.getAttribute('data-price-tier')).toBe('3');
+        const quote = paint(payView({ theme: ROW })).root;
+        expect(
+            quote.querySelector('[data-role="pay-row"] .item-head')?.getAttribute('data-price-tier'),
+        ).toBe('3');
+        const card = paint(broadcastView({ theme: ROW })).root;
+        expect(card.querySelector('.stall')?.classList.contains('t-x')).toBe(true);
+        expect(card.querySelector('.bc-p')?.getAttribute('data-tier')).toBe('3');
+        const quoteCard = paint(
+            quoteView({ theme: ROW, broadcast: quoteCards, broadcastState: 'live' }),
+        ).root;
+        expect(quoteCard.querySelector('.bc-q-item .bc-p')?.getAttribute('data-tier')).toBe('3');
+        expect(studioLook(ROW)).toBe('Test look');
+        expect(summary(ROW)).toContain('Test look');
+    });
+
+    it('an id with no row still paints Modern, and names its number', () => {
+        const shop = paint(offersView([OFFER], undefined, { theme: UNKNOWN })).root;
+        expect([...shop.querySelector('.stall')!.classList].filter((c) => c.startsWith('t-'))).toEqual([
+            't-modern',
+        ]);
+        expect(shop.querySelector('.item-head')?.hasAttribute('data-price-tier')).toBe(false);
+        expect(
+            paint(payView({ theme: UNKNOWN }))
+                .root.querySelector('[data-role="pay-row"] .item-head')
+                ?.getAttribute('data-price-tier'),
+        ).toBe('1');
+        expect(
+            paint(broadcastView({ theme: UNKNOWN })).root.querySelector('.bc-p')?.getAttribute('data-tier'),
+        ).toBe('1');
+        expect(
+            paint(quoteView({ theme: UNKNOWN, broadcast: quoteCards, broadcastState: 'live' }))
+                .root.querySelector('.bc-q-item .bc-p')
+                ?.hasAttribute('data-tier'),
+        ).toBe(false);
+        // The default's label would name a look the seller never chose: the
+        // record's own number stands, on both screens that read a look back.
+        expect(studioLook(UNKNOWN)).toBe('254');
+        expect(summary(UNKNOWN)).toContain('254');
+        expect(summary(UNKNOWN)).not.toContain('Modern');
     });
 });
 

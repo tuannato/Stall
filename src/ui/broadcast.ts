@@ -24,7 +24,6 @@ import { fitsQr } from '../domain/qr';
 import { DUST_SATS, formatAtoms, formatXec, isUnbuyable } from '../domain/money';
 import { payLandingUrl, stallPath } from '../domain/route';
 import type { BroadcastParams, StallView } from '../domain/state';
-import { overlayTierCharCeilings } from '../domain/theme';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
 import { nextCard } from '../domain/window';
@@ -34,7 +33,7 @@ import {
     identityOf,
     knownDecimals,
     listingsInShopOrder,
-    paintedThemeId,
+    paintedTheme,
     priceTier,
     qrSvg,
     quoteFigure,
@@ -375,7 +374,7 @@ function listingCard(view: StallView, listing: TokenListing): HTMLElement {
         }
         priceRow.append(figure);
         priceRow.append(el('span', 'bc-u', copy.XEC));
-        const tier = priceTier(amount, hasFrom, overlayTierCharCeilings(paintedThemeId(view)));
+        const tier = priceTier(amount, hasFrom, paintedTheme(view).overlayTierCeilings);
         if (tier > 0) {
             priceRow.setAttribute('data-tier', String(tier));
         }
@@ -418,7 +417,7 @@ function quoteCard(view: StallView, price: TokenPrice, tokenId: string): HTMLEle
     row.append(node);
     // The same ladder the asked figure walks, on the same 216px of plate: the
     // unit rides inside this figure, so the whole string is what is measured.
-    const tier = priceTier(figure, false, overlayTierCharCeilings(paintedThemeId(view)));
+    const tier = priceTier(figure, false, paintedTheme(view).overlayTierCeilings);
     if (tier > 0) {
         row.setAttribute('data-tier', String(tier));
     }

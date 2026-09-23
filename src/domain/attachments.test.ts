@@ -12,6 +12,8 @@ import {
     encodeAttachmentFlags,
     withMood,
     wornAttachments,
+    wornFrom,
+    type ShippedAttachment,
 } from './attachments';
 import {
     DEFAULT_THEME_ID,
@@ -290,6 +292,90 @@ describe('attachment-flags-are-one-tagged-push', () => {
         expect(encodeAttachmentFlags(0xffffff).length).toBe(3);
         expect(decodeAttachmentFlags(encodeAttachmentFlags(0xffffff).slice(1))).toBe(0xffff);
         expect(decodeAttachmentFlags(encodeAttachmentFlags(Number.NaN).slice(1))).toBe(0);
+    });
+});
+
+describe('worn-from-a-looks-rows-is-worn-attachments', () => {
+    /**
+     * `wornFrom` is the selection rule over rows handed in, so a caller that
+     * holds a look as an object can wear its decorations; `wornAttachments`
+     * is now that rule over the catalogue's rows for an id. Neither is judged
+     * against the other — one is defined as the other — but both against the
+     * body `wornAttachments` had before the split, kept here verbatim over
+     * `SHIPPED_ATTACHMENTS`, on every shipped look plus an id with no rows,
+     * over **every** two-byte flag value and four entitlements: none asked,
+     * nothing held, every minted token held, and every other one.
+     */
+    function previousWornAttachments(
+        themeId: number,
+        flags: number,
+        held?: ReadonlySet<string>,
+    ): readonly ShippedAttachment[] {
+        const bySlot = new Map<string, ShippedAttachment>();
+        for (let bit = 0; bit < ATTACHMENT_BITS; bit += 1) {
+            if ((flags & (1 << bit)) === 0) {
+                continue;
+            }
+            const row = SHIPPED_ATTACHMENTS.find((a) => a.themeId === themeId && a.bit === bit);
+            if (row === undefined || bySlot.has(row.slot)) {
+                continue;
+            }
+            if (held !== undefined && (row.tokenId === undefined || !held.has(row.tokenId))) {
+                continue;
+            }
+            bySlot.set(row.slot, row);
+        }
+        return [...bySlot.values()];
+    }
+
+    const minted = [...mintedAttachmentTokens()];
+    const helds: readonly (ReadonlySet<string> | undefined)[] = [
+        undefined,
+        new Set(),
+        new Set(minted),
+        new Set(minted.filter((_, i) => i % 2 === 0)),
+    ];
+    const same = (a: readonly ShippedAttachment[], b: readonly ShippedAttachment[]): boolean =>
+        a.length === b.length && a.every((row, i) => row === b[i]);
+
+    it('agrees with the old rule on every look, every flag value and every entitlement', () => {
+        const looks = [...new Set(SHIPPED_ATTACHMENTS.map((a) => a.themeId)), 0xfe];
+        expect(looks).toEqual([DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID, 0xfe]);
+        const misses: string[] = [];
+        for (const themeId of looks) {
+            const rows = attachmentsForTheme(themeId);
+            for (const [h, held] of helds.entries()) {
+                for (let flags = 0; flags <= 0xffff; flags += 1) {
+                    const want = previousWornAttachments(themeId, flags, held);
+                    if (!same(wornFrom(rows, flags, held), want)) {
+                        misses.push(`wornFrom ${themeId}/${flags}/held#${h}`);
+                    }
+                    if (!same(wornAttachments(themeId, flags, held), want)) {
+                        misses.push(`wornAttachments ${themeId}/${flags}/held#${h}`);
+                    }
+                }
+            }
+        }
+        expect(misses.slice(0, 5), `${misses.length} disagreements`).toEqual([]);
+        // ~2 s alone; the bound is for a loaded box running the whole suite.
+    }, 30_000);
+
+    it('wears rows that are in no table, by their own bits, one per slot', () => {
+        const [mood, fringe] = attachmentsForTheme(DEFAULT_THEME_ID);
+        expect([mood?.slot, fringe?.slot]).toEqual(['mood', 'fringe']);
+        const rows: ShippedAttachment[] = [
+            { ...mood!, themeId: 0xfd, bit: 4 },
+            { ...fringe!, themeId: 0xfd, bit: 7 },
+            { ...fringe!, themeId: 0xfd, bit: 9 },
+        ];
+        expect(wornFrom(rows, bits(4, 7)).map((a) => a.bit)).toEqual([4, 7]);
+        // No shipped look has two rows in one slot, so the sweep above never
+        // reaches the exclusivity rule: two here, and the lower bit wins.
+        expect(wornFrom(rows, bits(7, 9)).map((a) => a.bit)).toEqual([7]);
+        expect(wornFrom(rows, bits(9)).map((a) => a.bit)).toEqual([9]);
+        // A bit these rows do not carry paints nothing, whatever the catalogue
+        // says that bit means on a shipped look.
+        expect(wornFrom(rows, bits(0, 1))).toEqual([]);
     });
 });
 

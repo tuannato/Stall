@@ -386,10 +386,6 @@ export function encodeAttachmentFlags(flags: number): Uint8Array {
     return Uint8Array.from([ATTACHMENT_FLAGS_TAG, safe & 0xff, (safe >> 8) & 0xff]);
 }
 
-export function attachmentAt(themeId: number, bit: number): ShippedAttachment | undefined {
-    return SHIPPED_ATTACHMENTS.find((a) => a.themeId === themeId && a.bit === bit);
-}
-
 /**
  * Every token the catalogue can be entitled by: the minted rows' ids, all
  * looks at once.
@@ -461,12 +457,25 @@ export function wornAttachments(
     flags: number,
     held?: ReadonlySet<string>,
 ): readonly ShippedAttachment[] {
+    return wornFrom(attachmentsForTheme(themeId), flags, held);
+}
+
+/**
+ * `wornAttachments` over a look's rows handed in rather than found by id — the
+ * same rule, pure, for a caller that holds a look as an object. `rows` is one
+ * look's table, in catalogue order: a bit names the first row carrying it.
+ */
+export function wornFrom(
+    rows: readonly ShippedAttachment[],
+    flags: number,
+    held?: ReadonlySet<string>,
+): readonly ShippedAttachment[] {
     const bySlot = new Map<AttachmentSlot, ShippedAttachment>();
     for (let bit = 0; bit < ATTACHMENT_BITS; bit += 1) {
         if ((flags & (1 << bit)) === 0) {
             continue;
         }
-        const row = attachmentAt(themeId, bit);
+        const row = rows.find((candidate) => candidate.bit === bit);
         // A bit with no row in this theme's table paints nothing and says
         // nothing. Unlike an unknown theme id, which falls back and tells the
         // visitor: a missing decoration is not a lie about money.

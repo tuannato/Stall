@@ -78,6 +78,54 @@ describe('a-state-pill-reads-on-every-palette-it-can-wear', () => {
     });
 });
 
+describe('each-look-row-carries-its-class-label-and-ladders', () => {
+    /**
+     * A look is painted from its row: the sheet class, the name a seller
+     * reads and both price ladders ride the row that `decodeTheme` returns,
+     * where they used to sit in three maps keyed by id. Pinned here by
+     * **literal value**, because every other assertion about them reads its
+     * expectation from the row it tests — a Rural ceiling moved by a slip, or
+     * a class that no longer scopes its own sheet, would leave the suite
+     * green. (`theme-table-ids-are-pinned` pins what an id means; this pins
+     * what its row hands the renderer today.)
+     */
+    it('pins each shipped row by value', () => {
+        const pinned = [
+            { id: 0x01, cls: 't-modern', label: 'Modern', shop: [7, 9, 12], overlay: [5, 7, 9] },
+            { id: 0x02, cls: 't-neo', label: 'Neo city', shop: [7, 9, 12], overlay: [5, 7, 9] },
+            { id: 0x03, cls: 't-rural', label: 'Rural', shop: [6, 8, 11], overlay: [8, 10, 12] },
+        ];
+        for (const want of pinned) {
+            const row = decodeTheme(want.id);
+            expect(row.known).toBe(true);
+            expect(row.sheetClass, `0x0${want.id} class`).toBe(want.cls);
+            expect(row.label, `0x0${want.id} label`).toBe(want.label);
+            expect(row.tierCeilings, `0x0${want.id} shop ladder`).toEqual(want.shop);
+            expect(row.overlayTierCeilings, `0x0${want.id} overlay ladder`).toEqual(want.overlay);
+        }
+        // The list a seller picks from is the rows, in the order they are
+        // offered, and nothing beside them.
+        expect(SHIPPED_THEMES).toEqual(pinned.map(({ id, label }) => ({ id, label })));
+    });
+
+    it('an id with no row wears the default row whole — class and ladders', () => {
+        const unknown = decodeTheme(0xfe);
+        expect(unknown.known).toBe(false);
+        expect(unknown.id).toBe(0xfe);
+        expect(unknown.sheetClass).toBe('t-modern');
+        expect(unknown.tierCeilings).toEqual([7, 9, 12]);
+        expect(unknown.overlayTierCeilings).toEqual([5, 7, 9]);
+    });
+
+    it('every class is one class token under t-', () => {
+        // `dressLook` strips every `t-` class before it adds the row's, and
+        // `classList.add` throws on a space — a bad row must not brick a stall.
+        for (const theme of [DEFAULT_THEME, ...SHIPPED_THEMES.map((row) => decodeTheme(row.id))]) {
+            expect(theme.sheetClass).toMatch(/^t-[a-z0-9-]+$/);
+        }
+    });
+});
+
 describe('theme-table-ids-are-pinned', () => {
     /**
      * A published record names a number, and that number is permanent. What

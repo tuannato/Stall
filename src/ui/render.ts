@@ -115,7 +115,6 @@ import {
     SHIPPED_THEMES,
     decodeTheme,
     themeVars,
-    tierCharCeilings,
     type DecodedTheme,
 } from '../domain/theme';
 import { stallMark } from './brand';
@@ -447,8 +446,9 @@ export function paintedThemeId(view: StallView): number {
 
 /**
  * The whole look that is painting, not just its id — the same answer
- * `renderStall` gives the frame, for the screens that read a look's *words*
- * and its *markup* rather than its class.
+ * `renderStall` gives the frame, for the screens that read a look's *words*,
+ * its *markup* and its price ladders (`tierCeilings`, and the overlay's in
+ * `broadcast.ts`) off the row rather than by id.
  *
  * The sparse-shop chrome is exactly that: `theme.sparse.kind` chooses which
  * children the motif mounts, and each look's sheet styles only its own kind.
@@ -462,9 +462,19 @@ export function paintedThemeId(view: StallView): number {
  * Same family as `1c52639` (the node rows) and `d52c555` (the sheet's own
  * summary): whatever the try-on paints, it paints whole.
  */
-function paintedTheme(view: StallView): DecodedTheme {
+export function paintedTheme(view: StallView): DecodedTheme {
     const previewed = activePreview(view);
     return previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+}
+
+/**
+ * A look's name as a screen reads it back: its row's label — or, for an id
+ * this build ships no row for, the number the record carries. That look wears
+ * the default's row, label included, and "Modern" there would name a look the
+ * seller never chose.
+ */
+function lookLabel(theme: DecodedTheme): string {
+    return theme.known ? theme.label : String(theme.id);
 }
 
 export function renderStall(
@@ -856,13 +866,6 @@ export function renderStall(
     overlayWasOpen = overlayOpen;
 }
 
-/** id → the class its shipped stylesheet is scoped under. */
-const THEME_CLASS: Record<number, string> = {
-    [DEFAULT_THEME_ID]: 't-modern',
-    [NEO_CITY_THEME_ID]: 't-neo',
-    [RURAL_THEME_ID]: 't-rural',
-};
-
 /**
  * Dress one element as a look: the `--s-*` vars inline, the look's class
  * and the worn decorations' root classes. This half has no side effects
@@ -891,10 +894,11 @@ function dressLook(
     /*
      * The look's own stylesheet, by class (owner's ruling, 2026-08-30:
      * the design files apply directly). The chain still supplies only a
-     * one-byte id — this maps it to a class over CSS we ship, exactly as
-     * the ornament kind always has. Unknown ids wear the default's class.
+     * one-byte id — `decodeTheme` turns it into a row, and the row names a
+     * class over CSS we ship, exactly as it names the ornament kind. Unknown
+     * ids wear the default's row, and so its class.
      */
-    node.classList.add(THEME_CLASS[theme.id] ?? 't-modern');
+    node.classList.add(theme.sheetClass);
     node.classList.add(...attachmentClasses(worn));
     return vars;
 }
@@ -2946,7 +2950,7 @@ function payRow(
     const tier = priceTier(
         figureText,
         false,
-        tierCharCeilings(paintedThemeId(view)),
+        paintedTheme(view).tierCeilings,
         mode === 'in' ? 0 : mode === 'apart' ? PAY_APART_PILL_CHARS : PAY_PILL_CHARS,
     );
     if (tier > 0) {
@@ -6068,10 +6072,13 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (input.value !== '') {
             parts.push({ label: copy.SUMMARY_NAME, value: input.value });
         }
-        const lookRow = SHIPPED_THEMES.find((row) => row.id === chosenTheme);
+        // The record's own look object while the choice is still that look,
+        // so a look handed to the renderer as a row names itself; any other
+        // choice is a picker row, decoded.
+        const recordLook = view.theme ?? DEFAULT_THEME;
         parts.push({
             label: copy.SUMMARY_LOOK,
-            value: lookRow?.label ?? String(chosenTheme),
+            value: lookLabel(chosenTheme === recordLook.id ? recordLook : decodeTheme(chosenTheme)),
         });
         if (extras.tagline !== undefined) {
             parts.push({ label: copy.SUMMARY_TAGLINE });
@@ -6397,7 +6404,7 @@ function offerRow(
         // The figure's dress for the width it has — set on the head, which
         // owns the grid the tier rules re-cut, per the look actually being
         // painted (a try-on included). Desktop never reads it.
-        const tier = priceTier(figure, hasFrom, tierCharCeilings(paintedThemeId(view)));
+        const tier = priceTier(figure, hasFrom, paintedTheme(view).tierCeilings);
         if (tier > 0) {
             head.setAttribute('data-price-tier', String(tier));
         }
@@ -6441,7 +6448,7 @@ function offerRow(
  * tall is fine and a name two letters wide is not.
  *
  * Character count, not measurement — render never reads layout. The
- * ceilings are per look (`tierCharCeilings`, data beside the theme table:
+ * ceilings are per look (`DecodedTheme.tierCeilings`, data on the look's row:
  * Rural's tag chrome seats one character fewer), and the probe's
  * name-floor rule is what holds them true on every shipped look; `from`
  * rides the figure's own line, so it counts as two characters. Desktop has
@@ -7708,10 +7715,9 @@ function paintStudio(
         row.append(value);
         name.card.append(row);
     }
-    const lookId = view.theme?.id ?? DEFAULT_THEME.id;
     const look = kvRow(
         copy.STUDIO_LOOK_ROW,
-        SHIPPED_THEMES.find((row) => row.id === lookId)?.label ?? String(lookId),
+        lookLabel(view.theme ?? DEFAULT_THEME),
         'studio-look-row',
     );
     look.classList.add('kv-top');

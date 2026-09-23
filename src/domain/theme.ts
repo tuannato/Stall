@@ -211,6 +211,41 @@ export type DecodedTheme = {
     /** False when the id has no shipped row, so the screen can say so. */
     known: boolean;
     /**
+     * The class the look's own stylesheet is scoped under
+     * (`src/ui/theme-*.css`). It rides the row rather than a second map keyed
+     * by id, so whatever paints a look object paints that look's sheet — and
+     * an id with no row wears the default's, because `decodeTheme` spreads
+     * the default row. One class token: `dressLook` strips every `t-` class
+     * before it adds this one, and a space would throw in `classList.add`.
+     */
+    sheetClass: `t-${string}`;
+    /** The words a seller reads for this look — ours, and free to rename. */
+    label: string;
+    /**
+     * How many characters of asked figure the look seats at design size, at
+     * tier 1, and at tier 2, on a phone — past the last ceiling the tag takes
+     * its own row. Data beside the look, not CSS: the ceilings pair with the
+     * tier sizes each theme sheet declares, and they differ because the
+     * chrome differs — Rural's tag spends ~39px on notch padding and border
+     * and sets a serif rate line, so it seats one character fewer at every
+     * step (measured in the gallery at 390px: `from 1,200` at design size
+     * left the name column 59px; one tier down it breathes at ~76px).
+     */
+    tierCeilings: readonly [number, number, number];
+    /**
+     * The stream overlay's plate — 216px of content (252 − 2×18), figure
+     * 39→31→24px tabular bold, `from`/`XEC` at 22px, flex gap 8. Same
+     * `priceTier` shape as the shop (`from` counts as two characters); these
+     * cuts are not the shop's, because the overlay's `from` is 22px on a
+     * 216px plate rather than a 10.5px tag on a phone grid. Measured in
+     * Chrome at 1920×1080 against a row matching `broadcast.css`, in each
+     * look's `--s-font` (Neo's mono is the widest). Each ceiling is
+     * min(bare-fit, with-from-fit + 2) at that size so the +2 never spills.
+     * Past the last ceiling the row becomes two lines: `from` + `XEC` small,
+     * the figure alone (still nowrap). `from 100,000,000` is past every look.
+     */
+    overlayTierCeilings: readonly [number, number, number];
+    /**
      * The page's backdrop layers — a CSS background-image value, ours from
      * this table exactly like `cardBorder`'s color-mix strings, never a byte
      * of it chain-supplied. It paints **behind** every surface; the pixel
@@ -260,60 +295,20 @@ export const FONT_STACKS = [
  * all, so a seller who publishes it is asking for what they already had.
  */
 export const DEFAULT_THEME_ID = 0x01;
-
-/**
- * How many characters of asked figure each look seats at design size, at
- * tier 1, and at tier 2, on a phone — past the last ceiling the tag takes
- * its own row. Data beside the look, not CSS: the ceilings pair with the
- * tier sizes each theme sheet declares, and they differ because the chrome
- * differs — Rural's tag spends ~39px on notch padding and border and sets
- * a serif rate line, so it seats one character fewer at every step
- * (measured in the gallery at 390px: `from 1,200` at design size left the
- * name column 59px; one tier down it breathes at ~76px).
- */
-const TIER_CHAR_CEILINGS: ReadonlyMap<number, readonly [number, number, number]> = new Map([
-    [0x01, [7, 9, 12]],
-    [0x02, [7, 9, 12]],
-    [0x03, [6, 8, 11]],
-]);
-
-/** Unknown ids wear the shipped default look, so they tier like it too. */
-export function tierCharCeilings(themeId: number): readonly [number, number, number] {
-    return TIER_CHAR_CEILINGS.get(themeId) ?? TIER_CHAR_CEILINGS.get(DEFAULT_THEME_ID)!;
-}
-
-/**
- * Overlay plate — 216px of content (252 − 2×18), figure 39→31→24px tabular
- * bold, `from`/`XEC` at 22px, flex gap 8. Same `priceTier` shape as the
- * shop (`from` counts as two characters); these cuts are not the shop's,
- * because the overlay's `from` is 22px on a 216px plate rather than a
- * 10.5px tag on a phone grid. Measured in Chrome at 1920×1080 against a
- * row matching `broadcast.css`, in each look's `--s-font` (Neo's mono is
- * the widest). Each ceiling is min(bare-fit, with-from-fit + 2) at that
- * size so the +2 never spills. Past the last ceiling the row becomes two
- * lines: `from` + `XEC` small, the figure alone (still nowrap).
- * `from 100,000,000` is past every look.
- */
-const OVERLAY_TIER_CHAR_CEILINGS: ReadonlyMap<number, readonly [number, number, number]> =
-    new Map([
-        [0x01, [5, 7, 9]],
-        [0x02, [5, 7, 9]],
-        [0x03, [8, 10, 12]],
-    ]);
-
-/** Unknown ids wear the shipped default look, so they tier like it too. */
-export function overlayTierCharCeilings(themeId: number): readonly [number, number, number] {
-    return (
-        OVERLAY_TIER_CHAR_CEILINGS.get(themeId) ??
-        OVERLAY_TIER_CHAR_CEILINGS.get(DEFAULT_THEME_ID)!
-    );
-}
 export const NEO_CITY_THEME_ID = 0x02;
 export const RURAL_THEME_ID = 0x03;
 
+/**
+ * The default look. An id with no shipped row wears all of it — palette,
+ * sheet class and both ceiling ladders — so it tiers like it too.
+ */
 export const DEFAULT_THEME: DecodedTheme = {
     id: DEFAULT_THEME_ID,
     known: true,
+    sheetClass: 't-modern',
+    label: 'Modern',
+    tierCeilings: [7, 9, 12],
+    overlayTierCeilings: [5, 7, 9],
     sparse: {
         kind: 'lightwell',
         emptyTitle: 'The shelf is up — nothing on it yet.',
@@ -449,6 +444,10 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
     [
         NEO_CITY_THEME_ID,
         {
+            sheetClass: 't-neo',
+            label: 'Neo city',
+            tierCeilings: [7, 9, 12],
+            overlayTierCeilings: [5, 7, 9],
             /*
              * Re-cut 2026-08-30 from the approved full dress (extraction
              * round 1): a deeper night, a brighter cyan, and the muted
@@ -590,6 +589,10 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
     [
         RURAL_THEME_ID,
         {
+            sheetClass: 't-rural',
+            label: 'Rural',
+            tierCeilings: [6, 8, 11],
+            overlayTierCeilings: [8, 10, 12],
             /*
              * Re-cut 2026-08-30 from the approved full dress (extraction
              * round 1): warmer paper, terracotta deepened, and the second
@@ -747,16 +750,15 @@ function look(theme: DecodedTheme): Omit<DecodedTheme, 'id' | 'known'> {
 }
 
 /**
- * The looks a seller can choose, in the order they are offered. Labels are ours
- * and renaming one is free; the **id** is what a published record carries, so
- * `theme-table-ids-are-pinned` asserts the numbers and this list must agree
- * with `SHIPPED_LOOKS` rather than drift beside it.
+ * The looks a seller can choose, in the order they are offered — derived from
+ * `SHIPPED_LOOKS`, whose insertion order is the offer order, so the list and
+ * the table cannot drift. Labels are ours and renaming one is free; the **id**
+ * is what a published record carries, so `theme-table-ids-are-pinned` asserts
+ * the numbers.
  */
 export const SHIPPED_THEMES: readonly { readonly id: number; readonly label: string }[] = [
-    { id: DEFAULT_THEME_ID, label: 'Modern' },
-    { id: NEO_CITY_THEME_ID, label: 'Neo city' },
-    { id: RURAL_THEME_ID, label: 'Rural' },
-];
+    ...SHIPPED_LOOKS,
+].map(([id, row]) => ({ id, label: row.label }));
 
 export function isShippedThemeId(id: number): boolean {
     return SHIPPED_LOOKS.has(id);
