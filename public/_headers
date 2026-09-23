@@ -61,6 +61,12 @@
 /guide.css
   Cache-Control: no-store
 
+# The third-party notices (scripts/notices.mjs). Unhashed and regenerated
+# whenever the bundle's packages change, so a cached copy would name code
+# this site no longer sends.
+/licenses.txt
+  Cache-Control: no-store
+
 # Hashed filenames, so the bytes at a URL never change. Safe to cache hard only
 # because the document above is never cached.
 /assets/*

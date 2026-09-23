@@ -384,6 +384,8 @@ describe('unhashed-path-is-not-cacheable', () => {
             '/stream.css',
             '/guide',
             '/guide.css',
+            // The third-party notices: unhashed, regenerated with the bundle.
+            '/licenses.txt',
             ...stallSource,
         ]) {
             expect(declared.get(path)?.get('cache-control'), path).toBe('no-store');

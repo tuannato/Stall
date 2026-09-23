@@ -295,8 +295,16 @@ describe('public-weight-has-a-ceiling', () => {
      * next raise, and the question that raise asks is whether four cards of
      * a quarter of a megabyte each are what `public/` should be for, or
      * whether the cards should be generated smaller.
+     *
+     * **Raised by 20,000 to 1,360,000 on 2026-09-23 for `licenses.txt`**
+     * (20,274 bytes: the third-party notices, `scripts/notices.mjs`) — the
+     * deliberate diff, so the file does not eat the room the fourth look's
+     * card was given. Measured 1,128,248 with it in (and the `_headers` and
+     * `/guide` lines beside it), against 1,107,823 before. Emitting the file from the build instead was weighed and
+     * refused: it would move the weight onto `served-weight-has-a-ceiling`
+     * and take every licence change out of the diffs a reviewer reads.
      */
-    const PUBLIC_CEILING_BYTES = 1_340_000;
+    const PUBLIC_CEILING_BYTES = 1_360_000;
 
     function sizeOf(dir: string): number {
         let total = 0;

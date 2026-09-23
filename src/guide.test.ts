@@ -171,6 +171,29 @@ describe('the-guide-names-every-rate-source-the-csp-allows', () => {
     });
 });
 
+/*
+ * The third-party notices (`public/licenses.txt`, written by
+ * `scripts/notices.mjs` and held to the bundle by `scripts/notices.test.mjs`)
+ * are served, and a file nobody links is a file nobody reads: the guide's
+ * foot carries the one anchor to it — same origin, no script, plain text.
+ */
+describe('the-guide-links-the-licences', () => {
+    it('carries one anchor in its foot to the notices this origin serves', () => {
+        const html = read('public', 'guide.html');
+        const foot = html.match(/<footer class="foot">([\s\S]*?)<\/footer>/);
+        expect(foot, 'the guide has a foot').not.toBeNull();
+        const anchors = [...html.matchAll(/<a\b[^>]*\bhref="\/licenses\.txt"[^>]*>([\s\S]*?)<\/a>/g)];
+        expect(anchors, 'exactly one link to the notices').toHaveLength(1);
+        expect(foot![1]).toContain(anchors[0]![0]);
+        expect(anchors[0]![0]).toContain('data-role="licenses-link"');
+        expect(flat(anchors[0]![1]!).trim()).toBe('Open-source licences');
+        // Where it points is a file this origin ships, and it is the notices.
+        const notices = read('public', 'licenses.txt');
+        expect(notices).toContain('third-party software and fonts');
+        expect(notices).toContain('== Software under the MIT License ==');
+    });
+});
+
 describe('the-guide-promises-nothing', () => {
     it('does not promise safety, a guarantee or a refund', () => {
         const html = read('public', 'guide.html');
