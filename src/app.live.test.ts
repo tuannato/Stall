@@ -3343,6 +3343,49 @@ describe('a-token-whose-baton-the-wallet-holds-reaches-the-studio', () => {
     });
 });
 
+describe('a-described-token-is-named-by-its-genesis-like-a-quoted-one', () => {
+    /**
+     * The second `loadTokenMeta` asked about the priced records alone, on the
+     * reasoning that only a quote puts a row on the shop. True, and it forgot
+     * the two surfaces a description reaches with no figure on it at all: the
+     * Studio's items card and the describe picker, both of which take
+     * `describableTokenIds` — which has read the descriptions since it was
+     * written. So a token the seller had only written words about was named
+     * by its 64-character id in the one place they go to edit it.
+     *
+     * Measured on a live stall (2026-09-23): one `STLD` record carrying words
+     * and no price, nothing listed on Agora, no baton held.
+     */
+    it('reads the genesis of a token the records name without quoting', async () => {
+        const DESCRIBED = '6f'.repeat(32);
+        window.history.replaceState(null, '', stallPath(PK));
+        publish(signedTx({ txid: '6a'.repeat(32), outputs: [stl1Output('Riverside Goods')], height: 5 }));
+        publish(
+            signedTx({
+                txid: '6b'.repeat(32),
+                outputs: [stldOutput(DESCRIBED, 'One wrap, ten XEC')],
+                height: 6,
+            }),
+        );
+        chain.genesis.set(DESCRIBED, genesisOf('Beeswax Wrap'));
+
+        const root = document.createElement('div');
+        boot(root);
+        await flush();
+        await flush();
+
+        expect(painted.view?.prices?.size, 'words only: nothing is quoted').toBe(0);
+        expect(painted.view?.tokens.get(DESCRIBED)?.name).toBe('Beeswax Wrap');
+
+        (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
+        await flush();
+        const row = root.querySelector(`[data-role="studio-item"][data-token-id="${DESCRIBED}"]`);
+        expect(row, 'the described token has a row').not.toBeNull();
+        expect(row?.textContent).toContain('Beeswax Wrap');
+        expect(row?.textContent, 'never the id where a name goes').not.toContain(DESCRIBED);
+    });
+});
+
 describe('an-implausible-feed-answer-is-refused-and-said', () => {
     /**
      * The window is the domain's (`isPlausibleRate`) and `readPayRate` applies

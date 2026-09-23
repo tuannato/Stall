@@ -9526,6 +9526,67 @@ describe('a-pasted-token-id-joins-the-picker', () => {
     });
 });
 
+describe('a-picker-option-takes-the-name-the-sheet-learned', () => {
+    /**
+     * An option is built when the sheet is, which is before `askAbout` has
+     * answered — so a token whose genesis facts the load never read is
+     * labelled with its own 64-character id. That label used to stand for the
+     * life of the sheet: `addOption` refuses a value it already holds and
+     * nothing else ever wrote the text, while the same answer painted the
+     * provenance line two fields down. Measured on a live stall, 2026-09-23.
+     */
+    const DESCRIBED = 'cd'.repeat(32);
+    const DESCRIBED_META: TokenMeta = {
+        tokenId: DESCRIBED,
+        name: 'Beeswax Wrap',
+        ticker: 'BWX',
+        decimals: 2,
+        tokenType: { protocol: 'ALP', type: 'ALP_TOKEN_TYPE_STANDARD' },
+    };
+
+    it('relabels an option it built from a bare token id', async () => {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onLookupToken: vi.fn(async () => ({
+                meta: DESCRIBED_META,
+                // The live case this came from: words on a token another
+                // wallet minted, so the sheet learns a name it may not quote.
+                attribution: 'not-attributed' as const,
+            })),
+        };
+        renderStall(
+            root,
+            quoteView({
+                overlay: { kind: 'describe' },
+                fetch: { kind: 'empty' },
+                tokens: new Map(),
+                prices: undefined,
+                descriptions: new Map([[DESCRIBED, 'One wrap, ten XEC']]),
+            }),
+            h,
+        );
+        const picker = describeField(root, 'describe-token') as HTMLSelectElement;
+        const option = () => [...picker.options].find((o) => o.value === DESCRIBED);
+        expect(option()?.textContent, 'with no meta the id is the honest label').toBe(
+            DESCRIBED,
+        );
+
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(h.onLookupToken).toHaveBeenCalledWith(DESCRIBED);
+        expect(option()?.textContent, 'the name the lookup answered with').toBe(
+            'Beeswax Wrap',
+        );
+        // The same answer's other half, which was never the broken one.
+        expect(describeField(root, 'describe-price-why').textContent).toBe(
+            copy.DESC_QUOTE_NOT_YOURS,
+        );
+    });
+});
+
 describe('a-pasted-token-id-does-not-clear-the-half-written-record', () => {
     /**
      * The sheet holds a half-written record in the DOM and nowhere else, so a

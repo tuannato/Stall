@@ -3869,6 +3869,26 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const shelf = shelfField.value;
         const used = descriptionBytes(text);
 
+        /*
+         * The picker's labels follow what this sheet has learned.
+         *
+         * An option is built when the sheet is, which is before `askAbout`
+         * has answered — so a token whose genesis facts the load never read
+         * is labelled with its own 64-character id. The name arrives moments
+         * later and `addOption` refuses to touch a value it already holds, so
+         * the id stood there for the life of the sheet while the same answer
+         * painted the provenance line two fields down (measured on a live
+         * stall, 2026-09-23). Screened like every other genesis string, and
+         * written only when it changed: a `<select>` a seller is holding open
+         * must not be rebuilt under them.
+         */
+        for (const option of picker.options) {
+            const label = tokenName(known, option.value);
+            if (option.textContent !== label) {
+                option.textContent = label;
+            }
+        }
+
         // Nothing to write a record about yet. The picker and its note stay;
         // the record itself has no subject, so it is not on screen.
         const noToken = tokenId === '';

@@ -2556,7 +2556,7 @@ export function boot(
                 state = { ...state, view: { ...state.view, descriptionsFailed: true } };
             } else {
                 applyDescriptions(lookup);
-                await fillQuotedTokens(claimed, pending.pubkeyHex);
+                await fillRecordTokens(claimed, pending.pubkeyHex);
                 if (claimed !== generation) {
                     return;
                 }
@@ -2577,18 +2577,25 @@ export function boot(
     };
 
     /**
-     * Genesis facts for the tokens the seller's quotes name, on the screen
-     * where the book failed.
+     * Genesis facts for the tokens the seller's own records name, on the
+     * screen where the book failed.
      *
      * `loadCurrent` makes this read after its own walk; here the walk answers
      * later, so the read follows it in the same place. A read that answers
      * nothing leaves those quotes off the page and unmentioned: our failure is
      * already on this screen once, and a count under a hosts box says it twice.
+     *
+     * Quoted **and** described, the same set `loadCurrent` reads: a record
+     * with words and no figure paints no shop row, and still names a row on
+     * the Studio's items card and an option in the describe picker.
      */
-    const fillQuotedTokens = async (claimed: number, pubkeyHex: string): Promise<void> => {
-        const missing = [...(state.view.prices?.keys() ?? [])].filter(
-            (tokenId) => !state.view.tokens.has(tokenId),
-        );
+    const fillRecordTokens = async (claimed: number, pubkeyHex: string): Promise<void> => {
+        const missing = [
+            ...new Set([
+                ...(state.view.prices?.keys() ?? []),
+                ...(state.view.descriptions?.keys() ?? []),
+            ]),
+        ].filter((tokenId) => !state.view.tokens.has(tokenId));
         if (missing.length === 0) {
             return;
         }
@@ -3925,7 +3932,8 @@ async function loadCurrent(): Promise<AppState> {
     }
 
     /*
-     * Genesis facts for tokens the seller **quoted** but does not list.
+     * Genesis facts for the tokens the seller's own records name, and for the
+     * ones this wallet can still mint — none of which the book carries.
      *
      * A second read, and deliberately after the descriptions answered rather
      * than folded into the first: that one runs in parallel with this walk on
@@ -3935,15 +3943,25 @@ async function loadCurrent(): Promise<AppState> {
      * A read that fails leaves those rows unpainted and counted — a quote
      * whose genesis this page never saw could be an NFT, and a quote per whole
      * token means nothing about one.
+     *
+     * **Described, not only quoted.** It asked about the priced records alone
+     * until 2026-09-23, on the reasoning that only a quote puts a row on the
+     * shop — true, and it forgot the two surfaces a description reaches with
+     * no figure on it at all: the Studio's items card and the describe
+     * picker, both of which take `describableTokenIds`. A token the seller
+     * had only written words about was therefore named by its 64-character id
+     * in the one place they go to edit it (measured on a live stall).
      */
-    // The quoted tokens, and the ones the wallet can still mint: both need a
-    // name on the studio and in the picker, neither is on the book.
-    const quotedIds = [...new Set([...descriptionLookup.prices.keys(), ...(mintedHere ?? [])])].filter(
-        (tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)) === undefined,
-    );
-    if (quotedIds.length > 0) {
+    const offBookIds = [
+        ...new Set([
+            ...descriptionLookup.prices.keys(),
+            ...descriptionLookup.descriptions.keys(),
+            ...(mintedHere ?? []),
+        ]),
+    ].filter((tokenId) => sessionTokens.get(cacheKey(route.pubkeyHex, tokenId)) === undefined);
+    if (offBookIds.length > 0) {
         try {
-            for (const meta of await loadTokenMeta(chronik, quotedIds)) {
+            for (const meta of await loadTokenMeta(chronik, offBookIds)) {
                 sessionTokens.set(cacheKey(route.pubkeyHex, meta.tokenId), meta);
             }
         } catch {
@@ -3983,6 +4001,16 @@ async function loadCurrent(): Promise<AppState> {
     // for every one of them, and a sold-out listing must not take the quote
     // off the page with it.
     for (const tokenId of descriptionLookup.prices.keys()) {
+        const meta = sessionTokens.get(cacheKey(route.pubkeyHex, tokenId));
+        if (meta) {
+            tokens.set(tokenId, meta);
+        }
+    }
+    // The tokens the seller has written words about, listed or not: they
+    // carry no figure, so they reach no shop row — but they are rows on the
+    // Studio's items card and options in the describe picker, and both take
+    // their name from here (`describableTokenIds`).
+    for (const tokenId of descriptionLookup.descriptions.keys()) {
         const meta = sessionTokens.get(cacheKey(route.pubkeyHex, tokenId));
         if (meta) {
             tokens.set(tokenId, meta);
