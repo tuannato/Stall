@@ -4,8 +4,9 @@
  * may cover the asked amount "needs a test that reads rendered output, and
  * happy-dom does not lay out — it wants a real browser in the loop."
  *
- * This is that loop. It builds the app with `layout/probe.html` as a second
- * entry, serves `dist`, and drives headless Chrome at each viewport. The page
+ * This is that loop. It builds from `vite.probe.config.ts` — the app's own
+ * config with `layout/probe.html` as a second entry, into `.probe-dist` —
+ * serves that, and drives headless Chrome at each viewport. The page
  * measures itself and writes a verdict; this reads it back out of the page.
  * No new dependency: Chrome is the only thing it needs, and a missing Chrome is
  * a failure rather than a skip — a guard that silently does not run is counted
@@ -20,11 +21,48 @@
  * dependency — which is the only reason this is not puppeteer.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { payScreensMissingQuote } from './pay-screens.mjs';
+
+/*
+ * The app's config is read by this run and never written: the probe builds and
+ * previews from its own, `vite.probe.config.ts`. This used to patch its entry
+ * into `vite.config.ts` and write the file back on the way out, so a killed run
+ * left the app's config patched. What stays is a tripwire: if the bytes differ
+ * on the way out — an editor, or another script writing the file while this
+ * run built from it — the run fails and says so. An `exit` listener runs on
+ * every way out but a signal, a throw included, and setting `exitCode` there
+ * overrides the code `process.exit` was handed; a run killed by a signal has
+ * written nothing, so it leaves nothing behind.
+ */
+const APP_CONFIG = 'vite.config.ts';
+const PROBE_CONFIG = 'vite.probe.config.ts';
+const appConfigAtStart = readFileSync(APP_CONFIG);
+let tripwireSaid = false;
+/** True, and said once, when the app's config is not the bytes this run began with. */
+function appConfigMoved() {
+    let now;
+    try {
+        now = readFileSync(APP_CONFIG);
+    } catch {
+        now = undefined;
+    }
+    const moved = now === undefined || !now.equals(appConfigAtStart);
+    if (moved && !tripwireSaid) {
+        tripwireSaid = true;
+        console.error(
+            `\nlayout-check: ${APP_CONFIG} changed while this run built from it. ` +
+                'Nothing here writes it; find what did before trusting this run.',
+        );
+    }
+    return moved;
+}
+process.on('exit', () => {
+    if (appConfigMoved()) process.exitCode = 1;
+});
 
 const VIEWPORTS = [
     { name: 'mobile', width: 390, height: 844 },
@@ -95,9 +133,9 @@ function findChrome() {
 }
 
 /**
- * Throws rather than exits. `process.exit` skips `finally`, and everything this
- * script does after patching `vite.config.ts` has to unwind through it — a
- * failed build used to leave the patched config on disk.
+ * Throws rather than exits. `process.exit` skips `finally`, and the preview
+ * server and Chrome this script starts are stopped there — a failed build must
+ * unwind through it like any other failure.
  */
 function run(cmd, args, opts = {}) {
     const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
@@ -476,22 +514,6 @@ if (chromeBin === undefined) {
     process.exit(1);
 }
 
-// A second build entry, added for this run only and removed after.
-const configPath = 'vite.config.ts';
-const original = readFileSync(configPath, 'utf8');
-const anchor = 'modulePreload: { polyfill: false },';
-if (!original.includes(anchor)) {
-    console.error('layout-check: could not find the build config anchor.');
-    process.exit(1);
-}
-writeFileSync(
-    configPath,
-    original.replace(
-        anchor,
-        `${anchor}\n        rollupOptions: { input: { main: 'index.html', layoutProbe: 'layout/probe.html' } },`,
-    ),
-);
-
 let server;
 let browser;
 let profile;
@@ -546,8 +568,8 @@ const took = () => {
     return `${s.toFixed(1)}s`;
 };
 try {
-    run('npx', ['vite', 'build', '--logLevel', 'error']);
-    server = spawn('npx', ['vite', 'preview', '--port', PORT, '--strictPort'], {
+    run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error']);
+    server = spawn('npx', ['vite', 'preview', '--config', PROBE_CONFIG, '--port', PORT, '--strictPort'], {
         stdio: 'ignore',
         detached: true,
     });
@@ -1205,7 +1227,6 @@ try {
     failed = true;
     console.error(`\nlayout-check: ${err.message}`);
 } finally {
-    writeFileSync(configPath, original);
     for (const child of [server, browser]) {
         if (child?.pid === undefined) continue;
         try {
@@ -1234,5 +1255,8 @@ try {
     }
 }
 
+// Asked before the verdict as well as on the way out, so a moved config never
+// prints "passed" above the line that fails it.
+if (appConfigMoved()) failed = true;
 console.log(failed ? '\nlayout-check: FAILED' : '\nlayout-check: passed');
 process.exit(failed ? 1 : 0);

@@ -1,6 +1,10 @@
 # Build and tooling
 node_modules
 dist
+# The layout probe's build (`vite.probe.config.ts`) and the workshop kit's,
+# each in its own outDir so neither empties `dist/` under the other.
+.probe-dist
+.workshop-dist
 .vite
 coverage
 *.log

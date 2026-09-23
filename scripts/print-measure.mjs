@@ -8,14 +8,16 @@
  * (794×1123 CSS px), and reports whether every node of the printed page sits
  * inside the sheet. A manual check, run by hand and recorded in
  * `private/MANUAL-CHECKS.md`; not part of `pnpm test:layout`, because the
- * print block changes rarely and the run costs a build.
+ * print block changes rarely and the run costs a build. It builds and
+ * previews from the probe's own config, `vite.probe.config.ts`, and never
+ * writes the app's.
  *
  * Usage: `node scripts/print-measure.mjs [screen ...]` (default: `pay-tag`
  * and `studio`'s poster is not a screen — the stall poster is measured as
  * `print` through the same fixture with its format forced).
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,6 +28,31 @@ const A4 = { width: 794, height: 1123 };
 const screens = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['pay-tag'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/*
+ * Read, never written — `layout-check.mjs`'s tripwire and its reason: if the
+ * app's config differs on the way out, something wrote it while this run built
+ * from it, and the run fails saying so. Every way out but a signal runs the
+ * `exit` listener, and `exitCode` set there overrides `process.exit`'s code.
+ */
+const APP_CONFIG = 'vite.config.ts';
+const PROBE_CONFIG = 'vite.probe.config.ts';
+const appConfigAtStart = readFileSync(APP_CONFIG);
+process.on('exit', () => {
+    let now;
+    try {
+        now = readFileSync(APP_CONFIG);
+    } catch {
+        now = undefined;
+    }
+    if (now === undefined || !now.equals(appConfigAtStart)) {
+        console.error(
+            `print-measure: FAILED — ${APP_CONFIG} changed while this run built from it. ` +
+                'Nothing here writes it; find what did before trusting this run.',
+        );
+        process.exitCode = 1;
+    }
+});
 
 function findChrome() {
     for (const bin of CHROMES) {
@@ -101,29 +128,16 @@ if (chromeBin === undefined) {
     process.exit(1);
 }
 
-const configPath = 'vite.config.ts';
-const original = readFileSync(configPath, 'utf8');
-const anchor = 'modulePreload: { polyfill: false },';
-if (!original.includes(anchor)) {
-    console.error('print-measure: could not find the build config anchor.');
-    process.exit(1);
-}
-writeFileSync(
-    configPath,
-    original.replace(
-        anchor,
-        `${anchor}\n        rollupOptions: { input: { main: 'index.html', layoutProbe: 'layout/probe.html' } },`,
-    ),
-);
-
 let server;
 let browser;
 let profile;
 let failed = false;
 try {
-    const built = spawnSync('npx', ['vite', 'build', '--logLevel', 'error'], { stdio: 'inherit' });
+    const built = spawnSync('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error'], {
+        stdio: 'inherit',
+    });
     if (built.status !== 0) throw new Error('build failed');
-    server = spawn('npx', ['vite', 'preview', '--port', PORT, '--strictPort'], {
+    server = spawn('npx', ['vite', 'preview', '--config', PROBE_CONFIG, '--port', PORT, '--strictPort'], {
         stdio: 'ignore',
         detached: true,
     });
@@ -210,7 +224,6 @@ try {
     console.error(`print-measure: ${err.message}`);
     failed = true;
 } finally {
-    writeFileSync(configPath, original);
     if (browser) {
         try {
             process.kill(-browser.pid);
