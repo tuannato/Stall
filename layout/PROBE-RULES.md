@@ -1863,3 +1863,25 @@ and 213.7s):**
   those two runs; one sat 0.15 above it. A change to the pass's machinery
   cannot be shown lossless over a baseline that moves by itself, so the
   hermetic changes come before the levers in this step, not after them.
+
+**The jobs are hermetic now, and the pass is reproducible.** Each job's first
+paint comes after the neutral screen (`invalid`, as `looks-diff.mjs` does),
+so no job is measured after whichever job ran before it; every animation is
+frozen 400 ms into its active phase with its delay zeroed (a marquee's
+negative delay is wall-clock time), again after `document.fonts.ready`; the
+blanking sets `transition: none` before `color: transparent`, so it starts
+no fade; the page's clock is fixed (`FIXED_CLOCK` in `browser.mjs`, shared
+with `looks-diff.mjs`: `Date` reads one instant until the document has
+loaded and runs from it after, so a stamp taken at module evaluation is the
+same however long the load took); no page lives longer than 60 s (the pay
+code's rate ages out at 120 s and its timer repaints the sheet then); and
+the page is focused whatever its window is
+(`Emulation.setFocusEmulationEnabled` — measured to move nothing at one
+window, where `document.hasFocus()` is already true). Against the previous
+tree's dump, 86 boxes moved (97 against its other run), **every one a `.mini`
+on Modern or Rural, every one up, none with a different box, none across
+3:1**: the mid-fade readings replaced by the control at rest (Rural 3.15 →
+6.15, Modern 3.90 → 5.17; the shop-window sheet's close had read 3.02).
+Retries went from 89 to 0 and the pass from 155 s to 114 s. Two runs of the
+hermetic tree: **4575 boxes of 4575 identical**.
+

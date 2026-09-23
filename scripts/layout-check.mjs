@@ -24,7 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CHROMES, decodePng, devtools, findChrome } from './browser.mjs';
+import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
@@ -427,19 +427,27 @@ function alphaOutside(img, opaque) {
     return { min, clear, total };
 }
 
-/** One painted combination, with the glyphs blanked and the frame settled. */
-async function contrastPrepare(cdp, sessionId, screen, theme, wornAll) {
+/**
+ * One painted combination, with the glyphs blanked and the frame settled.
+ * `neutral` paints the neutral screen first (a job's first paint; its
+ * re-prepare at the grown size repaints the same screen, as a live update
+ * would), so no job is measured after whichever job ran before it.
+ */
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral) {
     const r = await cdp.send(
         'Runtime.evaluate',
         {
             expression:
                 `(async () => { ` +
                 `const out = window.__contrastPrepare(` +
-                `${JSON.stringify(screen)}, ${theme}, ${wornAll}); ` +
+                `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}); ` +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
                 `await document.fonts.ready; ` +
+                // The marquee measures again once the face has landed, and
+                // may arm a line then: frozen with everything else.
+                `window.__contrastFreeze(); ` +
                 `await new Promise((res) => ` +
                 `requestAnimationFrame(() => requestAnimationFrame(res))); ` +
                 `return JSON.stringify(out); })()`,
@@ -996,6 +1004,37 @@ try {
      * mobile-only pass certifies pixels nobody paints at 1280.
      */
     const contrastStartedAt = performance.now();
+    /*
+     * Both contrast passes run on a page whose clock is fixed
+     * (`FIXED_CLOCK`, shared with `looks-diff.mjs`): the pay fixtures stamp
+     * their rate at load and a sheet prints it to the second, the quote's age
+     * and the wall's freshness are read against "now", and the pay code turns
+     * stale 120 s after that stamp. Installed here, so the geometry passes
+     * above keep the real clock they were written against.
+     */
+    await cdp.send('Page.enable', {}, sessionId);
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, sessionId);
+    /*
+     * The page is focused whether or not its window is: `render.ts` focuses a
+     * sheet's close and a face's back control, and `:focus-visible` paints a
+     * ring only in a focused page. One headless window is focused already
+     * (measured: `document.hasFocus()` true with and without this, and the
+     * per-box dump identical, 4575 of 4575); a second window, which a sharded
+     * pass would open, is not.
+     */
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId);
+    /*
+     * And no page older than a minute: the rate stamp ages out at 120 s,
+     * and a pay sheet arms a timer that repaints it then. A page is loaded
+     * per viewport and again whenever it has lived longer than this.
+     */
+    const PAGE_MAX_AGE_MS = 60_000;
+    let loadedAt = 0;
+    const loadContrastPage = async (vp) => {
+        await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
+        await waitForFlag(cdp, sessionId, '__probeReady');
+        loadedAt = performance.now();
+    };
     try {
         let boxes = 0;
         const dim = [];
@@ -1009,8 +1048,7 @@ try {
                     { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
                     sessionId,
                 );
-                await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
-                await waitForFlag(cdp, sessionId, '__probeReady');
+                await loadContrastPage(vp);
                 return {
                     screens: await evalJson(cdp, sessionId, 'window.__contrastScreens'),
                     themes: await evalJson(cdp, sessionId, 'window.__themes'),
@@ -1034,8 +1072,8 @@ try {
                         // shot: the style change needs a composited frame, and a
                         // screenshot taken before one still shows the text — which
                         // read as 1.00:1 wherever a sample point landed on a glyph.
-                        const prepare = () =>
-                            contrastPrepare(cdp, sessionId, screen, theme, wornAll);
+                        const prepare = (neutral) =>
+                            contrastPrepare(cdp, sessionId, screen, theme, wornAll ? 0xffff : 0, neutral);
                         // First paint tells us how tall the page is; the viewport
                         // grows to hold all of it and the paint is redone at that
                         // size, because `captureBeyondViewport` does not reliably
@@ -1056,7 +1094,10 @@ try {
                             look: theme,
                             flags: wornAll ? 0xffff : 0,
                         };
-                        const first = await timed('prepare', prepare);
+                        if (performance.now() - loadedAt > PAGE_MAX_AGE_MS) {
+                            await timed('reload', () => loadContrastPage(vp));
+                        }
+                        const first = await timed('prepare', () => prepare(true));
                         for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
                         const record = {
                             key: jobKey(job),
@@ -1080,7 +1121,7 @@ try {
                                 ),
                             );
                         }
-                        const prep = grew ? await timed('re-prepare', prepare) : first;
+                        const prep = grew ? await timed('re-prepare', () => prepare(false)) : first;
                         if (grew) {
                             record.prepared = prep.targets.length;
                             record.nodes = prep.nodes;
@@ -1103,7 +1144,11 @@ try {
                         // glyphs and unmoved boxes while the shot showed the text
                         // still painted. A real defect is steady state (the
                         // planted-colour falsification fails both shots); a stale
-                        // surface is not.
+                        // surface is not. (Step 3a found what most of those
+                        // shots were: the prepare's own blanking starting a
+                        // 0.2 s `color` transition on a `.mini`, 89 retries a
+                        // run. The prepare starts none now and the retries went
+                        // to zero; the re-shot stays for whatever else is late.)
                         let retried = false;
                         if (prep.targets.length !== 0 && targets.length === 0) {
                             throw new Error(`${screen}: prepared targets but re-read none`);
@@ -1269,7 +1314,7 @@ try {
         for (const screen of CLEAR_SCREENS) {
             for (const { id: theme, rows } of themes) {
                 for (const wornAll of rows === 0 ? [false] : [false, true]) {
-                    const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll);
+                    const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll ? 0xffff : 0, true);
                     for (const cls of prep.sheetClasses ?? []) clearClasses.add(cls);
                     if (prep.targets.length === 0) {
                         throw new Error(`${screen} prepared no figure boxes — vacuous green.`);

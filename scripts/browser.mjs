@@ -22,6 +22,41 @@ export function findChrome() {
     return undefined;
 }
 
+/** The instant every page this repository's scripts shoot believes it loaded at. */
+export const FIXED_CLOCK_MS = Date.UTC(2026, 8, 23, 12, 0, 0);
+
+/*
+ * The page's clock, fixed, installed on every new document
+ * (`Page.addScriptToEvaluateOnNewDocument`) by `looks-diff.mjs` and the
+ * probe's contrast passes. `Date` reads `FIXED_CLOCK_MS` exactly until the
+ * document has loaded, and runs from that instant after it — so everything a
+ * module stamps at evaluation (the pay fixtures' rate, which a sheet prints
+ * to the second) is the same on every load, however long the load took, and
+ * a timer that compares two readings still sees time pass. Only "now" moves;
+ * a date built from a number is the date it always was.
+ *
+ * It used to run from the instant the document was created, which put a
+ * load's own length into every stamp: a module evaluated 1.2 s in printed
+ * 12:00:01 where a quicker load printed 12:00:00.
+ */
+export const FIXED_CLOCK = `(() => {
+    const Real = Date;
+    const fixed = ${FIXED_CLOCK_MS};
+    let offset;
+    const now = () => (offset === undefined ? fixed : Real.now() + offset);
+    addEventListener('load', () => { offset = fixed - Real.now(); }, { once: true });
+    class Fixed extends Real {
+        constructor(...args) {
+            if (args.length === 0) super(now());
+            else super(...args);
+        }
+        static now() {
+            return now();
+        }
+    }
+    globalThis.Date = Fixed;
+})();`;
+
 /** The smallest CDP client that does this job: request/response plus events. */
 export function devtools(url) {
     const ws = new WebSocket(url);

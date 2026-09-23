@@ -2112,8 +2112,11 @@ declare global {
         __contrastPrepare: (
             screen: string,
             themeId: number,
-            wornAll: boolean,
+            flags: number,
+            neutral: boolean,
         ) => { targets: ContrastTarget[]; pageH: number; sheetClasses: string[]; nodes: number };
+        /** Pause every animation on the page at one instant, its delay zeroed. */
+        __contrastFreeze: () => void;
         __contrastBoxes: () => (ContrastTarget & { i: number })[];
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
@@ -2318,7 +2321,46 @@ window.__opaqueBoxes = () =>
         return { x: box.x, y: box.y, w: box.width, h: box.height };
     });
 
-window.__contrastPrepare = (screen, themeId, wornAll) => {
+/**
+ * The screen painted before a job's first paint (step 3a, the step-3
+ * critic's P1): no marquee, no ticker, no sheet. `renderStall` keeps state
+ * from one paint to the next on purpose — the scroll offset of "the same
+ * screen" (`screenKey` ignores the look), whether a sheet or a face was
+ * already open (which decides where focus lands), the marquee's runs — so
+ * without it every job was measured after whichever job the loop happened
+ * to run before it. `looks-diff.mjs` paints the same screen for the same
+ * reason.
+ */
+const NEUTRAL_SCREEN = 'invalid';
+
+/**
+ * Freeze motion at one instant so a streak is on screen, not between frames:
+ * every animation paused 400 ms into its ACTIVE phase. The delay is zeroed
+ * first, because a marquee and the ticker continue a run across repaints
+ * through a negative delay equal to the wall-clock time since the run began —
+ * paused at `currentTime = 400` with it, the frozen instant was a different
+ * one on every run. Asked again after `document.fonts.ready`, which is when
+ * the marquee measures a second time and may arm a line the first measure
+ * did not.
+ */
+function freezeAnimations(): void {
+    for (const a of document.getAnimations()) {
+        a.pause();
+        try {
+            a.effect?.updateTiming({ delay: 0 });
+        } catch {
+            // Not ours to time.
+        }
+        try {
+            a.currentTime = 400;
+        } catch {
+            // A finished animation holds still on its own.
+        }
+    }
+}
+window.__contrastFreeze = freezeAnimations;
+
+window.__contrastPrepare = (screen, themeId, flags, neutral) => {
     // An id this page cannot paint throws rather than falling back: a
     // fallback look is the measurement the class echo exists to refuse.
     const look = lookById(themeId);
@@ -2326,18 +2368,11 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
         // The apex can only wear the default look — see `looksFor`.
         return { targets: [], pageH: 0, sheetClasses: [], nodes: 0 };
     }
-    const worn = wornAll ? wornOf(look, 0xffff) : [];
-    paint(screen, look, worn);
-    // Freeze motion at an arbitrary instant so a streak is on screen, not
-    // between frames.
-    for (const a of document.getAnimations()) {
-        a.pause();
-        try {
-            a.currentTime = 400;
-        } catch {
-            // A finished animation holds still on its own.
-        }
+    if (neutral) {
+        paint(NEUTRAL_SCREEN, look, []);
     }
+    paint(screen, look, wornOf(look, flags));
+    freezeAnimations();
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
     // there compares an undimmed text colour against scrimmed paint, which
@@ -2376,10 +2411,19 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
         // blanking, and its glyphs sampled as "ground" reported the shop tab
         // at 1.17:1 — the ink compared against its own sibling text.
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            // With no transition, or the blanking STARTS one: Modern's and
+            // Rural's `.mini` transition `color` over 0.2 s, so their glyphs
+            // were still fading when the shot was taken two frames later —
+            // 89 of 383 first shots read such a control under 3:1 and were
+            // retried, and two runs of one tree differed on 38 boxes read
+            // mid-fade on one of them (step 3a, `PROBE-RULES.md`).
+            el.style.transition = 'none';
             el.style.color = 'transparent';
             el.style.textShadow = 'none';
         }
     }
+    // Anything the prepare itself started — a fold it opened — is frozen too.
+    freezeAnimations();
     // The runner grows the emulated viewport to this and repaints before the
     // shot: `captureBeyondViewport` does not reliably paint backgrounds below
     // the fold — a below-fold buy control sampled as near-white. The shell

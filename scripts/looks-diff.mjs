@@ -32,7 +32,8 @@
  *   off); the viewport comes from CDP; every job paints a screen with no
  *   running line first (`invalid`) so a marquee starts its cycle again; every
  *   animation is paused `AT_MS` into its active phase with its delay zeroed;
- *   `Date` runs from one fixed instant on every load (`FIXED_CLOCK`); a
+ *   `Date` runs from one fixed instant on every load (`FIXED_CLOCK` in
+ *   `browser.mjs`, which the probe's contrast passes share); a
  *   capture is believed once two in a row agree (`settledShot`); the door is
  *   shot under reduced motion (its paste box types on a timer, not on an
  *   animation); each page is reloaded every minute, so a pay sheet's rate —
@@ -73,7 +74,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHROMES, decodePng, devtools, encodePng, findChrome } from './browser.mjs';
+import { CHROMES, FIXED_CLOCK, decodePng, devtools, encodePng, findChrome } from './browser.mjs';
 import { classify, diffMap, summarize } from './looks-diff-lib.mjs';
 import {
     earlyExit,
@@ -128,27 +129,6 @@ const HOLD =
     'return { x: Math.floor(r.x), y: Math.floor(r.y), w: Math.ceil(r.width) + 1, h: Math.ceil(r.height) + 1 }; }); })()';
 /** Captures taken until two in a row agree, at most, before a shot is reported as unsettled. */
 const SETTLE_TRIES = 3;
-/*
- * The page's clock, fixed: `Date` starts at the same instant on every load of
- * either build and runs from there. The pay fixtures stamp their rate with
- * `Date.now()` at load and the sheet prints that stamp as a time of day, so
- * two builds loaded a minute apart printed two times. Only "now" moves; a
- * date built from a number is the date it always was.
- */
-const FIXED_CLOCK = `(() => {
-    const Real = Date;
-    const offset = ${Date.UTC(2026, 8, 23, 12, 0, 0)} - Real.now();
-    class Fixed extends Real {
-        constructor(...args) {
-            if (args.length === 0) super(Real.now() + offset);
-            else super(...args);
-        }
-        static now() {
-            return Real.now() + offset;
-        }
-    }
-    globalThis.Date = Fixed;
-})();`;
 /** Reload a page this often: the pay fixtures stamp their rate at load, and it ages at 120 s. */
 const RELOAD_MS = 60_000;
 /** Never grow a capture past this; a longer page is shot to here on both sides. */
