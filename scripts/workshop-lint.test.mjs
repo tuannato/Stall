@@ -39,7 +39,8 @@ describe('workshop-lint', () => {
                         'html.bc-clear .t-workshop .bc { background: none; }\n' +
                         '.t-workshop .tab + .tab { margin: 0; }\n' +
                         '.t-workshop .items .item:nth-child(3n + 1) { rotate: 1deg; }\n' +
-                        '.t-workshop > .x, .t-workshop::before { content: "a { b"; }\n' +
+                        // A brace inside a string moves no structure.
+                        '.t-workshop > .x::after, .t-workshop::before { content: ""; --note: "a { b"; }\n' +
                         '@media (min-width: 680px) { .t-workshop .x { gap: 2px; } }\n' +
                         '@keyframes wk-sway { from { rotate: 0deg; } to { rotate: 2deg; } }\n' +
                         '.t-workshop .y { background: url(art/kite.svg); }\n' +
@@ -111,7 +112,7 @@ describe('workshop-lint', () => {
         assert.match(problems[0], /"sway" must be named wk-/);
         // Inside a grouping rule too.
         assert.equal(
-            lintSheet(sheet('@media (min-width: 1px) { @keyframes t-neo-cur { to { opacity: 0; } } }\n')).length,
+            lintSheet(sheet('@media (min-width: 680px) { @keyframes t-neo-cur { to { opacity: 0; } } }\n')).length,
             1,
         );
     });
@@ -154,7 +155,9 @@ describe('a-sheet-reaches-only-the-art-it-was-sent-with', () => {
             // or wrap a target in something else Vite rewrites.
             'background: -webkit-image-set(../../etc/hostname 1x);',
             '--x: url(../../etc/hostname);',
-            'content: "url(../../etc/hostname)";',
+            // A url inside a string (a content string would now be refused
+            // as printed text too, so a custom property carries it).
+            '--y: "url(../../etc/hostname)";',
             'background: url(art/a.svg#frag);',
             'background: url(art/../a.svg);',
             'background: url(art/A.svg);',

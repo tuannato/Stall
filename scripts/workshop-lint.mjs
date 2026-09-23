@@ -5,7 +5,11 @@
  * (every selector under `.t-workshop`; no `@import` or `@font-face`; every
  * `url()` and `image-set()` target `art/<name>.svg`, a plain file in the
  * `art/` folder beside the sheet, and no `src()`; keyframes named `wk-…`;
- * the reduced-motion block last). What needs a browser is
+ * the reduced-motion block last; and every rule a shipped look sheet obeys —
+ * attribute selectors from the state lists, generated text from the closed
+ * list, no other text or ink road, `@media` on the probe's conditions only,
+ * no `!important`, no fixed or sticky box, no prefixed property without its
+ * twin). What needs a browser is
  * `pnpm workshop:probe`. Every kit command that builds runs the same read
  * first and refuses to build on any problem (`scripts/workshop.mjs`).
  *

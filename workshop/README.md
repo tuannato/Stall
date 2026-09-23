@@ -62,7 +62,12 @@ the kit learns it).
 
 **The page is the app's.** Your look changes how the app's own markup is
 painted; it never adds, removes or reorders content, and never changes what
-a control does. *(Stall at intake.)*
+a control does. *(The kit refuses the ways a stylesheet can print or
+reorder text — `workshop:lint`: `content` only on `::before` and `::after`
+and only `''`, `'// '` or `'◆'`; no counters, list markers, emphasis marks,
+`attr()`, `quotes`, `::first-letter` or `::first-line`; a string nowhere
+but `content`, a font's names and the grid templates; no bidi override. The
+rest, Stall at intake.)*
 
 **Money is never covered, cut or faded.** These are protected: the asked
 price, the seller's own quoted price, the surcharge lines, the figure a
@@ -71,7 +76,10 @@ rate and converted-price lines, the amount on an Activity receipt, every QR
 code, the buy and pay controls, the seller's address, and the bytes of a
 record a seller is about to sign. Nothing may paint over them at any width,
 push them past the edge of the screen, or leave them below 3:1 contrast
-against what is actually painted behind them. *(The kit — `workshop:probe`.)*
+against what is actually painted behind them. *(The kit — `workshop:probe`;
+and `workshop:lint` refuses the ways to paint text in a colour the probe
+does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`,
+`background-clip: text`.)*
 
 **QR codes stay black on white, with their quiet margin.** Only the box
 around a code may take your look. *(The kit checks that nothing covers a
@@ -104,9 +112,17 @@ Text is never smaller than Stall's small-text scale (11 px for labels,
 referenced as `url(art/<name>.svg)`, a file in `workshop/art/` whose name is
 lower-case letters, digits and hyphens. *(The kit — `workshop:lint`.)*
 
-**Plain CSS.** Every selector under `.t-workshop`; at-rules limited to
-`@media`, `@supports`, `@container` and `@keyframes`; no nested rules; no
-escapes outside strings. *(The kit — `workshop:lint`.)*
+**Plain CSS, painted alike in every browser and on every stall.** Every
+selector under `.t-workshop`; at-rules limited to `@keyframes` and `@media`
+on one of the conditions the probe measures — `(max-width: 679.98px)`,
+`(min-width: 680px)`, `(prefers-reduced-motion: reduce)`; no nested rules;
+no escapes outside strings; no `!important`; no `position: fixed` or
+`sticky`; a prefixed property only beside its unprefixed twin at the same
+value (the `-webkit-line-clamp` idiom excepted, which every engine reads),
+and no engine-only selector; attribute selectors only on the state
+attributes the app sets, by their exact value — never on a link, a picture,
+a label or anything that carries a token or an address. *(The kit —
+`workshop:lint`.)*
 
 **Keyframes are named `wk-…`**, so they never collide with Stall's own.
 *(The kit.)*

@@ -3,8 +3,9 @@
  * static guards read, so a sheet added to the app is a sheet the guards see
  * the day it lands rather than the day somebody remembers a hand-kept list.
  *
- * Read by `src/ui/theme-sheets.test.ts` (its `SHEETS`) and by
- * `scripts/audit-shadowing.mjs` (its base and look lists). A `.mjs` with a
+ * Read by `src/ui/theme-sheets.test.ts` (its `SHEETS`), by
+ * `scripts/audit-shadowing.mjs` (its base and look lists), and by the
+ * shipped-sheet lints in `scripts/look-lint.test.mjs`. A `.mjs` with a
  * `.d.mts` beside it, because a TypeScript test importing an untyped `.mjs`
  * breaks `pnpm build`'s `tsc` (TS7016) while vitest, which never
  * type-checks, stays green.
@@ -13,11 +14,11 @@
  *
  * - `base` — the look-agnostic sheet every screen of the app sits on.
  * - `look` — one shipped look's own sheet, scoped under its `t-*` class
- *   (`lookClass`).
+ *   (`lookClass`). The shipped-sheet lint reads these.
  * - `screen` — a sheet the app imports for one screen of its own (the stream
  *   overlay, the studio's overlay guide, the shop window).
  * - `kit` — the workshop look's sheet: a creator's, linted by
- *   `pnpm workshop:lint`.
+ *   `pnpm workshop:lint` under the same rules as a `look` plus the kit's own.
  * - `harness` — a page of the workshop kit's that the app never serves (the
  *   showroom's chrome).
  * - `document` — a static page under `public/`, outside the Vite graph,
