@@ -20,12 +20,23 @@
  * included. Node 22 ships `WebSocket` and `fetch`, so speaking CDP costs no
  * dependency — which is the only reason this is not puppeteer.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { payScreensMissingQuote } from './pay-screens.mjs';
+import {
+    earlyExit,
+    interruptedCode,
+    onTeardown,
+    refuseTakenPort,
+    spawnGroup,
+    stopGroups,
+    stopOnSignals,
+    waitUntil,
+} from './process-groups.mjs';
+import { requireCleanKitBuild } from './workshop-build-check.mjs';
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
@@ -50,6 +61,14 @@ if (LOOKS !== 'shipped' && LOOKS !== 'workshop') {
     process.exit(1);
 }
 const PROBE_PAGE = LOOKS === 'workshop' ? 'layout/probe-workshop.html' : 'layout/probe.html';
+/*
+ * The preview server and Chrome this run starts are process groups of their
+ * own, stopped whole on Ctrl-C, SIGTERM, SIGHUP and every other way out, and
+ * never started on a port that already answers (`process-groups.mjs`, the
+ * intake critic's item 2): a run that left them up used to hand the next run
+ * a stale build on the same port.
+ */
+stopOnSignals('layout-check');
 /*
  * The look classes this run exists to measure, stated here rather than asked
  * of the page: the page reports what it PAINTED (`sheetClasses`, every `t-*`
@@ -219,17 +238,15 @@ function devtools(url) {
     };
 }
 
-async function devtoolsUrl() {
-    for (let i = 0; i < 60; i += 1) {
-        try {
+async function devtoolsUrl(watch) {
+    return waitUntil(
+        'Chrome\'s DevTools endpoint',
+        async () => {
             const res = await fetch(`http://127.0.0.1:${DEVTOOLS_PORT}/json/version`);
-            if (res.ok) return (await res.json()).webSocketDebuggerUrl;
-        } catch {
-            // Not listening yet.
-        }
-        await sleep(200);
-    }
-    throw new Error('layout-check: Chrome never opened its DevTools endpoint.');
+            return res.ok ? (await res.json()).webSocketDebuggerUrl : undefined;
+        },
+        { watch, timeoutMs: 12_000 },
+    );
 }
 
 /**
@@ -560,7 +577,6 @@ if (chromeBin === undefined) {
 
 let server;
 let browser;
-let profile;
 let failed = false;
 // The ceiling is enforcement, not a sentence in a plan: the second command in
 // CLAUDE.md §11 has to stay something everyone actually runs. Raised 60 → 150
@@ -613,12 +629,37 @@ const took = () => {
 };
 try {
     run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error']);
-    server = spawn('npx', ['vite', 'preview', '--config', PROBE_CONFIG, '--port', PORT, '--strictPort'], {
-        stdio: 'ignore',
-        detached: true,
+    if (LOOKS === 'workshop') {
+        // The kit's build is held against what it was given before anything
+        // serves it (`workshop-build-check.mjs`); the ordinary probe builds
+        // Stall's own sheets and skips this.
+        await requireCleanKitBuild({ configFile: PROBE_CONFIG });
+    }
+    await refuseTakenPort(PORT, 'preview server');
+    await refuseTakenPort(DEVTOOLS_PORT, 'Chrome DevTools endpoint');
+    server = spawnGroup('the preview server', 'npx', [
+        'vite',
+        'preview',
+        '--config',
+        PROBE_CONFIG,
+        '--port',
+        PORT,
+        '--strictPort',
+    ]);
+    const profile = mkdtempSync(join(tmpdir(), 'stall-layout-'));
+    // Best effort, and never the reason a run goes red: Chrome keeps writing
+    // to its profile for a moment after the kill, and a leftover temp
+    // directory is not a layout defect. A cleanup that can fail the guard is
+    // a false red. Run once every group is down, on every way out.
+    onTeardown(() => {
+        try {
+            rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch {
+            console.error(`layout-check: left a temp profile behind at ${profile}`);
+        }
     });
-    profile = mkdtempSync(join(tmpdir(), 'stall-layout-'));
-    browser = spawn(
+    browser = spawnGroup(
+        'Chrome',
         chromeBin,
         [
             '--headless=new',
@@ -637,14 +678,19 @@ try {
             `--remote-debugging-port=${DEVTOOLS_PORT}`,
             'about:blank',
         ],
-        { stdio: 'ignore', detached: true },
+        { stderr: 'ignore' },
     );
 
-    const cdp = devtools(await devtoolsUrl());
+    const cdp = devtools(await devtoolsUrl([server, browser]));
     await cdp.opened;
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    await sleep(3000); // The preview server is still coming up.
+    // The preview answering the probe page, or its own last words if it died
+    // (a port it lost, a build it could not read) — never a fixed sleep that
+    // measured whatever else answered there.
+    await waitUntil('the preview server', async () => (await fetch(probeUrl(VIEWPORTS[0]))).ok, {
+        watch: [server, browser],
+    });
 
     console.log(`  build, preview and browser: ${took()}`);
     for (const vp of ALL_VIEWPORTS) {
@@ -1297,37 +1343,19 @@ try {
 } catch (err) {
     failed = true;
     console.error(`\nlayout-check: ${err.message}`);
+    for (const group of [server, browser]) {
+        const why = earlyExit(group);
+        if (why !== undefined && !err.message.includes(why)) console.error(`layout-check: ${why}`);
+    }
 } finally {
-    for (const child of [server, browser]) {
-        if (child?.pid === undefined) continue;
-        try {
-            process.kill(-child.pid);
-        } catch {
-            child.kill();
-        }
-    }
-    // Chrome writes to its profile on the way down, so wait for it before the
-    // directory is removed rather than racing it.
-    if (browser?.pid !== undefined) {
-        await new Promise((resolve) => {
-            browser.once('exit', resolve);
-            setTimeout(resolve, 3000);
-        });
-    }
-    // Best effort, and never the reason a run goes red: Chrome keeps writing to
-    // its profile for a moment after the kill, and a leftover temp directory is
-    // not a layout defect. A cleanup that can fail the guard is a false red.
-    if (profile !== undefined) {
-        try {
-            rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-        } catch {
-            console.error(`layout-check: left a temp profile behind at ${profile}`);
-        }
-    }
+    // Every process of both groups is gone before the profile is removed:
+    // Chrome writes to it on the way down.
+    await stopGroups();
 }
 
 // Asked before the verdict as well as on the way out, so a moved config never
 // prints "passed" above the line that fails it.
 if (appConfigMoved()) failed = true;
+if (interruptedCode() !== undefined) failed = true;
 console.log(failed ? '\nlayout-check: FAILED' : '\nlayout-check: passed');
-process.exit(failed ? 1 : 0);
+process.exit(interruptedCode() ?? (failed ? 1 : 0));

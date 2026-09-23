@@ -42,8 +42,9 @@ outside host blocked.
   Stall does not run code from a submission.
 - `workshop/theme-workshop.css` — your stylesheet. Every rule sits under
   `.t-workshop`.
-- `workshop/art/` — your pictures, as SVG files, referenced from your
-  stylesheet with a relative `url()`. They are served from the same site as
+- `workshop/art/` — your pictures, as SVG files named in lower-case letters,
+  digits and hyphens, referenced from your stylesheet as
+  `url(art/<name>.svg)`. They are served from the same site as
   the app; nothing is inlined and nothing is fetched from elsewhere.
 
 ## What is yours to decide
@@ -100,7 +101,8 @@ Text is never smaller than Stall's small-text scale (11 px for labels,
 
 **Nothing loads from anywhere else.** No `@import`, no `@font-face`, no
 `url(data:…)`, no `url()` to another site or to an absolute path — art is
-referenced relative to your stylesheet. *(The kit — `workshop:lint`.)*
+referenced as `url(art/<name>.svg)`, a file in `workshop/art/` whose name is
+lower-case letters, digits and hyphens. *(The kit — `workshop:lint`.)*
 
 **Plain CSS.** Every selector under `.t-workshop`; at-rules limited to
 `@media`, `@supports`, `@container` and `@keyframes`; no nested rules; no

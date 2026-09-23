@@ -16,10 +16,20 @@
  * and `studio`'s poster is not a screen — the stall poster is measured as
  * `print` through the same fixture with its format forced).
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+    earlyExit,
+    interruptedCode,
+    onTeardown,
+    refuseTakenPort,
+    spawnGroup,
+    stopGroups,
+    stopOnSignals,
+    waitUntil,
+} from './process-groups.mjs';
 
 const PORT = process.env.LAYOUT_PORT ?? '4321';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9341';
@@ -28,6 +38,11 @@ const A4 = { width: 794, height: 1123 };
 const screens = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['pay-tag'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The preview and Chrome are process groups stopped whole on Ctrl-C and on
+// every other way out, on ports nothing else answered on — `layout-check.mjs`'s
+// rule and its reason (`process-groups.mjs`).
+stopOnSignals('print-measure');
 
 /*
  * Read, never written — `layout-check.mjs`'s tripwire and its reason: if the
@@ -89,17 +104,15 @@ function devtools(url) {
     };
 }
 
-async function devtoolsUrl() {
-    for (let i = 0; i < 60; i += 1) {
-        try {
+async function devtoolsUrl(watch) {
+    return waitUntil(
+        'Chrome\'s DevTools endpoint',
+        async () => {
             const res = await fetch(`http://127.0.0.1:${DEVTOOLS_PORT}/json/version`);
-            if (res.ok) return (await res.json()).webSocketDebuggerUrl;
-        } catch {
-            // Not listening yet.
-        }
-        await sleep(200);
-    }
-    throw new Error('print-measure: Chrome never opened its DevTools endpoint.');
+            return res.ok ? (await res.json()).webSocketDebuggerUrl : undefined;
+        },
+        { watch, timeoutMs: 12_000 },
+    );
 }
 
 async function evaluate(cdp, sessionId, expression) {
@@ -130,19 +143,27 @@ if (chromeBin === undefined) {
 
 let server;
 let browser;
-let profile;
 let failed = false;
 try {
     const built = spawnSync('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error'], {
         stdio: 'inherit',
     });
     if (built.status !== 0) throw new Error('build failed');
-    server = spawn('npx', ['vite', 'preview', '--config', PROBE_CONFIG, '--port', PORT, '--strictPort'], {
-        stdio: 'ignore',
-        detached: true,
-    });
-    profile = mkdtempSync(join(tmpdir(), 'stall-print-'));
-    browser = spawn(
+    await refuseTakenPort(PORT, 'preview server');
+    await refuseTakenPort(DEVTOOLS_PORT, 'Chrome DevTools endpoint');
+    server = spawnGroup('the preview server', 'npx', [
+        'vite',
+        'preview',
+        '--config',
+        PROBE_CONFIG,
+        '--port',
+        PORT,
+        '--strictPort',
+    ]);
+    const profile = mkdtempSync(join(tmpdir(), 'stall-print-'));
+    onTeardown(() => rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+    browser = spawnGroup(
+        'Chrome',
         chromeBin,
         [
             '--headless=new',
@@ -156,13 +177,17 @@ try {
             `--remote-debugging-port=${DEVTOOLS_PORT}`,
             'about:blank',
         ],
-        { stdio: 'ignore', detached: true },
+        { stderr: 'ignore' },
     );
-    const cdp = devtools(await devtoolsUrl());
+    const cdp = devtools(await devtoolsUrl([server, browser]));
     await cdp.opened;
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    await sleep(3000);
+    await waitUntil(
+        'the preview server',
+        async () => (await fetch(`http://localhost:${PORT}/layout/probe.html`)).ok,
+        { watch: [server, browser] },
+    );
 
     await cdp.send(
         'Emulation.setDeviceMetricsOverride',
@@ -222,22 +247,12 @@ try {
     cdp.close();
 } catch (err) {
     console.error(`print-measure: ${err.message}`);
+    for (const group of [server, browser]) {
+        const why = earlyExit(group);
+        if (why !== undefined && !err.message.includes(why)) console.error(`print-measure: ${why}`);
+    }
     failed = true;
 } finally {
-    if (browser) {
-        try {
-            process.kill(-browser.pid);
-        } catch {
-            // Already gone.
-        }
-    }
-    if (server) {
-        try {
-            process.kill(-server.pid);
-        } catch {
-            // Already gone.
-        }
-    }
-    if (profile) rmSync(profile, { recursive: true, force: true });
+    await stopGroups();
 }
-process.exit(failed ? 1 : 0);
+process.exit(interruptedCode() ?? (failed ? 1 : 0));

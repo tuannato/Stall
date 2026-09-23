@@ -11,6 +11,18 @@
  * rules, `@media` / `@supports` / `@container` blocks, `@keyframes` — and
  * refuses what it does not read (nested rules), rather than guessing.
  *
+ * **A sheet reaches only the art it was sent with.** Vite's build copies
+ * whatever a `url()`, an `image-set()` entry or a custom property holding
+ * one points at, `..` and absolute-looking paths included: a sheet that
+ * passed this lint once made a kit build emit `/etc/hostname` and
+ * `/etc/os-release` as assets and turn `?inline` into a `data:` URL (the
+ * intake critic's item 1, 2026-09-23). So every such target must be exactly
+ * `art/<name>.svg` or `./art/<name>.svg` — lower-case letters, digits and
+ * hyphens, no query, no fragment, no `..`, no escape — naming a plain file
+ * the caller listed in the sheet's `art/` folder, and `src()` is refused
+ * outright. The lint is not the only guard: `workshop-build-check.mjs`
+ * holds every kit build's output against what the build was given.
+ *
  * Tests: `scripts/workshop-lint.test.mjs` (node --test, in `pnpm test`), and
  * `the-starter-is-each-shipped-look-rescoped` over the real shipped sheets.
  */
@@ -22,6 +34,31 @@ export const KIT_CLASS = 't-workshop';
 const GROUPING = new Set(['media', 'supports', 'container']);
 
 const REDUCE_PRELUDE = /^@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)$/i;
+
+/** A file name the art folder may hold and a sheet may name: `<name>.svg`, lower case. */
+export const ART_NAME = /^[a-z0-9-]{1,64}\.svg$/;
+/** The one shape a `url()` or `image-set()` target may take in a look sheet. */
+export const ART_URL = /^(?:\.\/)?art\/([a-z0-9-]{1,64}\.svg)$/;
+const ART_RULE = 'art is url(art/<name>.svg), a file in workshop/art/ named in lower-case letters, digits and hyphens';
+
+/** The most of a creator's text a message quotes. */
+const ECHO_MAX = 64;
+
+/**
+ * A creator's text as a message may quote it: at most `max` characters of
+ * it, and every control, format, separator or surrogate character written
+ * as an escape — a terminal must never receive one raw from a sheet.
+ */
+export function echo(text, max = ECHO_MAX) {
+    const chars = [...String(text)];
+    const shown = chars
+        .slice(0, max)
+        .map((c) =>
+            /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(c) ? `\\u{${c.codePointAt(0).toString(16)}}` : c,
+        )
+        .join('');
+    return chars.length > max ? `${shown}…` : shown;
+}
 
 function skipString(text, at) {
     const quote = text[at];
@@ -122,14 +159,14 @@ function parseList(text, from, to, errors) {
             if (atName !== undefined) {
                 nodes.push({ kind: 'at', name: atName, prelude, statement: true, start, end: j });
             } else {
-                errors.push({ at: start, message: `"${prelude.slice(0, 40)}" is not inside a rule` });
+                errors.push({ at: start, message: `"${echo(prelude, 40)}" is not inside a rule` });
             }
             i = j < to && text[j] === ';' ? j + 1 : j;
             continue;
         }
         const close = closingBrace(text, j, to);
         if (close < 0) {
-            errors.push({ at: start, message: `the block of "${prelude.slice(0, 40)}" is never closed` });
+            errors.push({ at: start, message: `the block of "${echo(prelude, 40)}" is never closed` });
             break;
         }
         if (atName !== undefined) {
@@ -224,48 +261,85 @@ export function selectorEscape(selector) {
         if (parts[k] !== undefined && KIT_CLASS_RE.test(parts[k])) {
             const next = parts[k + 1];
             if (next === '+' || next === '~') {
-                return `"${selector}" reaches a sibling of .${KIT_CLASS} (${next})`;
+                return `"${echo(selector)}" reaches a sibling of .${KIT_CLASS} (${next})`;
             }
             return undefined;
         }
     }
-    return `"${selector}" is not under .${KIT_CLASS}`;
+    return `"${echo(selector)}" is not under .${KIT_CLASS}`;
 }
 
-/** Why a `url()` or `image-set()` target may not be in a look sheet, or undefined. */
-export function urlProblem(target) {
+/**
+ * Why a `url()` or `image-set()` target may not be in a look sheet, or
+ * undefined: it must be exactly `art/<name>.svg` (or `./art/…`) and `<name>`
+ * must be in `art`, the plain files the sheet's `art/` folder holds.
+ */
+export function urlProblem(target, art = []) {
+    const listed = art instanceof Set ? art : new Set(art);
+    const m = ART_URL.exec(target);
+    if (m !== null) {
+        return listed.has(m[1]) ? undefined : `there is no plain file workshop/art/${m[1]} (a link is not one)`;
+    }
     const value = target.trim();
-    if (value.includes('\\')) return 'an escaped URL';
-    if (/^data:/i.test(value)) return 'a data: URL — art goes in workshop/art/ as a file';
-    if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return 'a URL with a scheme — nothing loads from another site';
-    if (value.startsWith('//')) return 'a URL to another site';
-    if (value.startsWith('/')) return 'an absolute path — use a path relative to the sheet';
-    if (value === '') return 'an empty URL';
-    return undefined;
+    if (/^data:/i.test(value)) return `a data: URL — ${ART_RULE}`;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//')) {
+        return `nothing loads from another site — ${ART_RULE}`;
+    }
+    return ART_RULE;
 }
 
-/** Every `url(…)` and `image-set(…)` string target in the text, with its index. */
+/** The shapes the starter's re-basing leaves alone: nothing to re-base, or not a path. */
+function notAPath(value) {
+    return (
+        value === '' ||
+        value.startsWith('#') ||
+        value.startsWith('/') ||
+        value.includes('\\') ||
+        /^[a-z][a-z0-9+.-]*:/i.test(value)
+    );
+}
+
+/** The index of the `)` closing the parenthesis opened at `open`, or -1. */
+function closingParen(text, open) {
+    let depth = 0;
+    let i = open;
+    while (i < text.length) {
+        const c = text[i];
+        if (c === '"' || c === "'") {
+            i = skipString(text, i);
+            continue;
+        }
+        if (c === '(') depth += 1;
+        if (c === ')') {
+            depth -= 1;
+            if (depth === 0) return i;
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+/**
+ * Every target a build would resolve, with its index: each `url(…)` —
+ * inside a string or a custom property too, because Vite rewrites those —
+ * and each entry of an `image-set(…)` or `-webkit-image-set(…)` that is not
+ * itself a `url()`: a quoted string, or the entry's first bare token, which
+ * Vite resolves as a path even though a browser would not.
+ */
 function urlTargets(text) {
     const out = [];
     const urlRe = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
     for (const m of text.matchAll(urlRe)) {
         out.push({ at: m.index, value: m[1] ?? m[2] ?? m[3] ?? '' });
     }
-    const setRe = /image-set\(/gi;
-    for (const m of text.matchAll(setRe)) {
-        let depth = 0;
-        let i = m.index + m[0].length - 1;
-        const open = i;
-        for (; i < text.length; i += 1) {
-            if (text[i] === '(') depth += 1;
-            if (text[i] === ')') {
-                depth -= 1;
-                if (depth === 0) break;
-            }
-        }
-        const inner = text.slice(open + 1, i);
-        for (const s of inner.matchAll(/"([^"]*)"|'([^']*)'/g)) {
-            out.push({ at: m.index, value: s[1] ?? s[2] ?? '' });
+    for (const m of text.matchAll(/image-set\(/gi)) {
+        const open = m.index + m[0].length - 1;
+        const close = closingParen(text, open);
+        const inner = text.slice(open + 1, close < 0 ? text.length : close);
+        for (const entry of splitTopLevel(inner, ',')) {
+            if (/^url\(/i.test(entry)) continue;
+            const quoted = /^(["'])([\s\S]*?)\1/.exec(entry);
+            out.push({ at: m.index, value: quoted !== null ? quoted[2] : entry.split(/\s+/)[0] });
         }
     }
     return out;
@@ -312,15 +386,16 @@ function isReduceBlock(node) {
  * 1. Every selector is under `.t-workshop` (at-rule wrappers allowed).
  * 2. No `@import`, no `@font-face`, and no at-rule but `@media`, `@supports`,
  *    `@container` and `@keyframes`.
- * 3. No `url(data:…)`, no `url()` with a scheme or to another site, no
- *    absolute path — art is a relative file — and no CSS escape outside a
- *    string, which is how a `url(` or a scheme would hide from rule 3.
+ * 3. Every `url()` and `image-set()` target is `art/<name>.svg` naming a
+ *    file in `art` (the plain files of the sheet's `art/` folder); no
+ *    `src()`; and no CSS escape outside a string, which is how a `url(` or
+ *    a scheme would hide from rule 3.
  * 4. Every `@keyframes` is named `wk-…`: keyframes are global, and a look
  *    must never replace one of Stall's.
  * 5. The last rule of the sheet is `@media (prefers-reduced-motion: reduce)`,
  *    so a mover can never be declared after the block that stills it.
  */
-export function lintSheet(css) {
+export function lintSheet(css, { art = [] } = {}) {
     const { text, nodes, errors } = parseSheet(css);
     const problems = errors.map((e) => `line ${lineOf(text, e.at)}: ${e.message}`);
     const at = (index, message) => problems.push(`line ${lineOf(text, index)}: ${message}`);
@@ -329,7 +404,7 @@ export function lintSheet(css) {
         for (const node of list) {
             if (node.kind === 'rule') {
                 if (braceOutsideStrings(node.body)) {
-                    at(node.start, `"${node.prelude}" holds a nested rule — write it flat, under .${KIT_CLASS}`);
+                    at(node.start, `"${echo(node.prelude)}" holds a nested rule — write it flat, under .${KIT_CLASS}`);
                 }
                 for (const selector of splitTopLevel(node.prelude, ',')) {
                     const escape = selectorEscape(selector);
@@ -344,20 +419,24 @@ export function lintSheet(css) {
             } else if (node.name === 'keyframes') {
                 const name = node.prelude.replace(/^@keyframes\s*/i, '').trim();
                 if (!/^wk-[\w-]+$/.test(name)) {
-                    at(node.start, `@keyframes "${name}" must be named wk-… (keyframes are global)`);
+                    at(node.start, `@keyframes "${echo(name)}" must be named wk-… (keyframes are global)`);
                 }
             } else if (GROUPING.has(node.name)) {
                 walk(node.children ?? []);
             } else {
-                at(node.start, `@${node.name} is not allowed in a look sheet`);
+                at(node.start, `@${echo(node.name)} is not allowed in a look sheet`);
             }
         }
     };
     walk(nodes);
 
+    const listed = new Set(art);
     for (const target of urlTargets(text)) {
-        const why = urlProblem(target.value);
-        if (why !== undefined) at(target.at, `url "${target.value}": ${why}`);
+        const why = urlProblem(target.value, listed);
+        if (why !== undefined) at(target.at, `url "${echo(target.value)}": ${why}`);
+    }
+    for (const m of text.matchAll(/(?<![\w-])src\(/gi)) {
+        at(m.index, `src() is not allowed — ${ART_RULE}`);
     }
     const escape = escapeOutsideStrings(text);
     if (escape >= 0) {
@@ -388,7 +467,7 @@ function escapeRe(text) {
 function rebaseUrls(css) {
     return css.replace(/url\(\s*(["']?)([^"')]*)\1\s*\)/gi, (all, quote, target) => {
         const value = target.trim();
-        if (value === '' || urlProblem(value) !== undefined || value.startsWith('#')) {
+        if (notAPath(value)) {
             return all;
         }
         const segments = ['..', 'src', 'ui'];

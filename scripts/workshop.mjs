@@ -8,11 +8,20 @@
  *   pnpm workshop:probe                      the layout probe on the kit's look
  *   pnpm workshop:lint                       (its own script: workshop-lint.mjs)
  *
- * Every command that builds validates `workshop/look.json` first and prints
- * every fault in it, so a creator reads the list here rather than meeting a
- * blank page; builds from `vite.workshop.config.ts` into its own outDir under
- * `.workshop-dist/`; and never writes `vite.config.ts` — it fails if that file
- * changed while it ran, `layout-check.mjs`'s tripwire and its reason.
+ * Every command that builds validates `workshop/look.json` and lints
+ * `workshop/theme-workshop.css` first (`requireKit`), printing every fault
+ * and building nothing while there is one, so a creator reads the list here
+ * rather than meeting a blank page; builds from `vite.workshop.config.ts`
+ * into its own outDir under `.workshop-dist/`, then holds that outDir
+ * against what the build was given and deletes it if it holds anything else
+ * (`workshop-build-check.mjs` — the guard that does not trust the lint);
+ * and never writes `vite.config.ts` — it fails if that file changed while it
+ * ran, `layout-check.mjs`'s tripwire and its reason.
+ *
+ * The preview server and Chrome it starts are process groups stopped whole
+ * on Ctrl-C and every other way out, never started on a port that already
+ * answers (`process-groups.mjs`); `workshop:probe` hands a signal on to
+ * `layout-check.mjs`, which does the same for its own.
  *
  * Offline after one `pnpm install`: the preview serves a policy with no icon
  * host, and the headless Chrome for shots and the probe resolves nothing but
@@ -36,6 +45,17 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    earlyExit,
+    interruptedCode,
+    onTeardown,
+    refuseTakenPort,
+    spawnGroup,
+    stopGroups,
+    stopOnSignals,
+    waitUntil,
+} from './process-groups.mjs';
+import { readArt, requireCleanKitBuild } from './workshop-build-check.mjs';
 import { lintSheet, rescopeSheet, sheetHasRules } from './workshop-css.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -47,8 +67,6 @@ const KIT_LOOK_ID = 0xff;
 const SHOTS_OUT = '.workshop-dist/shots-out';
 const CDP_PORT = process.env.WORKSHOP_CDP_PORT ?? '9342';
 const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function usage(message) {
     if (message !== undefined) console.error(`workshop: ${message}\n`);
@@ -110,12 +128,39 @@ async function requireReadableLook(dir = 'workshop') {
     }
 }
 
+/**
+ * Stop with every fault the kit's two files have, or return: `look.json`
+ * read, then the sheet linted against the art folder beside it — the same
+ * read `pnpm workshop:lint` makes. Nothing is built while either says no.
+ */
+async function requireKit() {
+    await requireReadableLook();
+    const sheet = join('workshop', 'theme-workshop.css');
+    let css;
+    try {
+        css = readFileSync(sheet, 'utf8');
+    } catch (err) {
+        console.error(`workshop: cannot read ${sheet}: ${err.message}`);
+        process.exit(1);
+    }
+    const problems = lintSheet(css, { art: readArt(join('workshop', 'art')) });
+    if (problems.length > 0) {
+        console.error(
+            `✗ ${sheet} has ${problems.length} problem${problems.length === 1 ? '' : 's'} ` +
+                '(the pnpm workshop:lint read) — nothing is built until it has none:',
+        );
+        for (const problem of problems) console.error(`    ${problem}`);
+        process.exit(1);
+    }
+}
+
 async function commandSettings(command) {
     const { WORKSHOP_COMMANDS } = await tsModule(`./${WORKSHOP_CONFIG}`);
     return WORKSHOP_COMMANDS[command];
 }
 
-function buildFor(command) {
+/** Build for `command`, then hold the output against what the build was given. */
+async function buildFor(command) {
     const r = spawnSync('npx', ['vite', 'build', '--config', WORKSHOP_CONFIG, '--logLevel', 'error'], {
         stdio: 'inherit',
         env: { ...process.env, STALL_WORKSHOP_CMD: command },
@@ -123,6 +168,8 @@ function buildFor(command) {
     if (r.status !== 0) {
         throw new Error(`the ${command} build failed (vite exited ${r.status})`);
     }
+    process.env.STALL_WORKSHOP_CMD = command;
+    await requireCleanKitBuild({ configFile: WORKSHOP_CONFIG, artDir: join('workshop', 'art') });
 }
 
 /* ---------- start ---------- */
@@ -172,7 +219,7 @@ async function start(args) {
         .sort()
         .map((name) => ({ from: `src/ui/${name}`, css: readFileSync(join('src/ui', name), 'utf8') }));
     const css = rescopeSheet(readFileSync(`src/ui/theme-${base}.css`, 'utf8'), base, carried);
-    const cssProblems = lintSheet(css);
+    const cssProblems = lintSheet(css, { art: readArt(join(dir, 'art')) });
     const lookText = starter.lookFileText(starter.starterLook(base));
     const { workshopLookProblems } = await tsModule('./layout/workshopLook.ts');
     const lookProblems = workshopLookProblems(lookText);
@@ -195,29 +242,38 @@ async function start(args) {
 /* ---------- serve ---------- */
 
 async function serve() {
-    await requireReadableLook();
+    stopOnSignals('workshop');
+    await requireKit();
     const { port } = await commandSettings('serve');
-    buildFor('serve');
-    const server = spawn('npx', ['vite', 'preview', '--config', WORKSHOP_CONFIG], {
-        stdio: 'inherit',
+    await buildFor('serve');
+    await refuseTakenPort(port, "showroom's preview server");
+    const server = spawnGroup('the preview server', 'npx', ['vite', 'preview', '--config', WORKSHOP_CONFIG], {
         env: { ...process.env, STALL_WORKSHOP_CMD: 'serve' },
+        stdout: 'inherit',
+        stderr: 'inherit',
     });
     const url = `http://localhost:${port}/layout/gallery.html?look=${KIT_LOOK_ID}`;
-    setTimeout(() => {
-        console.log(`\n  Showroom: ${url}\n  (Ctrl-C to stop.)\n`);
-    }, 1500);
-    for (const signal of ['SIGINT', 'SIGTERM']) {
-        process.on(signal, () => server.kill(signal));
+    await waitUntil('the preview server', async () => (await fetch(url)).ok, { watch: [server] });
+    console.log(`\n  Showroom: ${url}\n  (Ctrl-C to stop.)\n`);
+    if (server.exit === undefined) {
+        await new Promise((resolve) => server.child.once('exit', resolve));
     }
-    await new Promise((resolve) => server.on('exit', resolve));
+    if (interruptedCode() !== undefined) return;
+    // It stopped on its own: say so, and leave nothing of its group behind.
+    const why = earlyExit(server) ?? 'the preview server stopped';
+    await stopGroups();
+    throw new Error(why);
 }
 
 /* ---------- probe ---------- */
 
 async function probe() {
-    await requireReadableLook();
+    await requireKit();
     const { port } = await commandSettings('probe');
-    const r = spawnSync(
+    // Not detached: a Ctrl-C at the terminal reaches `layout-check.mjs`
+    // directly, and a signal sent to this process alone is handed on, so the
+    // probe's own handler stops its preview and Chrome either way.
+    const child = spawn(
         'node',
         ['scripts/layout-check.mjs', '--config', WORKSHOP_CONFIG, '--looks', 'workshop'],
         {
@@ -230,7 +286,22 @@ async function probe() {
             },
         },
     );
-    process.exitCode = r.status ?? 1;
+    let caught;
+    for (const [signal, code] of [
+        ['SIGINT', 130],
+        ['SIGTERM', 143],
+        ['SIGHUP', 129],
+    ]) {
+        process.on(signal, () => {
+            caught ??= code;
+            child.kill(signal);
+        });
+    }
+    const status = await new Promise((resolve) => {
+        child.once('error', () => resolve(1));
+        child.once('exit', (code) => resolve(code ?? 1));
+    });
+    process.exitCode = caught ?? status;
 }
 
 /* ---------- shots ---------- */
@@ -269,19 +340,6 @@ function devtools(url) {
         },
         close: () => ws.close(),
     };
-}
-
-async function waitFor(what, probeFn, tries = 150, every = 200) {
-    for (let i = 0; i < tries; i += 1) {
-        try {
-            const value = await probeFn();
-            if (value !== undefined && value !== false) return value;
-        } catch {
-            // Not up yet.
-        }
-        await sleep(every);
-    }
-    throw new Error(`${what} never came up`);
 }
 
 async function evaluate(cdp, sessionId, expression) {
@@ -333,7 +391,8 @@ function contactSheet(shots) {
 }
 
 async function shots() {
-    await requireReadableLook();
+    stopOnSignals('workshop');
+    await requireKit();
     const chrome = findChrome();
     if (chrome === undefined) {
         console.error(`workshop:shots: no Chrome found. Install one of: ${CHROMES.join(', ')}`);
@@ -341,18 +400,25 @@ async function shots() {
     }
     const { port } = await commandSettings('shots');
     const startedAt = Date.now();
-    buildFor('shots');
+    await buildFor('shots');
     let server;
     let browser;
-    let profile;
     try {
-        server = spawn('npx', ['vite', 'preview', '--config', WORKSHOP_CONFIG], {
-            stdio: 'ignore',
-            detached: true,
+        await refuseTakenPort(port, 'preview server');
+        await refuseTakenPort(CDP_PORT, 'Chrome DevTools endpoint');
+        server = spawnGroup('the preview server', 'npx', ['vite', 'preview', '--config', WORKSHOP_CONFIG], {
             env: { ...process.env, STALL_WORKSHOP_CMD: 'shots' },
         });
-        profile = mkdtempSync(join(tmpdir(), 'stall-workshop-'));
-        browser = spawn(
+        const profile = mkdtempSync(join(tmpdir(), 'stall-workshop-'));
+        onTeardown(() => {
+            try {
+                rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+            } catch {
+                console.error(`workshop:shots: left a temp profile behind at ${profile}`);
+            }
+        });
+        browser = spawnGroup(
+            'Chrome',
             chrome,
             [
                 '--headless=new',
@@ -366,14 +432,19 @@ async function shots() {
                 `--remote-debugging-port=${CDP_PORT}`,
                 'about:blank',
             ],
-            { stdio: 'ignore', detached: true },
+            { stderr: 'ignore' },
         );
-        const wsUrl = await waitFor('Chrome', async () => {
-            const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
-            return res.ok ? (await res.json()).webSocketDebuggerUrl : undefined;
-        });
+        const watch = [server, browser];
+        const wsUrl = await waitUntil(
+            'Chrome',
+            async () => {
+                const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
+                return res.ok ? (await res.json()).webSocketDebuggerUrl : undefined;
+            },
+            { watch },
+        );
         const gallery = `http://localhost:${port}/layout/gallery.html`;
-        await waitFor('the preview server', async () => (await fetch(gallery)).ok);
+        await waitUntil('the preview server', async () => (await fetch(gallery)).ok, { watch });
         const cdp = devtools(wsUrl);
         await cdp.opened;
         const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
@@ -386,7 +457,7 @@ async function shots() {
             );
         await metrics(390, 844);
         await cdp.send('Page.navigate', { url: `${gallery}?look=${KIT_LOOK_ID}&chrome=0` }, sessionId);
-        await waitFor('the showroom', () => evaluate(cdp, sessionId, 'window.__galleryReady === true'));
+        await waitUntil('the showroom', () => evaluate(cdp, sessionId, 'window.__galleryReady === true'), { watch });
         const plan = await evaluate(cdp, sessionId, 'window.__shotPlan()');
         const viewports = new Set(plan.map((job) => job.viewport.name)).size;
         console.log(
@@ -468,28 +539,15 @@ async function shots() {
             `✓ workshop:shots: ${written.length} PNGs, ${(bytes / 1e6).toFixed(1)} MB, in ` +
                 `${((Date.now() - startedAt) / 1000).toFixed(1)}s — open ${join(SHOTS_OUT, 'index.html')}`,
         );
+    } catch (err) {
+        for (const group of [server, browser]) {
+            const why = earlyExit(group);
+            if (why !== undefined && !err.message.includes(why)) console.error(`workshop:shots: ${why}`);
+        }
+        throw err;
     } finally {
-        for (const child of [server, browser]) {
-            if (child?.pid === undefined) continue;
-            try {
-                process.kill(-child.pid);
-            } catch {
-                child.kill();
-            }
-        }
-        if (browser?.pid !== undefined) {
-            await new Promise((resolve) => {
-                browser.once('exit', resolve);
-                setTimeout(resolve, 3000);
-            });
-        }
-        if (profile !== undefined) {
-            try {
-                rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-            } catch {
-                console.error(`workshop:shots: left a temp profile behind at ${profile}`);
-            }
-        }
+        // Every process of both groups is gone before the profile is removed.
+        await stopGroups();
     }
 }
 
@@ -504,5 +562,5 @@ try {
     else usage(command === undefined ? undefined : `no command "${command}"`);
 } catch (err) {
     console.error(`\nworkshop: ${err.message}`);
-    process.exitCode = 1;
+    process.exitCode = interruptedCode() ?? 1;
 }
