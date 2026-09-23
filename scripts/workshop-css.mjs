@@ -34,10 +34,12 @@
  * differently from what Chrome painted for the probe, or paint around what
  * the probe reads (G4). `lintLookSheet` applies them to a shipped look
  * under its own class; `lintSheet` applies them to the kit's sheet beside
- * the kit's own rules.
+ * the kit's own rules. The flash rule (G6) needs every sheet at once, since
+ * a rule in one sheet can re-time a keyframe declared in another:
+ * `flashReport`.
  *
  * Tests: `scripts/workshop-lint.test.mjs` (the kit),
- * `scripts/look-lint.test.mjs` (the shipped sheets; both
+ * `scripts/look-lint.test.mjs` (the shipped sheets and the flash rule; both
  * node --test, in `pnpm test`), and `the-starter-is-each-shipped-look-rescoped`
  * over the real shipped sheets.
  */
@@ -701,8 +703,9 @@ const word = (keyword) => new RegExp(`(?<![\\w-])${keyword}(?![\\w-])`, 'i');
 
 /**
  * Properties a look sheet may not set at all, with the reason. G2's text
- * roads — a stylesheet printing, hiding or mirroring text — and G4's ink
- * roads, which paint text in a colour the contrast pass never reads.
+ * roads — a stylesheet printing, hiding or mirroring text — G4's ink roads,
+ * which paint text in a colour the contrast pass never reads, and the
+ * scroll-driven timelines the flash rule (G6) cannot count.
  */
 const REFUSED_PROPERTIES = Object.freeze({
     quotes: 'quotes is the text open-quote and close-quote print — a look prints no text of its own',
@@ -715,6 +718,20 @@ const REFUSED_PROPERTIES = Object.freeze({
     '-webkit-text-stroke': 'outlines text in a colour the contrast pass never reads',
     '-webkit-text-stroke-color': 'outlines text in a colour the contrast pass never reads',
     '-webkit-text-stroke-width': 'outlines text in a colour the contrast pass never reads',
+    // G6: a scroll-driven animation runs as fast as the reader scrolls, so
+    // no duration bounds how often it can flash.
+    'animation-timeline': 'ties an animation to the scroll, where no duration bounds how often it flashes',
+    'animation-range': 'ties an animation to the scroll, where no duration bounds how often it flashes',
+    'animation-range-start': 'ties an animation to the scroll, where no duration bounds how often it flashes',
+    'animation-range-end': 'ties an animation to the scroll, where no duration bounds how often it flashes',
+    'scroll-timeline': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'scroll-timeline-name': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'scroll-timeline-axis': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'view-timeline': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'view-timeline-name': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'view-timeline-axis': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'view-timeline-inset': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
+    'timeline-scope': 'defines a scroll timeline, where no duration bounds how often an animation flashes',
 });
 
 /**
@@ -1036,6 +1053,8 @@ function lintLook(css, { scope, kit, art }) {
  *    from the state lists, generated text from `GENERATED_TEXT` on
  *    `::before` / `::after` alone, no other text road, no `!important`, no
  *    fixed or sticky box, no prefixed property without its twin, no ink road.
+ *
+ * The flash rule reads every sheet at once and is `flashReport`'s.
  */
 export function lintSheet(css, { art = [] } = {}) {
     return lintLook(css, { scope: KIT_CLASS, kit: true, art });
@@ -1049,6 +1068,509 @@ export function lintSheet(css, { art = [] } = {}) {
  */
 export function lintLookSheet(css, { lookClass }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [] });
+}
+
+/* ---------- G6: how often a keyframe flashes, read from the sheets ---------- */
+
+/**
+ * WCAG 2.3.1: nothing flashes more than three times in any one second. A
+ * flash is a pair of opposing changes, so this is six changes in a window
+ * and not seven.
+ */
+export const MAX_FLASHES_PER_SECOND = 3;
+
+/**
+ * Animated properties that move or size a thing without changing what the
+ * pixel under it shows. Every other animated property — opacity, colour,
+ * background (position included: a background that jumps is a flash),
+ * filter, visibility, shadows, a custom property that a colour reads — counts
+ * toward a flash, so a property this list forgot errs toward a refusal.
+ */
+const MOVEMENT = new Set([
+    'transform',
+    'translate',
+    'rotate',
+    'scale',
+    'transform-origin',
+    'left',
+    'right',
+    'top',
+    'bottom',
+    'inset',
+    'width',
+    'height',
+    'margin',
+    'margin-top',
+    'margin-right',
+    'margin-bottom',
+    'margin-left',
+    'padding',
+    'padding-top',
+    'padding-right',
+    'padding-bottom',
+    'padding-left',
+    'grid-template-rows',
+    'grid-template-columns',
+    'outline-offset',
+]);
+
+/** A value this reader could not work out: a `var()` nothing declares, set by script at run time. */
+const UNKNOWN = '\u0000?';
+
+const CYCLE_CAP = 10000;
+
+function timeOf(token) {
+    const literal = /^([+-]?(?:\d*\.)?\d+)(ms|s)$/i.exec(token);
+    if (literal !== null) {
+        return Number(literal[1]) / (literal[2].toLowerCase() === 'ms' ? 1000 : 1);
+    }
+    const calc = /^calc\(\s*([^()]*)\s*\)$/i.exec(token);
+    if (calc !== null) {
+        const parts = calc[1].split(/\s*([*/])\s*/);
+        if (parts.length !== 3) return undefined;
+        const [a, op, b] = parts;
+        const time = timeOf(a) ?? timeOf(b);
+        const number = /^[+-]?(?:\d*\.)?\d+$/.test(b) ? Number(b) : /^[+-]?(?:\d*\.)?\d+$/.test(a) ? Number(a) : undefined;
+        if (time === undefined || number === undefined || (op === '/' && timeOf(a) === undefined)) return undefined;
+        return op === '*' ? time * number : time / number;
+    }
+    return undefined;
+}
+
+/** The first top-level comma in `text`, or -1. */
+function firstComma(text) {
+    let depth = 0;
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '"' || c === "'") {
+            i = skipString(text, i) - 1;
+            continue;
+        }
+        if (c === '(') depth += 1;
+        else if (c === ')') depth -= 1;
+        else if (c === ',' && depth === 0) return i;
+    }
+    return -1;
+}
+
+/**
+ * Every value `text` can take once its `var()`s are replaced by the values
+ * the sheets and the theme table give them (and each one's fallback). A
+ * `var()` nothing declares becomes `UNKNOWN`, which the readers below treat
+ * as "could be anything".
+ */
+function expandVars(text, lookup, depth = 0, budget = { left: 512 }) {
+    const m = /var\(/i.exec(text);
+    if (m === null) return [text];
+    const open = m.index + m[0].length - 1;
+    const close = closingParen(text, open);
+    if (close < 0 || depth > 8 || budget.left <= 0) {
+        return [text.slice(0, m.index) + UNKNOWN];
+    }
+    const inner = text.slice(open + 1, close);
+    const comma = firstComma(inner);
+    const name = (comma < 0 ? inner : inner.slice(0, comma)).trim();
+    const candidates = [...(lookup.get(name) ?? [])];
+    if (comma >= 0) candidates.push(inner.slice(comma + 1).trim());
+    if (candidates.length === 0) candidates.push(UNKNOWN);
+    const out = [];
+    for (const candidate of new Set(candidates)) {
+        for (const value of expandVars(text.slice(0, m.index) + candidate + text.slice(close + 1), lookup, depth + 1, budget)) {
+            out.push(value);
+            budget.left -= 1;
+        }
+    }
+    return out;
+}
+
+const TIMING_WORDS = new Set(['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end']);
+const FILL_WORDS = new Set(['forwards', 'backwards', 'both']);
+const PLAY_WORDS = new Set(['running', 'paused']);
+const DIRECTION_WORDS = new Set(['normal', 'reverse', 'alternate', 'alternate-reverse']);
+const GLOBAL_WORDS = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
+
+/**
+ * One single animation of an `animation` shorthand, as `{ name, seconds,
+ * iterations, alternate }`: `seconds` is undefined when this reader cannot
+ * tell it and null when the shorthand gives none (0s, which shows nothing).
+ * A value it cannot read counts as an endless one.
+ */
+function parseSingleAnimation(text) {
+    let name;
+    let seconds = null;
+    let times = 0;
+    let iterations = 1;
+    let alternate = false;
+    for (const token of splitTopLevel(text, ' ')) {
+        const lower = token.toLowerCase();
+        if (token.includes(UNKNOWN)) {
+            if (times === 0) seconds = undefined;
+            iterations = Infinity;
+            if (name === undefined && token === UNKNOWN) name = UNKNOWN;
+            continue;
+        }
+        const time = timeOf(lower);
+        if (time !== undefined || /^calc\(/.test(lower)) {
+            if (times === 0 && seconds !== undefined) seconds = time;
+            times += 1;
+            continue;
+        }
+        if (lower === 'infinite') {
+            iterations = Infinity;
+        } else if (/^[+-]?(?:\d*\.)?\d+$/.test(lower)) {
+            iterations = Number(lower);
+        } else if (DIRECTION_WORDS.has(lower)) {
+            alternate = alternate || lower.startsWith('alternate');
+        } else if (
+            TIMING_WORDS.has(lower) ||
+            FILL_WORDS.has(lower) ||
+            PLAY_WORDS.has(lower) ||
+            GLOBAL_WORDS.has(lower) ||
+            lower === 'none' ||
+            /^(steps|cubic-bezier|linear)\(/.test(lower)
+        ) {
+            continue;
+        } else if (name === undefined || name === UNKNOWN) {
+            name = token;
+        }
+    }
+    return { name, seconds, iterations, alternate };
+}
+
+/** The class names in a selector's subject — its last compound — which is the element the rule animates. */
+function subjectClasses(selector) {
+    const compounds = flatten(selector).trim().split(/\s*[>+~]\s*|\s+/);
+    const subject = compounds[compounds.length - 1] ?? '';
+    return new Set([...subject.matchAll(/\.([\w-]+)/g)].map((m) => m[1]));
+}
+
+/** Every qualified rule of a parsed sheet, grouping at-rules opened (their conditions do not matter here). */
+function allRules(nodes) {
+    const out = [];
+    for (const node of nodes) {
+        if (node.kind === 'rule') out.push(node);
+        else if (node.children !== undefined) out.push(...allRules(node.children));
+    }
+    return out;
+}
+
+/** A keyframe's stops as `{ at, decls }`, `at` from 0 to 1, in source order. */
+function keyframeStops(body) {
+    const stops = [];
+    for (const node of parseList(body, 0, body.length, [])) {
+        if (node.kind !== 'rule') continue;
+        const decls = declarationsOf(node.body).filter((d) => !d.prop.startsWith('animation-'));
+        for (const selector of splitTopLevel(node.prelude, ',')) {
+            const key = selector.trim().toLowerCase();
+            const at =
+                key === 'from' ? 0 : key === 'to' ? 1 : /^(?:\d*\.)?\d+%$/.test(key) ? parseFloat(key) / 100 : undefined;
+            if (at !== undefined) stops.push({ at: Math.min(1, Math.max(0, at)), decls });
+        }
+    }
+    return stops;
+}
+
+function numeric(value) {
+    const m = /^([+-]?(?:\d*\.)?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i.exec(value);
+    return m === null ? undefined : { n: Number(m[1]), unit: m[2].toLowerCase() };
+}
+
+/** +1 or -1 when both values are numbers in one unit, else 0 (unknown direction, which never merges). */
+function direction(from, to) {
+    const a = numeric(from);
+    const b = numeric(to);
+    if (a === undefined || b === undefined || a.unit !== b.unit || a.n === b.n) return 0;
+    return b.n > a.n ? 1 : -1;
+}
+
+/** True when a keyframe changes anything a flash is made of. */
+function flashes(stops) {
+    return stops.some((stop) => stop.decls.some((d) => !MOVEMENT.has(d.prop)));
+}
+
+/**
+ * The most changes, and so flashes, any one-second window holds when a
+ * keyframe runs for `seconds` a cycle, `iterations` times, alternating or
+ * not. Per property: the declared stops (an endpoint a keyframe leaves out is
+ * the element's own value, unknown here and so different from every declared
+ * one), each change between two stops that differ — a run of changes the
+ * same way in a number merged into one — and, cycle to cycle, the jump from
+ * the last value back to the first. Changes of several properties at one
+ * instant are one change; two of one property at one instant (a ramp's end
+ * and the jump back) are two.
+ */
+export function keyframeFlashes(stops, { seconds, iterations = Infinity, alternate = false }) {
+    const byProperty = new Map();
+    for (const stop of [...stops].sort((a, b) => a.at - b.at)) {
+        for (const { prop, value } of stop.decls) {
+            if (MOVEMENT.has(prop)) continue;
+            if (!byProperty.has(prop)) byProperty.set(prop, new Map());
+            byProperty.get(prop).set(stop.at, value);
+        }
+    }
+    if (!(seconds > 0) || byProperty.size === 0 || !(iterations > 0)) {
+        return { changes: 0, flashes: 0 };
+    }
+    const cycles = Math.min(
+        CYCLE_CAP,
+        Number.isFinite(iterations) ? Math.ceil(iterations) : Math.ceil(1 / seconds) + 3,
+    );
+    const weight = new Map();
+    for (const values of byProperty.values()) {
+        const points = [...values].map(([at, value]) => ({ at, value }));
+        if (points[0].at > 0) points.unshift({ at: 0, value: UNKNOWN });
+        if (points[points.length - 1].at < 1) points.push({ at: 1, value: UNKNOWN });
+        const changes = [];
+        for (let i = 1; i < points.length; i += 1) {
+            if (points[i].value === points[i - 1].value) continue;
+            const dir = direction(points[i - 1].value, points[i].value);
+            const last = changes[changes.length - 1];
+            if (last !== undefined && dir !== 0 && last.dir === dir) {
+                last.end = points[i].at;
+            } else {
+                changes.push({ start: points[i - 1].at, end: points[i].at, dir });
+            }
+        }
+        const first = points[0].value;
+        const final = points[points.length - 1].value;
+        const events = [];
+        for (let c = 0; c < cycles; c += 1) {
+            const reversed = alternate && c % 2 === 1;
+            if (!alternate && c > 0 && first !== final) {
+                events.push({ t: c, dir: direction(final, first) });
+            }
+            const order = reversed ? [...changes].reverse() : changes;
+            for (const change of order) {
+                events.push(
+                    reversed ? { t: c + 1 - change.start, dir: -change.dir } : { t: c + change.end, dir: change.dir },
+                );
+            }
+        }
+        const merged = [];
+        for (const event of events) {
+            const last = merged[merged.length - 1];
+            if (last !== undefined && event.dir !== 0 && last.dir === event.dir) last.t = event.t;
+            else merged.push({ ...event });
+        }
+        const local = new Map();
+        for (const event of merged) {
+            const key = Math.round(event.t * seconds * 1e6);
+            local.set(key, (local.get(key) ?? 0) + 1);
+        }
+        for (const [key, count] of local) weight.set(key, Math.max(weight.get(key) ?? 0, count));
+    }
+    const times = [...weight].sort((a, b) => a[0] - b[0]);
+    let best = 0;
+    let sum = 0;
+    let low = 0;
+    for (let high = 0; high < times.length; high += 1) {
+        sum += times[high][1];
+        while (times[high][0] - times[low][0] >= 1e6) {
+            sum -= times[low][1];
+            low += 1;
+        }
+        best = Math.max(best, sum);
+    }
+    return { changes: best, flashes: Math.floor(best / 2) };
+}
+
+/**
+ * G6, static: every `@keyframes` in `sheets` (`[{ name, css }]`) at every
+ * timing a rule gives it, with the most flashes any second of it holds.
+ *
+ * A rule gives a keyframe its timings through an `animation` shorthand or
+ * `animation-name` beside the timing longhands, after every `var()` is read
+ * through the sheets' own custom properties and `vars` (the theme table's
+ * `--s-*-anim` values, `{ name: [values] }`). A rule that sets a timing
+ * longhand and names no keyframe re-times whatever runs on its element, so
+ * it is paired with every keyframe a rule runs on an element of the same
+ * class — or with every keyframe, when its subject names no class or a class
+ * no animating rule names. Stated limit: an element carrying two classes,
+ * one named by the re-timing rule and the other by the animation, is not
+ * seen, since which classes share an element is the renderer's and not in
+ * any sheet; and a change timed by script is not in a sheet at all.
+ *
+ * Returns `{ report, problems }`: `report` has one row per keyframe and
+ * timing that changes a flash property; `problems` names each row over
+ * `MAX_FLASHES_PER_SECOND` and each flashing keyframe run for a time this
+ * reader cannot work out.
+ */
+export function flashReport(sheets, { vars = {} } = {}) {
+    const keyframes = new Map();
+    const lookup = new Map(Object.entries(vars).map(([name, values]) => [name, [...values]]));
+    const rules = [];
+    for (const sheet of sheets) {
+        const { nodes } = parseSheet(sheet.css);
+        const visit = (list) => {
+            for (const node of list) {
+                if (node.kind === 'at' && node.name === 'keyframes' && node.body !== undefined) {
+                    const name = node.prelude.replace(/^@keyframes\s*/i, '').trim();
+                    const list2 = keyframes.get(name) ?? [];
+                    list2.push({ sheet: sheet.name, stops: keyframeStops(node.body) });
+                    keyframes.set(name, list2);
+                } else if (node.kind === 'at' && node.children !== undefined) {
+                    visit(node.children);
+                }
+            }
+        };
+        visit(nodes);
+        for (const rule of allRules(nodes)) {
+            const decls = declarationsOf(rule.body);
+            for (const { prop, value } of decls) {
+                if (prop.startsWith('--')) {
+                    const known = lookup.get(prop) ?? [];
+                    known.push(value);
+                    lookup.set(prop, known);
+                }
+            }
+            rules.push({ sheet: sheet.name, rule, decls });
+        }
+    }
+
+    const entries = [];
+    const modifiers = [];
+    for (const { sheet, rule, decls } of rules) {
+        // What the rule's shorthand says, one single animation at a time, and
+        // what its longhands say, which may re-time any of them.
+        const singles = [];
+        const named = new Set();
+        const long = { seconds: new Set(), iterations: new Set(), alternates: new Set() };
+        let timed = false;
+        for (const { prop, value } of decls) {
+            if (!prop.startsWith('animation')) continue;
+            const values = expandVars(value.replace(/\s*!\s*important\s*$/i, ''), lookup);
+            const each = (fn) => {
+                for (const whole of values) for (const one of splitTopLevel(whole, ',')) fn(one);
+            };
+            if (prop === 'animation') {
+                each((single) => {
+                    const parsed = parseSingleAnimation(single);
+                    if (parsed.name !== undefined) singles.push(parsed);
+                });
+            } else if (prop === 'animation-name') {
+                each((one) => {
+                    if (one.includes(UNKNOWN)) named.add(UNKNOWN);
+                    else if (one.toLowerCase() !== 'none' && !GLOBAL_WORDS.has(one.toLowerCase())) named.add(one);
+                });
+            } else if (prop === 'animation-duration') {
+                timed = true;
+                each((one) => long.seconds.add(one.includes(UNKNOWN) ? undefined : timeOf(one.toLowerCase())));
+            } else if (prop === 'animation-iteration-count') {
+                timed = true;
+                each((one) => long.iterations.add(/^[+-]?(?:\d*\.)?\d+$/.test(one) ? Number(one) : Infinity));
+            } else if (prop === 'animation-direction') {
+                timed = true;
+                each((one) => long.alternates.add(one.includes(UNKNOWN) || /alternate/i.test(one)));
+            }
+        }
+        const subjects = splitTopLevel(rule.prelude, ',').map(subjectClasses);
+        const where = { sheet, selector: rule.prelude.replace(/\s+/g, ' ') };
+        const withLong = (seconds, iterations, alternates) => ({
+            seconds: new Set([...seconds, ...long.seconds]),
+            iterations: new Set([...iterations, ...long.iterations]),
+            alternates: new Set([...alternates, ...long.alternates]),
+        });
+        for (const single of singles) {
+            entries.push({
+                names: new Set([single.name]),
+                ...withLong([single.seconds], [single.iterations], [single.alternate]),
+                subjects,
+                where,
+            });
+        }
+        if (named.size > 0) {
+            // `animation-name` beside a shorthand renames what the shorthand
+            // timed; alone, it runs for the longhands' time or none (0s).
+            entries.push({
+                names: named,
+                ...withLong(
+                    singles.length > 0 ? singles.map((s) => s.seconds) : [null],
+                    singles.length > 0 ? singles.map((s) => s.iterations) : [1],
+                    singles.length > 0 ? singles.map((s) => s.alternate) : [false],
+                ),
+                subjects,
+                where,
+            });
+        }
+        if (singles.length === 0 && named.size === 0 && timed) {
+            modifiers.push({
+                seconds: long.seconds,
+                iterations: long.iterations,
+                alternates: long.alternates,
+                subjects,
+                where,
+            });
+        }
+    }
+
+    const classesOf = new Map();
+    for (const entry of entries) {
+        for (const name of entry.names) {
+            const set = classesOf.get(name) ?? new Set();
+            for (const subject of entry.subjects) for (const cls of subject) set.add(cls);
+            classesOf.set(name, set);
+        }
+    }
+    const animated = new Set([...classesOf.values()].flatMap((set) => [...set]));
+    const pairs = (modifier, name) =>
+        modifier.subjects.some(
+            (subject) =>
+                subject.size === 0 ||
+                [...subject].every((cls) => !animated.has(cls)) ||
+                [...subject].some((cls) => classesOf.get(name)?.has(cls)),
+        );
+
+    const report = [];
+    const problems = [];
+    const timings = new Map();
+    const add = (name, source) => {
+        const t = timings.get(name) ?? { seconds: new Map(), iterations: new Set(), alternates: new Set(), wheres: [] };
+        for (const s of source.seconds) if (!t.seconds.has(s)) t.seconds.set(s, source.where);
+        for (const i of source.iterations) t.iterations.add(i);
+        for (const a of source.alternates) t.alternates.add(a);
+        t.wheres.push(source.where);
+        timings.set(name, t);
+    };
+    for (const entry of entries) for (const name of entry.names) add(name, entry);
+    for (const modifier of modifiers) {
+        for (const name of [...timings.keys()]) if (name !== UNKNOWN && pairs(modifier, name)) add(name, modifier);
+    }
+    for (const [name, timing] of timings) {
+        if (name === UNKNOWN) {
+            for (const where of timing.wheres) {
+                problems.push(
+                    `${where.sheet}: "${echo(where.selector)}" runs an animation whose keyframes this reader cannot name — name them plainly`,
+                );
+            }
+            continue;
+        }
+        if (timing.iterations.size === 0) timing.iterations.add(1);
+        if (timing.alternates.size === 0) timing.alternates.add(false);
+        for (const declared of keyframes.get(name) ?? []) {
+            if (!flashes(declared.stops)) continue;
+            for (const [seconds, where] of timing.seconds) {
+                if (seconds === null) continue;
+                if (seconds === undefined) {
+                    problems.push(
+                        `@keyframes ${name} (${declared.sheet}) changes what a pixel shows, and "${echo(where.selector)}" (${where.sheet}) runs it for a time this reader cannot work out — write the duration plainly`,
+                    );
+                    continue;
+                }
+                for (const iterations of timing.iterations) {
+                    for (const alternate of timing.alternates) {
+                        const counted = keyframeFlashes(declared.stops, { seconds, iterations, alternate });
+                        report.push({ name, sheet: declared.sheet, seconds, iterations, alternate, ...counted, where });
+                        if (counted.flashes > MAX_FLASHES_PER_SECOND) {
+                            problems.push(
+                                `@keyframes ${name} (${declared.sheet}) flashes ${counted.flashes} times in one second when "${echo(where.selector)}" (${where.sheet}) runs it at ${seconds}s — at most ${MAX_FLASHES_PER_SECOND}`,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return { report, problems: [...new Set(problems)] };
 }
 
 /** True when the sheet holds any rule — anything but an empty reduced-motion block. */

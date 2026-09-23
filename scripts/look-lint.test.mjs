@@ -3,12 +3,16 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { servedFlashReport, servedSheets, themeVarValues } from './look-flash.mjs';
 import { appSheets, sheetsWithRole } from './sheet-roles.mjs';
 import {
     GENERATED_TEXT,
     LOOK_MEDIA,
+    MAX_FLASHES_PER_SECOND,
     STATE_ATTRIBUTES,
     decodeEscapes,
+    flashReport,
+    keyframeFlashes,
     lintLookSheet,
     lintSheet,
     PRESENCE_ATTRIBUTES,
@@ -20,7 +24,7 @@ import {
  * The rules every look sheet obeys — the shipped ones under their own class,
  * the kit's under `.t-workshop` — over the REAL shipped sheets, each rule
  * proved red by a plant on a copy of one (build step 4a; the step-4
- * critic's items 7, 8 and 9, 2026-09-24).
+ * critic's items 7, 8, 9 and 12, 2026-09-24).
  *
  * `node --test` rather than vitest, like `workshop-lint.test.mjs` beside it:
  * a TypeScript test importing these `.mjs` modules breaks `tsc` (TS7016).
@@ -302,5 +306,97 @@ describe('a-look-cannot-paint-around-what-the-probe-reads', () => {
     it('accepts the positions the shipped looks use, and a background that only names text inside a function', () => {
         accepts('.t-neo .item { position: relative; } .t-neo .item-h { position: absolute; }');
         accepts('.t-neo .item { background: var(--s-text) linear-gradient(red, var(--text, blue)); }');
+    });
+});
+
+describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
+    /**
+     * G6, static (WCAG 2.3.1): every `@keyframes` in every served sheet, at
+     * every timing a rule gives it — the theme table's `--s-*-anim` values
+     * included, and a rule that re-times whatever runs on its element — holds
+     * at most three flashes (pairs of opposing changes) in any one second.
+     * `att-hum`'s failing lamp is the named boundary: three dips inside
+     * ~0.22 s of a 7 s cycle, exactly three.
+     */
+    it('finds no served keyframe over three flashes a second, and no flashing one it cannot time', async () => {
+        const { report, problems } = await servedFlashReport();
+        assert.deepEqual(problems, []);
+        assert.ok(report.length > 10, 'the report read the served keyframes');
+        const worst = Math.max(...report.map((row) => row.flashes));
+        assert.ok(worst <= MAX_FLASHES_PER_SECOND, `worst ${worst}`);
+        // The theme table's animations are read through their vars.
+        assert.ok(report.some((row) => row.name === 'neo-flick' && row.seconds === 6), 'neo-flick through --s-name-anim');
+    });
+
+    it('reads att-hum at the boundary: three flashes, six changes, at its shipped 7 s', async () => {
+        const { report } = await servedFlashReport();
+        const hum = report.filter((row) => row.name === 'att-hum-gutter');
+        assert.deepEqual(
+            hum.map((row) => [row.seconds, row.iterations, row.alternate, row.changes, row.flashes]),
+            [[7, Infinity, false, 6, 3]],
+        );
+    });
+
+    it('refuses a strobe, a re-timed lamp, and a flashing keyframe run for a time it cannot read', async () => {
+        const vars = await themeVarValues();
+        const withNeo = (css) =>
+            servedSheets().map((sheet) => (sheet.name === NEO.path ? { name: sheet.name, css } : sheet));
+        for (const [rule, pattern] of [
+            [
+                '@keyframes t-neo-strobe { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    '.t-neo .stall-name { animation: t-neo-strobe 1s steps(1) infinite; }',
+                /t-neo-strobe .* flashes 5 times in one second/,
+            ],
+            // A longhand that names no keyframe re-times the lamp on its element.
+            ['.t-neo .sign-lamp { animation-duration: 1s; }', /att-hum-gutter .* flashes 4 times .* at 1s/],
+            // … and one whose element names no class re-times everything.
+            ['.t-neo h1 span { animation-duration: 0.5s; }', /att-hum-gutter .* flashes \d+ times .* at 0\.5s/],
+            // A shorthand naming another sheet's keyframe at its own pace.
+            ['.t-neo .item-p { animation: om-flick 0.8s steps(1) infinite; }', /om-flick .* flashes \d+ times/],
+            ['.t-neo .stall-name { animation: t-neo-cur var(--t-neo-nowhere) infinite; }', /t-neo-cur .* a time this reader cannot work out/],
+        ]) {
+            const { problems } = flashReport(withNeo(plantedNeo(rule)), { vars });
+            assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('refuses a scroll-driven animation in a look sheet, which no duration bounds', () => {
+        plant(
+            '.t-neo .stall-name { animation: t-neo-cur 1s infinite; animation-timeline: scroll(); }',
+            /animation-timeline — ties an animation to the scroll/,
+        );
+        plant('.t-neo .items { view-timeline: --t-neo-v block; }', /view-timeline — defines a scroll timeline/);
+    });
+
+    it('counts a change as a change: pairs of opposing ones are flashes, a ramp one way is one, a jump back is another', () => {
+        const stops = (list) => list.map(([at, decls]) => ({ at, decls: decls.map(([prop, value]) => ({ prop, value })) }));
+        // Opacity 1 → 0 → 1 → 0 … five times in one second: ten changes.
+        const strobe = stops(
+            Array.from({ length: 11 }, (_, i) => [i / 10, [['opacity', i % 2 === 0 ? '1' : '0']]]),
+        );
+        assert.deepEqual(keyframeFlashes(strobe, { seconds: 1, iterations: 1 }), { changes: 10, flashes: 5 });
+        // A ramp 0 → 0.3 → 0.6 → 1 is one change, and the jump back to 0 another.
+        const ramp = stops([
+            [0, [['opacity', '0']]],
+            [0.3, [['opacity', '0.3']]],
+            [0.6, [['opacity', '0.6']]],
+            [1, [['opacity', '1']]],
+        ]);
+        assert.deepEqual(keyframeFlashes(ramp, { seconds: 0.25, iterations: 1 }), { changes: 1, flashes: 0 });
+        assert.equal(keyframeFlashes(ramp, { seconds: 0.25, iterations: Infinity }).changes, 8);
+        // Alternating, the same ramp has no jump: four changes a second.
+        assert.equal(keyframeFlashes(ramp, { seconds: 0.25, iterations: Infinity, alternate: true }).changes, 4);
+        // Two properties changing at one instant are one change; movement is none.
+        const both = stops([
+            [0, [['color', 'red'], ['text-shadow', 'none'], ['transform', 'none']]],
+            [0.5, [['color', 'blue'], ['text-shadow', '0 0 2px red'], ['transform', 'scale(2)']]],
+            [1, [['color', 'red'], ['text-shadow', 'none'], ['transform', 'none']]],
+        ]);
+        assert.deepEqual(keyframeFlashes(both, { seconds: 1, iterations: 1 }), { changes: 2, flashes: 1 });
+        const moving = stops([
+            [0, [['transform', 'none']]],
+            [1, [['transform', 'scale(2)']]],
+        ]);
+        assert.deepEqual(keyframeFlashes(moving, { seconds: 0.01 }), { changes: 0, flashes: 0 });
     });
 });

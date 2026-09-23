@@ -56,6 +56,7 @@ import {
     stopOnSignals,
     waitUntil,
 } from './process-groups.mjs';
+import { servedFlashReport } from './look-flash.mjs';
 import { readArt, requireCleanKitBuild } from './workshop-build-check.mjs';
 import { lintSheet, rescopeSheet, sheetHasRules } from './workshop-css.mjs';
 
@@ -144,6 +145,7 @@ async function requireKit() {
         process.exit(1);
     }
     const problems = lintSheet(css, { art: readArt(join('workshop', 'art')) });
+    problems.push(...(await servedFlashReport({ kit: { name: sheet, css } })).problems);
     if (problems.length > 0) {
         console.error(
             `✗ ${sheet} has ${problems.length} problem${problems.length === 1 ? '' : 's'} ` +
@@ -220,6 +222,7 @@ async function start(args) {
         .map((name) => ({ from: `src/ui/${name}`, css: readFileSync(join('src/ui', name), 'utf8') }));
     const css = rescopeSheet(readFileSync(`src/ui/theme-${base}.css`, 'utf8'), base, carried);
     const cssProblems = lintSheet(css, { art: readArt(join(dir, 'art')) });
+    cssProblems.push(...(await servedFlashReport({ kit: { name: sheetPath, css } })).problems);
     const lookText = starter.lookFileText(starter.starterLook(base));
     const { workshopLookProblems } = await tsModule('./layout/workshopLook.ts');
     const lookProblems = workshopLookProblems(lookText);

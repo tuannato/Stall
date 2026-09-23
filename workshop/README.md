@@ -96,8 +96,11 @@ decorations are real elements or background paint. *(The kit.)*
 with one of: `sway`, `drift`, `spin`, `crawl`, `breathe`, `fall`. Every
 moving thing is stilled under `prefers-reduced-motion`, in a block that is
 the **last rule of your stylesheet**. *(The kit checks the still state and
-the last-rule position.)* Nothing flashes, and motion outside the menu is
-not accepted. *(Stall at intake.)*
+the last-rule position.)* Nothing flashes more than three times in any
+second. *(The kit — `workshop:lint` counts every keyframe at every duration
+a rule runs it for, Stall's own included, and refuses a scroll-driven
+animation, which no duration bounds.)* Motion outside the menu is not
+accepted. *(Stall at intake.)*
 
 **Type.** Pick one of three stacks for the look: Inter (the only face Stall
 serves, so it looks the same everywhere), a system monospace, or a system

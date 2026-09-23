@@ -9,7 +9,8 @@
  * attribute selectors from the state lists, generated text from the closed
  * list, no other text or ink road, `@media` on the probe's conditions only,
  * no `!important`, no fixed or sticky box, no prefixed property without its
- * twin). What needs a browser is
+ * twin), then the flash rule over this sheet read in the kit's place beside
+ * every sheet the app serves (`look-flash.mjs`). What needs a browser is
  * `pnpm workshop:probe`. Every kit command that builds runs the same read
  * first and refuses to build on any problem (`scripts/workshop.mjs`).
  *
@@ -19,6 +20,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { servedFlashReport } from './look-flash.mjs';
 import { readArt } from './workshop-build-check.mjs';
 import { lintSheet } from './workshop-css.mjs';
 
@@ -31,6 +33,7 @@ try {
     process.exit(1);
 }
 const problems = lintSheet(css, { art: readArt(join(dirname(file), 'art')) });
+problems.push(...(await servedFlashReport({ kit: { name: file, css } })).problems);
 if (problems.length === 0) {
     console.log(`✓ workshop:lint: ${file} — every static rule holds`);
     process.exit(0);

@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -248,5 +249,40 @@ describe('workshop-starter-rescoping', () => {
         assert.match(out, /\.stall\.t-workshop\.broadcast \.plate \{ border: 0; \}/);
         assert.ok(out.indexOf('Carried from x.css') < out.indexOf('@media (prefers-reduced-motion'));
         assert.deepEqual(lintSheet(out), []);
+    });
+});
+
+/**
+ * `pnpm workshop:lint` reads the flash rule over the creator's sheet in the
+ * kit's place beside every sheet the app serves (`look-flash.mjs`), since a
+ * kit rule can re-time a shipped keyframe as well as flash its own. Through
+ * the command a creator runs, over a scratch sheet.
+ */
+describe('the-kit-lint-reads-the-flash-rule-beside-the-served-sheets', () => {
+    const run = (css) => {
+        const dir = mkdtempSync(join(tmpdir(), 'stall-flash-'));
+        try {
+            const file = join(dir, 'theme-workshop.css');
+            writeFileSync(file, css);
+            return spawnSync('node', ['scripts/workshop-lint.mjs', file], { encoding: 'utf8' });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    };
+
+    it('refuses a strobe of its own and a shipped lamp it re-times, and passes the skeleton', () => {
+        const strobe = run(
+            sheet(
+                '@keyframes wk-strobe { 0%, 50% { opacity: 1; } 25%, 75% { opacity: 0; } }\n' +
+                    '.t-workshop .stall-name { animation: wk-strobe 0.4s steps(1) infinite; }\n',
+            ),
+        );
+        assert.equal(strobe.status, 1, strobe.stdout + strobe.stderr);
+        assert.match(strobe.stderr, /@keyframes wk-strobe .* flashes \d+ times in one second/);
+        const lamp = run(sheet('.t-workshop .sign-lamp { animation-duration: 1s; }\n'));
+        assert.equal(lamp.status, 1, lamp.stdout + lamp.stderr);
+        assert.match(lamp.stderr, /@keyframes att-hum-gutter \(src\/ui\/stall\.css\) flashes 4 times/);
+        const skeleton = run(readFileSync('workshop/theme-workshop.css', 'utf8'));
+        assert.equal(skeleton.status, 0, skeleton.stdout + skeleton.stderr);
     });
 });
