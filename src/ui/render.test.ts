@@ -5926,11 +5926,14 @@ describe('the-head-wears-the-tier-the-figure-earned', () => {
 describe('every-shipped-look-sizes-every-price-tier', () => {
     /**
      * The tier sizes live in each theme sheet, next to that look's own
-     * `.item-x` literal — the emitted `--s-price-size` is shadowed by all
-     * three looks (the audit's PARTIAL table), so a base ladder on the var
-     * would be a 0.2px change on Rural. The cost of per-look rules is that
-     * a look can silently forget one and paint the full-size figure into a
-     * tier-2 column; this is what notices.
+     * `.item-x` literal. stall.css carries a base ladder too — tiers derived
+     * from `--s-price-size` (0.81 and 0.65) — but it is written at (0,1,0)
+     * under `:where()` so that **any sheet that sizes `.item-x` at all
+     * out-ranks it, tiers included**: it is the floor for a look with no
+     * sheet (the skeleton, an untouched kit), not a default a look inherits.
+     * So a shipped look owns its whole ladder, and one that forgot a tier
+     * would paint its full-size figure into that tier's column with nothing
+     * underneath to catch it; this is what notices.
      */
     const LOOKS = ['modern', 'neo', 'rural'] as const;
 

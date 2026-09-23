@@ -280,13 +280,15 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'listings', zoom: true },
     }),
     /*
-     * The unbuyable dash beside a buyable figure (2026-09-23). T2's only
-     * listing asks a minimum take its remainder cannot meet (`isUnbuyable`),
-     * so its row paints the dash; T1's is an ordinary whole-lot ask at tier 0
-     * on every look. No screen painted an unbuyable offer before, so the dash
-     * was measured by nothing and had no picture `pnpm looks:diff` could
-     * compare a change to it against. The face below, and a wall row and the
-     * wall's card further down, stage the dash in the other places it paints.
+     * The unbuyable dash beside a buyable figure (step 2b, 2026-09-23 — the
+     * owner's D1: the dash is the size of the figure). T2's only listing asks
+     * a minimum take its remainder cannot meet (`isUnbuyable`), so its row
+     * paints the dash; T1's is an ordinary whole-lot ask at tier 0 on every
+     * look. No screen painted an unbuyable offer before, so the dash's size
+     * was measured by nothing. The probe's `the-dash-is-the-size-of-the-figure`
+     * compares the two on this screen, the face below against
+     * `item-listing`'s figure, the wall row against its neighbour's and the
+     * wall's card against `shop-window-cycle`'s.
      */
     unbuyable: base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -944,9 +946,9 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
-     * The unbuyable dash on a wall: Browse, an unbuyable row beside a buyable
-     * one, no lock — the wall sizes its figure, and so what sits in its
-     * place, neither as the shop nor as the face does.
+     * The unbuyable dash on a wall (step 2b): Browse, an unbuyable row beside
+     * a buyable one, no lock — the dash takes the wall figure's size, which is
+     * neither the shop's nor the face's.
      */
     'shop-window-unbuyable': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -956,8 +958,8 @@ export const SCREENS: Record<string, StallView> = {
     /*
      * And on the wall's one big card (Cycle): the unbuyable listing alone, so
      * it is the card at the cursor. The largest figure the app paints — up to
-     * 112px, 124px on a tall screen — is `shop-window-cycle`'s at the same
-     * width.
+     * 112px, 124px on a tall screen — so the largest dash; its buyable figure
+     * is `shop-window-cycle`'s at the same width.
      */
     'shop-window-cycle-unbuyable': base({
         fetch: { kind: 'offers', offers: [UNBUYABLE_OFFER] },
@@ -1279,8 +1281,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // decoration interactions they could stage are `offers`' again.
     'stream-sheet',
     'embed-sheet',
-    // The unbuyable dash's screens exist for the dash; the decoration
-    // interactions they could stage are `offers`' again.
+    // The unbuyable dash's four screens exist for one size comparison; the
+    // decoration interactions they could stage are `offers`' again.
     'unbuyable',
     'item-unbuyable',
     'shop-window-unbuyable',
@@ -1368,8 +1370,8 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'first-stall',
     // The unbuyable dash (2026-09-23): the dash and its badge are muted ink
     // no contrast target names, beside `offers`' own figure on its ground,
-    // and on the face and the wall the same. What they are here for is the
-    // dash's geometry.
+    // and on the face and the wall the same. What they are here for is one
+    // size, which is geometry.
     'unbuyable',
     'item-unbuyable',
     'shop-window-unbuyable',

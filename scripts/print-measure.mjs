@@ -203,7 +203,7 @@ try {
     const themes = await evaluate(cdp, sessionId, 'JSON.stringify(window.__themes)');
 
     for (const screen of screens) {
-        for (const theme of JSON.parse(themes)) {
+        for (const { id: theme } of JSON.parse(themes)) {
             await evaluate(
                 cdp,
                 sessionId,

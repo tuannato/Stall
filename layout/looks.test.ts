@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { attachmentsForTheme } from '../src/domain/attachments';
 import { DEFAULT_THEME_ID, SHIPPED_THEMES, WORKSHOP_THEME_ID, decodeTheme } from '../src/domain/theme';
 import {
+    SKELETON_LOOK_ID,
+    SKELETON_SHEET_CLASS,
     galleryLooks,
     kitLook,
     lookById,
@@ -66,9 +68,13 @@ describe('the-harness-chooses-looks-in-one-place', () => {
 
     it('resolves the shipped looks to their own rows, and the kit only once registered', () => {
         // Before registration (this module's own state): the three shipped
-        // looks, each its own row and its own decorations.
+        // looks, each its own row and its own decorations, and the skeleton.
         expect(kitLook()).toBeUndefined();
-        expect(measuredLooks().map((look) => look.id)).toEqual(SHIPPED_THEMES.map((row) => row.id));
+        expect(measuredLooks().map((look) => look.id)).toEqual([
+            ...SHIPPED_THEMES.map((row) => row.id),
+            SKELETON_LOOK_ID,
+        ]);
+        expect(shippedLooks().map((look) => look.id)).toEqual(SHIPPED_THEMES.map((row) => row.id));
         for (const look of shippedLooks()) {
             expect(look.theme).toEqual(decodeTheme(look.id));
             expect(look.rows).toEqual(attachmentsForTheme(look.id));
@@ -76,6 +82,12 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         }
         expect(looksFor('door').map((look) => look.id)).toEqual([DEFAULT_THEME_ID]);
         expect(() => lookById(WORKSHOP_THEME_ID)).toThrow(/workshop pages/);
+
+        // The skeleton is measured on every screen but the door.
+        const skeleton = lookById(SKELETON_LOOK_ID);
+        expect(skeleton.theme.sheetClass).toBe(SKELETON_SHEET_CLASS);
+        expect(looksFor('offers')).toContain(skeleton);
+        expect(looksFor('door')).not.toContain(skeleton);
 
         registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)));
         const kit = kitLook()!;
@@ -117,5 +129,59 @@ describe('the-scratch-id-is-not-a-shipped-look', () => {
         expect(() => registerWorkshopLook({ ...kit, theme: { ...kit.theme, id: DEFAULT_THEME_ID } })).toThrow(
             /carries id 255/,
         );
+    });
+});
+
+/**
+ * The skeleton the ordinary probe measures (step 2d, the owner's D3): the
+ * default row under a class no stylesheet names, so the base sheets paint it
+ * and no look's does. Three ways it could stop being that, each pinned
+ * without trusting the module under test: a sheet somewhere learning the
+ * class, the row drifting from the default's, and the runner forgetting to
+ * expect the class (a pass that never painted it would then read green).
+ */
+describe('the-skeleton-is-the-default-row-under-a-class-no-sheet-styles', () => {
+    // Read at collection, before any test registers the kit: once a kit look
+    // is registered this page measures the kit alone, as a workshop page does.
+    const skeleton = lookById(SKELETON_LOOK_ID);
+
+    it('is the default row, every field but the class', () => {
+        const { sheetClass, ...rest } = skeleton.theme;
+        const { sheetClass: defaultClass, ...defaultRest } = decodeTheme(DEFAULT_THEME_ID);
+        expect(sheetClass).toBe('t-skeleton');
+        expect(defaultClass).not.toBe(sheetClass);
+        expect(rest).toEqual(defaultRest);
+        expect(skeleton.rows).toEqual([]);
+        expect(skeleton.label).toBe('Skeleton');
+    });
+
+    it('carries a harness address that is no shipped id and not the kit’s', () => {
+        expect(SHIPPED_THEMES.map((row) => row.id)).not.toContain(SKELETON_LOOK_ID);
+        expect(SKELETON_LOOK_ID).not.toBe(WORKSHOP_THEME_ID);
+        // The renderer never sees the address: the row keeps the default's id.
+        expect(skeleton.theme.id).toBe(DEFAULT_THEME_ID);
+    });
+
+    it('wears a class no stylesheet in the repository names', () => {
+        const ROOT = join(LAYOUT, '..');
+        const sheets = [
+            ...readdirSync(join(ROOT, 'src/ui')).filter((n) => n.endsWith('.css')).map((n) => join(ROOT, 'src/ui', n)),
+            ...readdirSync(LAYOUT).filter((n) => n.endsWith('.css')).map((n) => join(LAYOUT, n)),
+            join(ROOT, 'workshop/theme-workshop.css'),
+        ];
+        // The walk found the sheets it exists for.
+        expect(sheets.some((path) => path.endsWith('stall.css'))).toBe(true);
+        expect(sheets.some((path) => path.endsWith('theme-modern.css'))).toBe(true);
+        for (const path of sheets) {
+            expect(readFileSync(path, 'utf8').includes(SKELETON_SHEET_CLASS), path).toBe(false);
+        }
+    });
+
+    it('is a class the ordinary runner expects to see painted', () => {
+        const runner = readFileSync(join(LAYOUT, '..', 'scripts/layout-check.mjs'), 'utf8');
+        const at = runner.indexOf('const EXPECTED_SHEET_CLASSES =');
+        expect(at).toBeGreaterThan(-1);
+        const statement = runner.slice(at, runner.indexOf(';', at));
+        expect(statement).toContain(`'${SKELETON_SHEET_CLASS}'`);
     });
 });

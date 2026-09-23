@@ -6391,8 +6391,10 @@ function offerRow(
     const price = el('span', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
-        // it would advertise a purchase that cannot happen.
-        price.append(el('span', 'dash', copy.DASHED_PRICE));
+        // it would advertise a purchase that cannot happen. The dash wears
+        // the figure's class, so it is the size this row would paint a
+        // figure at, on every look at every width (`.dash` in stall.css).
+        price.append(el('span', 'item-x dash', copy.DASHED_PRICE));
         price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
     } else {
         const amount = el('span', 'item-a');
@@ -6648,7 +6650,9 @@ function itemFace(
 
     const figure = el('div', 'face-x');
     if (isUnbuyable(offer)) {
-        figure.append(el('span', 'dash', copy.DASHED_PRICE));
+        // `x`, the face figure's own class: the size a buyable offer's figure
+        // takes here (`.dash` in stall.css).
+        figure.append(el('span', 'x dash', copy.DASHED_PRICE));
         figure.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
         card.append(figure);
         card.append(

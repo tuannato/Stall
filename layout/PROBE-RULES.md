@@ -1625,9 +1625,9 @@ ordinary `pnpm test:layout` never loads the kit's look or sheet
   `reducedMotion` and `portraitTall`; `__contrastPrepare` returns the classes
   of the one paint it made. The runner refuses any pass whose set is not
   exactly what it measures — `{t-workshop}` for the kit, `{t-modern, t-neo,
-  t-rural}` otherwise (a fourth shipped look adds its class to
-  `EXPECTED_SHEET_CLASSES`) — and the contrast and transparency passes by the
-  union of their prepares. **Why** (the step-1 critic's P1): `decodeTheme(0xff)`
+  t-rural, t-skeleton}` otherwise (the skeleton since step 2, below; a
+  fourth shipped look adds its class to `EXPECTED_SHEET_CLASSES`) — and the
+  contrast and transparency passes by the union of their prepares. **Why** (the step-1 critic's P1): `decodeTheme(0xff)`
   answers with MODERN's row and `attachmentsForTheme(0xff)` with `[]`, so any
   site left choosing a look by id paints Modern bare under the kit's name —
   and Modern is green, so the one failure that shows is *fewer failures*, a
@@ -1654,12 +1654,160 @@ ordinary `pnpm test:layout` never loads the kit's look or sheet
   the workshop probe linked the kit's sheet AHEAD of the app's sheets (the
   showroom did not). Pinned by `links the kit’s sheet after the app’s sheets
   on both kit pages`, proved red by swapping the two imports back.
-- **The skeleton, measured once** (the committed kit, Modern's row with no
-  rule; 32.8s): 15 failures, every one "the name column collapsed under the
-  price" on `offers` and `long-item-name` at 390px (seven seeks each; one more
-  under reduced motion) — the tier-1/2 figure sizes are declared only in a
-  look's own sheet. Every other pass green. That list is the step-2 input;
-  nothing subtracts it — a known-failures filter would hide a creator's own
-  failure on the same screen and check. The three starters
-  (`pnpm workshop:start <look>`) each probe green: Modern 75.0s, Neo 62.7s,
-  Rural 71.7s.
+- **The skeleton, measured once before step 2** (the committed kit, Modern's
+  row with no rule; 32.8s): 15 failures, every one "the name column collapsed
+  under the price" on `offers` and `long-item-name` at 390px (seven seeks
+  each; one more under reduced motion). Nothing subtracts a failure — a
+  known-failures filter would hide a creator's own failure on the same
+  screen and check. Step 2 turned it green and the ordinary probe now
+  measures a fixed skeleton on every run (below). The three starters
+  (`pnpm workshop:start <look>`) each probed green on 2026-09-23 before
+  step 2: Modern 75.0s, Neo 62.7s, Rural 71.7s; after step 2, Modern 76.9s
+  and the untouched skeleton 22.7s (green, its worn half no longer painted).
+
+## The skeleton is measured on every run (2026-09-23, the owner's D3)
+
+`layout/looks.ts` carries a harness look beside the shipped three: the
+default row under `t-skeleton`, a class no stylesheet names, so the app's
+base sheets paint it and no look's sheet does — what a look is before its
+sheet has a rule (the committed kit), and what a stall WOULD paint before
+its look's sheet arrived if looks' sheets ever load apart from the app (Q17;
+today `render.ts` imports every sheet with the app). Addressed by the
+harness alone as `0xfe` (`lookById`, the contrast driver's `__themes`); the
+row keeps the default's own id, so the renderer paints exactly the default
+row. It is measured on every screen the shipped looks are measured on except
+the door (`canWear`), in every pass, the contrast and transparency passes
+included; it wears no decoration, so a screen buys one variant of it — and
+since `__themes` carries each look's decoration-row count, the contrast and
+transparency passes no longer paint its "worn" half, which was the bare paint
+again. `EXPECTED_SHEET_CLASSES` gains `t-skeleton`, so a pass that never
+painted it fails the class audit. Static half:
+`the-skeleton-is-the-default-row-under-a-class-no-sheet-styles` (the row is
+the default's but for the class; the class is in no stylesheet under
+`src/ui/`, `layout/` or `workshop/`; the runner expects it).
+
+**What it cost, measured 2026-09-23 on the 4-core box:** HEAD 192.4s
+(contrast 3628 boxes, 139.1s; transparency 136 boxes). With the skeleton
+sampled twice per screen: 219.6s and 218.8s (contrast 4866 boxes, 160.8s;
+transparency 180). With its worn half skipped: **210.0–216.0s** over three
+runs (contrast 4285 boxes, 153–154s; transparency 158 boxes, 8.3s) — about
+7s back. The phone and desk passes now print what the step-2 rules compared
+(`compared:` under the pass's line): 7 dash comparisons per place — three
+looks bare and worn, and the skeleton — and all three rows read; on the
+phone, the skeleton's ladder read 3 tier-1, 12 tier-2 and 17 tier-3 figures. Clip points: mobile
+886/9608 → 915/10167, desktop 1641/11699 → 1688/12589, canvas 102/1760 →
+132/1915 — the skeleton's own screens plus the dash fixtures below; the
+ratios held (9%, 13%, 7%).
+
+**What turned it green was the row, not the ladder.** Step 2 gave stall.css a
+floor ladder derived from `--s-price-size` (tiers 1 and 3 × 0.81, tier 2 ×
+0.65, under `:where()` at (0,1,0), phones only) for a look whose sheet sizes
+nothing. With the ladder disabled and the rows at step 2's values, no
+geometry rule failed: at Modern's 26px (the row now states what its sheet
+paints) the skeleton's tier-2 row keeps a name column over the 64px floor at
+full size; the 15 failures of the untouched kit (below) were at 30px.
+
+**So the ladder has its own pin, `the-skeletons-ladder-steps-the-rows-size`**:
+at a phone, every tiered figure the skeleton paints must be `--s-price-size`
+times its tier's factor (26 → 21.06 / 16.9 / 21.06px), and the runner
+requires a tier-1, a tier-2 and a tier-3 figure read on the mobile pass
+(`ladderTiers` in the verdict, `probe-coverage.mjs`) — tier 1 is the quote
+rows' "$5.00" beside its Pay pill (`plugin-missing-quotes`, `quotes-failed`,
+`quotes-truncated`), tiers 2 and 3 the long figures on `offers`. **Proved
+red** by aiming the ladder's media query at `max-width: 1px`: every tiered
+skeleton figure on every phone screen read 26px against 21.06 or 16.9.
+
+**A gap no rule fails, noted and not fixed:** the sparse shop's closing motif
+is styled only in each look's own sheet, so on the skeleton it is bare
+markup that nothing measures as wrong.
+
+## The dash is the size of the figure (2026-09-23, the owner's D1)
+
+An unbuyable offer (`isUnbuyable`) paints a dash where its figure would be —
+on a shop row (`offerRow`), on the listing face and on a wall row and the
+wall's Cycle card (`window.ts`). `.dash` read `--s-price-size`, which every
+look's sheet overrides for the figure and not for the dash, and no fixture
+carried an unbuyable offer (`minAcceptedAtoms` appeared nowhere under
+`layout/`), so the mismatch was measured by nothing. The dash now wears the
+figure's own class — `item-x` on a row and on the wall, `x` on the face —
+and `.stall .dash.item-x, .stall .dash.x` restores everything but the size.
+Measured after (every look, S1 → S2): the phone row 30/26/31 → 26/26/25px
+(Modern/Neo/Rural), the desk row 30/26/31 → 32/32/31, the face → 34 on every
+look at every width, the wall's Browse row → 39.68px at 1280 (46 at 1080 and
+768), the wall's Cycle card → the card figure's clamp (up to 112px, 124 on a
+tall screen).
+
+**`the-dash-is-the-size-of-the-figure`** gathers, over each pass, the
+computed `font-size` of every `.dash` and of every buyable figure
+(`[data-role="price"]`, a row only at tier 0) by place — `row`, `face`,
+`wall-browse`, `wall-cycle` — and by look with its worn state, and fails a
+dash whose size is not every figure's in the same place, a dash with no
+figure measured there, and a dash screen that painted no dash. Across
+screens on purpose: the face and the Cycle card show one offer, so
+`item-unbuyable`'s dash is held to `item-listing`'s figure and
+`shop-window-cycle-unbuyable`'s to `shop-window-cycle`'s; the row and the
+wall's Browse have both on one screen. **It also holds the dash's dress**:
+the class lends it the figure's rules, so its colour must equal a swatch
+painted `var(--s-muted)` in its own parent, its `text-shadow` and
+`font-weight` its parent's, and its `animation-name` and `transform` must be
+`none`. The door's deck is not a shop and is skipped. Fixtures:
+`unbuyable`, `item-unbuyable`, `shop-window-unbuyable`,
+`shop-window-cycle-unbuyable` (geometry only, state-screen variants; the
+wall two ride the portrait and tablet passes too). **The comparisons are
+counted** (`dashChecks`) and the runner requires at least one per place it
+owes — row and face on the phone pass, all four on the desk pass
+(`probe-coverage.mjs`, tested on its own in
+`a-probe-rule-that-compared-nothing-fails-the-pass`).
+
+**Proved red.** HEAD's dash put back (class `dash` alone, `.dash {
+font-size: var(--s-price-size) }`) with HEAD's rows: every place red — the
+dash 30/26/31px against a 39.68px Browse figure at 1280 and 46px at 1080 and
+768, against 34px on the face, and Modern's phone row 30 against 26, the
+incident the owner decided on. Only the dash rule's own `font-size` given
+back: 21 failures, the face at both widths and every desk row (the phone
+rows passed because the rows now state their sheets' figures, and the wall
+because `window.css` sizes `.item-x` at (0,4,0) over the plant). The dress:
+`.t-modern .item-p > .item-x { color: #ff0000; font-weight: 900 }` planted
+in `theme-modern.css` — (0,3,0), later than stall.css, so it reaches the row
+and wall dashes (a direct child of `.item-p`; the buyable figure is not) —
+read "colour rgb(255, 0, 0), not the muted ink" and "font-weight 900, not
+its parent's 400" on every Modern row and wall dash. The count: the Cycle
+fixture's listing made buyable read "painted no dash" on every look and
+"compared no dash with a figure on a wall-cycle" on the desk pass. (A
+fixture merely renamed would not have: the rule reads the dash wherever it
+is painted, so the dash still counts under another name.)
+
+## A shipped row states the sizes its sheet paints (2026-09-23)
+
+Each look's sheet sizes the tier-0 figure and the sign's name itself; the
+row carried other numbers, harmless only while nothing read them. The
+emitted var is what paints wherever the sheet does not reach — the skeleton,
+the floor ladder, Neo's phone sign (its sheet sizes no `.stall-name` below
+680px, so the row's 25px IS what paints). **`a-shipped-row-states-the-sizes-its-sheet-paints`**:
+on `offers`, bare, for each shipped look, at 390 and 1280, the computed size
+of a tier-0 figure and of `.stall-name` must equal the var the stall carries
+for that width (`--s-price-size` / `-d`, `--s-sign-size` / `-d`). The cascade
+answers; no stylesheet is parsed. A number that does not read fails rather
+than comparing as NaN, and the looks whose rows were read are reported
+(`rowSizeClasses`) for the runner to require every shipped one.
+
+**Proved red** by HEAD's rows: Modern's figure 26 against 30 and name 27
+against 25, Rural's 25 against 31 and 29 against 27, at 390, in the mobile
+and reduced-motion passes; Neo and every desk value already agreed. By one
+row edit alone reverted (Rural's `signSize` back to 27): that one line,
+twice. And by the probe reading `--s-price-sizz` on the phone: "a number that
+does not read compares nothing" on all three looks, and "read no row for
+t-modern / t-neo / t-rural" on the mobile pass. Rural states `priceSizeD:
+'31px'` since this rule, or `priceSizeD ?? priceSize` would have carried its
+phone 25 to the desk.
+
+## The class audit reads the stall, not the door's deck (2026-09-23)
+
+`sheetClassesOn` collected every `.stall` in the tree, the door's three deck
+minis included — so on the phone and desk passes the union always held
+`t-neo` and `t-rural` from the door, and a shipped look painted under the
+wrong class could not fail there; only a missing skeleton would have. It
+skips `.deck-stall` now. **Proved red** by painting Neo's row with
+`t-modern`: every pass, contrast and transparency included, printed "painted
+t-modern, t-rural, t-skeleton where this run measures t-modern, t-neo,
+t-rural, t-skeleton".

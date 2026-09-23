@@ -3,12 +3,13 @@
  * the committed kit holds before anyone starts.
  *
  * The committed kit is the **skeleton** — Modern's row with nothing restated,
- * no moods, no decorations, and a stylesheet with no rules. That is likely
- * red under the probe, because a look's tier-1/2 figure sizes and its
- * sparse-shop motif are styled only in the look's own sheet (the step-1
- * critic's P2-2), so a creator starts from a **green starter** instead: a
- * shipped look's row written out here, beside its sheet re-scoped under
- * `.t-workshop` by `scripts/workshop-css.mjs`. Test:
+ * no moods, no decorations, and a stylesheet with no rules. It passes the
+ * probe since step 2 (Modern's row states the 26px figure its sheet paints,
+ * where it said 30; the ordinary probe measures a skeleton like it on every
+ * run), but it is a bare page: the sparse shop's motif, for one, is styled
+ * only in a look's own sheet. So a creator starts from a **starter**
+ * instead: a shipped look's row written out here, beside its sheet re-scoped
+ * under `.t-workshop` by `scripts/workshop-css.mjs`. Test:
  * `the-starter-is-each-shipped-look-rescoped`.
  *
  * `scripts/workshop.mjs` loads this module through Vite's `runnerImport`,

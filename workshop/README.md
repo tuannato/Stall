@@ -24,7 +24,7 @@ outside host blocked.
 
 | Command | What it does |
 |---|---|
-| `pnpm workshop:start modern` (or `neo`, `rural`) | Copies one of Stall's looks into `workshop/` as your starting point: its stylesheet re-scoped to `.t-workshop` and its row as `look.json`. **Start here** — the untouched kit is a bare skeleton and does not pass the probe on its own. Refuses to write over a stylesheet with a rule in it, or a `look.json` you have changed. |
+| `pnpm workshop:start modern` (or `neo`, `rural`) | Copies one of Stall's looks into `workshop/` as your starting point: its stylesheet re-scoped to `.t-workshop` and its row as `look.json`. **Start here** — the untouched kit is a bare skeleton: it passes the probe, but it is Stall's plain base with nothing of a look on it. Refuses to write over a stylesheet with a rule in it, or a `look.json` you have changed. |
 | `pnpm workshop` | Builds the app with your look and serves the showroom: every screen, your look, your moods and decorations, with a timeline to pause animations. Prints the address to open. |
 | `pnpm workshop:shots` | Screenshots every screen × bare / every decoration worn / each mood × the widths Stall measures (390, 1280, and the wall and stream sizes), plus a contact sheet at `.workshop-dist/shots-out/index.html`. Prints the count before it starts. |
 | `pnpm workshop:probe` | Runs Stall's layout probe on your look alone — the same rules Stall's own looks pass before they ship, in one to two minutes. Red means a rule failed; the message names the screen, the element and the rule. |

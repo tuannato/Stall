@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHROMES, decodePng, devtools, findChrome } from './browser.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
+import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -75,10 +76,15 @@ stopOnSignals('layout-check');
  * class on every `.stall`) and the runner refuses any pass whose set is not
  * exactly this one — the workshop critic's P1, a kit page that painted Modern
  * by id and read as a skeleton that passed. A fourth shipped look adds its
- * class to this line. Test: `the-workshop-probe-measures-the-workshop-look`.
+ * class to this line. `t-skeleton` is the harness's own look (the default row
+ * under a class no sheet styles, `layout/looks.ts`), measured beside the
+ * shipped three since step 2d. Tests:
+ * `the-workshop-probe-measures-the-workshop-look`,
+ * `the-skeleton-is-the-default-row-under-a-class-no-sheet-styles`.
  */
+const SHIPPED_SHEET_CLASSES = LOOKS === 'workshop' ? [] : ['t-modern', 't-neo', 't-rural'];
 const EXPECTED_SHEET_CLASSES =
-    LOOKS === 'workshop' ? ['t-workshop'] : ['t-modern', 't-neo', 't-rural'];
+    LOOKS === 'workshop' ? ['t-workshop'] : [...SHIPPED_SHEET_CLASSES, 't-skeleton'];
 
 /** Why a painted class set is not the one this run measures, or undefined. */
 function sheetClassesWrong(painted) {
@@ -650,6 +656,20 @@ try {
             );
             continue;
         }
+        /*
+         * The step-2 rules, audited the same way: each reports what it
+         * compared, and a pass that compared nothing where it owes a
+         * comparison is refused (`probe-coverage.mjs`).
+         */
+        const gaps = probeCoverageGaps(vp.name, report, {
+            shippedClasses: SHIPPED_SHEET_CLASSES,
+            skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
+        });
+        if (gaps.length > 0) {
+            failed = true;
+            console.error(`✗ ${vp.name} (${measured}): a rule compared nothing it owes —`);
+            for (const gap of gaps) console.error(`    ${gap}`);
+        }
         const spent = took();
         /*
          * The clip tolerance's own arithmetic, on every run rather than only
@@ -682,11 +702,15 @@ try {
                     ' the clip tolerance is eating the cover check',
             );
         }
+        const compared = probeCoverageLine(vp.name, report);
         if (report.failures.length === 0) {
-            console.log(
-                `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
-                    clipLine,
-            );
+            if (gaps.length === 0) {
+                console.log(
+                    `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
+                        clipLine +
+                        (compared === '' ? '' : `\n    compared: ${compared}`),
+                );
+            }
             continue;
         }
         failed = true;
@@ -945,8 +969,10 @@ try {
                  * two frames. Door-under-Neo is the pattern that pays it.
                  */
                 const wornStates = overlayScreens.includes(screen) ? [false] : [false, true];
-                for (const theme of themes) {
-                    for (const wornAll of wornStates) {
+                for (const { id: theme, rows } of themes) {
+                    // A look with no decoration rows (the skeleton) wears
+                    // nothing when worn: its worn half is the bare paint again.
+                    for (const wornAll of rows === 0 ? [false] : wornStates) {
                         // Two animation frames between hiding the glyphs and the
                         // shot: the style change needs a composited frame, and a
                         // screenshot taken before one still shows the text — which
@@ -1113,8 +1139,8 @@ try {
         let clearRatio = 1;
         const clearClasses = new Set();
         for (const screen of CLEAR_SCREENS) {
-            for (const theme of themes) {
-                for (const wornAll of [false, true]) {
+            for (const { id: theme, rows } of themes) {
+                for (const wornAll of rows === 0 ? [false] : [false, true]) {
                     const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll);
                     for (const cls of prep.sheetClasses ?? []) clearClasses.add(cls);
                     if (prep.targets.length === 0) {

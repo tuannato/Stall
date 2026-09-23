@@ -1971,6 +1971,37 @@ body {
     text-shadow: var(--s-price-glow);
 }
 
+/*
+ * The long-figure ladder's floor, phones only like every tier rule (step 2c,
+ * 2026-09-23). Derived from the row, with no field of its own: tiers 1 and 3
+ * at 0.81 of `--s-price-size`, tier 2 at 0.65 — the shipped sheets' own
+ * ratios (Modern and Neo 21/26 and 17/26, Rural 20/25 and 16/25), tier 3
+ * taking the tier-1 size back because it sits on a row of its own.
+ *
+ * The semantic, and the reason for the `:where()`: this stays at (0,1,0) and
+ * sits AFTER the base `.item-x`, so it steps the figure down on a look whose
+ * sheet sizes nothing — the skeleton, a kit look before its sheet has a
+ * rule, and, if looks' sheets ever load apart from the app (Q17), a stall
+ * before its look's sheet has arrived; today `render.ts` imports every sheet
+ * with the app — and **any look sheet that sizes `.item-x` at all out-ranks
+ * it, tiers included**. A look that sizes the figure owns its whole ladder;
+ * one that forgets a tier paints its full-size figure into that tier's
+ * column, which is what `every-shipped-look-sizes-every-price-tier` notices.
+ * The quote head (`.item-head.item-head-q`) is an `.item-head` and takes the
+ * same ladder. Pinned by the probe's `the-skeletons-ladder-steps-the-rows-size`
+ * (the skeleton's tiered figures are the row's size times these factors).
+ */
+@media (max-width: 679.98px) {
+    :where(.item-head[data-price-tier='1']) .item-x,
+    :where(.item-head[data-price-tier='3']) .item-x {
+        font-size: calc(var(--s-price-size) * 0.81);
+    }
+
+    :where(.item-head[data-price-tier='2']) .item-x {
+        font-size: calc(var(--s-price-size) * 0.65);
+    }
+}
+
 .item-u {
     font-size: var(--s-unit-size);
     color: var(--s-muted);
@@ -3043,13 +3074,33 @@ textarea.paste-in {
     cursor: not-allowed;
 }
 
-.dash {
+/*
+ * The unbuyable dash is the size of the figure it stands in for (the owner,
+ * 2026-09-23, D1: "Bằng cỡ giá"). It is painted wearing that figure's class
+ * — `item-x` on a shop row and on the wall, `x` on the listing face — so
+ * every rule that sizes the figure, per look and per width, sizes the dash
+ * with it, and the two cannot drift: this rule names no `font-size`. It read
+ * `--s-price-size` until then, which every look's sheet overrode for the
+ * figure and not for the dash — Modern painted a 30px dash beside a 26px
+ * figure on a phone.
+ *
+ * Everything but the size is the dash's own. The figure's rules would lend
+ * it their ink, glow, weight, spacing and numerals, so they are restated
+ * here at (0,3,0) — over any look's `.t-* .item-x` (0,2,0) and the face's
+ * `.face-x .x` — the inherited ones as `inherit`, which is what the dash
+ * had before it wore the class. Probe: `the-dash-is-the-size-of-the-figure`.
+ */
+.stall .dash.item-x,
+.stall .dash.x {
     display: block;
     font-family: var(--s-font);
-    font-size: var(--s-price-size);
     color: var(--s-muted);
     letter-spacing: 0.06em;
     line-height: 1.05;
+    font-weight: inherit;
+    font-variant-numeric: inherit;
+    white-space: inherit;
+    text-shadow: inherit;
 }
 
 /*

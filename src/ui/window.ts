@@ -296,8 +296,9 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
         // The price this page holds is for a take the covenant will refuse,
         // so it is not shown as a price — `offerRow`'s rule, and it matters
         // more here: a shop row a buyer can open to find out is one thing, a
-        // number on a wall with nothing to press is another.
-        price.append(el('span', 'dash', copy.DASHED_PRICE));
+        // number on a wall with nothing to press is another. The figure's
+        // class, so the dash is the wall figure's size (`.dash` in stall.css).
+        price.append(el('span', 'item-x dash', copy.DASHED_PRICE));
         price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
     } else {
         const amount = el('span', 'item-a');

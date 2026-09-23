@@ -73,7 +73,18 @@ export type Shape = {
     iconClip: string;
     hero: string;
     heroRadius: string;
-    /** The asked amount: its typesetting, and where it sits in its own cell. */
+    /**
+     * The asked amount: its typesetting, and where it sits in its own cell.
+     *
+     * `priceSize` / `priceSizeD` and `signSize` / `signSizeD` state what the
+     * look's own sheet paints for the tier-0 figure and the sign's name, at a
+     * phone and at a desk: a sheet may size either, and the row still says
+     * the same number, because the emitted var is what paints wherever the
+     * sheet does not reach — the skeleton, the base ladder's derived tiers
+     * (`calc(var(--s-price-size) * …)` in stall.css), a look whose sheet is
+     * silent at a width (Neo's phone sign). Held by the probe:
+     * `a-shipped-row-states-the-sizes-its-sheet-paints`.
+     */
     priceSize: string;
     priceWeight: string;
     priceTrack: string;
@@ -370,7 +381,7 @@ export const DEFAULT_THEME: DecodedTheme = {
         iconClip: 'none',
         hero: '132px',
         heroRadius: '16px',
-        priceSize: '30px',
+        priceSize: '26px',
         priceWeight: '650',
         priceTrack: '-.02em',
         // The design's one baseline row — "FROM 1,200 XEC". Column was the
@@ -392,7 +403,7 @@ export const DEFAULT_THEME: DecodedTheme = {
         itemsD: 'minmax(0, 1fr)',
         signPadM: '16px 18px 14px',
         signPadD: '40px 34px 26px',
-        signSize: '25px',
+        signSize: '27px',
         signCase: 'none',
         signRule: '1px solid color-mix(in srgb, var(--s-muted) 18%, transparent)',
         nameWeight: '650',
@@ -534,6 +545,8 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 itemsD: 'minmax(0, 1fr)',
                 signPadM: '14px 14px 12px',
                 signPadD: '30px 24px 20px',
+                // Live, not a statement: Neo's sheet sizes no `.stall-name`
+                // below 680px, so this is the size its phone sign paints.
                 signSize: '25px',
                 signCase: 'uppercase',
                 signRule: '1px solid color-mix(in srgb, var(--s-accent) 22%, transparent)',
@@ -656,7 +669,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 iconClip: 'none',
                 hero: '140px',
                 heroRadius: '999px',
-                priceSize: '31px',
+                priceSize: '25px',
                 priceWeight: '600',
                 priceTrack: '0',
                 priceDir: 'row',
@@ -683,7 +696,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 itemsD: 'minmax(0, 1fr)',
                 signPadM: '16px 18px 12px',
                 signPadD: '34px 40px 26px',
-                signSize: '27px',
+                signSize: '29px',
                 signCase: 'none',
                 signRule: '4px double color-mix(in srgb, var(--s-muted) 50%, transparent)',
                 nameWeight: '600',
@@ -741,6 +754,9 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
                 priceAnim: 'rural-tag-sway 5.5s ease-in-out infinite',
                 priceInk: '#2e1f08',
                 signSizeD: '44px',
+                // The desk figure is 31px where the phone one is 25: stated,
+                // or `priceSizeD ?? priceSize` would carry the phone's down.
+                priceSizeD: '31px',
                 iconD: '58px',
                 itemName: '16.5px',
                 itemNameD: '16.5px',

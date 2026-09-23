@@ -15,7 +15,9 @@
  * Shipped ids come from the shipped table. The workshop look (`0xff`) exists
  * only once a kit page registers it — `layout/workshopRegister.ts`, imported
  * by the workshop probe entry before the probe module, and the showroom — so
- * the ordinary probe never loads the kit's sheet or look.
+ * the ordinary probe never loads the kit's sheet or look. The skeleton
+ * (`SKELETON_LOOK_ID`) is the harness's own and always here: the ordinary
+ * probe measures it beside the shipped looks.
  */
 import {
     attachmentsForTheme,
@@ -77,6 +79,42 @@ export function shippedLooks(): readonly Look[] {
     return SHIPPED;
 }
 
+/**
+ * The harness's address for the skeleton — never a row, and never an id the
+ * renderer sees: the skeleton paints the default row, `theme.id` included,
+ * so this number only tells the harness's looks apart (`lookById`, the
+ * contrast driver's `__themes`). Not a shipped id and not the kit's
+ * (`the-skeleton-is-the-default-row-under-a-class-no-sheet-styles`).
+ */
+export const SKELETON_LOOK_ID = 0xfe;
+
+/** The class the skeleton wears: a `t-*` class no stylesheet anywhere names. */
+export const SKELETON_SHEET_CLASS = 't-skeleton';
+
+/**
+ * The skeleton (step 2d, the owner's D3, 2026-09-23): the default row
+ * wearing `t-skeleton`, so the app's base sheets paint it and no look's
+ * sheet does — what a look is before its own sheet has a rule (the committed
+ * kit), and what a stall WOULD paint before its look's sheet arrived if
+ * looks' sheets ever load apart from the app (Q17; today `render.ts` imports
+ * every sheet with the app). The ordinary probe measures it beside the
+ * shipped looks on every screen but the door, and pins the base's floor for
+ * a look with no rules — the derived price ladder in stall.css — by
+ * `the-skeletons-ladder-steps-the-rows-size`, so neither can rot behind a
+ * sentence the way "the untouched kit does not pass the probe" did. Fixed
+ * here and independent of `workshop/`: a creator's kit changes nothing about
+ * it. It wears no decorations, as the kit's skeleton wears none.
+ */
+const SKELETON: Look = {
+    id: SKELETON_LOOK_ID,
+    label: 'Skeleton',
+    theme: { ...decodeTheme(DEFAULT_THEME_ID), sheetClass: SKELETON_SHEET_CLASS },
+    rows: [],
+};
+
+/** Every look the ordinary probe measures: the shipped looks, then the skeleton. */
+const MEASURED: readonly Look[] = [...SHIPPED, SKELETON];
+
 /** What the showroom offers: the shipped looks, and the kit's when registered. */
 export function galleryLooks(): readonly Look[] {
     return kit === undefined ? shippedLooks() : [...shippedLooks(), kit];
@@ -85,15 +123,15 @@ export function galleryLooks(): readonly Look[] {
 /**
  * What the probe measures: the kit's look **alone** on a workshop page — a
  * creator's run judges their look, not Stall's three again — and every
- * shipped look everywhere else.
+ * shipped look and the skeleton everywhere else.
  */
 export function measuredLooks(): readonly Look[] {
-    return kit === undefined ? shippedLooks() : [kit];
+    return kit === undefined ? MEASURED : [kit];
 }
 
-/** A look by id, from what this page can paint. Throws on any other id. */
+/** A look by id, from what this page can paint or measure. Throws on any other id. */
 export function lookById(id: number): Look {
-    const look = galleryLooks().find((candidate) => candidate.id === id);
+    const look = [...galleryLooks(), ...measuredLooks()].find((candidate) => candidate.id === id);
     if (look === undefined) {
         throw new Error(
             id === WORKSHOP_THEME_ID

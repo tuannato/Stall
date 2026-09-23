@@ -14,7 +14,7 @@
  */
 import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
 import type { ShippedAttachment } from '../src/domain/attachments';
-import { lookById, looksFor, measuredLooks, wornOf, type Look } from './looks';
+import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -500,9 +500,16 @@ function describe(node: Element): string {
  */
 const sheetClassesPainted = new Set<string>();
 
+/*
+ * The door's deck minis are left out (2026-09-23): they are three shipped
+ * looks by design (Q8), painted on the door whatever look was asked for, so
+ * counting them put `t-neo` and `t-rural` into the union on every page pass
+ * and the audit could not see a shipped look painted under the wrong class —
+ * only a missing skeleton would have failed it.
+ */
 function sheetClassesOn(root: ParentNode): string[] {
     const out = new Set<string>();
-    for (const stall of root.querySelectorAll('.stall')) {
+    for (const stall of root.querySelectorAll('.stall:not(.deck-stall)')) {
         for (const cls of stall.classList) {
             if (cls.startsWith('t-')) {
                 out.add(cls);
@@ -1355,6 +1362,215 @@ function screensToRun(): string[] {
     return asked.split(',').filter((name) => name in SCREENS);
 }
 
+/*
+ * **The dash is the size of the figure** (step 2b — the owner's D1,
+ * 2026-09-23: "Bằng cỡ giá"). An unbuyable offer paints a dash where its
+ * figure would be — on a shop row, on the listing face, on a wall row and on
+ * the wall's one big card — and the dash must be the size the figure takes in
+ * that same place, on every look at every width. `.dash` read
+ * `--s-price-size`, which every look's sheet overrides for the figure and not
+ * for the dash, so Modern painted a 30px dash beside a 26px figure on a phone
+ * and nothing measured it: no fixture carried an unbuyable offer. The dash
+ * now wears the figure's own class (stall.css, `.dash`); this is what
+ * notices a rule that sizes one and not the other.
+ *
+ * The two sizes are gathered over the whole pass, by context and by look —
+ * worn state included — because the face and the wall's card show one offer
+ * and cannot carry a buyable figure beside the dash: `item-unbuyable`'s dash
+ * is held to `item-listing`'s figure, `shop-window-cycle-unbuyable`'s to
+ * `shop-window-cycle`'s. A row figure counts only at tier 0 (a tier is a step
+ * down the dash never takes), and the door's deck is not a shop.
+ *
+ * **And the class it wears lends it nothing but the size**: the figure's
+ * rules would lend it their ink, glow, weight and motion, so each dash's
+ * colour must equal a swatch painted `var(--s-muted)` in the same place, its
+ * `text-shadow` and `font-weight` its parent's, and its `animation-name` and
+ * `transform` must be `none`.
+ *
+ * The comparisons made are counted per context (`dashChecks` in the
+ * verdict), and the runner refuses a phone or desk pass that made none in a
+ * context it owes (`probe-coverage.mjs`) — a renamed fixture would otherwise
+ * leave this rule green over nothing.
+ */
+const DASH_SCREENS = new Set([
+    'unbuyable',
+    'item-unbuyable',
+    'shop-window-unbuyable',
+    'shop-window-cycle-unbuyable',
+]);
+type SizeSeen = { px: number; screen: string; where: string };
+const dashSizes = new Map<string, SizeSeen[]>();
+const figureSizes = new Map<string, SizeSeen[]>();
+const dashChecks: Record<string, number> = {};
+
+/** Where a dash or a figure sits: `row`, `face`, or `wall-<mode>` — or nowhere this rule reads. */
+function priceContext(node: Element): string | undefined {
+    if (node.closest('[data-role="door-deck"]') !== null) {
+        return undefined;
+    }
+    const wall = node.closest('.stall.shop-window');
+    if (wall !== null && node.closest('.sw-row') !== null) {
+        return `wall-${wall.getAttribute('data-mode') ?? '?'}`;
+    }
+    if (node.closest('.face-x') !== null) {
+        return 'face';
+    }
+    if (node.closest('.item-head') !== null) {
+        return 'row';
+    }
+    return undefined;
+}
+
+/** The dash's own dress: what the figure's class must not have lent it. */
+function dashDressFaults(dash: HTMLElement): string[] {
+    const parent = dash.parentElement;
+    if (parent === null) {
+        return ['the dash has no parent to compare against'];
+    }
+    const swatch = document.createElement('span');
+    swatch.style.color = 'var(--s-muted)';
+    parent.append(swatch);
+    const muted = getComputedStyle(swatch).color;
+    swatch.remove();
+    const cs = getComputedStyle(dash);
+    const up = getComputedStyle(parent);
+    const faults: string[] = [];
+    if (cs.color !== muted) faults.push(`colour ${cs.color}, not the muted ink ${muted}`);
+    if (cs.textShadow !== up.textShadow) faults.push(`text-shadow ${cs.textShadow}, not its parent's ${up.textShadow}`);
+    if (cs.fontWeight !== up.fontWeight) faults.push(`font-weight ${cs.fontWeight}, not its parent's ${up.fontWeight}`);
+    if (cs.animationName !== 'none') faults.push(`animation ${cs.animationName}`);
+    if (cs.transform !== 'none') faults.push(`transform ${cs.transform}`);
+    return faults;
+}
+
+function gatherPriceSizes(screen: string, label: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    const note = (into: Map<string, SizeSeen[]>, node: Element): string | undefined => {
+        const where = priceContext(node);
+        if (where === undefined) {
+            return undefined;
+        }
+        const key = `${where} · ${label}`;
+        const px = Number.parseFloat(getComputedStyle(node).fontSize);
+        into.set(key, [...(into.get(key) ?? []), { px, screen, where }]);
+        return where;
+    };
+    for (const dash of root.querySelectorAll<HTMLElement>('.dash')) {
+        if (note(dashSizes, dash) === undefined) {
+            continue;
+        }
+        for (const fault of dashDressFaults(dash)) {
+            out.push({ screen, theme: label, check: 'the-dash-is-the-size-of-the-figure', detail: `the dash wears ${fault}` });
+        }
+    }
+    for (const figure of root.querySelectorAll('[data-role="price"]')) {
+        const head = figure.closest('.item-head');
+        if (head !== null && head.hasAttribute('data-price-tier')) {
+            continue;
+        }
+        note(figureSizes, figure);
+    }
+    return out;
+}
+
+/*
+ * **A shipped row states the sizes its sheet paints** (step 2e, 2026-09-23).
+ * Each look's sheet sizes the tier-0 figure and the sign's name itself, and
+ * the row carried other numbers — Modern said 30 and 25 where its sheet
+ * paints 26 and 27, Rural 31 and 27 against 25 and 29 — which was harmless
+ * only while nothing read them. The emitted var is what paints wherever the
+ * sheet does not reach: the skeleton, the base's derived price ladder, Neo's
+ * phone sign (its sheet sizes no name below 680px). So on `offers`, bare,
+ * for every shipped look, at the phone and at the desk, the computed size of
+ * a tier-0 figure and of the sign's name must equal the var the stall
+ * carries for that width. The cascade itself answers — no stylesheet is
+ * parsed — on a screen the pass paints anyway. A number that does not read
+ * (a renamed var reads as nothing) fails rather than comparing as NaN, and
+ * the looks it compared are reported (`rowSizeClasses`) for the runner to
+ * require every shipped one.
+ */
+const rowSizeClasses = new Set<string>();
+
+function rowStatesItsSizes(look: Look, label: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    const fail = (detail: string): void => {
+        out.push({ screen: 'offers', theme: label, check: 'a-shipped-row-states-the-sizes-its-sheet-paints', detail });
+    };
+    const stall = root.querySelector<HTMLElement>('.stall');
+    const figure = root.querySelector('button.item-head:not([data-price-tier]) [data-role="price"]');
+    const name = root.querySelector('.stall-name');
+    if (stall === null || figure === null || name === null) {
+        fail('offers painted no stall, no tier-0 figure or no sign name to compare');
+        return out;
+    }
+    const desk = matchMedia('(min-width: 680px)').matches;
+    const vars = getComputedStyle(stall);
+    let compared = 0;
+    for (const [node, what, prop] of [
+        [figure, 'the tier-0 figure', desk ? '--s-price-size-d' : '--s-price-size'],
+        [name, 'the sign’s name', desk ? '--s-sign-size-d' : '--s-sign-size'],
+    ] as const) {
+        const stated = vars.getPropertyValue(prop).trim();
+        const painted = getComputedStyle(node).fontSize;
+        const a = Number.parseFloat(stated);
+        const b = Number.parseFloat(painted);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) {
+            fail(`${what}: the row states ${prop}: "${stated}" and it paints "${painted}" — a number that does not read compares nothing`);
+            continue;
+        }
+        compared += 1;
+        if (Math.abs(a - b) > 0.01) {
+            fail(`${what} paints ${painted} at ${window.innerWidth}px; the row states ${prop}: ${stated}`);
+        }
+    }
+    if (compared === 2) {
+        rowSizeClasses.add(look.theme.sheetClass);
+    }
+    return out;
+}
+
+/*
+ * **The skeleton's price ladder is the row's size, stepped** (2026-09-23).
+ * stall.css derives a floor ladder from `--s-price-size` — tiers 1 and 3 at
+ * 0.81, tier 2 at 0.65 — for a look whose sheet sizes no `.item-x`, and the
+ * skeleton is the one look that stands on it. On a phone, every tiered figure
+ * the skeleton paints must be the var times its tier's factor; the tiers
+ * compared are counted (`ladderTiers`) and the runner requires all three.
+ * Without this nothing failed when the ladder was removed: at the 26px the
+ * row states, the skeleton's names keep their floor at full size.
+ */
+const LADDER: Readonly<Record<string, number>> = { '1': 0.81, '2': 0.65, '3': 0.81 };
+const ladderTiers: Record<string, number> = {};
+
+function skeletonLadderFaults(screen: string, label: string): Failure[] {
+    if (matchMedia('(min-width: 680px)').matches) {
+        return [];
+    }
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    for (const figure of root.querySelectorAll<HTMLElement>('.item-head[data-price-tier] .item-x')) {
+        if (figure.closest('[data-role="door-deck"]') !== null) continue;
+        const tier = figure.closest('.item-head')!.getAttribute('data-price-tier') ?? '';
+        const factor = LADDER[tier];
+        const stall = figure.closest<HTMLElement>('.stall');
+        if (factor === undefined || stall === null) continue;
+        const size = Number.parseFloat(getComputedStyle(stall).getPropertyValue('--s-price-size'));
+        const painted = Number.parseFloat(getComputedStyle(figure).fontSize);
+        ladderTiers[tier] = (ladderTiers[tier] ?? 0) + 1;
+        if (!Number.isFinite(size) || !Number.isFinite(painted) || Math.abs(size * factor - painted) > 0.05) {
+            out.push({
+                screen,
+                theme: label,
+                check: 'the-skeletons-ladder-steps-the-rows-size',
+                detail: `a tier-${tier} figure paints ${getComputedStyle(figure).fontSize}; the ladder says ${size} × ${factor} = ${(size * factor).toFixed(2)}px`,
+            });
+        }
+    }
+    return out;
+}
+
 const failures: Failure[] = [];
 const measured = screensToRun();
 /**
@@ -1387,6 +1603,48 @@ for (const screen of measured) {
             ) {
                 withQuote.add(screen);
             }
+            failures.push(...gatherPriceSizes(screen, label));
+            // A screen built for the dash that painted none would leave the
+            // rule below green over nothing.
+            if (DASH_SCREENS.has(screen) && document.querySelector('#app .dash') === null) {
+                failures.push({
+                    screen,
+                    theme: label,
+                    check: 'the-dash-is-the-size-of-the-figure',
+                    detail: `${screen} painted no dash — the rule would compare nothing`,
+                });
+            }
+            if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
+                failures.push(...rowStatesItsSizes(look, label));
+            }
+            if (look.id === SKELETON_LOOK_ID) {
+                failures.push(...skeletonLadderFaults(screen, label));
+            }
+        }
+    }
+}
+
+for (const [key, dashes] of dashSizes) {
+    const figures = figureSizes.get(key) ?? [];
+    for (const dash of dashes) {
+        if (figures.length === 0) {
+            failures.push({
+                screen: dash.screen,
+                theme: key,
+                check: 'the-dash-is-the-size-of-the-figure',
+                detail: `a ${dash.px}px dash with no buyable figure measured in the same place this pass`,
+            });
+            continue;
+        }
+        dashChecks[dash.where] = (dashChecks[dash.where] ?? 0) + 1;
+        const other = figures.find((figure) => Math.abs(figure.px - dash.px) > 0.01);
+        if (other !== undefined) {
+            failures.push({
+                screen: dash.screen,
+                theme: key,
+                check: 'the-dash-is-the-size-of-the-figure',
+                detail: `the dash is ${dash.px}px where the figure is ${other.px}px (${other.screen}) at ${window.innerWidth}px`,
+            });
         }
     }
 }
@@ -1867,7 +2125,8 @@ declare global {
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
         __canvasScreens: string[];
-        __themes: number[];
+        /** Each measured look's id, and how many decoration rows it has — none means no worn half. */
+        __themes: { id: number; rows: number }[];
         __probeReady: boolean;
     }
 }
@@ -1902,7 +2161,7 @@ window.__contrastScreens = screensForViewport().filter(
 );
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
-window.__themes = measuredLooks().map((look) => look.id);
+window.__themes = measuredLooks().map((look) => ({ id: look.id, rows: look.rows.length }));
 
 /** True when any ancestor up to the stall carries a live transform. */
 function insideTransform(node: HTMLElement): boolean {
@@ -2176,6 +2435,15 @@ result.textContent = JSON.stringify(
         clipSkips,
         clipChecks,
         screensWithQuote: [...withQuote],
+        /*
+         * What the step-2 rules compared, for the runner to require
+         * (`probe-coverage.mjs`): dash-against-figure comparisons per place,
+         * the shipped looks whose row sizes were read, and the skeleton's
+         * tiered figures per tier.
+         */
+        dashChecks,
+        rowSizeClasses: [...rowSizeClasses].sort(),
+        ladderTiers,
         failures,
     },
     null,
