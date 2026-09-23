@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import { ICON_HOST } from './src/domain/icons';
-import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST } from './src/net/hosts';
+import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './src/net/hosts';
 
 /**
  * Key derivation must not reach the bundle.
@@ -241,6 +241,11 @@ function noKeyDerivation(): Plugin {
  * img-src is derived from ICON_HOST the same way. The page never fetches that
  * origin — only an <img> loads it — so the host does not belong on connect-src.
  *
+ * The second price feed's host follows `SECOND_FEED`: a paused feed is a host
+ * this page never asks, and a policy that still allowed it would be a
+ * permission nothing uses (owner, 2026-09-23). The two deployed copies take
+ * it back by hand; `deploy-spec-matches-the-app` fails until they do.
+ *
  * object-src, frame-src and worker-src are stated rather than left to
  * default-src: worker-src does not fall back to default-src at all (it falls
  * back through child-src to script-src).
@@ -261,7 +266,7 @@ export const CSP = [
     // Both schemes, from the one constant. chronik-client turns each https
     // host into wss://<host>/ws for its subscription socket, and CSP does not
     // infer one from the other — a missing wss:// is a silent dead socket.
-    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')} ${CHRONIK_HOSTS.map((h) => h.replace('https://', 'wss://')).join(' ')} ${PRICE_HOST} ${PRICE_CHECK_HOST}`,
+    `connect-src 'self' ${CHRONIK_HOSTS.join(' ')} ${CHRONIK_HOSTS.map((h) => h.replace('https://', 'wss://')).join(' ')} ${PRICE_HOST}${SECOND_FEED === 'on' ? ` ${PRICE_CHECK_HOST}` : ''}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

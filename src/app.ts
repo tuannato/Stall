@@ -175,6 +175,7 @@ import {
 } from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
+import { SECOND_FEED } from './net/hosts';
 import { withDeadline } from './domain/deadline';
 import { nextCard, tokensAtBlock } from './domain/window';
 import { windowListings, windowRail } from './ui/window';
@@ -2120,28 +2121,33 @@ export function boot(
         unit: string = quoteUnitOnScreen(),
     ): Promise<PayRateAnswer> => {
         // Two feeds, asked together, wherever this runs (the open, the `?pay=`
-        // landing, the press-time valve, the refresh control). The second
-        // rides under its own, shorter budget, so a hung check cannot hold
-        // the figure past the primary's ceiling; at its deadline it is simply
-        // "unchecked". Everything about what the two answers mean — the
-        // window, the disagreement line, and that the check can only speak
-        // and never price — is the domain's (`judgeRates`), not this file's.
-        // Neither feed judges the glance (`refreshFiat`): that is `≈`, off
-        // the money path, and has no sentence for absence (CLAUDE §8).
+        // landing, the press-time valve, the refresh control) — **while
+        // `SECOND_FEED` is on**. Paused (owner, 2026-09-23), the check is
+        // not asked at all and the judge is handed nothing, so `check` is
+        // `'none'` and the figure is the first feed's exactly as before: the
+        // check never priced one. On, the second rides under its own,
+        // shorter budget, so a hung check cannot hold the figure past the
+        // primary's ceiling; at its deadline it is simply "unchecked".
+        // Everything about what the two answers mean — the window, the
+        // disagreement line, and that the check can only speak and never
+        // price — is the domain's (`judgeRates`), not this file's. Neither
+        // feed judges the glance (`refreshFiat`): that is `≈`, off the money
+        // path, and has no sentence for absence (CLAUDE §8).
         //
         // A quote written in another unit adds ONE request: its own rate,
-        // for the figure. The USD pair is still asked and still judges —
-        // the window is written for USD and the second feed answers for USD
-        // alone, so that pair is the only place the fence and the
-        // disagreement rule can run (`judgeQuoteRates`). A USD quote asks
-        // exactly the two it always did.
+        // for the figure. The USD answer is still asked and still judges —
+        // the window is written for USD, and the second feed (when on)
+        // answers for USD alone, so that pair is the only place the fence and
+        // the disagreement rule can run (`judgeQuoteRates`).
         const code = unit;
         const [primary, check, figure] = await Promise.all([
             fetchXecPrice(DEFAULT_FIAT_CODE, timeoutMs === undefined ? undefined : { timeoutMs }),
-            withDeadline(
-                fetchXecPriceCheck(DEFAULT_FIAT_CODE, { timeoutMs: PAY_CHECK_TIMEOUT_MS }),
-                PAY_CHECK_TIMEOUT_MS,
-            ),
+            SECOND_FEED === 'on'
+                ? withDeadline(
+                      fetchXecPriceCheck(DEFAULT_FIAT_CODE, { timeoutMs: PAY_CHECK_TIMEOUT_MS }),
+                      PAY_CHECK_TIMEOUT_MS,
+                  )
+                : Promise.resolve(undefined),
             code === DEFAULT_FIAT_CODE
                 ? Promise.resolve(undefined)
                 : fetchXecPrice(code, timeoutMs === undefined ? undefined : { timeoutMs }),

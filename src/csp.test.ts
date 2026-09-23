@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import appConfig, { CSP } from '../vite.config';
 import { ICON_HOST } from './domain/icons';
-import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST } from './net/hosts';
+import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './net/hosts';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -96,26 +96,28 @@ describe('script-src-and-connect-src-are-pinned', () => {
         }
     });
 
-    it('allows nothing in connect-src but self, the chronik hosts and the two price feeds, by literal', () => {
+    it('allows nothing in connect-src but self, the chronik hosts and the one price feed, by literal', () => {
         // Pinned as literals the way `img-src-is-self-and-the-icon-host` pins
         // the icon host: a constant compared with itself is lockstep-loosenable
         // (change the constant, change three copies, green).
         expect(PRICE_HOST).toBe('https://api.coingecko.com');
         expect(PRICE_CHECK_HOST).toBe('https://api.coinpaprika.com');
+        // The second feed is paused (owner, 2026-09-23): not asked, so not
+        // allowed. Turning it back on is `SECOND_FEED`, the two deployed
+        // copies and 'https://api.coinpaprika.com' back in the list below —
+        // this line fails first, so the list cannot be forgotten.
+        expect(SECOND_FEED).toBe('paused');
         const expected = [
             "'self'",
             ...CHRONIK_HOSTS,
             ...CHRONIK_HOSTS.map((host) => host.replace('https://', 'wss://')),
-            // The price feed, and since 2026-09-07 the second feed that is
-            // asked beside it and can only refuse a figure, never supply one
-            // (`judgeRates`). Two non-chronik hosts, and this is what a
-            // checked figure costs: one more party that learns a payment is
-            // being composed.
+            // The price feed, and nothing beside it: one non-chronik host,
+            // one party that learns a payment is being composed.
             'https://api.coingecko.com',
-            'https://api.coinpaprika.com',
         ].sort();
         for (const [label, policy] of policyCopies()) {
             expect([...sources(policy, 'connect-src')].sort(), label).toEqual(expected);
+            expect(sources(policy, 'connect-src'), label).not.toContain('https://api.coinpaprika.com');
         }
     });
 });

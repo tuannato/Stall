@@ -148,7 +148,7 @@ describe('the-guide-names-every-rate-source-the-csp-allows', () => {
      * must name each one — a host added to the policy with the guide left
      * alone turns this red, where "contains CoinGecko" stayed green.
      */
-    it('names each price feed the policy lets the page reach', () => {
+    it('names each price feed the policy lets the page reach, and none it does not', () => {
         const headers = read('public', '_headers');
         const csp = headers.split('\n').find((line) => line.includes('Content-Security-Policy'))!;
         const connect = csp.split(';').find((part) => part.trim().startsWith('connect-src'))!;
@@ -161,12 +161,21 @@ describe('the-guide-names-every-rate-source-the-csp-allows', () => {
             .split(/\s+/)
             .slice(1)
             .filter((src) => src.startsWith('https://') && !src.includes('chronik'));
-        expect(feeds.length).toBeGreaterThanOrEqual(2);
+        // One since 2026-09-23: the second feed is paused (`SECOND_FEED`).
+        expect(feeds.length).toBeGreaterThanOrEqual(1);
         const guide = flat(read('public', 'guide.html'));
         for (const host of feeds) {
             const name = names[host];
             expect(name, `a price feed this test has no name for: ${host}`).toBeDefined();
             expect(guide, host).toContain(name!);
+        }
+        // The other direction: a feed the page cannot reach is not one the
+        // guide may say it consults — a paused check named here would be a
+        // sentence about a request nobody makes.
+        for (const [host, name] of Object.entries(names)) {
+            if (!feeds.includes(host)) {
+                expect(guide, `${name} is named but the policy does not allow ${host}`).not.toContain(name);
+            }
         }
     });
 });

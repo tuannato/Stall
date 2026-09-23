@@ -9,7 +9,8 @@ import type { StallView, TokenMeta } from './domain/state';
  * The shop window's three timers, in their OWN file.
  *
  * They were written into `app.live.test.ts`, which already has the harness —
- * and the full suite then went red in `the-pay-sheet-asks-both-feeds`, twice,
+ * and the full suite then went red in `the-pay-sheet-asks-both-feeds` (since
+ * renamed `the-pay-sheet-asks-one-feed-while-the-check-is-paused`), twice,
  * on two different cases, while that file alone stayed green and HEAD without
  * these tests stayed green. Three `boot()` calls under fake timers leave a
  * context the neighbours in that file evidently share. Rather than chase it,

@@ -10,6 +10,7 @@ import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS, type StallView } from './domain/state';
 import type { ChainTx, HistoryPage } from './net/chain';
 import { UNKNOWN_TXID } from './net/live';
+import { SECOND_FEED } from './net/hosts';
 import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
@@ -308,8 +309,9 @@ vi.mock('./net/price', () => ({
     fetchXecPrice: (code: string, opts?: { timeoutMs?: number }) =>
         priceControl.fetch(code, opts),
 }));
-// The second feed is mocked beside the first, or five pay-sheet tests would
-// make a real request to api.coinpaprika.com under happy-dom's fetch.
+// The second feed is mocked beside the first even while `SECOND_FEED` is
+// paused: the paused-check tests count its calls (none), and the day it is
+// turned back on no test may make a real request under happy-dom's fetch.
 vi.mock('./net/priceCheck', () => ({
     fetchXecPriceCheck: (code: string, opts?: { timeoutMs?: number }) =>
         priceControl.check(code, opts),
@@ -3438,11 +3440,15 @@ describe('an-implausible-feed-answer-is-refused-and-said', () => {
     });
 });
 
-describe('the-pay-sheet-asks-both-feeds', () => {
+describe('the-pay-sheet-asks-one-feed-while-the-check-is-paused', () => {
     /**
-     * The second feed is asked beside the first wherever `readPayRate` runs,
-     * under its own shorter budget — and a mock that is never called would
-     * pass every other test here, so the call is counted.
+     * `SECOND_FEED` is paused (owner, 2026-09-23): wherever `readPayRate`
+     * runs, the first feed is asked and the check is not — so `check` is
+     * `'none'`, the valve's disagreement line cannot fire, and the figure is
+     * the first feed's exactly as it always was. The mock is still wired and
+     * still answers, and it is counted, because a check that is asked and
+     * then ignored would pass every assertion about the figure while telling
+     * a second party a payment is being composed.
      */
     const META = {
         tokenId: TOKEN,
@@ -3457,87 +3463,25 @@ describe('the-pay-sheet-asks-both-feeds', () => {
             prices: new Map([[TOKEN, { code: 'usd', exponent: 2, amount: 500n }]]),
         });
 
-    it('asks the check once per read, with its own budget, and names both feeds when they agree', async () => {
-        priceControl.fetch = async () => scaleRate(0.00003)!;
+    it('pins the switch it describes', () => {
+        expect(SECOND_FEED).toBe('paused');
+    });
+
+    it('never asks the check, and names the one feed that priced the figure', async () => {
+        const fetch = vi.fn(async (_code: string, _opts?: { timeoutMs?: number }) => scaleRate(0.00003)!);
         const check = vi.fn(async (_code: string, _opts?: { timeoutMs?: number }) => scaleRate(0.0000301)!);
+        priceControl.fetch = fetch;
         priceControl.check = check;
         const { root } = bootStall(quoted());
         await flush();
+        const before = fetch.mock.calls.length;
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
-        // The press asks two feeds and the answers land on their own chains.
-        // A fixed tick count reached them on an idle box and missed them on a
-        // busy one — this file's own `until` docblock says so, and these were
-        // the last readers of the pattern it warns about. Measured: the whole
-        // suite went red here twice, in two different cases, purely under
-        // parallel load.
+        // The answer lands on its own chain; a fixed tick count reached it on
+        // an idle box and missed it on a busy one (this file's `until`).
         await until(() => painted.view?.payRate !== undefined);
-        expect(check).toHaveBeenCalledTimes(1);
-        expect(check.mock.calls[0]![1]).toEqual({ timeoutMs: PAY_CHECK_TIMEOUT_MS });
-        expect(painted.view?.payRate?.check).toBe('agree');
-        const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
-        expect(rate).toContain(RATE_SOURCE_PRIMARY);
-        expect(rate).toContain(RATE_SOURCE_CHECK);
-        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
-    });
-
-    it('prices with the first feed and never the check', async () => {
-        // Distinct but agreeing, so an argument swap would show in the figure.
-        priceControl.fetch = async () => scaleRate(0.00003)!;
-        priceControl.check = async () => scaleRate(0.0000301)!;
-        const { root } = bootStall(quoted());
-        await flush();
-        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
-        await flush();
-        // The press asks two feeds and the answers land on their own chains.
-        // A fixed tick count reached them on an idle box and missed them on a
-        // busy one — this file's own `until` docblock says so, and these were
-        // the last readers of the pattern it warns about. Measured: the whole
-        // suite went red here twice, in two different cases, purely under
-        // parallel load.
-        await until(() => painted.view?.payRate !== undefined);
-        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
-        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
-            '166,666.67',
-        );
-    });
-
-    it('a check that disagrees is said on the valve, and the figure stands', async () => {
-        priceControl.fetch = async () => scaleRate(0.00003)!;
-        priceControl.check = async () => scaleRate(0.00006)!;
-        const { root } = bootStall(quoted());
-        await flush();
-        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
-        await flush();
-        // The press asks two feeds and the answers land on their own chains.
-        // A fixed tick count reached them on an idle box and missed them on a
-        // busy one — this file's own `until` docblock says so, and these were
-        // the last readers of the pattern it warns about. Measured: the whole
-        // suite went red here twice, in two different cases, purely under
-        // parallel load.
-        await until(() => painted.view?.payRate !== undefined);
-        expect(painted.view?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
-        expect(painted.view?.payRate?.check).toBe('disagree');
-        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_RATE_DISAGREE);
-        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
-            '166,666.67',
-        );
-    });
-
-    it('a check that did not answer leaves the figure resting on one named feed', async () => {
-        priceControl.fetch = async () => scaleRate(0.00003)!;
-        priceControl.check = async () => undefined;
-        const { root } = bootStall(quoted());
-        await flush();
-        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
-        await flush();
-        // The press asks two feeds and the answers land on their own chains.
-        // A fixed tick count reached them on an idle box and missed them on a
-        // busy one — this file's own `until` docblock says so, and these were
-        // the last readers of the pattern it warns about. Measured: the whole
-        // suite went red here twice, in two different cases, purely under
-        // parallel load.
-        await until(() => painted.view?.payRate !== undefined);
+        expect(fetch.mock.calls.length, 'the first feed was asked for the sheet').toBeGreaterThan(before);
+        expect(check, 'the paused check is never asked').not.toHaveBeenCalled();
         expect(painted.view?.payRate?.check).toBe('none');
         const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
         expect(rate).toContain(RATE_SOURCE_PRIMARY);
@@ -3545,25 +3489,67 @@ describe('the-pay-sheet-asks-both-feeds', () => {
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
     });
 
-    it('a slow check does not hold up the figure', async () => {
-        vi.useFakeTimers();
+    it('prices with the first feed, as it always did', async () => {
         priceControl.fetch = async () => scaleRate(0.00003)!;
-        // Never answers inside the budget; the deadline answers "unchecked".
-        priceControl.check = () => new Promise(() => {});
+        priceControl.check = async () => scaleRate(0.0000301)!;
         const { root } = bootStall(quoted());
-        for (let i = 0; i < 8; i += 1) {
-            await vi.advanceTimersByTimeAsync(0);
-        }
+        await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
-        await vi.advanceTimersByTimeAsync(PAY_CHECK_TIMEOUT_MS - 1);
-        expect(painted.view?.payRate, 'still waiting on the check inside its budget').toBeUndefined();
-        await vi.advanceTimersByTimeAsync(1);
-        for (let i = 0; i < 4; i += 1) {
-            await vi.advanceTimersByTimeAsync(0);
-        }
+        await flush();
+        await until(() => painted.view?.payRate !== undefined);
         expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
+            '166,666.67',
+        );
+    });
+
+    it('a check that would disagree is not asked, so the valve says nothing and the figure stands', async () => {
+        priceControl.fetch = async () => scaleRate(0.00003)!;
+        const check = vi.fn(async () => scaleRate(0.00006)!);
+        priceControl.check = check;
+        const { root } = bootStall(quoted());
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        await until(() => painted.view?.payRate !== undefined);
+        expect(check).not.toHaveBeenCalled();
+        expect(painted.view?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
         expect(painted.view?.payRate?.check).toBe('none');
-        vi.useRealTimers();
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
+        expect(root.textContent).not.toContain(PAY_RATE_DISAGREE);
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
+            '166,666.67',
+        );
+    });
+
+    it('a hung check cannot hold up the figure: it is never asked', async () => {
+        vi.useFakeTimers();
+        // `finally`, so a red here cannot leave the fake clock running under
+        // every later test in this file (measured: a failure here turned
+        // three unrelated tests into 20 s timeouts).
+        try {
+            priceControl.fetch = async () => scaleRate(0.00003)!;
+            // Would never answer; while paused nobody waits on it, not even
+            // for its own budget.
+            priceControl.check = () => new Promise(() => {});
+            const { root } = bootStall(quoted());
+            for (let i = 0; i < 8; i += 1) {
+                await vi.advanceTimersByTimeAsync(0);
+            }
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            for (let i = 0; i < 4; i += 1) {
+                await vi.advanceTimersByTimeAsync(0);
+            }
+            // No clock moved: the figure landed at t=0, where an asked check
+            // would have held it for its whole budget.
+            expect(
+                painted.view?.payRate?.rate,
+                `landed without waiting out the check's ${PAY_CHECK_TIMEOUT_MS} ms`,
+            ).toBe(scaleRate(0.00003)!);
+            expect(painted.view?.payRate?.check).toBe('none');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 
@@ -3615,7 +3601,8 @@ describe('pay-several-at-the-app-level', () => {
      * paint has no prices, and a prune over it would empty the selection and blame the
      * seller — the critic's P1, 2026-09-21); a live re-read that takes a
      * chosen quote off the rail prunes it and says so once; the several
-     * sheet asks both feeds for a USD selection and neither for XEC.
+     * sheet asks the first feed for a USD selection — never the check while
+     * `SECOND_FEED` is paused — and neither for XEC.
      */
     // `fungible` picks tickers the withheld fence does not refuse — "GT" is
     // a top-500 coin's, and a token wearing it is not a row (§4).
@@ -3685,7 +3672,7 @@ describe('pay-several-at-the-app-level', () => {
         expect(painted.view?.selectionDropped).toBeUndefined();
     });
 
-    it('the several sheet asks both feeds for a USD selection and neither for XEC', async () => {
+    it('the several sheet asks the first feed for a USD selection, never the paused check, and neither for XEC', async () => {
         const fetch = vi.fn(async () => scaleRate(0.00003)!);
         const check = vi.fn(async () => scaleRate(0.00003)!);
         priceControl.fetch = fetch;
@@ -3699,7 +3686,7 @@ describe('pay-several-at-the-app-level', () => {
         await flush();
         expect(usd.root.querySelector('[data-role="pay-several"] [data-role="price"]')).not.toBeNull();
         expect(fetch.mock.calls.length).toBeGreaterThan(before);
-        expect(check).toHaveBeenCalled();
+        expect(check, 'the check is paused').not.toHaveBeenCalled();
 
         fetch.mockClear();
         check.mockClear();

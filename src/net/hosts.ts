@@ -8,9 +8,10 @@ export const CHRONIK_HOSTS = [
 export type ChronikHost = (typeof CHRONIK_HOSTS)[number];
 
 /**
- * The price feed. One origin, and the only non-chronik host `connect-src`
- * carries — the same endpoint Cashtab asks, so the currency list this app
- * offers is one that has been answered in production.
+ * The price feed. One origin, and — while `SECOND_FEED` is paused — the only
+ * non-chronik host `connect-src` carries: the same endpoint Cashtab asks, so
+ * the currency list this app offers is one that has been answered in
+ * production.
  *
  * A third party we now trust for a number: it can be down, it rate-limits
  * (429 is the common failure), and it can be wrong. None of that may reach the
@@ -45,5 +46,27 @@ export const PRICE_HOST = 'https://api.coingecko.com';
  * the check goes absent and the rate line names one feed. It sees a
  * visitor's IP at those moments and nothing else: no referrer, no cookie,
  * and the URL names the asset, not the stall.
+ *
+ * **Not asked while `SECOND_FEED` is paused**, and not in `connect-src`
+ * either: the constant stays so the check can come back in one diff.
  */
 export const PRICE_CHECK_HOST = 'https://api.coinpaprika.com';
+
+/**
+ * Whether the second feed is asked at all. **Paused** (owner, 2026-09-23):
+ * CoinPaprika's free plan is described as personal and non-commercial, and
+ * no keyless source a browser can call directly was found whose terms say
+ * commercial use is fine (the survey:
+ * `private/design/workshop-2026-09-23/PRICE-SOURCES.md`). Paused, not
+ * deleted: `fetchXecPriceCheck`, `judgeRates` and their tests stay, and
+ * while paused `readPayRate` hands the judge no check, so `check` is
+ * `'none'` and the figure is the first feed's, as it always was.
+ *
+ * Turning it back on is this line plus the host: `vite.config.ts` derives
+ * its `connect-src` from this switch, and the two deployed copies
+ * (`public/_headers`, `deploy/stall-headers.conf`) and the literal list in
+ * `script-src-and-connect-src-are-pinned` take `PRICE_CHECK_HOST` back by
+ * hand — the copies are compared, so forgetting one fails the suite.
+ */
+export type SecondFeed = 'on' | 'paused';
+export const SECOND_FEED: SecondFeed = 'paused';
