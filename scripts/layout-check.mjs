@@ -1202,20 +1202,21 @@ try {
                     nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
                     return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly);
                 };
-                // First paint tells us how tall the page is; the viewport
-                // grows to hold all of it and the paint is redone at that
-                // size, because `captureBeyondViewport` does not reliably
-                // paint backgrounds below the fold — a below-fold buy
-                // control sampled as near-white. That first paint is asked
-                // for its height alone (step 3a): at every viewport this
-                // pass measures, every job's page is taller than it — the
-                // page's own verdict `<pre>` sits under the app, 313 px on
-                // most jobs (`PROBE-RULES.md`) — so the boxes, the blanking,
-                // the font wait and the two frames the full prepare spends
-                // were spent on a paint the grow threw away. A page that fits
-                // is prepared afresh from the neutral screen at the same
-                // size — the same paint, by hermeticity (measured with the
-                // verdict hidden: 181 jobs fit, every box identical).
+                // First paint tells us how tall the page is — the document,
+                // and the viewport it takes for the shell's region and an
+                // open sheet to hide nothing (`pageHeight` in the probe) —
+                // and a page taller than its viewport is grown to hold all
+                // of it and painted again at that size, because
+                // `captureBeyondViewport` does not reliably paint
+                // backgrounds below the fold: a below-fold buy control
+                // sampled as near-white. A page that fits is shot at its
+                // own size and prepared afresh from the neutral screen —
+                // the same paint, by hermeticity. That first paint is asked
+                // for its height alone (step 3a): the boxes, the blanking,
+                // the font wait and the frames belong to the paint that is
+                // shot. Until 2026-09-24 no page fit, because the probe's
+                // verdict `<pre>` sat under the app and padded every shot
+                // by 313px (`PROBE-RULES.md`, "Shot at the real height").
                 const first = await timed('height', () => prepare(true, true));
                 for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
                 record.classes = first.sheetClasses ?? [];
@@ -1224,23 +1225,48 @@ try {
                     refuse(why);
                     continue;
                 }
-                const shotH = Math.max(vp.height, first.pageH);
+                let shotH = Math.max(vp.height, first.pageH);
                 const grew = shotH !== vp.height;
                 record.pageH = first.pageH;
                 record.grew = grew;
                 let grown = false;
+                const growTo = (height) =>
+                    timed('grow', () =>
+                        cdp.send(
+                            'Emulation.setDeviceMetricsOverride',
+                            { width: vp.width, height, deviceScaleFactor: 1, mobile: false },
+                            sessionId,
+                        ),
+                    );
                 try {
                     if (grew) {
-                        await timed('grow', () =>
-                            cdp.send(
-                                'Emulation.setDeviceMetricsOverride',
-                                { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
-                                sessionId,
-                            ),
-                        );
+                        await growTo(shotH);
                         grown = true;
                     }
-                    const prep = await timed('prepare', () => prepare(!grew));
+                    let prep = await timed('prepare', () => prepare(!grew));
+                    /*
+                     * The grow is held to the paint it was for. A sheet's
+                     * share of a grown viewport is read off the paint, not
+                     * known, and the first paint above did not wait for the
+                     * self-hosted face — so when the prepared page says it
+                     * is still taller than the shot, the shot grows again,
+                     * twice at most, and a job that still does not fit is
+                     * refused rather than shot with its foot behind a clip.
+                     * With the verdict out of the flow nothing pads the
+                     * shot past either (`PROBE-RULES.md`, "Shot at the real
+                     * height").
+                     */
+                    for (let round = 0; prep.pageH > shotH && round < 2; round += 1) {
+                        shotH = prep.pageH;
+                        await growTo(shotH);
+                        grown = true;
+                        prep = await timed('prepare', () => prepare(false));
+                    }
+                    record.shotH = shotH;
+                    if (prep.pageH > shotH) {
+                        refuse([`the page is ${prep.pageH}px tall at a ${shotH}px shot after two more grows`]);
+                        continue;
+                    }
                     for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
                     record.prepared = prep.targets.length;
                     record.nodes = prep.nodes;

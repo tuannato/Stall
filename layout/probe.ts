@@ -2403,10 +2403,47 @@ function freezeAnimations(): void {
 }
 window.__contrastFreeze = freezeAnimations;
 
-/** The page's whole height, the shell's scroll region included. */
-function pageHeight(): number {
-    const scrollRegion = document.querySelector('.stall-scroll');
-    return Math.max(document.documentElement.scrollHeight, scrollRegion?.scrollHeight ?? 0);
+/**
+ * The viewport height at which nothing a reader scrolls to is behind its
+ * clip: the document's own height, and — for the two surfaces a reader
+ * scrolls inside, the shell's region and an open sheet — the viewport plus
+ * what that surface hides, scaled by how much of each pixel of viewport the
+ * surface is given.
+ *
+ * It asked for the region's `scrollHeight` as a page height (2026-09-24),
+ * which leaves the dock's own height of the region still hidden once the
+ * viewport grows to it — the region is the viewport less the dock — and
+ * asked nothing of a sheet at all. Neither showed while this page's verdict
+ * `<pre>` sat in the flow under the app: its 313px grew every shot past
+ * both (`PROBE-RULES.md`, "Shot at the real height").
+ *
+ * A surface that is not the reader's to scroll is not asked: the wall's
+ * region is `overflow: hidden` (its list scrolls itself, and the wall is
+ * shot at its screen's size because its layout reads the frame's shape),
+ * and so is the shell's region behind an open sheet.
+ */
+function pageHeight(scope: ParentNode): number {
+    const vh = window.innerHeight;
+    let need = document.documentElement.scrollHeight;
+    const surfaces = [document.querySelector<HTMLElement>('.stall-scroll')];
+    if (scope !== document) {
+        surfaces.push(...scope.querySelectorAll<HTMLElement>('.sheet'));
+    }
+    for (const surface of surfaces) {
+        if (surface === null) continue;
+        const cs = getComputedStyle(surface);
+        if (cs.overflowY !== 'auto' && cs.overflowY !== 'scroll') continue;
+        const hidden = surface.scrollHeight - surface.clientHeight;
+        if (hidden <= 0) continue;
+        // A sheet is capped at a share of the viewport (`max-height: 92vh`,
+        // 86vh at desk width), so a pixel of viewport buys it less than a
+        // pixel; the region takes whatever the dock leaves, all of it.
+        const cap = Number.parseFloat(cs.maxHeight);
+        const capped = Number.isFinite(cap) && surface.offsetHeight >= cap - 0.5;
+        const share = capped ? Math.min(1, cap / vh) : 1;
+        need = Math.max(need, vh + Math.ceil(hidden / share));
+    }
+    return need;
 }
 
 window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
@@ -2450,17 +2487,16 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     for (const details of scope.querySelectorAll('details')) {
         details.open = true;
     }
-    // The runner's first question of a job is only how tall the page is,
-    // and at every viewport it measures the answer is "taller than the
-    // viewport" — by the height of this page's own verdict `<pre>` under the
-    // app at the least (`PROBE-RULES.md`, step 3a) — so the paint it is
-    // asking about is thrown away by the repaint at the grown size. Nothing
-    // is collected or blanked.
+    // The runner's first question of a job is only how tall the page is:
+    // when the answer is taller than the viewport, the paint it asked about
+    // is thrown away by the repaint at the grown size, and when it is not,
+    // the job is prepared afresh from the neutral screen at the same size.
+    // Either way nothing is collected or blanked here.
     if (heightOnly) {
         preparedNodes = [];
         return {
             targets: [],
-            pageH: pageHeight(),
+            pageH: pageHeight(scope),
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
             ...echo,
@@ -2501,11 +2537,12 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // The runner grows the emulated viewport to this and repaints before the
     // shot: `captureBeyondViewport` does not reliably paint backgrounds below
     // the fold — a below-fold buy control sampled as near-white. The shell
-    // hides its height inside its scroll region, so that is asked too: at the
-    // grown viewport the region stretches and everything is on screen.
+    // and an open sheet hide their height inside their own scroll, so those
+    // are asked too (`pageHeight`): at the grown viewport each stretches and
+    // everything is on screen.
     return {
         targets,
-        pageH: pageHeight(),
+        pageH: pageHeight(scope),
         // What this one paint wore, for the runner's class audit.
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
         // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
@@ -2514,63 +2551,87 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     };
 };
 
+/*
+ * The verdict, in an element the runner reads by `textContent` and nothing
+ * lays out (`hidden`).
+ *
+ * It sat in the flow under the app for as long as this page existed, and the
+ * contrast pass grows a shot to the page's height — so every page that fits
+ * its viewport was shot 313px taller than it (the verdict's own height), the
+ * shop window at 1920x1393 where the wall is a 1080 screen whose layout reads
+ * its frame's shape. The payment band's text on Neo read 2.89:1 at the real
+ * height and 14.48:1 at the padded one (2026-09-24, `PROBE-RULES.md`, "Shot at
+ * the real height"). The verdict is held to taking no room: a sheet that ever
+ * dressed it back into the flow fails every pass rather than padding every
+ * shot again.
+ */
 const result = document.createElement('pre');
 result.id = 'layout-result';
-result.textContent = JSON.stringify(
-    {
-        viewport: window.innerWidth,
-        reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
-        /*
-         * The tall-portrait half of `window.css`, echoed back so the runner
-         * can refuse a pass the media feature never reached — the same guard
-         * `reducedMotion` gives that pass. It is `portrait` with the
-         * `max-height: 1200px` block NOT matching: a phone and a counter
-         * tablet are portrait too and take the short variant, so the stacked
-         * column a wall-mounted screen paints is a third state, and asking
-         * only for `portrait` would have certified it from a 390px phone.
-         */
-        portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
-            .matches,
-        /*
-         * The other portrait block — `(orientation: portrait) and
-         * (max-height: 1200px)` — echoed back for its own pass's guard.
-         *
-         * It was reached only by the 390x844 mobile pass, and only because
-         * the wall fixtures ran there. Taking them out of that pass was
-         * right (the app cannot paint a wall at 390) and left this block
-         * executed by NOTHING, with two documents still describing it as
-         * covered (QA, 2026-09-20, measured in Chrome). That is
-         * `44720d3` again: half a layout behind a query no pass could
-         * enter. A counter tablet stood on end is 768 wide, which is over
-         * the wall's floor, so the screen is real and the pass is now its
-         * own.
-         */
-        portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
-            .matches,
-        screensMeasured: measured,
-        /*
-         * Every `t-*` class a painted `.stall` wore — the look this page
-         * actually measured, not the one it was asked for. The runner refuses
-         * a pass whose set is not exactly what it ran (`{t-workshop}` for the
-         * kit, the three shipped classes otherwise).
-         */
-        sheetClasses: [...sheetClassesPainted].sort(),
-        clipSkips,
-        clipChecks,
-        screensWithQuote: [...withQuote],
-        /*
-         * What the step-2 rules compared, for the runner to require
-         * (`probe-coverage.mjs`): dash-against-figure comparisons per place,
-         * the shipped looks whose row sizes were read, and the skeleton's
-         * tiered figures per tier.
-         */
-        dashChecks,
-        rowSizeClasses: [...rowSizeClasses].sort(),
-        ladderTiers,
-        failures,
-    },
-    null,
-    1,
-);
+result.hidden = true;
 document.body.append(result);
+const verdict = {
+    viewport: window.innerWidth,
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    /*
+     * The tall-portrait half of `window.css`, echoed back so the runner
+     * can refuse a pass the media feature never reached — the same guard
+     * `reducedMotion` gives that pass. It is `portrait` with the
+     * `max-height: 1200px` block NOT matching: a phone and a counter
+     * tablet are portrait too and take the short variant, so the stacked
+     * column a wall-mounted screen paints is a third state, and asking
+     * only for `portrait` would have certified it from a 390px phone.
+     */
+    portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
+        .matches,
+    /*
+     * The other portrait block — `(orientation: portrait) and
+     * (max-height: 1200px)` — echoed back for its own pass's guard.
+     *
+     * It was reached only by the 390x844 mobile pass, and only because
+     * the wall fixtures ran there. Taking them out of that pass was
+     * right (the app cannot paint a wall at 390) and left this block
+     * executed by NOTHING, with two documents still describing it as
+     * covered (QA, 2026-09-20, measured in Chrome). That is
+     * `44720d3` again: half a layout behind a query no pass could
+     * enter. A counter tablet stood on end is 768 wide, which is over
+     * the wall's floor, so the screen is real and the pass is now its
+     * own.
+     */
+    portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
+        .matches,
+    screensMeasured: measured,
+    /*
+     * Every `t-*` class a painted `.stall` wore — the look this page
+     * actually measured, not the one it was asked for. The runner refuses
+     * a pass whose set is not exactly what it ran (`{t-workshop}` for the
+     * kit, the three shipped classes otherwise).
+     */
+    sheetClasses: [...sheetClassesPainted].sort(),
+    clipSkips,
+    clipChecks,
+    screensWithQuote: [...withQuote],
+    /*
+     * What the step-2 rules compared, for the runner to require
+     * (`probe-coverage.mjs`): dash-against-figure comparisons per place,
+     * the shipped looks whose row sizes were read, and the skeleton's
+     * tiered figures per tier.
+     */
+    dashChecks,
+    rowSizeClasses: [...rowSizeClasses].sort(),
+    ladderTiers,
+    failures,
+};
+result.textContent = JSON.stringify(verdict, null, 1);
+{
+    const box = result.getBoundingClientRect();
+    if (box.width !== 0 || box.height !== 0) {
+        failures.push({
+            screen: 'probe page',
+            theme: '-',
+            check: 'the verdict takes no room',
+            detail: `#layout-result lays out at ${box.width}x${box.height}, and every contrast shot grows by it`,
+        });
+        result.textContent = JSON.stringify(verdict, null, 1);
+    }
+}
 window.__probeReady = true;

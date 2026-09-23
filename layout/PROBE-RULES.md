@@ -543,7 +543,10 @@ Sampling amendments, each measured:
   and the fit-content dock re-centres with it.
 - **The viewport grows to the page height and the paint is redone** —
   `captureBeyondViewport` does not reliably paint backgrounds below the
-  fold (a below-fold buy control sampled near-white).
+  fold (a below-fold buy control sampled near-white). The page height is
+  the document's, and the viewport it takes for the shell's region and an
+  open sheet to hide nothing; a page that fits is shot at its own size
+  ("Shot at the real height", 2026-09-24).
 - **A failing box is re-shot once before it is believed** — capture right
   after an emulated resize can raster a stale frame; a real defect is
   steady state.
@@ -1993,4 +1996,100 @@ behind the value's ink `rgb(223,246,255)`. Measured under a diagnostic plant
 only (both the previous runner and this one read it); nothing in this step
 changes what height a job is shot at, so it is recorded here and left to the
 owner: shooting pages at their own height is a change to what the guard
-measures, and it goes red on its first run.
+measures, and it goes red on its first run. (Done the next day, with the
+plate's ground first: "Shot at the real height" below.)
+
+## Shot at the real height (2026-09-24)
+
+**The verdict takes no room.** `#layout-result` is `hidden` — the runner
+reads its `textContent`, and nothing else on either side reads the element —
+and the page holds it to that: a verdict that lays out adds "the verdict
+takes no room" to every pass's failures. **Proved red** by putting it back
+(`hidden = false`): every geometry pass failed on that line ("lays out at
+390x1365"), and all 383 contrast jobs were refused by the grow check below.
+
+**The incident it exposed.** At its own 1920×1080 the touch wall's payment
+band (`.sw-paying`) painted its text straight on the look's ground: it had
+none of its own. Neo worn put a rain drop behind a line's figure at 2.89:1,
+and even at the padded 1920×1393 its rate line read 3.99:1 and its total
+6.24:1. The band now wears the list's own card — the class `item`, which
+every look dresses (`.t-* .item`) and every card decoration reaches — with
+the frame drawn in the slack around it by a negative margin, so the list
+keeps its room (`window.css`; test
+`the-wall-payment-plate-stands-on-the-lists-card`). Neo worn reads 16.56:1
+on every text box of the band. **Proved red** by taking `item` off the
+band: `shop-window-touch-quotes-pay @canvas / theme 2 + worn: dd.sw-pay-v
+at 1062,669 sits on paint at 2.92:1` (the frame's margin still in place,
+so a pixel lower than the 2.89 reading).
+
+**Hiding the verdict alone lost 229 boxes**, measured against the previous
+dump: every shot had been 313px taller than its page, and that padding —
+not the grow — was what put three things in frame.
+
+- **The shell's foot.** `pageHeight` asked for the region's `scrollHeight`
+  as a page height, and the region is the viewport less the dock: grown to
+  that, the dock's own height of the region is still behind its clip. The
+  footer's controls on `empty`, `offers-changed`, `hostile-name`,
+  `plugin-missing-quotes` and both `pay-several-strip`s, and on every long
+  page the last ~60px, were sampled only because of the padding (a studio
+  control at 390 was sampled clipped to 30 of its 44px, on the kit's look).
+- **A sheet's lower half.** Nothing asked the open sheet at all; its
+  controls under the fold (the name sheet's decoration chips, the describe
+  sheet's segments and sign control, the shop-window sheet's switches)
+  were in frame when the 313px reached them and not when it did not — and
+  the record hex on both record sheets, at both widths and on every look,
+  never was, nor any sheet's foot close: the hex of a record a seller is
+  about to sign is a protected box, and no contrast shot had reached it.
+- **The wall's rows below its list's edge**, at a height the wall is never
+  hung at.
+
+**So the grow asks what a reader scrolls.** `pageHeight(scope)` is the
+document's height, and the viewport plus what the shell's region hides and
+what an open sheet hides — the sheet's scaled by its share of the viewport
+(`max-height: 92vh`, 86vh at desk width), since a pixel of viewport buys it
+less than a pixel. A surface that is not the reader's to scroll is not
+asked: the wall's region is `overflow: hidden` (its list scrolls itself,
+and a wall is shot at its screen's size because its layout reads the
+frame's shape), and so is the shell behind an open sheet. The runner holds
+the grow to the prepared paint: when the prepared page says it is still
+taller than the shot, it grows again, twice at most, and refuses the job
+after that ("mobile/offers/1/0: the page is 2516px tall at a 2098px shot
+after two more grows" — the verdict back in the flow, which grows with the
+viewport, is what proved it, on all 383 jobs).
+
+**Against the previous dump** (4575 boxes): 4284 identical, 238 moved, 337
+added, 53 removed, **none across 3:1**. Moved: the band's six text boxes
+on every look (its card); the controls anchored to the foot — the dock's
+tabs, the footer's `.mini.another` — at their place in a shot of another
+height; boxes the old shot cut at the region's edge, read whole now (a
+studio lede 22 → 53px tall, Rural worn 4.80 → 4.36; a stepper 41 → 44px);
+Neo worn's Activity rows over rain laid out for another height (±0.3);
+and the wall's cycle card at its own shape (`shop-window-cycle` at
+1280×900, `shop-window-wall` at 1920×1080: the tile 465 → 437px). Added:
+the sheet halves and shell feet above, every one at 4.05:1 or more. Removed: the wall's second row and
+below at its own height (`shop-window-browse` at 1280×900,
+`shop-window-quotes`, `shop-window-touch-quotes-pay` at 1920×1080) — the
+same card class as the row above them, which is sampled. The kit's look
+(`pnpm workshop:probe`, 625 boxes): 618 identical, 7 moved, 43 added, 7
+removed, the same three kinds. 147 of the 383 jobs now fit and are shot at
+their own viewport (none did); no job needed a second grow. Contrast pass
+86.7 s, `pnpm test:layout` 144.9 s, against 88.6 s and 147.1 s on the tree
+before.
+
+**What this still cannot see.**
+
+- **The wall's list below its edge.** It scrolls itself on an idle timer;
+  a row that is not on screen at the instant shot is sampled only through
+  the rows that are, which wear the same card over whatever the look paints
+  at a different offset.
+- **A control the wall's body cuts from below.** Found while measuring the
+  band, on main and unchanged here: at 768×1024 the band is taller than the
+  body on Neo (bare and worn), Modern worn and Rural worn, the list shows no
+  row, and the body's `overflow: hidden` cuts Back from below, leaving 36
+  of its 72px on screen on Neo, 44 on Rural worn and 7 on Modern worn. `cutSideways` is sideways only, and no rule measures a
+  control cut from below on a wall.
+- **`looks:diff` and `workshop:shots` grow the old way**
+  (`max(document, region.scrollHeight)`). They shoot the showroom, which
+  carries no verdict, so a page that fits was always shot at its own size
+  there; a long page's last dock-height and a sheet's lower half are outside
+  their shots.
