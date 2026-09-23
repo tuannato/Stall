@@ -202,9 +202,13 @@ const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9339';
  * unwind through it like any other failure.
  */
 function run(cmd, args, opts = {}) {
-    const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
+    // Bounded like everything else this run waits on: a build blocks the
+    // event loop, so the watchdog below cannot fire during one.
+    const r = spawnSync(cmd, args, { stdio: 'inherit', timeout: RUNTIME_CEILING_S * 1000, ...opts });
     if (r.status !== 0) {
-        throw new Error(`${cmd} ${args.join(' ')} exited ${r.status}`);
+        throw new Error(
+            `${cmd} ${args.join(' ')} ${r.signal === null ? `exited ${r.status}` : `was stopped by ${r.signal}`}`,
+        );
     }
 }
 
@@ -227,6 +231,7 @@ async function devtoolsUrl(watch) {
  * that never answers must not be able to hang the run.
  */
 async function readVerdict(cdp, sessionId, url) {
+    currentStep = `the probe page's verdict at ${url.replace(/^http:\/\/localhost:\d+\//, '')}`;
     await cdp.send('Page.navigate', { url }, sessionId);
     for (let i = 0; i < 150; i += 1) {
         const r = await cdp.send(
@@ -433,14 +438,14 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce) {
     const r = await cdp.send(
         'Runtime.evaluate',
         {
             expression:
                 `(async () => { ` +
                 `const out = window.__contrastPrepare(` +
-                `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}); ` +
+                `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}); ` +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -461,6 +466,50 @@ async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral) {
     }
     return JSON.parse(r.result.value);
 }
+
+/*
+ * The per-job echo checks (step 3a, the step-3 critic's P1 2). Each answer
+ * the page gives a contrast job is held to the job before anything in it is
+ * sampled: the nonce of the prepare it answers for, the combination it
+ * painted, the viewport it measured, and the look classes this one paint
+ * wore (the door's own stall among them — `includes` there, exactly the one
+ * class everywhere else). Each returns why the answer is not the job's, or
+ * nothing; a refused job fails the run and says which check refused it.
+ */
+function paintEcho(job, out, nonce, width, height) {
+    const why = [];
+    if (out.nonce !== nonce) {
+        why.push(`the prepare answered for ${out.nonce} where it was asked as ${nonce}`);
+    }
+    const painted = out.painted ?? {};
+    if (painted.screen !== job.screen || painted.look !== job.look || painted.flags !== job.flags) {
+        why.push(`it painted ${painted.screen}/${painted.look}/${painted.flags}`);
+    }
+    if (out.vw !== width || out.vh !== height) {
+        why.push(`the page measured ${out.vw}x${out.vh} where the job is ${width}x${height}`);
+    }
+    const classes = out.sheetClasses ?? [];
+    const wore = job.screen === 'door' ? classes.includes(job.sheetClass) : classes.length === 1 && classes[0] === job.sheetClass;
+    if (!wore) {
+        why.push(`the paint wore ${classes.join(', ') || 'no look class'} where the job's look is ${job.sheetClass}`);
+    }
+    return why;
+}
+
+function liveEcho(live, nonce, width, height) {
+    const why = [];
+    if (live.nonce !== nonce) {
+        why.push(`the boxes were re-read from prepare ${live.nonce} where the job's last was ${nonce}`);
+    }
+    if (live.vw !== width || live.vh !== height) {
+        why.push(`the boxes were re-read at ${live.vw}x${live.vh} where the job is ${width}x${height}`);
+    }
+    return why;
+}
+
+let prepareSerial = 0;
+/** What the run is doing now, for the watchdog's last sentence. */
+let currentStep = 'starting';
 
 /** The shot as PNG bytes, not yet decoded — the contrast pass times the two apart. */
 async function captureRaw(cdp, sessionId) {
@@ -523,6 +572,29 @@ const CLIP_SKIP_CEILING = 0.3;
 const RUNTIME_CEILING_S = 300;
 const startedAt = Date.now();
 /*
+ * Every CDP command this run sends is bounded (`devtools`' `timeoutMs`): one
+ * that has not answered in this long — a page that hung, a target that
+ * crashed, a box in swap — fails its pass, naming the method, instead of
+ * holding the run open. The longest a healthy command takes here is a
+ * capture of a grown 1920-wide page, well under a second.
+ */
+const CDP_TIMEOUT_MS = 30_000;
+/*
+ * And the ceiling is a watchdog, not only a line at the end: once the wall
+ * clock passes it the run stops — every process group it started killed
+ * (`process-groups.mjs`) — and says what it was doing. A run that crawls
+ * past the ceiling used to finish every pass first, however long that took,
+ * and only then print the red line.
+ */
+const watchdog = setTimeout(() => {
+    console.error(
+        `\n✗ runtime: past the ${RUNTIME_CEILING_S}s ceiling while on ${currentStep} — ` +
+            'the watchdog stops the run.',
+    );
+    stopGroups().finally(() => process.exit(interruptedCode() ?? 1));
+}, RUNTIME_CEILING_S * 1000);
+watchdog.unref();
+/*
  * Each pass says what it cost. The budget rule is "prune the matrix before
  * raising the number", and the first session to hit the ceiling had to guess
  * which pass to prune — these are the numbers that guess should have been.
@@ -556,10 +628,10 @@ function phaseTable(passMs) {
     const rows = [...phases].map(([phase, { calls, ms }]) => ({ phase, calls, ms }));
     const accounted = rows.reduce((sum, row) => sum + row.ms, 0);
     rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, passMs - accounted) });
-    const lines = [`    phase           calls     total   share     mean`];
+    const lines = [`    phase             calls     total   share     mean`];
     for (const { phase, calls, ms } of rows) {
         lines.push(
-            `    ${phase.padEnd(14)} ${String(calls || '').padStart(6)} ${(ms / 1000).toFixed(1).padStart(8)}s` +
+            `    ${phase.padEnd(16)} ${String(calls || '').padStart(6)} ${(ms / 1000).toFixed(1).padStart(8)}s` +
                 ` ${((ms / passMs) * 100).toFixed(0).padStart(6)}%` +
                 ` ${calls === 0 ? '' : `${(ms / calls).toFixed(0).padStart(6)}ms`}`,
         );
@@ -581,6 +653,7 @@ function gitRev() {
     return `${head.stdout.trim()}${dirty.status === 0 && dirty.stdout.trim() !== '' ? '+' : ''}`;
 }
 try {
+    currentStep = 'the build';
     run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error']);
     if (LOOKS === 'workshop') {
         // The kit's build is held against what it was given before anything
@@ -588,6 +661,7 @@ try {
         // Stall's own sheets and skips this.
         await requireCleanKitBuild({ configFile: PROBE_CONFIG });
     }
+    currentStep = 'starting the preview server and Chrome';
     await refuseTakenPort(PORT, 'preview server');
     await refuseTakenPort(DEVTOOLS_PORT, 'Chrome DevTools endpoint');
     server = spawnGroup('the preview server', 'npx', [
@@ -634,7 +708,7 @@ try {
         { stderr: 'ignore' },
     );
 
-    const cdp = devtools(await devtoolsUrl([server, browser]));
+    const cdp = devtools(await devtoolsUrl([server, browser]), { timeoutMs: CDP_TIMEOUT_MS });
     await cdp.opened;
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
@@ -1030,11 +1104,16 @@ try {
      */
     const PAGE_MAX_AGE_MS = 60_000;
     let loadedAt = 0;
-    const loadContrastPage = async (vp) => {
-        await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
-        await waitForFlag(cdp, sessionId, '__probeReady');
+    const loadContrastPage = async (vp, phase = 'load') => {
+        await timed(`${phase}: navigate`, () =>
+            cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId),
+        );
+        await timed(`${phase}: ready`, () => waitForFlag(cdp, sessionId, '__probeReady'));
         loadedAt = performance.now();
     };
+    // Jobs refused by their echo checks, one line each — said whatever else
+    // the pass does, a pass that threw later included.
+    const refused = [];
     try {
         let boxes = 0;
         const dim = [];
@@ -1051,13 +1130,16 @@ try {
         let plan;
         const done = new Map();
         for (const vp of ALL_VIEWPORTS) {
-            const pageScreens = await timed('navigate', async () => {
-                await cdp.send(
+            currentStep = `contrast: loading the ${vp.name} page`;
+            await timed('metrics', () =>
+                cdp.send(
                     'Emulation.setDeviceMetricsOverride',
                     { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
                     sessionId,
-                );
-                await loadContrastPage(vp);
+                ),
+            );
+            await loadContrastPage(vp);
+            const pageScreens = await timed('plan reads', async () => {
                 plan ??= await evalJson(cdp, sessionId, 'window.__contrastPlan()');
                 return evalJson(cdp, sessionId, 'window.__contrastScreens');
             });
@@ -1078,15 +1160,33 @@ try {
                 );
             }
             for (const plannedJob of jobsHere) {
+                currentStep = `contrast job ${plannedJob.key}`;
+                done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
                 const { screen, look: theme, flags } = plannedJob;
                 const wornAll = flags !== 0;
-                done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
+                const job = { pass: 'contrast', viewport: vp.name, screen, look: theme, flags };
+                const record = { key: jobKey(job), ...job };
+                dumpJobs.push(record);
+                // A job whose echo is not the job is refused before anything
+                // is sampled, and says why; the run fails.
+                const refuse = (why) => {
+                    record.refused = why;
+                    refused.push(`${plannedJob.key}: ${why.join('; ')}`);
+                };
+                if (performance.now() - loadedAt > PAGE_MAX_AGE_MS) {
+                    await loadContrastPage(vp, 'reload');
+                }
                 // Two animation frames between hiding the glyphs and the
                 // shot: the style change needs a composited frame, and a
                 // screenshot taken before one still shows the text — which
                 // read as 1.00:1 wherever a sample point landed on a glyph.
-                const prepare = (neutral) =>
-                    contrastPrepare(cdp, sessionId, screen, theme, flags, neutral);
+                // Every prepare carries a nonce of its own, echoed back by
+                // the prepare and by every box re-read after it.
+                let nonce;
+                const prepare = (neutral) => {
+                    nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
+                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce);
+                };
                 // First paint tells us how tall the page is; the viewport
                 // grows to hold all of it and the paint is redone at that
                 // size, because `captureBeyondViewport` does not reliably
@@ -1100,151 +1200,190 @@ try {
                 // the largest single cost in this guard, buying nothing.
                 // Nothing repaints between the two, so the first prepare's
                 // tree is the tree that gets shot.
-                const job = {
-                    pass: 'contrast',
-                    viewport: vp.name,
-                    screen,
-                    look: theme,
-                    flags,
-                };
-                if (performance.now() - loadedAt > PAGE_MAX_AGE_MS) {
-                    await timed('reload', () => loadContrastPage(vp));
-                }
                 const first = await timed('prepare', () => prepare(true));
                 for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
-                const record = {
-                    key: jobKey(job),
-                    ...job,
-                    nodes: first.nodes,
-                    prepared: first.targets.length,
-                    classes: first.sheetClasses ?? [],
-                };
-                dumpJobs.push(record);
-                if (first.targets.length === 0) continue;
+                record.nodes = first.nodes;
+                record.prepared = first.targets.length;
+                record.classes = first.sheetClasses ?? [];
+                let why = paintEcho(plannedJob, first, nonce, vp.width, vp.height);
+                if (why.length === 0 && first.targets.length === 0) {
+                    why = ['the prepare collected no contrast targets — a planned job that measures nothing'];
+                }
+                if (why.length > 0) {
+                    refuse(why);
+                    continue;
+                }
                 const shotH = Math.max(vp.height, first.pageH);
                 const grew = shotH !== vp.height;
                 record.pageH = first.pageH;
                 record.grew = grew;
-                if (grew) {
-                    await timed('grow', () =>
-                        cdp.send(
-                            'Emulation.setDeviceMetricsOverride',
-                            { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
-                            sessionId,
-                        ),
-                    );
-                }
-                const prep = grew ? await timed('re-prepare', () => prepare(false)) : first;
-                if (grew) {
-                    record.prepared = prep.targets.length;
-                    record.nodes = prep.nodes;
-                    record.classes = prep.sheetClasses ?? [];
-                }
-                // The boxes are re-read at the last moment before every
-                // shot: anything that lands between prepare and capture
-                // (a late face, an image) moves the layout under
-                // coordinates already taken.
-                const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                const capture = async () => {
-                    const png = await timed('capture', () => captureRaw(cdp, sessionId));
-                    return timed('decode', async () => decodePng(png));
-                };
-                let img = await capture();
-                let targets = await timed('boxes', liveBoxes);
-                // A failing box is re-shot once before it is believed:
-                // capture right after an emulated resize can raster a
-                // stale frame — measured: the live DOM held transparent
-                // glyphs and unmoved boxes while the shot showed the text
-                // still painted. A real defect is steady state (the
-                // planted-colour falsification fails both shots); a stale
-                // surface is not. (Step 3a found what most of those
-                // shots were: the prepare's own blanking starting a
-                // 0.2 s `color` transition on a `.mini`, 89 retries a
-                // run. The prepare starts none now and the retries went
-                // to zero; the re-shot stays for whatever else is late.)
-                let retried = false;
-                if (prep.targets.length !== 0 && targets.length === 0) {
-                    throw new Error(`${screen}: prepared targets but re-read none`);
-                }
-                record.live = targets.length;
-                record.image = [img.width, img.height];
-                let sampled = 0;
-                let dropped = 0;
-                const sampleStart = performance.now();
-                let retryMs = 0;
-                for (let ti = 0; ti < targets.length; ti += 1) {
-                    let t = targets[ti];
-                    let worst = worstContrastInBox(img, t, t.color);
-                    if (worst === undefined) {
-                        dropped += 1;
-                        dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null });
+                let grown = false;
+                try {
+                    if (grew) {
+                        await timed('grow', () =>
+                            cdp.send(
+                                'Emulation.setDeviceMetricsOverride',
+                                { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
+                                sessionId,
+                            ),
+                        );
+                        grown = true;
+                        const prep = await timed('re-prepare', () => prepare(false));
+                        for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                        record.prepared = prep.targets.length;
+                        record.nodes = prep.nodes;
+                        record.classes = prep.sheetClasses ?? [];
+                        why = paintEcho(plannedJob, prep, nonce, vp.width, shotH);
+                        if (why.length === 0 && prep.targets.length === 0) {
+                            why = ['the re-prepare collected no contrast targets'];
+                        }
+                        if (why.length > 0) {
+                            refuse(why);
+                            continue;
+                        }
+                    }
+                    // The boxes are re-read at the last moment before every
+                    // shot: anything that lands between prepare and capture
+                    // (a late face, an image) moves the layout under
+                    // coordinates already taken.
+                    const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                    // The shot, and the re-read after it, each held to the
+                    // job: the image its width by the grown height, the
+                    // re-read from this job's last prepare at that viewport.
+                    const capture = async () => {
+                        const png = await timed('capture', () => captureRaw(cdp, sessionId));
+                        const shot = await timed('decode', async () => decodePng(png));
+                        const bad = shot.width !== vp.width || shot.height !== shotH;
+                        return {
+                            shot,
+                            why: bad ? [`the shot is ${shot.width}x${shot.height} where the job is ${vp.width}x${shotH}`] : [],
+                        };
+                    };
+                    const reread = async () => {
+                        const live = await liveBoxes();
+                        return { live, why: liveEcho(live, nonce, vp.width, shotH) };
+                    };
+                    let { shot: img, why: shotWhy } = await capture();
+                    if (shotWhy.length > 0) {
+                        refuse(shotWhy);
                         continue;
                     }
-                    boxes += 1;
-                    sampled += 1;
-                    let firstWorst;
-                    if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
-                        const retryStart = performance.now();
-                        firstWorst = worst;
-                        await sleep(250);
-                        img = await capture();
-                        const again = await liveBoxes();
-                        if (again.length === targets.length) {
-                            targets = again;
-                            t = targets[ti];
-                        }
-                        retried = true;
-                        worst = worstContrastInBox(img, t, t.color);
-                        retryMs += performance.now() - retryStart;
+                    const firstRead = await timed('boxes', reread);
+                    if (firstRead.why.length > 0) {
+                        refuse(firstRead.why);
+                        continue;
                     }
-                    dumpBoxes.push({
-                        key: boxKey(job, t),
-                        job: record.key,
-                        i: t.i,
-                        sel: t.sel,
-                        x: t.x,
-                        y: t.y,
-                        w: t.w,
-                        h: t.h,
-                        color: t.color,
-                        worst: dumpValue(worst),
-                        ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
-                    });
-                    if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
-                        dim.push(
-                            `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
-                                `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
-                                (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
+                    let targets = firstRead.live.boxes;
+                    // A failing box is re-shot once before it is believed:
+                    // capture right after an emulated resize can raster a
+                    // stale frame — measured: the live DOM held transparent
+                    // glyphs and unmoved boxes while the shot showed the text
+                    // still painted. A real defect is steady state (the
+                    // planted-colour falsification fails both shots); a stale
+                    // surface is not. (Step 3a found what most of those
+                    // shots were: the prepare's own blanking starting a
+                    // 0.2 s `color` transition on a `.mini`, 89 retries a
+                    // run. The prepare starts none now and the retries went
+                    // to zero; the re-shot stays for whatever else is late.)
+                    let retried = false;
+                    if (targets.length === 0) {
+                        refuse([`prepared ${record.prepared} targets and the re-read found none`]);
+                        continue;
+                    }
+                    record.live = targets.length;
+                    record.image = [img.width, img.height];
+                    let sampled = 0;
+                    let dropped = 0;
+                    const sampleStart = performance.now();
+                    let retryMs = 0;
+                    let retryWhy = [];
+                    for (let ti = 0; ti < targets.length; ti += 1) {
+                        let t = targets[ti];
+                        let worst = worstContrastInBox(img, t, t.color);
+                        if (worst === undefined) {
+                            dropped += 1;
+                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null });
+                            continue;
+                        }
+                        boxes += 1;
+                        sampled += 1;
+                        let firstWorst;
+                        if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
+                            const retryStart = performance.now();
+                            firstWorst = worst;
+                            await sleep(250);
+                            const again = await capture();
+                            const againRead = await reread();
+                            retryWhy = [...again.why, ...againRead.why];
+                            if (retryWhy.length > 0) break;
+                            img = again.shot;
+                            if (againRead.live.boxes.length === targets.length) {
+                                targets = againRead.live.boxes;
+                                t = targets[ti];
+                            }
+                            retried = true;
+                            worst = worstContrastInBox(img, t, t.color);
+                            retryMs += performance.now() - retryStart;
+                        }
+                        dumpBoxes.push({
+                            key: boxKey(job, t),
+                            job: record.key,
+                            i: t.i,
+                            sel: t.sel,
+                            x: t.x,
+                            y: t.y,
+                            w: t.w,
+                            h: t.h,
+                            color: t.color,
+                            worst: dumpValue(worst),
+                            ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
+                        });
+                        if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
+                            dim.push(
+                                `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
+                                    (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
+                            );
+                        }
+                    }
+                    {
+                        // The sampling itself, net of any retry inside it
+                        // (whose capture and decode are their own phases).
+                        const entry = phases.get('sample') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - sampleStart - retryMs;
+                        phases.set('sample', entry);
+                    }
+                    record.sampled = sampled;
+                    record.dropped = dropped;
+                    record.retried = retried;
+                    if (retryWhy.length > 0) {
+                        refuse(retryWhy.map((w) => `on the re-shot, ${w}`));
+                    } else if (sampled === 0) {
+                        // Every box fell outside the shot — a stale capture
+                        // from before the viewport grew is the shape — and a
+                        // job that sampled nothing proved nothing.
+                        refuse([`${targets.length} boxes and none sampled — every one fell outside the ${img.width}x${img.height} shot`]);
+                    }
+                } finally {
+                    if (grown) {
+                        await timed('shrink', () =>
+                            cdp.send(
+                                'Emulation.setDeviceMetricsOverride',
+                                {
+                                    width: vp.width,
+                                    height: vp.height,
+                                    deviceScaleFactor: 1,
+                                    mobile: false,
+                                },
+                                sessionId,
+                            ),
                         );
                     }
                 }
-                {
-                    // The sampling itself, net of any retry inside it
-                    // (whose capture and decode are their own phases).
-                    const entry = phases.get('sample') ?? { calls: 0, ms: 0 };
-                    entry.calls += 1;
-                    entry.ms += performance.now() - sampleStart - retryMs;
-                    phases.set('sample', entry);
-                }
-                record.sampled = sampled;
-                record.dropped = dropped;
-                record.retried = retried;
-                if (grew) {
-                    await timed('shrink', () =>
-                        cdp.send(
-                            'Emulation.setDeviceMetricsOverride',
-                            {
-                                width: vp.width,
-                                height: vp.height,
-                                deviceScaleFactor: 1,
-                                mobile: false,
-                            },
-                            sessionId,
-                        ),
-                    );
-                }
             }
         }
+        currentStep = 'contrast: the verdict';
         const planKeys = new Set(plan.map((j) => j.key));
         const missing = plan.filter((j) => !done.has(j.key)).map((j) => j.key);
         const twice = [...done].filter(([, n]) => n !== 1).map(([key, n]) => `${key} (${n}x)`);
@@ -1267,8 +1406,8 @@ try {
             failed = true;
             console.error(`✗ contrast: ${sheetClassesWrong([...contrastClasses])}`);
         } else if (dim.length === 0) {
-            // No tick over a walk that missed or repeated a job.
-            if (walkOk) {
+            // No tick over a walk that missed or repeated a job, or refused one.
+            if (walkOk && refused.length === 0) {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels — ${took()}`,
@@ -1285,7 +1424,12 @@ try {
         }
     } catch (err) {
         failed = true;
-        console.error(`✗ contrast: ${err.message}`);
+        console.error(`✗ contrast: ${err.message} (on ${currentStep}) — ${took()}`);
+    }
+    if (refused.length > 0) {
+        failed = true;
+        console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
+        for (const line of refused) console.error(`    ${line}`);
     }
     // Printed whatever the verdict, a pass that threw included: a slow red
     // run is exactly the one whose phases someone needs to read.
@@ -1330,6 +1474,7 @@ try {
             { width: CANVAS.width, height: CANVAS.height, deviceScaleFactor: 1, mobile: false },
             sessionId,
         );
+        currentStep = 'transparency: loading the canvas page';
         await cdp.send('Page.navigate', { url: probeUrl(CANVAS, '&screens=') }, sessionId);
         await waitForFlag(cdp, sessionId, '__probeReady');
         const themes = await evalJson(cdp, sessionId, 'window.__themes');
@@ -1342,10 +1487,19 @@ try {
         let clearRatio = 1;
         const clearClasses = new Set();
         for (const screen of CLEAR_SCREENS) {
-            for (const { id: theme, rows } of themes) {
+            for (const { id: theme, rows, sheetClass } of themes) {
                 for (const wornAll of rows === 0 ? [false] : [false, true]) {
-                    const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll ? 0xffff : 0, true);
+                    const flags = wornAll ? 0xffff : 0;
+                    currentStep = `transparency job ${screen}/${theme}/${flags}`;
+                    const nonce = `transparency/${screen}/${theme}/${flags}#${(prepareSerial += 1)}`;
+                    const prep = await contrastPrepare(cdp, sessionId, screen, theme, flags, true, nonce);
                     for (const cls of prep.sheetClasses ?? []) clearClasses.add(cls);
+                    // The same echo checks as pass 4's, thrown: this pass
+                    // stops at its first problem.
+                    const echo = (why) => {
+                        if (why.length > 0) throw new Error(`${screen} / theme ${theme}: ${why.join('; ')}`);
+                    };
+                    echo(paintEcho({ screen, look: theme, flags, sheetClass }, prep, nonce, CANVAS.width, CANVAS.height));
                     if (prep.targets.length === 0) {
                         throw new Error(`${screen} prepared no figure boxes — vacuous green.`);
                     }
@@ -1361,7 +1515,12 @@ try {
                             await cdp.send('Emulation.setDefaultBackgroundColorOverride', {}, sessionId);
                         }
                     };
+                    const sized = (shot) =>
+                        shot.width === CANVAS.width && shot.height === CANVAS.height
+                            ? []
+                            : [`the shot is ${shot.width}x${shot.height} where the job is ${CANVAS.width}x${CANVAS.height}`];
                     let img = await clearShot();
+                    echo(sized(img));
                     if (img.bpp !== 4) {
                         // Measured with the transparency longhands removed: an
                         // overlay that paints a ground over the whole frame comes
@@ -1384,8 +1543,10 @@ try {
                             'every pixel outside the plates is fully opaque — the overlay painted a ground.',
                         );
                     }
-                    let targets = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                    const job = { pass: 'transparency', viewport: 'canvas', screen, look: theme, flags: wornAll ? 0xffff : 0 };
+                    const firstRead = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                    echo(liveEcho(firstRead, nonce, CANVAS.width, CANVAS.height));
+                    let targets = firstRead.boxes;
+                    const job = { pass: 'transparency', viewport: 'canvas', screen, look: theme, flags };
                     const record = {
                         key: jobKey(job),
                         ...job,
@@ -1428,8 +1589,10 @@ try {
                     if (found.length > 0) {
                         await sleep(250);
                         img = await clearShot();
+                        echo(sized(img));
                         const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                        if (again.length === targets.length) targets = again;
+                        echo(liveEcho(again, nonce, CANVAS.width, CANVAS.height));
+                        if (again.boxes.length === targets.length) targets = again.boxes;
                         ({ found, values } = sample(img));
                     }
                     for (const { t, ground, worst } of values) {
@@ -1449,6 +1612,9 @@ try {
                     }
                     record.sampled = values.filter((v) => v.worst !== undefined).length;
                     record.dropped = values.length - record.sampled;
+                    if (targets.length > 0 && record.sampled === 0) {
+                        echo([`${targets.length} boxes and none sampled over either ground`]);
+                    }
                     boxes += counted;
                     dim.push(...found);
                 }
@@ -1475,7 +1641,7 @@ try {
         }
     } catch (err) {
         failed = true;
-        console.error(`✗ transparency: ${err.message}`);
+        console.error(`✗ transparency: ${err.message} (on ${currentStep})`);
     }
     cdp.close();
     {

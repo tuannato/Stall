@@ -2107,6 +2107,32 @@ const CONTRAST_TEXT = [
     '.item-ic',
 ].join(', ');
 
+/**
+ * What one prepare hands back, echoing what it was asked for (step 3a, the
+ * step-3 critic's P1 2): the runner's nonce, the combination it painted, the
+ * viewport it measured, and the look classes this one paint wore — so a
+ * paint that is not the job's is refused before anything is sampled, rather
+ * than measured and counted as the job's.
+ */
+type ContrastPrepared = {
+    targets: ContrastTarget[];
+    pageH: number;
+    sheetClasses: string[];
+    nodes: number;
+    nonce: string;
+    painted: { screen: string; look: number; flags: number };
+    vw: number;
+    vh: number;
+};
+
+/** The live boxes, with the nonce of the prepare that collected their nodes and the viewport now. */
+type ContrastLive = {
+    nonce: string | undefined;
+    vw: number;
+    vh: number;
+    boxes: (ContrastTarget & { i: number })[];
+};
+
 declare global {
     interface Window {
         __contrastPrepare: (
@@ -2114,10 +2140,11 @@ declare global {
             themeId: number,
             flags: number,
             neutral: boolean,
-        ) => { targets: ContrastTarget[]; pageH: number; sheetClasses: string[]; nodes: number };
+            nonce: string,
+        ) => ContrastPrepared;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
-        __contrastBoxes: () => (ContrastTarget & { i: number })[];
+        __contrastBoxes: () => ContrastLive;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -2131,7 +2158,7 @@ declare global {
         __noDecorScreens: string[];
         __canvasScreens: string[];
         /** Each measured look's id, and how many decoration rows it has — none means no worn half. */
-        __themes: { id: number; rows: number }[];
+        __themes: { id: number; rows: number; sheetClass: string }[];
         __probeReady: boolean;
     }
 }
@@ -2169,7 +2196,11 @@ window.__contrastScreens = contrastScreens(
 window.__contrastPlan = () => contrastPlan(measuredLooks());
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
-window.__themes = measuredLooks().map((look) => ({ id: look.id, rows: look.rows.length }));
+window.__themes = measuredLooks().map((look) => ({
+    id: look.id,
+    rows: look.rows.length,
+    sheetClass: look.theme.sheetClass,
+}));
 
 /** True when any ancestor up to the stall carries a live transform. */
 function insideTransform(node: HTMLElement): boolean {
@@ -2185,6 +2216,8 @@ function insideTransform(node: HTMLElement): boolean {
 
 /** The nodes the last `__contrastPrepare` blanked, for late box re-reads. */
 let preparedNodes: HTMLElement[] = [];
+/** The runner's nonce for that prepare, echoed with every re-read. */
+let preparedNonce: string | undefined;
 
 /** One node's sample box and static fields, or nothing worth sampling. */
 function targetFor(node: HTMLElement): ContrastTarget | undefined {
@@ -2309,8 +2342,11 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
  * the neighbouring selected tab's ground — 1.20:1 reported on a dock whose
  * DOM held nothing but cream at those coordinates.
  */
-window.__contrastBoxes = () =>
-    preparedNodes
+window.__contrastBoxes = () => ({
+    nonce: preparedNonce,
+    vw: window.innerWidth,
+    vh: window.innerHeight,
+    boxes: preparedNodes
         // Each box carries its node's index among the prepared nodes: stable
         // DOM order, so a box the page drops does not renumber the rest in
         // the runner's per-box dump (`scripts/contrast-dump.mjs`).
@@ -2318,7 +2354,8 @@ window.__contrastBoxes = () =>
             const target = targetFor(node);
             return target === undefined ? undefined : { ...target, i };
         })
-        .filter((t): t is ContrastTarget & { i: number } => t !== undefined);
+        .filter((t): t is ContrastTarget & { i: number } => t !== undefined),
+});
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -2365,13 +2402,22 @@ function freezeAnimations(): void {
 }
 window.__contrastFreeze = freezeAnimations;
 
-window.__contrastPrepare = (screen, themeId, flags, neutral) => {
+window.__contrastPrepare = (screen, themeId, flags, neutral, nonce) => {
+    preparedNonce = nonce;
+    const echo = {
+        nonce,
+        painted: { screen, look: themeId, flags },
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+    };
     // An id this page cannot paint throws rather than falling back: a
     // fallback look is the measurement the class echo exists to refuse.
     const look = lookById(themeId);
     if (!looksFor(screen).includes(look)) {
-        // The apex can only wear the default look — see `looksFor`.
-        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0 };
+        // The apex can only wear the default look — see `looksFor`. The plan
+        // never asks for this; the runner refuses a job with no targets.
+        preparedNodes = [];
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, ...echo };
     }
     if (neutral) {
         paint(NEUTRAL_SCREEN, look, []);
@@ -2445,6 +2491,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral) => {
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
         // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
         nodes: preparedNodes.length,
+        ...echo,
     };
 };
 

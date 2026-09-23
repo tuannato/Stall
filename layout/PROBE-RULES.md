@@ -1902,3 +1902,41 @@ plan's size is pinned by value — 170 phone, 191 desk, 22 canvas jobs
 (`the-contrast-plan-is-every-job-the-pass-owes`). The ten door-under-a-look-
 that-cannot-wear-it prepares are no longer made (`canWear` keeps them out of
 the plan); the dump's 4575 boxes are identical.
+
+**Every contrast job is held to itself before it is sampled.** Each prepare
+carries a nonce of the runner's and echoes it back with what it painted
+(screen, look id, flags), the viewport it measured and the `t-*` classes
+that one paint wore; every box re-read echoes the nonce of the prepare it
+read from and the viewport then. A job is refused — the run fails, one line
+per job, and nothing of it is sampled — when the prepare answers for another
+nonce or another combination, when the page measured a viewport that is not
+the job's (the grown height on the re-prepare), when the paint wore a class
+that is not the job's look (exactly that one class; on the door, among
+them), when the shot is not the job's width by its grown height, when the
+re-read answers for another prepare, when a planned job collected no
+targets, and when a job with targets sampled none. Pass 5 throws on the
+same checks. **Proved red** by one run with five planted defects, each
+named on its own line: the grow skipped ("the page measured 390x844 where
+the job is 390x1157"), a second prepare between the shot and the re-read
+("the boxes were re-read from prepare an-intruding-prepare where the job's
+last was mobile/offers/3/0#10"), the boxes moved off the shot ("13 boxes and
+none sampled — every one fell outside the 390x1596 shot"), the viewport
+shrunk before the capture ("the shot is 390x844 where the job is
+390x1611"), and the page painting Neo's row where Modern was asked ("the
+paint wore t-neo where the job's look is t-modern").
+
+**Nothing the runner waits on is unbounded.** Every CDP command carries a
+30 s bound (`devtools`' `timeoutMs`; a command still waiting when the socket
+closes rejects at once), and the build a 300 s one. **Proved red** by a
+page-side promise that never settles: "CDP Runtime.evaluate did not answer
+within 30s (on contrast job desktop/offers/1/0)". And the ceiling is a
+watchdog: past 300 s of wall clock the run stops, kills every process group
+it started and names the step — **proved** at a planted 75 s: "past the 75s
+ceiling while on contrast job mobile/unresolved/2/0 — the watchdog stops the
+run", exit 1, no Chrome, no preview and neither port left behind.
+
+**Where a contrast page's load goes:** 2.8–3.8 s of each is the probe module's
+own billboard check (every look painted on `offers` once per decoration row,
+each paint's whole computed style read), which runs on every load, the
+contrast pass's included, where its result is never read. The page is loaded
+per viewport and once more at the 60 s mark: about 11 s a run.

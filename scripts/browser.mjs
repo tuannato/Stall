@@ -57,8 +57,17 @@ export const FIXED_CLOCK = `(() => {
     globalThis.Date = Fixed;
 })();`;
 
-/** The smallest CDP client that does this job: request/response plus events. */
-export function devtools(url) {
+/**
+ * The smallest CDP client that does this job: request/response plus events.
+ *
+ * `timeoutMs`, when given, bounds every command: one that has not answered
+ * by then rejects, naming the method, instead of waiting for ever on a page
+ * that hung or a target that crashed (the step-3 critic's item 5 — the
+ * probe's prepare had no bound at all). A command can carry its own bound
+ * as the fourth argument of `send`. And every command still waiting when the
+ * socket closes — Chrome died — rejects at once.
+ */
+export function devtools(url, { timeoutMs } = {}) {
     const ws = new WebSocket(url);
     let nextId = 1;
     const waiting = new Map();
@@ -70,15 +79,32 @@ export function devtools(url) {
         if (msg.error) pending.reject(new Error(JSON.stringify(msg.error)));
         else pending.resolve(msg.result);
     });
+    ws.addEventListener('close', () => {
+        for (const [id, pending] of waiting) {
+            waiting.delete(id);
+            pending.reject(new Error(`the DevTools socket closed while ${pending.method} was waiting`));
+        }
+    });
     return {
         opened: new Promise((resolve, reject) => {
             ws.addEventListener('open', resolve, { once: true });
             ws.addEventListener('error', reject, { once: true });
         }),
-        send(method, params = {}, sessionId) {
+        send(method, params = {}, sessionId, { timeoutMs: bound = timeoutMs } = {}) {
             const id = nextId++;
             return new Promise((resolve, reject) => {
-                waiting.set(id, { resolve, reject });
+                let timer;
+                const settle = (fn) => (value) => {
+                    clearTimeout(timer);
+                    fn(value);
+                };
+                waiting.set(id, { method, resolve: settle(resolve), reject: settle(reject) });
+                if (bound !== undefined) {
+                    timer = setTimeout(() => {
+                        if (!waiting.delete(id)) return;
+                        reject(new Error(`CDP ${method} did not answer within ${bound / 1000}s`));
+                    }, bound);
+                }
                 ws.send(JSON.stringify({ id, method, params, sessionId }));
             });
         },

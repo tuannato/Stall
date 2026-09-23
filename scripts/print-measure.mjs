@@ -207,7 +207,8 @@ try {
             await evaluate(
                 cdp,
                 sessionId,
-                `(async () => { window.__contrastPrepare(${JSON.stringify(screen)}, ${theme}, false); ` +
+                // Bare (flags 0), from the neutral screen, under a nonce of its own.
+                `(async () => { window.__contrastPrepare(${JSON.stringify(screen)}, ${theme}, 0, true, 'print-measure'); ` +
                     `await document.fonts.ready; ` +
                     `await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))); })()`,
             );
