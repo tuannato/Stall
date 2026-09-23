@@ -15,6 +15,7 @@
 import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
+import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -25,7 +26,6 @@ import {
 } from '../src/ui/obsSizes';
 import {
     CANVAS_SCREENS,
-    GEOMETRY_ONLY_SCREENS,
     NO_DECOR_SCREENS,
     SCREENS,
     STATE_SCREENS,
@@ -2125,6 +2125,8 @@ declare global {
          */
         __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
         __contrastScreens: string[];
+        /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
+        __contrastPlan: () => ContrastJob[];
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
         __canvasScreens: string[];
@@ -2150,18 +2152,21 @@ declare global {
  * over black AND white, rather than paying for it twice here. The two
  * long-name screens are geometry for the sticker rule and put no figure on a
  * ground this list does not already hold. `GEOMETRY_ONLY_SCREENS` is the same
- * judgement written down for the page screens.
+ * judgement written down for the page screens. The rule itself is
+ * `contrastScreens` in `contrastPlan.ts`, shared with the plan below.
  */
-window.__contrastScreens = screensForViewport().filter(
-    (name) =>
-        // `broadcast-ticker` since 2026-09-21: the ribbon's figures are the
-        // first money on a moving node, sampled at the pinned offset the
-        // fixture holds them at. The other three ticker screens are geometry
-        // (the quotes pass and pass 5 share its ink; `-live` is the reduce
-        // pass's) — `PROBE-RULES.md`, "The ticker".
-        (!NO_DECOR_SCREENS.has(name) || name === 'broadcast' || name === 'broadcast-ticker') &&
-        !GEOMETRY_ONLY_SCREENS.has(name),
+window.__contrastScreens = contrastScreens(
+    window.innerWidth,
+    new URLSearchParams(location.search).get('viewport') === 'canvas',
+    measuredLooks(),
 );
+/*
+ * The whole pass as a list of jobs (step 3a, the step-3 critic's item 7):
+ * the runner walks this and nothing else, and holds the jobs it did against
+ * it at the end. The screens at this page's own width are `__contrastScreens`
+ * above, which the runner compares with the plan's at every viewport.
+ */
+window.__contrastPlan = () => contrastPlan(measuredLooks());
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = measuredLooks().map((look) => ({ id: look.id, rows: look.rows.length }));

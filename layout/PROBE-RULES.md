@@ -1885,3 +1885,20 @@ on Modern or Rural, every one up, none with a different box, none across
 Retries went from 89 to 0 and the pass from 155 s to 114 s. Two runs of the
 hermetic tree: **4575 boxes of 4575 identical**.
 
+
+**The pass walks a plan, and holds its walk to it.** `layout/contrastPlan.ts`
+lists every job — viewport, screen, look, decoration flags as a bitmask (`0`
+or `WORN_ALL`, so a variant per mood is a new value, not a new schema) — and
+the probe page publishes it (`__contrastPlan()`; Node cannot import the
+fixtures). The runner walks that list and nothing else, checks at each
+viewport that the plan's screens are the ones the page itself samples there
+(`__contrastScreens`, built by the same `contrastScreens`), and at the end
+requires every planned job done exactly once: **proved red** by dropping one
+canvas job and running another twice — "the walk did not do every planned
+job exactly once (383 planned, 382 done) — never done:
+canvas/shop-window-touch-quotes-pay/2/65535; done more than once:
+canvas/shop-window-wall/1/0 (2x)", and no tick on the contrast line. The
+plan's size is pinned by value — 170 phone, 191 desk, 22 canvas jobs
+(`the-contrast-plan-is-every-job-the-pass-owes`). The ten door-under-a-look-
+that-cannot-wear-it prepares are no longer made (`canWear` keeps them out of
+the plan); the dump's 4575 boxes are identical.
