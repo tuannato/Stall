@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { SERVED_SHEETS, appSheets } from '../../scripts/sheet-roles.mjs';
 import {
     DEFAULT_THEME_ID,
     NEO_CITY_THEME_ID,
@@ -24,27 +25,22 @@ import {
     themeVars,
 } from '../domain/theme';
 
-const UI_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /**
- * Every sheet this app serves. The tail (everything after `stall.css`) is
- * also what the ink-over-ground rule is measured on: the three looks, and
- * the two screen-owned sheets that carry their own palette decisions —
- * `broadcast.css` for the stream overlay and `obsGuide.css` for the studio
- * section that explains it. A sheet missing from this list is a sheet no
- * guard here can see.
+ * Every sheet this app serves — the base, the three looks and the
+ * screen-owned sheets — from the one role table (`scripts/sheet-roles.mjs`,
+ * held to the tree by `every-served-sheet-is-on-the-guard-list`), so a sheet
+ * added to the app is a sheet these guards read. Everything but the base is
+ * also what the ink-over-ground rule is measured on: the looks, and the
+ * screen sheets that carry their own palette decisions.
  */
-const SHEETS = [
-    'stall.css',
-    'theme-modern.css',
-    'theme-neo.css',
-    'theme-rural.css',
-    'broadcast.css',
-    'obsGuide.css',
-    'window.css',
-];
+const SHEETS = appSheets().map((sheet) => sheet.path);
+const NOT_BASE = appSheets()
+    .filter((sheet) => sheet.role !== 'base')
+    .map((sheet) => sheet.path);
 
 const stripped = (file: string): string =>
-    readFileSync(join(UI_DIR, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    readFileSync(join(ROOT, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
 const allCss = (): string => SHEETS.map(stripped).join('\n');
 
@@ -261,7 +257,7 @@ describe('a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground', () => {
      */
     it('every theme rule declaring both keeps ink and ground in one world', () => {
         const offences: string[] = [];
-        for (const file of SHEETS.slice(1)) {
+        for (const file of NOT_BASE) {
             for (const { selector, body } of parseRules(stripped(file))) {
                 const ink = kindOf(lastDecl(body, ['color']));
                 const ground = kindOf(lastDecl(body, ['background', 'background-color']));
@@ -281,12 +277,14 @@ describe('the-reduce-block-is-the-last-rule-in-its-sheet', () => {
      * a same-specificity mover appended below it re-wins and runs for every
      * reduced-motion visitor. stall.css's block said "STAYS LAST" and had
      * 470 lines after it when the marquee landed (2026-09-09) — nothing
-     * moving among them, which is luck. Enforced now, for every sheet that
-     * declares one.
+     * moving among them, which is luck. Enforced now, for every served sheet
+     * that declares one — the kit's and the static pages' too, read from the
+     * role table.
      */
     it('ends every sheet that has a reduce block with that block', () => {
-        for (const sheet of SHEETS) {
-            const css = readFileSync(join(UI_DIR, sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(SERVED_SHEETS.length).toBeGreaterThan(SHEETS.length);
+        for (const { path: sheet } of SERVED_SHEETS) {
+            const css = readFileSync(join(ROOT, sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
             const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
             if (at < 0) {
                 continue;
