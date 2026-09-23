@@ -601,7 +601,20 @@ function selectionBar(
  * view: a camera pointed at the code must decode what the screen shows.
  */
 function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTMLElement {
-    const box = el('div', 'sw-plate sw-paying');
+    /*
+     * `item` is the card, not a row: the class every look dresses its list
+     * cards through (`.item` in `stall.css`, `.t-* .item` in each theme
+     * sheet, `.att-pinstripe .item` among the decorations), worn here for
+     * its ground alone. The band had none, so its text — the figure a
+     * wallet signs among it — sat straight on whatever the look and its
+     * decorations paint behind the stall: Neo's rain read 2.89:1 under a
+     * line's figure the day the probe first measured this screen at its
+     * own 1920x1080 (`PROBE-RULES.md`, 2026-09-24). The class brings the
+     * look's surface, border, radius and shadow and nothing a row has —
+     * no head, no areas — so a look or a mood carries the band with the
+     * cards above it, and a workshop look dresses it by dressing `.item`.
+     */
+    const box = el('div', 'sw-plate sw-paying item');
     box.setAttribute('data-role', 'window-paying');
     // The composed URI where the payee sweep can read it: `qrSvg` puts a
     // path in the DOM and nothing else, and a wall code with no sibling

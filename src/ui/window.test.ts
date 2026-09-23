@@ -1572,6 +1572,63 @@ describe('a-touch-wall-strip-says-the-total-and-composes-one-payment', () => {
     });
 });
 
+describe('the-wall-payment-plate-stands-on-the-lists-card', () => {
+    /**
+     * The band had no ground of its own, so its text — the figure a wallet
+     * signs among it — sat on whatever the look paints behind the stall, and
+     * Neo's rain crossed a line's figure at 2.89:1 the day the probe first
+     * shot this screen at its real 1080 (2026-09-24, `PROBE-RULES.md`). The
+     * contrast pass is what proves the ground is there; this pins the two
+     * halves it rests on.
+     */
+    const wall = () =>
+        paint(
+            windowView(
+                { show: 'quotes', mode: 'browse', touch: true },
+                {
+                    prices: new Map([[BEANS, QUOTE_USD]]),
+                    selection: new Map([[BEANS, 2n]]),
+                    windowPaying: {
+                        sats: 525_000n,
+                        uri: `${ADDR}?amount=5250.00`,
+                        selection: new Map([[BEANS, 2n]]),
+                        prices: new Map([[BEANS, QUOTE_USD]]),
+                        names: new Map([[BEANS, 'Roasted Beans']]),
+                        borrowed: new Set<string>(),
+                        unit: 'usd',
+                        atMs: Date.now(),
+                    },
+                } as unknown as Partial<StallView>,
+            ),
+        );
+
+    it('wears the class every look dresses its cards through, and nothing a row has', () => {
+        const plate = wall().querySelector('[data-role="window-paying"]')!;
+        expect(plate.classList.contains('item'), 'the look’s own card').toBe(true);
+        // Outside the list, so the rules that dress a ROW of it — Rural's
+        // tilt on `.items .item:nth-child` — never reach the payment.
+        expect(plate.closest('.items')).toBeNull();
+        expect(plate.querySelector('.item-head')).toBeNull();
+    });
+
+    it('draws the frame in the slack around the band, so the list keeps its room', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8');
+        const at = css.indexOf('--sw-pay-pad-b:');
+        expect(at, 'the plate states its padding once').toBeGreaterThan(-1);
+        const block = css.slice(css.lastIndexOf('{', at), css.indexOf('}', at));
+        // The margin is the padding plus the looks' 1px card border, so the
+        // row the band takes is the height its content takes.
+        expect(block).toMatch(/padding:\s*var\(--sw-pay-pad-b\) var\(--sw-pay-pad-i\);/);
+        expect(block).toMatch(
+            /margin:\s*calc\(-1 \* var\(--sw-pay-pad-b\) - 1px\) calc\(-1 \* var\(--sw-pay-pad-i\) - 1px\);/,
+        );
+        // `.item` clips, and a clipping grid item has no automatic minimum
+        // height: a band taller than the body shrank its row and centred
+        // itself up over the sign.
+        expect(block).toMatch(/overflow:\s*visible;/);
+    });
+});
+
 describe('the-touch-switch-is-the-sellers-and-needs-the-pay-code', () => {
     /**
      * One switch on the composing sheet, revealed by Browse (cycle has no

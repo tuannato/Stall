@@ -913,6 +913,38 @@
     row-gap: 12px;
 }
 
+/*
+ * The band's ground is the list's own card (`item` on the plate, in
+ * `payingPlate`): each look's surface, border, radius and shadow, and
+ * whatever a decoration does to a card (Pinstripe's edge), so no
+ * decoration paints behind the figure a wallet signs. It had none until
+ * 2026-09-24, and Neo's rain crossed a line's figure at 2.89:1 the day
+ * the probe first shot this screen at its own 1080 (`PROBE-RULES.md`).
+ *
+ * It costs the list nothing, by construction: a negative margin the size
+ * of the padding plus the looks' 1px card border draws the frame in the
+ * slack already around the band — the 20px gap above it, the body's 24px
+ * below and 44px beside — so the content box, every box inside it and the
+ * row the band takes are where they were on 2026-09-22, and the list keeps
+ * its room at every size (Pinstripe's border is 2px, and costs 2px). The
+ * price, stated: the card stands 17px proud of the list cards' edges. The
+ * other way — on their edges, padding out of the columns — rewraps the
+ * text, and at 768x1024 the rewrap took the list's last cut row.
+ */
+.stall.shop-window[data-touch='on'] .sw-paying {
+    --sw-pay-pad-b: 12px;
+    --sw-pay-pad-i: 16px;
+    width: auto;
+    justify-self: stretch;
+    /* `.item` clips, and a grid item that clips has no automatic minimum
+       height: a band taller than the body then shrank its row to the room
+       left and centred itself up over the sign (measured at 768x1024 on
+       Neo, where the band is taller than the body on main already). */
+    overflow: visible;
+    padding: var(--sw-pay-pad-b) var(--sw-pay-pad-i);
+    margin: calc(-1 * var(--sw-pay-pad-b) - 1px) calc(-1 * var(--sw-pay-pad-i) - 1px);
+}
+
 .stall.shop-window[data-touch='on'] .sw-paying .qr {
     grid-area: qr;
 }
