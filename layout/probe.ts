@@ -12,13 +12,10 @@
  * in a real browser, and writes a verdict into the DOM for the runner to read.
  * It asserts what only a browser can see.
  */
-import { PAY_QR_NARROWEST_PX, renderStall, WINDOW_MIN_PX } from '../src/ui/render';
-import { decodeTheme, SHIPPED_THEMES } from '../src/domain/theme';
-import {
-    attachmentsForTheme,
-    wornAttachments,
-    type ShippedAttachment,
-} from '../src/domain/attachments';
+import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
+import type { ShippedAttachment } from '../src/domain/attachments';
+import { lookById, looksFor, measuredLooks, wornOf, type Look } from './looks';
+import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -492,10 +489,37 @@ function describe(node: Element): string {
     return `${node.tagName.toLowerCase()}${cls === '' ? '' : `.${cls.split(/\s+/).join('.')}`}`;
 }
 
-function paint(screen: string, themeId: number, worn: readonly ShippedAttachment[]): void {
+/**
+ * The `t-*` classes on every painted `.stall`, over every paint this page
+ * made — echoed in the verdict as `sheetClasses`, the way `reducedMotion` and
+ * `portraitTall` are, so the runner can refuse a pass that measured a look it
+ * did not ask for. The workshop critic's P1: a kit page that painted Modern
+ * by id anywhere reads as a skeleton that passed, and only the class the tree
+ * actually wore can tell the two apart
+ * (`the-workshop-probe-measures-the-workshop-look`).
+ */
+const sheetClassesPainted = new Set<string>();
+
+function sheetClassesOn(root: ParentNode): string[] {
+    const out = new Set<string>();
+    for (const stall of root.querySelectorAll('.stall')) {
+        for (const cls of stall.classList) {
+            if (cls.startsWith('t-')) {
+                out.add(cls);
+            }
+        }
+    }
+    return [...out].sort();
+}
+
+/** Paint one combination. A look is an object from `looks.ts`, never an id. */
+function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
-    const view = { ...SCREENS[screen]!, theme: decodeTheme(themeId), worn };
+    const view = { ...SCREENS[screen]!, theme: look.theme, worn };
     renderStall(root, view, handlers);
+    for (const cls of sheetClassesOn(root)) {
+        sheetClassesPainted.add(cls);
+    }
 }
 
 /**
@@ -506,9 +530,9 @@ function paint(screen: string, themeId: number, worn: readonly ShippedAttachment
  * is measured alone, and then the all-worn case is measured once — the only
  * combination a picker can actually produce.
  */
-function wornVariants(themeId: number): readonly (readonly ShippedAttachment[])[] {
-    const rows = attachmentsForTheme(themeId);
-    const all = wornAttachments(themeId, 0xffff);
+function wornVariants(look: Look): readonly (readonly ShippedAttachment[])[] {
+    const rows = look.rows;
+    const all = wornOf(look, 0xffff);
     const singles = rows.map((row) => [row]);
     return [[], ...singles, ...(all.length > 1 ? [all] : [])];
 }
@@ -1231,11 +1255,11 @@ function reducedMotionLeaks(screen: string, themeLabel: string): Failure[] {
 
 function checkOverTime(
     screen: string,
-    themeId: number,
+    look: Look,
     themeLabel: string,
     worn: readonly ShippedAttachment[],
 ): Failure[] {
-    paint(screen, themeId, worn);
+    paint(screen, look, worn);
     const out = measure(screen, themeLabel);
     out.push(...reducedMotionLeaks(screen, themeLabel));
     // Queried after the paint, so these are the animations on the tree that is
@@ -1279,7 +1303,7 @@ function checkOverTime(
  * only — the probe's runtime is a budget, and the interaction a single row
  * could break that the full set does not needs a card to stage it.
  */
-function variantsFor(screen: string, themeId: number): readonly (readonly ShippedAttachment[])[] {
+function variantsFor(screen: string, look: Look): readonly (readonly ShippedAttachment[])[] {
     // The overlay wears nothing: `renderStall`'s broadcast branch keeps only
     // `slot: 'mood'` rows and mounts no ornament strip, so every worn variant
     // paints the same tree. One bare pass, and the driver skips its `wornAll`
@@ -1287,7 +1311,7 @@ function variantsFor(screen: string, themeId: number): readonly (readonly Shippe
     if (NO_DECOR_SCREENS.has(screen)) {
         return [[]];
     }
-    const all = wornVariants(themeId);
+    const all = wornVariants(look);
     if (!STATE_SCREENS.has(screen) || all.length < 2) {
         return all;
     }
@@ -1307,33 +1331,11 @@ function variantsFor(screen: string, themeId: number): readonly (readonly Shippe
  */
 function screensForViewport(): string[] {
     const canvas = new URLSearchParams(location.search).get('viewport') === 'canvas';
-    /*
-     * A wall screen is not in a pass narrower than the wall's own floor
-     * (2026-09-20).
-     *
-     * `renderStall` used to take the width itself, so a wall fixture at
-     * 390px quietly painted the ordinary stall here and measured that. The
-     * app settles wall-ness once per load now — a predicate reading a live
-     * width flipped under a rotation and threw away an open sheet — which
-     * left this pass painting the wall layout at a phone's width: 42
-     * failures per look of a screen the app cannot produce there.
-     *
-     * The first fix stripped `window` inside `paint()`, and a reviewer was
-     * right to call that a guard taught to look away: it restated the app's
-     * rule by hand and hid a case rather than declaring it out of scope.
-     * This is the matrix saying so instead — the same shape as the canvas
-     * split above, and `screensMeasured` reports what actually ran, so a
-     * pass that quietly measured the wrong side can be refused.
-     *
-     * The sheet that COMPOSES a wall link is not a wall screen: it paints on
-     * an ordinary stall, carries no `window`, and stays in every pass.
-     */
-    const wallFits = window.innerWidth >= WINDOW_MIN_PX;
-    return Object.keys(SCREENS).filter(
-        (name) =>
-            CANVAS_SCREENS.has(name) === canvas &&
-            (wallFits || SCREENS[name]!.window === undefined),
-    );
+    // The split itself lives in `screenSplit.ts` (the wall's own floor, the
+    // canvas line), shared with the workshop's shot plan so a screenshot is
+    // of exactly what was measured. A screen no measured look can wear is not
+    // measured at all: the door on a workshop page (`looksFor`).
+    return screensAt(window.innerWidth, canvas).filter((name) => looksFor(name).length > 0);
 }
 
 /**
@@ -1353,17 +1355,6 @@ function screensToRun(): string[] {
     return asked.split(',').filter((name) => name in SCREENS);
 }
 
-/**
- * The apex paints `view.theme ?? DEFAULT_THEME` and never fetches, so the
- * door can only ever wear the default look. A door-under-Neo combination is
- * a screen no visitor can reach: its red is a false alarm (measured — the
- * Neo mini ink over the door's light ground), and its green is budget spent
- * certifying nothing.
- */
-function themesFor(screen: string): readonly (typeof SHIPPED_THEMES)[number][] {
-    return screen === 'door' ? SHIPPED_THEMES.slice(0, 1) : [...SHIPPED_THEMES];
-}
-
 const failures: Failure[] = [];
 const measured = screensToRun();
 /**
@@ -1376,13 +1367,13 @@ const measured = screensToRun();
  */
 const withQuote = new Set<string>();
 for (const screen of measured) {
-    for (const theme of themesFor(screen)) {
-        for (const worn of variantsFor(screen, theme.id)) {
+    for (const look of looksFor(screen)) {
+        for (const worn of variantsFor(screen, look)) {
             const label =
                 worn.length === 0
-                    ? theme.label
-                    : `${theme.label} + ${worn.map((a) => a.label).join(' + ')}`;
-            failures.push(...checkOverTime(screen, theme.id, label, worn));
+                    ? look.label
+                    : `${look.label} + ${worn.map((a) => a.label).join(' + ')}`;
+            failures.push(...checkOverTime(screen, look, label, worn));
             // The tree `checkOverTime` measured is still mounted: it seeks the
             // animations it painted rather than repainting.
             // A pay screen owes a seller's figure. The several-items sheet
@@ -1450,16 +1441,20 @@ function paintSignature(): string {
     return parts.join('\n');
 }
 
-for (const theme of SHIPPED_THEMES) {
-    paint('offers', theme.id, []);
+// Every measured look — on a workshop page the kit's alone, judged against
+// its OWN row: a kit mood measured against `decodeTheme(0xff)` would be
+// measured against Modern's canvas (the workshop critic's P1).
+for (const look of measuredLooks()) {
+    const theme = look.theme;
+    paint('offers', look, []);
     const bare = paintSignature();
-    for (const row of attachmentsForTheme(theme.id)) {
-        paint('offers', theme.id, [row]);
+    for (const row of look.rows) {
+        paint('offers', look, [row]);
         const bill = (check: string, detail: string): void => {
             failures.push({ screen: 'billboard', theme: theme.label, check, detail });
         };
         if (row.slot === 'mood') {
-            const base = decodeTheme(theme.id);
+            const base = theme;
             const p = row.palette ?? {};
             const bg = p.bg ?? base.bg;
             const surface = p.surface ?? base.surface;
@@ -1523,13 +1518,13 @@ for (const theme of SHIPPED_THEMES) {
      * the eye, in the framework's review checklist, under each mood the row
      * can be worn with.
      */
-    const moods = attachmentsForTheme(theme.id).filter((row) => row.slot === 'mood');
-    const wearable = attachmentsForTheme(theme.id).filter((row) => row.slot !== 'mood');
+    const moods = look.rows.filter((row) => row.slot === 'mood');
+    const wearable = look.rows.filter((row) => row.slot !== 'mood');
     for (const mood of moods) {
-        paint('offers', theme.id, [mood]);
+        paint('offers', look, [mood]);
         const moodAlone = paintSignature();
         for (const row of wearable) {
-            paint('offers', theme.id, [mood, row]);
+            paint('offers', look, [mood, row]);
             if (paintSignature() === moodAlone) {
                 failures.push({
                     screen: 'billboard',
@@ -1549,15 +1544,15 @@ for (const theme of SHIPPED_THEMES) {
      * compared against the all-root dress; equality means every other row
      * was erased by the cascade.
      */
-    const rootRows = attachmentsForTheme(theme.id).filter(
+    const rootRows = look.rows.filter(
         (row) => row.paint === 'root' && row.slot !== 'mood',
     );
     if (rootRows.length > 1) {
         const singles = rootRows.map((row) => {
-            paint('offers', theme.id, [row]);
+            paint('offers', look, [row]);
             return paintSignature();
         });
-        paint('offers', theme.id, rootRows);
+        paint('offers', look, rootRows);
         const together = paintSignature();
         for (let i = 0; i < rootRows.length; i += 1) {
             if (together === singles[i]) {
@@ -1860,7 +1855,7 @@ declare global {
             screen: string,
             themeId: number,
             wornAll: boolean,
-        ) => { targets: ContrastTarget[] };
+        ) => { targets: ContrastTarget[]; pageH: number; sheetClasses: string[] };
         __contrastBoxes: () => ContrastTarget[];
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
@@ -1907,7 +1902,7 @@ window.__contrastScreens = screensForViewport().filter(
 );
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
-window.__themes = SHIPPED_THEMES.map((t) => t.id);
+window.__themes = measuredLooks().map((look) => look.id);
 
 /** True when any ancestor up to the stall carries a live transform. */
 function insideTransform(node: HTMLElement): boolean {
@@ -2059,12 +2054,15 @@ window.__opaqueBoxes = () =>
     });
 
 window.__contrastPrepare = (screen, themeId, wornAll) => {
-    if (screen === 'door' && themeId !== SHIPPED_THEMES[0]!.id) {
-        // The apex can only wear the default look — see themesFor.
-        return { targets: [], pageH: 0 };
+    // An id this page cannot paint throws rather than falling back: a
+    // fallback look is the measurement the class echo exists to refuse.
+    const look = lookById(themeId);
+    if (!looksFor(screen).includes(look)) {
+        // The apex can only wear the default look — see `looksFor`.
+        return { targets: [], pageH: 0, sheetClasses: [] };
     }
-    const worn = wornAll ? wornAttachments(themeId, 0xffff) : [];
-    paint(screen, themeId, worn);
+    const worn = wornAll ? wornOf(look, 0xffff) : [];
+    paint(screen, look, worn);
     // Freeze motion at an arbitrary instant so a streak is on screen, not
     // between frames.
     for (const a of document.getAnimations()) {
@@ -2129,6 +2127,8 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
             document.documentElement.scrollHeight,
             scrollRegion?.scrollHeight ?? 0,
         ),
+        // What this one paint wore, for the runner's class audit.
+        sheetClasses: sheetClassesOn(document.getElementById('app')!),
     };
 };
 
@@ -2166,6 +2166,13 @@ result.textContent = JSON.stringify(
         portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
             .matches,
         screensMeasured: measured,
+        /*
+         * Every `t-*` class a painted `.stall` wore — the look this page
+         * actually measured, not the one it was asked for. The runner refuses
+         * a pass whose set is not exactly what it ran (`{t-workshop}` for the
+         * kit, the three shipped classes otherwise).
+         */
+        sheetClasses: [...sheetClassesPainted].sort(),
         clipSkips,
         clipChecks,
         screensWithQuote: [...withQuote],

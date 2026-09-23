@@ -60,3 +60,14 @@
     align-items: center;
     cursor: pointer;
 }
+
+/* A `workshop/look.json` that does not read: the validator's list, in red. */
+#gallery-ui pre.g-problem {
+    margin: 8px 0 0;
+    color: #ff7b72;
+    white-space: pre-wrap;
+    font: inherit;
+    font-size: 11px;
+    max-height: 40vh;
+    overflow: auto;
+}

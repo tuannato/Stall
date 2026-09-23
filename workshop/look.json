@@ -1,0 +1,10 @@
+{
+  "label": "Untitled workshop look",
+  "base": "modern",
+  "palette": {},
+  "shape": {},
+  "tierCeilings": [7, 9, 12],
+  "overlayTierCeilings": [5, 7, 9],
+  "moods": [],
+  "decorations": []
+}

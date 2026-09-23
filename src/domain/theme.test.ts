@@ -11,6 +11,7 @@ import {
     NEO_CITY_THEME_ID,
     RURAL_THEME_ID,
     SHIPPED_THEMES,
+    WORKSHOP_THEME_ID,
     contrastRatio,
     decodeTheme,
     isShippedThemeId,
@@ -18,6 +19,7 @@ import {
     type DecodedTheme,
     type Rgb,
 } from './theme';
+import { SHIPPED_ATTACHMENTS } from './attachments';
 
 function rgbOf(cssValue: string): Rgb {
     const m = cssValue.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
@@ -176,6 +178,30 @@ describe('theme-table-ids-are-pinned', () => {
             expect(rgbOf(vars['--s-accent']!)).toEqual(theme.accent);
             expect(rgbOf(vars['--s-muted']!)).toEqual(theme.muted);
         }
+    });
+});
+
+describe('the-scratch-id-is-not-a-shipped-look', () => {
+    /**
+     * `0xff` is the workshop's (K2, 2026-09-23): the look a creator is
+     * designing in `workshop/`, built in `layout/` and handed to the renderer
+     * as a row object. It must never be a row here, or a published `0xff`
+     * would paint whatever this table said while the kit painted something
+     * else under the same number. Pinned by literal value, because every
+     * other assertion below reads its expectation from the symbol it tests.
+     * The kit's own half — that the look it builds carries this id — is
+     * `layout/looks.test.ts`, which this directory cannot import.
+     */
+    it('is 0xff, and no row, offer or decoration names it', () => {
+        expect(WORKSHOP_THEME_ID).toBe(0xff);
+        expect(isShippedThemeId(WORKSHOP_THEME_ID)).toBe(false);
+        const decoded = decodeTheme(WORKSHOP_THEME_ID);
+        expect(decoded.known).toBe(false);
+        // An id with no row wears the default's row, so the kit's class can
+        // never come from this table.
+        expect(decoded.sheetClass).toBe(DEFAULT_THEME.sheetClass);
+        expect(SHIPPED_THEMES.map((row) => row.id)).not.toContain(WORKSHOP_THEME_ID);
+        expect(SHIPPED_ATTACHMENTS.filter((row) => row.themeId === WORKSHOP_THEME_ID)).toEqual([]);
     });
 });
 

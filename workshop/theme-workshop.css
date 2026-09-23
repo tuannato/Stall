@@ -1,0 +1,19 @@
+/*
+ * The workshop look's stylesheet — yours to write.
+ *
+ * Every rule sits under `.t-workshop`, the class the renderer puts on the
+ * stall when it paints the look `workshop/look.json` describes. To start from
+ * one of Stall's own looks, `pnpm workshop:start modern` (or `neo`, `rural`)
+ * copies that look's sheet here, re-scoped to `.t-workshop`, and its row into
+ * `look.json`. It refuses to write over a sheet that has a rule in it.
+ *
+ * `pnpm workshop:lint` reads this file for what needs no browser: every
+ * selector under `.t-workshop`; no `@import`, no `@font-face`, no
+ * `url(data:…)` and no `url()` to another site — art goes in `workshop/art/`,
+ * referenced with a relative `url()`; keyframes named `wk-…`; and the
+ * reduced-motion block below stays the LAST rule in the file, where anything
+ * that moves is stilled. `pnpm workshop:probe` measures the rest in a browser.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+}

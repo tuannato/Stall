@@ -52,8 +52,15 @@ function read(p: string): string {
     return strip(readFileSync(p, 'utf8'));
 }
 
+/**
+ * An import (`from '…'`, a bare `import '…'`, a CSS `@import` or `url()`)
+ * whose path climbs out into `layout/` or `workshop/`.
+ */
+const LAYOUT_OR_WORKSHOP =
+    /(?:from\s*|import\s*|@import\s*|url\(\s*)['"]?(?:\.\.\/)+(?:layout|workshop)\//;
+
 describe('directory-walls', () => {
-    it('keeps domain pure, net off document, ui off chronik, and keys empty', () => {
+    it('keeps domain pure, net off document, ui off chronik, the harness out, and keys empty', () => {
         const files = walk(SRC);
         for (const file of files) {
             const rel = relative(SRC, file).replaceAll('\\', '/');
@@ -73,6 +80,13 @@ describe('directory-walls', () => {
                 expect(text, rel).not.toMatch(/from ['"]ecash-agora['"]/);
             }
             expect(text, rel).not.toMatch(/from ['"]ecash-wallet['"]/);
+            // The layout harness and the workshop kit are dev-only, built by
+            // their own configs; nothing the app serves may reach them. Tests
+            // are not served, and may read the harness (`gallery-is-not-served`
+            // names the kit's skeleton label).
+            if (!rel.endsWith('.test.ts')) {
+                expect(text, rel).not.toMatch(LAYOUT_OR_WORKSHOP);
+            }
         }
         const keys = readdirSync(join(SRC, 'keys'));
         expect(keys).toEqual(['.gitkeep']);
@@ -92,6 +106,7 @@ describe('directory-walls', () => {
             expect(text, rel).not.toMatch(/from ['"]chronik-client['"]/);
             expect(text, rel).not.toMatch(/src\/ui\//);
             expect(text, rel).not.toMatch(/from ['"]ecash-wallet['"]/);
+            expect(text, rel).not.toMatch(LAYOUT_OR_WORKSHOP);
         }
     });
 });
@@ -121,5 +136,19 @@ describe('directory-walls-still-sees-code', () => {
         expect(stripped).toMatch(/\bdocument\b/);
         // A `//` inside a string is not a comment.
         expect(stripped).toContain('https://example.com/a//b');
+    });
+
+    it('sees every road from the app into the harness', () => {
+        for (const road of [
+            "import { SCREENS } from '../../layout/fixtures';",
+            "import '../workshop/theme-workshop.css';",
+            "import raw from '../../workshop/look.json?raw';",
+            "@import '../../workshop/theme-workshop.css';",
+            "background: url('../../workshop/art/kite.svg');",
+        ]) {
+            expect(road).toMatch(LAYOUT_OR_WORKSHOP);
+        }
+        // A directory of the same name inside `src/` is not the harness.
+        expect("import { x } from './layout/grid';").not.toMatch(LAYOUT_OR_WORKSHOP);
     });
 });

@@ -2,6 +2,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
+import { KIT_SKELETON } from '../layout/workshopStarter';
 
 /** Structural, because `rollup` is not a dependency of this app to import types from. */
 type BuiltPart = {
@@ -202,19 +203,37 @@ describe('served-weight-has-a-ceiling', () => {
  * future second entry cannot bring it in silently.
  */
 describe('gallery-is-not-served', () => {
-    it('emits no gallery file and no showroom code', async () => {
+    /**
+     * The showroom and the workshop kit are dev-only: `vite.workshop.config.ts`
+     * builds them for `pnpm workshop`, and the production build must carry
+     * nothing of either — no gallery or kit file, no module under `layout/` or
+     * `workshop/`, no showroom hook, no kit class, and not the kit's skeleton
+     * label, which is the string a look.json leaking in would bring with it.
+     */
+    it('emits no gallery or workshop file and no showroom or kit code', async () => {
         const result = (await build({
             logLevel: 'silent',
             build: { write: false },
         })) as unknown as BuiltOutput | readonly BuiltOutput[];
         const outputs = Array.isArray(result) ? result : [result as BuiltOutput];
-        const parts = outputs.flatMap((o) => o.output);
+        const parts = outputs.flatMap((o) => o.output) as readonly (BuiltPart & {
+            moduleIds?: readonly string[];
+            originalFileNames?: readonly string[];
+        })[];
         expect(parts.length, 'nothing was built').toBeGreaterThan(0);
 
         for (const part of parts) {
             expect(part.fileName ?? '', 'a gallery file is in the build').not.toContain(
                 'gallery',
             );
+            expect(part.fileName ?? '', 'a workshop file is in the build').not.toContain(
+                'workshop',
+            );
+            for (const source of [...(part.moduleIds ?? []), ...(part.originalFileNames ?? [])]) {
+                expect(source, 'a layout/ or workshop/ source is in the build').not.toMatch(
+                    /(^|[/\\])(layout|workshop)[/\\]/,
+                );
+            }
         }
         const code = parts
             .filter((part) => part.type === 'chunk')
@@ -223,6 +242,18 @@ describe('gallery-is-not-served', () => {
         expect(code, 'showroom code is in the served script').not.toContain(
             '__galleryReady',
         );
+        expect(code, 'the shot plan is in the served script').not.toContain('__shotPlan');
+        expect(code, 'the kit look is in the served script').not.toContain(KIT_SKELETON.label);
+        const text = parts
+            .map((part) =>
+                part.type === 'chunk'
+                    ? (part.code ?? '')
+                    : typeof part.source === 'string'
+                      ? part.source
+                      : new TextDecoder().decode(part.source ?? new Uint8Array()),
+            )
+            .join('\n');
+        expect(text, 'the kit class is in the served files').not.toContain('t-workshop');
     }, 120_000);
 });
 

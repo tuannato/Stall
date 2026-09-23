@@ -1607,3 +1607,59 @@ on `.item-fiat-src`: 504 geometry failures (`item-listing`, and `item-zoom`,
 whose face stands behind the zoom scrim — every look and decoration at 390
 and 1280) and 12 contrast figures at 1.00:1 (`item-listing`, three looks,
 bare and worn, both widths). Green again with the plant reverted.
+
+## The workshop probe measures the kit's look, and says which look it painted (2026-09-23)
+
+`pnpm workshop:probe` runs every rule here over the look a creator is
+designing in `workshop/` — the same passes, the same ceiling, through
+`layout-check.mjs --config vite.workshop.config.ts --looks workshop`. Its page
+is `layout/probe-workshop.html`, whose entry registers the kit's look with
+`layout/looks.ts` before `probe.ts` evaluates; `measuredLooks()` then answers
+the kit's look **alone**, and `looksFor('door')` answers nothing (the door's
+deck is three shipped looks), so the door is not in the workshop passes. The
+ordinary `pnpm test:layout` never loads the kit's look or sheet
+(`the-ordinary-probe-loads-no-kit`).
+
+- **Every verdict echoes `sheetClasses`** — every `t-*` class on every
+  painted `.stall`, over every paint the page made — as it echoes
+  `reducedMotion` and `portraitTall`; `__contrastPrepare` returns the classes
+  of the one paint it made. The runner refuses any pass whose set is not
+  exactly what it measures — `{t-workshop}` for the kit, `{t-modern, t-neo,
+  t-rural}` otherwise (a fourth shipped look adds its class to
+  `EXPECTED_SHEET_CLASSES`) — and the contrast and transparency passes by the
+  union of their prepares. **Why** (the step-1 critic's P1): `decodeTheme(0xff)`
+  answers with MODERN's row and `attachmentsForTheme(0xff)` with `[]`, so any
+  site left choosing a look by id paints Modern bare under the kit's name —
+  and Modern is green, so the one failure that shows is *fewer failures*, a
+  skeleton that passed. Only the class the tree actually wore tells the two
+  apart. The static half is `the-harness-chooses-looks-in-one-place`.
+- **Proved red by a real run**: `paint()` reverted to
+  `decodeTheme(look.id)` on the kit page, and every pass — the three widths,
+  both portraits, both reduced-motion passes, contrast and transparency —
+  printed `painted t-modern where this run measures t-workshop
+  (the-workshop-probe-measures-the-workshop-look)` and the run failed. The
+  ordinary run with the check in place: unchanged (197.1s; clip counts
+  886/9608, 1641/11699, 102/1760, identical to before). **One number moved,
+  and it is not coverage lost:** the contrast pass reads 3628 figure boxes
+  where it read 3576. The verdict `<pre>` under `#app` grew by the class
+  echo, so the probe page is 75px taller at 390px (1022 → 1097), each shot
+  the pass grows to the page's height is taller, and more of each stall is
+  in frame. The targets every prepare returns are identical in both builds
+  (counted per screen, look and worn state). That the shot's height follows
+  the length of the verdict text is an old quirk, noted and not changed.
+- **The kit's sheet lands after `stall.css`**, as a shipped look's does: a
+  build links an entry's stylesheets in the order it imports their chunks,
+  and the kit's sheet shares a chunk with the kit's loaders, so the probe
+  entry imports the renderer first. Measured: with the loader imported first,
+  the workshop probe linked the kit's sheet AHEAD of the app's sheets (the
+  showroom did not). Pinned by `links the kit’s sheet after the app’s sheets
+  on both kit pages`, proved red by swapping the two imports back.
+- **The skeleton, measured once** (the committed kit, Modern's row with no
+  rule; 32.8s): 15 failures, every one "the name column collapsed under the
+  price" on `offers` and `long-item-name` at 390px (seven seeks each; one more
+  under reduced motion) — the tier-1/2 figure sizes are declared only in a
+  look's own sheet. Every other pass green. That list is the step-2 input;
+  nothing subtracts it — a known-failures filter would hide a creator's own
+  failure on the same screen and check. The three starters
+  (`pnpm workshop:start <look>`) each probe green: Modern 75.0s, Neo 62.7s,
+  Rural 71.7s.

@@ -299,6 +299,22 @@ export const NEO_CITY_THEME_ID = 0x02;
 export const RURAL_THEME_ID = 0x03;
 
 /**
+ * The workshop's scratch id (owner, 2026-09-23, K2): the look a creator is
+ * designing in `workshop/`, painted by the showroom and measured by
+ * `pnpm workshop:probe`. **Reserved for ever and never a row** — a record
+ * that names it on chain reads as an id this build ships no row for, like any
+ * other, so a published `0xff` paints the default look and says so, and the
+ * look under design can never reach a visitor through the chain.
+ *
+ * Only a number here: the kit's look is built in `layout/` from
+ * `workshop/look.json` and handed to the renderer as a row object, so nothing
+ * of it is in `src/` or in the production bundle
+ * (`the-workshop-build-serves-the-same-app`). Test:
+ * `the-scratch-id-is-not-a-shipped-look`.
+ */
+export const WORKSHOP_THEME_ID = 0xff;
+
+/**
  * The default look. An id with no shipped row wears all of it — palette,
  * sheet class and both ceiling ladders — so it tiers like it too.
  */

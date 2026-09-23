@@ -5,8 +5,8 @@
  * happy-dom does not lay out — it wants a real browser in the loop."
  *
  * This is that loop. It builds from `vite.probe.config.ts` — the app's own
- * config with `layout/probe.html` as a second entry, into `.probe-dist` —
- * serves that, and drives headless Chrome at each viewport. The page
+ * config with `layout/probe.html` as a second entry, into `.probe-dist` (or
+ * from the config `--config` names: the workshop kit's, below) — serves that, and drives headless Chrome at each viewport. The page
  * measures itself and writes a verdict; this reads it back out of the page.
  * No new dependency: Chrome is the only thing it needs, and a missing Chrome is
  * a failure rather than a skip — a guard that silently does not run is counted
@@ -28,6 +28,51 @@ import { inflateSync } from 'node:zlib';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 
 /*
+ * `--config <file>` names the build (default `vite.probe.config.ts`, the
+ * ordinary probe) and `--looks workshop` measures the workshop kit's look
+ * alone, on its own probe entry — `pnpm workshop:probe` passes both, with
+ * `vite.workshop.config.ts`. Same passes, same rules, same ceiling.
+ */
+function flag(name, fallback) {
+    const at = process.argv.indexOf(name);
+    if (at < 0) return fallback;
+    const value = process.argv[at + 1];
+    if (value === undefined || value.startsWith('--')) {
+        console.error(`layout-check: ${name} needs a value`);
+        process.exit(1);
+    }
+    return value;
+}
+const PROBE_CONFIG = flag('--config', 'vite.probe.config.ts');
+const LOOKS = flag('--looks', 'shipped');
+if (LOOKS !== 'shipped' && LOOKS !== 'workshop') {
+    console.error(`layout-check: --looks is "shipped" or "workshop", not "${LOOKS}"`);
+    process.exit(1);
+}
+const PROBE_PAGE = LOOKS === 'workshop' ? 'layout/probe-workshop.html' : 'layout/probe.html';
+/*
+ * The look classes this run exists to measure, stated here rather than asked
+ * of the page: the page reports what it PAINTED (`sheetClasses`, every `t-*`
+ * class on every `.stall`) and the runner refuses any pass whose set is not
+ * exactly this one — the workshop critic's P1, a kit page that painted Modern
+ * by id and read as a skeleton that passed. A fourth shipped look adds its
+ * class to this line. Test: `the-workshop-probe-measures-the-workshop-look`.
+ */
+const EXPECTED_SHEET_CLASSES =
+    LOOKS === 'workshop' ? ['t-workshop'] : ['t-modern', 't-neo', 't-rural'];
+
+/** Why a painted class set is not the one this run measures, or undefined. */
+function sheetClassesWrong(painted) {
+    const got = [...new Set(painted ?? [])].sort();
+    const want = [...EXPECTED_SHEET_CLASSES].sort();
+    if (got.join(' ') === want.join(' ')) return undefined;
+    return (
+        `painted ${got.length === 0 ? 'no look class' : got.join(', ')} where this run measures ` +
+        `${want.join(', ')} (the-workshop-probe-measures-the-workshop-look)`
+    );
+}
+
+/*
  * The app's config is read by this run and never written: the probe builds and
  * previews from its own, `vite.probe.config.ts`. This used to patch its entry
  * into `vite.config.ts` and write the file back on the way out, so a killed run
@@ -39,7 +84,6 @@ import { payScreensMissingQuote } from './pay-screens.mjs';
  * written nothing, so it leaves nothing behind.
  */
 const APP_CONFIG = 'vite.config.ts';
-const PROBE_CONFIG = 'vite.probe.config.ts';
 const appConfigAtStart = readFileSync(APP_CONFIG);
 let tripwireSaid = false;
 /** True, and said once, when the app's config is not the bytes this run began with. */
@@ -120,7 +164,7 @@ const WINDOW_SCREENS =
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
-    `http://localhost:${PORT}/layout/probe.html?viewport=${vp === CANVAS ? 'canvas' : 'page'}${extra}`;
+    `http://localhost:${PORT}/${PROBE_PAGE}?viewport=${vp === CANVAS ? 'canvas' : 'page'}${extra}`;
 const PORT = process.env.LAYOUT_PORT ?? '4319';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9339';
 const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
@@ -627,6 +671,12 @@ try {
             failed = true;
             continue;
         }
+        const wrongLook = sheetClassesWrong(report.sheetClasses);
+        if (wrongLook !== undefined) {
+            console.error(`✗ ${vp.name} (${measured}): ${wrongLook}`);
+            failed = true;
+            continue;
+        }
         /*
          * The split, audited rather than trusted. The overlay screens belong to
          * the canvas pass and nothing else does; a filter that quietly answered
@@ -739,6 +789,9 @@ try {
                 console.error(
                     `✗ ${label}: asked for ${PORTRAIT.width}px and the page measured ${pv.viewport}px.`,
                 );
+            } else if (sheetClassesWrong(pv.sheetClasses) !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${sheetClassesWrong(pv.sheetClasses)}`);
             } else if (pv.portraitTall !== true) {
                 // The emulation applied a size and the media query still did
                 // not match: the pass would measure the landscape or the
@@ -793,6 +846,9 @@ try {
                 console.error(
                     `✗ ${label}: asked for ${TABLET.width}px and the page measured ${tv.viewport}px.`,
                 );
+            } else if (sheetClassesWrong(tv.sheetClasses) !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${sheetClassesWrong(tv.sheetClasses)}`);
             } else if (tv.portraitShort !== true) {
                 // The same guard `portraitTall` gives the pass above: an
                 // emulation that applied a size while the query did not
@@ -879,6 +935,9 @@ try {
             if (rm.reducedMotion !== true) {
                 failed = true;
                 console.error(`✗ ${label}: the page never saw the media feature.`);
+            } else if (sheetClassesWrong(rm.sheetClasses) !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${sheetClassesWrong(rm.sheetClasses)}`);
             } else if (rm.viewport !== pass.vp.width) {
                 failed = true;
                 console.error(
@@ -930,6 +989,9 @@ try {
     try {
         let boxes = 0;
         const dim = [];
+        // Every class the prepares painted: each one must be a class this run
+        // measures, and together they must be all of them.
+        const contrastClasses = new Set();
         for (const vp of ALL_VIEWPORTS) {
             await cdp.send(
                 'Emulation.setDeviceMetricsOverride',
@@ -972,6 +1034,7 @@ try {
                         // Nothing repaints between the two, so the first prepare's
                         // tree is the tree that gets shot.
                         const first = await prepare();
+                        for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
                         if (first.targets.length === 0) continue;
                         const shotH = Math.max(vp.height, first.pageH);
                         const grew = shotH !== vp.height;
@@ -1045,6 +1108,9 @@ try {
         if (boxes === 0) {
             failed = true;
             console.error('✗ contrast: no figure boxes were sampled — vacuous green.');
+        } else if (sheetClassesWrong([...contrastClasses]) !== undefined) {
+            failed = true;
+            console.error(`✗ contrast: ${sheetClassesWrong([...contrastClasses])}`);
         } else if (dim.length === 0) {
             console.log(
                 `✓ contrast: ${boxes} figure boxes sampled against rendered pixels — ${took()}`,
@@ -1112,10 +1178,12 @@ try {
         // let one screen that painted a ground hide behind another that did
         // not.
         let clearRatio = 1;
+        const clearClasses = new Set();
         for (const screen of CLEAR_SCREENS) {
             for (const theme of themes) {
                 for (const wornAll of [false, true]) {
                     const prep = await contrastPrepare(cdp, sessionId, screen, theme, wornAll);
+                    for (const cls of prep.sheetClasses ?? []) clearClasses.add(cls);
                     if (prep.targets.length === 0) {
                         throw new Error(`${screen} prepared no figure boxes — vacuous green.`);
                     }
@@ -1194,7 +1262,10 @@ try {
             }
         }
         const clearPct = (clearRatio * 100).toFixed(0);
-        if (dim.length === 0) {
+        if (sheetClassesWrong([...clearClasses]) !== undefined) {
+            failed = true;
+            console.error(`✗ transparency: ${sheetClassesWrong([...clearClasses])}`);
+        } else if (dim.length === 0) {
             console.log(
                 `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
                     `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,

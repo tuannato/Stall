@@ -315,7 +315,9 @@ export default defineConfig({
         },
     },
     test: {
-        include: ['src/**/*.test.ts'],
+        // The app's tests, and the layout harness's own unit tests (the
+        // workshop kit's loader, resolver, shot plan and build checks).
+        include: ['src/**/*.test.ts', 'layout/**/*.test.ts'],
         environment: 'node',
         reporters: ['default'],
         // A slow test at vitest's 5 s default is a red that comes and goes
