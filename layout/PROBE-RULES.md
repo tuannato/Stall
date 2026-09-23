@@ -1811,3 +1811,55 @@ skips `.deck-stall` now. **Proved red** by painting Neo's row with
 `t-modern`: every pass, contrast and transparency included, printed "painted
 t-modern, t-rural, t-skeleton where this run measures t-modern, t-neo,
 t-rural, t-skeleton".
+
+## The contrast passes say where their time goes, box by box (2026-09-23, step 3a)
+
+Step 3 was going to shard the contrast pass; its critic's first ask was to
+measure before making anything cheaper or parallel, and to give the proof
+something finer than a tally. Two instruments, both on every run:
+
+- **A phase table under the contrast line** — navigate, prepare, grow,
+  re-prepare, capture (the CDP call, transfer and parse), decode, boxes (the
+  live re-read), sample, shrink, and what no phase accounts for.
+- **A per-box dump**, `.layout-dump/<looks>-<time>-<rev>.json` and
+  `<looks>-latest.json` (gitignored): every job each contrast pass ran (pass 4
+  and pass 5) and every box it sampled — keyed by pass, viewport, screen, look
+  id, decoration flags, the node's index among the prepared nodes and its
+  description (and, on the transparent wire, the ground) — with the box, the
+  ink and the worst contrast found, or `null` for a box the sampler dropped.
+  `node scripts/contrast-dump.mjs <before> <after>` compares two box by box:
+  identical means the same double (`a-contrast-change-is-lossless-only-box-for-box`),
+  and a move across 3:1 is named as such.
+
+**What the first two dumps said, 2026-09-23 on the 4-core box, load 0.3,
+two runs of one tree (4285 boxes and 158 over the wire, both green, 213.0s
+and 213.7s):**
+
+| phase | calls | total | mean |
+|---|---|---|---|
+| navigate | 3 | 8.7–9.5s | ~3 s |
+| prepare | 393 | 11.0s | 28 ms |
+| grow | 383 | 5.8s | 15 ms |
+| re-prepare | 383 | 11.9s | 31 ms |
+| capture | 472–476 | 74.2s (48%) | 157 ms |
+| decode | 472–476 | 18.1s (12%) | 38 ms |
+| boxes, sample, shrink | 383 each | 2.3s | — |
+| unaccounted | — | 22.5–23.5s (15%) | — |
+
+- **Every one of the 383 real jobs grows** at 390×844, 1280×900 and 1920×1080,
+  so the one-prepare shortcut for a page that fits never fires; the ten other
+  prepares are the door under a look that cannot wear it (a no-op).
+- **89 of the 383 first shots read a box below 3:1 and were retried** — the
+  "unaccounted" line is their 250 ms sleeps. It is not a stale frame. Every
+  one is a `.mini` control on Modern or Rural, the two looks whose `.mini`
+  transitions `color` over 0.2 s — and the prepare blanks the ink with
+  `color: transparent` *after* pausing the page's animations, so the glyphs
+  are still fading when the shot is taken two frames later. Modern read
+  2.75:1 there and 5.17:1 once the fade was done.
+- **So the pass is not reproducible run to run.** The two dumps differ on 38
+  boxes, every one a `.mini` read mid-fade on one run and at rest on the
+  other — `pay-several-strip` under Rural at 3.15:1 against 6.15:1, the
+  shop-window sheet's close at 5.63 against 3.44. None crossed 3:1 between
+  those two runs; one sat 0.15 above it. A change to the pass's machinery
+  cannot be shown lossless over a baseline that moves by itself, so the
+  hermetic changes come before the levers in this step, not after them.

@@ -7,6 +7,9 @@ dist
 .workshop-dist
 # `pnpm looks:diff <ref>`: its builds and its before / after / diff PNGs.
 .looks-diff
+# `pnpm test:layout`'s per-box contrast record, one file per run
+# (`scripts/contrast-dump.mjs`).
+.layout-dump
 .vite
 coverage
 *.log

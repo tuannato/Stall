@@ -2113,8 +2113,8 @@ declare global {
             screen: string,
             themeId: number,
             wornAll: boolean,
-        ) => { targets: ContrastTarget[]; pageH: number; sheetClasses: string[] };
-        __contrastBoxes: () => ContrastTarget[];
+        ) => { targets: ContrastTarget[]; pageH: number; sheetClasses: string[]; nodes: number };
+        __contrastBoxes: () => (ContrastTarget & { i: number })[];
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -2303,8 +2303,14 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
  */
 window.__contrastBoxes = () =>
     preparedNodes
-        .map((node) => targetFor(node))
-        .filter((t): t is ContrastTarget => t !== undefined);
+        // Each box carries its node's index among the prepared nodes: stable
+        // DOM order, so a box the page drops does not renumber the rest in
+        // the runner's per-box dump (`scripts/contrast-dump.mjs`).
+        .map((node, i) => {
+            const target = targetFor(node);
+            return target === undefined ? undefined : { ...target, i };
+        })
+        .filter((t): t is ContrastTarget & { i: number } => t !== undefined);
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -2318,7 +2324,7 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
     const look = lookById(themeId);
     if (!looksFor(screen).includes(look)) {
         // The apex can only wear the default look — see `looksFor`.
-        return { targets: [], pageH: 0, sheetClasses: [] };
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0 };
     }
     const worn = wornAll ? wornOf(look, 0xffff) : [];
     paint(screen, look, worn);
@@ -2388,6 +2394,8 @@ window.__contrastPrepare = (screen, themeId, wornAll) => {
         ),
         // What this one paint wore, for the runner's class audit.
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
+        // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
+        nodes: preparedNodes.length,
     };
 };
 

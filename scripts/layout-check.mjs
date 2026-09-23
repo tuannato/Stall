@@ -22,9 +22,10 @@
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHROMES, decodePng, devtools, findChrome } from './browser.mjs';
+import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
 import {
@@ -453,9 +454,14 @@ async function contrastPrepare(cdp, sessionId, screen, theme, wornAll) {
     return JSON.parse(r.result.value);
 }
 
-async function captureShot(cdp, sessionId) {
+/** The shot as PNG bytes, not yet decoded — the contrast pass times the two apart. */
+async function captureRaw(cdp, sessionId) {
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId);
-    return decodePng(Buffer.from(shot.data, 'base64'));
+    return Buffer.from(shot.data, 'base64');
+}
+
+async function captureShot(cdp, sessionId) {
+    return decodePng(await captureRaw(cdp, sessionId));
 }
 
 const chromeBin = findChrome();
@@ -520,6 +526,52 @@ const took = () => {
     lastStamp = now;
     return `${s.toFixed(1)}s`;
 };
+/*
+ * Where the contrast pass spends its time, phase by phase (the step-3
+ * critic's item 4: measure before making anything cheaper or parallel).
+ * `timed` adds the wall clock of one awaited step to its phase; the table is
+ * printed under the pass's own line, with what no phase accounts for.
+ */
+const phases = new Map();
+async function timed(phase, fn) {
+    const t0 = performance.now();
+    try {
+        return await fn();
+    } finally {
+        const entry = phases.get(phase) ?? { calls: 0, ms: 0 };
+        entry.calls += 1;
+        entry.ms += performance.now() - t0;
+        phases.set(phase, entry);
+    }
+}
+function phaseTable(passMs) {
+    const rows = [...phases].map(([phase, { calls, ms }]) => ({ phase, calls, ms }));
+    const accounted = rows.reduce((sum, row) => sum + row.ms, 0);
+    rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, passMs - accounted) });
+    const lines = [`    phase           calls     total   share     mean`];
+    for (const { phase, calls, ms } of rows) {
+        lines.push(
+            `    ${phase.padEnd(14)} ${String(calls || '').padStart(6)} ${(ms / 1000).toFixed(1).padStart(8)}s` +
+                ` ${((ms / passMs) * 100).toFixed(0).padStart(6)}%` +
+                ` ${calls === 0 ? '' : `${(ms / calls).toFixed(0).padStart(6)}ms`}`,
+        );
+    }
+    return lines;
+}
+/*
+ * The per-box dump (`contrast-dump.mjs`): every job each contrast pass ran
+ * and every box it sampled, with the worst value it found, written to
+ * `.layout-dump/` on every run. It is how a change to the passes' machinery
+ * is shown to move nothing — or exactly what it moved.
+ */
+const dumpJobs = [];
+const dumpBoxes = [];
+function gitRev() {
+    const head = spawnSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' });
+    if (head.status !== 0) return undefined;
+    const dirty = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' });
+    return `${head.stdout.trim()}${dirty.status === 0 && dirty.stdout.trim() !== '' ? '+' : ''}`;
+}
 try {
     run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error']);
     if (LOOKS === 'workshop') {
@@ -943,6 +995,7 @@ try {
      * set of grounds (the fd head panels, the 860px column), and a
      * mobile-only pass certifies pixels nobody paints at 1280.
      */
+    const contrastStartedAt = performance.now();
     try {
         let boxes = 0;
         const dim = [];
@@ -950,16 +1003,20 @@ try {
         // measures, and together they must be all of them.
         const contrastClasses = new Set();
         for (const vp of ALL_VIEWPORTS) {
-            await cdp.send(
-                'Emulation.setDeviceMetricsOverride',
-                { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
-                sessionId,
-            );
-            await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
-            await waitForFlag(cdp, sessionId, '__probeReady');
-            const screens = await evalJson(cdp, sessionId, 'window.__contrastScreens');
-            const themes = await evalJson(cdp, sessionId, 'window.__themes');
-            const overlayScreens = await evalJson(cdp, sessionId, 'window.__noDecorScreens');
+            const { screens, themes, overlayScreens } = await timed('navigate', async () => {
+                await cdp.send(
+                    'Emulation.setDeviceMetricsOverride',
+                    { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
+                    sessionId,
+                );
+                await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId);
+                await waitForFlag(cdp, sessionId, '__probeReady');
+                return {
+                    screens: await evalJson(cdp, sessionId, 'window.__contrastScreens'),
+                    themes: await evalJson(cdp, sessionId, 'window.__themes'),
+                    overlayScreens: await evalJson(cdp, sessionId, 'window.__noDecorScreens'),
+                };
+            });
             for (const screen of screens) {
                 /*
                  * The overlay wears nothing, so its worn half is the same paint
@@ -992,27 +1049,54 @@ try {
                         // the largest single cost in this guard, buying nothing.
                         // Nothing repaints between the two, so the first prepare's
                         // tree is the tree that gets shot.
-                        const first = await prepare();
+                        const job = {
+                            pass: 'contrast',
+                            viewport: vp.name,
+                            screen,
+                            look: theme,
+                            flags: wornAll ? 0xffff : 0,
+                        };
+                        const first = await timed('prepare', prepare);
                         for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
+                        const record = {
+                            key: jobKey(job),
+                            ...job,
+                            nodes: first.nodes,
+                            prepared: first.targets.length,
+                            classes: first.sheetClasses ?? [],
+                        };
+                        dumpJobs.push(record);
                         if (first.targets.length === 0) continue;
                         const shotH = Math.max(vp.height, first.pageH);
                         const grew = shotH !== vp.height;
+                        record.pageH = first.pageH;
+                        record.grew = grew;
                         if (grew) {
-                            await cdp.send(
-                                'Emulation.setDeviceMetricsOverride',
-                                { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
-                                sessionId,
+                            await timed('grow', () =>
+                                cdp.send(
+                                    'Emulation.setDeviceMetricsOverride',
+                                    { width: vp.width, height: shotH, deviceScaleFactor: 1, mobile: false },
+                                    sessionId,
+                                ),
                             );
                         }
-                        const prep = grew ? await prepare() : first;
+                        const prep = grew ? await timed('re-prepare', prepare) : first;
+                        if (grew) {
+                            record.prepared = prep.targets.length;
+                            record.nodes = prep.nodes;
+                            record.classes = prep.sheetClasses ?? [];
+                        }
                         // The boxes are re-read at the last moment before every
                         // shot: anything that lands between prepare and capture
                         // (a late face, an image) moves the layout under
                         // coordinates already taken.
                         const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                        const capture = () => captureShot(cdp, sessionId);
+                        const capture = async () => {
+                            const png = await timed('capture', () => captureRaw(cdp, sessionId));
+                            return timed('decode', async () => decodePng(png));
+                        };
                         let img = await capture();
-                        let targets = await liveBoxes();
+                        let targets = await timed('boxes', liveBoxes);
                         // A failing box is re-shot once before it is believed:
                         // capture right after an emulated resize can raster a
                         // stale frame — measured: the live DOM held transparent
@@ -1024,12 +1108,26 @@ try {
                         if (prep.targets.length !== 0 && targets.length === 0) {
                             throw new Error(`${screen}: prepared targets but re-read none`);
                         }
+                        record.live = targets.length;
+                        record.image = [img.width, img.height];
+                        let sampled = 0;
+                        let dropped = 0;
+                        const sampleStart = performance.now();
+                        let retryMs = 0;
                         for (let ti = 0; ti < targets.length; ti += 1) {
                             let t = targets[ti];
                             let worst = worstContrastInBox(img, t, t.color);
-                            if (worst === undefined) continue;
+                            if (worst === undefined) {
+                                dropped += 1;
+                                dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null });
+                                continue;
+                            }
                             boxes += 1;
+                            sampled += 1;
+                            let firstWorst;
                             if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
+                                const retryStart = performance.now();
+                                firstWorst = worst;
                                 await sleep(250);
                                 img = await capture();
                                 const again = await liveBoxes();
@@ -1039,7 +1137,21 @@ try {
                                 }
                                 retried = true;
                                 worst = worstContrastInBox(img, t, t.color);
+                                retryMs += performance.now() - retryStart;
                             }
+                            dumpBoxes.push({
+                                key: boxKey(job, t),
+                                job: record.key,
+                                i: t.i,
+                                sel: t.sel,
+                                x: t.x,
+                                y: t.y,
+                                w: t.w,
+                                h: t.h,
+                                color: t.color,
+                                worst: dumpValue(worst),
+                                ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
+                            });
                             if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                                 dim.push(
                                     `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
@@ -1048,16 +1160,29 @@ try {
                                 );
                             }
                         }
+                        {
+                            // The sampling itself, net of any retry inside it
+                            // (whose capture and decode are their own phases).
+                            const entry = phases.get('sample') ?? { calls: 0, ms: 0 };
+                            entry.calls += 1;
+                            entry.ms += performance.now() - sampleStart - retryMs;
+                            phases.set('sample', entry);
+                        }
+                        record.sampled = sampled;
+                        record.dropped = dropped;
+                        record.retried = retried;
                         if (grew) {
-                            await cdp.send(
-                                'Emulation.setDeviceMetricsOverride',
-                                {
-                                    width: vp.width,
-                                    height: vp.height,
-                                    deviceScaleFactor: 1,
-                                    mobile: false,
-                                },
-                                sessionId,
+                            await timed('shrink', () =>
+                                cdp.send(
+                                    'Emulation.setDeviceMetricsOverride',
+                                    {
+                                        width: vp.width,
+                                        height: vp.height,
+                                        deviceScaleFactor: 1,
+                                        mobile: false,
+                                    },
+                                    sessionId,
+                                ),
                             );
                         }
                     }
@@ -1087,6 +1212,9 @@ try {
         failed = true;
         console.error(`✗ contrast: ${err.message}`);
     }
+    // Printed whatever the verdict, a pass that threw included: a slow red
+    // run is exactly the one whose phases someone needs to read.
+    for (const line of phaseTable(performance.now() - contrastStartedAt)) console.log(line);
 
     /*
      * Pass 5: the transparent wire, in pixels.
@@ -1182,8 +1310,20 @@ try {
                         );
                     }
                     let targets = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                    const job = { pass: 'transparency', viewport: 'canvas', screen, look: theme, flags: wornAll ? 0xffff : 0 };
+                    const record = {
+                        key: jobKey(job),
+                        ...job,
+                        nodes: prep.nodes,
+                        prepared: prep.targets.length,
+                        classes: prep.sheetClasses ?? [],
+                        live: targets.length,
+                        image: [img.width, img.height],
+                    };
+                    dumpJobs.push(record);
                     const sample = (shot) => {
                         const found = [];
+                        const values = [];
                         let counted = 0;
                         for (const [ground, level] of [
                             ['black', 0],
@@ -1192,6 +1332,7 @@ try {
                             const flat = compositeOver(shot, level);
                             for (const t of targets) {
                                 const worst = worstContrastInBox(flat, t, t.color);
+                                values.push({ t, ground, worst });
                                 if (worst === undefined) continue;
                                 counted += 1;
                                 if (worst < PIXEL_CONTRAST_FLOOR) {
@@ -1203,18 +1344,36 @@ try {
                                 }
                             }
                         }
-                        return { found, counted };
+                        return { found, counted, values };
                     };
-                    let { found, counted } = sample(img);
+                    let { found, counted, values } = sample(img);
                     // A failing box is re-shot once before it is believed — the same
                     // rule pass 4 learned: a real defect is steady state.
+                    record.retried = found.length > 0;
                     if (found.length > 0) {
                         await sleep(250);
                         img = await clearShot();
                         const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
                         if (again.length === targets.length) targets = again;
-                        ({ found } = sample(img));
+                        ({ found, values } = sample(img));
                     }
+                    for (const { t, ground, worst } of values) {
+                        dumpBoxes.push({
+                            key: boxKey(job, { ...t, ground }),
+                            job: record.key,
+                            i: t.i,
+                            sel: t.sel,
+                            ground,
+                            x: t.x,
+                            y: t.y,
+                            w: t.w,
+                            h: t.h,
+                            color: t.color,
+                            worst: dumpValue(worst),
+                        });
+                    }
+                    record.sampled = values.filter((v) => v.worst !== undefined).length;
+                    record.dropped = values.length - record.sampled;
                     boxes += counted;
                     dim.push(...found);
                 }
@@ -1244,6 +1403,25 @@ try {
         console.error(`✗ transparency: ${err.message}`);
     }
     cdp.close();
+    {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const rev = gitRev();
+        const path = writeDump(
+            {
+                meta: {
+                    looks: LOOKS,
+                    rev: rev ?? null,
+                    at: new Date().toISOString(),
+                    loadavg: loadavg(),
+                    argv: process.argv.slice(2),
+                },
+                jobs: dumpJobs,
+                boxes: dumpBoxes,
+            },
+            { looks: LOOKS, stamp, rev },
+        );
+        console.log(`  contrast dump: ${dumpBoxes.length} boxes over ${dumpJobs.length} jobs → ${path}`);
+    }
     const elapsedS = (Date.now() - startedAt) / 1000;
     if (elapsedS > RUNTIME_CEILING_S) {
         failed = true;
