@@ -7,6 +7,7 @@ import { WINDOW_MIN_PX } from '../src/ui/render';
 import { CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { shippedLooks, type Look } from './looks';
 import { DEFAULT_THEME_ID } from '../src/domain/theme';
+import { CONTRAST_VIEWPORTS } from './contrastPlan';
 import { SHOT_VIEWPORTS, diffPlan, shotPlan, type ShotJob } from './shotPlan';
 import { lookFromJson, parseWorkshopLook } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
@@ -83,6 +84,15 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect(SHOT_VIEWPORTS.portrait).toMatchObject({ width: 1080, height: 1920 });
         expect(SHOT_VIEWPORTS.tablet).toMatchObject({ width: 768, height: 1024 });
         expect(SHOT_VIEWPORTS.canvas).toMatchObject({ width: 1920, height: 1080 });
+        // The phone, the desk and the canvas are the probe's own three.
+        expect(SHOT_VIEWPORTS.desk).toMatchObject({ width: 1280, height: 900 });
+        const probe = (name: string): [number, number] => {
+            const vp = CONTRAST_VIEWPORTS.find((v) => v.name === name)!;
+            return [vp.width, vp.height];
+        };
+        expect([SHOT_VIEWPORTS.phone.width, SHOT_VIEWPORTS.phone.height]).toEqual(probe('mobile'));
+        expect([SHOT_VIEWPORTS.desk.width, SHOT_VIEWPORTS.desk.height]).toEqual(probe('desktop'));
+        expect([SHOT_VIEWPORTS.canvas.width, SHOT_VIEWPORTS.canvas.height]).toEqual(probe('canvas'));
     });
 
     it('shoots every variant: bare, every decoration where decorations paint, and each mood everywhere', () => {

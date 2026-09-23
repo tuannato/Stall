@@ -932,8 +932,10 @@ clips today); no incident yet.
 
 ## Budget
 
-`RUNTIME_CEILING_S = 150` (raised from 60 on 2026-08-30 when contrast took
-on the desktop width; measured 107–120s). The ceiling is enforcement: the
+`RUNTIME_CEILING_S = 300` (raised from 60 on 2026-08-30 when contrast took
+on the desktop width, measured 107–120s; to 200 on 2026-09-19 and to 300 on
+2026-09-22, the owner's calls, `layout-check.mjs` says why; a watchdog since
+step 3a). The ceiling is enforcement: the
 CLAUDE.md §11 second command has to stay something everyone actually runs.
 If the runtime grows again, prune the matrix, do not raise the number
 first. The reduced-motion pass re-measures only the animating screens;
@@ -1827,6 +1829,8 @@ something finer than a tally. Two instruments, both on every run:
   id, decoration flags, the node's index among the prepared nodes and its
   description (and, on the transparent wire, the ground) — with the box, the
   ink and the worst contrast found, or `null` for a box the sampler dropped.
+  The newest 20 timestamped dumps of each kind of run are kept (~1.5 MB
+  each), the latest under its own name.
   `node scripts/contrast-dump.mjs <before> <after>` compares two box by box:
   identical means the same double (`a-contrast-change-is-lossless-only-box-for-box`),
   and a move across 3:1 is named as such.

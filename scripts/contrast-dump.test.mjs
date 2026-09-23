@@ -5,7 +5,10 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { boxKey, compareDumps, comparisonLines, dumpValue, jobKey } from './contrast-dump.mjs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DUMPS_KEPT, boxKey, compareDumps, comparisonLines, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 
 const job = { pass: 'contrast', viewport: 'mobile', screen: 'offers', look: 1, flags: 0 };
 const box = (i, worst, extra = {}) => ({
@@ -65,5 +68,25 @@ describe('a-contrast-change-is-lossless-only-box-for-box', () => {
         assert.equal(r.moved[0].after, null);
         assert.deepEqual(r.removed.map((x) => x.key), [box(1, 5).key]);
         assert.deepEqual(r.added.map((x) => x.key), [box(2, 5).key]);
+    });
+
+    it('keeps the newest dumps of one kind of run, and never another kind\'s', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'contrast-dump-'));
+        try {
+            writeDump({ boxes: [] }, { looks: 'workshop', stamp: '2026-01-01T00-00-00-000Z', dir });
+            for (let n = 0; n < DUMPS_KEPT + 3; n += 1) {
+                const stamp = `2026-09-23T10-00-${String(n).padStart(2, '0')}-000Z`;
+                writeDump({ boxes: [] }, { looks: 'shipped', stamp, rev: 'abc1234', dir });
+            }
+            const names = readdirSync(dir).sort();
+            const shipped = names.filter((name) => name.startsWith('shipped-2026'));
+            assert.equal(shipped.length, DUMPS_KEPT);
+            assert.equal(shipped[0], 'shipped-2026-09-23T10-00-03-000Z-abc1234.json');
+            assert.ok(names.includes('shipped-latest.json'));
+            assert.ok(names.includes('workshop-2026-01-01T00-00-00-000Z.json'));
+            assert.ok(names.includes('workshop-latest.json'));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

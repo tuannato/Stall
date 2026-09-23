@@ -23,7 +23,7 @@
  * box the page drops does not renumber the rest) and its node's description
  * — plus, on the transparent wire, the ground it was flattened onto.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -121,13 +121,27 @@ export function comparisonLines(result, { list = 40 } = {}) {
     return lines;
 }
 
-/** Write a run's dump, timestamped, and as the latest for its looks. Returns the timestamped path. */
-export function writeDump(dump, { looks, stamp, rev }) {
-    mkdirSync(DUMP_DIR, { recursive: true });
+/** How many timestamped dumps of one kind of run are kept; a dump is ~1.5 MB. */
+export const DUMPS_KEPT = 20;
+
+/**
+ * Write a run's dump, timestamped, and as the latest for its looks, and keep
+ * only the newest `DUMPS_KEPT` timestamped ones for those looks — a guard run
+ * several times a day must not fill a disk. Returns the timestamped path.
+ */
+export function writeDump(dump, { looks, stamp, rev, dir = DUMP_DIR }) {
+    mkdirSync(dir, { recursive: true });
     const text = `${JSON.stringify(dump, null, 1)}\n`;
-    const path = join(DUMP_DIR, `${looks}-${stamp}${rev === undefined ? '' : `-${rev}`}.json`);
+    const path = join(dir, `${looks}-${stamp}${rev === undefined ? '' : `-${rev}`}.json`);
     writeFileSync(path, text);
-    writeFileSync(join(DUMP_DIR, `${looks}-latest.json`), text);
+    writeFileSync(join(dir, `${looks}-latest.json`), text);
+    // The stamp is an ISO time, so the names sort in the order they were written.
+    const mine = readdirSync(dir)
+        .filter((name) => name.startsWith(`${looks}-`) && name !== `${looks}-latest.json` && name.endsWith('.json'))
+        .sort();
+    for (const name of mine.slice(0, Math.max(0, mine.length - DUMPS_KEPT))) {
+        rmSync(join(dir, name), { force: true });
+    }
     return path;
 }
 

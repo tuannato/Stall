@@ -9,7 +9,7 @@
  * `ERR_MODULE_NOT_FOUND`). The screen split is the probe's own function
  * (`screensAt`), so a screenshot is of exactly what was measured.
  *
- * - **Viewports.** 390×844 and 1280×800 for the page screens (the wall
+ * - **Viewports.** 390×844 and 1280×900 for the page screens (the wall
  *   screens only where the wall fits, as the probe does), 1920×1080 for the
  *   canvas screens, and the shop window's two portrait passes — 1080×1920,
  *   the tall wall, and 768×1024, the counter tablet stood on end.
@@ -40,7 +40,9 @@ export type ShotViewport = {
 
 export const SHOT_VIEWPORTS = {
     phone: { name: 'phone', width: 390, height: 844 },
-    desk: { name: 'desk', width: 1280, height: 800 },
+    // 900 tall, the probe's desktop (step 3a): at 800 a desk shot was of a
+    // viewport the probe never measured.
+    desk: { name: 'desk', width: 1280, height: 900 },
     canvas: { name: 'canvas', width: 1920, height: 1080 },
     portrait: { name: 'portrait', width: 1080, height: 1920 },
     tablet: { name: 'tablet', width: 768, height: 1024 },
