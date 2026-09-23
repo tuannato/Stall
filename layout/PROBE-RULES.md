@@ -1940,3 +1940,53 @@ own billboard check (every look painted on `offers` once per decoration row,
 each paint's whole computed style read), which runs on every load, the
 contrast pass's included, where its result is never read. The page is loaded
 per viewport and once more at the 60 s mark: about 11 s a run.
+
+**Three levers, each shown to move nothing** — the dump before and after
+each one, 4575 boxes of 4575 identical every time:
+
+- **`optimizeForSpeed` on every capture** (both contrast passes): Chrome
+  encodes the PNG with its fastest settings — the same pixels, a bigger
+  file — and pass 5 still gets its alpha channel (it refuses to run
+  without). Capture 155 → 117 ms a shot.
+- **The PNG reader unfilters row by row**, one loop per filter type, where
+  it switched per byte (`browser.mjs`, shared with `looks:diff` and the
+  kit): decode 40 → 21 ms. It also refuses image data shorter than its
+  header, which the old loop read as zeros. Held to an encoder written from
+  the specification, every filter type at three and four bytes a pixel
+  (`decode-png-undoes-every-filter`; the old reader passes the same
+  roundtrips).
+- **A job's first paint is asked for its height alone**: no boxes, no
+  blanking, no font wait, no frames — every job grows, so that paint is
+  thrown away by the repaint at the grown size. 29 → 14 ms. A page that fits
+  is prepared afresh from the neutral screen — no page fits today (below),
+  so that branch was measured with the verdict hidden: 181 jobs fit, and the
+  previous runner and this one read the same 4346 boxes.
+
+Not pulled: decoding off the main thread. At one window nothing runs while a
+shot decodes — the next job cannot start before the verdict on this one,
+because a red box is re-shot on the same tree — so a worker buys the 3 ms
+box re-read at most; it belongs with the sharding, where several windows
+share one Node thread. Also not pulled, and a candidate: the probe module's
+billboard check runs on every contrast page load (2.8–3.8 s each, three or
+four loads a run) and its result is never read there.
+
+Contrast pass after the three: **88 s** (155 s at the start of this step,
+114 s once hermetic); `pnpm test:layout` 146 s.
+
+**What the "fits" measurement found, and did not fix.** Every contrast job
+grows because the probe page's own verdict `<pre>` is appended under the app
+— `document.documentElement.scrollHeight` is the viewport plus that
+element's height (313 px on 286 of the 383 jobs; the rest are pages taller
+than their viewport anyway) — so the one-prepare shortcut for a page that
+fits has never fired, and every page that fits is shot at its viewport plus
+313 px: a phone at 390×1157, the shop window at **1920×1393** where the wall
+is a 1920×1080 screen whose layout is chosen by container queries on its
+shape. With that element hidden, 181 jobs fit and are shot at their own
+size, and one figure falls under the floor that the ordinary run reads at
+14.48:1: **`shop-window-touch-quotes-pay` at 1920×1080, Neo worn, the
+payment plate's `dd.sw-pay-v` at 2.89:1** — a teal rain drop, `rgb(48,158,156)`,
+behind the value's ink `rgb(223,246,255)`. Measured under a diagnostic plant
+only (both the previous runner and this one read it); nothing in this step
+changes what height a job is shot at, so it is recorded here and left to the
+owner: shooting pages at their own height is a change to what the guard
+measures, and it goes red on its first run.

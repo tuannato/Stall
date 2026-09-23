@@ -149,41 +149,65 @@ export function decodePng(buf) {
     if (width === 0 || bpp === 0) throw new Error('PNG carried no IHDR');
     const raw = inflateSync(Buffer.concat(idat));
     const stride = width * bpp;
-    const out = Buffer.alloc(height * stride);
+    if (raw.length < height * (stride + 1)) throw new Error('PNG data is shorter than its IHDR says');
+    // Every byte is written below, row by row.
+    const out = Buffer.allocUnsafe(height * stride);
+    /*
+     * One loop per filter type, chosen per row, rather than a switch per
+     * byte: the contrast pass decodes a grown page on every job, and the
+     * per-byte switch was 40 ms of a 390x1500 shot (step 3a). The arithmetic
+     * is the PNG specification's, unchanged; `decode-png-undoes-every-filter`
+     * holds it to an encoder written from the same specification.
+     */
     for (let y = 0; y < height; y += 1) {
-        const filter = raw[y * (stride + 1)];
-        const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
-        const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : undefined;
-        const cur = out.subarray(y * stride, (y + 1) * stride);
-        for (let x = 0; x < stride; x += 1) {
-            const a = x >= bpp ? cur[x - bpp] : 0;
-            const b = prev !== undefined ? prev[x] : 0;
-            const c = x >= bpp && prev !== undefined ? prev[x - bpp] : 0;
-            let v = line[x];
-            switch (filter) {
-                case 0:
-                    break;
-                case 1:
-                    v = (v + a) & 0xff;
-                    break;
-                case 2:
-                    v = (v + b) & 0xff;
-                    break;
-                case 3:
-                    v = (v + ((a + b) >> 1)) & 0xff;
-                    break;
-                case 4: {
-                    const p = a + b - c;
-                    const pa = Math.abs(p - a);
-                    const pb = Math.abs(p - b);
-                    const pc = Math.abs(p - c);
-                    v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
-                    break;
+        const i = y * (stride + 1) + 1;
+        const o = y * stride;
+        const p = o - stride;
+        const filter = raw[i - 1];
+        switch (filter) {
+            case 0:
+                raw.copy(out, o, i, i + stride);
+                break;
+            case 1:
+                for (let x = 0; x < bpp; x += 1) out[o + x] = raw[i + x];
+                for (let x = bpp; x < stride; x += 1) out[o + x] = (raw[i + x] + out[o + x - bpp]) & 0xff;
+                break;
+            case 2:
+                if (y === 0) raw.copy(out, o, i, i + stride);
+                else for (let x = 0; x < stride; x += 1) out[o + x] = (raw[i + x] + out[p + x]) & 0xff;
+                break;
+            case 3:
+                if (y === 0) {
+                    for (let x = 0; x < bpp; x += 1) out[o + x] = raw[i + x];
+                    for (let x = bpp; x < stride; x += 1) out[o + x] = (raw[i + x] + (out[o + x - bpp] >> 1)) & 0xff;
+                } else {
+                    for (let x = 0; x < bpp; x += 1) out[o + x] = (raw[i + x] + (out[p + x] >> 1)) & 0xff;
+                    for (let x = bpp; x < stride; x += 1) {
+                        out[o + x] = (raw[i + x] + ((out[o + x - bpp] + out[p + x]) >> 1)) & 0xff;
+                    }
                 }
-                default:
-                    throw new Error(`PNG filter ${filter}`);
-            }
-            cur[x] = v;
+                break;
+            case 4:
+                if (y === 0) {
+                    // Paeth with no row above is Sub.
+                    for (let x = 0; x < bpp; x += 1) out[o + x] = raw[i + x];
+                    for (let x = bpp; x < stride; x += 1) out[o + x] = (raw[i + x] + out[o + x - bpp]) & 0xff;
+                } else {
+                    // With no pixel to the left, Paeth picks the one above.
+                    for (let x = 0; x < bpp; x += 1) out[o + x] = (raw[i + x] + out[p + x]) & 0xff;
+                    for (let x = bpp; x < stride; x += 1) {
+                        const a = out[o + x - bpp];
+                        const b = out[p + x];
+                        const c = out[p + x - bpp];
+                        const pa = Math.abs(b - c);
+                        const pb = Math.abs(a - c);
+                        const pc = Math.abs(a + b - c - c);
+                        out[o + x] = (raw[i + x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
+                    }
+                }
+                break;
+            default:
+                throw new Error(`PNG filter ${filter}`);
         }
     }
     return { width, height, bpp, data: out };

@@ -438,14 +438,19 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false) {
+    const args = `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}`;
+    if (heightOnly) {
+        // The paint and its height, and nothing to wait for: no box is
+        // collected and no glyph blanked on a paint the grow throws away.
+        return evalJson(cdp, sessionId, `window.__contrastPrepare(${args}, true)`);
+    }
     const r = await cdp.send(
         'Runtime.evaluate',
         {
             expression:
                 `(async () => { ` +
-                `const out = window.__contrastPrepare(` +
-                `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}); ` +
+                `const out = window.__contrastPrepare(${args}); ` +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -511,9 +516,19 @@ let prepareSerial = 0;
 /** What the run is doing now, for the watchdog's last sentence. */
 let currentStep = 'starting';
 
-/** The shot as PNG bytes, not yet decoded — the contrast pass times the two apart. */
+/**
+ * The shot as PNG bytes, not yet decoded — the contrast pass times the two
+ * apart. `optimizeForSpeed` has Chrome encode the PNG with its fastest
+ * settings: the same pixels, a larger file, half the time (step 3a, measured
+ * by the per-box dump — every box's worst value identical — and pass 5 still
+ * gets its alpha channel, which it refuses to run without).
+ */
 async function captureRaw(cdp, sessionId) {
-    const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId);
+    const shot = await cdp.send(
+        'Page.captureScreenshot',
+        { format: 'png', fromSurface: true, optimizeForSpeed: true },
+        sessionId,
+    );
     return Buffer.from(shot.data, 'base64');
 }
 
@@ -1183,32 +1198,28 @@ try {
                 // Every prepare carries a nonce of its own, echoed back by
                 // the prepare and by every box re-read after it.
                 let nonce;
-                const prepare = (neutral) => {
+                const prepare = (neutral, heightOnly = false) => {
                     nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce);
+                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly);
                 };
                 // First paint tells us how tall the page is; the viewport
                 // grows to hold all of it and the paint is redone at that
                 // size, because `captureBeyondViewport` does not reliably
                 // paint backgrounds below the fold — a below-fold buy
-                // control sampled as near-white.
-                //
-                // **Only when it actually grows.** A page that already
-                // fits was being painted, font-settled and frame-settled a
-                // second time at a size identical to the first, for every
-                // screen, look and worn state that fits its viewport —
-                // the largest single cost in this guard, buying nothing.
-                // Nothing repaints between the two, so the first prepare's
-                // tree is the tree that gets shot.
-                const first = await timed('prepare', () => prepare(true));
+                // control sampled as near-white. That first paint is asked
+                // for its height alone (step 3a): at every viewport this
+                // pass measures, every job's page is taller than it — the
+                // page's own verdict `<pre>` sits under the app, 313 px on
+                // most jobs (`PROBE-RULES.md`) — so the boxes, the blanking,
+                // the font wait and the two frames the full prepare spends
+                // were spent on a paint the grow threw away. A page that fits
+                // is prepared afresh from the neutral screen at the same
+                // size — the same paint, by hermeticity (measured with the
+                // verdict hidden: 181 jobs fit, every box identical).
+                const first = await timed('height', () => prepare(true, true));
                 for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
-                record.nodes = first.nodes;
-                record.prepared = first.targets.length;
                 record.classes = first.sheetClasses ?? [];
                 let why = paintEcho(plannedJob, first, nonce, vp.width, vp.height);
-                if (why.length === 0 && first.targets.length === 0) {
-                    why = ['the prepare collected no contrast targets — a planned job that measures nothing'];
-                }
                 if (why.length > 0) {
                     refuse(why);
                     continue;
@@ -1228,19 +1239,19 @@ try {
                             ),
                         );
                         grown = true;
-                        const prep = await timed('re-prepare', () => prepare(false));
-                        for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
-                        record.prepared = prep.targets.length;
-                        record.nodes = prep.nodes;
-                        record.classes = prep.sheetClasses ?? [];
-                        why = paintEcho(plannedJob, prep, nonce, vp.width, shotH);
-                        if (why.length === 0 && prep.targets.length === 0) {
-                            why = ['the re-prepare collected no contrast targets'];
-                        }
-                        if (why.length > 0) {
-                            refuse(why);
-                            continue;
-                        }
+                    }
+                    const prep = await timed('prepare', () => prepare(!grew));
+                    for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                    record.prepared = prep.targets.length;
+                    record.nodes = prep.nodes;
+                    record.classes = prep.sheetClasses ?? [];
+                    why = paintEcho(plannedJob, prep, nonce, vp.width, shotH);
+                    if (why.length === 0 && prep.targets.length === 0) {
+                        why = ['the prepare collected no contrast targets — a planned job that measures nothing'];
+                    }
+                    if (why.length > 0) {
+                        refuse(why);
+                        continue;
                     }
                     // The boxes are re-read at the last moment before every
                     // shot: anything that lands between prepare and capture

@@ -2141,6 +2141,7 @@ declare global {
             flags: number,
             neutral: boolean,
             nonce: string,
+            heightOnly?: boolean,
         ) => ContrastPrepared;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
@@ -2402,7 +2403,13 @@ function freezeAnimations(): void {
 }
 window.__contrastFreeze = freezeAnimations;
 
-window.__contrastPrepare = (screen, themeId, flags, neutral, nonce) => {
+/** The page's whole height, the shell's scroll region included. */
+function pageHeight(): number {
+    const scrollRegion = document.querySelector('.stall-scroll');
+    return Math.max(document.documentElement.scrollHeight, scrollRegion?.scrollHeight ?? 0);
+}
+
+window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
     preparedNonce = nonce;
     const echo = {
         nonce,
@@ -2443,6 +2450,22 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce) => {
     for (const details of scope.querySelectorAll('details')) {
         details.open = true;
     }
+    // The runner's first question of a job is only how tall the page is,
+    // and at every viewport it measures the answer is "taller than the
+    // viewport" — by the height of this page's own verdict `<pre>` under the
+    // app at the least (`PROBE-RULES.md`, step 3a) — so the paint it is
+    // asking about is thrown away by the repaint at the grown size. Nothing
+    // is collected or blanked.
+    if (heightOnly) {
+        preparedNodes = [];
+        return {
+            targets: [],
+            pageH: pageHeight(),
+            sheetClasses: sheetClassesOn(document.getElementById('app')!),
+            nodes: 0,
+            ...echo,
+        };
+    }
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
@@ -2480,13 +2503,9 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce) => {
     // the fold — a below-fold buy control sampled as near-white. The shell
     // hides its height inside its scroll region, so that is asked too: at the
     // grown viewport the region stretches and everything is on screen.
-    const scrollRegion = document.querySelector('.stall-scroll');
     return {
         targets,
-        pageH: Math.max(
-            document.documentElement.scrollHeight,
-            scrollRegion?.scrollHeight ?? 0,
-        ),
+        pageH: pageHeight(),
         // What this one paint wore, for the runner's class audit.
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
         // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
