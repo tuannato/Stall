@@ -654,6 +654,92 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
     });
 });
 
+describe('a-cycle-step-over-a-walk-that-threw-leaves-the-rail', () => {
+    /**
+     * The critic's fifth pass (2026-09-24, P3): the Cycle step stored the
+     * rail it counted, and over a floor a walk left when it threw the quotes
+     * count nothing — so a wall resting on the quotes was moved to the
+     * listings off our own failure and came back there. The step's rail
+     * moves only over records this page can judge (`recordsKnown`).
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+    const A = 'a1'.repeat(32);
+    const Q = 'c3'.repeat(32);
+    const meta = (tokenId: string, name: string): TokenMeta =>
+        ({ tokenId, name, ticker: name.slice(0, 2).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }) as TokenMeta;
+    const params = { show: 'all' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const, touch: false as const };
+    const base = {
+        route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+        overlay: { kind: 'idle' as const },
+        address: ADDR,
+        stallName: 'Riverside Goods',
+        window: params,
+    };
+    const quoted = new Map([[Q, { code: 'xec', exponent: 2, amount: 500_000n }]]);
+    const offers = [{ ...OFFER, tokenId: A }];
+
+    it('keeps a wall on the quotes across a dwell over a walk that threw', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=all&mode=cycle`);
+        const states = [
+            // Nothing listed: the wall rests on the quotes.
+            { view: { ...base, fetch: { kind: 'empty' as const }, tokens: new Map([[Q, meta(Q, 'Plum Jam')]]), prices: quoted }, offers: [], pubkeyHex: PK },
+            // The book fails and the walk throws before it reads a record.
+            {
+                view: { ...base, fetch: { kind: 'unreachable' as const, triedAtMs: 0, hosts: [] }, tokens: new Map() },
+                offers: [],
+                pubkeyHex: PK,
+                pendingFacts: {
+                    stall: { address: ADDR, hash: toHex(HASH) },
+                    pubkeyHex: PK,
+                    manifest: Promise.resolve(undefined),
+                    descriptions: Promise.resolve({
+                        descriptions: new Map<string, string>(),
+                        shelves: new Map<string, string>(),
+                        prices: new Map(),
+                        quoteTimes: new Map<string, number>(),
+                        unreadable: new Set<string>(),
+                        truncated: false,
+                        failed: true,
+                        genesis: new Map(),
+                    }),
+                },
+            },
+            // Then a good read with a listing and the quote.
+            {
+                view: {
+                    ...base,
+                    fetch: { kind: 'offers' as const, offers },
+                    tokens: new Map([
+                        [A, meta(A, 'Apples')],
+                        [Q, meta(Q, 'Plum Jam')],
+                    ]),
+                    prices: quoted,
+                },
+                offers,
+                pubkeyHex: PK,
+            },
+        ];
+        let at = 0;
+        const root = document.createElement('div');
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('[data-role="seller-price"]'), 'on the quotes').not.toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        // A whole dwell over the floor the throw left.
+        await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS + 10);
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.querySelector('[data-role="seller-price"]'), 'still the quotes').not.toBeNull();
+        expect(root.querySelector('[data-role="price"]'), 'not the listing').toBeNull();
+    });
+});
+
 describe('a-new-lock-height-on-the-same-stall-takes-a-fresh-set', () => {
     /**
      * The freeze is captured once and kept across every refresh — for the

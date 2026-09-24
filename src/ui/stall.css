@@ -7150,6 +7150,19 @@ textarea.share-embed {
     grid-area: pay;
 }
 
+/* A choice this page's read did not reach: said where the total and Pay
+   stand, across both of their cells, until the next read reaches it. */
+.sel-unread {
+    grid-column: total-start / pay-end;
+    grid-row: total;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--s-text);
+    text-align: right;
+    text-wrap: balance;
+}
+
 .sel-empty {
     padding: 10px 12px 6px;
     font-size: 12.5px;

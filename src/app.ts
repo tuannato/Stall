@@ -155,6 +155,7 @@ import {
     broadcastFigure,
     identityOf,
     quotedItems,
+    unreadChosen,
     renderStall,
     holdsLivePaint,
     shopWindowPaints,
@@ -665,6 +666,8 @@ export function boot(
      * So it is a function, it takes the view, and everything that decides
      * anything about the wall goes through it.
      */
+    const settled = (view: StallView = state.view): StallView =>
+        view.window === undefined || wallWidth ? view : { ...view, window: undefined };
     /**
      * Whether the view holds a read of the seller's records that can be
      * judged against (the critic's fourth pass, 2026-09-24): read, and not a
@@ -673,12 +676,19 @@ export function boot(
      * the prune took a chosen quote out of a customer's choice and said the
      * seller had, the wall's frozen payment was closed as "moved", and the
      * stored rail left the quotes. Our failure is never the seller's doing;
-     * all three ask this.
+     * all three ask this, and so do the Cycle step's rail and the opening
+     * rail's decision.
+     *
+     * Records a wall kept from the last good read over a walk that threw
+     * (`recordsStale`) ARE judged: they are a whole read, only older, and
+     * the choice and the plate on screen were made off exactly them. A walk
+     * that stopped at our own page cap (`descriptionsTruncated`) is judged
+     * over what it read — a record it reached that moved to another unit is
+     * the seller's doing — and what it did not reach is not, which is
+     * `pruneSelection`'s `complete` and the plate's comparison below.
      */
     const recordsKnown = (view: StallView): boolean =>
         view.prices !== undefined && view.descriptionsFailed !== true;
-    const settled = (view: StallView = state.view): StallView =>
-        view.window === undefined || wallWidth ? view : { ...view, window: undefined };
     /**
      * The wall's own params, settled, without building a view.
      *
@@ -755,6 +765,38 @@ export function boot(
      */
     let bookReadAt = 0;
     let shopTabFor: string | undefined;
+    /**
+     * Whether `shopTab` is settled for `shopTabFor`: the opening rail is
+     * decided once, but only by a read that could decide it. A book that
+     * answered empty beside a records walk that threw cannot say whether the
+     * seller quotes anything, so the next load decides again — unless the
+     * reader has pressed a tab, which settles it (the critic's fifth pass,
+     * 2026-09-24).
+     */
+    let shopTabSettled = false;
+    /**
+     * The last read of the seller's records that finished, for one stall —
+     * the maps, and the names and attributions of the tokens they name.
+     * Closure state, taken at paint time from a view `recordsKnown` accepts
+     * (a kept view re-takes the same records), so a SECOND walk that throws
+     * in a row still has something to keep. Two readers: a
+     * wall re-reading the same stall keeps it whole over a walk that threw,
+     * and any screen names a chosen item from it that its own read did not
+     * reach (the strip, `chosenNames` below). Keyed by the stall's key, so
+     * one seller's records never name another's items.
+     */
+    let lastGoodRecords:
+        | {
+              pubkeyHex: string;
+              descriptions: StallView['descriptions'];
+              shelves: StallView['shelves'];
+              prices: NonNullable<StallView['prices']>;
+              quoteTimes: StallView['quoteTimes'];
+              descriptionsTruncated: StallView['descriptionsTruncated'];
+              tokens: StallView['tokens'];
+              genesis: StallView['genesis'];
+          }
+        | undefined;
     /**
      * The transactions this page has watched arrive, newest first.
      *
@@ -935,6 +977,29 @@ export function boot(
         return best;
     };
 
+    /**
+     * The view's token names, with the names of chosen items this read did
+     * not carry added from the last read that finished for this stall.
+     */
+    const chosenNames = (): StallView['tokens'] => {
+        const kept = lastGoodRecords;
+        if (kept === undefined || kept.pubkeyHex !== state.pubkeyHex || selection.size === 0) {
+            return state.view.tokens;
+        }
+        let out: SessionTokenCache | undefined;
+        for (const tokenId of selection.keys()) {
+            const meta = kept.tokens.get(tokenId);
+            // Only for an item this read has no record of: a name can then
+            // build no row, so the shop, the rails and every gate below read
+            // the same set whether they take this view or `state.view`.
+            if (meta !== undefined && !state.view.tokens.has(tokenId) && state.view.prices?.has(tokenId) !== true) {
+                out ??= new Map(state.view.tokens);
+                out.set(tokenId, meta);
+            }
+        }
+        return out ?? state.view.tokens;
+    };
+
     const paint = (): void => {
         // A quote that left the rail leaves the selection (D8), judged
         // against what this paint will show — never a count on an item the
@@ -950,9 +1015,12 @@ export function boot(
         // seller for it (the critic's P1, 2026-09-21). The same rule
         // `applyDescriptions` keeps: a walk that answered nothing erases
         // nothing.
+        // What a walk that stopped at our own page cap did not reach is our
+        // gap and stays chosen; a record there in a painted unit whose
+        // genesis never arrived is our gap too (`pruneSelection`).
+        const complete = state.view.descriptionsTruncated !== true;
         if (recordsKnown(state.view) && state.view.prices !== undefined) {
-            const quotedNow = new Set(quotedItems(state.view).map((item) => item.tokenId));
-            const pruned = pruneSelection(selection, quotedNow, state.view.prices);
+            const pruned = pruneSelection(selection, state.view.prices, complete);
             if (pruned.dropped) {
                 selection = pruned.selection;
                 selectionDropped = true;
@@ -980,28 +1048,43 @@ export function boot(
             // comparison against that closed the plate every sixty seconds
             // on a wall nobody had touched.
             for (const [tokenId, price] of windowPaying.prices) {
-                if (!samePrice(price, state.view.prices.get(tokenId))) {
+                const now = state.view.prices.get(tokenId);
+                // A record a capped walk did not reach has not moved.
+                if (now === undefined && !complete) {
+                    continue;
+                }
+                if (!samePrice(price, now)) {
                     cancelWallPayment();
                     break;
                 }
             }
         }
-        /*
-         * The drivers hold the rail that is PAINTED (the critic's third
-         * pass, 2026-09-24, a P1 of round 3). `windowRail` and
-         * `broadcastRail` turn an empty rail off at paint time, but the
-         * closure's own `windowRailAt` / `broadcastRailAt` moved only on a
-         * turn or a Cycle step — so a `show=all` touch wall on a stall with
-         * quotes and nothing listed painted the quotes while the driver
-         * still said "listings", and the first listing to land flipped the
-         * painter back under a customer's hands: the strip, Clear all, Pay
-         * and the payment code gone. Stored here, every paint agrees with
-         * the screen, and a rail that was chosen for being the only one is
-         * kept once the other fills. Over a read of the records only
-         * (`prices`), the prune's own rule: a paint that does not know the
-         * quotes cannot say they are empty, and storing "listings" off one
-         * would move a wall back onto the listings for good.
-         */
+        // The last read that finished, kept for the next walk that throws.
+        // Its names and attributions ACCUMULATE over the visit to one stall:
+        // a genesis cannot go stale, and a later read that stopped at our
+        // page cap must not forget the name of an item a customer chose off
+        // an earlier one.
+        if (recordsKnown(state.view) && state.view.prices !== undefined && state.pubkeyHex !== undefined) {
+            const prev = lastGoodRecords?.pubkeyHex === state.pubkeyHex ? lastGoodRecords : undefined;
+            const names = new Map(prev?.tokens ?? []);
+            for (const [tokenId, meta] of state.view.tokens) {
+                names.set(tokenId, meta);
+            }
+            const genesis = new Map(prev?.genesis ?? []);
+            for (const [tokenId, attribution] of state.view.genesis ?? []) {
+                genesis.set(tokenId, attribution);
+            }
+            lastGoodRecords = {
+                pubkeyHex: state.pubkeyHex,
+                descriptions: state.view.descriptions,
+                shelves: state.view.shelves,
+                prices: state.view.prices,
+                quoteTimes: state.view.quoteTimes,
+                descriptionsTruncated: state.view.descriptionsTruncated,
+                tokens: names,
+                genesis,
+            };
+        }
         /*
          * The freeze is captured ONCE per lock height, on the first paint
          * that has both a lock and a book, and here — before the view is
@@ -1021,6 +1104,23 @@ export function boot(
                 windowLockSet = tokensAtBlock(state.offers, wall.upto);
             }
         }
+        /*
+         * The drivers hold the rail that is PAINTED (the critic's third
+         * pass, 2026-09-24, a P1 of round 3). `windowRail` and
+         * `broadcastRail` turn an empty rail off at paint time, but the
+         * closure's own `windowRailAt` / `broadcastRailAt` moved only on a
+         * turn or a Cycle step — so a `show=all` touch wall on a stall with
+         * quotes and nothing listed painted the quotes while the driver
+         * still said "listings", and the first listing to land flipped the
+         * painter back under a customer's hands: the strip, Clear all, Pay
+         * and the payment code gone. Stored here, every paint agrees with
+         * the screen, and a rail that was chosen for being the only one is
+         * kept once the other fills. Only over a read of the records this
+         * page can judge (`recordsKnown`): a paint that has not read the
+         * quotes, or read a floor a walk left when it threw, cannot say they
+         * are empty, and storing "listings" off one would move a wall back
+         * onto the listings for good.
+         */
         if (recordsKnown(state.view)) {
             const params = wallParams();
             if (params !== undefined) {
@@ -1099,6 +1199,17 @@ export function boot(
             payRateAsking,
             payQuantity,
             selection: new Map(selection),
+            /*
+             * A chosen item this read did not reach is still named — the
+             * strip says the page could not read it, and a sentence about
+             * "1 item" with no name beside it is a count nobody can check.
+             * The name is its genesis name, which cannot go stale, taken
+             * from the last read that finished for this stall, and only for
+             * a chosen item this read holds no record of: no row is built
+             * from it (a row needs a record in `prices`), so nothing here
+             * puts an item this load did not read on the shop.
+             */
+            tokens: chosenNames(),
             selectionOpen,
             ...(selectionAsk === undefined ? {} : { selectionAsk }),
             ...(entered ? { selectionEntered: true as const } : {}),
@@ -1383,6 +1494,7 @@ export function boot(
                 // The reader's own choice, and it outlives the load: a
                 // re-read of this stall paints whichever side they are on.
                 shopTab = tab;
+                shopTabSettled = true;
                 // The dropped-item sentence lives until the tab switches (D8).
                 selectionDropped = false;
                 paint();
@@ -1780,7 +1892,13 @@ export function boot(
         // empty rail turns itself off rather than standing a dwell on a blank.
         const step = nextCard(windowCursorAt, length, windowTurns(seen, params) ? 'all' : rail, rail);
         windowCursorAt = step.cursor;
-        windowRailAt = step.rail;
+        // The rail moves only over records this page can judge, the paint's
+        // own rule: a Cycle step counting a floor a walk left when it threw
+        // would turn a wall off its quotes for good (the critic's fifth
+        // pass, 2026-09-24).
+        if (recordsKnown(state.view)) {
+            windowRailAt = step.rail;
+        }
         paint();
     };
 
@@ -2004,7 +2122,10 @@ export function boot(
      * repaints once for the sheet that asked.
      */
     const onOpenPaySeveral = (): void => {
-        if (selection.size === 0) {
+        // Refused while a chosen item is one this read did not reach: the
+        // strip says so in Pay's place, and a sheet over part of a choice
+        // said "0 items · one payment" under a strip that said one.
+        if (selection.size === 0 || unreadChosen(selection, state.view).length > 0) {
             return;
         }
         const claimed = generation;
@@ -2067,7 +2188,8 @@ export function boot(
 
     const onWallPay = (): void => {
         const params = wallParams();
-        if (params === undefined || selection.size === 0) {
+        // The phone's refusal, on the wall: no code over part of a choice.
+        if (params === undefined || selection.size === 0 || unreadChosen(selection, state.view).length > 0) {
             return;
         }
         const claimed = generation;
@@ -2502,6 +2624,18 @@ export function boot(
             ? 'quotes'
             : 'listings';
     };
+    /**
+     * Whether `openingShopTab` answered from a read that could decide it. The
+     * quotes win only over an `empty` book, and there the answer rests on the
+     * records: a walk that threw (or has not answered) left a floor that may
+     * hold none of the seller's quotes, and "listings" fixed off it would
+     * keep a stall with nothing listed on its empty side for the rest of the
+     * visit (the critic's fifth pass, 2026-09-24). Every other answer — a
+     * `?pay=` link, a book with rows, a book that failed — is decided by the
+     * book or the link alone.
+     */
+    const opensDecisively = (view: StallView): boolean =>
+        view.payHint !== undefined || view.fetch?.kind !== 'empty' || recordsKnown(view);
 
     const refresh = async (): Promise<void> => {
         const claimed = ++generation;
@@ -2579,18 +2713,54 @@ export function boot(
          * `applyDescriptions` already applies to a live re-read, applied to
          * a load. The floor it read is not the seller's record, and a wall
          * with a customer mid-choice must not repaint as if it were.
+         *
+         * **All of it, names and attributions included** (the critic's fifth
+         * pass, 2026-09-24, P1): `loadCurrent` builds `tokens` and `genesis`
+         * from the floor the throw left, so restoring the maps alone kept a
+         * chosen quote's price with no name and no kind — no row, pruned,
+         * the payment closed and the seller blamed. The kept ids take the
+         * last read's names and attributions wherever this load has none.
+         *
+         * **And said** (the owner, "Nói rõ"): the kept view is `recordsStale`,
+         * so the wall prints `WINDOW_QUOTES_AS_LAST_READ` where the book's
+         * freshness stamp would claim the quotes were read just now, and
+         * nothing is judged against it. Taken from `lastGoodRecords` rather
+         * than the view on screen, so a second walk that throws in a row
+         * keeps the same records again.
          */
-        const keptRecords =
-            sameStall && next.view.descriptionsFailed === true && recordsKnown(state.view)
-                ? {
-                      descriptions: state.view.descriptions,
-                      shelves: state.view.shelves,
-                      prices: state.view.prices,
-                      quoteTimes: state.view.quoteTimes,
-                      descriptionsFailed: state.view.descriptionsFailed,
-                      descriptionsTruncated: state.view.descriptionsTruncated,
-                  }
-                : {};
+        const kept =
+            sameStall &&
+            next.view.descriptionsFailed === true &&
+            lastGoodRecords !== undefined &&
+            lastGoodRecords.pubkeyHex === next.pubkeyHex
+                ? lastGoodRecords
+                : undefined;
+        const keptRecords: Partial<StallView> = {};
+        if (kept !== undefined) {
+            const tokens: SessionTokenCache = new Map(next.view.tokens);
+            const genesis = new Map(next.view.genesis ?? []);
+            for (const tokenId of new Set([...kept.prices.keys(), ...(kept.descriptions?.keys() ?? [])])) {
+                const meta = kept.tokens.get(tokenId);
+                if (meta !== undefined && !tokens.has(tokenId)) {
+                    tokens.set(tokenId, meta);
+                }
+                const attribution = kept.genesis?.get(tokenId);
+                if (attribution !== undefined && !genesis.has(tokenId)) {
+                    genesis.set(tokenId, attribution);
+                }
+            }
+            Object.assign(keptRecords, {
+                descriptions: kept.descriptions,
+                shelves: kept.shelves,
+                prices: kept.prices,
+                quoteTimes: kept.quoteTimes,
+                descriptionsFailed: false,
+                descriptionsTruncated: kept.descriptionsTruncated,
+                recordsStale: true,
+                tokens,
+                genesis,
+            });
+        }
         const loaded: AppState = {
             ...next,
             view: {
@@ -2605,9 +2775,15 @@ export function boot(
         if (next.pubkeyHex === undefined || next.pubkeyHex !== shopTabFor) {
             shopTab = openingShopTab(loaded.view);
             shopTabFor = next.pubkeyHex;
+            shopTabSettled = opensDecisively(loaded.view);
             // A selection is one stall's (D7): a different seller starts empty.
             resetSelection();
             windowPaying = undefined;
+        } else if (!shopTabSettled) {
+            // The last load could not decide (an empty book beside a walk
+            // that threw), and the reader has not chosen: this one may.
+            shopTab = openingShopTab(loaded.view);
+            shopTabSettled = opensDecisively(loaded.view);
         }
         // A scanned link is answered from the records, and on a failure screen
         // those arrive after this paint — judging the hint against the state
@@ -3243,6 +3419,9 @@ export function boot(
             // actually got rather than the one the load made.
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
+            // This walk's own answer replaces any records kept over an
+            // earlier one that threw.
+            recordsStale: undefined,
             genesis:
                 pubkeyHex === undefined
                     ? state.view.genesis

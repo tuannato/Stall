@@ -2631,6 +2631,23 @@ export function quotedItems(view: StallView): QuotedItem[] {
 }
 
 /**
+ * The chosen items this page cannot show as rows just now, in the order they
+ * were chosen: a walk that threw or stopped at our own page cap did not reach
+ * the record, or the record is there and its genesis never arrived. Our gap,
+ * never the seller's doing (`pruneSelection` keeps them), so every surface
+ * that prints the choice names them and refuses Pay until they read — a
+ * payment composed over part of a choice would be a figure for items nobody
+ * picked on their own (the owner, "Nói rõ", 2026-09-24).
+ */
+export function unreadChosen(selection: ReadonlyMap<string, bigint>, view: StallView): string[] {
+    if (selection.size === 0) {
+        return [];
+    }
+    const quoted = new Set(quotedItems(view).map((item) => item.tokenId));
+    return [...selection].filter(([tokenId, count]) => count > 0n && !quoted.has(tokenId)).map(([tokenId]) => tokenId);
+}
+
+/**
  * Quotes this page could not read the item's genesis for. Our own gap, said
  * out loud for the same reason the dropped-listings line is: a section that
  * silently showed two of three would report our failure as the seller's
@@ -2819,7 +2836,14 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     // carries belongs above them, and only where there is a row to choose.
     // …and once more when a re-read took the last chosen item away: the
     // open strip is the one place the sentence can be said.
-    if (items.length > 0 || (view.selectionOpen === true && view.selectionDropped === true)) {
+    // …and while anything is chosen, whatever this read reached: a walk
+    // that threw can leave no row at all, and a choice that vanished with
+    // the rows is the emptying `pruneSelection` refuses, done by the screen.
+    if (
+        items.length > 0 ||
+        (view.selection?.size ?? 0) > 0 ||
+        (view.selectionOpen === true && view.selectionDropped === true)
+    ) {
         section.append(selectionStrip(view, handlers));
     }
     section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
@@ -5226,9 +5250,17 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
             trayIn.append(el('div', 'sel-empty', copy.SELECTION_EMPTY));
         } else {
             const sum = el('div', 'sel-sum');
-            const names = quotedItems(view)
-                .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
-                .map((item) => `${quoteNaming(view, item.tokenId).title} ×${selection.get(item.tokenId)!.toString()}`)
+            // Every chosen item by name, the rows' own and then any this read
+            // did not reach — named from `view.tokens`, which carries a chosen
+            // item's genesis name from the last read that finished.
+            const unread = unreadChosen(selection, view);
+            const names = [
+                ...quotedItems(view)
+                    .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
+                    .map((item) => item.tokenId),
+                ...unread,
+            ]
+                .map((tokenId) => `${quoteNaming(view, tokenId).title} ×${selection.get(tokenId)!.toString()}`)
                 .join(' · ');
             const namesNode = el('span', 'sel-names', names);
             namesNode.setAttribute('data-role', 'selection-names');
@@ -5243,21 +5275,29 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
             clear.addEventListener('click', () => handlers.onSelectionAsk?.({ kind: 'clear' }));
             countCell.append(clear);
             sum.append(countCell);
-            const glance = selectionGlance(selection, view.prices);
-            const totalBlock = el('span', 'sel-totalblk');
-            const total = el('b', 'sel-total', glance === undefined ? '' : quoteFigure(glance));
-            total.setAttribute('data-role', 'selection-total');
-            totalBlock.append(total);
-            if (selectionHasSurcharge(selection, view.prices)) {
-                totalBlock.append(el('small', 'sel-note', copy.SELECTION_NOTE_SURCHARGE));
+            if (unread.length > 0) {
+                // In place of the total and Pay: a total over part of a
+                // choice is a figure for items nobody picked on their own.
+                const said = el('span', 'sel-unread', copy.selectionUnread(unread.length));
+                said.setAttribute('data-role', 'selection-unread');
+                sum.append(said);
+            } else {
+                const glance = selectionGlance(selection, view.prices);
+                const totalBlock = el('span', 'sel-totalblk');
+                const total = el('b', 'sel-total', glance === undefined ? '' : quoteFigure(glance));
+                total.setAttribute('data-role', 'selection-total');
+                totalBlock.append(total);
+                if (selectionHasSurcharge(selection, view.prices)) {
+                    totalBlock.append(el('small', 'sel-note', copy.SELECTION_NOTE_SURCHARGE));
+                }
+                sum.append(totalBlock);
+                const pay = el('button', 'buy pay-btn sel-pay', copy.SELECTION_PAY);
+                pay.type = 'button';
+                pay.setAttribute('data-role', 'pay-several-open');
+                pay.setAttribute('data-focus-key', 'pay-several-open');
+                pay.addEventListener('click', () => handlers.onOpenPaySeveral?.());
+                sum.append(pay);
             }
-            sum.append(totalBlock);
-            const pay = el('button', 'buy pay-btn sel-pay', copy.SELECTION_PAY);
-            pay.type = 'button';
-            pay.setAttribute('data-role', 'pay-several-open');
-            pay.setAttribute('data-focus-key', 'pay-several-open');
-            pay.addEventListener('click', () => handlers.onOpenPaySeveral?.());
-            sum.append(pay);
             trayIn.append(sum);
             if (selection.size >= MAX_SELECTION_ENTRIES) {
                 trayIn.append(el('p', 'fine sel-full', copy.selectionFull(MAX_SELECTION_ENTRIES)));

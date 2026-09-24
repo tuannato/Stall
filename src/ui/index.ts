@@ -3,6 +3,7 @@ export {
     identityOf,
     listingsInShopOrder,
     quotedItems,
+    unreadChosen,
     renderStall,
     overlayMounts,
     holdsLivePaint,

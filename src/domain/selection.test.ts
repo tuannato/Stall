@@ -104,12 +104,12 @@ describe('the-selection-figure-is-one-bigint-per-item-summed', () => {
 });
 
 describe('a-removed-quote-leaves-the-selection', () => {
-    it('prunes what the rail no longer quotes and says so once', () => {
-        const prices = new Map([[A, USD5], [B, USD3_SUR]]);
-        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Set([A]), prices);
+    it('prunes what a complete read no longer quotes and says so once', () => {
+        // B's record is gone from a read that finished: the seller removed it.
+        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Map([[A, USD5]]), true);
         expect([...pruned.selection]).toEqual([[A, 2n]]);
         expect(pruned.dropped).toBe(true);
-        const kept = pruneSelection(new Map([[A, 2n]]), new Set([A, B]), prices);
+        const kept = pruneSelection(new Map([[A, 2n]]), new Map([[A, USD5], [B, USD3_SUR]]), true);
         expect(kept.dropped).toBe(false);
         expect(MAX_SELECTION_ENTRIES).toBe(35);
     });
@@ -117,12 +117,28 @@ describe('a-removed-quote-leaves-the-selection', () => {
     it('prunes an item a re-read moved to another unit, so a selection never holds two', () => {
         // The seller republished B from USD to XEC under an open strip.
         const moved = new Map([[A, USD5], [B, XEC]]);
-        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Set([A, B]), moved);
+        const pruned = pruneSelection(new Map([[A, 2n], [B, 1n]]), moved, true);
         expect([...pruned.selection]).toEqual([[A, 2n]]);
         expect(pruned.dropped).toBe(true);
         // The unit is the first KEPT item's: A gone, B and C stay in theirs.
-        const first = pruneSelection(new Map([[A, 1n], [B, 1n], [C, 1n]]), new Set([B, C]), new Map([[B, XEC], [C, { ...XEC, amount: 1n }]]));
+        const first = pruneSelection(new Map([[A, 1n], [B, 1n], [C, 1n]]), new Map([[B, XEC], [C, { ...XEC, amount: 1n }]]), true);
         expect([...first.selection.keys()]).toEqual([B, C]);
         expect(first.dropped).toBe(true);
+        // A unit this page does not paint is a unit that changed, even alone.
+        const unpainted = pruneSelection(new Map([[A, 1n]]), new Map([[A, { ...USD5, code: 'zzz' }]]), true);
+        expect([...unpainted.selection]).toEqual([]);
+        expect(unpainted.dropped).toBe(true);
+    });
+
+    it('keeps what a read that did not finish never reached, and never says it was taken out', () => {
+        // The critic's fifth pass (2026-09-24): a walk that stopped at our
+        // own page cap, or threw, did not reach A — our gap, not the seller's.
+        const partial = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Map([[B, USD3_SUR]]), false);
+        expect([...partial.selection]).toEqual([[A, 2n], [B, 1n]]);
+        expect(partial.dropped).toBe(false);
+        // …while a unit it DID read moving is still the seller's doing.
+        const movedInPart = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Map([[A, USD5], [B, XEC]]), false);
+        expect([...movedInPart.selection]).toEqual([[A, 2n]]);
+        expect(movedInPart.dropped).toBe(true);
     });
 });

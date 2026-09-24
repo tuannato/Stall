@@ -15,6 +15,10 @@ import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
     SELECTION_DROPPED,
+    QUOTE_MINTED_CHIP,
+    WINDOW_QUOTES_AS_LAST_READ,
+    selectionUnread,
+    windowSelectionUnread,
     HOME_LEDE,
     OPENING_BODY,
     PLUGIN_MISSING_BODY,
@@ -468,6 +472,437 @@ beforeEach(() => {
     priceControl.fetch = async () => undefined;
     priceControl.check = async () => undefined;
 });
+describe('a-records-read-that-failed-never-empties-a-choice', () => {
+    /* Local, because this describe sits at the head of the file: every app a
+       test boots stays listening, and a `popstate` reaches all of them, so
+       these many-refresh tests run before the file has booted a hundred. */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    /**
+     * The critic's fourth pass (2026-09-24, P1): a descriptions walk that
+     * threw returns what it had read before the throw with `failed: true`,
+     * and three things on the screen read that floor as the seller's whole
+     * record — the prune took a chosen quote out of the customer's choice
+     * (and blamed the seller, `SELECTION_DROPPED`), the wall's frozen payment
+     * was compared with it and closed, and the stored rail moved off the
+     * quotes. Our failure is never the seller removing a quote: one
+     * predicate (`recordsKnown`) gates all three, and a same-stall refresh
+     * keeps the last good records when its own walk failed — the refusal a
+     * live re-read already applies. The fifth pass (P1): kept whole, the
+     * names and attributions of the kept ids with them, because the load
+     * builds both from the floor.
+     *
+     * Which case holds which gate: the first two hold the prune and the
+     * carry-over (the second with the load's own floor-only names); the
+     * third — an EMPTY partial read, with a payment standing — holds the
+     * plate's comparison and the rail store, each proved red with its gate
+     * reverted; the fourth holds the phone's Retry.
+     */
+    const A = 'a1'.repeat(32);
+    const B = 'b2'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const tokens = new Map([
+        [A, fungible(A, 'Plum Jam')],
+        [B, fungible(B, 'Rye Flour')],
+    ]);
+    /** What `loadCurrent` builds over a walk that threw after reading B alone. */
+    const floorTokens = new Map([[B, fungible(B, 'Rye Flour')]]);
+    const genesisBoth = new Map([
+        [A, 'attributed' as const],
+        [B, 'attributed' as const],
+    ]);
+    const floorGenesis = new Map([[B, 'attributed' as const]]);
+    /** What a walk that threw after reading B's record answers. */
+    const failedLookup = {
+        descriptions: new Map<string, string>(),
+        shelves: new Map<string, string>(),
+        prices: new Map([[B, XEC_B]]),
+        quoteTimes: new Map<string, number>(),
+        unreadable: new Set<string>(),
+        truncated: false,
+        failed: true,
+        genesis: new Map(),
+    };
+    /** A walk that threw before it read anything. */
+    const emptyFailedLookup = { ...failedLookup, prices: new Map() };
+    /** Boots with a loader that answers the states in turn, the last one for good. */
+    const bootSequence = (states: State[]): HTMLElement => {
+        const root = document.createElement('div');
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        return root;
+    };
+    /*
+     * Read off this test's own root, never `painted`: a `popstate` reaches
+     * every app an earlier test booted in this file, and each of them paints
+     * last into the shared capture.
+     */
+    const wallCount = (root: HTMLElement, name: string): string | undefined =>
+        [...root.querySelectorAll('.sw-strip .sw-row, .sw-strip .item')]
+            .find((row) => row.textContent?.includes(name))
+            ?.querySelector('.sw-step-n')?.textContent ?? undefined;
+    const phoneCount = (root: HTMLElement, tokenId: string): string | undefined =>
+        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)
+            ?.parentElement?.querySelector('[data-role="selection-count"]')?.textContent ?? undefined;
+    /** Presses the named control for this token, and fails when there is none. */
+    const pressMore = (root: HTMLElement, role: string, tokenId: string): void => {
+        const button = [...root.querySelectorAll<HTMLButtonElement>(`[data-role="${role}"]`)].find(
+            (b) => (b.closest('[data-token]')?.getAttribute('data-token') ?? b.getAttribute('data-focus-key') ?? '').includes(tokenId),
+        );
+        if (button === undefined) {
+            throw new Error(`no ${role} for ${tokenId}`);
+        }
+        button.click();
+    };
+    const wallRow = (root: HTMLElement, name: string): Element | undefined =>
+        [...root.querySelectorAll('.sw-strip .sw-row, .sw-strip .item')].find((row) => row.textContent?.includes(name));
+    const wall = (show: 'quotes' | 'all') => ({
+        show,
+        mode: 'browse' as const,
+        payCode: true,
+        turn: 'none' as const,
+        touch: true,
+    });
+
+    it('a wall whose walk failed while its book answered keeps the choice, the payment and the quotes', async () => {
+        // The wall's own canonical path, so the refresh is the heartbeat's
+        // same-stall re-read (`identityOf` answers the address).
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall('quotes') });
+        const failed = stallEmpty({
+            tokens,
+            prices: failedLookup.prices,
+            descriptionsFailed: true,
+            window: wall('quotes'),
+        });
+        const root = bootSequence([good, failed, good]);
+        await flush();
+        pressMore(root, 'window-step-more', A);
+        await flush();
+        expect(wallCount(root, 'Plum Jam')).toBe('1');
+        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="window-paying"]'), 'a payment stands').not.toBeNull();
+
+        // The heartbeat's refresh: the same stall, and a walk that threw.
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'the choice stands').toContain('Plum Jam');
+        expect(root.querySelector('.sw-sel-drop'), 'and nobody is told the seller took it').toBeNull();
+        expect(root.querySelector('[data-role="window-paying"]'), 'the payment stands').not.toBeNull();
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        // The last good records stand on the wall: the floor the throw left
+        // would have taken the chosen item's own row off the list.
+        expect(root.querySelector('.sw-strip')?.textContent, 'the chosen row stays on the wall').toContain('Plum Jam');
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallCount(root, 'Plum Jam')).toBe('1');
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+    });
+
+    it("a failed walk's load names only the tokens of its floor, and the wall keeps the kept ids' names and attributions", async () => {
+        // The fifth pass's P1: `loadCurrent` builds `tokens` and `genesis`
+        // from the floor, so a chosen quote the walk never reached had a
+        // price back and no name — no row, pruned, the payment closed.
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        const good = stallEmpty({
+            tokens,
+            genesis: genesisBoth,
+            prices: new Map([[A, XEC_A], [B, XEC_B]]),
+            window: wall('quotes'),
+        });
+        const failed = stallEmpty({
+            tokens: floorTokens,
+            genesis: floorGenesis,
+            prices: failedLookup.prices,
+            descriptionsFailed: true,
+            window: wall('quotes'),
+        });
+        const root = bootSequence([good, failed, failed, good]);
+        await flush();
+        pressMore(root, 'window-step-more', A);
+        await flush();
+        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="window-paying"]'), 'a payment stands').not.toBeNull();
+
+        for (const pass of ['the first walk that throws', 'the second in a row']) {
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await flush();
+            expect(wallCount(root, 'Plum Jam'), `${pass}: the choice stands`).toBe('1');
+            expect(root.querySelector('[data-role="window-paying"]'), `${pass}: the payment stands`).not.toBeNull();
+            expect(root.textContent, pass).not.toContain(SELECTION_DROPPED);
+            expect(wallRow(root, 'Plum Jam')?.textContent, `${pass}: the kept row keeps its attribution`).toContain(
+                QUOTE_MINTED_CHIP,
+            );
+        }
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallCount(root, 'Plum Jam'), 'and after the good read').toBe('1');
+    });
+
+    it('a wall whose book and walk both failed, over an empty read and a standing payment, keeps the payment and the rail', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=all&mode=browse&touch=on`);
+        const good = stallEmpty({ tokens, fetch: { kind: 'empty' }, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall('all') });
+        const bookFailed: State = {
+            ...stallEmpty({
+                tokens: new Map(),
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] },
+                window: wall('all'),
+            }),
+            // A walk that threw before it read anything: no record at all,
+            // which is what the plate's comparison and the rail store would
+            // have judged the seller by.
+            pendingFacts: {
+                stall: { address: ADDR, hash: HASH },
+                pubkeyHex: PK,
+                manifest: Promise.resolve(undefined),
+                descriptions: Promise.resolve(emptyFailedLookup),
+            },
+        };
+        // The wall is on the quotes (nothing is listed), and a listing lands
+        // with the next good read.
+        const withListing = stallEmpty({
+            tokens: new Map([...tokens, [TOKEN, TOKEN_META]]),
+            fetch: { kind: 'offers', offers: [OFFER] },
+            prices: new Map([[A, XEC_A], [B, XEC_B]]),
+            window: wall('all'),
+        });
+        const root = bootSequence([good, bookFailed, withListing]);
+        await flush();
+        pressMore(root, 'window-step-more', A);
+        await flush();
+        expect(wallCount(root, 'Plum Jam')).toBe('1');
+        // An XEC selection asks no feed: the press composes the code at once.
+        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="window-paying"]'), 'a payment stands').not.toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.querySelector('.sw-strip [data-role="seller-price"]'), 'still the quotes').not.toBeNull();
+        expect(root.querySelector('.sw-strip [data-role="price"]'), 'and no listing beside them').toBeNull();
+        expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'with the choice on it').toContain('Plum Jam');
+        expect(wallCount(root, 'Plum Jam'), 'the choice stands over a failed book and walk').toBe('1');
+        expect(root.querySelector('[data-role="window-paying"]'), 'and the payment code').not.toBeNull();
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+    });
+
+    it('a phone retry on the quotes rail over a walk that failed keeps the choice', async () => {
+        window.history.replaceState(null, '', stallPath(PK));
+        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), shopTab: 'quotes' });
+        const failed = stallEmpty({ tokens: floorTokens, prices: failedLookup.prices, descriptionsFailed: true, shopTab: 'quotes' });
+        const root = bootSequence([good, failed, good]);
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        const more = [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')].find(
+            (b) => b.getAttribute('data-focus-key') === `selection-step:${A}:more`,
+        )!;
+        more.click();
+        expect(phoneCount(root, A)).toBe('1');
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.querySelector('[data-role="quotes-failed"]'), 'the walk failed').not.toBeNull();
+        expect(root.querySelector('[data-role="selection-dropped"]'), 'nobody is told the seller took it').toBeNull();
+
+        // The rail's own retry, over the failed read.
+        (root.querySelector('.pay-sec [data-role="retry"]') as HTMLButtonElement).click();
+        await flush();
+        expect(phoneCount(root, A), 'the choice stands after the retry').toBe('1');
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+    });
+});
+
+describe('a-wall-over-records-kept-from-a-walk-that-threw-says-so', () => {
+    /* Local, because this describe sits at the head of the file: every app a
+       test boots stays listening, and a `popstate` reaches all of them, so
+       these many-refresh tests run before the file has booted a hundred. */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    /**
+     * The owner's wording (2026-09-24, "Nói rõ"): the kept records are the
+     * last good read, older than the book beside them, so the status line
+     * says so where the book's stamp would say "Updated just now" — and a
+     * good read takes the sentence away.
+     */
+    const A = 'a1'.repeat(32);
+    const tokens = new Map([[A, fungible(A, 'Plum Jam')]]);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+
+    it('prints the stale line on the quotes rail, twice in a row, and drops it on a good read', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { show: 'quotes' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: false };
+        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A]]), window: params });
+        const failed = stallEmpty({ tokens: new Map(), prices: new Map(), descriptionsFailed: true, window: params });
+        const root = document.createElement('div');
+        const states = [good, failed, failed, good];
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        await flush();
+        const fresh = (): string | null | undefined => root.querySelector('[data-role="window-fresh"]')?.textContent;
+        expect(fresh(), 'a good read carries the book stamp').toBe('Updated just now');
+
+        for (const pass of ['the first walk that throws', 'the second in a row']) {
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await flush();
+            expect(fresh(), pass).toBe(WINDOW_QUOTES_AS_LAST_READ);
+            expect(root.querySelector('.sw-strip')?.textContent, `${pass}: the kept quote stands`).toContain('Plum Jam');
+        }
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(fresh(), 'a good read takes it away').toBe('Updated just now');
+    });
+});
+
+describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
+    /* Local, because this describe sits at the head of the file: every app a
+       test boots stays listening, and a `popstate` reaches all of them, so
+       these many-refresh tests run before the file has booted a hundred. */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    /**
+     * The owner's wording (2026-09-24, "Nói rõ"), the critic's fifth pass
+     * item 4: after a read that did not reach a chosen item the phone's
+     * strip named nothing, said "1 item" over a blank total, and Pay opened
+     * a sheet saying "0 items · one payment". The item is named from what
+     * the page last read, the total and Pay give way to one sentence, and
+     * the press is refused until a read reaches it again.
+     */
+    const A = 'a1'.repeat(32);
+    const B = 'b2'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const tokens = new Map([
+        [A, fungible(A, 'Plum Jam')],
+        [B, fungible(B, 'Rye Flour')],
+    ]);
+    const bootSequence = (states: State[]): HTMLElement => {
+        const root = document.createElement('div');
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        return root;
+    };
+
+    it('on a phone: names it, says it in place of the total and Pay, and refuses the sheet', async () => {
+        window.history.replaceState(null, '', stallPath(PK));
+        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), shopTab: 'quotes' });
+        // Exactly what `loadCurrent` answers over a walk that threw after
+        // reading B: the floor's price and the floor's name, nothing of A.
+        const failed = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            prices: new Map([[B, XEC_B]]),
+            descriptionsFailed: true,
+            shopTab: 'quotes',
+        });
+        const root = bootSequence([good, failed, good]);
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${A}:more`)!
+            .click();
+        const stalePay = root.querySelector<HTMLButtonElement>('[data-role="pay-several-open"]');
+        expect(stalePay, 'Pay stands over a read that reached the choice').not.toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        const strip = root.querySelector('[data-role="selection-strip"]');
+        expect(strip, 'the strip stands').not.toBeNull();
+        expect(strip?.querySelector('[data-role="selection-names"]')?.textContent, 'the chosen item is named').toBe(
+            'Plum Jam ×1',
+        );
+        expect(strip?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(selectionUnread(1));
+        expect(selectionUnread(1)).toBe('This page could not read 1 item you chose \u2014 try again to pay');
+        expect(selectionUnread(2)).toContain('2 items you chose');
+        expect(strip?.querySelector('[data-role="selection-total"]'), 'no total over part of a choice').toBeNull();
+        expect(strip?.querySelector('[data-role="pay-several-open"]'), 'and no Pay').toBeNull();
+        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        // The Pay a slow repaint left under a finger is refused too.
+        stalePay!.click();
+        await flush();
+        expect(root.querySelector('[data-role="pay-several"]'), 'the sheet does not open').toBeNull();
+
+        (root.querySelector('.pay-sec [data-role="retry"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="selection-unread"]'), 'a read that reaches it takes the line away').toBeNull();
+        expect(root.querySelector('[data-role="selection-total"]')?.textContent).toBe('5,000.00 XEC');
+        expect(root.querySelector('[data-role="pay-several-open"]'), 'and Pay is back').not.toBeNull();
+    });
+
+    it('on a touch wall: a walk that stopped at the page cap keeps the choice and refuses Pay in its own words', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        // USD, so a press that was not refused would ask a feed.
+        const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+        const USD_B = { code: 'usd', exponent: 2, amount: 700n };
+        const params = { show: 'quotes' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: true };
+        const good = stallEmpty({ tokens, prices: new Map([[A, USD_A], [B, USD_B]]), window: params });
+        // Our own page cap: B was reached, A lies past it.
+        const truncated = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            prices: new Map([[B, USD_B]]),
+            descriptionsTruncated: true,
+            window: params,
+        });
+        const root = bootSequence([good, truncated, good]);
+        await flush();
+        [...root.querySelectorAll<HTMLButtonElement>('[data-role="window-step-more"]')]
+            .find((b) => b.getAttribute('data-focus-key')?.includes(A))!
+            .click();
+        await flush();
+        const stalePay = root.querySelector<HTMLButtonElement>('[data-role="window-pay"]');
+        expect(stalePay, 'Pay stands over a read that reached the choice').not.toBeNull();
+        let asked = 0;
+        priceControl.fetch = async () => {
+            asked += 1;
+            return undefined;
+        };
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        const bar = root.querySelector('[data-role="window-selection"]');
+        expect(bar?.textContent, 'the choice stands, named').toContain('Plum Jam ×1');
+        expect(root.textContent, 'never "no longer quoted"').not.toContain(SELECTION_DROPPED);
+        expect(bar?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(windowSelectionUnread(1));
+        expect(bar?.querySelector('[data-role="selection-total"]'), 'no total').toBeNull();
+        expect(root.querySelector('[data-role="window-pay"]'), 'and no Pay').toBeNull();
+        expect(root.querySelector('[data-role="window-clear"]'), 'Clear all stays').not.toBeNull();
+        // The Pay a slow repaint left under a finger is refused too: no feed
+        // is asked for a code over part of a choice.
+        stalePay!.click();
+        await flush();
+        expect(asked, 'no feed is asked').toBe(0);
+        expect(root.querySelector('[data-role="window-pay-why"]'), 'and nothing is said to be asked').toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.querySelector('[data-role="window-pay"]'), 'Pay is back when the read reaches it').not.toBeNull();
+        expect(root.querySelector('[data-role="selection-unread"]')).toBeNull();
+    });
+});
+
 
 describe('a-settings-publish-lands-without-a-reload', () => {
     /**
@@ -4230,172 +4665,5 @@ describe('a-listing-arriving-does-not-turn-the-stream-off-its-quote-card', () =>
 
         expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
         expect(card(), 'and the card a viewer is reading stays').toBe('quote');
-    });
-});
-
-describe('a-records-read-that-failed-never-empties-a-choice', () => {
-    /**
-     * The critic's fourth pass (2026-09-24, P1): a descriptions walk that
-     * threw returns what it had read before the throw with `failed: true`,
-     * and three things on the screen read that floor as the seller's whole
-     * record — the prune took a chosen quote out of the customer's choice
-     * (and blamed the seller, `SELECTION_DROPPED`), the wall's frozen payment
-     * was compared with it and closed, and the stored rail moved off the
-     * quotes. Our failure is never the seller removing a quote: one
-     * predicate (`recordsKnown`) gates all three, and a same-stall refresh
-     * keeps the last good records when its own walk failed — the refusal a
-     * live re-read already applies.
-     */
-    const A = 'a1'.repeat(32);
-    const B = 'b2'.repeat(32);
-    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
-    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
-    const tokens = new Map([
-        [A, fungible(A, 'Plum Jam')],
-        [B, fungible(B, 'Rye Flour')],
-    ]);
-    /** What a walk that threw after reading B's record answers. */
-    const failedLookup = {
-        descriptions: new Map<string, string>(),
-        shelves: new Map<string, string>(),
-        prices: new Map([[B, XEC_B]]),
-        quoteTimes: new Map<string, number>(),
-        unreadable: new Set<string>(),
-        truncated: false,
-        failed: true,
-        genesis: new Map(),
-    };
-    /** Boots with a loader that answers the states in turn, the last one for good. */
-    const bootSequence = (states: State[]): HTMLElement => {
-        const root = document.createElement('div');
-        let at = 0;
-        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
-        return root;
-    };
-    /*
-     * Read off this test's own root, never `painted`: a `popstate` reaches
-     * every app an earlier test booted in this file, and each of them paints
-     * last into the shared capture.
-     */
-    const wallCount = (root: HTMLElement, name: string): string | undefined =>
-        [...root.querySelectorAll('.sw-strip .sw-row, .sw-strip .item')]
-            .find((row) => row.textContent?.includes(name))
-            ?.querySelector('.sw-step-n')?.textContent ?? undefined;
-    const phoneCount = (root: HTMLElement, tokenId: string): string | undefined =>
-        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
-            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)
-            ?.parentElement?.querySelector('[data-role="selection-count"]')?.textContent ?? undefined;
-    const pressMore = (root: HTMLElement, role: string, tokenId: string): void => {
-        const button = [...root.querySelectorAll<HTMLButtonElement>(`[data-role="${role}"]`)].find(
-            (b) => (b.closest('[data-token]')?.getAttribute('data-token') ?? b.getAttribute('data-focus-key') ?? '').includes(tokenId),
-        );
-        (button ?? root.querySelector<HTMLButtonElement>(`[data-role="${role}"]`))!.click();
-    };
-
-    it('a wall whose walk failed while its book answered keeps the choice, the payment and the quotes', async () => {
-        // The wall's own canonical path, so the refresh is the heartbeat's
-        // same-stall re-read (`identityOf` answers the address).
-        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
-        const wall = { show: 'quotes' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: true };
-        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall });
-        const failed = stallEmpty({
-            tokens,
-            prices: failedLookup.prices,
-            descriptionsFailed: true,
-            window: wall,
-        });
-        const root = bootSequence([good, failed, good]);
-        await flush();
-        pressMore(root, 'window-step-more', A);
-        await flush();
-        expect(wallCount(root, 'Plum Jam')).toBe('1');
-        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
-        await flush();
-        expect(root.querySelector('[data-role="window-paying"]'), 'a payment stands').not.toBeNull();
-
-        // The heartbeat's refresh: the same stall, and a walk that threw.
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        await flush();
-        expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'the choice stands').toContain('Plum Jam');
-        expect(root.querySelector('.sw-sel-drop'), 'and nobody is told the seller took it').toBeNull();
-        expect(root.querySelector('[data-role="window-paying"]'), 'the payment stands').not.toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
-        // The last good records stand on the wall: the floor the throw left
-        // would have taken the chosen item's own row off the list.
-        expect(root.querySelector('.sw-strip')?.textContent, 'the chosen row stays on the wall').toContain('Plum Jam');
-
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        await flush();
-        expect(wallCount(root, 'Plum Jam')).toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
-    });
-
-    it('a wall whose book and walk both failed keeps the choice and the rail when the facts land late', async () => {
-        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=all&mode=browse&touch=on`);
-        const wall = { show: 'all' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: true };
-        const good = stallEmpty({ tokens, fetch: { kind: 'empty' }, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall });
-        const bookFailed: State = {
-            ...stallEmpty({
-                tokens,
-                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: UNREACHABLE_HOSTS },
-                window: wall,
-            }),
-            pendingFacts: {
-                stall: { address: ADDR, hash: HASH },
-                pubkeyHex: PK,
-                manifest: Promise.resolve(undefined),
-                descriptions: Promise.resolve(failedLookup),
-            },
-        };
-        // The wall is on the quotes (nothing is listed), and a listing lands
-        // with the next good read.
-        const withListing = stallEmpty({
-            tokens: new Map([...tokens, [TOKEN, TOKEN_META]]),
-            fetch: { kind: 'offers', offers: [OFFER] },
-            prices: new Map([[A, XEC_A], [B, XEC_B]]),
-            window: wall,
-        });
-        const root = bootSequence([good, bookFailed, withListing]);
-        await flush();
-        pressMore(root, 'window-step-more', A);
-        await flush();
-        expect(wallCount(root, 'Plum Jam')).toBe('1');
-
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        await flush();
-        // The failure screen paints no quotes rail of its own; the choice
-        // is what the next read comes back to.
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
-
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        await flush();
-        expect(root.querySelector('.sw-strip [data-role="seller-price"]'), 'still the quotes').not.toBeNull();
-        expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'with the choice on it').toContain('Plum Jam');
-        expect(wallCount(root, 'Plum Jam'), 'the choice stands over a failed book and walk').toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
-    });
-
-    it('a phone retry on the quotes rail over a walk that failed keeps the choice', async () => {
-        const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), shopTab: 'quotes' });
-        const failed = stallEmpty({ tokens, prices: failedLookup.prices, descriptionsFailed: true, shopTab: 'quotes' });
-        const root = bootSequence([good, failed, good]);
-        await flush();
-        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
-        const more = [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')].find(
-            (b) => b.getAttribute('data-focus-key') === `selection-step:${A}:more`,
-        )!;
-        more.click();
-        expect(phoneCount(root, A)).toBe('1');
-
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        await flush();
-        expect(root.querySelector('[data-role="quotes-failed"]'), 'the walk failed').not.toBeNull();
-        expect(root.querySelector('[data-role="selection-dropped"]'), 'nobody is told the seller took it').toBeNull();
-
-        // The rail's own retry, over the failed read.
-        (root.querySelector('.pay-sec [data-role="retry"]') as HTMLButtonElement).click();
-        await flush();
-        expect(phoneCount(root, A), 'the choice stands after the retry').toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
     });
 });

@@ -922,6 +922,17 @@ export type StallView = WindowState & {
      */
     descriptionsFailed?: boolean;
     /**
+     * The records on the view are the last good read, kept because this
+     * load's own walk threw (a wall re-reading the same stall — the
+     * heartbeat). They were the seller's whole record when read and may be
+     * older than the book beside them, so the wall says so in place of the
+     * book's freshness stamp (`WINDOW_QUOTES_AS_LAST_READ`). A whole read,
+     * only older: the choice and the plate on screen were made off exactly
+     * these records, so they are judged like any other (`recordsKnown` in
+     * `app.ts`).
+     */
+    recordsStale?: boolean;
+    /**
      * tokenId → whether this stall's own wallet minted that token.
      *
      * Built for the tokens the seller quoted and merged monotonically

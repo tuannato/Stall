@@ -16,7 +16,7 @@
  * the seller's unit; the sheet is where a figure freezes).
  */
 import { XEC_PRICE_CODE, surchargedQuote, type TokenPrice } from './description';
-import { satsForQuote, satsWithSurcharge } from './fiat';
+import { isQuoteUnit, satsForQuote, satsWithSurcharge } from './fiat';
 
 /** Token id → count, whole items, at least one each. */
 export type Selection = ReadonlyMap<string, bigint>;
@@ -188,25 +188,44 @@ export function selectionTolerance(
 
 /**
  * A quote that leaves the rail leaves the selection (D8). Applied at paint
- * time over the quoted set, so a live re-read that removed a record cannot
- * leave a count on an item the seller no longer quotes; `dropped` is what
- * the strip says once, until the selection next changes.
+ * time over a read of the seller's records, so a live re-read that removed
+ * a record cannot leave a count on an item the seller no longer quotes;
+ * `dropped` is what the strip says once, until the selection next changes.
+ *
+ * **Only the seller's doing drops an item, never our gap** (the critic's
+ * fifth pass, 2026-09-24). A chosen item goes when the read shows its record
+ * gone — and only a `complete` read can show that, since a walk that threw
+ * or stopped at our own page cap simply did not reach it — or when its
+ * record now names another unit (a republished quote, USD → XEC, or a unit
+ * this page does not paint at all). A record that is there in a painted unit
+ * but makes no row — its genesis never arrived — is this page's gap and
+ * stays chosen: the strip says so and Pay waits for it. The caller decides
+ * which reads are worth judging at all (`recordsKnown` in `app.ts`: a walk
+ * that threw is never judged).
  */
 export function pruneSelection(
     selection: Selection,
-    quoted: ReadonlySet<string>,
-    prices: ReadonlyMap<string, TokenPrice> | undefined,
+    prices: ReadonlyMap<string, TokenPrice>,
+    complete: boolean,
 ): { selection: Map<string, bigint>; dropped: boolean } {
     const kept = new Map<string, bigint>();
     let dropped = false;
-    // The unit is the first KEPT item's: a re-read that took the first item
-    // out leaves the rest in their own unit; one that moved an item to
-    // another unit (a republished quote, USD → XEC) drops that item, or the
-    // selection would hold two units and every surface would go blank.
+    // The unit is the first KEPT item's that the read names: a re-read that
+    // took the first item out leaves the rest in their own unit; one that
+    // moved an item to another unit drops that item, or the selection would
+    // hold two units and every surface would go blank.
     let unit: string | undefined;
     for (const [tokenId, count] of selection) {
-        const price = prices?.get(tokenId);
-        if (!quoted.has(tokenId) || price === undefined) {
+        const price = prices.get(tokenId);
+        if (price === undefined) {
+            if (complete) {
+                dropped = true;
+            } else {
+                kept.set(tokenId, count);
+            }
+            continue;
+        }
+        if (!isQuoteUnit(price.code)) {
             dropped = true;
             continue;
         }

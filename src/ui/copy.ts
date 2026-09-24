@@ -1969,6 +1969,14 @@ export const selectionApart = (unit: string): string =>
     `Quoted in ${unit} \u2014 paid on its own`;
 export const SELECTION_DROPPED =
     'Something you chose is no longer quoted as it was and was taken out.';
+/**
+ * A chosen item this page's own read did not reach — a walk that threw or
+ * stopped at our page cap, or a genesis that never arrived. In place of the
+ * strip's total and Pay: our failure, never "no longer quoted" (the owner,
+ * "Nói rõ", 2026-09-24).
+ */
+export const selectionUnread = (n: number): string =>
+    `This page could not read ${n} item${n === 1 ? '' : 's'} you chose \u2014 try again to pay`;
 export const selectionFull = (n: number): string =>
     `Up to ${n} different items in one payment.`;
 /* The several-items sheet. */
@@ -2388,6 +2396,21 @@ export const WINDOW_PAY_BACK = 'Back';
  */
 export const WINDOW_PAY_ASKING =
     'Asking the price feeds for a rate\u2026 the code appears when one arrives.';
+/**
+ * The wall's own sentence for a chosen item its read did not reach, in place
+ * of the strip's total and Pay. The wall has no retry control: its heartbeat
+ * reads again within a minute, so Pay comes back by itself.
+ */
+export const windowSelectionUnread = (n: number): string =>
+    `This screen could not read ${n} item${n === 1 ? '' : 's'} you chose just now \u2014 Pay comes back once it can`;
+/**
+ * The wall's status line over records kept from the last read that finished,
+ * because this screen's own walk threw (the owner's wording, 2026-09-24): in
+ * place of the book's freshness stamp, which would claim the quotes were read
+ * just now.
+ */
+export const WINDOW_QUOTES_AS_LAST_READ =
+    'Quotes as last read \u00b7 this screen could not read them just now';
 export const WINDOW_PAY_WHY_TEXT: Readonly<Record<PayRateWhy, string>> = {
     'no-answer':
         'No price feed answered just now, so there is no code to scan. Tap Pay again in a moment.',

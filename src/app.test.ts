@@ -1247,6 +1247,45 @@ describe('the-opening-tab-is-decided-once-and-sticks', () => {
     });
 });
 
+describe('the-opening-tab-is-not-decided-over-a-walk-that-threw', () => {
+    /**
+     * The critic's fifth pass (2026-09-24): over an empty book the opening
+     * side rests on the records, and a walk that threw left a floor that may
+     * hold none of the seller's quotes — "listings" decided off it stuck for
+     * the visit, and a stall that quotes and lists nothing opened on its
+     * empty side for good. The next load decides again; a tab the reader
+     * pressed is theirs and settles it.
+     */
+    it('decides again on the next load', async () => {
+        let failed = true;
+        const root = document.createElement('div');
+        boot(root, async () =>
+            failed ? quotedStall({ prices: new Map(), descriptionsFailed: true }) : quotedStall(),
+        );
+        await flush();
+        expect(railPressed(root), 'the floor quotes nothing').toBe('shop-tab-listings');
+
+        failed = false;
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(railPressed(root), 'a read that finished decides').toBe('shop-tab-quotes');
+    });
+
+    it('keeps a side the reader pressed', async () => {
+        let failed = true;
+        const root = document.createElement('div');
+        boot(root, async () =>
+            failed ? quotedStall({ prices: new Map(), descriptionsFailed: true }) : quotedStall(),
+        );
+        await flush();
+        railTab(root, 'listings')!.click();
+        failed = false;
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(railPressed(root)).toBe('shop-tab-listings');
+    });
+});
+
 describe('a-retry-on-the-quotes-tab-comes-back-to-the-quotes-tab', () => {
     /**
      * A walk that threw is the one quotes outcome with a way forward, so it

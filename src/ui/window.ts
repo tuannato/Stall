@@ -28,6 +28,7 @@ import {
     quoteFigure,
     quoteNaming,
     quotedItems,
+    unreadChosen,
     stallBaseUrl,
     tokenName,
     unreadableQuotes,
@@ -519,9 +520,17 @@ function selectionBar(
         bar.append(names);
         return bar;
     }
-    const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
-    const line = items
-        .map((item) => `${quoteNaming(view, item.tokenId).title} \u00d7${(selection.get(item.tokenId) ?? 0n).toString()}`)
+    // Every chosen item by name, the rows' own and then any this screen's
+    // read did not reach (`unreadChosen`), named from `view.tokens`.
+    const unread = unreadChosen(selection, view);
+    const chosen = [
+        ...quotedItems(view)
+            .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
+            .map((item) => item.tokenId),
+        ...unread,
+    ];
+    const line = chosen
+        .map((tokenId) => `${quoteNaming(view, tokenId).title} \u00d7${(selection.get(tokenId) ?? 0n).toString()}`)
         .join(' \u00b7 ');
     const namesRow = el('span', 'sw-sel-n', line);
     names.append(namesRow);
@@ -555,13 +564,21 @@ function selectionBar(
     }
     bar.append(names);
 
-    const glance = selectionGlance(selection, view.prices);
     const totals = el('div', 'sw-sel-tot');
-    const total = el('span', 'sw-sel-t', glance === undefined ? '' : quoteFigure(glance));
-    total.setAttribute('data-role', 'selection-total');
-    totals.append(total);
-    if (selectionHasSurcharge(selection, view.prices)) {
-        totals.append(el('span', 'sw-sel-s', copy.SELECTION_NOTE_SURCHARGE));
+    if (unread.length > 0) {
+        // In place of the total, and Pay is not built below: a code over
+        // part of a choice would pay for items nobody picked on their own.
+        const said = el('span', 'sw-sel-unread', copy.windowSelectionUnread(unread.length));
+        said.setAttribute('data-role', 'selection-unread');
+        totals.append(said);
+    } else {
+        const glance = selectionGlance(selection, view.prices);
+        const total = el('span', 'sw-sel-t', glance === undefined ? '' : quoteFigure(glance));
+        total.setAttribute('data-role', 'selection-total');
+        totals.append(total);
+        if (selectionHasSurcharge(selection, view.prices)) {
+            totals.append(el('span', 'sw-sel-s', copy.SELECTION_NOTE_SURCHARGE));
+        }
     }
     bar.append(totals);
 
@@ -593,7 +610,9 @@ function selectionBar(
     if (handlers.onWallPay !== undefined) {
         pay.addEventListener('click', handlers.onWallPay);
     }
-    buttons.append(pay);
+    if (unread.length === 0) {
+        buttons.append(pay);
+    }
     bar.append(buttons);
     return bar;
 }
@@ -1102,7 +1121,12 @@ function statusBar(
     const left = el('span', 'sw-state', copy.windowState(rail, lockLine, outcome));
     left.setAttribute('data-role', 'window-state');
     bar.append(left);
-    const fresh = copy.windowFreshness(view.readAtMs, Date.now());
+    // Over records kept from the last read that finished, the quotes rail
+    // says so where the book's stamp would claim they were read just now.
+    const fresh =
+        rail === 'quotes' && view.recordsStale === true
+            ? copy.WINDOW_QUOTES_AS_LAST_READ
+            : copy.windowFreshness(view.readAtMs, Date.now());
     if (fresh !== undefined) {
         const right = el('span', 'sw-fresh', fresh);
         right.setAttribute('data-role', 'window-fresh');
