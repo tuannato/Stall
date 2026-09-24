@@ -56,8 +56,8 @@ export const PRICE_CHECK_HOST = 'https://api.coinpaprika.com';
  * Whether the second feed is asked at all. **Paused** (owner, 2026-09-23):
  * CoinPaprika's free plan is described as personal and non-commercial, and
  * no keyless source a browser can call directly was found whose terms say
- * commercial use is fine (the survey:
- * `private/design/workshop-2026-09-23/PRICE-SOURCES.md`). Paused, not
+ * commercial use is fine (surveyed 2026-09-23: exchanges without CORS or
+ * with non-commercial terms, aggregators that need a key). Paused, not
  * deleted: `fetchXecPriceCheck`, `judgeRates` and their tests stay, and
  * while paused `readPayRate` hands the judge no check, so `check` is
  * `'none'` and the figure is the first feed's, as it always was.
