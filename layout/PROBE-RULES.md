@@ -2482,11 +2482,12 @@ tablet passes (21), "broadcast-unbuyable …" on the canvas (4), and the
 desk's and canvas's skip coverage gaps. The fixture comments name the real
 counter (`skipChecks`, by surface).
 
-**An overlay with only unbuyable listings says there is nothing to buy.**
+**An overlay with only unbuyable listings says so** (reworded in round 5,
+below: about the listings, never the stall).
 With `cards=listings` (or `cards=all` and nothing quoted) and every listing
 unbuyable, the stream skips them all: the ticker painted an empty ribbon
 under "Listings" and the corner card a head with nothing under it — a
-source that looked dead. Both now say `BROADCAST_NOTHING_TO_BUY` ("nothing
+source that looked dead. Both said `BROADCAST_NOTHING_TO_BUY` ("nothing
 to buy right now") where the ribbon or the card would stand — never
 "nothing listed yet", which is false over a book that has listings.
 Fixture `broadcast-ticker-none-buyable` (canvas, geometry: the sentence
@@ -2522,20 +2523,28 @@ the ground with a 6px shadow halo, so nothing moves; and on a wall the
 status line and the shop code's plate.
 
 **The targets.** The failure and empty sentences and the other ground
-lines are contrast targets on every look (`.mid-t`, `.mid-p`,
+lines are contrast targets that match on every look (`.mid-t`, `.mid-p`,
 `.pay-sec > .fine` — `quotes-failed`, `-reading`, `-truncated`, the
 lede —, `.stall-body > .fine`, the sparse box's lines and button, the
 notice, the Activity notes, the face's pointer, the checklist's steps and
-note, `.sw-state`, `.sw-fresh`, the plate's caption); the brand strip,
-the Wearing line, the headings and the back control are targets where
-the rain is worn (`.stall.att-rainfall:not(.deck-stall) …`), because
-unscoped they read under 3:1 on other looks worn — Modern's shelf heads
-at 2.56:1 with every decoration, Rural's Wearing links and back control
-at 2.53:1, Rural's strip over its bunting at 1.1:1 — which is the owner's
-question, not this rule's (reported with the round). Four geometry-only
+note, `.sw-state`, `.sw-fresh`, the plate's caption) — **but a target is
+read only where its screen is sampled**, and the screens that carry most
+of the failure and empty sentences are geometry-only: `.mid-p` on the
+failure screens and the sparse box on `empty` are read on every look, and
+the quotes rail's failure lines, the checklist and (round 5) the notice
+invite on Neo worn alone. The brand strip, the Wearing line, the headings
+and the back control are targets where the rain is worn
+(`.stall.att-rainfall:not(.deck-stall) …`): unscoped, three reads fell
+under 3:1 on other looks worn. **Corrected in round 5** (the critic's
+fourth pass) — this entry first called all three the owner's question,
+and two are this sampler's mistakes: Modern's section and shelf heads
+(2.56:1) read the heading's own 2px accent underline, inside the box and
+never reached by the glyphs, and Rural's strip (1.1:1) reads the bunting
+row its box also holds. Rural's Wearing links and back control (2.53:1,
+sun-faded worn) are real and open, for the next step. Four geometry-only
 screens are sampled on Neo worn alone (`RAIN_JOBS`: `quotes-failed`,
-`nothing-quoted`, `quotes-truncated`, `first-stall`), at the phone and
-the desk: 449 jobs.
+`nothing-quoted`, `quotes-truncated`, `first-stall`; `sparse-pasted` since
+round 5), at the phone and the desk: 449 jobs then, 451 now.
 
 **The sampler, twice more honest.** A heading's in-flow marker (Neo's
 wedge, an inline-block `::before` inside the heading's box) is stepped
@@ -2578,3 +2587,17 @@ rain is worn, hover included (Neo restates hover with the `background`
 shorthand at (0,3,0); the ground's rule is (0,4,0)); measured in Chrome
 with the hover forced: an opaque ground in both states, the words at
 6.68:1 and 6.39:1. 451 jobs.
+
+**The overlay's empty line, reworded (round 5, the critic's fourth pass).**
+"Nothing to buy right now" claimed the whole stall over a book whose
+listings the stream skips — a stall with quotes it does not carry is not a
+stall with nothing to buy. The overlay now says why it has no card, about
+the listings, whenever a definite book has offers and `broadcastCards` is
+empty (`emptyOverlayReason`): `BROADCAST_NO_LISTING_BUYABLE` ("no listing
+can be bought right now") when every listing is unbuyable, and
+`BROADCAST_NO_LISTING_CARRIED` ("nothing listed here that this page shows")
+when every offer is a token this page does not carry — the two empty
+ribbons the old sentence left. A `cards=quotes` stream with no payable
+quote falls back to the listings (§4), and its ticker label now names the
+listings it shows rather than the quotes line. Tests in
+`the-stream-skips-an-unbuyable-listing`, red on the old overlay.

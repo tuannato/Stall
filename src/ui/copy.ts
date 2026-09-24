@@ -2033,12 +2033,17 @@ export const BROADCAST_CAPTION = 'Scan to open';
 /** Empty shop on the overlay. Muted; not a failure. */
 export const BROADCAST_EMPTY = 'nothing listed yet';
 /**
- * The overlay's listings when every one is an offer nobody can take (its
- * smallest take is more than is left): the stream skips them all, and
- * "nothing listed yet" would be false — they are listed (the critic's third
- * pass, 2026-09-24: the ticker painted an empty ribbon under "Listings").
+ * The overlay over a book that has listings and not one card to show
+ * (the critic's third and fourth passes, 2026-09-24). Said about the
+ * listings and never about the stall: a stall with quotes the stream does
+ * not carry is not a stall with nothing to buy. Two sentences, because
+ * there are two reasons: every listing is one nobody can take (its smallest
+ * take is more than is left), and the stream skips them — or every listing
+ * is a token this page does not carry (§4's withheld list). "Nothing listed
+ * yet" would be false for both: they are listed.
  */
-export const BROADCAST_NOTHING_TO_BUY = 'nothing to buy right now';
+export const BROADCAST_NO_LISTING_BUYABLE = 'no listing can be bought right now';
+export const BROADCAST_NO_LISTING_CARRIED = 'nothing listed here that this page shows';
 /**
  * The one line under a quote card, and every limit of that rail in it: money
  * reaches the seller, nothing is held, and no token changes hands. It is the

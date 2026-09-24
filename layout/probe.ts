@@ -2634,7 +2634,10 @@ const CONTRAST_TEXT = [
      * status line and caption. Found by sampling every text node on every
      * screen on Neo worn over the brightest drop; each had no box of its
      * own, so under the rain it read 1.1–2.9:1 and nothing here measured it.
-     * Every look samples these.
+     * They match on every look, but a target is read only where its screen
+     * is sampled: `.mid-p` on the failure screens and the empty stall on
+     * every look; the quotes rail's failure lines, the checklist and the
+     * notice invite on Neo worn alone (`RAIN_JOBS`, geometry-only screens).
      */
     '.notice-text',
     '.sparse-empty-t',
@@ -2659,12 +2662,14 @@ const CONTRAST_TEXT = [
     /*
      * And the rest of what the rain exposed, sampled where it is worn: the
      * brand strip, the footer's Wearing line, the section and shelf heads,
-     * the face's back control. Unscoped, these read under 3:1 on other
-     * looks with every decoration worn — Modern's shelf heads at 2.56:1,
-     * Rural's Wearing links and back control at 2.53:1, Rural's strip over
-     * its bunting at 1.1:1 — which is a question for the owner and not this
-     * rule's to answer (PROBE-RULES.md, "A line on the ground reads wherever
-     * a drop falls").
+     * the face's back control. Unscoped, three reads fall under 3:1 on other
+     * looks with every decoration worn, and two of them are this sampler's
+     * mistakes (the critic's fourth pass): Modern's section and shelf heads
+     * (2.56:1) read the heading's own 2px accent underline, inside the box
+     * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
+     * bunting row its box also holds. Rural's Wearing links and back control
+     * (2.53:1, sun-faded worn) are real and open. Scoped until the sampler
+     * reads behind a target's own text lines — the next step, not this one.
      */
     '.stall.att-rainfall:not(.deck-stall) .orn',
     '.stall.att-rainfall:not(.deck-stall) .wearing',

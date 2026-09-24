@@ -1352,7 +1352,7 @@ export const SCREENS: Record<string, StallView> = {
     /*
      * Every listing unbuyable, `cards=listings` (the critic's third pass,
      * 2026-09-24): the ribbon has nothing to run, and the bar says so in its
-     * place (`BROADCAST_NOTHING_TO_BUY`) rather than standing empty under
+     * place (`BROADCAST_NO_LISTING_BUYABLE`) rather than standing empty under
      * "Listings".
      */
     'broadcast-ticker-none-buyable': base({

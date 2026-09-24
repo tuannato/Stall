@@ -6437,29 +6437,37 @@ describe('the-stream-skips-an-unbuyable-listing', () => {
     });
 
     /**
-     * The critic's third pass (2026-09-24): with every listing unbuyable and
-     * `cards=listings`, the ticker painted an empty ribbon under "Listings"
-     * and the corner card a head with nothing under it — a source that
-     * looked dead. An empty rail says so, and "nothing listed yet" would be
-     * false: they are listed, and none can be bought.
+     * The critic's third and fourth passes (2026-09-24): with every listing
+     * unbuyable the ticker painted an empty ribbon under "Listings" and the
+     * corner card a head with nothing under it — a source that looked dead.
+     * An overlay with no card over a book that has offers says why, about
+     * the listings and never the stall ("nothing to buy" claimed a stall
+     * whose quotes it did not carry), and "nothing listed yet" would be
+     * false: they are listed. The same for a `cards=quotes` stream with no
+     * payable quote — which falls back to the listings, and now labels them
+     * so — and for a book of only tokens this page does not carry.
      */
-    it('says there is nothing to buy where a ribbon or a card of only unbuyable listings would stand', () => {
-        const ticker = paint(
+    const tickerOf = (over: Partial<StallView>, cards: 'listings' | 'quotes' | 'all' = 'listings') =>
+        paint(
             broadcastView({
-                fetch: { kind: 'offers', offers: [stranded] },
-                tokens,
-                broadcast: { preset: 'ticker', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
-            }),
+                ...over,
+                broadcast: { preset: 'ticker', mode: 'fixed', transparent: false, cards, side: 'right', edge: 'bottom' },
+            } as Partial<StallView>),
         ).root;
+
+    it('says no listing can be bought where a ribbon or a card of only unbuyable listings would stand', () => {
+        const ticker = tickerOf({ fetch: { kind: 'offers', offers: [stranded] }, tokens });
         expect(ticker.querySelector('.tk-run'), 'no ribbon').toBeNull();
-        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NOTHING_TO_BUY);
+        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_BUYABLE);
         expect(ticker.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(copy.BROADCAST_TICKER_LISTINGS);
         expect(ticker.textContent).not.toContain(copy.BROADCAST_EMPTY);
         const card = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded] }, tokens })).root;
-        expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NOTHING_TO_BUY);
+        expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_BUYABLE);
+        // About the listings, never the stall.
+        expect(copy.BROADCAST_NO_LISTING_BUYABLE).toContain('listing');
         // Not on a stall that has something to show, nor on the quotes rail.
         const buyable = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens })).root;
-        expect(buyable.textContent).not.toContain(copy.BROADCAST_NOTHING_TO_BUY);
+        expect(buyable.textContent).not.toContain(copy.BROADCAST_NO_LISTING_BUYABLE);
         const quotes = paint(
             broadcastView({
                 fetch: { kind: 'offers', offers: [stranded] },
@@ -6468,7 +6476,40 @@ describe('the-stream-skips-an-unbuyable-listing', () => {
                 broadcast: { ...BROADCAST, mode: 'fixed', cards: 'all' },
             }),
         ).root;
-        expect(quotes.textContent).not.toContain(copy.BROADCAST_NOTHING_TO_BUY);
+        expect(quotes.textContent).not.toContain(copy.BROADCAST_NO_LISTING_BUYABLE);
+    });
+
+    it('says so on a quotes stream with no payable quote, under the listings label it falls back to', () => {
+        // One quote, under the dust floor: not payable, so no quote card.
+        const ticker = tickerOf(
+            {
+                fetch: { kind: 'offers', offers: [stranded] },
+                tokens,
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 100n }]]),
+            },
+            'quotes',
+        );
+        expect(ticker.querySelector('.tk-run'), 'no ribbon').toBeNull();
+        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_BUYABLE);
+        expect(ticker.querySelector('[data-role="ticker-rail"]')?.textContent, 'the label names what is shown').toBe(
+            copy.BROADCAST_TICKER_LISTINGS,
+        );
+        // And with a buyable listing, the fallback's items ride under the
+        // listings label, not the quotes line.
+        const fallback = tickerOf({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens }, 'quotes');
+        expect(fallback.querySelectorAll('.tk-it').length).toBe(1);
+        expect(fallback.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(copy.BROADCAST_TICKER_LISTINGS);
+    });
+
+    it('says nothing listed here is shown over a book of only tokens this page does not carry', () => {
+        const withheld = { ...OFFER, tokenId: FIRMA_ID, outpoint: { txid: OUTPOINT.txid, outIdx: 7 } };
+        const firmaTokens = new Map([[FIRMA_ID, FIRMA_META]]);
+        const ticker = tickerOf({ fetch: { kind: 'offers', offers: [withheld] }, tokens: firmaTokens });
+        expect(ticker.querySelector('.tk-run')).toBeNull();
+        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_CARRIED);
+        expect(ticker.textContent).not.toContain('FIRMA');
+        const card = paint(broadcastView({ fetch: { kind: 'offers', offers: [withheld] }, tokens: firmaTokens })).root;
+        expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_CARRIED);
     });
 });
 

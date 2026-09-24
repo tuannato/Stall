@@ -151,18 +151,44 @@ export function broadcastRail(view: StallView): 'listings' | 'quotes' {
 }
 
 /**
- * A definite book with listings on it and not one the stream can show —
- * every one unbuyable — and no quote card in their place. The overlay says
- * so rather than standing empty: an empty rail on a surface with nothing
- * else to show (the critic's third pass, 2026-09-24).
+ * Why a definite book with offers on it leaves the overlay no card to show
+ * — `broadcastCards` empty, whichever rail asked (a `cards=quotes` stream
+ * with no payable quote falls back to the listings) — or nothing when there
+ * is a card, or no book. The overlay says so rather than standing empty: an
+ * empty ribbon under its label reads as a source that died (the critic's
+ * third and fourth passes, 2026-09-24).
+ *
+ * - `unbuyable`: listed, and every listing is one nobody can take;
+ * - `withheld`: offered, and every offer is a token this page does not carry.
  */
-export function nothingToBuy(view: StallView): boolean {
-    return (
-        view.fetch?.kind === 'offers' &&
-        broadcastRail(view) === 'listings' &&
-        listingsInShopOrder(view).length > 0 &&
-        streamListings(view).length === 0
-    );
+export function emptyOverlayReason(view: StallView): 'unbuyable' | 'withheld' | undefined {
+    if (view.fetch?.kind !== 'offers' || broadcastCards(view).length > 0) {
+        return undefined;
+    }
+    if (listingsInShopOrder(view).length > 0) {
+        return 'unbuyable';
+    }
+    return view.fetch.offers.length > 0 ? 'withheld' : undefined;
+}
+
+/** The sentence for `emptyOverlayReason`, or nothing. */
+function emptyOverlayLine(view: StallView): string | undefined {
+    const why = emptyOverlayReason(view);
+    return why === 'unbuyable'
+        ? copy.BROADCAST_NO_LISTING_BUYABLE
+        : why === 'withheld'
+          ? copy.BROADCAST_NO_LISTING_CARRIED
+          : undefined;
+}
+
+/**
+ * The rail the cards on screen are from: a `cards=quotes` stream with no
+ * payable quote shows the listings "as if the switch were absent" (§4), and
+ * its label must say so rather than name quotes over listing items.
+ */
+function shownRail(view: StallView): 'listings' | 'quotes' {
+    const rail = broadcastRail(view);
+    return rail === 'quotes' && payableQuotes(view).length === 0 ? 'listings' : rail;
 }
 
 /** Under `cards=all`, both rails have something to show, so the wrap turns. */
@@ -325,8 +351,8 @@ export function renderBroadcastView(view: StallView): HTMLElement {
     // something they can pay for.
     if (fetch?.kind === 'empty' && ext === undefined) {
         head.append(el('div', 'bc-empty', copy.BROADCAST_EMPTY));
-    } else if (ext === undefined && nothingToBuy(view)) {
-        head.append(el('div', 'bc-empty', copy.BROADCAST_NOTHING_TO_BUY));
+    } else if (ext === undefined && emptyOverlayLine(view) !== undefined) {
+        head.append(el('div', 'bc-empty', emptyOverlayLine(view)!));
     }
     if (ext !== undefined) {
         head.append(ext);
@@ -493,7 +519,7 @@ function renderTicker(view: StallView, params: BroadcastParams): HTMLElement {
     root.setAttribute('data-side', params.side);
     root.setAttribute('data-edge', params.edge);
 
-    const rail = broadcastRail(view);
+    const rail = shownRail(view);
     const bar = el('div', 'plate tk-bar');
     const flag = el('div', 'tk-lab');
     flag.append(el('div', 'tk-brand', copy.BROADCAST_BRAND));
@@ -553,11 +579,10 @@ function renderTicker(view: StallView, params: BroadcastParams): HTMLElement {
             clip.append(run);
         } else if (fetch?.kind === 'empty') {
             clip.append(el('div', 'tk-empty', copy.BROADCAST_EMPTY));
-        } else if (nothingToBuy(view)) {
-            // Listed, and not one of them can be bought: the stream skips
-            // them all, and an empty ribbon under "Listings" reads as a
-            // source that died.
-            clip.append(el('div', 'tk-empty', copy.BROADCAST_NOTHING_TO_BUY));
+        } else if (emptyOverlayLine(view) !== undefined) {
+            // Listed, and not one of them can be shown: an empty ribbon
+            // under its label reads as a source that died.
+            clip.append(el('div', 'tk-empty', emptyOverlayLine(view)!));
         }
     }
     bar.append(clip);
