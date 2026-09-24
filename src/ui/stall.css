@@ -3075,35 +3075,6 @@ textarea.paste-in {
 }
 
 /*
- * The unbuyable dash is the size of the figure it stands in for (the owner,
- * 2026-09-23, D1: "Bằng cỡ giá"). It is painted wearing that figure's class
- * — `item-x` on a shop row and on the wall, `x` on the listing face — so
- * every rule that sizes the figure, per look and per width, sizes the dash
- * with it, and the two cannot drift: this rule names no `font-size`. It read
- * `--s-price-size` until then, which every look's sheet overrode for the
- * figure and not for the dash — Modern painted a 30px dash beside a 26px
- * figure on a phone.
- *
- * Everything but the size is the dash's own. The figure's rules would lend
- * it their ink, glow, weight, spacing and numerals, so they are restated
- * here at (0,3,0) — over any look's `.t-* .item-x` (0,2,0) and the face's
- * `.face-x .x` — the inherited ones as `inherit`, which is what the dash
- * had before it wore the class. Probe: `the-dash-is-the-size-of-the-figure`.
- */
-.stall .dash.item-x,
-.stall .dash.x {
-    display: block;
-    font-family: var(--s-font);
-    color: var(--s-muted);
-    letter-spacing: 0.06em;
-    line-height: 1.05;
-    font-weight: inherit;
-    font-variant-numeric: inherit;
-    white-space: inherit;
-    text-shadow: inherit;
-}
-
-/*
  * A label never wraps. These are our own words, all of them short, and a
  * two-line "Token ID" beside a two-line value reads as a broken row rather
  * than as a fact.

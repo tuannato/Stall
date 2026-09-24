@@ -20,6 +20,7 @@ import { glyphLabel } from './glyphs';
 import {
     announcementNote,
     cheapestOf,
+    unbuyableLabel,
     header,
     itemIcon,
     listingsInShopOrder,
@@ -292,14 +293,14 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
     head.append(info);
 
     const price = el('span', 'item-p');
-    if (isUnbuyable(offer)) {
+    const unbuyable = isUnbuyable(offer);
+    if (unbuyable) {
         // The price this page holds is for a take the covenant will refuse,
         // so it is not shown as a price — `offerRow`'s rule, and it matters
         // more here: a shop row a buyer can open to find out is one thing, a
-        // number on a wall with nothing to press is another. The figure's
-        // class, so the dash is the wall figure's size (`.dash` in stall.css).
-        price.append(el('span', 'item-x dash', copy.DASHED_PRICE));
-        price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
+        // number on a wall with nothing to press is another. No stand-in for
+        // the figure either: the label alone (the owner, 2026-09-24).
+        price.append(unbuyableLabel('item-u'));
     } else {
         const amount = el('span', 'item-a');
         // "from" is a claim about the figure — that it prices PART of the lot.
@@ -315,7 +316,12 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
     }
     head.append(price);
 
-    if (withCode) {
+    // No code for an offer nobody can take (the owner's C, 2026-09-24): the
+    // code opens Cashtab's token page, which the listing face refuses to
+    // link for the same offer ("Cashtab will not show this row either").
+    // The cycle skips such a listing outright (`cycleListings`), so this is
+    // the fence behind that rule rather than a card anyone should see.
+    if (withCode && !unbuyable) {
         const link = windowItemLink(offer.tokenId, 'listing');
         if (link !== undefined) {
             head.append(codePlate(link, copy.WINDOW_SCAN_ITEM, 'sw-qr'));
@@ -782,26 +788,94 @@ export function windowListings(view: StallView, params: WindowParams): TokenList
 }
 
 /**
+ * The listings the Cycle card steps through: the screen's own
+ * (`windowListings`, after the freeze), less every listing nobody can take.
+ *
+ * The owner, 2026-09-24: "Bỏ qua món không mua được trong vòng cycle". A
+ * card stands twenty seconds on a wall, and an offer whose covenant refuses
+ * every take (`isUnbuyable`, the listing's cheapest being one) had a card
+ * with no figure and no code — twenty seconds of a shop window saying what
+ * cannot be bought. Browse still lists it, labelled, as the shop does: a
+ * catalogue shows the shelf, a carousel shows what to buy. A rail whose
+ * every listing is unbuyable has nothing to cycle and is an empty rail —
+ * `windowRail` turns a `show=all` screen past it, and the status line says
+ * "Nothing here this screen can show", a sentence about the screen.
+ *
+ * Read after the freeze: a token whose only offer at `upto` was an
+ * unbuyable remainder stays off the Cycle even once a buyable relist is
+ * mined past the lock — a relist is what a plant looks like — until the
+ * seller re-locks (stated, and pinned by a test in `window.test.ts`).
+ */
+export function cycleListings(view: StallView, params: WindowParams): TokenListing[] {
+    return windowListings(view, params).filter((listing) => !isUnbuyable(cheapestOf(listing)));
+}
+
+/** The listings the listings rail steps or scrolls through in the mode that is on. */
+export function wallListings(view: StallView, params: WindowParams): TokenListing[] {
+    return params.mode === 'cycle' ? cycleListings(view, params) : windowListings(view, params);
+}
+
+/**
  * Which rail is on screen right now — **the one derivation there is**.
  *
  * `all` rotates; it never merges. A covenant's asked amount beside a seller's
  * own quote is what `the-two-rails-never-paint-on-one-screen` forbids, and a
  * shop screen has no tab to press to ask which figure is which.
  *
- * Pure, and taking both halves as arguments, because the painter reads the
- * rail off the view and the driver holds it in a closure — and when those were
- * two expressions the driver stepped the cursor modulo the LISTINGS count
- * while the painter indexed the quotes. Measured: `show=quotes` on a stall
- * with one listing and three quotes showed the same card for ever. CLAUDE.md
- * §4 states this for the stream in one line — "a list derived in five places
- * is how the cursor and the card come to mean different rows" — and this
- * screen had two.
+ * Pure, and taking the rail the driver holds as an argument, because the
+ * painter reads it off the view and the driver keeps it in a closure — and
+ * when those were two expressions the driver stepped the cursor modulo the
+ * LISTINGS count while the painter indexed the quotes. Measured:
+ * `show=quotes` on a stall with one listing and three quotes showed the same
+ * card for ever. CLAUDE.md §4 states this for the stream in one line — "a
+ * list derived in five places is how the cursor and the card come to mean
+ * different rows" — and this screen had two.
+ *
+ * **Under `all`, an empty rail turns itself off** (2026-09-24, the owner;
+ * the stream's `broadcastRail` on this surface). The Cycle skips an
+ * unbuyable listing, so a listings rail of only unbuyable ones has nothing to
+ * show — and a wall standing on it painted an empty strip with no code for a
+ * whole dwell, every other turn. A rail with something on it wins over one
+ * with nothing; with both empty the listings stand, where the status line
+ * says so.
  */
 export function windowRail(
-    show: WindowParams['show'],
+    view: StallView,
+    params: WindowParams,
     rail: 'listings' | 'quotes',
 ): 'listings' | 'quotes' {
-    return show === 'all' ? rail : show;
+    if (params.show !== 'all') {
+        return params.show;
+    }
+    const hasQuotes = quotedItems(view).length > 0;
+    const hasListings = wallListings(view, params).length > 0;
+    if (rail === 'quotes') {
+        return hasQuotes ? 'quotes' : 'listings';
+    }
+    return hasListings || !hasQuotes ? 'listings' : 'quotes';
+}
+
+/**
+ * Whether a Cycle wall composed with these options would show nothing,
+ * because every listing is one the Cycle skips (`cycleListings`) and there
+ * is no quote to turn to. The composing sheet composes no link for it and
+ * says why (2026-09-24, the critic): a rail with nothing at all on it was
+ * refused at the picker already, and the skip made a second way to a blank
+ * wall that the picker could not see.
+ */
+export function wallCyclesNothing(view: StallView, params: WindowParams): boolean {
+    if (params.mode !== 'cycle' || params.show === 'quotes') {
+        return false;
+    }
+    const listed = windowListings(view, params).length > 0;
+    const cycled = cycleListings(view, params).length > 0;
+    const quoted = quotedItems(view).length > 0;
+    return listed && !cycled && (params.show === 'listings' || !quoted);
+}
+
+/** Under `all`, both rails have something to show, so the wrap turns — `broadcastTurns` on the wall. */
+export function windowTurns(view: StallView, params: WindowParams): boolean {
+    return params.show === 'all' && quotedItems(view).length > 0 && wallListings(view, params).length > 0;
 }
 
 /** Whether this wall takes a customer's touch: Browse, the quotes, the seller's switch. */
@@ -840,7 +914,7 @@ export function renderShopWindow(
 
     const body = el('main', 'stall-body');
     const strip = el('div', 'items sw-strip');
-    const rail = windowRail(params.show, view.windowRail ?? 'listings');
+    const rail = windowRail(view, params, view.windowRail ?? 'listings');
     const cycle = params.mode === 'cycle';
     // The customer's own half, on the quotes rail alone: a listing's road off
     // this wall is Cashtab's token page, and "Pay several" is the quotes
@@ -858,7 +932,7 @@ export function renderShopWindow(
             );
         }
     } else {
-        const items = windowListings(view, params);
+        const items = wallListings(view, params);
         const at = cycle ? [items[windowCursor(view, items.length)]].filter(Boolean) : items;
         for (const listing of at) {
             strip.append(listingRow(listing!, view, cycle));
@@ -946,7 +1020,7 @@ function statusBar(
                 copy.windowOutcome(
                     view.fetch?.kind,
                     undefined,
-                    windowListings(view, params).length,
+                    wallListings(view, params).length,
                 );
     /*
      * The lock line is the listings rail's alone. The freeze is listings-only
@@ -1029,6 +1103,14 @@ export function shopWindowSheet(
     openTab.setAttribute('target', '_blank');
     openTab.setAttribute('rel', 'noopener noreferrer');
     openTab.setAttribute('data-role', 'shop-window-open-tab');
+    const copyBtn = el('button', 'mini another');
+    copyBtn.type = 'button';
+    copyBtn.setAttribute('data-role', 'shop-window-copy');
+    // A Cycle wall whose every listing is skipped shows nothing: no link is
+    // composed for it, and this says why and what to choose instead.
+    const nothingWhy = el('p', 'fine', copy.WINDOW_CYCLE_NOTHING);
+    nothingWhy.setAttribute('data-role', 'window-cycle-nothing');
+    nothingWhy.hidden = true;
 
     const composed = (): WindowParams => ({
         show,
@@ -1057,9 +1139,20 @@ export function shopWindowSheet(
     };
 
     const sync = (): void => {
-        const url = windowLinkFor(composed());
-        linkField.value = url;
-        openTab.setAttribute('href', url);
+        const params = composed();
+        const blank = wallCyclesNothing(view, params);
+        const url = windowLinkFor(params);
+        nothingWhy.hidden = !blank;
+        linkField.value = blank ? '' : url;
+        openHere.disabled = blank;
+        copyBtn.disabled = blank;
+        if (blank) {
+            openTab.removeAttribute('href');
+            openTab.setAttribute('aria-disabled', 'true');
+        } else {
+            openTab.setAttribute('href', url);
+            openTab.removeAttribute('aria-disabled');
+        }
         screen.setAttribute('data-mode', mode);
         screen.setAttribute('data-show', show);
         screen.setAttribute('data-code', String(payCode));
@@ -1319,6 +1412,7 @@ export function shopWindowSheet(
 
     const open = group('open', copy.WINDOW_GROUP_OPEN);
     linkField.setAttribute('aria-label', copy.WINDOW_LINK_LABEL);
+    open.append(nothingWhy);
     open.append(linkField);
     open.append(el('p', 'fine', copy.WINDOW_LINK_WHY));
     openHere.addEventListener('click', () => {
@@ -1327,9 +1421,6 @@ export function shopWindowSheet(
     // The copy control, for the shop's own computer: the same fallback the
     // share link keeps — select the field and say so when the clipboard
     // refuses.
-    const copyBtn = el('button', 'mini another');
-    copyBtn.type = 'button';
-    copyBtn.setAttribute('data-role', 'shop-window-copy');
     const say = glyphLabel(copyBtn, 'copy', copy.COPY_LINK);
     const fallback = (): void => {
         linkField.focus();

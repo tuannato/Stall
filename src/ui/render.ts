@@ -2475,6 +2475,19 @@ export function listingsOf(offers: readonly StallOffer[]): TokenListing[] {
 }
 
 /**
+ * "Not buyable", in the dress of the place it stands (`item-u` in a price
+ * cell, `listing-meta` in the face's fold), under one role on every surface
+ * — the overlay and the wall pass their own classes — so the probe can find
+ * it by what it means and measure its ink (`[data-role="unbuyable"]` is a
+ * contrast target). It is all an unbuyable offer's price cell says.
+ */
+export function unbuyableLabel(cls: string): HTMLElement {
+    const label = el('span', cls, copy.UNBUYABLE_BADGE);
+    label.setAttribute('data-role', 'unbuyable');
+    return label;
+}
+
+/**
  * The card's figure: the cheapest **buyable** ask — an `askedSats` the
  * covenant encodes, never a computed number, and never the market's (§10:
  * the index silently drops offers it cannot parse, so "lowest on Agora" is a
@@ -3126,8 +3139,8 @@ function tokenMatchesFilter(
 /**
  * The explicit orders. Price sorts by the figure the card shows — its
  * cheapest buyable `askedSats`, a number a covenant encodes — never by a rate
- * across tokens, which compares nothing a visitor sees. Cards whose figure is
- * dashed (all rows unbuyable) sink to the end in either direction rather than
+ * across tokens, which compares nothing a visitor sees. Cards that show no
+ * figure (all rows unbuyable) sink to the end in either direction rather than
  * winning "cheapest" with a price that cannot be paid.
  */
 function sortedListings(
@@ -6391,11 +6404,11 @@ function offerRow(
     const price = el('span', 'item-p');
     if (isUnbuyable(offer)) {
         // The price we hold is for a take the covenant will refuse. Printing
-        // it would advertise a purchase that cannot happen. The dash wears
-        // the figure's class, so it is the size this row would paint a
-        // figure at, on every look at every width (`.dash` in stall.css).
-        price.append(el('span', 'item-x dash', copy.DASHED_PRICE));
-        price.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
+        // it would advertise a purchase that cannot happen, and a dash in its
+        // place read as a figure too (the owner, 2026-09-24): the cell says
+        // "Not buyable" and nothing else. Probe:
+        // `an-unbuyable-offer-paints-no-figure-and-says-so`.
+        price.append(unbuyableLabel('item-u'));
     } else {
         const amount = el('span', 'item-a');
         const hasFrom = offer.askedAtoms < offer.atoms;
@@ -6639,7 +6652,6 @@ function itemFace(
         return null;
     }
     const offer = cheapestOf(listing);
-    const d = decimalsOf(view.tokens, offer.tokenId);
     const ticker = tokenTicker(view.tokens, offer.tokenId);
     const meta = tokenMeta(view.tokens, offer.tokenId);
     const name = tokenName(view.tokens, offer.tokenId);
@@ -6650,19 +6662,24 @@ function itemFace(
 
     const figure = el('div', 'face-x');
     if (isUnbuyable(offer)) {
-        // `x`, the face figure's own class: the size a buyable offer's figure
-        // takes here (`.dash` in stall.css).
-        figure.append(el('span', 'x dash', copy.DASHED_PRICE));
-        figure.append(el('span', 'item-u', copy.UNBUYABLE_BADGE));
+        // No figure and no stand-in for one: the label alone, as on the row.
+        figure.append(unbuyableLabel('item-u'));
         card.append(figure);
+        // Both counts only when the genesis decimals are known: at 0,
+        // `formatAtoms` prints atoms verbatim, and "less than 13000000000"
+        // for 1.3 tokens is a wrong number, not a missing one (CLAUDE §8's
+        // `knownDecimals` rule, which this sentence did not follow).
+        const known = knownDecimals(view.tokens, offer.tokenId);
         card.append(
             el(
                 'div',
                 'ctx',
-                copy.unbuyableLine(
-                    formatAtoms(offer.minAcceptedAtoms!, d),
-                    formatAtoms(offer.atoms, d),
-                ),
+                known === undefined
+                    ? copy.UNBUYABLE_LINE_UNCOUNTED
+                    : copy.unbuyableLine(
+                          formatAtoms(offer.minAcceptedAtoms!, known),
+                          formatAtoms(offer.atoms, known),
+                      ),
             ),
         );
         // The seller's words on the card, labelled as theirs (2026-09-09: a
@@ -6927,8 +6944,7 @@ function listingsBlock(listing: TokenListing, view: StallView): HTMLElement {
     for (const offer of sorted) {
         const line = el('div', 'listing-line');
         if (isUnbuyable(offer)) {
-            line.append(el('span', 'listing-x', copy.DASHED_PRICE));
-            line.append(el('span', 'listing-meta', copy.UNBUYABLE_BADGE));
+            line.append(unbuyableLabel('listing-meta'));
         } else {
             const figure = el('span', 'listing-x', copy.payAmount(formatXec(offer.askedSats)));
             figure.setAttribute('data-role', 'price');

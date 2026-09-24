@@ -41,6 +41,7 @@ import {
     stallBaseUrl,
     tokenName,
     tokenTicker,
+    unbuyableLabel,
 } from './render';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -87,11 +88,24 @@ export function broadcastCards(view: StallView): BroadcastCard[] {
             return quotes;
         }
     }
-    return listingsInShopOrder(view).map((listing) => ({
+    return streamListings(view).map((listing) => ({
         kind: 'listing',
         tokenId: listing.tokenId,
         listing,
     }));
+}
+
+/**
+ * The listings the stream shows: the shop's, less every listing nobody can
+ * take (the owner, 2026-09-24 — the wall's Cycle rule on the other
+ * unattended surface). A card stands 8 s on a stream, a viewer can only
+ * scan it, and an unbuyable one carried no figure and no road; the ticker's
+ * item the same. A listings rail of only unbuyable listings is an empty
+ * rail: `broadcastRail` turns a `cards=all` stream past it, and with
+ * nothing to turn to the head plate carries the stall's name and code alone.
+ */
+export function streamListings(view: StallView): TokenListing[] {
+    return listingsInShopOrder(view).filter((listing) => !isUnbuyable(cheapestOf(listing)));
 }
 
 /** The pay set as cards: every quote this page paints whose scan can reach a payment. */
@@ -129,7 +143,7 @@ export function broadcastRail(view: StallView): 'listings' | 'quotes' {
         return 'listings';
     }
     const hasQuotes = payableQuotes(view).length > 0;
-    const hasListings = listingsInShopOrder(view).length > 0;
+    const hasListings = streamListings(view).length > 0;
     if ((view.broadcastRail ?? 'listings') === 'quotes') {
         return hasQuotes ? 'quotes' : 'listings';
     }
@@ -141,7 +155,7 @@ export function broadcastTurns(view: StallView): boolean {
     return (
         view.broadcast?.cards === 'all' &&
         payableQuotes(view).length > 0 &&
-        listingsInShopOrder(view).length > 0
+        streamListings(view).length > 0
     );
 }
 
@@ -354,13 +368,11 @@ function listingCard(view: StallView, listing: TokenListing): HTMLElement {
     }
     const priceRow = el('div', 'bc-p');
     if (isUnbuyable(offer)) {
-        const figure = el('span', undefined, copy.DASHED_PRICE);
-        figure.setAttribute('data-role', 'price');
-        if (view.broadcastPulse === true) {
-            figure.classList.add('pulse');
-        }
-        priceRow.append(figure);
-        priceRow.append(el('span', 'bc-why', copy.UNBUYABLE_BADGE));
+        // The stream skips such a listing (`streamListings`), so this is the
+        // fence behind that rule: no figure, and nothing under the price role
+        // — the role is the covenant's asked amount, and a take the covenant
+        // refuses has none to show. The label alone (the owner, 2026-09-24).
+        priceRow.append(unbuyableLabel('bc-why'));
     } else {
         const hasFrom = offer.askedAtoms < offer.atoms;
         if (hasFrom) {
@@ -548,10 +560,8 @@ function tickerListingItem(view: StallView, listing: TokenListing): HTMLElement 
     const item = el('span', 'tk-it');
     item.append(el('span', 'tk-n', tokenName(view.tokens, listing.tokenId)));
     if (isUnbuyable(offer)) {
-        const figure = el('span', 'tk-x', copy.DASHED_PRICE);
-        figure.setAttribute('data-role', 'price');
-        item.append(figure);
-        item.append(el('span', 'tk-w', copy.UNBUYABLE_BADGE));
+        // Skipped like the card (`streamListings`); the fence is its rule.
+        item.append(unbuyableLabel('tk-w'));
     } else {
         if (offer.askedAtoms < offer.atoms) {
             item.append(el('span', 'tk-from', copy.PRICE_FROM));

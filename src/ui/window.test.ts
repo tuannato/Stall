@@ -5,7 +5,18 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
-import { WINDOW_QR_MIN_PX, WINDOW_QR_PX, shopWindowSheet, windowItemLink, windowLinkFor } from './window';
+import {
+    WINDOW_QR_MIN_PX,
+    WINDOW_QR_PX,
+    cycleListings,
+    shopWindowSheet,
+    wallListings,
+    windowItemLink,
+    windowLinkFor,
+    windowRail,
+    windowTurns,
+} from './window';
+import { nextCard } from '../domain/window';
 import type { TokenPrice } from '../domain/description';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { qrMatrix } from '../domain/qr';
@@ -17,6 +28,7 @@ const PK = '02' + '11'.repeat(32);
 const ADDR = 'ecash:qpjq0dcnn4j0c7lnrjqxpqk3z2qz0mfvyv8qyqz3hn';
 const BEANS = 'a'.repeat(64);
 const TEA = 'b'.repeat(64);
+const RYE = 'e'.repeat(64);
 const JUNK = 'c'.repeat(64);
 /** One quote in each of two units: the touch wall's `in` row and its `apart` row. */
 const QUOTE_USD: TokenPrice = { code: 'usd', exponent: 2, amount: 500n, surchargePct: 5 };
@@ -639,9 +651,9 @@ describe('the-window-row-keeps-every-rule-the-shop-row-keeps', () => {
      * refuse. A shop row a buyer can open to find out is one thing; a number
      * on a wall with nothing to press is another.
      */
-    it('dashes a price the covenant would refuse', () => {
+    it('says a price the covenant would refuse is not buyable, and paints no figure', () => {
         const root = paint(
-            windowView({ show: 'listings', mode: 'cycle' }, {
+            windowView({ show: 'listings', mode: 'browse' }, {
                 tokens: new Map([tokenMeta(BEANS, 'Roasted Beans')]),
                 fetch: {
                     kind: 'offers',
@@ -650,7 +662,8 @@ describe('the-window-row-keeps-every-rule-the-shop-row-keeps', () => {
             } as Partial<StallView>),
         );
         expect(root.querySelector('[data-role="price"]')).toBeNull();
-        expect(root.querySelector('.dash')).not.toBeNull();
+        expect(root.querySelector('.sw-row .item-p')?.textContent).toBe(copy.UNBUYABLE_BADGE);
+        expect(root.textContent).not.toContain(copy.DASHED_PRICE);
     });
 
     /** "from" says the figure prices PART of the lot. On a whole lot it is false. */
@@ -1661,5 +1674,121 @@ describe('the-touch-switch-is-the-sellers-and-needs-the-pay-code', () => {
             (sheet.querySelector('[data-role="window-touch-why"]') as HTMLElement).hidden,
             'the reason is on screen while the code is off',
         ).toBe(false);
+    });
+});
+
+describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
+    /**
+     * The owner, 2026-09-24: the Cycle card skips a listing nobody can take
+     * (`isUnbuyable`); Browse still lists it, labelled. A card stands twenty
+     * seconds on a wall, and an unbuyable one had no figure and no code to
+     * give a customer. `cycleListings` is the one derivation — the painter,
+     * the driver's step and the status line all read it through
+     * `wallListings` — so the cursor can never point at what the card
+     * refuses to paint. The driver's own clock is `app.window.test.ts`'s.
+     */
+    const refused = (tokenId: string): StallOffer => ({ ...offer(tokenId, 100), minAcceptedAtoms: 999n });
+    const three = {
+        tokens: new Map([tokenMeta(BEANS, 'Roasted Beans'), tokenMeta(TEA, 'Green Tea'), tokenMeta(RYE, 'Rye Flour')]),
+        fetch: { kind: 'offers' as const, offers: [offer(BEANS, 100), refused(TEA), offer(RYE, 100)] },
+    };
+
+    it('steps over an unbuyable listing between two buyable ones, and Browse still lists it', () => {
+        const params: WindowParams = { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false };
+        const view = windowView(params, three as Partial<StallView>);
+        expect(cycleListings(view, params).map((l) => l.tokenId).sort()).toEqual([BEANS, RYE].sort());
+        expect(wallListings(view, params)).toHaveLength(2);
+        const seen = new Set<string>();
+        for (const cursor of [0, 1, 2, 3]) {
+            const root = paint(windowView(params, { ...three, windowCursor: cursor } as Partial<StallView>));
+            seen.add(root.querySelector('.sw-row .item-n')?.textContent ?? '');
+            expect(root.textContent).not.toContain(copy.UNBUYABLE_BADGE);
+            // The card at the cursor keeps its own code: the skip took the
+            // unbuyable card, not the road off a buyable one.
+            expect(root.querySelector('.sw-row .sw-qr')).not.toBeNull();
+        }
+        expect([...seen].sort()).toEqual(['Roasted Beans', 'Rye Flour']);
+        const browse = paint(windowView({ show: 'listings', mode: 'browse' }, three as Partial<StallView>));
+        expect([...browse.querySelectorAll('.sw-row .item-n')].map((n) => n.textContent)).toContain('Green Tea');
+        expect(browse.textContent).toContain(copy.UNBUYABLE_BADGE);
+    });
+
+    it('treats a rail whose every listing is unbuyable as empty, and draws no code for it', () => {
+        const only = {
+            tokens: new Map([tokenMeta(TEA, 'Green Tea')]),
+            fetch: { kind: 'offers' as const, offers: [refused(TEA)] },
+        };
+        const root = paint(windowView({ show: 'listings', mode: 'cycle' }, only as Partial<StallView>));
+        expect(root.querySelector('.sw-row')).toBeNull();
+        expect(root.querySelector('.sw-qr')).toBeNull();
+        expect(root.textContent).not.toContain(copy.WINDOW_SCAN_ITEM);
+        expect(root.querySelector('[data-role="window-state"]')?.textContent).toContain('Nothing here this screen can show');
+        // And a screen showing both rails never stands on it: the rail it
+        // holds resolves to the quotes while the quotes have something, and
+        // the wrap does not turn back onto the empty one.
+        const both: WindowParams = { show: 'all', mode: 'cycle', payCode: true, turn: 'none', touch: false };
+        const quoted = windowView(both, {
+            ...only,
+            tokens: new Map([tokenMeta(TEA, 'Green Tea'), tokenMeta(BEANS, 'Roasted Beans')]),
+            prices: new Map([[BEANS, QUOTE_XEC]]),
+        } as Partial<StallView>);
+        expect(windowRail(quoted, both, 'listings')).toBe('quotes');
+        expect(windowTurns(quoted, both)).toBe(false);
+        expect(nextCard(0, 1, windowTurns(quoted, both) ? 'all' : 'quotes', 'quotes')).toEqual({ cursor: 0, rail: 'quotes' });
+    });
+
+    /**
+     * The freeze meets the skip, stated rather than smoothed (the critic,
+     * 2026-09-24). A lock keeps a token by the offers it had at `upto`
+     * (`offersWithinLock`), and when the only one it had was a remainder
+     * nobody can take, a buyable relist mined after the lock is not let in —
+     * it is exactly what a stranger's plant looks like. So that token is off
+     * the Cycle until the seller re-locks, and Browse lists it as "Not
+     * buyable": fewer of the seller's goods, never a stranger's, which is
+     * the direction the freeze fails in.
+     */
+    it('keeps a token whose only pre-lock offer is unbuyable off the Cycle, relisted or not', () => {
+        const stranded = { ...offer(TEA, 100), minAcceptedAtoms: 999n };
+        const relisted = { ...offer(TEA, 130), outpoint: { txid: 'e'.repeat(64), outIdx: 1 } };
+        const frozen = {
+            tokens: new Map([tokenMeta(BEANS, 'Roasted Beans'), tokenMeta(TEA, 'Green Tea')]),
+            fetch: { kind: 'offers' as const, offers: [offer(BEANS, 100), stranded, relisted] },
+        };
+        const cycle: WindowParams = { show: 'listings', mode: 'cycle', upto: 120, payCode: true, turn: 'none', touch: false };
+        const view = windowView(cycle, frozen as Partial<StallView>);
+        expect(cycleListings(view, cycle).map((l) => l.tokenId)).toEqual([BEANS]);
+        const browse = paint(windowView({ ...cycle, mode: 'browse' }, frozen as Partial<StallView>));
+        const tea = [...browse.querySelectorAll('.sw-row')].find((row) => row.textContent?.includes('Green Tea'));
+        expect(tea?.querySelector('[data-role="unbuyable"]')?.textContent).toBe(copy.UNBUYABLE_BADGE);
+        expect(tea?.querySelector('[data-role="price"]')).toBeNull();
+    });
+
+    /**
+     * The composing sheet does not hand a seller a Cycle wall that shows
+     * nothing (the critic, 2026-09-24): a rail with nothing on it was refused
+     * at the picker, and the skip made a second road to a blank wall. With
+     * every listing unbuyable and nothing quoted, Cycle composes no link and
+     * says why; Browse, where they are listed and labelled, composes one.
+     */
+    it('composes no Cycle wall that would show nothing, and says what to choose', () => {
+        const only = {
+            tokens: new Map([tokenMeta(TEA, 'Green Tea')]),
+            fetch: { kind: 'offers' as const, offers: [refused(TEA)] },
+        };
+        const sheet = shopWindowSheet(windowView({ show: 'all', mode: 'cycle' }, only as Partial<StallView>), () => {});
+        document.body.append(sheet);
+        const why = sheet.querySelector<HTMLElement>('[data-role="window-cycle-nothing"]')!;
+        const link = sheet.querySelector<HTMLInputElement>('[data-role="shop-window-link"]')!;
+        const here = sheet.querySelector<HTMLButtonElement>('[data-role="shop-window-open-here"]')!;
+        expect(why.hidden).toBe(false);
+        expect(why.textContent).toBe(copy.WINDOW_CYCLE_NOTHING);
+        expect(link.value).toBe('');
+        expect(here.disabled).toBe(true);
+        expect(sheet.querySelector('[data-role="shop-window-open-tab"]')!.hasAttribute('href')).toBe(false);
+        sheet.querySelector<HTMLButtonElement>('[data-role="window-mode-browse"]')!.click();
+        expect(why.hidden).toBe(true);
+        expect(link.value).toContain('mode=browse');
+        expect(here.disabled).toBe(false);
+        sheet.remove();
     });
 });

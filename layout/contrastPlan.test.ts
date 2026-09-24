@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 170, desktop: 191, canvas: 22, total: 383 });
+        }).toEqual({ mobile: 193, desktop: 221, canvas: 22, total: 436 });
     });
 
     it('walks the runner’s own viewports', () => {
@@ -56,7 +56,8 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
     it('samples every screen a look can wear, where the probe measures it, less the overlay’s and the geometry-only', () => {
         // Derived from the fixture table, not through `screensAt`.
         const sampled = (name: string): boolean =>
-            (!NO_DECOR_SCREENS.has(name) || name === 'broadcast' || name === 'broadcast-ticker') &&
+            (!NO_DECOR_SCREENS.has(name) ||
+                ['broadcast', 'broadcast-ticker'].includes(name)) &&
             !GEOMETRY_ONLY_SCREENS.has(name);
         const page = Object.keys(SCREENS).filter((name) => !CANVAS_SCREENS.has(name) && sampled(name));
         const at = (viewport: string): string[] => [
@@ -69,7 +70,9 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
 
     it('paints each screen under every look that can wear it, bare and fully worn where decorations paint', () => {
         const byCell = new Map<string, ContrastJob[]>();
-        for (const job of jobs) {
+        // The reduced-motion jobs are a second paint of a planned one, held
+        // below; the rest are one job per look and variant.
+        for (const job of jobs.filter((j) => j.reduced !== true)) {
             const cell = `${job.viewport}/${job.screen}`;
             byCell.set(cell, [...(byCell.get(cell) ?? []), job]);
         }
@@ -87,6 +90,14 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         }
         // One key per job: the runner's exactly-once check counts by key.
         expect(new Set(jobs.map((job) => job.key)).size).toBe(jobs.length);
+        // Rural's swaying price tag, read stilled: `unbuyable` a second time,
+        // under reduced motion, bare and worn, at the phone and the desk.
+        expect(jobs.filter((j) => j.reduced === true).map((j) => j.key)).toEqual([
+            'mobile/unbuyable/3/0/reduce',
+            `mobile/unbuyable/3/${WORN_ALL}/reduce`,
+            'desktop/unbuyable/3/0/reduce',
+            `desktop/unbuyable/3/${WORN_ALL}/reduce`,
+        ]);
         expect(jobs.every((job) => job.flags === 0 || job.flags === WORN_ALL)).toBe(true);
     });
 

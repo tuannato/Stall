@@ -350,6 +350,15 @@ export function unbuyableLine(minimum: string, left: string): string {
     return `The contract will not accept less than ${minimum}, and only ${left} is left. No amount can be bought; only the seller can cancel it.`;
 }
 
+/** The same fact when the token's decimals never arrived, so no count can be printed truthfully. */
+export const UNBUYABLE_LINE_UNCOUNTED =
+    'The contract’s smallest take is more than is left. No amount can be bought; only the seller can cancel it.';
+
+/**
+ * A rate this page cannot compute (the genesis decimals never arrived): the
+ * face's rate line. Never an unbuyable offer's figure — that cell carries
+ * `UNBUYABLE_BADGE` alone (2026-09-24).
+ */
 export const DASHED_PRICE = '—';
 export const XEC = 'XEC';
 export const TRIED = 'tried';
@@ -2135,6 +2144,9 @@ export const WINDOW_TURN_CCW = 'Turn left';
 export const WINDOW_TURN_WHY =
     'For a screen hung sideways on a wall while the computer driving it still sends a landscape picture \u2014 an old television with no network of its own. Leave it on None unless the picture comes out sideways; if a turn lands upside down, use the other one.';
 
+/** The composing sheet over a Cycle wall that would show nothing: every listing is one nobody can buy. */
+export const WINDOW_CYCLE_NOTHING =
+    'This wall would show nothing: every listing here is one nobody can buy, and Cycle skips those. Choose Browse, where they are listed and labelled, or show your quotes.';
 export const WINDOW_SHOW_LABEL = 'Show';
 export const WINDOW_MODE_LABEL = 'Mode';
 export const WINDOW_SHOW_LISTINGS = 'Listings';

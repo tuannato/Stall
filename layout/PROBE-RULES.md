@@ -1698,7 +1698,8 @@ transparency 180). With its worn half skipped: **210.0–216.0s** over three
 runs (contrast 4285 boxes, 153–154s; transparency 158 boxes, 8.3s) — about
 7s back. The phone and desk passes now print what the step-2 rules compared
 (`compared:` under the pass's line): 7 dash comparisons per place — three
-looks bare and worn, and the skeleton — and all three rows read; on the
+looks bare and worn, and the skeleton — and all three rows read (the dash
+comparisons are unbuyable labels read since 2026-09-24, below); on the
 phone, the skeleton's ladder read 3 tier-1, 12 tier-2 and 17 tier-3 figures. Clip points: mobile
 886/9608 → 915/10167, desktop 1641/11699 → 1688/12589, canvas 102/1760 →
 132/1915 — the skeleton's own screens plus the dash fixtures below; the
@@ -1726,61 +1727,86 @@ skeleton figure on every phone screen read 26px against 21.06 or 16.9.
 is styled only in each look's own sheet, so on the skeleton it is bare
 markup that nothing measures as wrong.
 
-## The dash is the size of the figure (2026-09-23, the owner's D1)
+## An unbuyable offer paints no figure and says so (2026-09-24, the owner)
 
-An unbuyable offer (`isUnbuyable`) paints a dash where its figure would be —
-on a shop row (`offerRow`), on the listing face and on a wall row and the
-wall's Cycle card (`window.ts`). `.dash` read `--s-price-size`, which every
-look's sheet overrides for the figure and not for the dash, and no fixture
-carried an unbuyable offer (`minAcceptedAtoms` appeared nowhere under
-`layout/`), so the mismatch was measured by nothing. The dash now wears the
-figure's own class — `item-x` on a row and on the wall, `x` on the face —
-and `.stall .dash.item-x, .stall .dash.x` restores everything but the size.
-Measured after (every look, S1 → S2): the phone row 30/26/31 → 26/26/25px
-(Modern/Neo/Rural), the desk row 30/26/31 → 32/32/31, the face → 34 on every
-look at every width, the wall's Browse row → 39.68px at 1280 (46 at 1080 and
-768), the wall's Cycle card → the card figure's clamp (up to 112px, 124 on a
-tall screen).
+An offer whose covenant refuses every take this page could ask for
+(`isUnbuyable`) painted a dash where its figure would be, and for one day the
+dash was the size of the figure (the owner's D1 of 2026-09-23: 112px on the
+wall's Cycle card). Seen in pictures, the owner removed it everywhere: a dash
+in a price cell reads as a price, and on the stream overlay it wore
+`data-role="price"`, the covenant's asked amount, over a take the covenant
+refuses. Three places carry the label "Not buyable" alone in their price
+cell, under one role, `data-role="unbuyable"` (`unbuyableLabel`): the shop
+row (`offerRow`), the listing face's figure and its fold's listing line
+(`itemFace`, `listingsBlock`), and a wall row in Browse (`listingRow`).
+**The three unattended surfaces that step through one card at a time skip
+such a listing** (the owner, the same day): the wall's Cycle
+(`cycleListings`, read through `wallListings` by the painter, the driver's
+step and the status line) and the stream's corner card and ticker
+(`streamListings`, read by `broadcastCards`, `broadcastRail` and
+`broadcastTurns`). A rail of only unbuyable listings is an empty rail on
+both: under `all` the rail with something on it wins and the wrap does not
+turn back (`windowRail` / `windowTurns` mirror `broadcastRail` /
+`broadcastTurns`), and the composing sheet composes no Cycle wall that would
+show nothing (`wallCyclesNothing`, `WINDOW_CYCLE_NOTHING`). Tests:
+`the-wall-cycle-skips-an-unbuyable-listing` (render, driver, the empty rail,
+the sheet, the freeze), `the-stream-skips-an-unbuyable-listing`. The
+`.stall .dash.*` rule left stall.css; `DASHED_PRICE` stays as the face's
+rate line when the genesis decimals never arrived, and the face's sentence
+about the minimum take says it without counts then
+(`UNBUYABLE_LINE_UNCOUNTED`).
 
-**`the-dash-is-the-size-of-the-figure`** gathers, over each pass, the
-computed `font-size` of every `.dash` and of every buyable figure
-(`[data-role="price"]`, a row only at tier 0) by place — `row`, `face`,
-`wall-browse`, `wall-cycle` — and by look with its worn state, and fails a
-dash whose size is not every figure's in the same place, a dash with no
-figure measured there, and a dash screen that painted no dash. Across
-screens on purpose: the face and the Cycle card show one offer, so
-`item-unbuyable`'s dash is held to `item-listing`'s figure and
-`shop-window-cycle-unbuyable`'s to `shop-window-cycle`'s; the row and the
-wall's Browse have both on one screen. **It also holds the dash's dress**:
-the class lends it the figure's rules, so its colour must equal a swatch
-painted `var(--s-muted)` in its own parent, its `text-shadow` and
-`font-weight` its parent's, and its `animation-name` and `transform` must be
-`none`. The door's deck is not a shop and is skipped. Fixtures:
-`unbuyable`, `item-unbuyable`, `shop-window-unbuyable`,
-`shop-window-cycle-unbuyable` (geometry only, state-screen variants; the
-wall two ride the portrait and tablet passes too). **The comparisons are
-counted** (`dashChecks`) and the runner requires at least one per place it
-owes — row and face on the phone pass, all four on the desk pass
-(`probe-coverage.mjs`, tested on its own in
-`a-probe-rule-that-compared-nothing-fails-the-pass`).
+**The freeze meets the skip, stated.** A lock keeps a token by the offers it
+had at `upto` (`offersWithinLock`). When the only one it had was an
+unbuyable remainder, a buyable relist mined after the lock is not let in —
+it is what a stranger's plant looks like — so that token stays off the
+Cycle, and Browse lists it as "Not buyable", until the seller re-locks.
+Fewer of the seller's goods, never a stranger's. Test: `keeps a token whose
+only pre-lock offer is unbuyable off the Cycle, relisted or not`.
 
-**Proved red.** HEAD's dash put back (class `dash` alone, `.dash {
-font-size: var(--s-price-size) }`) with HEAD's rows: every place red — the
-dash 30/26/31px against a 39.68px Browse figure at 1280 and 46px at 1080 and
-768, against 34px on the face, and Modern's phone row 30 against 26, the
-incident the owner decided on. Only the dash rule's own `font-size` given
-back: 21 failures, the face at both widths and every desk row (the phone
-rows passed because the rows now state their sheets' figures, and the wall
-because `window.css` sizes `.item-x` at (0,4,0) over the plant). The dress:
-`.t-modern .item-p > .item-x { color: #ff0000; font-weight: 900 }` planted
-in `theme-modern.css` — (0,3,0), later than stall.css, so it reaches the row
-and wall dashes (a direct child of `.item-p`; the buyable figure is not) —
-read "colour rgb(255, 0, 0), not the muted ink" and "font-weight 900, not
-its parent's 400" on every Modern row and wall dash. The count: the Cycle
-fixture's listing made buyable read "painted no dash" on every look and
-"compared no dash with a figure on a wall-cycle" on the desk pass. (A
-fixture merely renamed would not have: the rule reads the dash wherever it
-is painted, so the dash still counts under another name.)
+**`an-unbuyable-offer-paints-no-figure-and-says-so`**, for every "Not buyable"
+label the page paints, in the cell it sits in (`.item-p`, `.face-x`,
+`.listing-line`, and on the overlay `.bc-p` and `.tk-it`): **no figure** —
+the cell holds none of a figure's parts (`FIGURE_PARTS`: the price role,
+`.item-a`, `.item-x`, `.item-from`, `.x`, `.listing-x`, `.bc-from`, `.bc-u`,
+`.tk-x`, `.tk-u`, `.tk-from`, `.dash`) and says nothing but the label;
+**says so** — it shows and nothing covers it (`coveredBy`); **by its role**
+— it carries `data-role="unbuyable"`. A label in no cell this rule reads
+fails, **a label on a Cycle card, a stream card or a ticker item fails**
+(those surfaces skip), and a screen built for a label that painted none
+fails. The three skipping fixtures — `shop-window-cycle-unbuyable`,
+`broadcast-unbuyable`, `broadcast-ticker-unbuyable`, each a buyable listing
+beside the unbuyable one with the cursor where the shop's order puts the
+unbuyable one — must paint a card (or a ribbon item) and no label
+(`SKIP_SCREENS`, counted as `skipChecks`). The runner requires labels read
+on `row` and `face` at the phone, those and `wall-browse` at the desk, a
+`wall-cycle` skip on the desk pass and a `stream-card` and a `stream-ticker`
+skip on the canvas pass (`probe-coverage.mjs`). The `wall-cycle`,
+`overlay-card` and `overlay-ticker` label places the first version owed are
+gone with the labels there: the skips replaced them.
+
+**Its ink is measured.** `[data-role="unbuyable"]` is in `CONTRAST_TEXT`,
+sampled on `unbuyable`, `item-unbuyable`, `item-unbuyable-fold` and
+`shop-window-unbuyable`. Worst measured, 2026-09-24: Modern 5.58:1, Neo
+7.39:1, Rural 3.22:1 (the wall's Browse, worn), the skeleton 5.58:1. **Rural's
+row label is read under reduced motion** (`REDUCED_JOBS` in
+`contrastPlan.ts`, the runner switching the emulated media per job): the tag
+sways, and the sampler pads a box inside a transform by 8px a side, which
+left nothing of the 14px label, so it was dropped on every ordinary job.
+Stilled, it read 5.17:1 bare and 3.19:1 worn at both widths.
+
+**Proved red.** The first version, with four plants: the row's dash back,
+the overlay card's dash back under the price role, the face's label hidden,
+the Cycle fixture made buyable — each failed on every look it paints. This
+version: the skip taken out of `cycleListings` read "wall-cycle: an
+unbuyable listing is on a surface that skips them" on all seven variants on
+the desk, portrait and tablet passes and "saw no wall-cycle skip"; taken out
+of `streamListings`, the same on all four looks for `overlay-card` and
+`overlay-ticker` and "saw no stream-card / stream-ticker skip"; the overlay
+label painted without its role read "carries no data-role"; a pale ink
+planted on Rural's label (`#efe2c8`) read 1.06–1.07:1 on the reduced jobs,
+where the ordinary jobs had dropped the box. Not planted on its own: a
+covered label (`coveredBy`'s own plants are in "Geometry, not hit testing").
 
 ## A shipped row states the sizes its sheet paints (2026-09-23)
 

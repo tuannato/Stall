@@ -13,6 +13,7 @@
  * It asserts what only a browser can see.
  */
 import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
+import { UNBUYABLE_BADGE } from '../src/ui/copy';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -1363,113 +1364,161 @@ function screensToRun(): string[] {
 }
 
 /*
- * **The dash is the size of the figure** (step 2b — the owner's D1,
- * 2026-09-23: "Bằng cỡ giá"). An unbuyable offer paints a dash where its
- * figure would be — on a shop row, on the listing face, on a wall row and on
- * the wall's one big card — and the dash must be the size the figure takes in
- * that same place, on every look at every width. `.dash` read
- * `--s-price-size`, which every look's sheet overrides for the figure and not
- * for the dash, so Modern painted a 30px dash beside a 26px figure on a phone
- * and nothing measured it: no fixture carried an unbuyable offer. The dash
- * now wears the figure's own class (stall.css, `.dash`); this is what
- * notices a rule that sizes one and not the other.
+ * **An unbuyable offer paints no figure and says so** (the owner, 2026-09-24,
+ * reversing the day-old "the dash is the size of the figure"). An offer
+ * whose covenant refuses every take this page could ask for (`isUnbuyable`)
+ * carries the label "Not buyable" in its price cell and nothing else: no
+ * figure, no unit, no "from", and no stand-in for a figure — the dash that
+ * stood there read as a price, 112px tall on the wall's card, and on the
+ * stream overlay it wore `data-role="price"` with no price in it. Three
+ * places paint the label: a shop row, the listing face (its card, and its
+ * fold's line) and a wall row in Browse. The three unattended surfaces that
+ * step through one card at a time **skip** such a listing (the owner,
+ * 2026-09-24): the wall's Cycle card, the stream's corner card and its
+ * ticker item — so a label on any of them is a failure, and
+ * `shop-window-cycle-unbuyable`, `broadcast-unbuyable` and
+ * `broadcast-ticker-unbuyable` (each a buyable listing beside an unbuyable
+ * one, the cursor where the shop order puts the unbuyable one) are held to
+ * painting a card, or a ribbon item, with no label (`skipChecks`).
  *
- * The two sizes are gathered over the whole pass, by context and by look —
- * worn state included — because the face and the wall's card show one offer
- * and cannot carry a buyable figure beside the dash: `item-unbuyable`'s dash
- * is held to `item-listing`'s figure, `shop-window-cycle-unbuyable`'s to
- * `shop-window-cycle`'s. A row figure counts only at tier 0 (a tier is a step
- * down the dash never takes), and the door's deck is not a shop.
+ * For every "Not buyable" label the page paints, in a cell this rule knows:
+ * - **no figure**: the cell holds no node of a figure's parts
+ *   (`FIGURE_PARTS`, the price role and every class a figure, its unit or
+ *   its "from" wears, the dash's own included) and no words but the label —
+ *   the ticker item keeps its name and its stock line, which are not a
+ *   figure;
+ * - **says so**: the label has a box, is visible, and nothing covers it
+ *   (`coveredBy`, the protected boxes' own test);
+ * - **by its role**: every label carries `data-role="unbuyable"`, the one
+ *   contrast target that measures its ink on every surface (`CONTRAST_TEXT`).
  *
- * **And the class it wears lends it nothing but the size**: the figure's
- * rules would lend it their ink, glow, weight and motion, so each dash's
- * colour must equal a swatch painted `var(--s-muted)` in the same place, its
- * `text-shadow` and `font-weight` its parent's, and its `animation-name` and
- * `transform` must be `none`.
- *
- * The comparisons made are counted per context (`dashChecks` in the
- * verdict), and the runner refuses a phone or desk pass that made none in a
- * context it owes (`probe-coverage.mjs`) — a renamed fixture would otherwise
- * leave this rule green over nothing.
+ * A label outside every known cell fails (a new surface this rule cannot
+ * read is a surface it is not guarding), and a screen built for an
+ * unbuyable offer that painted no label fails. The labels read are counted
+ * per place (`unbuyableChecks` in the verdict) and the skips seen per
+ * surface (`skipChecks`: `wall-cycle`, `stream-card`, `stream-ticker`); the
+ * runner refuses a phone or desk pass that read no label in a place it owes,
+ * a desk pass that saw no Cycle skip and a canvas pass that saw no stream
+ * skip (`probe-coverage.mjs`) — a renamed fixture would otherwise leave this
+ * rule green over nothing.
  */
-const DASH_SCREENS = new Set([
-    'unbuyable',
-    'item-unbuyable',
-    'shop-window-unbuyable',
-    'shop-window-cycle-unbuyable',
-]);
-type SizeSeen = { px: number; screen: string; where: string };
-const dashSizes = new Map<string, SizeSeen[]>();
-const figureSizes = new Map<string, SizeSeen[]>();
-const dashChecks: Record<string, number> = {};
+const UNBUYABLE_CHECK = 'an-unbuyable-offer-paints-no-figure-and-says-so';
+const UNBUYABLE_SCREENS = new Set(['unbuyable', 'item-unbuyable', 'item-unbuyable-fold', 'shop-window-unbuyable']);
+/**
+ * The fixtures whose unbuyable listing must be skipped, and what each must
+ * paint instead: a card (or a ribbon item) and no label on it.
+ */
+const SKIP_SCREENS: Readonly<Record<string, { surface: string; shown: string }>> = {
+    'shop-window-cycle-unbuyable': { surface: 'wall-cycle', shown: '.stall.shop-window[data-mode="cycle"] .sw-row' },
+    'broadcast-unbuyable': { surface: 'stream-card', shown: '.bc-ext .bc-item' },
+    'broadcast-ticker-unbuyable': { surface: 'stream-ticker', shown: '.tk-run .tk-it' },
+};
+const skipChecks: Record<string, number> = {};
+/** The cells an unbuyable offer's label sits in, one kind per place it is painted. */
+const UNBUYABLE_CELLS = '.item-p, .face-x, .listing-line, .bc-p, .tk-it';
+/** What a figure is made of, wherever one is painted — a stand-in for one included. */
+const FIGURE_PARTS = [
+    '[data-role="price"]',
+    '.item-a',
+    '.item-x',
+    '.item-from',
+    '.x',
+    '.listing-x',
+    '.bc-from',
+    '.bc-u',
+    '.tk-x',
+    '.tk-u',
+    '.tk-from',
+    '.dash',
+].join(', ');
+const unbuyableChecks: Record<string, number> = {};
 
-/** Where a dash or a figure sits: `row`, `face`, or `wall-<mode>` — or nowhere this rule reads. */
-function priceContext(node: Element): string | undefined {
-    if (node.closest('[data-role="door-deck"]') !== null) {
+/** Where an unbuyable label's cell sits: `row`, `face`, `wall-<mode>`, `overlay-card`, `overlay-ticker`. */
+function unbuyablePlace(cell: Element): string | undefined {
+    if (cell.closest('[data-role="door-deck"]') !== null) {
         return undefined;
     }
-    const wall = node.closest('.stall.shop-window');
-    if (wall !== null && node.closest('.sw-row') !== null) {
+    if (cell.matches('.tk-it')) {
+        return 'overlay-ticker';
+    }
+    if (cell.matches('.bc-p')) {
+        return 'overlay-card';
+    }
+    const wall = cell.closest('.stall.shop-window');
+    if (wall !== null && cell.closest('.sw-row') !== null) {
         return `wall-${wall.getAttribute('data-mode') ?? '?'}`;
     }
-    if (node.closest('.face-x') !== null) {
+    if (cell.matches('.face-x, .listing-line')) {
         return 'face';
     }
-    if (node.closest('.item-head') !== null) {
+    if (cell.closest('.item-head') !== null) {
         return 'row';
     }
     return undefined;
 }
 
-/** The dash's own dress: what the figure's class must not have lent it. */
-function dashDressFaults(dash: HTMLElement): string[] {
-    const parent = dash.parentElement;
-    if (parent === null) {
-        return ['the dash has no parent to compare against'];
-    }
-    const swatch = document.createElement('span');
-    swatch.style.color = 'var(--s-muted)';
-    parent.append(swatch);
-    const muted = getComputedStyle(swatch).color;
-    swatch.remove();
-    const cs = getComputedStyle(dash);
-    const up = getComputedStyle(parent);
-    const faults: string[] = [];
-    if (cs.color !== muted) faults.push(`colour ${cs.color}, not the muted ink ${muted}`);
-    if (cs.textShadow !== up.textShadow) faults.push(`text-shadow ${cs.textShadow}, not its parent's ${up.textShadow}`);
-    if (cs.fontWeight !== up.fontWeight) faults.push(`font-weight ${cs.fontWeight}, not its parent's ${up.fontWeight}`);
-    if (cs.animationName !== 'none') faults.push(`animation ${cs.animationName}`);
-    if (cs.transform !== 'none') faults.push(`transform ${cs.transform}`);
-    return faults;
-}
-
-function gatherPriceSizes(screen: string, label: string): Failure[] {
+function unbuyableFaults(screen: string, label: string): Failure[] {
     const root = document.getElementById('app')!;
     const out: Failure[] = [];
-    const note = (into: Map<string, SizeSeen[]>, node: Element): string | undefined => {
-        const where = priceContext(node);
-        if (where === undefined) {
-            return undefined;
-        }
-        const key = `${where} · ${label}`;
-        const px = Number.parseFloat(getComputedStyle(node).fontSize);
-        into.set(key, [...(into.get(key) ?? []), { px, screen, where }]);
-        return where;
+    const fail = (detail: string): void => {
+        out.push({ screen, theme: label, check: UNBUYABLE_CHECK, detail });
     };
-    for (const dash of root.querySelectorAll<HTMLElement>('.dash')) {
-        if (note(dashSizes, dash) === undefined) {
+    let read = 0;
+    for (const node of root.querySelectorAll<HTMLElement>('*')) {
+        if (node.childElementCount > 0 || node.textContent?.trim() !== UNBUYABLE_BADGE) {
             continue;
         }
-        for (const fault of dashDressFaults(dash)) {
-            out.push({ screen, theme: label, check: 'the-dash-is-the-size-of-the-figure', detail: `the dash wears ${fault}` });
+        const cell = node.closest(UNBUYABLE_CELLS);
+        const where = cell === null ? undefined : unbuyablePlace(cell);
+        if (cell === null || where === undefined) {
+            if (node.closest('[data-role="door-deck"]') === null) {
+                fail(`"${UNBUYABLE_BADGE}" in ${describe(node)} sits in no price cell this rule reads`);
+            }
+            continue;
+        }
+        read += 1;
+        if (where === 'wall-cycle' || where === 'overlay-card' || where === 'overlay-ticker') {
+            fail(`${where}: an unbuyable listing is on a surface that skips them`);
+            continue;
+        }
+        unbuyableChecks[where] = (unbuyableChecks[where] ?? 0) + 1;
+        if (node.getAttribute('data-role') !== 'unbuyable') {
+            fail(`${where}: "${UNBUYABLE_BADGE}" in ${describe(node)} carries no data-role="unbuyable" — its ink is measured by that role`);
+        }
+        const part = cell.querySelector(FIGURE_PARTS);
+        if (part !== null) {
+            fail(`${where}: beside "${UNBUYABLE_BADGE}" the cell paints ${describe(part)} "${part.textContent?.trim() ?? ''}"`);
+        }
+        // Everything else the cell says. A ticker item is a whole line — its
+        // name and its stock ride beside the label, and neither is a figure.
+        const rest = [...cell.childNodes]
+            .filter((child) => child !== node && !(child instanceof Element && where === 'overlay-ticker' && child.matches('.tk-n, .tk-w')))
+            .map((child) => child.textContent ?? '')
+            .join(' ')
+            .trim();
+        if (rest !== '') {
+            fail(`${where}: beside "${UNBUYABLE_BADGE}" the cell says "${rest}"`);
+        }
+        const cs = getComputedStyle(node);
+        if (cs.display === 'none' || cs.visibility !== 'visible' || Number.parseFloat(cs.opacity) < 1) {
+            fail(`${where}: "${UNBUYABLE_BADGE}" does not show (display ${cs.display}, visibility ${cs.visibility}, opacity ${cs.opacity})`);
+            continue;
+        }
+        const covered = coveredBy(node);
+        if (covered !== undefined) {
+            fail(`${where}: "${UNBUYABLE_BADGE}" ${covered}`);
         }
     }
-    for (const figure of root.querySelectorAll('[data-role="price"]')) {
-        const head = figure.closest('.item-head');
-        if (head !== null && head.hasAttribute('data-price-tier')) {
-            continue;
+    if (UNBUYABLE_SCREENS.has(screen) && read === 0) {
+        fail(`${screen} painted no "${UNBUYABLE_BADGE}" — the rule would read nothing`);
+    }
+    const skip = SKIP_SCREENS[screen];
+    if (skip !== undefined) {
+        if (root.querySelector(skip.shown) === null) {
+            fail(`${screen} painted nothing where the skip is judged (${skip.shown}) — it would be judged over nothing`);
+        } else if (read === 0) {
+            skipChecks[skip.surface] = (skipChecks[skip.surface] ?? 0) + 1;
         }
-        note(figureSizes, figure);
     }
     return out;
 }
@@ -1603,48 +1652,13 @@ for (const screen of measured) {
             ) {
                 withQuote.add(screen);
             }
-            failures.push(...gatherPriceSizes(screen, label));
-            // A screen built for the dash that painted none would leave the
-            // rule below green over nothing.
-            if (DASH_SCREENS.has(screen) && document.querySelector('#app .dash') === null) {
-                failures.push({
-                    screen,
-                    theme: label,
-                    check: 'the-dash-is-the-size-of-the-figure',
-                    detail: `${screen} painted no dash — the rule would compare nothing`,
-                });
-            }
+            failures.push(...unbuyableFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
             }
             if (look.id === SKELETON_LOOK_ID) {
                 failures.push(...skeletonLadderFaults(screen, label));
             }
-        }
-    }
-}
-
-for (const [key, dashes] of dashSizes) {
-    const figures = figureSizes.get(key) ?? [];
-    for (const dash of dashes) {
-        if (figures.length === 0) {
-            failures.push({
-                screen: dash.screen,
-                theme: key,
-                check: 'the-dash-is-the-size-of-the-figure',
-                detail: `a ${dash.px}px dash with no buyable figure measured in the same place this pass`,
-            });
-            continue;
-        }
-        dashChecks[dash.where] = (dashChecks[dash.where] ?? 0) + 1;
-        const other = figures.find((figure) => Math.abs(figure.px - dash.px) > 0.01);
-        if (other !== undefined) {
-            failures.push({
-                screen: dash.screen,
-                theme: key,
-                check: 'the-dash-is-the-size-of-the-figure',
-                detail: `the dash is ${dash.px}px where the figure is ${other.px}px (${other.screen}) at ${window.innerWidth}px`,
-            });
         }
     }
 }
@@ -1920,6 +1934,11 @@ function chromeOver(node: HTMLElement, box: Hole): Hole[] {
 
 const CONTRAST_TEXT = [
     '[data-role="price"]',
+    // "Not buyable" (2026-09-24, the critic): all an unbuyable offer's price
+    // cell says since the dash left, on the row, the face and its fold, the
+    // wall's Browse, the overlay card and the ticker — one role on every
+    // surface, whatever class dresses it there.
+    '[data-role="unbuyable"]',
     '.row.big dd',
     '.buy',
     // The address's two text nodes, never the `.addr` box itself: the box
@@ -2612,11 +2631,12 @@ const verdict = {
     screensWithQuote: [...withQuote],
     /*
      * What the step-2 rules compared, for the runner to require
-     * (`probe-coverage.mjs`): dash-against-figure comparisons per place,
-     * the shipped looks whose row sizes were read, and the skeleton's
-     * tiered figures per tier.
+     * (`probe-coverage.mjs`): the unbuyable labels read per place, the
+     * shipped looks whose row sizes were read, and the skeleton's tiered
+     * figures per tier.
      */
-    dashChecks,
+    unbuyableChecks,
+    skipChecks,
     rowSizeClasses: [...rowSizeClasses].sort(),
     ladderTiers,
     failures,

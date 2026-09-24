@@ -223,8 +223,8 @@ const SHOP_OFFERS: StallOffer[] = [
 /**
  * A listing nobody can take: its covenant's minimum accept (13) is more than
  * the 12 atoms left on the UTXO — the remainder of a partial fill, as it is
- * met in the wild (`isUnbuyable`). The row, the face and the wall paint a dash
- * where the figure goes.
+ * met in the wild (`isUnbuyable`). Every surface paints "Not buyable" where
+ * the figure goes, and nothing else there.
  */
 const UNBUYABLE_OFFER: StallOffer = offer(T2, 1, 87_500n, { minAcceptedAtoms: 13n });
 
@@ -280,15 +280,12 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'listings', zoom: true },
     }),
     /*
-     * The unbuyable dash beside a buyable figure (step 2b, 2026-09-23 — the
-     * owner's D1: the dash is the size of the figure). T2's only listing asks
-     * a minimum take its remainder cannot meet (`isUnbuyable`), so its row
-     * paints the dash; T1's is an ordinary whole-lot ask at tier 0 on every
-     * look. No screen painted an unbuyable offer before, so the dash's size
-     * was measured by nothing. The probe's `the-dash-is-the-size-of-the-figure`
-     * compares the two on this screen, the face below against
-     * `item-listing`'s figure, the wall row against its neighbour's and the
-     * wall's card against `shop-window-cycle`'s.
+     * An unbuyable offer beside a buyable one (2026-09-23; since 2026-09-24
+     * the unbuyable one paints the label alone). T2's only listing asks a
+     * minimum take its remainder cannot meet (`isUnbuyable`); T1's is an
+     * ordinary ask, so the label stands in a row beside a real figure. The
+     * probe's `an-unbuyable-offer-paints-no-figure-and-says-so` reads it here,
+     * on the face below, on the two wall screens and on the overlay's two.
      */
     unbuyable: base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -296,6 +293,20 @@ export const SCREENS: Record<string, StallView> = {
     'item-unbuyable': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
         overlay: { kind: 'item', tokenId: T2, rail: 'listings' },
+    }),
+    /*
+     * The face's fold line (the critic, 2026-09-24): a token with one
+     * buyable and one unbuyable offer, so the face paints the buyable figure
+     * and its fold lists both — the unbuyable one as "Not buyable". An
+     * all-unbuyable token's face returns before the fold's listings block,
+     * so `item-unbuyable` above never painted this line.
+     */
+    'item-unbuyable-fold': base({
+        fetch: {
+            kind: 'offers',
+            offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), offer(T1, 6, 90_000n, { minAcceptedAtoms: 13n })],
+        },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
     }),
     /*
      * The two record sheets, one screen each. They were one screen while they
@@ -946,9 +957,8 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
-     * The unbuyable dash on a wall (step 2b): Browse, an unbuyable row beside
-     * a buyable one, no lock — the dash takes the wall figure's size, which is
-     * neither the shop's nor the face's.
+     * The unbuyable offer on a wall: Browse, an unbuyable row beside a
+     * buyable one, no lock.
      */
     'shop-window-unbuyable': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -956,14 +966,17 @@ export const SCREENS: Record<string, StallView> = {
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     /*
-     * And on the wall's one big card (Cycle): the unbuyable listing alone, so
-     * it is the card at the cursor. The largest figure the app paints — up to
-     * 112px, 124px on a tall screen — so the largest dash; its buyable figure
-     * is `shop-window-cycle`'s at the same width.
+     * And the wall's one big card (Cycle) SKIPS it (the owner, 2026-09-24):
+     * a buyable listing and the unbuyable one, the cursor at 0 — where the
+     * shop's own order puts the unbuyable one (measured: with the skip taken
+     * out, this card is "Not buyable") and where the cycle's list has the
+     * one buyable card. What the probe holds here is that a Cycle card is
+     * painted and carries no "Not buyable" (`cycleSkipChecks`).
      */
     'shop-window-cycle-unbuyable': base({
-        fetch: { kind: 'offers', offers: [UNBUYABLE_OFFER] },
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
         window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        windowCursor: 0,
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     /*
@@ -1046,6 +1059,19 @@ export const SCREENS: Record<string, StallView> = {
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         broadcast: bc('corner', 'fixed', true),
         broadcastState: 'live',
+    }),
+    /*
+     * The stream SKIPS an unbuyable listing (the owner, 2026-09-24): a buyable
+     * listing and the unbuyable one, the cursor at 0 — where the shop's own
+     * order puts the unbuyable one, and where the stream's list has the one
+     * buyable card. The probe holds the card to carrying no "Not buyable"
+     * (`streamSkipChecks`).
+     */
+    'broadcast-unbuyable': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
     }),
     'broadcast-clear': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
@@ -1214,6 +1240,13 @@ export const SCREENS: Record<string, StallView> = {
         broadcastState: 'live',
         broadcastTickerStill: true,
     }),
+    /* And the ribbon skips it: the same two listings, pinned at the start — one item runs. */
+    'broadcast-ticker-unbuyable': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
+        broadcast: bc('ticker', 'fixed'),
+        broadcastState: 'live',
+        broadcastTickerAt: 0,
+    }),
     /* The same bar on the OBS wire, where pass 5 reads it. */
     'broadcast-ticker-clear': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
@@ -1281,10 +1314,12 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // decoration interactions they could stage are `offers`' again.
     'stream-sheet',
     'embed-sheet',
-    // The unbuyable dash's four screens exist for one size comparison; the
-    // decoration interactions they could stage are `offers`' again.
+    // The unbuyable offer's page screens exist for one label (and the
+    // Cycle card's skip); the decoration interactions they could stage are
+    // `offers`' again.
     'unbuyable',
     'item-unbuyable',
+    'item-unbuyable-fold',
     'shop-window-unbuyable',
     'shop-window-cycle-unbuyable',
 ]);
@@ -1368,13 +1403,11 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // The checklist is `unresolvable`'s ground with numbered steps on it;
     // its muted status lines are not contrast targets. Geometry only.
     'first-stall',
-    // The unbuyable dash (2026-09-23): the dash and its badge are muted ink
-    // no contrast target names, beside `offers`' own figure on its ground,
-    // and on the face and the wall the same. What they are here for is one
-    // size, which is geometry.
-    'unbuyable',
-    'item-unbuyable',
-    'shop-window-unbuyable',
+    // The Cycle card that skips an unbuyable listing paints a buyable card
+    // `shop-window-cycle` already samples. The unbuyable label itself is
+    // sampled (2026-09-24, the critic: it is all a price cell says) on the
+    // row, the face, its fold, the wall's Browse, the overlay card and the
+    // ticker — `[data-role="unbuyable"]` in `CONTRAST_TEXT`.
     'shop-window-cycle-unbuyable',
 ]);
 
@@ -1425,6 +1458,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-live',
     'broadcast-ticker-quotes-still',
     'broadcast-ticker-clear',
+    'broadcast-unbuyable',
+    'broadcast-ticker-unbuyable',
     'shop-window-wall',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
@@ -1447,4 +1482,6 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-live',
     'broadcast-ticker-quotes-still',
     'broadcast-ticker-clear',
+    'broadcast-unbuyable',
+    'broadcast-ticker-unbuyable',
 ]);

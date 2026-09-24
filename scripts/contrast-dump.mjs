@@ -34,8 +34,9 @@ export const DUMP_DIR = '.layout-dump';
 export const FLOOR = 3;
 
 /** One job's key: the combination the pass painted. */
-export function jobKey({ pass, viewport, screen, look, flags }) {
-    return `${pass}|${viewport}|${screen}|${look}|${flags}`;
+export function jobKey({ pass, viewport, screen, look, flags, reduced }) {
+    // A job painted under reduced motion is a job of its own (`REDUCED_JOBS`).
+    return `${pass}|${viewport}|${screen}|${look}|${flags}${reduced === true ? '|reduce' : ''}`;
 }
 
 /** One box's key, inside its job. */

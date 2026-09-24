@@ -178,7 +178,7 @@ import { fetchXecPriceCheck } from './net/priceCheck';
 import { SECOND_FEED } from './net/hosts';
 import { withDeadline } from './domain/deadline';
 import { nextCard, tokensAtBlock } from './domain/window';
-import { windowListings, windowRail } from './ui/window';
+import { wallListings, windowRail, windowTurns } from './ui/window';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -1693,13 +1693,15 @@ export function boot(
         // The SAME derivation the painter uses, and the same view: the lock
         // is written onto the view at paint time, so counting off `state.view`
         // dropped the remembered-token branch the screen was painting.
-        const rail = windowRail(params.show, windowRailAt);
         const seen: StallView = { ...state.view, ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }) };
+        const rail = windowRail(seen, params, windowRailAt);
         const length =
             rail === 'quotes'
                 ? quotedItems(seen).length
-                : windowListings(seen, params).length;
-        const step = nextCard(windowCursorAt, length, params.show, rail);
+                : wallListings(seen, params).length;
+        // `all` turns only while the other rail has something to show: an
+        // empty rail turns itself off rather than standing a dwell on a blank.
+        const step = nextCard(windowCursorAt, length, windowTurns(seen, params) ? 'all' : rail, rail);
         windowCursorAt = step.cursor;
         windowRailAt = step.rail;
         paint();
@@ -1723,7 +1725,13 @@ export function boot(
         const room = strip.scrollHeight - strip.clientHeight;
         if (room <= 1 || strip.scrollTop >= room - 1) {
             strip.scrollTop = 0;
-            if (params?.show !== 'all') {
+            if (params === undefined || params.show !== 'all') {
+                return;
+            }
+            // Only while the other rail has something on it: a turn onto an
+            // empty rail is a turn `windowRail` would undo, one scroll later.
+            const seen: StallView = { ...state.view, ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }) };
+            if (!windowTurns(seen, params)) {
                 return;
             }
             // A list that fits reaches this on every tick; one that scrolls

@@ -487,6 +487,115 @@ describe('a-shop-window-advances-and-re-reads-without-a-visit', () => {
  * a SNAPSHOT: the wall holds no paint, so a figure recomputed from the view
  * would move under a camera pointed at the code (P1-2).
  */
+describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
+    /**
+     * The owner, 2026-09-24: the Cycle card skips a listing nobody can take.
+     * This drives the wall's own clock — the step is the driver's, and it
+     * must count the list the painter paints (`wallListings`), or the cursor
+     * lands on a slot the card no longer has.
+     */
+    const id = (c: string): string => c.repeat(64);
+    const meta = (tokenId: string, name: string): TokenMeta => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 2).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    } as TokenMeta);
+    const listing = (tokenId: string, n: number, unbuyable = false) => ({
+        ...OFFER,
+        outpoint: { txid: id(String(n)), outIdx: n },
+        tokenId,
+        ...(unbuyable ? { atoms: 3n, askedAtoms: 10n, minAcceptedAtoms: 10n } : {}),
+    });
+    const shownName = (root: HTMLElement): string =>
+        root.querySelector('[data-role="shop-window"] .item-n')?.textContent ?? '';
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('never stops on an unbuyable listing between two buyable ones', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=cycle`);
+        const offers = [listing(id('1'), 1), listing(id('2'), 2, true), listing(id('3'), 3)];
+        const tokens = new Map([
+            [id('1'), meta(id('1'), 'Apples')],
+            [id('2'), meta(id('2'), 'Stranded Pears')],
+            [id('3'), meta(id('3'), 'Cherries')],
+        ]);
+        const root = document.createElement('div');
+        boot(root, async () => ({
+            view: {
+                route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+                fetch: { kind: 'offers' as const, offers },
+                overlay: { kind: 'idle' as const },
+                address: ADDR,
+                stallName: 'Riverside Goods',
+                tokens,
+                window: { show: 'listings' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const, touch: false as const },
+            },
+            offers,
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+        const seen: string[] = [shownName(root)];
+        for (let i = 0; i < 5; i += 1) {
+            await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS + 10);
+            seen.push(shownName(root));
+        }
+        expect(seen).not.toContain('Stranded Pears');
+        expect(new Set(seen)).toEqual(new Set(['Apples', 'Cherries']));
+        // The first two dwells each move the card. Later ones are not held
+        // to it: the sixty-second heartbeat re-arms the card's timer, so the
+        // card at the third dwell stands a fourth whatever the list (measured
+        // with two buyable listings and no unbuyable one: Apples, Cherries,
+        // Apples, Apples, …).
+        expect(seen.slice(0, 3)).toEqual(['Apples', 'Cherries', 'Apples']);
+        expect(root.textContent).not.toContain('Not buyable');
+    });
+
+    /**
+     * `a-wall-showing-both-rails-never-stands-on-an-empty-one` (the owner,
+     * 2026-09-24; the stream's `broadcastRail` on the wall). A listings rail
+     * whose every listing is unbuyable has nothing to cycle, so a wall showing
+     * both rails is on the quotes from the first paint and at every dwell —
+     * never an empty strip. The first version of this test asserted only that
+     * the stranded listing was not shown, which a blank card also satisfies.
+     */
+    it('a-wall-showing-both-rails-never-stands-on-an-empty-one', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=cycle`);
+        const offers = [listing(id('2'), 2, true)];
+        const tokens = new Map([
+            [id('2'), meta(id('2'), 'Stranded Pears')],
+            [id('4'), meta(id('4'), 'Plum Jam')],
+        ]);
+        const root = document.createElement('div');
+        boot(root, async () => ({
+            view: {
+                route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+                fetch: { kind: 'offers' as const, offers },
+                overlay: { kind: 'idle' as const },
+                address: ADDR,
+                stallName: 'Riverside Goods',
+                tokens,
+                prices: new Map([[id('4'), { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                window: { show: 'all' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const, touch: false as const },
+            },
+            offers,
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+        for (let dwell = 0; dwell <= 5; dwell += 1) {
+            expect(shownName(root), `dwell ${dwell}`).toBe('Plum Jam');
+            expect(root.querySelector('[data-role="seller-price"]'), `dwell ${dwell}`).not.toBeNull();
+            expect(root.querySelector('[data-role="window-state"]')?.textContent, `dwell ${dwell}`).not.toContain(
+                'Nothing here this screen can show',
+            );
+            await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS + 10);
+        }
+    });
+});
+
 describe('a-touch-wall-freezes-the-payment-its-press-composed', () => {
     afterEach(() => {
         vi.useRealTimers();

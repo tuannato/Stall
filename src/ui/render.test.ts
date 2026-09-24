@@ -75,6 +75,7 @@ import {
     TOKEN_TICKER,
     TOKEN_TYPE,
     UNBUYABLE_BADGE,
+    UNBUYABLE_LINE_UNCOUNTED,
     TRY_AGAIN,
     UNREACHABLE_BODY,
     UNREADABLE_BODY,
@@ -142,7 +143,7 @@ import {
     publishBip21,
 } from '../domain/cashtab';
 import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
-import { broadcastCards, broadcastFigure } from './broadcast';
+import { broadcastCards, broadcastFigure, broadcastRail, broadcastTurns } from './broadcast';
 import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
@@ -1235,13 +1236,52 @@ describe('min-exceeds-remaining-is-not-buyable', () => {
         expect(text).toContain(UNBUYABLE_BADGE);
         expect(text).not.toContain(EMPTY_TITLE);
 
-        // No price for an impossible take, and no "from" either.
+        // No price for an impossible take, no "from", and no stand-in for a
+        // figure (the owner, 2026-09-24): the face's figure cell says the
+        // label and nothing else.
         expect(root.querySelector('[data-role="price"]')).toBeNull();
         expect(text).not.toContain(PRICE_FROM);
+        expect(text).not.toContain(DASHED_PRICE);
+        expect(root.querySelector('.face-x')?.textContent).toBe(UNBUYABLE_BADGE);
 
         // Cashtab drops this offer too, so a link there is a dead end.
         expect(root.querySelector('[data-role="item-face"] a.buy')).toBeNull();
         expect(text).toContain('only the seller can cancel it');
+    });
+
+    it('says so on the row with the label alone', () => {
+        const stranded: StallOffer = { ...OFFER, atoms: 3n, askedAtoms: 10n, minAcceptedAtoms: 10n };
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [stranded] },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+            }),
+        );
+        expect(root.querySelector('.item-head .item-p')?.textContent).toBe(UNBUYABLE_BADGE);
+        expect(root.querySelector('.item-head [data-role="unbuyable"]')?.textContent).toBe(UNBUYABLE_BADGE);
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+        expect(root.textContent).not.toContain(DASHED_PRICE);
+    });
+
+    /**
+     * The face's sentence counts the minimum take and the stock — and at
+     * unknown decimals `formatAtoms` prints atoms verbatim, which is a wrong
+     * number rather than a missing one (§8, `knownDecimals`). Uncounted, it
+     * says the fact without the figures.
+     */
+    it('prints no count it cannot read when the genesis decimals never arrived', () => {
+        const stranded: StallOffer = { ...OFFER, atoms: 3n, askedAtoms: 10n, minAcceptedAtoms: 10n };
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers: [stranded] },
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                tokens: new Map(),
+            }),
+        );
+        const ctx = [...root.querySelectorAll('.ctx')].map((n) => n.textContent ?? '');
+        expect(ctx).toContain(UNBUYABLE_LINE_UNCOUNTED);
+        expect(ctx.join(' ')).not.toMatch(/less than 10/);
+        expect(root.querySelector('.face-x [data-role="unbuyable"]')?.textContent).toBe(UNBUYABLE_BADGE);
     });
 });
 
@@ -6324,27 +6364,76 @@ describe('a-full-lot-on-the-overlay-does-not-say-from', () => {
     });
 });
 
-describe('an-unbuyable-card-on-the-overlay-says-why', () => {
+describe('the-stream-skips-an-unbuyable-listing', () => {
     /**
-     * A dash with no why is not honest. The shop already names the
-     * stranded remainder; the overlay must too.
+     * The owner, 2026-09-24: the stream's carousel skips a listing nobody can
+     * take, on the corner card and in the ticker, as the wall's Cycle does. A
+     * card stands 8 s and a viewer can only scan it; an unbuyable card had no
+     * figure and no road. `streamListings` is the one derivation, so the
+     * cards, the rail and the turn all read the same list — and a listings
+     * rail of only unbuyable ones is an empty rail (`broadcastRail`).
      */
-    it('prints the badge beside the dash', () => {
-        const stranded: StallOffer = {
-            ...OFFER,
-            atoms: 3n,
-            askedAtoms: 10n,
-            minAcceptedAtoms: 10n,
-        };
+    const STRANDED = 'ef'.repeat(32);
+    const stranded: StallOffer = {
+        ...OFFER,
+        outpoint: { txid: 'fe'.repeat(32), outIdx: 3 },
+        tokenId: STRANDED,
+        atoms: 3n,
+        askedAtoms: 10n,
+        minAcceptedAtoms: 10n,
+    };
+    const tokens = new Map<string, TokenMeta>([
+        [TOKEN_ID, BEANS],
+        [STRANDED, { ...BEANS, tokenId: STRANDED, name: 'Stranded Pears', ticker: 'PEAR' }],
+    ]);
+
+    it('never puts an unbuyable listing on the card, at any cursor', () => {
+        for (const cursor of [0, 1, 2]) {
+            const { root } = paint(
+                broadcastView({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens, broadcastCursor: cursor }),
+            );
+            expect(root.querySelector('.bc-nm')?.textContent, `cursor ${cursor}`).toBe('Roasted Beans');
+            expect(root.textContent).not.toContain(UNBUYABLE_BADGE);
+            expect(root.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+        }
+        expect(broadcastCards(broadcastView({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens })).map((c) => c.tokenId)).toEqual([
+            TOKEN_ID,
+        ]);
+    });
+
+    it('never runs an unbuyable listing on the ticker', () => {
         const { root } = paint(
-            broadcastView({ fetch: { kind: 'offers', offers: [stranded] } }),
+            broadcastView({
+                fetch: { kind: 'offers', offers: [stranded, OFFER] },
+                tokens,
+                broadcast: { preset: 'ticker', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
+            }),
         );
-        const priceRow = root.querySelector('.bc-p');
-        expect(priceRow, 'the price row is on the card').not.toBeNull();
-        expect(root.querySelector('[data-role="price"]')?.textContent).toBe(
-            DASHED_PRICE,
-        );
-        expect(priceRow!.textContent).toContain(UNBUYABLE_BADGE);
+        const names = [...root.querySelectorAll('.tk-it .tk-n')].map((n) => n.textContent);
+        expect(names).toEqual(['Roasted Beans']);
+        expect(root.textContent).not.toContain(UNBUYABLE_BADGE);
+    });
+
+    it('treats a listings rail of only unbuyable listings as empty', () => {
+        // Alone on the listings rail: no card, no label, no price role — the
+        // head carries the stall and the plate its code.
+        const { root } = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded] }, tokens }));
+        expect(root.querySelector('.bc-ext')).toBeNull();
+        expect(root.querySelector('[data-role="price"]')).toBeNull();
+        expect(root.textContent).not.toContain(UNBUYABLE_BADGE);
+        expect(root.querySelector('[data-role="qr"]')).not.toBeNull();
+        // Under `cards=all` with a quote, the stream is on the quotes and
+        // does not turn back onto the empty rail.
+        const all = broadcastView({
+            fetch: { kind: 'offers', offers: [stranded] },
+            tokens,
+            prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+            broadcast: { ...BROADCAST, mode: 'fixed', cards: 'all' },
+            broadcastRail: 'listings',
+        });
+        expect(broadcastRail(all)).toBe('quotes');
+        expect(broadcastTurns(all)).toBe(false);
+        expect(broadcastCards(all).map((c) => c.kind)).toEqual(['quote']);
     });
 });
 

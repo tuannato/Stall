@@ -187,8 +187,9 @@ const WINDOW_SCREENS =
     // payment the press froze. Both passes below read this list, so both
     // the portrait screen and the counter tablet measure them.
     'shop-window-touch-quotes,shop-window-touch-quotes-pay,' +
-    // The unbuyable dash on a wall (2026-09-23), in a Browse row and on the
-    // Cycle card: the tall wall re-cuts both sizes.
+    // An unbuyable offer on a wall (2026-09-23), in a Browse row and on the
+    // Cycle card — the card with no code since 2026-09-24, which the tall
+    // wall and the tablet lay out on their own.
     'shop-window-unbuyable,shop-window-cycle-unbuyable';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
@@ -1144,6 +1145,7 @@ try {
          */
         let plan;
         const done = new Map();
+        let reducedNow = false;
         for (const vp of ALL_VIEWPORTS) {
             currentStep = `contrast: loading the ${vp.name} page`;
             await timed('metrics', () =>
@@ -1179,7 +1181,19 @@ try {
                 done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
                 const { screen, look: theme, flags } = plannedJob;
                 const wornAll = flags !== 0;
-                const job = { pass: 'contrast', viewport: vp.name, screen, look: theme, flags };
+                const reduced = plannedJob.reduced === true;
+                const job = { pass: 'contrast', viewport: vp.name, screen, look: theme, flags, ...(reduced ? { reduced } : {}) };
+                // A job of `REDUCED_JOBS` is painted under reduced motion: a
+                // box the sampler cannot read while it moves (Rural's swaying
+                // tag) is read stilled. Switched per job, and back after it.
+                if (reduced !== reducedNow) {
+                    await cdp.send(
+                        'Emulation.setEmulatedMedia',
+                        { features: reduced ? [{ name: 'prefers-reduced-motion', value: 'reduce' }] : [] },
+                        sessionId,
+                    );
+                    reducedNow = reduced;
+                }
                 const record = { key: jobKey(job), ...job };
                 dumpJobs.push(record);
                 // A job whose echo is not the job is refused before anything
@@ -1419,6 +1433,10 @@ try {
                     }
                 }
             }
+        }
+        if (reducedNow) {
+            await cdp.send('Emulation.setEmulatedMedia', { features: [] }, sessionId);
+            reducedNow = false;
         }
         currentStep = 'contrast: the verdict';
         const planKeys = new Set(plan.map((j) => j.key));

@@ -29,6 +29,7 @@
  * Test: `the-contrast-plan-is-every-job-the-pass-owes`.
  */
 import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS } from './fixtures';
+import { RURAL_THEME_ID } from '../src/domain/theme';
 import { canWear, type Look } from './looks';
 import { screensAt } from './screenSplit';
 
@@ -62,7 +63,23 @@ export type ContrastJob = {
     readonly sheetClass: string;
     /** The decoration bits `__contrastPrepare` is handed. */
     readonly flags: number;
+    /** Painted under `prefers-reduced-motion: reduce` (`REDUCED_JOBS`). */
+    readonly reduced?: boolean;
 };
+
+/**
+ * Screens sampled a second time under reduced motion, per look: a box the
+ * sampler cannot read while it moves. Rural's price tag sways
+ * (`t-rural-tag`), and a box inside a transform is padded 8px a side
+ * (`insideTransform`), which leaves nothing of the 14px "Not buyable" label
+ * that is all an unbuyable row's price cell says — so its ink was measured
+ * by nothing (the critic, 2026-09-24). Stilled, the tag has no transform and
+ * the label is read whole.
+ */
+export const REDUCED_JOBS: ReadonlyArray<{ screen: string; look: number }> = [{ screen: 'unbuyable', look: RURAL_THEME_ID }];
+
+/** The overlay screens the pass samples; every other overlay screen is geometry. */
+export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);
 
 /** The screens the pass samples at one viewport, for the given looks. */
 export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[]): string[] {
@@ -73,7 +90,7 @@ export function contrastScreens(width: number, canvas: boolean, looks: readonly 
             // the first money on a moving node, sampled at the pinned offset
             // the fixture holds them at. The other ticker screens are
             // geometry (`PROBE-RULES.md`, "The ticker").
-            (!NO_DECOR_SCREENS.has(name) || name === 'broadcast' || name === 'broadcast-ticker') &&
+            (!NO_DECOR_SCREENS.has(name) || OVERLAY_SAMPLED.has(name)) &&
             !GEOMETRY_ONLY_SCREENS.has(name),
     );
 }
@@ -89,8 +106,7 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                 }
                 const variants = look.rows.length === 0 || NO_DECOR_SCREENS.has(screen) ? [0] : [0, WORN_ALL];
                 for (const flags of variants) {
-                    jobs.push({
-                        key: `${viewport.name}/${screen}/${look.id}/${flags}`,
+                    const job = {
                         viewport: viewport.name,
                         width: viewport.width,
                         height: viewport.height,
@@ -98,7 +114,11 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                         look: look.id,
                         sheetClass: look.theme.sheetClass,
                         flags,
-                    });
+                    };
+                    jobs.push({ key: `${viewport.name}/${screen}/${look.id}/${flags}`, ...job });
+                    if (REDUCED_JOBS.some((r) => r.screen === screen && r.look === look.id)) {
+                        jobs.push({ key: `${viewport.name}/${screen}/${look.id}/${flags}/reduce`, ...job, reduced: true });
+                    }
                 }
             }
         }
