@@ -159,6 +159,7 @@ import {
     holdsLivePaint,
     shopWindowPaints,
     WINDOW_MIN_PX,
+    broadcastRail,
     broadcastStep,
     broadcastTurns,
     tickerPages,
@@ -694,6 +695,13 @@ export function boot(
      * see `offersWithinLock` for why membership and not a height comparison.
      */
     let windowLockSet: ReadonlySet<string> | undefined;
+    /**
+     * The height that set was captured at. A same-path navigation (Back, a
+     * bookmark) keeps the stall and so everything above — and a lock at
+     * another height filtered by the old one's set kept a token settled
+     * after the new height on the shelf (the critic's third pass).
+     */
+    let windowLockAt: number | undefined;
     /** When somebody last touched this screen. `0` is "nobody has". */
     let windowTouchedAt = 0;
     /**
@@ -964,6 +972,54 @@ export function boot(
                     cancelWallPayment();
                     break;
                 }
+            }
+        }
+        /*
+         * The drivers hold the rail that is PAINTED (the critic's third
+         * pass, 2026-09-24, a P1 of round 3). `windowRail` and
+         * `broadcastRail` turn an empty rail off at paint time, but the
+         * closure's own `windowRailAt` / `broadcastRailAt` moved only on a
+         * turn or a Cycle step — so a `show=all` touch wall on a stall with
+         * quotes and nothing listed painted the quotes while the driver
+         * still said "listings", and the first listing to land flipped the
+         * painter back under a customer's hands: the strip, Clear all, Pay
+         * and the payment code gone. Stored here, every paint agrees with
+         * the screen, and a rail that was chosen for being the only one is
+         * kept once the other fills. Over a read of the records only
+         * (`prices`), the prune's own rule: a paint that does not know the
+         * quotes cannot say they are empty, and storing "listings" off one
+         * would move a wall back onto the listings for good.
+         */
+        /*
+         * The freeze is captured ONCE per lock height, on the first paint
+         * that has both a lock and a book, and here — before the view is
+         * built — so the paint that shows a lock is the paint that took it.
+         * After that the remembered set is what filters, so an item partly
+         * sold since (its remaining utxo now in a later block) stays on the
+         * shelf it was on when the seller locked it. A same-path navigation
+         * to another `upto` takes a fresh set (`windowLockAt`).
+         */
+        const wall = wallParams();
+        if (wall !== undefined && shopWindowPaints(settled())) {
+            if (wall.upto !== windowLockAt) {
+                windowLockSet = undefined;
+                windowLockAt = wall.upto;
+            }
+            if (wall.upto !== undefined && windowLockSet === undefined && state.offers.length > 0) {
+                windowLockSet = tokensAtBlock(state.offers, wall.upto);
+            }
+        }
+        if (state.view.prices !== undefined) {
+            const params = wallParams();
+            if (params !== undefined) {
+                const seen: StallView = {
+                    ...state.view,
+                    ...(windowLockSet === undefined ? {} : { windowLock: windowLockSet }),
+                };
+                windowRailAt = windowRail(seen, params, windowRailAt);
+            }
+            if (state.view.broadcast !== undefined) {
+                broadcastRailAt = broadcastRail(withRail(state.view));
             }
         }
         // Read at paint time, not at load: the toggle changes it without a
@@ -1600,13 +1656,6 @@ export function boot(
             return;
         }
         const params = view.window;
-        // The freeze is captured ONCE, on the first paint that has both a lock
-        // and a book. After that the remembered set is what filters, so an
-        // item partly sold since — whose remaining utxo is now in a later
-        // block — stays on the shelf it was on when the seller locked it.
-        if (params.upto !== undefined && windowLockSet === undefined && state.offers.length > 0) {
-            windowLockSet = tokensAtBlock(state.offers, params.upto);
-        }
 
         /*
          * The code lives as long as the rate that priced it (T-D). At expiry
@@ -2491,6 +2540,7 @@ export function boot(
             // onto another's wall if they are not — the shape of the
             // cross-stall contamination this project has already had once.
             windowLockSet = undefined;
+            windowLockAt = undefined;
             windowCursorAt = 0;
             windowCardDueAt = undefined;
             windowRailAt = 'listings';

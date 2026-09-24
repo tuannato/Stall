@@ -2,7 +2,7 @@
 import { encodeCashAddress } from 'ecashaddrjs';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stallPath } from './domain/route';
+import { parseWindowParams, stallPath } from './domain/route';
 import type { StallView, TokenMeta } from './domain/state';
 
 /*
@@ -588,7 +588,16 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
         await vi.advanceTimersByTimeAsync(0);
         const names = ['Apples', 'Cherries'];
         expect(shownName(root)).toBe('Apples');
-        let at = 0;
+        // A refresh MID-dwell (a same-path navigation runs the same
+        // `refresh()` the beat does): the card's timer is cleared ten seconds
+        // in and re-armed with the ten that are left — the branch a beat
+        // landing on a due time never reaches. It also moves the beat to 70 s,
+        // 130 s and 190 s, so every later beat lands mid-dwell too.
+        await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS / 2);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(shownName(root), 'the refresh keeps the card').toBe('Apples');
+        let at = WINDOW_CARD_MS / 2;
         for (let dwell = 1; dwell <= 10; dwell += 1) {
             const due = dwell * WINDOW_CARD_MS;
             await vi.advanceTimersByTimeAsync(due - 200 - at);
@@ -597,10 +606,10 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
             at = due + 200;
             expect(shownName(root), `just after dwell ${dwell} ends`).toBe(names[dwell % 2]);
         }
-        // Ten dwells are 200 s: the heartbeat ran three times in them, and
-        // is the thing this test is about.
-        expect(10 * WINDOW_CARD_MS).toBeGreaterThan(3 * WINDOW_BEAT_MS);
-        expect(loads, 'the first load and three beats').toBe(4);
+        // Ten dwells are 200 s: the heartbeat ran three times in them, each
+        // mid-dwell, and is the thing this test is about.
+        expect(10 * WINDOW_CARD_MS).toBeGreaterThan(WINDOW_CARD_MS / 2 + 3 * WINDOW_BEAT_MS);
+        expect(loads, 'the first load, the refresh and three beats').toBe(5);
     });
 
     /**
@@ -642,6 +651,61 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
             );
             await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS + 10);
         }
+    });
+});
+
+describe('a-new-lock-height-on-the-same-stall-takes-a-fresh-set', () => {
+    /**
+     * The freeze is captured once and kept across every refresh — for the
+     * SAME lock. A same-path navigation (Back, Forward, a bookmark) to the
+     * stall's wall at another `upto` kept the set captured at the first,
+     * so the new height was filtered by the old one's tokens (the critic's
+     * third pass, 2026-09-24). The set is keyed by the height it was taken
+     * at.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const A = 'a1'.repeat(32);
+    const B = 'b2'.repeat(32);
+    const meta = (tokenId: string, name: string): TokenMeta =>
+        ({ tokenId, name, ticker: name.slice(0, 2).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }) as TokenMeta;
+    const offers = [
+        { ...OFFER, tokenId: A, outpoint: { txid: 'a3'.repeat(32), outIdx: 0 }, blockHeight: 90 },
+        { ...OFFER, tokenId: B, outpoint: { txid: 'b4'.repeat(32), outIdx: 0 }, blockHeight: 150 },
+    ];
+    const names = (root: HTMLElement): string[] =>
+        [...root.querySelectorAll('[data-role="shop-window"] .item-n')].map((n) => n.textContent ?? '').sort();
+
+    it('filters a new height by its own tokens, not the old height’s', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=browse&upto=200`);
+        const root = document.createElement('div');
+        boot(root, async () => ({
+            view: {
+                route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+                fetch: { kind: 'offers' as const, offers },
+                overlay: { kind: 'idle' as const },
+                address: ADDR,
+                stallName: 'Riverside Goods',
+                tokens: new Map([
+                    [A, meta(A, 'Apples')],
+                    [B, meta(B, 'Barley')],
+                ]),
+                window: parseWindowParams(location.search)!,
+            },
+            offers,
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(names(root), 'locked at 200: both').toEqual(['Apples', 'Barley']);
+
+        // Back to a lower lock on the same stall: Barley settled at 150, so
+        // a lock at 100 must not carry it on the remembered set of the 200.
+        window.history.pushState(null, '', `${stallPath(ADDR)}?view=window&mode=browse&upto=100`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(names(root), 'locked at 100: only what was settled by then').toEqual(['Apples']);
     });
 });
 

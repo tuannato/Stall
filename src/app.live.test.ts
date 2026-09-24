@@ -4126,3 +4126,109 @@ describe('a-new-card-under-an-armed-timer-gets-its-own-dwell', () => {
     });
 });
 
+
+describe('a-listing-arriving-does-not-turn-a-touch-wall-off-a-selection', () => {
+    /**
+     * The critic's third pass (2026-09-24, P1, a regression of round 3): a
+     * `show=all` touch wall on a stall with quotes and nothing listed paints
+     * the quotes — `windowRail` turns an empty rail off — but the driver's
+     * own `windowRailAt` still said "listings", because only the turn and the
+     * Cycle step ever wrote it. The first listing to land (the seller's own,
+     * or a stranger's gift PARTIAL) flipped the painter back to listings
+     * under a customer's hands: the strip, Clear all, Pay and the payment
+     * code all went, with nothing on the wall to bring them back. The driver
+     * now holds what is painted.
+     */
+    const QUOTE_TOKEN = 'cd'.repeat(32);
+    const QUOTE_META = {
+        tokenId: QUOTE_TOKEN,
+        name: 'Plum Jam',
+        ticker: 'PJ',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+
+    it('keeps the quotes, the choice and the payment code when a listing lands', async () => {
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&show=all&mode=browse&touch=on`);
+        const { root } = bootStall(
+            stallEmpty({
+                fetch: { kind: 'empty' },
+                tokens: new Map([[QUOTE_TOKEN, QUOTE_META]]),
+                prices: new Map([[QUOTE_TOKEN, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                window: { show: 'all', mode: 'browse', payCode: true, turn: 'none', touch: true },
+            }),
+        );
+        await flush();
+        const strip = (): Element | null => root.querySelector('.sw-strip');
+        expect(strip()?.querySelector('[data-role="seller-price"]'), 'the quotes are on the wall').not.toBeNull();
+        (root.querySelector('[data-role="window-step-more"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="window-selection"]'), 'a choice stands').not.toBeNull();
+        // An XEC selection asks no feed: the press composes the code at once.
+        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelector('[data-role="window-paying"]'), 'the payment code stands').not.toBeNull();
+
+        // A listing lands in the stall's group.
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+
+        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(strip()?.querySelector('[data-role="seller-price"]'), 'still the quotes').not.toBeNull();
+        expect(strip()?.querySelector('[data-role="price"]'), 'and no listing beside them').toBeNull();
+        expect(root.querySelector('[data-role="window-selection"]'), 'the choice is still there').not.toBeNull();
+        expect(root.querySelector('[data-role="window-clear"]'), 'with its Clear all').not.toBeNull();
+        expect(root.querySelector('[data-role="window-paying"]'), 'and the payment code').not.toBeNull();
+    });
+});
+
+describe('a-listing-arriving-does-not-turn-the-stream-off-its-quote-card', () => {
+    /**
+     * The same disagreement on the stream (found looking for it, 2026-09-24):
+     * under `cards=all` with nothing listed the overlay paints the quotes,
+     * while `broadcastRailAt` still said "listings" — so a listing landing
+     * mid-dwell swapped the card a viewer was reading for the listing, off
+     * the carousel's own rhythm. The rail turns at the wrap, never on a
+     * socket tick.
+     */
+    const QUOTE_TOKEN = 'cd'.repeat(32);
+
+    it('keeps the quote card on screen when a listing lands', async () => {
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=broadcast&preset=corner&mode=fixed&cards=all`);
+        const { root } = bootStall(
+            stallEmpty({
+                fetch: { kind: 'empty' },
+                tokens: new Map([
+                    [
+                        QUOTE_TOKEN,
+                        {
+                            tokenId: QUOTE_TOKEN,
+                            name: 'Plum Jam',
+                            ticker: 'PJ',
+                            decimals: 0,
+                            tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+                        },
+                    ],
+                ]),
+                prices: new Map([[QUOTE_TOKEN, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'all', side: 'right', edge: 'bottom' },
+            }),
+        );
+        await flush();
+        const card = (): string =>
+            root.querySelector('[data-role="price"]') !== null
+                ? 'listing'
+                : root.querySelector('[data-role="seller-price"]') !== null
+                  ? 'quote'
+                  : 'none';
+        expect(card(), 'the quote is the card').toBe('quote');
+
+        chain.book = { kind: 'offers', offers: [OFFER] };
+        watches[0]!.hooks.onChanged?.('message');
+        await flush();
+
+        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(card(), 'and the card a viewer is reading stays').toBe('quote');
+    });
+});
