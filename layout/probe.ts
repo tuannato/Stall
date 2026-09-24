@@ -14,6 +14,9 @@
  */
 import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
 import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
+import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
+import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
+import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -2746,6 +2749,130 @@ function freezeAnimations(): void {
 }
 window.__contrastFreeze = freezeAnimations;
 
+/*
+ * **A line on the ground reads wherever a drop falls** (2026-09-24, the
+ * critic's P1 on the visible batch; `PROBE-RULES.md`). Neo's rain
+ * (`att-rainfall`) is three tiled sheets of drops drifting down the stall's
+ * own ground every 2.6 s, so a line with no card of its own under it is
+ * crossed by a drop within one drift. The pass freezes every animation at
+ * one instant (`freezeAnimations`), so what it read depended on where the
+ * drops happened to be then: a green was luck, and one more Activity row
+ * moved a receipt amount onto a drop and read 2.7:1.
+ *
+ * So in a contrast job, every stall wearing the rain has its three drop
+ * sheets replaced by ONE flat layer of the brightest drop the art draws —
+ * every pixel of the ground as a drop is at its worst — in the first
+ * sheet's place in the stack, and every other layer kept where it was: the
+ * backdrop behind, and with the aurora its glows behind and its tint in
+ * front (they are the same element's layers). **The colour and opacity are
+ * read from the art, not stated**: every `stroke` with its `stroke-opacity`
+ * in `rain-near.svg`, `rain-mid.svg` and `rain-far.svg` is composited over
+ * the stall's computed `background-color` (`--s-bg`), and the one that comes
+ * out lightest wins — Neo's ink is light, so the lightest paint is the worst
+ * ground. Today that is the near sheet's cyan `#2ce9e0` at 0.68. Two drops
+ * crossing are brighter still and are not modelled: the strokes are 1.6px
+ * wide, and a crossing is a point.
+ *
+ * The prepare reports how many stalls wore the rain and how many it
+ * flattened, the runner refuses a job where the two differ, and the pass
+ * owes at least one flattened job on the shipped looks.
+ */
+const RAIN_SHEETS = [rainNearSvg, rainMidSvg, rainFarSvg];
+
+type Drop = { rgb: [number, number, number]; alpha: number };
+
+function brightestDrop(ground: string): Drop | undefined {
+    const bg = parseRgb(ground);
+    if (bg === undefined) {
+        return undefined;
+    }
+    let best: (Drop & { lum: number }) | undefined;
+    for (const sheet of RAIN_SHEETS) {
+        for (const m of sheet.matchAll(/stroke="#([0-9a-fA-F]{6})"\s+stroke-opacity="([0-9.]+)"/g)) {
+            const hex = m[1]!;
+            const rgb = [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+            const alpha = Number(m[2]);
+            const over = rgb.map((c, i) => c * alpha + bg[i]! * (1 - alpha));
+            const lum = relLum(over[0]!, over[1]!, over[2]!);
+            if (best === undefined || lum > best.lum) {
+                best = { rgb, alpha, lum };
+            }
+        }
+    }
+    return best === undefined ? undefined : { rgb: best.rgb, alpha: best.alpha };
+}
+
+function parseRgb(value: string): [number, number, number] | undefined {
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value);
+    return m === null ? undefined : [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function relLum(r: number, g: number, b: number): number {
+    const c = (v: number): number => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+}
+
+/** A comma-separated CSS list split at its top-level commas (a gradient's own commas stay inside). */
+function splitLayers(value: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        const c = value[i];
+        if (c === '(') {
+            depth += 1;
+        } else if (c === ')') {
+            depth -= 1;
+        } else if (c === ',' && depth === 0) {
+            out.push(value.slice(start, i));
+            start = i + 1;
+        }
+    }
+    out.push(value.slice(start));
+    return out.map((x) => x.trim());
+}
+
+/** Every rain-wearing stall's drop sheets as one flat layer of the brightest drop; how many wore it and how many were flattened. */
+function rainAtItsBrightest(): { worn: number; flattened: number } {
+    let worn = 0;
+    let flattened = 0;
+    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-rainfall')) {
+        worn += 1;
+        const cs = getComputedStyle(stall);
+        const drop = brightestDrop(cs.backgroundColor);
+        const layers = splitLayers(cs.backgroundImage);
+        const isSheet = (layer: string): boolean => /^url\("?[^")]*rain-(?:near|mid|far)[^")]*"?\)$/.test(layer);
+        const first = layers.findIndex(isSheet);
+        if (drop === undefined || first < 0 || layers.filter(isSheet).length !== RAIN_SHEETS.length) {
+            continue;
+        }
+        const paint = `rgba(${drop.rgb.join(', ')}, ${drop.alpha})`;
+        // Each longhand list keeps every other layer's own entry; the flat
+        // layer takes the first sheet's place and covers the box.
+        const rebuild = (list: string[], flatEntry: string): string =>
+            layers
+                .flatMap((layer, i) => (!isSheet(layer) ? [list[i % list.length]!] : i === first ? [flatEntry] : []))
+                .join(', ');
+        const sizes = splitLayers(cs.backgroundSize);
+        const repeats = splitLayers(cs.backgroundRepeat);
+        const positions = splitLayers(cs.backgroundPosition);
+        // Important, and the animation left alone: an important declaration
+        // outranks the drift's animated `background-position` (which would
+        // slide the flat layer off the top of the box), while the aurora's
+        // own layers keep the positions the freeze read them at.
+        const set = (prop: string, value: string): void => stall.style.setProperty(prop, value, 'important');
+        set('background-image', rebuild(layers, `linear-gradient(${paint}, ${paint})`));
+        set('background-size', rebuild(sizes, '100% 100%'));
+        set('background-repeat', rebuild(repeats, 'no-repeat'));
+        set('background-position', rebuild(positions, '0% 0%'));
+        flattened += 1;
+    }
+    return { worn, flattened };
+}
+
 /**
  * The viewport height at which nothing a reader scrolls to is behind its
  * clip: the document's own height, and — for the two surfaces a reader
@@ -2811,6 +2938,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     }
     paint(screen, look, wornOf(look, flags));
     freezeAnimations();
+    const rain = rainAtItsBrightest();
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
     // there compares an undimmed text colour against scrimmed paint, which
@@ -2842,6 +2970,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             pageH: pageHeight(scope),
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
+            rain,
             ...echo,
         };
     }
@@ -2890,6 +3019,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
         // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
         nodes: preparedNodes.length,
+        // The stalls that wore the rain, and how many had it at its brightest.
+        rain,
         ...echo,
     };
 };

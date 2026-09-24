@@ -2840,6 +2840,38 @@ textarea.paste-in {
     margin: 0 2px 6px;
 }
 
+/*
+ * **Where Neo's rain is worn, the Activity sections stand on the look's own
+ * ground** (the owner, 2026-09-24). The rows are text straight on the
+ * stall's background — `.event-fold` is `background: none` and the sections
+ * carry only the rail — and the rain is that background: three sheets of
+ * drops drifting down it every 2.6 s, the brightest a cyan at 0.68 that
+ * reads 2.6–2.9:1 under Neo's ink. Every line on the panel was crossed by a
+ * drop within one drift; the contrast pass only saw it once it sampled the
+ * rain at its brightest drop (`a-line-on-the-ground-reads-wherever-a-drop-
+ * falls`, `PROBE-RULES.md`).
+ *
+ * `var(--s-bg)` rather than the card surface: it is the ground every ink
+ * and muted token was validated on (`legibleOn`), so the panel reads exactly
+ * as it does with no rain worn — the list is a column of the look's own
+ * night with the rain in the margins, not a card it never was. A longhand
+ * `background-color`, so the rail `.events` draws with `background-image`
+ * is untouched, and a mood that swaps the palette swaps this with it.
+ */
+.stall.att-rainfall .activity-sec {
+    background-color: var(--s-bg);
+}
+
+/*
+ * And the 12px between the two sections (the body's 6px gap and the
+ * section's own 6px margin) is painted the same ground by a shadow the
+ * second one casts upward — the sticky sheet head's slab, §4 — so no strip
+ * of rain runs across the panel between two lists that read as one.
+ */
+.stall.att-rainfall .activity-sec + .activity-sec {
+    box-shadow: 0 -12px 0 0 var(--s-bg);
+}
+
 .event-time {
     grid-area: time;
     color: var(--s-muted);

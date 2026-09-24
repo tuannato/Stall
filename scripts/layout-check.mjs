@@ -499,6 +499,13 @@ function paintEcho(job, out, nonce, width, height) {
     if (out.vw !== width || out.vh !== height) {
         why.push(`the page measured ${out.vw}x${out.vh} where the job is ${width}x${height}`);
     }
+    // `a-line-on-the-ground-reads-wherever-a-drop-falls`: every stall that
+    // wore Neo's rain had it replaced by the brightest drop, or the job read
+    // one instant of a moving decoration (`PROBE-RULES.md`).
+    const rain = out.rain ?? { worn: 0, flattened: 0 };
+    if (rain.worn !== rain.flattened) {
+        why.push(`${rain.worn} stall(s) wore the rain and ${rain.flattened} had it at its brightest`);
+    }
     const classes = out.sheetClasses ?? [];
     if (job.screen === 'door') {
         if (classes.length > 0) {
@@ -1172,6 +1179,8 @@ try {
     const refused = [];
     try {
         let boxes = 0;
+        // Jobs whose rain was sampled at its brightest drop: the rule owes one.
+        let rainJobs = 0;
         const dim = [];
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1322,6 +1331,7 @@ try {
                         continue;
                     }
                     for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                    if ((prep.rain?.flattened ?? 0) > 0) rainJobs += 1;
                     record.prepared = prep.targets.length;
                     record.nodes = prep.nodes;
                     record.classes = prep.sheetClasses ?? [];
@@ -1500,12 +1510,19 @@ try {
         } else if (sheetClassesWrong([...contrastClasses]) !== undefined) {
             failed = true;
             console.error(`✗ contrast: ${sheetClassesWrong([...contrastClasses])}`);
+        } else if (LOOKS === 'shipped' && rainJobs === 0) {
+            // Neo's worn jobs wear the rain; a run that flattened none read
+            // the moving decoration at one instant again, or not at all.
+            failed = true;
+            console.error(
+                '✗ contrast: a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on no job — a rule that compared nothing',
+            );
         } else if (dim.length === 0) {
             // No tick over a walk that missed or repeated a job, or refused one.
             if (walkOk && refused.length === 0) {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
-                        `sampled against rendered pixels — ${took()}`,
+                        `sampled against rendered pixels, the rain at its brightest on ${rainJobs} — ${took()}`,
                 );
             }
         } else {

@@ -2320,3 +2320,54 @@ the 35 lines hidden at 1080×1920 and the line under them saying nothing
 where it owes "+30 more items: swipe the list", 33 at 1920×1080, 34 at
 768×1024, and on the three-item plate 1 at 1920×1080 and 2 at 768×1024 —
 and a coverage gap on each wall pass.
+
+## A line on the ground reads wherever a drop falls (2026-09-24, the critic's P1 on the visible batch)
+
+Neo's rain (`att-rainfall`) is three tiled sheets of drops drifting down the
+stall's own background every 2.6 s, so every line with no card under it is
+crossed by a drop within one drift. The contrast pass freezes every
+animation at 400 ms, so what it read depended on where the drops happened
+to be then: one more row on the `activity` fixture moved a receipt amount
+(`dd.event-dd`, money) onto a drop and read 2.76:1 at 390 and 2.71:1 at
+1280 — and the builder answered by moving the widest initials onto an
+existing row instead of adding one, which taught the guard to look away.
+That was wrong, and it is recorded here so it is not done again: a fixture
+change that makes a real defect visible is the finding.
+
+**`a-line-on-the-ground-reads-wherever-a-drop-falls`**: in every contrast
+job, each `.stall.att-rainfall` has its three drop sheets replaced by ONE
+flat layer of the brightest drop the art draws — every pixel of the ground
+as a drop is at its worst — in the first sheet's place in the stack, with
+every other layer kept where it was (the backdrop behind; with the aurora,
+its glows behind and its tint in front). The colour and opacity are read
+from the art: every `stroke="#…" stroke-opacity="…"` in `rain-near.svg`,
+`rain-mid.svg` and `rain-far.svg` is composited over the stall's computed
+`background-color`, and the lightest composite wins (Neo's ink is light, so
+the lightest paint is the worst ground) — today the near sheet's `#2ce9e0`
+at 0.68. The four background longhands are set `!important`, so the drift's
+animated `background-position` cannot slide the flat layer off the top of
+the box, and the aurora's own layers keep the positions the freeze read
+them at. Two drops crossing are brighter still and are not modelled: the
+strokes are 1.6px wide, and a crossing is a point. The prepare reports how
+many stalls wore the rain and how many were flattened; the runner refuses a
+job where the two differ and fails a shipped run that flattened none (63
+jobs: every Neo worn job, at 390, 1280 and the canvas).
+
+**Proved red**, with the fixture as it stood: 15 figures on Neo worn under
+3:1 — `dd.event-dd` 2.58–2.94:1 and the Activity rows' empty tiles
+2.64–2.92:1 at 390 and 1280 — green before the flattening, so the old green
+was the drops' luck. With the flattening skipped: 63 jobs refused ("1
+stall(s) wore the rain and 0 had it at its brightest") and the no-job
+line.
+
+**The fix (owner, 2026-09-24): the Activity sections stand on `--s-bg`
+where the rain is worn** (`.stall.att-rainfall .activity-sec`, a longhand
+`background-color`; the 12px between the two sections painted by a shadow
+the second casts upward). `--s-bg` and not the card surface, because it is
+the ground every ink and muted token was validated on. Green after, and
+with item 4's extra row restored.
+
+**What it cannot see**: only the nodes `CONTRAST_TEXT` names are sampled,
+and much of Neo's groundless text is not among them — at the brightest drop
+Neo's ink reads 2.84:1 and its muted 1.27:1 over bare ground. The list is
+in CLAUDE §10, handed to the owner as more than a small ground.
