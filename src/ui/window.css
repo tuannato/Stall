@@ -1154,7 +1154,8 @@
      * band, by name and count; Back brings the list back. The cost,
      * stated: the list's place is not kept across the payment (a hidden
      * scroller has no offset to keep), and this reverses the tablet half of
-     * "the shelf stays on screen" — the owner's to confirm.
+     * "the shelf stays on screen" — confirmed by the owner ("Ok",
+     * 2026-09-24).
      */
     .stall.shop-window[data-touch='on'][data-mode='browse'] .sw[data-paying='on'] .sw-strip {
         display: none;

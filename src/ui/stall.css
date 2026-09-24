@@ -705,11 +705,14 @@ body {
 
 /*
  * An ink darker than the look's own muted is lifted to it first, and then
- * outlined (the owner's order: "đổi màu chữ" before the dark layer). In a
- * token, so a mood that moves the muted moves the lift: the vacant box's
- * second line (`#5e7799`) and the invite's words (`#b08ca3`).
+ * outlined (the owner's order: "đổi màu chữ" before the dark layer), where
+ * the outline alone does not read. In a token, so a mood that moves the
+ * muted moves the lift: the vacant box's second line (`#5e7799`). The
+ * invite's pink words (`#b08ca3`) are not lifted: in the ring of their
+ * outline at the rain's worst they read 5.77:1 at the phone and 6.28:1 at
+ * the desk as they are (round 9, measured; lifted they read 6.79 and 7.27).
  */
-.stall.att-rainfall:not(.deck-stall) :is(.sparse-empty-s, .notice-invite .invite-text) {
+.stall.att-rainfall:not(.deck-stall) .sparse-empty-s {
     color: var(--s-muted);
 }
 

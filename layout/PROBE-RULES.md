@@ -2276,8 +2276,8 @@ count and a borrowed-token sentence ran the 35-item band to 528px in
 Modern worn's 485px body and cut Back by 10px. Measured after at
 768×1024: the band 408–491px in a 485–617px body on every look, bare and
 worn, with 1, 3 and 35 items. The owner's "the list keeps what it can"
-stands at 1920×1080 and 1080×1920 and is reversed at the tablet — stated
-in `window.css` as the owner's to confirm.
+stands at 1920×1080 and 1080×1920 and is reversed at the tablet — the
+owner confirmed it ("Ok", 2026-09-24).
 
 **Two lines outside the payment's scroller are held whole (`WALL_HELD`).**
 The "+N more" line (`pay-lines-more`) and the borrowed-token sentence
@@ -2548,7 +2548,11 @@ and two are this sampler's mistakes: Modern's section and shelf heads
 (2.56:1) read the heading's own 2px accent underline, inside the box and
 never reached by the glyphs, and Rural's strip (1.1:1) reads the bunting
 row its box also holds. Rural's Wearing links and back control (2.53:1,
-sun-faded worn) are real and open, for the next step. Four geometry-only
+sun-faded worn) are real and open: they sit behind a rain-scoped selector
+(`.stall.att-rainfall:not(.deck-stall) …`), so no pass reads them on Rural
+today, and they are fixed in step 5b by the owner's (c) — Sun-faded's
+accent and muted darkened (`VISIBLE-BATCH-PLAN`, 2026-09-24) — with the
+targets unscoped there (round 9 note, the critic's eighth pass, item 11). Four geometry-only
 screens are sampled on Neo worn alone (`RAIN_JOBS`: `quotes-failed`,
 `nothing-quoted`, `quotes-truncated`, `first-stall`; `sparse-pasted` since
 round 5), at the phone and the desk: 449 jobs then, 451 now.
@@ -2718,8 +2722,12 @@ the rain wears `text-shadow` in `var(--s-bg)` at alpha 1 and zero blur —
 `--rain-outline-1`, eight one-pixel offsets, at 14px and over;
 `--rain-outline-2`, those and twelve at two pixels, under 14px. Leaf lines
 only; Neo's heading glow listed after it; an ink darker than the muted
-lifted to `var(--s-muted)` first (the vacant box's `#5e7799`, the invite's
-`#b08ca3`, the first-stall guide link's browser blue). A soft glow was
+lifted to `var(--s-muted)` first where the outline alone does not read —
+the vacant box's `#5e7799` alone since round 9 (the first-stall guide link
+wore it for one round and wears the accent now; the invite's `#b08ca3` read
+5.77:1 at the phone and 6.28:1 at the desk unlifted, in the solid ring, so
+its lift — never measured as needed, the critic's eighth pass, item 6 —
+was dropped). A soft glow was
 measured first and could not honestly pass: at 2px or less it darkens a
 ring pixel by ≈0.55 at best, and muted needs 0.44 at every pixel over the
 drop and 0.51 with the aurora (the critic's P1).
@@ -2883,6 +2891,9 @@ not invisible off the drops: over the aurora's washes, the notice's wash,
 the Activity pill's, the invite's and the call to action's tints it is a
 dark stroke, and it covers the inner part of Neo's heading glow — every
 screen had outline pixels away from any drop changed by more than 16
-levels, up to about 2,300 a screen. The owner's mock
-(`review/E-outline-activity.jpg`) was the rain alone, on `--s-bg`; the
-look with the aurora worn is theirs to see.
+levels, up to about 2,300 a screen. The mock the outline was chosen from
+(`review/E-outline-activity.jpg`) was the window's, not the owner's, and it
+showed the rain alone, on `--s-bg`; the look with the aurora worn is the
+owner's to see. **The outline awaits the owner** (round 9): it stays as
+committed until they choose between it and the options pictured in
+`visible-batch-shots/13-outline-options/`.
