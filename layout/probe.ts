@@ -2653,6 +2653,9 @@ const CONTRAST_TEXT = [
     '.sw-state',
     '.sw-fresh',
     '.sw-plate .sw-cap',
+    // The notice invite's words, on its own wash over the ground
+    // (`sparse-pasted`, the critic's fourth pass).
+    '.notice-invite .invite-text',
     /*
      * And the rest of what the rain exposed, sampled where it is worn: the
      * brand strip, the footer's Wearing line, the section and shelf heads,

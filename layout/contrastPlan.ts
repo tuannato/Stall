@@ -84,10 +84,11 @@ export const REDUCED_JOBS: ReadonlyArray<{ screen: string; look: number }> = [{ 
  * screens whose failure and empty sentences, notes and checklist stand on
  * the stall's own ground, which is where the rain falls — the quotes rail
  * that did not finish, the one with nothing quoted yet, the one stopped at
- * our cap, and the first-stall checklist. The rain is sampled at its
+ * our cap, the first-stall checklist, and the notice invite a pasted
+ * navigation paints (`sparse-pasted`). The rain is sampled at its
  * brightest drop there (`a-line-on-the-ground-reads-wherever-a-drop-falls`).
  */
-export const RAIN_JOBS: readonly string[] = ['quotes-failed', 'nothing-quoted', 'quotes-truncated', 'first-stall'];
+export const RAIN_JOBS: readonly string[] = ['quotes-failed', 'nothing-quoted', 'quotes-truncated', 'first-stall', 'sparse-pasted'];
 
 /** The overlay screens the pass samples; every other overlay screen is geometry. */
 export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);

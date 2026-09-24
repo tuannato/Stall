@@ -2916,6 +2916,21 @@ textarea.paste-in {
     background-color: var(--s-surface);
 }
 
+/*
+ * The notice invite a seller's own paste paints (the critic's fourth pass):
+ * a button on the bare ground whose wash Neo writes as a 4% colour, 9% on
+ * hover, so under the rain its words read 1.00:1. The same washes, over the
+ * ground — hover included, because Neo restates it with the `background`
+ * shorthand at (0,3,0), which this out-ranks.
+ */
+.stall.att-rainfall .notice-invite {
+    background-color: color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg));
+}
+
+.stall.att-rainfall .notice-invite:hover {
+    background-color: color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg));
+}
+
 .stall.att-rainfall
     :is(.mid-t, .mid-p, .pay-sec > .fine, .pay-sec > .section-title, .stall-body > .fine, .item-back, .item-face > .pay-pointer) {
     background-color: var(--s-bg);

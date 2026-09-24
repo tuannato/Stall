@@ -598,6 +598,20 @@ export const SCREENS: Record<string, StallView> = {
         announcement: undefined,
         shelves: undefined,
     }),
+    /*
+     * The same stall reached by the seller's own paste (`pasted`), with no
+     * announcement: the one road that paints the notice invite, a button on
+     * the stall's bare ground (the critic's fourth pass, 2026-09-24: under
+     * Neo's rain its words read 1.08:1 and no fixture painted it). Sampled
+     * on Neo worn (`RAIN_JOBS`).
+     */
+    'sparse-pasted': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        tagline: undefined,
+        announcement: undefined,
+        shelves: undefined,
+        pasted: true,
+    }),
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
     /*
@@ -1507,6 +1521,10 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // 35-item one — which alone carries the two lines outside the scroller,
     // "+N more" and the borrowed-token sentence — is sampled for those.
     'shop-window-touch-quotes-pay-3',
+    // The sparse stall a seller pasted: its notice invite is sampled on Neo
+    // worn, where the rain falls behind it (`RAIN_JOBS`), and its geometry
+    // everywhere.
+    'sparse-pasted',
     // The Cycle card that skips an unbuyable listing paints a buyable card
     // `shop-window-cycle` already samples. The unbuyable label itself is
     // sampled (2026-09-24, the critic: it is all a price cell says) on the

@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 196, desktop: 224, canvas: 29, total: 449 });
+        }).toEqual({ mobile: 197, desktop: 225, canvas: 29, total: 451 });
     });
 
     it('walks the runner’s own viewports', () => {
@@ -55,7 +55,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
 
     it('samples every screen a look can wear, where the probe measures it, less the overlay’s and the geometry-only', () => {
         // Derived from the fixture table, not through `screensAt`. The rain's
-        // own jobs (Neo worn on four geometry-only screens) are held below.
+        // own jobs (Neo worn on five geometry-only screens) are held below.
         const sampled = (name: string): boolean =>
             (!NO_DECOR_SCREENS.has(name) ||
                 ['broadcast', 'broadcast-ticker'].includes(name)) &&
@@ -109,7 +109,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         ]);
         expect(jobs.every((job) => job.flags === 0 || job.flags === WORN_ALL)).toBe(true);
         // The rain's own jobs: Neo worn alone, at the phone and the desk, on
-        // the four geometry-only screens whose lines stand on the ground.
+        // the five geometry-only screens whose lines stand on the ground.
         expect(RAIN_JOBS.every((screen) => GEOMETRY_ONLY_SCREENS.has(screen))).toBe(true);
         expect(jobs.filter((j) => RAIN_JOBS.includes(j.screen)).map((j) => j.key)).toEqual(
             ['mobile', 'desktop'].flatMap((vp) => RAIN_JOBS.map((screen) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${WORN_ALL}`)),

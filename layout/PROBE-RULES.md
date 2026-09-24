@@ -2564,3 +2564,17 @@ a full-opacity `<path>` added to the near sheet: 69 jobs refused ("1
 stall(s) wore the rain and 0 had it at its brightest") and the same ten.
 Green with the grounds: 449 jobs, 6,072 boxes, the rain at its brightest
 on 69.
+
+**The notice invite (round 5, the critic's fourth pass).** The button a
+seller's own paste paints where the announcement would stand
+(`button.notice-invite`, `pasted` and no announcement) sat on the bare
+ground under Neo's rain — its wash is a 4% colour, 9% on hover — and no
+fixture painted it, so the scan never saw it: 1.08:1 at the brightest
+drop. Fixture `sparse-pasted` (the `sparse` stall reached by a paste) is
+in `RAIN_JOBS`, and `.notice-invite .invite-text` is a target. **Proved
+red** before the ground: "span.invite-text … sits on paint at 1.00:1" at
+390 and 1.01:1 at 1280. The washes are restated over `--s-bg` where the
+rain is worn, hover included (Neo restates hover with the `background`
+shorthand at (0,3,0); the ground's rule is (0,4,0)); measured in Chrome
+with the hover forced: an opaque ground in both states, the words at
+6.68:1 and 6.39:1. 451 jobs.
