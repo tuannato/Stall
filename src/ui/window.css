@@ -1201,8 +1201,9 @@
      * both, and Back stands beside them. `.sw-pay-b` hands its children to
      * the band (`display: contents`) at this size alone, so every other
      * layout is the markup's own; the DOM order, and so the reading and tab
-     * order, is unchanged. The list keeps what is left (`PROBE-RULES.md`,
-     * "Nothing on the wall is cut from below", has the numbers per look).
+     * order, is unchanged. The list is not on screen while the band is
+     * (the block's first rule, round 3); `PROBE-RULES.md`, "Nothing on the
+     * wall is cut from below", has the numbers per look.
      */
     .stall.shop-window[data-touch='on'] .sw-paying {
         grid-template-columns: auto minmax(0, 1fr) auto;

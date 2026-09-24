@@ -1035,7 +1035,8 @@ export const SCREENS: Record<string, StallView> = {
      * shop's own order puts the unbuyable one (measured: with the skip taken
      * out, this card is "Not buyable") and where the cycle's list has the
      * one buyable card. What the probe holds here is that a Cycle card is
-     * painted and carries no "Not buyable" (`cycleSkipChecks`).
+     * painted and carries no "Not buyable" (`skipChecks`, surface `wall-cycle`;
+     * the probe also asserts the unbuyable listing is at the cursor).
      */
     'shop-window-cycle-unbuyable': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -1151,7 +1152,8 @@ export const SCREENS: Record<string, StallView> = {
      * listing and the unbuyable one, the cursor at 0 — where the shop's own
      * order puts the unbuyable one, and where the stream's list has the one
      * buyable card. The probe holds the card to carrying no "Not buyable"
-     * (`streamSkipChecks`).
+     * (`skipChecks`, surfaces `stream-card` and `stream-ticker`; the probe
+     * also asserts the unbuyable listing is at the cursor, or on the page).
      */
     'broadcast-unbuyable': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n, { askedAtoms: 12n }), UNBUYABLE_OFFER] },
@@ -1332,6 +1334,17 @@ export const SCREENS: Record<string, StallView> = {
         broadcast: bc('ticker', 'fixed'),
         broadcastState: 'live',
         broadcastTickerAt: 0,
+    }),
+    /*
+     * Every listing unbuyable, `cards=listings` (the critic's third pass,
+     * 2026-09-24): the ribbon has nothing to run, and the bar says so in its
+     * place (`BROADCAST_NOTHING_TO_BUY`) rather than standing empty under
+     * "Listings".
+     */
+    'broadcast-ticker-none-buyable': base({
+        fetch: { kind: 'offers', offers: [UNBUYABLE_OFFER] },
+        broadcast: bc('ticker', 'fixed'),
+        broadcastState: 'live',
     }),
     /* The same bar on the OBS wire, where pass 5 reads it. */
     'broadcast-ticker-clear': base({
@@ -1551,6 +1564,7 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-clear',
     'broadcast-unbuyable',
     'broadcast-ticker-unbuyable',
+    'broadcast-ticker-none-buyable',
     'shop-window-wall',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
@@ -1589,4 +1603,5 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-clear',
     'broadcast-unbuyable',
     'broadcast-ticker-unbuyable',
+    'broadcast-ticker-none-buyable',
 ]);

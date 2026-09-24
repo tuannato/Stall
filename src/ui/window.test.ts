@@ -1793,6 +1793,24 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
         expect(here.disabled).toBe(false);
         sheet.remove();
     });
+
+    it('offers the quotes as the way out only where the stall quotes something', () => {
+        // Nothing quoted: the sentence names Browse alone.
+        expect(copy.WINDOW_CYCLE_NOTHING).not.toContain('quote');
+        const quoted = {
+            tokens: new Map([tokenMeta(TEA, 'Green Tea'), tokenMeta(BEANS, 'Roasted Beans')]),
+            fetch: { kind: 'offers' as const, offers: [refused(TEA)] },
+            prices: new Map([[BEANS, QUOTE_XEC]]),
+        };
+        // Listings only, on a stall that does quote: the quotes are a road.
+        const sheet = shopWindowSheet(windowView({ show: 'all', mode: 'cycle' }, quoted as unknown as Partial<StallView>), () => {});
+        document.body.append(sheet);
+        sheet.querySelector<HTMLButtonElement>('[data-role="window-show-listings"]')!.click();
+        const why = sheet.querySelector<HTMLElement>('[data-role="window-cycle-nothing"]')!;
+        expect(why.hidden).toBe(false);
+        expect(why.textContent).toBe(copy.WINDOW_CYCLE_NOTHING_QUOTED);
+        sheet.remove();
+    });
 });
 
 /**

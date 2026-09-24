@@ -2033,6 +2033,13 @@ export const BROADCAST_CAPTION = 'Scan to open';
 /** Empty shop on the overlay. Muted; not a failure. */
 export const BROADCAST_EMPTY = 'nothing listed yet';
 /**
+ * The overlay's listings when every one is an offer nobody can take (its
+ * smallest take is more than is left): the stream skips them all, and
+ * "nothing listed yet" would be false — they are listed (the critic's third
+ * pass, 2026-09-24: the ticker painted an empty ribbon under "Listings").
+ */
+export const BROADCAST_NOTHING_TO_BUY = 'nothing to buy right now';
+/**
  * The one line under a quote card, and every limit of that rail in it: money
  * reaches the seller, nothing is held, and no token changes hands. It is the
  * only sentence a viewer gets before they scan, so it says what the payment
@@ -2144,8 +2151,15 @@ export const WINDOW_TURN_CCW = 'Turn left';
 export const WINDOW_TURN_WHY =
     'For a screen hung sideways on a wall while the computer driving it still sends a landscape picture \u2014 an old television with no network of its own. Leave it on None unless the picture comes out sideways; if a turn lands upside down, use the other one.';
 
-/** The composing sheet over a Cycle wall that would show nothing: every listing is one nobody can buy. */
+/**
+ * The composing sheet over a Cycle wall that would show nothing: every
+ * listing is one nobody can buy. Two sentences, because the quotes are a way
+ * out only where there are some (the critic's third pass, 2026-09-24: the
+ * one sentence offered them on a stall that quotes nothing).
+ */
 export const WINDOW_CYCLE_NOTHING =
+    'This wall would show nothing: every listing here is one nobody can buy, and Cycle skips those. Choose Browse, where they are listed and labelled.';
+export const WINDOW_CYCLE_NOTHING_QUOTED =
     'This wall would show nothing: every listing here is one nobody can buy, and Cycle skips those. Choose Browse, where they are listed and labelled, or show your quotes.';
 export const WINDOW_SHOW_LABEL = 'Show';
 export const WINDOW_MODE_LABEL = 'Mode';

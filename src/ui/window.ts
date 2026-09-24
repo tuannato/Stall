@@ -1208,6 +1208,8 @@ export function shopWindowSheet(
         const blank = wallCyclesNothing(view, params);
         const url = windowLinkFor(params);
         nothingWhy.hidden = !blank;
+        nothingWhy.textContent =
+            quotedItems(view).length > 0 ? copy.WINDOW_CYCLE_NOTHING_QUOTED : copy.WINDOW_CYCLE_NOTHING;
         linkField.value = blank ? '' : url;
         openHere.disabled = blank;
         copyBtn.disabled = blank;

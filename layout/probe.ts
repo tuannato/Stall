@@ -12,7 +12,10 @@
  * in a real browser, and writes a verdict into the DOM for the runner to read.
  * It asserts what only a browser can see.
  */
-import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
+import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
+import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
+import { isUnbuyable } from '../src/domain/money';
+import type { StallView } from '../src/domain/state';
 import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
@@ -1412,12 +1415,45 @@ const UNBUYABLE_SCREENS = new Set(['unbuyable', 'item-unbuyable', 'item-unbuyabl
 /**
  * The fixtures whose unbuyable listing must be skipped, and what each must
  * paint instead: a card (or a ribbon item) and no label on it.
+ *
+ * `wouldShow` is where the surface looks in the shop's own order before any
+ * skip — the card's cursor, or the ticker's page — and the fixture must put
+ * an unbuyable listing THERE (the critic's third pass, 2026-09-24): a cursor
+ * on a buyable listing paints a card with no label whether or not anything
+ * is skipped, and the rule would count a skip it never saw.
  */
-const SKIP_SCREENS: Readonly<Record<string, { surface: string; shown: string }>> = {
-    'shop-window-cycle-unbuyable': { surface: 'wall-cycle', shown: '.stall.shop-window[data-mode="cycle"] .sw-row' },
-    'broadcast-unbuyable': { surface: 'stream-card', shown: '.bc-ext .bc-item' },
-    'broadcast-ticker-unbuyable': { surface: 'stream-ticker', shown: '.tk-run .tk-it' },
+const SKIP_SCREENS: Readonly<
+    Record<string, { surface: string; shown: string; wouldShow: (view: StallView) => number[] }>
+> = {
+    'shop-window-cycle-unbuyable': {
+        surface: 'wall-cycle',
+        shown: '.stall.shop-window[data-mode="cycle"] .sw-row',
+        wouldShow: (view) => [view.windowCursor ?? 0],
+    },
+    'broadcast-unbuyable': {
+        surface: 'stream-card',
+        shown: '.bc-ext .bc-item',
+        wouldShow: (view) => [view.broadcastCursor ?? 0],
+    },
+    'broadcast-ticker-unbuyable': {
+        surface: 'stream-ticker',
+        shown: '.tk-run .tk-it',
+        wouldShow: (view) => {
+            const at = (view.broadcastCursor ?? 0) * TICKER_ITEMS_PER_PASS;
+            return Array.from({ length: TICKER_ITEMS_PER_PASS }, (_, i) => at + i);
+        },
+    },
 };
+
+/** Whether the listing a skipping surface would show unskipped, at its cursor or page, is unbuyable. */
+function skipIsAtTheCursor(screen: string, skip: { wouldShow: (view: StallView) => number[] }): boolean {
+    const view = SCREENS[screen]!;
+    const order = listingsInShopOrder(view);
+    return skip
+        .wouldShow(view)
+        .filter((i) => i < order.length)
+        .some((i) => isUnbuyable(cheapestOf(order[i]!)));
+}
 const skipChecks: Record<string, number> = {};
 /** The cells an unbuyable offer's label sits in, one kind per place it is painted. */
 const UNBUYABLE_CELLS = '.item-p, .face-x, .listing-line, .bc-p, .tk-it';
@@ -1519,7 +1555,9 @@ function unbuyableFaults(screen: string, label: string): Failure[] {
     }
     const skip = SKIP_SCREENS[screen];
     if (skip !== undefined) {
-        if (root.querySelector(skip.shown) === null) {
+        if (!skipIsAtTheCursor(screen, skip)) {
+            fail(`${screen} puts no unbuyable listing where its surface looks unskipped — a card with no label there proves no skip`);
+        } else if (root.querySelector(skip.shown) === null) {
             fail(`${screen} painted nothing where the skip is judged (${skip.shown}) — it would be judged over nothing`);
         } else if (read === 0) {
             skipChecks[skip.surface] = (skipChecks[skip.surface] ?? 0) + 1;
@@ -1664,9 +1702,11 @@ function doorMiniFaults(): Failure[] {
  * so the control can never be brought whole into view — the case is
  * **printed, not failed** for the list's two steppers alone
  * (`window-step-*`, `SLIVER_ROLES`; `wallSlivers`, on the pass's
- * `compared:` line): the tablet's list keeps 12–49px while a payment stands
- * on the short looks worn, which is the trade the owner took ("the list
- * keeps what it can"). Any other control or box shown only in part inside a
+ * `compared:` line) — a list scrolled so a stepper is cut at its edge is
+ * still a list a finger can scroll. Since round 3 no fixture prints one:
+ * the tablet's list, which kept 0–167px of a 321–364px row beside a
+ * payment, steps aside while a payment stands (`window.css`), and nothing
+ * else on a wall scrolls a stepper that short. Any other control or box shown only in part inside a
  * scroller fails (the critic, 2026-09-24: it forgave every role, so Back in
  * a body planted to scroll read green). The two held lines (`WALL_HELD`)
  * get no scroller allowance at all: inside one is a failure, since being

@@ -2462,3 +2462,34 @@ static pages' (`public/*.css`) and the workshop kit's
 new sheet is read the day it lands. **Proved red** with a 10px rule planted
 in `public/stream.css` and a `font: 700 9px/1` planted in the kit's sheet,
 each named by the test.
+
+## Round 4 (the critic's third pass, 2026-09-24): the skip is proved where it can be seen
+
+**A skip fixture must put the unbuyable listing where its surface looks.**
+`an-unbuyable-offer-paints-no-figure-and-says-so` counts a skip on
+`shop-window-cycle-unbuyable`, `broadcast-unbuyable` and
+`broadcast-ticker-unbuyable` when the surface paints a card (or a ribbon
+item) with no "Not buyable" on it — which a cursor resting on a BUYABLE
+listing does whether or not anything is skipped. So each entry of
+`SKIP_SCREENS` now says where its surface looks unskipped (`wouldShow`:
+the Cycle card's `windowCursor`, the stream card's `broadcastCursor`, the
+ticker's page of `TICKER_ITEMS_PER_PASS` items), and the rule fails the
+screen unless an unbuyable listing is there in the shop's own order
+(`listingsInShopOrder`, `cheapestOf`, `isUnbuyable`). **Proved red** with
+both cursors moved to 1: "shop-window-cycle-unbuyable puts no unbuyable
+listing where its surface looks unskipped" on the desk, portrait and
+tablet passes (21), "broadcast-unbuyable …" on the canvas (4), and the
+desk's and canvas's skip coverage gaps. The fixture comments name the real
+counter (`skipChecks`, by surface).
+
+**An overlay with only unbuyable listings says there is nothing to buy.**
+With `cards=listings` (or `cards=all` and nothing quoted) and every listing
+unbuyable, the stream skips them all: the ticker painted an empty ribbon
+under "Listings" and the corner card a head with nothing under it — a
+source that looked dead. Both now say `BROADCAST_NOTHING_TO_BUY` ("nothing
+to buy right now") where the ribbon or the card would stand — never
+"nothing listed yet", which is false over a book that has listings.
+Fixture `broadcast-ticker-none-buyable` (canvas, geometry: the sentence
+stands inside its cell); test
+`the-stream-skips-an-unbuyable-listing` › "says there is nothing to buy
+…", red with the sentence taken out.

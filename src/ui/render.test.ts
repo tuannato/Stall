@@ -6435,6 +6435,41 @@ describe('the-stream-skips-an-unbuyable-listing', () => {
         expect(broadcastTurns(all)).toBe(false);
         expect(broadcastCards(all).map((c) => c.kind)).toEqual(['quote']);
     });
+
+    /**
+     * The critic's third pass (2026-09-24): with every listing unbuyable and
+     * `cards=listings`, the ticker painted an empty ribbon under "Listings"
+     * and the corner card a head with nothing under it — a source that
+     * looked dead. An empty rail says so, and "nothing listed yet" would be
+     * false: they are listed, and none can be bought.
+     */
+    it('says there is nothing to buy where a ribbon or a card of only unbuyable listings would stand', () => {
+        const ticker = paint(
+            broadcastView({
+                fetch: { kind: 'offers', offers: [stranded] },
+                tokens,
+                broadcast: { preset: 'ticker', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
+            }),
+        ).root;
+        expect(ticker.querySelector('.tk-run'), 'no ribbon').toBeNull();
+        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NOTHING_TO_BUY);
+        expect(ticker.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(copy.BROADCAST_TICKER_LISTINGS);
+        expect(ticker.textContent).not.toContain(copy.BROADCAST_EMPTY);
+        const card = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded] }, tokens })).root;
+        expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NOTHING_TO_BUY);
+        // Not on a stall that has something to show, nor on the quotes rail.
+        const buyable = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens })).root;
+        expect(buyable.textContent).not.toContain(copy.BROADCAST_NOTHING_TO_BUY);
+        const quotes = paint(
+            broadcastView({
+                fetch: { kind: 'offers', offers: [stranded] },
+                tokens,
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }]]),
+                broadcast: { ...BROADCAST, mode: 'fixed', cards: 'all' },
+            }),
+        ).root;
+        expect(quotes.textContent).not.toContain(copy.BROADCAST_NOTHING_TO_BUY);
+    });
 });
 
 describe('a-broadcast-never-prints-our-failure', () => {

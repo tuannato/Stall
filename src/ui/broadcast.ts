@@ -150,6 +150,21 @@ export function broadcastRail(view: StallView): 'listings' | 'quotes' {
     return hasListings || !hasQuotes ? 'listings' : 'quotes';
 }
 
+/**
+ * A definite book with listings on it and not one the stream can show —
+ * every one unbuyable — and no quote card in their place. The overlay says
+ * so rather than standing empty: an empty rail on a surface with nothing
+ * else to show (the critic's third pass, 2026-09-24).
+ */
+export function nothingToBuy(view: StallView): boolean {
+    return (
+        view.fetch?.kind === 'offers' &&
+        broadcastRail(view) === 'listings' &&
+        listingsInShopOrder(view).length > 0 &&
+        streamListings(view).length === 0
+    );
+}
+
 /** Under `cards=all`, both rails have something to show, so the wrap turns. */
 export function broadcastTurns(view: StallView): boolean {
     return (
@@ -310,6 +325,8 @@ export function renderBroadcastView(view: StallView): HTMLElement {
     // something they can pay for.
     if (fetch?.kind === 'empty' && ext === undefined) {
         head.append(el('div', 'bc-empty', copy.BROADCAST_EMPTY));
+    } else if (ext === undefined && nothingToBuy(view)) {
+        head.append(el('div', 'bc-empty', copy.BROADCAST_NOTHING_TO_BUY));
     }
     if (ext !== undefined) {
         head.append(ext);
@@ -536,6 +553,11 @@ function renderTicker(view: StallView, params: BroadcastParams): HTMLElement {
             clip.append(run);
         } else if (fetch?.kind === 'empty') {
             clip.append(el('div', 'tk-empty', copy.BROADCAST_EMPTY));
+        } else if (nothingToBuy(view)) {
+            // Listed, and not one of them can be bought: the stream skips
+            // them all, and an empty ribbon under "Listings" reads as a
+            // source that died.
+            clip.append(el('div', 'tk-empty', copy.BROADCAST_NOTHING_TO_BUY));
         }
     }
     bar.append(clip);
