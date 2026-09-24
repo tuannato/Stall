@@ -29,6 +29,7 @@ import {
     quoteNaming,
     quotedItems,
     unreadChosen,
+    chosenIsNamed,
     stallBaseUrl,
     tokenName,
     unreadableQuotes,
@@ -521,13 +522,14 @@ function selectionBar(
         return bar;
     }
     // Every chosen item by name, the rows' own and then any this screen's
-    // read did not reach (`unreadChosen`), named from `view.tokens`.
+    // read did not reach (`unreadChosen`) that the view can name
+    // (`chosenIsNamed`); the rest are counted below, never named by an id.
     const unread = unreadChosen(selection, view);
     const chosen = [
         ...quotedItems(view)
             .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
             .map((item) => item.tokenId),
-        ...unread,
+        ...unread.map((u) => u.tokenId).filter((tokenId) => chosenIsNamed(view, tokenId)),
     ];
     const line = chosen
         .map((tokenId) => `${quoteNaming(view, tokenId).title} \u00d7${(selection.get(tokenId) ?? 0n).toString()}`)
@@ -568,9 +570,19 @@ function selectionBar(
     if (unread.length > 0) {
         // In place of the total, and Pay is not built below: a code over
         // part of a choice would pay for items nobody picked on their own.
-        const said = el('span', 'sw-sel-unread', copy.windowSelectionUnread(unread.length));
-        said.setAttribute('data-role', 'selection-unread');
-        totals.append(said);
+        // Said per reason, and nothing while the records are still being
+        // read (`unreadChosen`'s `reading`).
+        const failed = unread.filter((u) => u.why === 'unread').length;
+        const capped = unread.filter((u) => u.why === 'capped').length;
+        const lines = [
+            ...(failed > 0 ? [copy.windowSelectionUnread(failed)] : []),
+            ...(capped > 0 ? [copy.windowSelectionCapped(capped)] : []),
+        ];
+        if (lines.length > 0) {
+            const said = el('span', 'sw-sel-unread', lines.join(' '));
+            said.setAttribute('data-role', 'selection-unread');
+            totals.append(said);
+        }
     } else {
         const glance = selectionGlance(selection, view.prices);
         const total = el('span', 'sw-sel-t', glance === undefined ? '' : quoteFigure(glance));

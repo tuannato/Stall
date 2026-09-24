@@ -922,11 +922,23 @@ export type StallView = WindowState & {
      */
     descriptionsFailed?: boolean;
     /**
-     * The records on the view are the last good read, kept because this
-     * load's own walk threw (a wall re-reading the same stall — the
-     * heartbeat). They were the seller's whole record when read and may be
+     * The tokens the walk behind these records resolved — a winner of any
+     * kind, a removal included (`DescriptionLookup.decided`). What a read
+     * says about one of these is complete even when the read as a whole is
+     * not: a record it shows gone is gone, so the prune and the wall's
+     * plate judge them as a finished read would. Absent on a view no walk
+     * built; then the tokens the maps name are the ones decided.
+     */
+    descriptionsDecided?: ReadonlySet<string>;
+    /**
+     * Some of the records on the view are the last good read, kept because
+     * this read's own walk threw before it reached them (a wall re-reading
+     * the same stall — the heartbeat — or a live walk that threw over
+     * records already on screen). Every token the failed walk DID resolve
+     * shows what it read (`mergeFailedRead`); the kept ones fill only the
+     * rest, and this is set only while one of them is shown. They may be
      * older than the book beside them, so the wall says so in place of the
-     * book's freshness stamp (`WINDOW_QUOTES_AS_LAST_READ`). A whole read,
+     * book's freshness stamp (`WINDOW_QUOTES_AS_LAST_READ`). Whole reads,
      * only older: the choice and the plate on screen were made off exactly
      * these records, so they are judged like any other (`recordsKnown` in
      * `app.ts`).

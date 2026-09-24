@@ -534,6 +534,41 @@ describe('a-walk-that-threw-keeps-what-it-read', () => {
     });
 });
 
+describe('a-walk-says-which-tokens-it-resolved', () => {
+    /**
+     * The critic's sixth pass (2026-09-24): a caller filling the tokens a
+     * walk that threw never reached, from an older read, must not fill a
+     * token the walk resolved — and a removal is in no map at all, so the
+     * walk says which tokens it resolved in its own set.
+     */
+    it('names a word, a removal and nothing it did not reach, before a throw', async () => {
+        const TOKEN_C = 'c'.repeat(64);
+        const first = page(
+            [
+                tx({ txid: 'a'.repeat(64), outputs: [stld(TOKEN_A, 'Beans')], height: 800_001 }),
+                tx({ txid: 'b'.repeat(64), outputs: [stld(TOKEN_B)], height: 800_000 }),
+                // Unmined and unfinalised: one node's opinion, no winner (§5).
+                tx({ txid: 'd'.repeat(64), outputs: [stld(TOKEN_C, 'Maybe')] }),
+            ],
+            3,
+        );
+        const chronik: ManifestChronik = {
+            address: () => ({
+                history: (p = 0) =>
+                    p === 0
+                        ? Promise.resolve({ ...first, numTxs: 9 })
+                        : Promise.reject(new Error('that page did not answer')),
+            }),
+            lokadId: () => ({ history: () => Promise.resolve({ ...page([]), numTxs: 9999 }) }),
+            tx: () => Promise.reject(new Error('not used')),
+        };
+        const out = await load(chronik);
+        expect(out.failed).toBe(true);
+        expect(out.descriptions.has(TOKEN_B), 'a removal is in no map').toBe(false);
+        expect([...out.decided].sort()).toEqual([TOKEN_A, TOKEN_B].sort());
+    });
+});
+
 describe('description-does-not-cross-stalls', () => {
     /**
      * Two sellers can each list the same token and each describe it. The words

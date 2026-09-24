@@ -202,11 +202,17 @@ export function selectionTolerance(
  * stays chosen: the strip says so and Pay waits for it. The caller decides
  * which reads are worth judging at all (`recordsKnown` in `app.ts`: a walk
  * that threw is never judged).
+ *
+ * `decided` are the tokens the read resolved even when it did not finish
+ * (`StallView.descriptionsDecided`): a walk reads newest first, so a removal
+ * it reached before our page cap or before a throw is the seller's, and the
+ * item goes as it would after a complete read (the critic's sixth pass).
  */
 export function pruneSelection(
     selection: Selection,
     prices: ReadonlyMap<string, TokenPrice>,
     complete: boolean,
+    decided: ReadonlySet<string> = new Set(),
 ): { selection: Map<string, bigint>; dropped: boolean } {
     const kept = new Map<string, bigint>();
     let dropped = false;
@@ -218,7 +224,7 @@ export function pruneSelection(
     for (const [tokenId, count] of selection) {
         const price = prices.get(tokenId);
         if (price === undefined) {
-            if (complete) {
+            if (complete || decided.has(tokenId)) {
                 dropped = true;
             } else {
                 kept.set(tokenId, count);

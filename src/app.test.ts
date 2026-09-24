@@ -980,6 +980,7 @@ function noRecords(over: Partial<DescriptionLookup> = {}): DescriptionLookup {
         shelves: new Map(),
         prices: new Map(),
         quoteTimes: new Map(),
+        decided: new Set(),
         unreadable: new Set(),
         genesis: new Map(),
         truncated: false,

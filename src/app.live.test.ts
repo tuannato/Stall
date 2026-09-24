@@ -9,6 +9,7 @@ import { STLD_HEX, encodeDescriptionHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS, type StallView } from './domain/state';
 import type { ChainTx, HistoryPage } from './net/chain';
+import type { DescriptionLookup } from './net/descriptions';
 import { UNKNOWN_TXID } from './net/live';
 import { SECOND_FEED } from './net/hosts';
 import { p2pkhOutputScript } from './net/script';
@@ -18,7 +19,9 @@ import {
     QUOTE_MINTED_CHIP,
     WINDOW_QUOTES_AS_LAST_READ,
     selectionUnread,
+    selectionCapped,
     windowSelectionUnread,
+    windowSelectionCapped,
     HOME_LEDE,
     OPENING_BODY,
     PLUGIN_MISSING_BODY,
@@ -524,13 +527,14 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         shelves: new Map<string, string>(),
         prices: new Map([[B, XEC_B]]),
         quoteTimes: new Map<string, number>(),
+        decided: new Set([B]),
         unreadable: new Set<string>(),
         truncated: false,
         failed: true,
         genesis: new Map(),
     };
     /** A walk that threw before it read anything. */
-    const emptyFailedLookup = { ...failedLookup, prices: new Map() };
+    const emptyFailedLookup = { ...failedLookup, prices: new Map(), decided: new Set<string>() };
     /** Boots with a loader that answers the states in turn, the last one for good. */
     const bootSequence = (states: State[]): HTMLElement => {
         const root = document.createElement('div');
@@ -852,7 +856,7 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         expect(root.querySelector('[data-role="pay-several-open"]'), 'and Pay is back').not.toBeNull();
     });
 
-    it('on a touch wall: a walk that stopped at the page cap keeps the choice and refuses Pay in its own words', async () => {
+    it('on a touch wall: a walk that stopped at the page cap keeps the choice and refuses Pay in its own words, with no remedy', async () => {
         window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
         // USD, so a press that was not refused would ask a feed.
         const USD_A = { code: 'usd', exponent: 2, amount: 500n };
@@ -885,7 +889,10 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         const bar = root.querySelector('[data-role="window-selection"]');
         expect(bar?.textContent, 'the choice stands, named').toContain('Plum Jam ×1');
         expect(root.textContent, 'never "no longer quoted"').not.toContain(SELECTION_DROPPED);
-        expect(bar?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(windowSelectionUnread(1));
+        // Past our own page cap: the heartbeat's next read stops in the same
+        // place, so the sentence offers no remedy (the critic's sixth pass).
+        expect(bar?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(windowSelectionCapped(1));
+        expect(windowSelectionCapped(1)).not.toMatch(/comes back|try again/);
         expect(bar?.querySelector('[data-role="selection-total"]'), 'no total').toBeNull();
         expect(root.querySelector('[data-role="window-pay"]'), 'and no Pay').toBeNull();
         expect(root.querySelector('[data-role="window-clear"]'), 'Clear all stays').not.toBeNull();
@@ -903,6 +910,377 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
     });
 });
 
+
+describe('a-walk-that-threw-keeps-the-records-per-token', () => {
+    /* Local, because this describe sits at the head of the file: every app a
+       test boots stays listening, and a `popstate` reaches all of them. */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    /**
+     * The critic's sixth pass (2026-09-24), P1: a wall walk that throws read
+     * the NEWEST records first, so what it resolved before the throw is the
+     * seller's latest word — and the wall kept the last good read whole over
+     * it: an older figure on the row and a payment composed at it, or an
+     * item the seller had removed still on offer. Per token now: what the
+     * walk resolved wins, a removal included, and the kept records fill only
+     * the tokens it never reached; the stale line stands only while one of
+     * those is shown. Item 7: a book that failed beside the walk keeps the
+     * records the same way, and a live walk that throws says it left older
+     * records. Owner's (f): a chosen item this screen cannot read closes the
+     * payment code.
+     */
+    const A = 'a1'.repeat(32);
+    const B = 'b2'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_A_NEWER = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const tokens = new Map([
+        [A, fungible(A, 'Plum Jam')],
+        [B, fungible(B, 'Rye Flour')],
+    ]);
+    const genesis = new Map([
+        [A, 'attributed' as const],
+        [B, 'attributed' as const],
+    ]);
+    const wall = { show: 'quotes' as const, mode: 'browse' as const, payCode: true, turn: 'none' as const, touch: true };
+    const bootSequence = (states: State[]): HTMLElement => {
+        const root = document.createElement('div');
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        return root;
+    };
+    const wallRow = (root: HTMLElement, name: string): Element | undefined =>
+        [...root.querySelectorAll('.sw-strip .sw-row, .sw-strip .item')].find((row) => row.textContent?.includes(name));
+    const plate = (root: HTMLElement): Element | null => root.querySelector('[data-role="window-paying"]');
+    const fresh = (root: HTMLElement): string | null | undefined =>
+        root.querySelector('[data-role="window-fresh"]')?.textContent;
+    const choose = async (root: HTMLElement, tokenId: string): Promise<void> => {
+        const more = [...root.querySelectorAll<HTMLButtonElement>('[data-role="window-step-more"]')].find((b) =>
+            b.getAttribute('data-focus-key')?.includes(tokenId),
+        );
+        if (more === undefined) {
+            throw new Error(`no + for ${tokenId}`);
+        }
+        more.click();
+        await flush();
+    };
+    const pay = async (root: HTMLElement): Promise<void> => {
+        (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+        await flush();
+    };
+    const good = (): State =>
+        stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall });
+
+    it('a-walk-that-threw-after-a-newer-quote-shows-the-newer-quote', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        // Exactly what `loadCurrent` answers when the walk read A's newer
+        // record on its first page and threw before it reached B.
+        const failed = stallEmpty({
+            tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+            genesis: new Map([[A, 'attributed' as const]]),
+            prices: new Map([[A, XEC_A_NEWER]]),
+            descriptionsFailed: true,
+            descriptionsDecided: new Set([A]),
+            window: wall,
+        });
+        const root = bootSequence([good(), failed, failed]);
+        await flush();
+        await choose(root, A);
+        await pay(root);
+        expect(plate(root)?.getAttribute('data-pay-uri'), 'the code pays the figure read').toContain('amount=5000.00');
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallRow(root, 'Plum Jam')?.textContent, 'the row shows the figure the walk read').toContain('9,000.00');
+        expect(wallRow(root, 'Plum Jam')?.textContent, 'and never the older one').not.toContain('5,000.00');
+        expect(plate(root), 'the code at the older figure is closed').toBeNull();
+        expect(wallRow(root, 'Rye Flour'), 'the record it never reached is kept').not.toBeUndefined();
+        expect(fresh(root), 'and said to be').toBe(WINDOW_QUOTES_AS_LAST_READ);
+
+        await pay(root);
+        expect(plate(root)?.getAttribute('data-pay-uri'), 'a new press composes the newer figure').toContain(
+            'amount=9000.00',
+        );
+    });
+
+    it('a-walk-that-threw-after-a-removal-offers-nothing', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        // The walk read A's removal (a tombstone: in no map, only resolved)
+        // and threw before it reached B.
+        const removed = stallEmpty({
+            tokens: new Map(),
+            prices: new Map(),
+            descriptionsFailed: true,
+            descriptionsDecided: new Set([A]),
+            window: wall,
+        });
+        const root = bootSequence([good(), removed, removed]);
+        await flush();
+        await choose(root, A);
+        await pay(root);
+        expect(plate(root), 'a payment stands').not.toBeNull();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallRow(root, 'Plum Jam'), 'the removed item is not on offer').toBeUndefined();
+        expect(root.querySelector('[data-role="window-selection"]')?.textContent ?? '', 'nor in the choice').not.toContain(
+            'Plum Jam',
+        );
+        expect(plate(root), 'nor in a code').toBeNull();
+        expect(root.textContent, 'the seller removed it, and that is said').toContain(SELECTION_DROPPED);
+        expect(wallRow(root, 'Rye Flour'), 'the record it never reached is kept').not.toBeUndefined();
+        expect(fresh(root)).toBe(WINDOW_QUOTES_AS_LAST_READ);
+    });
+
+    it('a removal a walk reached before our page cap takes the item out as a finished read would', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        // The walk finished at our cap: A's removal was on a page it read.
+        const cappedRemoval = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            genesis: new Map([[B, 'attributed' as const]]),
+            prices: new Map([[B, XEC_B]]),
+            descriptionsTruncated: true,
+            descriptionsDecided: new Set([A, B]),
+            window: wall,
+        });
+        const root = bootSequence([good(), cappedRemoval]);
+        await flush();
+        await choose(root, A);
+        await pay(root);
+        expect(plate(root), 'a payment stands').not.toBeNull();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(root.textContent, 'the seller removed it, and that is said').toContain(SELECTION_DROPPED);
+        expect(root.querySelector('[data-role="selection-unread"]'), 'never "past our cap"').toBeNull();
+        expect(plate(root), 'and the code is closed').toBeNull();
+    });
+
+    it('says nothing is as last read when the walk resolved everything the wall shows', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { ...wall, touch: false };
+        // A removal of A and B's record, both resolved before the throw.
+        const allRead = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            genesis: new Map([[B, 'attributed' as const]]),
+            prices: new Map([[B, XEC_B]]),
+            descriptionsFailed: true,
+            descriptionsDecided: new Set([A, B]),
+            window: params,
+        });
+        const root = bootSequence([
+            stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: params }),
+            allRead,
+        ]);
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallRow(root, 'Plum Jam')).toBeUndefined();
+        expect(wallRow(root, 'Rye Flour')).not.toBeUndefined();
+        expect(fresh(root), 'nothing kept is shown, so nothing is said to be').toBe('Updated just now');
+    });
+
+    it('a wall whose book and walk both failed keeps the records and says so', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { ...wall, touch: false };
+        const bookFailed: State = {
+            ...stallEmpty({ tokens: new Map(), fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] }, window: params }),
+            pendingFacts: {
+                stall: { address: ADDR, hash: HASH },
+                pubkeyHex: PK,
+                manifest: Promise.resolve(undefined),
+                descriptions: Promise.resolve({
+                    descriptions: new Map<string, string>(),
+                    shelves: new Map<string, string>(),
+                    prices: new Map(),
+                    quoteTimes: new Map<string, number>(),
+                    decided: new Set<string>(),
+                    unreadable: new Set<string>(),
+                    truncated: false,
+                    failed: true,
+                    genesis: new Map(),
+                }),
+            },
+        };
+        const root = bootSequence([
+            stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: params }),
+            bookFailed,
+        ]);
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallRow(root, 'Plum Jam'), 'the kept quotes stand').not.toBeUndefined();
+        expect(wallRow(root, 'Rye Flour')).not.toBeUndefined();
+        expect(fresh(root), 'as last read').toBe(WINDOW_QUOTES_AS_LAST_READ);
+    });
+
+    it('a live walk that throws leaves the older records and says so', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { ...wall, touch: false };
+        const root = bootStall(stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A]]), window: params })).root;
+        await flush();
+        expect(fresh(root)).toBe('Updated just now');
+        chain.historyThrows = true;
+        chain.txThrows = true;
+        watches[0]!.hooks.onBurst?.(['0a'.repeat(32)]);
+        await flush();
+        expect(chain.calls.stld, 'it did try').toBe(1);
+        expect(wallRow(root, 'Plum Jam'), 'the older record stays').not.toBeUndefined();
+        expect(fresh(root), 'and is said to be older').toBe(WINDOW_QUOTES_AS_LAST_READ);
+    });
+
+    it('a wall payment closes when a chosen item cannot be read', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+        // Our own page cap, B reached and A past it: the slot goes back to
+        // the shop's code (the owner's (f), 2026-09-24).
+        const capped = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            genesis: new Map([[B, 'attributed' as const]]),
+            prices: new Map([[B, XEC_B]]),
+            descriptionsTruncated: true,
+            descriptionsDecided: new Set([B]),
+            window: wall,
+        });
+        // A record whose genesis never arrived: our gap, a later read may fill it.
+        const noGenesis = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            genesis: new Map([[B, 'attributed' as const]]),
+            prices: new Map([[A, XEC_A], [B, XEC_B]]),
+            window: wall,
+        });
+        for (const [label, after, said] of [
+            ['past the cap', capped, windowSelectionCapped(1)],
+            ['no genesis', noGenesis, windowSelectionUnread(1)],
+        ] as const) {
+            const root = bootSequence([good(), after]);
+            await flush();
+            await choose(root, A);
+            await pay(root);
+            expect(plate(root), `${label}: a payment stands`).not.toBeNull();
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await flush();
+            expect(plate(root), `${label}: the code is closed`).toBeNull();
+            expect(root.querySelector('[data-role="window-shop-code"], .sw-plate'), `${label}: the shop's code is back`).not.toBeNull();
+            expect(root.querySelector('[data-role="selection-unread"]')?.textContent, label).toBe(said);
+            expect(root.querySelector('[data-role="window-pay"]'), `${label}: and no Pay`).toBeNull();
+        }
+    });
+});
+
+describe('a-choice-is-not-called-unread-while-the-records-are-still-being-read', () => {
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    /**
+     * The critic's sixth pass (2026-09-24), P2: over a book that failed, the
+     * walk is still in flight and the quotes rail says "Still reading" — and
+     * the strip beside it said "could not read 1 item you chose — try again".
+     * Nothing has failed yet: Pay waits and nothing is said. And a failure
+     * screen names nothing this load did not read (CLAUDE §4): the chosen
+     * item is counted until this load reads its genesis, never named from
+     * an earlier read and never by its id.
+     */
+    const A = 'a1'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+
+    it('withholds Pay and says nothing over a read in flight, then says it once the read fails', async () => {
+        window.history.replaceState(null, '', stallPath(PK));
+        let answer: (lookup: DescriptionLookup) => void = () => undefined;
+        const inFlight = new Promise<DescriptionLookup>((resolve) => {
+            answer = resolve;
+        });
+        const good = stallEmpty({ tokens: new Map([[A, fungible(A, 'Plum Jam')]]), prices: new Map([[A, XEC_A]]), shopTab: 'quotes' });
+        const bookFailed: State = {
+            ...stallEmpty({ tokens: new Map(), fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] }, shopTab: 'quotes' }),
+            pendingFacts: {
+                stall: { address: ADDR, hash: HASH },
+                pubkeyHex: PK,
+                manifest: Promise.resolve(undefined),
+                descriptions: inFlight,
+            },
+        };
+        const root = document.createElement('div');
+        const states = [good, bookFailed];
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${A}:more`)!
+            .click();
+        await flush();
+
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        const strip = (): Element | null => root.querySelector('[data-role="selection-strip"]');
+        expect(strip(), 'the choice stands').not.toBeNull();
+        expect(strip()?.querySelector('[data-role="selection-unread"]'), 'nothing has failed yet').toBeNull();
+        expect(root.textContent).not.toContain(selectionUnread(1));
+        expect(strip()?.querySelector('[data-role="pay-several-open"]'), 'but Pay waits').toBeNull();
+        const names = strip()?.querySelector('[data-role="selection-names"]')?.textContent ?? '';
+        expect(names, 'a failure screen names nothing this load did not read').not.toContain('Plum Jam');
+        expect(names, 'and never by its id').not.toContain(A);
+
+        answer({
+            descriptions: new Map(),
+            shelves: new Map(),
+            prices: new Map(),
+            quoteTimes: new Map(),
+            decided: new Set(),
+            unreadable: new Set(),
+            truncated: false,
+            failed: true,
+            genesis: new Map(),
+        });
+        await flush();
+        expect(strip()?.querySelector('[data-role="selection-unread"]')?.textContent, 'now it failed, and says so').toBe(
+            selectionUnread(1),
+        );
+        expect(strip()?.querySelector('[data-role="pay-several-open"]')).toBeNull();
+    });
+
+    it('a phone choice past our page cap is said with no remedy', async () => {
+        window.history.replaceState(null, '', stallPath(PK));
+        const B = 'b2'.repeat(32);
+        const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+        const both = new Map([
+            [A, fungible(A, 'Plum Jam')],
+            [B, fungible(B, 'Rye Flour')],
+        ]);
+        const good = stallEmpty({ tokens: both, prices: new Map([[A, XEC_A], [B, XEC_B]]), shopTab: 'quotes' });
+        const capped = stallEmpty({
+            tokens: new Map([[B, fungible(B, 'Rye Flour')]]),
+            prices: new Map([[B, XEC_B]]),
+            descriptionsTruncated: true,
+            descriptionsDecided: new Set([B]),
+            shopTab: 'quotes',
+        });
+        const root = document.createElement('div');
+        const states = [good, capped];
+        let at = 0;
+        boot(root, async () => states[Math.min(at++, states.length - 1)]!);
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${A}:more`)!
+            .click();
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        const said = root.querySelector('[data-role="selection-unread"]')?.textContent;
+        expect(said).toBe(selectionCapped(1));
+        expect(said, 'asking again stops in the same place').not.toMatch(/try again|comes back/);
+        expect(root.querySelector('[data-role="pay-several-open"]')).toBeNull();
+    });
+});
 
 describe('a-settings-publish-lands-without-a-reload', () => {
     /**

@@ -2631,20 +2631,57 @@ export function quotedItems(view: StallView): QuotedItem[] {
 }
 
 /**
- * The chosen items this page cannot show as rows just now, in the order they
- * were chosen: a walk that threw or stopped at our own page cap did not reach
- * the record, or the record is there and its genesis never arrived. Our gap,
- * never the seller's doing (`pruneSelection` keeps them), so every surface
- * that prints the choice names them and refuses Pay until they read — a
- * payment composed over part of a choice would be a figure for items nobody
- * picked on their own (the owner, "Nói rõ", 2026-09-24).
+ * Why a chosen item is not a row just now. Three different facts, and only
+ * the second promises anything:
+ * - `reading`: the records have not been read yet (a failure screen whose
+ *   walk is still in flight) — nothing to say beyond the rail's own
+ *   "still reading", and Pay waits;
+ * - `unread`: a walk that threw did not reach the record, or the record is
+ *   there and its genesis never arrived — a later read can reach it;
+ * - `capped`: a walk that finished stopped at our own page cap before it
+ *   reached the record — asking again stops in the same place, so no
+ *   sentence about this one may offer a retry (the critic's sixth pass).
  */
-export function unreadChosen(selection: ReadonlyMap<string, bigint>, view: StallView): string[] {
+export type UnreadWhy = 'reading' | 'unread' | 'capped';
+
+/**
+ * The chosen items this page cannot show as rows just now, in the order they
+ * were chosen, each with its reason (`UnreadWhy`). Our gap, never the
+ * seller's doing (`pruneSelection` keeps them), so every surface that prints
+ * the choice says so and refuses Pay until they read — a payment composed
+ * over part of a choice would be a figure for items nobody picked on their
+ * own (the owner, "Nói rõ", 2026-09-24).
+ */
+export function unreadChosen(
+    selection: ReadonlyMap<string, bigint>,
+    view: StallView,
+): { readonly tokenId: string; readonly why: UnreadWhy }[] {
     if (selection.size === 0) {
         return [];
     }
     const quoted = new Set(quotedItems(view).map((item) => item.tokenId));
-    return [...selection].filter(([tokenId, count]) => count > 0n && !quoted.has(tokenId)).map(([tokenId]) => tokenId);
+    const reading = view.prices === undefined && view.descriptionsFailed !== true;
+    // Past our own cap only on a walk that finished: over a floor a throw
+    // left, or records kept from an older read, a later read may reach it.
+    const capped = view.descriptionsTruncated === true && view.descriptionsFailed !== true && view.recordsStale !== true;
+    return [...selection]
+        .filter(([tokenId, count]) => count > 0n && !quoted.has(tokenId))
+        .map(([tokenId]) => ({
+            tokenId,
+            why: reading ? 'reading' : capped && view.prices?.has(tokenId) !== true ? 'capped' : 'unread',
+        }));
+}
+
+/**
+ * Whether a chosen item may be named on the strip: only by a genesis name
+ * the view holds, never by its 64-hex id (a count nobody can check is
+ * better than a string nobody can read). The view holds a name this load
+ * read, or on a screen whose book answered, one the page read earlier for
+ * this stall (`chosenNames` in `app.ts`) — never on a failure screen, which
+ * names nothing this load did not read (CLAUDE §4).
+ */
+export function chosenIsNamed(view: StallView, tokenId: string): boolean {
+    return view.tokens.has(tokenId);
 }
 
 /**
@@ -5251,14 +5288,14 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
         } else {
             const sum = el('div', 'sel-sum');
             // Every chosen item by name, the rows' own and then any this read
-            // did not reach — named from `view.tokens`, which carries a chosen
-            // item's genesis name from the last read that finished.
+            // did not reach that the view can name (`chosenIsNamed`); the
+            // rest are counted by the sentence below, never named by an id.
             const unread = unreadChosen(selection, view);
             const names = [
                 ...quotedItems(view)
                     .filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n)
                     .map((item) => item.tokenId),
-                ...unread,
+                ...unread.map((u) => u.tokenId).filter((tokenId) => chosenIsNamed(view, tokenId)),
             ]
                 .map((tokenId) => `${quoteNaming(view, tokenId).title} ×${selection.get(tokenId)!.toString()}`)
                 .join(' · ');
@@ -5278,9 +5315,20 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
             if (unread.length > 0) {
                 // In place of the total and Pay: a total over part of a
                 // choice is a figure for items nobody picked on their own.
-                const said = el('span', 'sel-unread', copy.selectionUnread(unread.length));
-                said.setAttribute('data-role', 'selection-unread');
-                sum.append(said);
+                // Said per reason, and nothing while the records are still
+                // being read — the rail already says so, and "could not read"
+                // over a read in flight is our failure announced early.
+                const failed = unread.filter((u) => u.why === 'unread').length;
+                const capped = unread.filter((u) => u.why === 'capped').length;
+                const lines = [
+                    ...(failed > 0 ? [copy.selectionUnread(failed)] : []),
+                    ...(capped > 0 ? [copy.selectionCapped(capped)] : []),
+                ];
+                if (lines.length > 0) {
+                    const said = el('span', 'sel-unread', lines.join(' '));
+                    said.setAttribute('data-role', 'selection-unread');
+                    sum.append(said);
+                }
             } else {
                 const glance = selectionGlance(selection, view.prices);
                 const totalBlock = el('span', 'sel-totalblk');

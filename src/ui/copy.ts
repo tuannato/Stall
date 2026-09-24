@@ -1970,13 +1970,21 @@ export const selectionApart = (unit: string): string =>
 export const SELECTION_DROPPED =
     'Something you chose is no longer quoted as it was and was taken out.';
 /**
- * A chosen item this page's own read did not reach — a walk that threw or
- * stopped at our page cap, or a genesis that never arrived. In place of the
- * strip's total and Pay: our failure, never "no longer quoted" (the owner,
- * "Nói rõ", 2026-09-24).
+ * A chosen item this page's own read did not reach — a walk that threw, or a
+ * genesis that never arrived. In place of the strip's total and Pay: our
+ * failure, never "no longer quoted" (the owner, "Nói rõ", 2026-09-24). A
+ * read that is still in flight says nothing here, and one that stopped at
+ * our page cap says `selectionCapped`, since trying again cannot help it.
  */
 export const selectionUnread = (n: number): string =>
     `This page could not read ${n} item${n === 1 ? '' : 's'} you chose \u2014 try again to pay`;
+/**
+ * A chosen item past our own page cap on a walk that finished: asking again
+ * stops in the same place, so this sentence offers no remedy (the critic's
+ * sixth pass, 2026-09-24) — only the fact, which is about this page.
+ */
+export const selectionCapped = (n: number): string =>
+    `This page stops reading the seller\u2019s records before it reaches ${n} item${n === 1 ? '' : 's'} you chose, so it cannot price ${n === 1 ? 'it' : 'them'} here`;
 export const selectionFull = (n: number): string =>
     `Up to ${n} different items in one payment.`;
 /* The several-items sheet. */
@@ -2397,12 +2405,19 @@ export const WINDOW_PAY_BACK = 'Back';
 export const WINDOW_PAY_ASKING =
     'Asking the price feeds for a rate\u2026 the code appears when one arrives.';
 /**
- * The wall's own sentence for a chosen item its read did not reach, in place
- * of the strip's total and Pay. The wall has no retry control: its heartbeat
- * reads again within a minute, so Pay comes back by itself.
+ * The wall's own sentence for a chosen item its read did not reach (a walk
+ * that threw, a genesis that never arrived), in place of the strip's total
+ * and Pay. The wall has no retry control: its heartbeat reads again within
+ * a minute, so Pay comes back by itself once a read reaches it.
  */
 export const windowSelectionUnread = (n: number): string =>
     `This screen could not read ${n} item${n === 1 ? '' : 's'} you chose just now \u2014 Pay comes back once it can`;
+/**
+ * The wall's sentence for a chosen item past our own page cap: the
+ * heartbeat's next read stops in the same place, so no remedy is offered.
+ */
+export const windowSelectionCapped = (n: number): string =>
+    `This screen stops reading the seller\u2019s records before it reaches ${n} item${n === 1 ? '' : 's'} you chose, so it cannot price ${n === 1 ? 'it' : 'them'} here`;
 /**
  * The wall's status line over records kept from the last read that finished,
  * because this screen's own walk threw (the owner's wording, 2026-09-24): in

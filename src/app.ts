@@ -33,6 +33,7 @@ import {
     selectionSats,
     selectionUnit,
 } from './domain/selection';
+import { decidedOf, mergeFailedRead } from './domain/records';
 import {
     clearSavedStall,
     forgetSurcharge,
@@ -793,6 +794,7 @@ export function boot(
               prices: NonNullable<StallView['prices']>;
               quoteTimes: StallView['quoteTimes'];
               descriptionsTruncated: StallView['descriptionsTruncated'];
+              decided: ReadonlySet<string>;
               tokens: StallView['tokens'];
               genesis: StallView['genesis'];
           }
@@ -983,7 +985,11 @@ export function boot(
      */
     const chosenNames = (): StallView['tokens'] => {
         const kept = lastGoodRecords;
-        if (kept === undefined || kept.pubkeyHex !== state.pubkeyHex || selection.size === 0) {
+        // Never on a failure screen, which names nothing this load did not
+        // read (CLAUDE §4): there a chosen item is counted, not named, until
+        // this load reads its genesis (the critic's sixth pass, 2026-09-24).
+        const bookAnswered = state.view.fetch?.kind === 'offers' || state.view.fetch?.kind === 'empty';
+        if (kept === undefined || kept.pubkeyHex !== state.pubkeyHex || selection.size === 0 || !bookAnswered) {
             return state.view.tokens;
         }
         let out: SessionTokenCache | undefined;
@@ -998,6 +1004,59 @@ export function boot(
             }
         }
         return out ?? state.view.tokens;
+    };
+
+    /**
+     * A read whose walk threw (`view`: the floor it read, its names, and the
+     * tokens it resolved) over records kept from an earlier read of the same
+     * stall (the critic's sixth pass, 2026-09-24, P1). Per token: what the
+     * walk resolved wins, a removal included — it reads newest first, so
+     * that is the seller's latest word — and the kept records fill only the
+     * tokens it never reached, with their names and attributions wherever
+     * this read has none. `recordsStale` only while a kept record is shown,
+     * because that is the one thing the stale line says.
+     */
+    const overKept = (
+        view: StallView,
+        kept: {
+            descriptions?: StallView['descriptions'];
+            shelves?: StallView['shelves'];
+            prices?: StallView['prices'];
+            quoteTimes?: StallView['quoteTimes'];
+            descriptionsTruncated?: StallView['descriptionsTruncated'];
+            decided?: ReadonlySet<string>;
+            tokens?: StallView['tokens'];
+            genesis?: StallView['genesis'];
+        },
+    ): Partial<StallView> => {
+        const resolved = decidedOf({ ...view, decided: view.descriptionsDecided });
+        const merged = mergeFailedRead(view, resolved, kept);
+        const tokens: SessionTokenCache = new Map(view.tokens);
+        const genesis = new Map(view.genesis ?? []);
+        for (const tokenId of merged.keptShown) {
+            const meta = kept.tokens?.get(tokenId);
+            if (meta !== undefined && !tokens.has(tokenId)) {
+                tokens.set(tokenId, meta);
+            }
+            const attribution = kept.genesis?.get(tokenId);
+            if (attribution !== undefined && !genesis.has(tokenId)) {
+                genesis.set(tokenId, attribution);
+            }
+        }
+        return {
+            descriptions: merged.descriptions,
+            shelves: merged.shelves,
+            prices: merged.prices,
+            quoteTimes: merged.quoteTimes,
+            descriptionsFailed: false,
+            descriptionsTruncated: kept.descriptionsTruncated,
+            // A token the kept read resolved and this one did not is
+            // resolved as of that read; one this read resolved, as of this.
+            descriptionsDecided: new Set([...resolved, ...(kept.decided ?? [])]),
+            recordsStale: merged.keptShown.size > 0 ? true : undefined,
+            tokens,
+            genesis,
+        };
     };
 
     const paint = (): void => {
@@ -1019,8 +1078,11 @@ export function boot(
         // gap and stays chosen; a record there in a painted unit whose
         // genesis never arrived is our gap too (`pruneSelection`).
         const complete = state.view.descriptionsTruncated !== true;
+        // What the read resolved is complete even where the read is not: a
+        // removal it reached before our cap or a throw is the seller's.
+        const decided = decidedOf({ ...state.view, decided: state.view.descriptionsDecided });
         if (recordsKnown(state.view) && state.view.prices !== undefined) {
-            const pruned = pruneSelection(selection, state.view.prices, complete);
+            const pruned = pruneSelection(selection, state.view.prices, complete, decided);
             if (pruned.dropped) {
                 selection = pruned.selection;
                 selectionDropped = true;
@@ -1049,8 +1111,9 @@ export function boot(
             // on a wall nobody had touched.
             for (const [tokenId, price] of windowPaying.prices) {
                 const now = state.view.prices.get(tokenId);
-                // A record a capped walk did not reach has not moved.
-                if (now === undefined && !complete) {
+                // A record a capped walk did not reach has not moved; one it
+                // resolved, a removal included, is judged.
+                if (now === undefined && !complete && !decided.has(tokenId)) {
                     continue;
                 }
                 if (!samePrice(price, now)) {
@@ -1058,6 +1121,18 @@ export function boot(
                     break;
                 }
             }
+        }
+        /*
+         * And whenever a chosen item cannot be read (the owner's (f),
+         * 2026-09-24): the code pays for the whole choice, and a choice this
+         * screen cannot show whole is not one a customer can check against
+         * the code — the slot goes back to the shop's code. Not while the
+         * records are still being read (`unreadChosen`'s `reading`): the
+         * heartbeat paints a read in flight every sixty seconds, and closing
+         * on that would close every plate on an untouched wall.
+         */
+        if (windowPaying !== undefined && unreadChosen(selection, state.view).some((u) => u.why !== 'reading')) {
+            cancelWallPayment();
         }
         // The last read that finished, kept for the next walk that throws.
         // Its names and attributions ACCUMULATE over the visit to one stall:
@@ -1081,6 +1156,7 @@ export function boot(
                 prices: state.view.prices,
                 quoteTimes: state.view.quoteTimes,
                 descriptionsTruncated: state.view.descriptionsTruncated,
+                decided,
                 tokens: names,
                 genesis,
             };
@@ -2709,58 +2785,35 @@ export function boot(
         // claim coverage across a gap it cannot see.
         /*
          * A walk that threw, on a wall re-reading the SAME stall (the
-         * heartbeat), keeps the last good records: the refusal
-         * `applyDescriptions` already applies to a live re-read, applied to
-         * a load. The floor it read is not the seller's record, and a wall
-         * with a customer mid-choice must not repaint as if it were.
+         * heartbeat), keeps the last good records for every token it never
+         * reached — and only those (`overKept`, the critic's sixth pass,
+         * P1): the walk reads newest first, so a token it resolved before
+         * the throw — a new figure, or a removal — is the seller's latest
+         * word, and keeping the older read whole over it put a figure the
+         * walk had read past on the wall and composed a payment at it. The
+         * floor alone is not the seller's record either, and a wall with a
+         * customer mid-choice must not repaint as if it were.
          *
-         * **All of it, names and attributions included** (the critic's fifth
-         * pass, 2026-09-24, P1): `loadCurrent` builds `tokens` and `genesis`
-         * from the floor the throw left, so restoring the maps alone kept a
-         * chosen quote's price with no name and no kind — no row, pruned,
-         * the payment closed and the seller blamed. The kept ids take the
-         * last read's names and attributions wherever this load has none.
+         * **Names and attributions with them** (the fifth pass, P1):
+         * `loadCurrent` builds `tokens` and `genesis` from the floor the
+         * throw left, so the kept ids take the last read's names and
+         * attributions wherever this load has none.
          *
-         * **And said** (the owner, "Nói rõ"): the kept view is `recordsStale`,
-         * so the wall prints `WINDOW_QUOTES_AS_LAST_READ` where the book's
-         * freshness stamp would claim the quotes were read just now, and
-         * nothing is judged against it. Taken from `lastGoodRecords` rather
-         * than the view on screen, so a second walk that throws in a row
-         * keeps the same records again.
+         * **And said** (the owner, "Nói rõ"): while a kept record is shown
+         * the view is `recordsStale`, so the wall prints
+         * `WINDOW_QUOTES_AS_LAST_READ` where the book's freshness stamp would
+         * claim the quotes were read just now. Taken from `lastGoodRecords`
+         * rather than the view on screen, so a second walk that throws in a
+         * row keeps the same records again. A book that failed too answers
+         * the walk later, on the facts road, which keeps them the same way
+         * (`applyPendingFacts`).
          */
-        const kept =
-            sameStall &&
-            next.view.descriptionsFailed === true &&
-            lastGoodRecords !== undefined &&
-            lastGoodRecords.pubkeyHex === next.pubkeyHex
+        const keepFor =
+            sameStall && lastGoodRecords !== undefined && lastGoodRecords.pubkeyHex === next.pubkeyHex
                 ? lastGoodRecords
                 : undefined;
-        const keptRecords: Partial<StallView> = {};
-        if (kept !== undefined) {
-            const tokens: SessionTokenCache = new Map(next.view.tokens);
-            const genesis = new Map(next.view.genesis ?? []);
-            for (const tokenId of new Set([...kept.prices.keys(), ...(kept.descriptions?.keys() ?? [])])) {
-                const meta = kept.tokens.get(tokenId);
-                if (meta !== undefined && !tokens.has(tokenId)) {
-                    tokens.set(tokenId, meta);
-                }
-                const attribution = kept.genesis?.get(tokenId);
-                if (attribution !== undefined && !genesis.has(tokenId)) {
-                    genesis.set(tokenId, attribution);
-                }
-            }
-            Object.assign(keptRecords, {
-                descriptions: kept.descriptions,
-                shelves: kept.shelves,
-                prices: kept.prices,
-                quoteTimes: kept.quoteTimes,
-                descriptionsFailed: false,
-                descriptionsTruncated: kept.descriptionsTruncated,
-                recordsStale: true,
-                tokens,
-                genesis,
-            });
-        }
+        const keptRecords: Partial<StallView> =
+            keepFor !== undefined && next.view.descriptionsFailed === true ? overKept(next.view, keepFor) : {};
         const loaded: AppState = {
             ...next,
             view: {
@@ -2806,7 +2859,7 @@ export function boot(
         syncBroadcastTimers();
         syncWindow();
         if (next.pendingFacts !== undefined) {
-            applyPendingFacts(claimed, next.pendingFacts);
+            applyPendingFacts(claimed, next.pendingFacts, keepFor);
         } else if (next.genesisPending !== undefined) {
             // The capped genesis reads, off the first paint: they land through
             // the same generation-guarded live paint a facts answer does.
@@ -2824,7 +2877,11 @@ export function boot(
      * `livePaint` gate that holds a paint back while a sheet is open. Nothing
      * is re-requested here — these are the reads the load already started.
      */
-    const applyPendingFacts = (claimed: number, pending: PendingFacts): void => {
+    const applyPendingFacts = (
+        claimed: number,
+        pending: PendingFacts,
+        keepFor?: NonNullable<typeof lastGoodRecords>,
+    ): void => {
         void (async () => {
             const lookup = await pending.manifest;
             if (claimed !== generation || lookup === undefined) {
@@ -2837,13 +2894,20 @@ export function boot(
             if (claimed !== generation) {
                 return;
             }
-            if (lookup === undefined) {
+            if (lookup === undefined && keepFor === undefined) {
                 // The walk answered nothing at all. Said on the view, because
                 // a scanned link must not be told this stall quotes no such
                 // item on the strength of a read that never happened.
                 state = { ...state, view: { ...state.view, descriptionsFailed: true } };
+            } else if (lookup === undefined) {
+                // The same, on a wall re-reading its own stall: the last good
+                // records stand for the whole of it, and say so.
+                applyDescriptions({ ...NO_RECORDS, failed: true }, keepFor);
             } else {
-                applyDescriptions(lookup);
+                // A book that failed beside a walk that threw keeps the
+                // wall's records too (the critic's sixth pass, item 7): the
+                // same-stall rule `refresh` applies to a book that answered.
+                applyDescriptions(lookup, keepFor);
                 await fillRecordTokens(claimed, pending.pubkeyHex);
                 if (claimed !== generation) {
                     return;
@@ -3364,7 +3428,7 @@ export function boot(
      * description survives until the next full load — the retry control and
      * any reload both are one.
      */
-    const applyDescriptions = (lookup: DescriptionLookup): void => {
+    const applyDescriptions = (lookup: DescriptionLookup, keptRead?: NonNullable<typeof lastGoodRecords>): void => {
         // The shelves and the prices ride the same records, so the same guard
         // covers all three: a wholly empty answer never erases any map already
         // on screen. Counting only two of them was not a smaller version of
@@ -3379,7 +3443,61 @@ export function boot(
             (state.view.descriptions?.size ?? 0) > 0 ||
             (state.view.shelves?.size ?? 0) > 0 ||
             (state.view.prices?.size ?? 0) > 0;
+        /*
+         * A walk that threw on the facts road of a wall re-reading its own
+         * stall, beside a book that failed (`keptRead`, the critic's sixth
+         * pass, item 7): the load's own rule (`refresh`) — the last good
+         * records for every token it never reached, what it read for every
+         * token it resolved, a removal included (`overKept`), and stale
+         * while a kept record is shown.
+         */
+        const over = lookup.failed ? keptRead : undefined;
+        if (over !== undefined) {
+            const pubkeyHex = state.pubkeyHex;
+            const kept = overKept(
+                {
+                    ...state.view,
+                    descriptions: lookup.descriptions,
+                    shelves: lookup.shelves,
+                    prices: lookup.prices,
+                    quoteTimes: lookup.quoteTimes,
+                    descriptionsDecided: lookup.decided,
+                },
+                over,
+            );
+            const prevCard =
+                state.view.broadcast !== undefined ? shownCard(withRail(state.view)) : undefined;
+            const merged: StallView = {
+                ...state.view,
+                ...kept,
+                genesis:
+                    pubkeyHex === undefined || kept.prices === undefined
+                        ? kept.genesis
+                        : new Map([...(kept.genesis ?? []), ...genesisFor(pubkeyHex, kept.prices.keys())]),
+            };
+            carryBroadcastCursor(prevCard, merged);
+            state = { ...state, view: merged };
+            // On an overlay showing quotes, a card over kept records is
+            // dimmed exactly as a failed book re-read leaves the listing card.
+            if (merged.recordsStale === true && state.view.broadcast?.cards === 'quotes') {
+                markBroadcastStale();
+            }
+            livePaint();
+            if (state.view.broadcast !== undefined) {
+                syncCarousel();
+            }
+            return;
+        }
         if ((lookup.failed || gotNothing) && hadSomething) {
+            // A live walk that threw leaves the older records on screen, and
+            // says so: they are the last read that finished, and the wall's
+            // line reads `recordsStale` on every road (the sixth pass, item
+            // 7). A walk that finished and found nothing is not our failure
+            // and is not said to be.
+            if (lookup.failed && state.view.recordsStale !== true) {
+                state = { ...state, view: { ...state.view, recordsStale: true } };
+                livePaint();
+            }
             // On an overlay showing quotes those figures came from this walk,
             // and this answer cannot be told from a seller who published
             // nothing — so the card already on screen stays, dimmed, exactly
@@ -3419,6 +3537,7 @@ export function boot(
             // actually got rather than the one the load made.
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
+            descriptionsDecided: lookup.decided,
             // This walk's own answer replaces any records kept over an
             // earlier one that threw.
             recordsStale: undefined,
@@ -4138,16 +4257,7 @@ async function loadCurrent(): Promise<AppState> {
      * beats no shop — so an `undefined` here is the rejection guard above
      * firing, and reads the same as a walk that found nothing.
      */
-    const descriptionLookup: DescriptionLookup = (await descriptionsSoon) ?? {
-        descriptions: new Map<string, string>(),
-        shelves: new Map<string, string>(),
-        prices: new Map<string, TokenPrice>(),
-        quoteTimes: new Map<string, number>(),
-        unreadable: new Set<string>(),
-        genesis: new Map<string, GenesisAttribution>(),
-        truncated: false,
-        failed: true,
-    };
+    const descriptionLookup: DescriptionLookup = (await descriptionsSoon) ?? { ...NO_RECORDS, failed: true };
 
     let stallName = cachedName;
     let theme = cachedTheme;
@@ -4343,6 +4453,7 @@ async function loadCurrent(): Promise<AppState> {
             // stopped early, nor after one that threw.
             descriptionsTruncated: descriptionLookup.truncated,
             descriptionsFailed: descriptionLookup.failed,
+            descriptionsDecided: descriptionLookup.decided,
             genesis: genesisFor(route.pubkeyHex, descriptionLookup.prices.keys()),
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
@@ -4496,6 +4607,19 @@ function decisionOf(state: GenesisAttribution, strength: AttributionStrength): G
 }
 
 /** What this session knows about these tokens, for the view. */
+/** A walk that answered nothing: every map empty, nothing resolved. */
+const NO_RECORDS: DescriptionLookup = {
+    descriptions: new Map<string, string>(),
+    shelves: new Map<string, string>(),
+    prices: new Map<string, TokenPrice>(),
+    quoteTimes: new Map<string, number>(),
+    decided: new Set<string>(),
+    unreadable: new Set<string>(),
+    genesis: new Map<string, GenesisAttribution>(),
+    truncated: false,
+    failed: false,
+};
+
 function genesisFor(
     pubkeyHex: string,
     tokenIds: Iterable<string>,

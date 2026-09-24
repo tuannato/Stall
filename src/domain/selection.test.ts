@@ -140,5 +140,10 @@ describe('a-removed-quote-leaves-the-selection', () => {
         const movedInPart = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Map([[A, USD5], [B, XEC]]), false);
         expect([...movedInPart.selection]).toEqual([[A, 2n]]);
         expect(movedInPart.dropped).toBe(true);
+        // …and so is a removal it DID reach (the sixth pass): a walk reads
+        // newest first, so a token it resolved is resolved.
+        const removedInPart = pruneSelection(new Map([[A, 2n], [B, 1n]]), new Map([[B, USD3_SUR]]), false, new Set([A, B]));
+        expect([...removedInPart.selection]).toEqual([[B, 1n]]);
+        expect(removedInPart.dropped).toBe(true);
     });
 });

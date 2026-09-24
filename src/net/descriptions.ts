@@ -85,6 +85,17 @@ export type DescriptionLookup = {
      */
     readonly quoteTimes: ReadonlyMap<string, number>;
     /**
+     * Every token whose record this walk resolved — a winner of any kind:
+     * words, a shelf, a price, or a removal (a tombstone, which leaves the
+     * token out of every map above). A walk reads each index newest first,
+     * so a token it resolved before a throw or before our page cap is
+     * resolved as the whole read would have it; a token absent here was
+     * never reached. Explicit because a removal has no other trace, and a
+     * caller filling the unreached tokens from an older read must not fill
+     * a token the seller removed (the critic's sixth pass, 2026-09-24).
+     */
+    readonly decided: ReadonlySet<string>;
+    /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
      * first when it holds the second.
@@ -206,6 +217,7 @@ function collate(
     const shelves = new Map<string, string>();
     const prices = new Map<string, TokenPrice>();
     const quoteTimes = new Map<string, number>();
+    const decided = new Set<string>();
     for (const [tokenId, records] of found) {
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
@@ -220,6 +232,7 @@ function collate(
         if (winner === undefined) {
             continue;
         }
+        decided.add(tokenId);
         // The winner's own clock, and only the winner's: a losing record's
         // stamp would date a document nobody is reading. A tombstone carries
         // it too — "when did the seller last say something about this token"
@@ -242,7 +255,7 @@ function collate(
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, shelves, prices, quoteTimes, unreadable };
+    return { descriptions, shelves, prices, quoteTimes, decided, unreadable };
 }
 
 function collectPage(

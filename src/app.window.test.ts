@@ -700,6 +700,7 @@ describe('a-cycle-step-over-a-walk-that-threw-leaves-the-rail', () => {
                         shelves: new Map<string, string>(),
                         prices: new Map(),
                         quoteTimes: new Map<string, number>(),
+                        decided: new Set<string>(),
                         unreadable: new Set<string>(),
                         truncated: false,
                         failed: true,
