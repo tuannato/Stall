@@ -2520,7 +2520,9 @@ first-stall checklist, which reads as a card, `var(--s-surface)`; a line
 on its own — `.mid-t`, `.mid-p`, `.pay-sec > .fine`, the quotes rail's
 title, `.stall-body > .fine`, the face's back control and its pointer —
 the ground with a 6px shadow halo, so nothing moves; and on a wall the
-status line and the shop code's plate.
+status line and the shop code's plate. **Superseded in round 6** by veils
+that hug the lines that need them ("A ground where the text reads without
+one", below): the owner found these grounds too heavy.
 
 **The targets.** The failure and empty sentences and the other ground
 lines are contrast targets that match on every look (`.mid-t`, `.mid-p`,
@@ -2586,7 +2588,8 @@ red** before the ground: "span.invite-text … sits on paint at 1.00:1" at
 rain is worn, hover included (Neo restates hover with the `background`
 shorthand at (0,3,0); the ground's rule is (0,4,0)); measured in Chrome
 with the hover forced: an opaque ground in both states, the words at
-6.68:1 and 6.39:1. 451 jobs.
+6.68:1 and 6.39:1. 451 jobs. (Round 6: a veil at 60% under Neo's own 4%
+wash, hover included — below.)
 
 **The overlay's empty line, reworded (round 5, the critic's fourth pass).**
 "Nothing to buy right now" claimed the whole stall over a book whose
@@ -2605,3 +2608,75 @@ between quote cards. Both in `render.test.ts`, red on round 5's overlay.) A `car
 quote falls back to the listings (§4), and its ticker label now names the
 listings it shows rather than the quotes line. Tests in
 `the-stream-skips-an-unbuyable-listing`, red on the old overlay.
+
+## A ground where the text reads without one (round 6, the owner, 2026-09-24 evening)
+
+**The incident.** Round 4 and 5 answered Neo's rain with the look's own
+ground laid solid under every line on the bare background — full-width
+bars under the section heads, the vacant box, the footer band, the whole
+Activity section — and the owner, over the pictures: "Phần che đen hơi quá
+đà". The rule, in their words: "nếu chữ vẫn đọc được thì không nền
+đen/trắng, nếu đọc không được thì nền đen/trắng mờ ôm sát chữ và có độ
+trong suốt đủ đạt ngưỡng" — a line that reads gets nothing; one that does
+not gets a translucent veil of the look's own ground, hugging it, at the
+least opacity that clears the floor. "Áp dụng cho tất cả … cũng như áp cho
+bộ đo/test sau này": the guards below enforce it from now on.
+
+**The veils** (`stall.css`, scoped to `.stall.att-rainfall:not(.deck-stall)`):
+`color-mix(in srgb, var(--s-bg) var(--rain-veil-…), transparent)` as the
+line's own `background-color`, a 2px ring of the same by a shadow; a
+one-line box `width: fit-content`, a paragraph's veil its block, a box of
+many lines none. Steps per ink: text 25%, the notice's ink 30%, accent 35%
+(and Neo's brighter `#3df2ea`), muted 55%, the Activity pill (its own muted
+tint kept on top) 60%, the notice invite (Neo's 4% wash kept on top, its
+hover included) 60%, and **the vacant box's second line, `#5e7799`, 80% —
+over the owner's 60% cap, stopped and put to the owner**.
+
+**Three guards.**
+
+1. **`a-rain-veil-is-the-least-that-reads`** (`decor-gate.test.ts`, pure):
+   each stated step recomputed from the rain art (`layout/rainDrop.ts`,
+   the derivation this pass flattens with) and Neo's palette against the
+   lightest ground the worn stall can paint anywhere — every layer at its
+   worst at once — reads 3:1 for every ink it serves, a step 5% lighter
+   does not, and a step over 60% names its reason. Proved red: muted at
+   60% ("would read at 55%"), at 50% ("expected false to be true"), and
+   `dim` unlisted ("--rain-veil-dim is 80%").
+2. **A veiled target re-read bare** (this pass): on a job that flattened a
+   moving decoration, every target whose own `background-color` is its
+   stall's ground made translucent is shot again with its veil and ring
+   taken off (`__contrastUnveil`, one more shot a veiled job), and a kind
+   of line — the box and its parent, described — whose every line on the
+   job reads 3:1 bare fails. **Per kind, measured**: the first run read
+   eight `dd.event-dd` at 3.03–3.11:1 bare on a long Activity list, lower
+   than the aurora's glow, where the list's first rows need the veil — a
+   rule cannot tell a row by where it landed. The same run's other
+   findings were real and fixed: the wall's announcement, which sits in the
+   sign (11.26:1 bare), and the payment plate's caption, which sits on its
+   card (16.56:1). Proved red: a veil planted on `.item-x` (a price on a
+   card) — 29 kinds "read 12.21:1 or better with its veil taken off". A
+   shipped run that read no veiled box fails as vacuous. Green: 469 veiled
+   boxes read bare, none needless.
+3. **`a-decoration-lays-no-opaque-ground-under-text`** (`decor-gate.test.ts`,
+   static, every served sheet): a decoration-scoped rule names
+   `var(--s-bg)`/`var(--s-surface)` in a `background`, `background-color`,
+   `box-shadow` or custom property only inside the veil's shape. Proved
+   red: round 5's block pasted back, 9 offences.
+
+**The targets it added**, where the rain is worn: the Activity rows' kind,
+time, pill, fields and notes, the checklist's step numbers and the
+footer's lines — each a line with a veil of its own is a box this pass
+reads. **A sampler correction came with it**: a box that draws nothing —
+no text, no glyph, no generated content — is not a target. The Activity's
+empty tile (`event-ic-empty`, a placeholder naming no token) was sampled as
+text against its own transparent ground and read 2.66–2.92:1 the moment
+the section's ground came off; the picture tile is the same rule's first
+case.
+
+**What waits.** The pass reads a target's border box, so a veil must cover
+the box it reads: a wrapped paragraph's veil is its whole block, ragged
+right edge included. A veil that follows each line's own extent (an
+inline background with `box-decoration-break: clone`) would leave gaps the
+pass reads as covered, and waits for the line-rect sampler
+(`SAMPLER-STEP-PLAN.md`), which measures behind the text's own lines.
+

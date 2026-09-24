@@ -20,6 +20,7 @@ import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
+import { brightestDrop, type Drop } from './rainDrop';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -2395,6 +2396,20 @@ type ContrastTarget = {
     holes: Hole[];
     /** What was measured, for a failure a person can find. */
     sel: string;
+    /**
+     * The box wears a veil of its own: a `background-color` that is the
+     * stall's own ground made translucent (`isVeiled`). The runner reads
+     * every veiled box once more with its veil taken off, and a line that
+     * reads without it fails — "a ground where the text reads without one"
+     * (the owner's rule, 2026-09-24, `PROBE-RULES.md`).
+     */
+    veiled: boolean;
+    /**
+     * The kind of line this is — the box and its parent, described. A veil
+     * is a rule over a kind of line, never over one line where it happened
+     * to land, so the runner judges "reads without one" per kind on a job.
+     */
+    kind: string;
 };
 
 type Hole = { x: number; y: number; w: number; h: number };
@@ -2678,6 +2693,22 @@ const CONTRAST_TEXT = [
     '.stall.att-rainfall:not(.deck-stall) .collection-name',
     '.stall.att-rainfall:not(.deck-stall) .collection-count',
     '.stall.att-rainfall:not(.deck-stall) .item-back',
+    /*
+     * The rest of the lines round 6 veils on the rain (the owner's rule,
+     * 2026-09-24 evening: a veil hugs a line, so each line is a box the pass
+     * reads — the Activity rows, the first-stall steps' numbers, the
+     * footer's lines). On the rain only: elsewhere they stand on a card or
+     * on a ground every look was proved on.
+     */
+    '.stall.att-rainfall:not(.deck-stall) .event-kind',
+    '.stall.att-rainfall:not(.deck-stall) .event-time',
+    '.stall.att-rainfall:not(.deck-stall) .event-txid',
+    '.stall.att-rainfall:not(.deck-stall) .event-dt',
+    '.stall.att-rainfall:not(.deck-stall) .event-dd',
+    '.stall.att-rainfall:not(.deck-stall) .event-body > .fine',
+    '.stall.att-rainfall:not(.deck-stall) .activity-sec > .fine',
+    '.stall.att-rainfall:not(.deck-stall) .first-stall .steps li > i',
+    '.stall.att-rainfall:not(.deck-stall) .stall-foot .fine',
 ].join(', ');
 
 /**
@@ -2719,6 +2750,8 @@ declare global {
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
+        /** Take the veil off the prepared boxes named, for the "reads without one" read. */
+        __contrastUnveil: (indices: number[]) => number;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -2802,6 +2835,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         // description-row tile at 1.18–2.64:1 on Rural and Neo (2026-09-15,
         // the day `.event-sum .event-ic` joined the list). The letters
         // tiles and the empty tiles beside it measured 5.7–17:1.
+        return undefined;
+    }
+    if (drawsNothing(node)) {
+        // A box with no letters, no glyph and no generated text has no ink
+        // to measure — the Activity's empty tile (`event-ic-empty`, a
+        // placeholder that keeps a row's column and names no token) was
+        // sampled as "text" against its own transparent ground, which read
+        // 2.66:1 the day the rain's ground came off from under it (round 6,
+        // 2026-09-24). The picture tile above is the same rule's first case.
         return undefined;
     }
     const full = node.getBoundingClientRect();
@@ -2921,8 +2963,74 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         pad: insideTransform(node) ? 8 : 0,
         holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
+        veiled: isVeiled(node, style),
+        kind: `${describe(node)} < ${node.parentElement === null ? '' : describe(node.parentElement)}`,
     };
 }
+
+/** No text, no drawn glyph, no generated content: nothing in the box has an ink. */
+function drawsNothing(node: HTMLElement): boolean {
+    if ((node.textContent ?? '').trim() !== '' || node.querySelector('svg, img') !== null) {
+        return false;
+    }
+    const generated = (pseudo: string): boolean => {
+        const content = getComputedStyle(node, pseudo).content;
+        return content !== 'none' && content !== 'normal' && content !== '""' && content !== "''";
+    };
+    return !generated('::before') && !generated('::after');
+}
+
+/** An sRGB colour as computed — `rgb()`, `rgba()` or `color(srgb …)` — with its alpha. */
+function colourOf(value: string): { rgb: [number, number, number]; alpha: number } | undefined {
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(value);
+    if (m !== null) {
+        return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], alpha: m[4] === undefined ? 1 : Number(m[4]) };
+    }
+    const f = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/.exec(value);
+    if (f !== null) {
+        const rgb = [f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255)) as [number, number, number];
+        return { rgb, alpha: f[4] === undefined ? 1 : Number(f[4]) };
+    }
+    return undefined;
+}
+
+/**
+ * Whether a target wears a veil of its own: its `background-color` is its
+ * stall's own ground, translucent — the only shape a decoration may lay
+ * under text (`a-decoration-lays-no-opaque-ground-under-text`). A card, a
+ * chip, a sign is opaque or another colour, and is never this.
+ */
+function isVeiled(node: HTMLElement, style: CSSStyleDeclaration): boolean {
+    const own = colourOf(style.backgroundColor);
+    const stall = node.closest<HTMLElement>('.stall');
+    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
+    if (own === undefined || ground === undefined || own.alpha <= 0 || own.alpha >= 1) {
+        return false;
+    }
+    return own.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1);
+}
+
+/**
+ * **A ground where the text reads without one** (the owner, 2026-09-24:
+ * "nếu chữ vẫn đọc được thì không nền đen/trắng"). The runner calls this on
+ * a decoration job after its shot, with the prepared indices of the boxes
+ * that wear a veil: each loses its own `background-color` and `box-shadow`
+ * (the veil and its ring; a tint the look paints on top as an image stays,
+ * being the look's), and the runner reads them again. A line that reads
+ * 3:1 with nothing under it did not need the veil, and fails.
+ */
+window.__contrastUnveil = (indices: number[]) => {
+    let taken = 0;
+    for (const i of indices) {
+        const node = preparedNodes[i];
+        if (node === undefined) continue;
+        node.style.setProperty('background-color', 'transparent', 'important');
+        node.style.setProperty('box-shadow', 'none', 'important');
+        taken += 1;
+    }
+    freezeAnimations();
+    return taken;
+};
 
 /**
  * The boxes as they are RIGHT NOW, for the runner to read immediately before
@@ -3021,50 +3129,15 @@ window.__contrastFreeze = freezeAnimations;
  */
 const RAIN_SHEETS = [rainNearSvg, rainMidSvg, rainFarSvg];
 
-type Drop = { rgb: [number, number, number]; alpha: number };
-
-function brightestDrop(ground: string): Drop | undefined {
+/** The drop derivation is `layout/rainDrop.ts`'s, shared with the veil test. */
+function brightestDropOn(ground: string): Drop | undefined {
     const bg = parseRgb(ground);
-    if (bg === undefined) {
-        return undefined;
-    }
-    let best: (Drop & { lum: number }) | undefined;
-    for (const sheet of RAIN_SHEETS) {
-        // Every drop is read, or none is: a path whose paint the pattern
-        // does not match (a full-opacity stroke, swapped attributes, an
-        // opacity on its group) would otherwise drop out of the choice and
-        // leave a brighter drop unmodelled (the critic's third pass). A sheet
-        // the pattern cannot read whole refuses the flattening, and the
-        // runner refuses the job.
-        const drops = [...sheet.matchAll(/<path\b[^>]*\sstroke="#([0-9a-fA-F]{6})"\s+stroke-opacity="([0-9.]+)"/g)];
-        if (drops.length !== (sheet.match(/<path\b/g) ?? []).length || /<g\b[^>]*opacity/.test(sheet)) {
-            return undefined;
-        }
-        for (const m of drops) {
-            const hex = m[1]!;
-            const rgb = [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-            const alpha = Number(m[2]);
-            const over = rgb.map((c, i) => c * alpha + bg[i]! * (1 - alpha));
-            const lum = relLum(over[0]!, over[1]!, over[2]!);
-            if (best === undefined || lum > best.lum) {
-                best = { rgb, alpha, lum };
-            }
-        }
-    }
-    return best === undefined ? undefined : { rgb: best.rgb, alpha: best.alpha };
+    return bg === undefined ? undefined : brightestDrop(RAIN_SHEETS, bg);
 }
 
 function parseRgb(value: string): [number, number, number] | undefined {
     const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value);
     return m === null ? undefined : [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function relLum(r: number, g: number, b: number): number {
-    const c = (v: number): number => {
-        const x = v / 255;
-        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
 }
 
 /** A comma-separated CSS list split at its top-level commas (a gradient's own commas stay inside). */
@@ -3100,7 +3173,7 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
     for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-rainfall:not(.deck-stall)')) {
         worn += 1;
         const cs = getComputedStyle(stall);
-        const drop = brightestDrop(cs.backgroundColor);
+        const drop = brightestDropOn(cs.backgroundColor);
         const layers = splitLayers(cs.backgroundImage);
         const isSheet = (layer: string): boolean => /^url\("?[^")]*rain-(?:near|mid|far)[^")]*"?\)$/.test(layer);
         const first = layers.findIndex(isSheet);

@@ -1194,6 +1194,10 @@ try {
         let rainJobs = 0;
         const rainKeys = new Set();
         const dim = [];
+        // A ground where the text reads without one (the owner's rule,
+        // 2026-09-24): every veiled box re-read with its veil off.
+        const needless = [];
+        let veiledRead = 0;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
         const contrastClasses = new Set();
@@ -1470,6 +1474,58 @@ try {
                         entry.ms += performance.now() - sampleStart - retryMs;
                         phases.set('sample', entry);
                     }
+                    /*
+                     * **A ground where the text reads without one** (the
+                     * owner, 2026-09-24 evening: "nếu chữ vẫn đọc được thì
+                     * không nền đen/trắng"). On a job that flattened a moving
+                     * decoration, every box that wears a veil of its own
+                     * (`veiled`, the stall's ground made translucent) is read
+                     * once more with the veil and its ring taken off; one
+                     * that reads the floor bare did not need it. One more
+                     * shot a veiled job, nothing on any other.
+                     */
+                    const veiled = targets.filter((t) => t.veiled);
+                    if (retryWhy.length === 0 && sampled > 0 && (prep.rain?.flattened ?? 0) > 0 && veiled.length > 0) {
+                        await evalJson(cdp, sessionId, `window.__contrastUnveil(${JSON.stringify(veiled.map((t) => t.i))})`);
+                        await sleep(60);
+                        const bare = await capture();
+                        const bareRead = await reread();
+                        const bareWhy = [...bare.why, ...bareRead.why];
+                        if (bareWhy.length > 0) {
+                            retryWhy = bareWhy.map((w) => `with the veils off, ${w}`);
+                        } else {
+                            /*
+                             * Judged per KIND of line (`kind`, the box and
+                             * its parent): a veil is a rule over a kind, and
+                             * a rule cannot tell a row by where it landed —
+                             * a long Activity list's last rows, far from the
+                             * aurora's glow, read 3.03:1 bare while its first
+                             * rows need the veil. A kind is needless when
+                             * every one of its lines on the job reads bare.
+                             */
+                            const now = new Map(bareRead.live.boxes.map((b) => [b.i, b]));
+                            const kinds = new Map();
+                            for (const t of veiled) {
+                                const box = now.get(t.i) ?? t;
+                                const worst = worstContrastInBox(bare.shot, box, t.color);
+                                if (worst === undefined) continue;
+                                veiledRead += 1;
+                                const kind = kinds.get(t.kind) ?? { reads: true, least: Infinity, box, sel: t.sel, n: 0 };
+                                kind.n += 1;
+                                kind.reads &&= worst >= PIXEL_CONTRAST_FLOOR;
+                                kind.least = Math.min(kind.least, worst);
+                                kinds.set(t.kind, kind);
+                            }
+                            for (const [name, kind] of kinds) {
+                                if (kind.reads) {
+                                    needless.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                            `${name} (${kind.n} line${kind.n === 1 ? '' : 's'}, first at ${Math.round(kind.box.x)},${Math.round(kind.box.y)}) reads ${kind.least.toFixed(2)}:1 or better with its veil taken off`,
+                                    );
+                                }
+                            }
+                        }
+                    }
                     record.sampled = sampled;
                     record.dropped = dropped;
                     record.retried = retried;
@@ -1535,12 +1591,29 @@ try {
             console.error(
                 `✗ contrast: a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
+        } else if (LOOKS === 'shipped' && veiledRead === 0) {
+            // The rule has to have read something, or its green is vacuous:
+            // the shipped rain veils lines on every Neo worn screen.
+            failed = true;
+            console.error('✗ contrast: a-ground-where-the-text-reads-without-one read no veiled box with its veil off — vacuous green');
+        } else if (needless.length > 0) {
+            failed = true;
+            console.error(
+                `✗ contrast: ${needless.length} veiled line(s) read ${PIXEL_CONTRAST_FLOOR}:1 with the veil taken off — a ground where the text reads without one:`,
+            );
+            for (const line of needless) {
+                console.error(`    ${line}`);
+            }
+            for (const line of dim) {
+                console.error(`    (also below the floor) ${line}`);
+            }
         } else if (dim.length === 0) {
             // No tick over a walk that missed or repeated a job, or refused one.
             if (walkOk && refused.length === 0) {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
-                        `sampled against rendered pixels, the rain at its brightest on ${rainJobs} — ${took()}`,
+                        `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
+                        `${veiledRead} veiled box(es) read bare and none needed no veil — ${took()}`,
                 );
             }
         } else {

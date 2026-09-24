@@ -2841,100 +2841,186 @@ textarea.paste-in {
 }
 
 /*
- * **Where Neo's rain is worn, the Activity sections stand on the look's own
- * ground** (the owner, 2026-09-24). The rows are text straight on the
- * stall's background — `.event-fold` is `background: none` and the sections
- * carry only the rail — and the rain is that background: three sheets of
- * drops drifting down it every 2.6 s, the brightest a cyan at 0.68 that
- * reads 2.6–2.9:1 under Neo's ink. Every line on the panel was crossed by a
- * drop within one drift; the contrast pass only saw it once it sampled the
- * rain at its brightest drop (`a-line-on-the-ground-reads-wherever-a-drop-
- * falls`, `PROBE-RULES.md`).
+ * **Where Neo's rain is worn, a line that does not read on it wears a veil
+ * that hugs it — and a line that reads wears nothing** (the owner, 2026-09-24
+ * evening, over the pictures of round 5's solid grounds: "Phần che đen hơi
+ * quá đà … nếu chữ vẫn đọc được thì không nền đen/trắng, nếu đọc không được
+ * thì nền đen/trắng mờ ôm sát chữ và có độ trong suốt đủ đạt ngưỡng").
  *
- * `var(--s-bg)` rather than the card surface: it is the ground every ink
- * and muted token was validated on (`legibleOn`), so the panel reads exactly
- * as it does with no rain worn — the list is a column of the look's own
- * night with the rain in the margins, not a card it never was. A longhand
- * `background-color`, so the rail `.events` draws with `background-image`
- * is untouched, and a mood that swaps the palette swaps this with it.
+ * The rain is the stall's own background: three sheets of drops drifting
+ * down it every 2.6 s, the brightest a cyan at 0.68, with the aurora's tint
+ * in front of it and its glows behind. Every ink Neo prints on the bare
+ * ground falls under 3:1 somewhere in that — the ink itself 1.95:1 at the
+ * worst — so every line standing on the bare ground is veiled, and nothing
+ * on a card or a sign is (the probe fails a veil the line does not need:
+ * "a ground where the text reads without one", `PROBE-RULES.md`).
+ *
+ * - **A veil is the look's own ground, translucent**: `var(--s-bg)` mixed
+ *   with `transparent` at one of the steps below, as a `background-color`
+ *   on the line's own box, with a 2px ring of the same by a shadow so the
+ *   glyphs do not touch its edge. No other ground under text is allowed in a
+ *   decoration's rules (`a-decoration-lays-no-opaque-ground-under-text`).
+ * - **It hugs**: a one-line box is only as wide as its text
+ *   (`width: fit-content`, centred where the line is centred); a paragraph's
+ *   veil is its text block. A box holding many lines — the Activity
+ *   sections, the notice, the vacant box, the first-stall checklist, the
+ *   footer — takes none: each of its lines has its own.
+ * - **A tint the look paints itself is kept as it paints it**: the notice
+ *   invite's pink wash and the Activity pill's muted tint on top of their
+ *   own veils (a step judged with the tint in it); the notice's gradient
+ *   and the Studio boxes' 4% tint under the veiled lines they hold.
+ * - **Each step is the least that reads**, per ink, against the lightest
+ *   ground the worn stall can paint anywhere — the flattened drop, the
+ *   aurora at tide 1 with every layer at its own brightest, the backdrop's
+ *   top band — every layer at its worst at once, which no single pixel
+ *   reaches, so a step holds wherever a line lands:
+ *   `a-rain-veil-is-the-least-that-reads` recomputes each from the art and
+ *   the palette and fails the day one could be a step lighter or no longer
+ *   reads. **`--rain-veil-dim` is over the owner's 60% cap** — the vacant
+ *   box's second line is Neo's dimmest ink (#5e7799) and needs 80%; stopped
+ *   and put to the owner (2026-09-24), shipped at its least on this branch.
+ *
+ * All scoped to a stall wearing the rain and never to the door's deck
+ * minis, which are pictures. Modern and Rural are untouched.
  */
-.stall.att-rainfall .activity-sec {
-    background-color: var(--s-bg);
+.stall.att-rainfall {
+    --rain-veil-text: 25%;
+    --rain-veil-notice: 30%;
+    --rain-veil-accent: 35%;
+    --rain-veil-muted: 55%;
+    --rain-veil-pill: 60%;
+    --rain-veil-invite: 60%;
+    --rain-veil-dim: 80%;
 }
 
-/*
- * And the 12px between the two sections (the body's 6px gap and the
- * section's own 6px margin) is painted the same ground by a shadow the
- * second one casts upward — the sticky sheet head's slab, §4 — so no strip
- * of rain runs across the panel between two lists that read as one.
- */
-.stall.att-rainfall .activity-sec + .activity-sec {
-    box-shadow: 0 -12px 0 0 var(--s-bg);
-}
-
-/*
- * **And every other line that stands on the bare ground** (the owner's
- * condition on decision 1, 2026-09-24: any groundless Neo text the rain
- * exposes gets the same ground, shown before merge). At the brightest drop
- * Neo's ink reads 2.84:1 over the bare ground and its muted 1.27:1, so a
- * line with no box under it is unreadable for part of every 2.6 s drift.
- * Found by sampling, not by list: every text node on every fixture screen
- * on Neo worn, at 390, 1280 and 1920, painted over the brightest drop
- * (`a-line-on-the-ground-reads-wherever-a-drop-falls`, and a scan kept in
- * the round's notes). Three shapes, all longhands so no border, rail or
- * image a region already draws is touched:
- *
- * - a REGION that is already a band or a box gets the look's ground: the
- *   brand strip, the footer, the section and shelf heads, the notice (its
- *   wash stays, over the ground), the sparse shop's box, the Activity
- *   notes' fold, the pinned-preference and share boxes (their 4% tint
- *   restated over the ground, since Neo writes it as the colour);
- * - a block that reads as a CARD gets the card surface: the first-stall
- *   checklist;
- * - a LINE on its own — a failure or empty sentence, a note, the quotes
- *   rail's title, the item face's back control and its pointer to the
- *   other rail — gets the ground with a 6px halo drawn by a shadow, so the
- *   line reads as a label and nothing moves.
- */
-.stall.att-rainfall :is(
+/* One line, only as wide as its text. */
+.stall.att-rainfall:not(.deck-stall)
+    :is(
         .orn,
-        .stall-foot,
-        .section-head,
-        .collection-head,
-        .notice,
-        .sparse-empty,
-        [data-role='activity-about']
+        .section-head > .section-title,
+        .pay-sec > .section-title,
+        .pay-sec > .fine,
+        .stall-body > .fine,
+        .stall-body > .mid-p,
+        .mid > .mid-t,
+        .mid > .mid-p,
+        .stall-foot .fine,
+        .activity-sec > .fine,
+        [data-role='activity-about'] > .fold-sum,
+        .activity-about .fine,
+        .event-kind,
+        .event-time,
+        .event-dt,
+        .event-dd,
+        .event-body > .fine,
+        .first-stall .steps li > span,
+        .first-stall > .fine,
+        .sparse-empty-t,
+        .sparse-empty-s,
+        .sw-plate:not(.sw-paying) .sw-cap
     ) {
-    background-color: var(--s-bg);
+    width: fit-content;
 }
 
-.stall.att-rainfall :is(.studio-browser, .share-ticket) {
-    background-color: color-mix(in srgb, var(--s-accent) 4%, var(--s-bg));
+/* …and centred where the line is centred. */
+.stall.att-rainfall:not(.deck-stall) :is(.orn, .mid > .mid-t, .mid > .mid-p, .sparse-empty-t, .sparse-empty-s) {
+    margin-inline: auto;
 }
 
-.stall.att-rainfall .first-stall {
-    background-color: var(--s-surface);
+/* The brand strip's own inline padding is 12px: a veil wants 2–4. */
+.stall.att-rainfall:not(.deck-stall) .orn {
+    padding-inline: 4px;
+}
+
+.stall.att-rainfall:not(.deck-stall)
+    :is(
+        .mid > .mid-t,
+        [data-role='activity-about'] > .fold-sum,
+        .event-kind,
+        .event-dd,
+        .sw-plate:not(.sw-paying) .sw-cap,
+        .item-face > .pay-pointer
+    ) {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent);
+}
+
+/* Not in the sign, where the wall carries the announcement on the sign's own ground. */
+.stall.att-rainfall:not(.deck-stall) .notice-text:not(.stall-sign .notice-text) {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-notice), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-notice), transparent);
+}
+
+.stall.att-rainfall:not(.deck-stall)
+    :is(
+        .orn,
+        .section-head > .section-title,
+        .pay-sec > .section-title,
+        .collection-name,
+        .item-back,
+        [data-role='list-first']
+    ) {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-accent), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-accent), transparent);
+}
+
+.stall.att-rainfall:not(.deck-stall)
+    :is(
+        .pay-sec > .fine,
+        .stall-body > .fine,
+        .stall-body > .mid-p,
+        .mid > .mid-p,
+        .collection-count,
+        .stall-foot .fine,
+        .activity-sec > .fine,
+        .activity-about .fine,
+        .event-time,
+        .event-dt,
+        .event-body > .fine,
+        .first-stall .steps li > i,
+        .first-stall .steps li > span,
+        .first-stall > .fine,
+        .studio-browser .fine,
+        .sparse-empty-t,
+        .sw-state,
+        .sw-fresh
+    ) {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-muted), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-muted), transparent);
+}
+
+.stall.att-rainfall:not(.deck-stall) .sparse-empty-s {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-dim), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-dim), transparent);
+}
+
+/*
+ * The Activity pill's own muted tint stays exactly as every look paints it,
+ * on top of its veil.
+ */
+.stall.att-rainfall:not(.deck-stall) .event-txid {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-pill), transparent);
+    background-image: linear-gradient(
+        color-mix(in srgb, var(--s-muted) 12%, transparent),
+        color-mix(in srgb, var(--s-muted) 12%, transparent)
+    );
 }
 
 /*
  * The notice invite a seller's own paste paints (the critic's fourth pass):
- * a button on the bare ground whose wash Neo writes as a 4% colour, 9% on
- * hover, so under the rain its words read 1.00:1. The same washes, over the
- * ground — hover included, because Neo restates it with the `background`
- * shorthand at (0,3,0), which this out-ranks.
+ * a button whose ground is Neo's pink wash, kept exactly as Neo paints it at
+ * rest, on top of its veil. **Its hover keeps the rest's wash** under the
+ * rain: Neo deepens it to 9%, and at 9% the invite's own ink needs a 65%
+ * veil — over the owner's 60% cap — where the border Neo brightens on hover
+ * still says the control is under the pointer. A choice made at the cap and
+ * put to the owner with the rest of the round (2026-09-24).
  */
-.stall.att-rainfall .notice-invite {
-    background-color: color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg));
-}
-
-.stall.att-rainfall .notice-invite:hover {
-    background-color: color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg));
-}
-
-.stall.att-rainfall
-    :is(.mid-t, .mid-p, .pay-sec > .fine, .pay-sec > .section-title, .stall-body > .fine, .item-back, .item-face > .pay-pointer) {
-    background-color: var(--s-bg);
-    box-shadow: 0 0 0 6px var(--s-bg);
+.stall.att-rainfall:not(.deck-stall) :is(.notice-invite, .notice-invite:hover) {
+    background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-invite), transparent);
+    background-image: linear-gradient(
+        color-mix(in srgb, var(--s-accent-2) 4%, transparent),
+        color-mix(in srgb, var(--s-accent-2) 4%, transparent)
+    );
 }
 
 .event-time {

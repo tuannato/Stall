@@ -34,7 +34,9 @@ import {
     attachmentsForTheme,
     type ShippedAttachment,
 } from '../domain/attachments';
-import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID } from '../domain/theme';
+import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID, decodeTheme } from '../domain/theme';
+import { leastVeil, over, readsAt, brightestDrop, type Rgb } from '../../layout/rainDrop';
+import { SERVED_SHEETS } from '../../scripts/sheet-roles.mjs';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -560,5 +562,264 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
                 `${row.label} paints a node and never says it cannot be pressed`,
             ).toBe(true);
         }
+    });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * Neo's rain and the veils that read on it (the owner, 2026-09-24 evening:
+ * "nếu chữ vẫn đọc được thì không nền đen/trắng, nếu đọc không được thì nền
+ * đen/trắng mờ ôm sát chữ và có độ trong suốt đủ đạt ngưỡng").
+ * ---------------------------------------------------------------------------
+ */
+const NEO_CSS = readFileSync(join(UI_DIR, 'theme-neo.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const RAIN_SHEETS = ['rain-near.svg', 'rain-mid.svg', 'rain-far.svg'].map((f) => readFileSync(join(UI_DIR, 'decor', f), 'utf8'));
+const rgbOf = (c: { r: number; g: number; b: number }): Rgb => [c.r, c.g, c.b];
+const hexRgb = (h: string): Rgb => [0, 2, 4].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as unknown as Rgb;
+
+/** The body of the one rule whose selector list is exactly `selector`. */
+function ruleBodyOf(css: string, selector: string): string {
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim());
+        if (selectors.includes(selector)) {
+            return m[2]!;
+        }
+    }
+    throw new Error(`no rule for ${selector}`);
+}
+
+/** A literal ink Neo's own sheet paints a line in. */
+function neoInk(selector: string): Rgb {
+    const m = /(?:^|;)\s*color:\s*#([0-9a-f]{6})\s*(?:;|$)/i.exec(ruleBodyOf(NEO_CSS, selector));
+    if (m === null) {
+        throw new Error(`${selector} states no literal ink`);
+    }
+    return hexRgb(m[1]!);
+}
+
+/**
+ * The lightest ground a line on the worn stall can stand on. Every layer at
+ * its worst AT ONCE — the drop flattened as the probe paints it
+ * (`brightestDrop`, the same derivation), the aurora at the tide the probe
+ * pins (1) with its glows at their centres and its tint at either corner and
+ * between, the backdrop's top band with a scanline on it — which no single
+ * pixel reaches, so a step that reads over every one of these reads wherever
+ * a line lands. With `underTint`, each again under the Studio boxes' own 4%
+ * tint, for a rule that veils a line inside one: the lightest wash the look
+ * paints under a veiled line.
+ */
+function rainGrounds(underTint = false): Rgb[] {
+    const neo = decodeTheme(NEO_CITY_THEME_ID);
+    const bg = rgbOf(neo.bg);
+    const accent = rgbOf(neo.accent);
+    const accent2 = rgbOf(neo.accentTwo);
+    const drop = brightestDrop(RAIN_SHEETS, bg);
+    if (drop === undefined) {
+        throw new Error('the rain art is not readable whole');
+    }
+    const backdrop = neo.backdrop ?? '';
+    const scan = /var\(--s-accent\) (\d+)%, transparent\)/.exec(backdrop);
+    const band = /var\(--s-accent\) (\d+)%, var\(--s-bg\)\)/.exec(backdrop);
+    if (scan === null || band === null) {
+        throw new Error("Neo's backdrop is no longer a band and a scanline: re-derive its brightest");
+    }
+    const bases = [bg, over(accent, Number(scan[1]) / 100, over(accent, Number(band[1]) / 100, bg))];
+    const hue = (name: string): Rgb => (name === 'accent' ? accent : accent2);
+    // The composite rule's four tide-driven layers, in the order it states
+    // them: the tint's two ends in front, then the two glows behind the rain.
+    const composite = ruleBodyOf(CSS, '.stall.att-rainfall.att-aurora');
+    const terms = [
+        ...composite.matchAll(/var\(--s-(accent(?:-2)?)\) calc\((\d+)% ([+-]) (\d+)% \* var\(--au-tide/g),
+    ].map((m) => ({ hue: hue(m[1]!), at1: (Number(m[2]) + (m[3] === '+' ? 1 : -1) * Number(m[4])) / 100 }));
+    if (terms.length !== 4) {
+        throw new Error(`the aurora composite has ${terms.length} tide-driven layers, not four`);
+    }
+    const [tintA, tintB, glowA, glowB] = terms as [(typeof terms)[0], (typeof terms)[0], (typeof terms)[0], (typeof terms)[0]];
+    const grounds: Rgb[] = [];
+    for (const base of bases) {
+        grounds.push(over(drop.rgb, drop.alpha, base));
+        const lit = over(drop.rgb, drop.alpha, over(glowA.hue, glowA.at1, over(glowB.hue, glowB.at1, base)));
+        grounds.push(lit, over(tintA.hue, tintA.at1, lit), over(tintB.hue, tintB.at1, lit));
+    }
+    const box = /background:\s*rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(ruleBodyOf(NEO_CSS, '.t-neo .studio-browser'));
+    if (box === null) {
+        throw new Error("the Studio box's tint is no longer a colour");
+    }
+    const tint: Rgb = [Number(box[1]), Number(box[2]), Number(box[3])];
+    return underTint ? [...grounds, ...grounds.map((g) => over(tint, Number(box[4]), g))] : grounds;
+}
+
+/**
+ * Which inks each step serves: the test's statement, checked against the
+ * sheet by the probe (a line veiled at a step its ink does not clear reads
+ * under 3:1 at its own pixels).
+ */
+function veilInks(): Record<string, Rgb[]> {
+    const neo = decodeTheme(NEO_CITY_THEME_ID);
+    return {
+        text: [rgbOf(neo.text)],
+        notice: [neoInk('.t-neo .notice-text')],
+        accent: [rgbOf(neo.accent), neoInk('.t-neo .collection-name')],
+        muted: [rgbOf(neo.muted)],
+        pill: [rgbOf(neo.muted)],
+        invite: [neoInk('.t-neo .notice-invite'), neoInk('.t-neo .ghost-chip')],
+        dim: [neoInk('.t-neo .sparse-empty-s')],
+    };
+}
+
+/**
+ * A step over the owner's 60% cap stands only with its reason written here —
+ * the builder stops on it and the owner decides (the round 6 brief).
+ */
+const ABOVE_THE_CAP: Readonly<Record<string, string>> = {
+    dim: "The vacant box's second line is Neo's dimmest ink (#5e7799, 4.41:1 on the bare night) and reads only at 80%. Stopped and put to the owner on 2026-09-24: accept it, lift the line's ink, or give the box back a ground.",
+};
+
+describe('a-rain-veil-is-the-least-that-reads', () => {
+    const rainRule = [...CSS.matchAll(/\.stall\.att-rainfall\s*\{([^{}]*)\}/g)].map((m) => m[1]!).join(';');
+    const steps = new Map(
+        [...rainRule.matchAll(/--rain-veil-([a-z]+):\s*(\d+)%/g)].map((m) => [m[1]!, Number(m[2])] as const),
+    );
+    const neo = decodeTheme(NEO_CITY_THEME_ID);
+    const bg = rgbOf(neo.bg);
+    const tokens: Record<string, Rgb> = {
+        bg,
+        muted: rgbOf(neo.muted),
+        accent: rgbOf(neo.accent),
+        'accent-2': rgbOf(neo.accentTwo),
+    };
+    /*
+     * Every veil the sheet lays, rule by rule: the step it names, and the
+     * tint the rule keeps on top of it when the look paints one there.
+     */
+    const uses = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => m[1]!.includes('.att-rainfall'))
+        .flatMap((m) => {
+            const body = m[2]!;
+            const veil = /background-color:\s*color-mix\(\s*in srgb,\s*var\(--s-bg\)\s+var\(--rain-veil-([a-z]+)\),\s*transparent\s*\)/.exec(body);
+            if (veil === null) {
+                return [];
+            }
+            const tint = /background-image:\s*linear-gradient\(\s*color-mix\(\s*in srgb,\s*var\(--s-([a-z0-9-]+)\)\s+(\d+)%,\s*transparent\s*\)/.exec(body);
+            return [
+                {
+                    name: veil[1]!,
+                    tint: tint === null ? undefined : { rgb: tokens[tint[1]!]!, alpha: Number(tint[2]) / 100 },
+                    source: m[1]!.replace(/\s+/g, ' ').trim(),
+                    grounds: rainGrounds(m[1]!.includes('.studio-browser')),
+                },
+            ];
+        });
+    const grounds = rainGrounds();
+    const inks = veilInks();
+
+    it('states a step for every veil the sheet lays, and lays every step it states', () => {
+        expect(steps.size).toBeGreaterThan(0);
+        expect(new Set(uses.map((u) => u.name))).toEqual(new Set(steps.keys()));
+        expect(new Set(Object.keys(inks))).toEqual(new Set(steps.keys()));
+    });
+
+    it('each step reads over the lightest ground the worn stall can paint, and a step lighter does not', () => {
+        for (const [name, pct] of steps) {
+            const mine = uses.filter((u) => u.name === name);
+            for (const use of mine) {
+                expect(readsAt(inks[name]!, bg, use.grounds, pct, use.tint), `${name} at ${pct}% on ${use.source}`).toBe(true);
+            }
+            if (pct > 0) {
+                expect(
+                    mine.every((use) => readsAt(inks[name]!, bg, use.grounds, pct - 5, use.tint)),
+                    `${name} would read at ${pct - 5}%: the veil is heavier than the floor asks`,
+                ).toBe(false);
+            }
+            // The least, exactly: no usage needs more than stated.
+            const least = Math.max(...mine.map((use) => leastVeil(inks[name]!, bg, use.grounds, use.tint) ?? 101));
+            expect(least, `${name}: least ${least}`).toBe(pct);
+        }
+    });
+
+    it('no step is over the owner’s 60% cap without its reason', () => {
+        for (const [name, pct] of steps) {
+            if (pct > 60) {
+                expect(ABOVE_THE_CAP[name], `--rain-veil-${name} is ${pct}%`).toBeDefined();
+            }
+        }
+        for (const name of Object.keys(ABOVE_THE_CAP)) {
+            expect(steps.get(name) ?? 0, `${name} is listed over the cap and is not`).toBeGreaterThan(60);
+        }
+    });
+
+    it('a veil is a ground the text needs: every ink on the bare rain reads under the floor', () => {
+        // The other half of "no ground where the text reads": the probe
+        // fails a veiled line that reads without its veil at its own pixels;
+        // this holds the reason every step is above zero at all.
+        for (const [name, list] of Object.entries(inks)) {
+            expect(readsAt(list, bg, grounds, 0), name).toBe(false);
+        }
+    });
+});
+
+describe('a-decoration-lays-no-opaque-ground-under-text', () => {
+    /**
+     * The other half of the owner's rule (2026-09-24 evening), read from
+     * source: a rule scoped to a decoration never lays the look's own ground
+     * or its card surface under anything — round 5's answer to Neo's rain
+     * was a solid `var(--s-bg)` band under every line on the bare ground, and
+     * the owner's word for it was "quá đà". Under a decoration, a ground is a
+     * veil — `color-mix(in srgb, var(--s-bg) var(--rain-veil-…), transparent)`,
+     * at a step `a-rain-veil-is-the-least-that-reads` holds to the least that
+     * reads — or nothing. Every served sheet, the kit's included: a creator's
+     * decoration is held to it too. What a veil may not be (laid where the
+     * line reads without it) is the probe's to see, at the line's own pixels.
+     */
+    const VEIL = /color-mix\(\s*in srgb,\s*var\(--s-bg\)\s+var\(--rain-veil-[a-z]+\),\s*transparent\s*\)/g;
+    const GROUND = /var\(--s-(?:bg|surface)\)/;
+    const REPO_ROOT = join(UI_DIR, '..', '..');
+
+    /** Every declaration in a decoration-scoped rule that lays a ground from a look token other than as a veil. */
+    function offences(css: string): string[] {
+        const out: string[] = [];
+        for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            const selector = m[1]!.replace(/\s+/g, ' ').trim();
+            if (!/\.att-[a-z0-9-]/.test(selector)) {
+                continue;
+            }
+            for (const declaration of m[2]!.split(';')) {
+                const at = declaration.indexOf(':');
+                if (at < 0) continue;
+                const prop = declaration.slice(0, at).trim();
+                const value = declaration.slice(at + 1);
+                if (!/^(?:background|background-color|box-shadow|--[a-z0-9-]+)$/.test(prop)) {
+                    continue;
+                }
+                if (GROUND.test(value.replace(VEIL, ''))) {
+                    out.push(`${selector} { ${prop}: ${value.replace(/\s+/g, ' ').trim()} }`);
+                }
+            }
+        }
+        return out;
+    }
+
+    it('lays a veil or nothing, in every served sheet', () => {
+        for (const sheet of SERVED_SHEETS) {
+            expect(offences(readFileSync(join(REPO_ROOT, sheet.path), 'utf8')), sheet.path).toEqual([]);
+        }
+    });
+
+    it('refuses round 5’s grounds and anything that is not the veil’s own shape', () => {
+        for (const planted of [
+            '.stall.att-rainfall .activity-sec { background-color: var(--s-bg); }',
+            '.stall.att-rainfall .first-stall { background-color: var(--s-surface); }',
+            '.stall.att-rainfall .mid-t { box-shadow: 0 0 0 6px var(--s-bg); }',
+            '.stall.att-rainfall .notice { background: color-mix(in srgb, var(--s-accent) 4%, var(--s-bg)); }',
+            '.stall.att-rainfall .mid-p { background-color: color-mix(in srgb, var(--s-bg) 90%, transparent); }',
+            '@media (min-width: 680px) { .stall.att-aurora .orn { --ground: var(--s-bg); } }',
+        ]) {
+            expect(offences(planted), planted).toHaveLength(1);
+        }
+        expect(
+            offences(
+                '.stall.att-rainfall .mid-t { background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent); }',
+            ),
+        ).toEqual([]);
     });
 });
