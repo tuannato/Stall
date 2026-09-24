@@ -2032,8 +2032,9 @@ const CONTRAST_TEXT = [
      * and 1.00:1 is not a colour this component can produce. Pressed it is
      * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
      * `--s-accent` over the button's `--s-surface`. **Measured across every
-     * shipped look and mood, the worst of those pairs is 4.05:1** (Rural
-     * under Sun-faded) against this pass's floor of 3 — not `legibleOn`,
+     * shipped look and mood, the worst of those pairs is 5.17:1** (Modern;
+     * Rural under Sun-faded was 4.05 until its inks went darker on
+     * 2026-09-25 and is 5.65 now) against this pass's floor of 3 — not `legibleOn`,
      * which arbitrates accent against `--s-bg` and never against
      * `--s-surface`; the pair is held by the palettes' own numbers. Both
      * sides are tokens declared in one rule, which

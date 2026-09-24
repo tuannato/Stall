@@ -309,12 +309,28 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
          * channels off the base — with the muted ink darkened to keep its
          * 4.5:1 on the brighter sheet.
          */
+        /*
+         * Accent and muted darkened 2026-09-25, the owner's (c) for Rural's
+         * confetti: the scraps are drawn art a mood cannot reach, and this
+         * palette's accent #ac6640 read 2.23:1 over the mid tile's sage fold
+         * (#b0bca2), its muted #766854 2.72 — six scrap-and-ink pairs under
+         * the floor, all of them this mood's. The art stays as drawn; the
+         * inks moved instead: accent #8b5334 and muted #6c5f4d, each the
+         * same hue a step darker, now 3.12:1 over that fold (the worst
+         * scrap-and-ink pair Rural paints, bare or faded), 6.15 over the
+         * page and 5.65–5.66 over the surface. The sunburst's ray at full
+         * tint over a weave crossing goes 3.07 → 4.25 against the accent.
+         * The cost the owner saw: everything this mood paints in its accent
+         * is a darker brown. `accentTwo` is unchanged. Tests:
+         * `every-confetti-scrap-clears-three-to-one-under-every-ground-ink`,
+         * `every-sunburst-ray-clears-three-to-one-under-every-ground-ink`.
+         */
         palette: {
             bg: rgb(255, 254, 250),
             surface: rgb(247, 244, 238),
             text: rgb(96, 84, 66),
-            muted: rgb(118, 104, 84),
-            accent: rgb(172, 102, 64),
+            muted: rgb(108, 95, 77),
+            accent: rgb(139, 83, 52),
             accentTwo: rgb(118, 104, 84),
         },
     },

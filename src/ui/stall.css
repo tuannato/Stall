@@ -1208,11 +1208,18 @@ body {
  *
  * **What the palette had to obey anyway.** A root-painted decoration is a
  * ground the look's ink lands on, and the wall's payment plate sets text
- * with no ground of its own. Every scrap colour clears 3:1 against every ink
- * that can sit over it — Rural's base muted and text, and Sun-faded's:
- * paper 5.07, pale gold 3.70, sage 3.28, pale sage 3.81. The reference's own
- * saturated rust (2.24) and deep green (2.63) cannot be used at all on a
- * light look, which is the finding and not a compromise.
+ * with no ground of its own. Every scrap colour — the four papers and their
+ * four folds — clears 3:1 against every ink Rural can set on bare ground
+ * (text, muted, accent and danger, as painted, bare and under every Rural
+ * mood): the worst pair is the mid tile's sage fold #b0bca2, 3.15:1 under
+ * the bare accent and 3.12:1 under Sun-faded's. Held by
+ * `every-confetti-scrap-clears-three-to-one-under-every-ground-ink`, which
+ * reads these files' fills. (This paragraph used to claim the same thing on
+ * figures for the four body tones against Sun-faded's muted alone; the folds
+ * against that mood's accent read 2.23–2.69, and the owner's answer,
+ * 2026-09-25, darkened that mood's accent and muted rather than the paper.)
+ * The reference's own saturated rust (2.24) and deep green (2.63) cannot be
+ * used at all on a light look, which is the finding and not a compromise.
  *
  * Three planes, each travelling its own tile so the near paper falls fastest,
  * every number through `--s-decor-scale` so the 1920 wall gets scraps rather

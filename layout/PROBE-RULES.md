@@ -1299,7 +1299,8 @@ look-and-decoration combinations. **1.00:1 is not a colour this component
 can produce**: pressed it is `--s-surface` ink on an opaque `--s-accent`,
 unpressed it inherits `--s-accent` over the button's own `--s-surface`, and
 the worst of those pairs measured across every shipped look and mood is
-**4.05:1** (Rural under Sun-faded) against this pass's floor of 3. So the
+**4.05:1** (Rural under Sun-faded) against this pass's floor of 3 — 5.17:1
+(Modern) since Sun-faded's inks went darker on 2026-09-25 (5.65 there now). So the
 pass was not measuring the pill, and no real contrast problem is hidden by
 taking it off the list — the label beside it stays measured here.
 
