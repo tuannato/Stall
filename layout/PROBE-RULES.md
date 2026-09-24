@@ -2750,9 +2750,10 @@ glyphs, never over its box:
   two-pixel set, all of the one-pixel set. The worst ring pixel of the
   blanked capture against the line's ink must clear 3:1 — every one, no
   percentile;
-- a line whose mask holds fewer than `RING_MASK_PER_CHAR` (3) pixels a
-  letter or digit, or none, fails as "no ring to read" (punctuation is held
-  to one pixel: a lone middle dot is two);
+- a line whose mask holds fewer than `RING_MASK_PER_CHAR` (10 since round
+  9; 3 before) pixels a letter or digit, or none, fails as "no ring to
+  read" (punctuation is held to one pixel: a lone middle dot is two), and
+  one whose solid ring holds no pixel fails as "no ring around them";
 - a failing ring is read again on a fresh pair of captures before it is
   believed, sharing the box read's one re-shot per job;
 - every other target keeps the box read.
@@ -2883,6 +2884,51 @@ rules, and a hurried partial version inside this batch would be a weaker
 guard.
 Under the rain the first-stall link inherits its line's outline and is
 read in its ring, and the muted lift it wore for one round is gone.
+
+**Three guards closed** (round 9, the critic's eighth pass, item 7).
+
+- **No other mark under text on a decoration**
+  (`an-outline-is-the-only-mark-under-text-on-a-decoration`, static,
+  `marksUnderText`): in a rule scoped to a decoration, or a keyframe one
+  runs, a `text-shadow` is the outline (every part of it, custom
+  properties substituted, in `var(--s-bg)`) or a glow listed with its
+  reason in `DECORATION_GLOW` — Neo's heading glow after the outline, the
+  crest's glow on the seller's name and its failing lamp's two frames; and
+  `-webkit-text-stroke` (a width alone strokes in the text's colour),
+  `paint-order` other than `normal`, a decoration line (`underline`,
+  `overline`, `line-through`) and `text-decoration-thickness` are refused.
+  `0 0 20px #000` twice passed every guard until then: it is in no
+  ground's colour, so the outline test never looked, and `text-shadow` is
+  not a ground property. Each glow listed must be one a served sheet still
+  sets. **Proved red**: the test's eleven plants (a dark cloud, the outline
+  with a cloud beside it, the listed glow on a line it was not listed for,
+  a cloud through a custom property and through a keyframe, two strokes, a
+  paint order, three decoration slabs); and planted in the served sheets —
+  `0 0 20px #000` twice on the footer's lines in `stall.css`, a stroke, a
+  paint order and a 0.9em underline in `theme-neo.css` — red, where the
+  round-8 test passed all four.
+- **`RING_MASK_PER_CHAR` is 10** (from 3): the least any outlined target
+  read is 13.7 glyph pixels a character, and 3 let a ring round a sliver
+  pass. **Proved red**: the footer's `.fine` painted at 62% alpha read
+  9.5 and 9.7 glyph pixels a character (362 for 38 letters, 786 for 81) —
+  over 3, under 10 — and "shows no ring to read"; at 55% the shelf counts
+  read 2.1–2.75 and fail either way.
+- **The ring is counted per line** (`ringRead`'s `bare`): a pixel outside
+  the target's ring box is dropped, so a line whose whole ring fell outside
+  it was carried by its neighbours' ring. A line whose glyphs show and
+  whose solid ring holds no pixel fails, "shows N glyph pixel(s) and no
+  ring around them". **Proved red**: the ring box cut to 22px tall in the
+  probe — every line under the first loses its ring — 83 lines on 11
+  kinds in the same planted run (the Wearing line, `p.fine.pay-lede`,
+  `p.mid-p`, the Activity fields, the checklist, `span.sw-cap`, …). Not observed, by mechanism: the round-8 runner fails
+  only a target with no ring pixel at all, and each of those kept its
+  first line's.
+
+Not closed here, stated: `paintsOpaqueGround` still asks whether the rain
+shows through a ground, not whether the outline shows on it at rest, and
+does not see a `url()` ground, a pseudo-element's or a non-ancestor's (the
+critic's item 7, its last clause, which the pictures in
+`visible-batch-shots/13-outline-options/` answer for the owner).
 
 **What the pictures show** (round 8, `visible-batch-shots/11-glyph-outline/`,
 Neo worn at one frozen instant, `main` beside this round at 390 and 1280,

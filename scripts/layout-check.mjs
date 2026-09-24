@@ -360,6 +360,11 @@ const RAIN_REQUIRED = [
  *   letter or digit it shows, or none at all, fails too: a ring around
  *   nothing proves nothing ("no ring to read"). Punctuation is held to one
  *   pixel, because a lone middle dot is two.
+ * - and a line whose glyphs are there but whose ring holds no pixel at all
+ *   fails as well ("no ring around its glyphs"): the ring is counted per
+ *   line, because a pixel outside the target's ring box is dropped, and a
+ *   line whose whole ring fell outside it was carried by its neighbours'
+ *   (the critic's eighth pass, item 7).
  *
  * Every other target keeps the box read. A failing ring is read again on a
  * fresh pair of captures before it is believed, like a failing box.
@@ -372,7 +377,14 @@ const RING_MASK_ALPHA = 0.5;
  */
 const outlinedTargetsSeen = new Set();
 
-const RING_MASK_PER_CHAR = 3;
+/**
+ * Glyph pixels a line's mask must hold per letter or digit. The least any
+ * outlined target read in round 8 was 13.7 a character (the pass prints
+ * it: "at least N glyph pixels a character"); 10 sits under that with room
+ * for a thinner face at the 11px floor, and refuses a ring around a sliver
+ * that 3 let through (the critic's eighth pass, item 7).
+ */
+const RING_MASK_PER_CHAR = 10;
 
 /** A computed colour as rgb and alpha: `rgb()`, `rgba()` or `color(srgb …)`. */
 function rgbaOf(value) {
@@ -386,7 +398,8 @@ function rgbaOf(value) {
 /**
  * One outlined target read in the ring around its glyphs: the worst ring
  * pixel's contrast against its line's ink, how many ring pixels were read,
- * and the lines that showed too few glyph pixels for their characters.
+ * the lines that showed too few glyph pixels for their characters, and the
+ * lines whose glyphs showed and whose ring held no pixel.
  */
 function ringRead(blank, shown, target) {
     const W = blank.width;
@@ -408,6 +421,7 @@ function ringRead(blank, shown, target) {
     let maskPx = 0;
     let chars = 0;
     const thin = [];
+    const bare = [];
     let why;
     for (const line of target.lines ?? []) {
         const [ir, ig, ib, ia] = rgbaOf(line.ink);
@@ -455,6 +469,9 @@ function ringRead(blank, shown, target) {
         // both reach is read as solid: the outline covers it whole.
         const solid = ([dx, dy]) => target.ring === 1 || Math.max(Math.abs(dx), Math.abs(dy)) < target.ring;
         const offsets = [...target.offsets.filter(solid), ...target.offsets.filter((o) => !solid(o))];
+        // This line's own solid ring, counted whether or not a line before
+        // it reached the same pixel: a line with none is refused below.
+        const lineRing = new Set();
         for (const [dx, dy] of offsets) {
             const inRim = !solid([dx, dy]);
             for (let k = 0; k < held.length; k += 2) {
@@ -462,6 +479,7 @@ function ringRead(blank, shown, target) {
                 const y = held[k + 1] + dy;
                 if (x < rx0 || x > rx1 || y < ry0 || y > ry1 || inMask(x, y) || inIcon(x, y)) continue;
                 const key = y * W + x;
+                if (!inRim) lineRing.add(key);
                 if (seen.has(key)) continue;
                 seen.add(key);
                 const i = key * bpp;
@@ -478,8 +496,11 @@ function ringRead(blank, shown, target) {
                 }
             }
         }
+        if (held.length > 0 && lineRing.size === 0) {
+            bare.push({ ...line, mask: held.length / 2 });
+        }
     }
-    return { worst, worstRim, ringPx, rimPx, maskPx, chars, thin, why };
+    return { worst, worstRim, ringPx, rimPx, maskPx, chars, thin, bare, why };
 }
 
 /**
@@ -1693,7 +1714,7 @@ try {
                         };
                         const readAll = (shown) =>
                             targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
-                        const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0;
+                        const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0 || r.bare.length > 0;
                         let pair = await shownPair();
                         let results = pair.why.length === 0 ? readAll(pair.shot) : [];
                         if (pair.why.length === 0 && results.some(bad) && !retried) {
@@ -1740,6 +1761,8 @@ try {
                                 rimPx: r.rimPx,
                                 rim: dumpValue(r.worstRim),
                                 maskPx: r.maskPx,
+                                chars: r.chars,
+                                bareLines: r.bare.length,
                             });
                             const at = `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
                             if (r.ringPx === 0 || r.thin.length > 0) {
@@ -1749,6 +1772,12 @@ try {
                                         (line === undefined
                                             ? ''
                                             : ` — a line of ${line.chars} letter(s) at ${Math.round(line.x)},${Math.round(line.y)} showed ${line.mask} glyph pixel(s)`),
+                                );
+                            } else if (r.bare.length > 0) {
+                                const line = r.bare[0];
+                                dim.push(
+                                    `${at} wears the ${t.ring}px outline and a line of ${line.chars} letter(s) at ` +
+                                        `${Math.round(line.x)},${Math.round(line.y)} shows ${line.mask} glyph pixel(s) and no ring around them`,
                                 );
                             } else if (r.worst < PIXEL_CONTRAST_FLOOR) {
                                 dim.push(

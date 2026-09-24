@@ -813,8 +813,11 @@ describe('a-decoration-lays-no-ground-under-text', () => {
      * each entry with its reason. What a line over a decoration may do
      * instead — an ink lifted, an outline hugging the strokes — is
      * `an-outline-is-the-only-mark-under-text-on-a-decoration`'s, below, and
-     * `text-shadow` is not on this list for that reason; a custom property
-     * is judged where it is read (`customUses`).
+     * `text-shadow` is not on this list for that reason: every other mark a
+     * decoration may put under a glyph — a shadow that is not the outline, a
+     * stroke, a paint order, a decoration line — is refused there
+     * (`marksUnderText`, the critic's eighth pass, item 7). A custom
+     * property is judged where it is read (`customUses`).
      */
     it('lays none in any served sheet', () => {
         for (const sheet of SERVED_SHEETS) {
@@ -1019,12 +1022,161 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
     return out;
 }
 
+/**
+ * The text shadows a decoration-scoped rule may set besides the outline,
+ * keyed `selector | the shadows left once the outline's are taken out`, each
+ * with its reason. Anything else a decoration puts under a glyph — a dark
+ * cloud (`0 0 20px #000` twice passed every guard until the critic's eighth
+ * pass, item 7), a stroke, a paint order that lays one, a decoration line
+ * thickened into a slab — is refused (`marksUnderText`).
+ */
+const DECORATION_GLOW: Readonly<Record<string, string>> = {
+    '.stall.att-rainfall:not(.deck-stall) :is(.section-title, .collection-name) | 0 0 12px rgba(44, 233, 224, 0.5)':
+        'Neo’s own heading glow (`.t-neo .section-title`), restated after the outline so the outline does not erase it: cyan, blurred, lighter than the ground, and outside the ring by construction',
+    '.stall.att-hum .stall-name | 0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)), 0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent), 0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent), 0 2px 18px color-mix(in srgb, var(--s-accent-2) 32%, transparent)':
+        'the crest’s own art (round 13): a neon glow on the seller’s name, in the accents, on the sign’s own panel — the decoration is this shadow',
+    '.stall.att-hum .sign-lamp | 0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)), 0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent), 0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent)':
+        'the failing lamp’s lit frames (`att-hum-gutter`): the crest’s glow on one grapheme',
+    '.stall.att-hum .sign-lamp | 0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent), 0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent)':
+        'the failing lamp’s dim frames (`att-hum-gutter`): the glow cut, the letter still lit',
+};
+
+/**
+ * The shadows in `value` that are not the outline's, as written: a part is
+ * the outline's when everything it can expand to is shadows in `--s-bg`
+ * (whose shape `outlineOffences` holds), so a custom property hiding
+ * anything else stays in the answer under its own name.
+ */
+function glowOf(value: string, defs: Map<string, string[]>): string {
+    const inGround = (part: string): boolean =>
+        expansions(part, defs).every((one) => topLevel(one).every((shadow) => /var\(--s-bg\)/.test(shadow)));
+    return topLevel(value)
+        .filter((part) => !inGround(part))
+        .join(', ');
+}
+
+/** A decoration line: underline, overline or a strike. */
+const DRAWS_A_LINE = /\b(?:underline|overline|line-through)\b/;
+
+/**
+ * Every mark under text in `css` that a decoration-scoped rule sets — in the
+ * rule, or through a keyframe it runs — other than the outline's shadows
+ * (`outlineOffences` holds their shape) and the listed glows: a `text-shadow`
+ * with anything else in it, a text stroke, a `paint-order` other than
+ * `normal`, and a decoration line or its thickness.
+ */
+function marksUnderText(css: string, defs: Map<string, string[]> = customProperties(css)): string[] {
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const frames = keyframesIn(clean);
+    const out: string[] = [];
+    for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim());
+        if (!selectors.some((sel) => DECORATION_SCOPED.test(sel))) continue;
+        const key = selectors.join(', ');
+        const own = declarationsOf(m[2]!);
+        const run = own
+            .filter((d) => d.prop === 'animation' || d.prop === 'animation-name')
+            .flatMap((d) => d.value.split(','))
+            .flatMap((one) => one.trim().split(/\s+/))
+            .filter((word) => frames.has(word))
+            .flatMap((name) => declarationsOf(frames.get(name)!.replace(/[^{}]*\{|\}/g, ';')));
+        for (const d of [...own, ...run]) {
+            const value = d.value.replace(/\s*!important\s*$/i, '').replace(/\s+/g, ' ').trim();
+            const at = `${key} { ${d.prop}: ${value.slice(0, 80)} }`;
+            if (d.prop === 'text-shadow') {
+                if (!paints(value, d.prop, defs)) continue;
+                const rest = glowOf(value, defs);
+                if (rest !== '' && DECORATION_GLOW[`${key} | ${rest}`] === undefined) {
+                    out.push(`${at}: a shadow under text that is neither the outline nor a listed glow`);
+                }
+            } else if (/^(?:-webkit-)?text-stroke(?:-[a-z]+)?$/.test(d.prop)) {
+                // A width alone strokes in the text's own colour.
+                if (!/^(?:0(?:px)?|none|initial|unset|transparent)(?:\s|$)/.test(value) && d.prop !== '-webkit-text-stroke-color') {
+                    out.push(`${at}: a stroke under text`);
+                }
+            } else if (d.prop === 'paint-order') {
+                if (value !== 'normal' && value !== 'initial' && value !== 'unset') out.push(`${at}: a paint order that lays a stroke`);
+            } else if (d.prop === 'text-decoration' || d.prop === 'text-decoration-line') {
+                if (DRAWS_A_LINE.test(value)) out.push(`${at}: a decoration line under text`);
+            } else if (d.prop === 'text-decoration-thickness') {
+                if (!/^(?:auto|from-font|initial|unset)$/.test(value)) out.push(`${at}: a decoration line thickened into a slab`);
+            }
+        }
+    }
+    return out;
+}
+
 describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
     it('holds every served sheet to the outline’s shape', () => {
         for (const sheet of SERVED_SHEETS) {
             const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
             expect(outlineOffences(css), sheet.path).toEqual([]);
         }
+    });
+
+    it('lets no other mark under text on a decoration, in any served sheet, and lists every glow it lets', () => {
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+            expect(marksUnderText(css), sheet.path).toEqual([]);
+        }
+        // Every listed glow is a rule a served sheet still sets.
+        const seen = new Set<string>();
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+            const defs = customProperties('');
+            const frames = keyframesIn(css);
+            for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+                const key = topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim()).join(', ');
+                const own = declarationsOf(m[2]!);
+                const run = own
+                    .filter((d) => d.prop === 'animation')
+                    .flatMap((d) => d.value.split(/\s+/))
+                    .filter((word) => frames.has(word))
+                    .flatMap((name) => declarationsOf(frames.get(name)!.replace(/[^{}]*\{|\}/g, ';')));
+                for (const d of [...own, ...run].filter((decl) => decl.prop === 'text-shadow')) {
+                    seen.add(`${key} | ${glowOf(d.value.replace(/\s+/g, ' ').trim(), defs)}`);
+                }
+            }
+        }
+        expect(Object.keys(DECORATION_GLOW).filter((key) => !seen.has(key))).toEqual([]);
+    });
+
+    it('refuses a dark cloud, a stroke, a paint order and a decoration slab under text on a decoration', () => {
+        for (const planted of [
+            // The critic's eighth pass, item 7: a shadow in no ground's colour.
+            '.stall.att-rainfall .fine { text-shadow: 0 0 20px #000, 0 0 20px #000; }',
+            // The outline with a dark cloud beside it.
+            '.stall.att-rainfall .fine { text-shadow: var(--rain-outline-1), 0 0 8px rgba(0, 0, 0, 0.9); }',
+            // The listed glow on a line it was not listed for.
+            '.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }',
+            // Through a custom property and through a keyframe.
+            '.x { --wk-cloud: 0 0 6px black; } .stall.att-rainfall .fine { text-shadow: var(--wk-cloud); }',
+            '@keyframes wk-c { to { text-shadow: 0 0 4px #111; } } .stall.att-rainfall .fine { animation: wk-c 1s; }',
+            // A stroke, both spellings, and one handed through a var.
+            '.stall.att-rainfall .fine { -webkit-text-stroke: 3px #05060d; }',
+            '.stall.att-rainfall .fine { -webkit-text-stroke-width: 2px; }',
+            '.stall.att-rainfall .fine { paint-order: stroke fill; }',
+            // A decoration line thickened into a slab under the words.
+            '.stall.att-rainfall .fine { text-decoration: underline 1em #05060d; }',
+            '.stall.att-rainfall .fine { text-decoration-line: line-through; }',
+            '.stall.att-rainfall .fine { text-decoration-thickness: 0.9em; }',
+        ]) {
+            expect(marksUnderText(planted), planted).not.toEqual([]);
+        }
+        // The outline alone, the listed glow on its own line, and nothing at all pass.
+        expect(marksUnderText('.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2); }')).toEqual([]);
+        expect(
+            marksUnderText(
+                '.stall.att-rainfall:not(.deck-stall) :is(.section-title, .collection-name) { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }',
+            ),
+        ).toEqual([]);
+        expect(
+            marksUnderText(
+                '.stall.att-rainfall .fine { text-shadow: none; -webkit-text-stroke: 0; paint-order: normal; text-decoration: none; text-decoration-thickness: auto; }',
+            ),
+        ).toEqual([]);
+        // Outside a decoration, not this test's: a look's own glow.
+        expect(marksUnderText('.t-neo .x { text-shadow: 0 0 20px #000; }')).toEqual([]);
     });
 
     it('states the two sets once, on the rain, as the probe reads them', () => {
