@@ -4,8 +4,11 @@
  * shapes a shot can take are built here pixel by pixel.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
-import { NOISE_PX, classify, diffMap, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, pageIsSpent, summarize } from './looks-diff-lib.mjs';
 
 /** A 10×10 RGBA frame, grey, with `paint` pixels set to red. */
 function frame(paint = []) {
@@ -138,5 +141,37 @@ describe('looks-diff-says-what-the-run-proves', () => {
             { expected: ['unbuyable'], compared },
         );
         assert.equal(out.code, 2);
+    });
+});
+
+describe('a-page-is-renewed-before-its-renderer-gives-out', () => {
+    /**
+     * The bound is only worth anything if the runner asks it: a test of the
+     * constant alone stays green with `load` never calling it (the critic,
+     * 2026-09-24). So the runner's own `load` is read — before it navigates,
+     * it must ask `pageIsSpent(side.loads)`, and when that answers yes close
+     * the page and open another; and it must count the load it makes.
+     */
+    it('is asked by the runner before every load', () => {
+        const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'looks-diff.mjs'), 'utf8');
+        const start = source.indexOf('const load = async (side');
+        assert.ok(start > -1, 'looks-diff.mjs has its load');
+        const body = source.slice(start, source.indexOf('Page.navigate', start));
+        assert.match(body, /if \(pageIsSpent\(side\.loads\)\) \{\s*await closePage\(side\);\s*await openPage\(side\);/);
+        assert.match(body, /side\.loads \+= 1;/);
+    });
+
+    /**
+     * One page reloading the showroom kept ~2 documents alive per load and
+     * its renderer crashed or stopped answering at load 131, 251 and 251 in
+     * three measured runs (2026-09-24). The page is renewed well before the
+     * earliest of those, and not so often that a run pays for it.
+     */
+    it('renews a page at 50 loads, under the earliest crash measured', () => {
+        assert.equal(LOADS_PER_PAGE, 50);
+        assert.ok(LOADS_PER_PAGE < 131);
+        assert.equal(pageIsSpent(0), false);
+        assert.equal(pageIsSpent(LOADS_PER_PAGE - 1), false);
+        assert.equal(pageIsSpent(LOADS_PER_PAGE), true);
     });
 });

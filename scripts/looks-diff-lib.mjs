@@ -18,6 +18,24 @@
  */
 export const NOISE_PX = 4;
 
+/**
+ * How many showroom loads one page takes before it is closed and a fresh one
+ * opened in a fresh browser context. Measured 2026-09-24 on the 4-core box,
+ * one page reloading the showroom and painting one screen per load: every
+ * load left about two documents alive in the renderer (Chrome's own
+ * `Documents` metric, 4 → 272 over 125 loads; the JS heap 1.9 → 102.7 MB),
+ * and the renderer crashed (`Target.targetCrashed`, error 133) or stopped
+ * answering at load 131, 251 and 251 in three runs — what the recheck phase,
+ * which reloads before every shot, met after ~400 differing shots. Renewed
+ * every 50 loads, 500 loads ran through and the heap never passed 41 MB.
+ */
+export const LOADS_PER_PAGE = 50;
+
+/** Whether a page that has taken `loads` showroom loads must be replaced before the next one. */
+export function pageIsSpent(loads) {
+    return loads >= LOADS_PER_PAGE;
+}
+
 function masked(masks, x, y) {
     return masks.some((m) => x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
 }

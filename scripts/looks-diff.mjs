@@ -41,6 +41,16 @@
  *   window; and the ticker's moving ribbon (`[data-ribbon="moving"]`) is
  *   masked, because no pause puts a ribbon that has been running since the
  *   page loaded in the same place twice.
+ * - **A page is thrown away after `LOADS_PER_PAGE` loads** and a fresh one
+ *   opened in a fresh browser context (`openPage`): a renderer that reloads
+ *   the showroom keeps its old documents alive, and after ~130–250 loads it
+ *   crashed or stopped answering — which the recheck phase, reloading before
+ *   every shot, reached once a change moved ~400 shots (measured 2026-09-24,
+ *   `looks-diff-lib.mjs` has the numbers). The count of renewals is printed.
+ *   A fresh context starts with a cold HTTP cache and no fonts loaded; each
+ *   shot still waits for `document.fonts.ready` and two agreeing captures,
+ *   and a shot that came out different anyway is re-shot on both sides and
+ *   can only land as inconclusive, never as a pass.
  * - **Every shot that differs is judged on a second pair.** Both sides are
  *   shot again on freshly loaded pages, and `classify`
  *   (`looks-diff-lib.mjs`) calls the shot **real** when some pixel differs in
@@ -75,7 +85,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, encodePng, findChrome } from './browser.mjs';
-import { classify, diffMap, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, classify, diffMap, pageIsSpent, summarize } from './looks-diff-lib.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -260,6 +270,8 @@ let code = 0;
 const started = [];
 /** Sides that handed back a shot whose captures never agreed twice in a row. */
 const unsettled = new Set();
+/** Pages closed and opened afresh after `LOADS_PER_PAGE` loads (`load`), reported with the tally. */
+let pagesRenewed = 0;
 const startedAt = Date.now();
 try {
     rmSync(SHOTS, { recursive: true, force: true });
@@ -357,6 +369,18 @@ try {
         started.push(server);
         const watch = [server, browser];
         await waitUntil(`the ${name} preview`, async () => (await fetch(gallery)).ok, { watch });
+        const side = { name, server, watch };
+        await openPage(side);
+        return side;
+    }
+    /*
+     * A side's page: its own browser context and window, the fixed clock, and
+     * nothing emulated yet. Opened with the side and again whenever the page
+     * has taken `LOADS_PER_PAGE` loads (`load` below), because a renderer
+     * that reloads the showroom hundreds of times keeps the old documents
+     * alive until it crashes — the recheck phase reloads before every shot.
+     */
+    async function openPage(side) {
         const { browserContextId } = await cdp.send('Target.createBrowserContext', {});
         const { targetId } = await cdp.send('Target.createTarget', {
             url: 'about:blank',
@@ -366,11 +390,14 @@ try {
         const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
         await cdp.send('Page.enable', {}, sessionId);
         await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, sessionId);
-        return { name, server, watch, browserContextId, targetId, sessionId, width: 0, height: 0, reduced: false, loadedAt: 0 };
+        Object.assign(side, { browserContextId, targetId, sessionId, width: 0, height: 0, reduced: false, loadedAt: 0, loads: 0 });
     }
-    async function closeSide(side) {
+    async function closePage(side) {
         await cdp.send('Target.closeTarget', { targetId: side.targetId });
         await cdp.send('Target.disposeBrowserContext', { browserContextId: side.browserContextId });
+    }
+    async function closeSide(side) {
+        await closePage(side);
         await stopGroup(side.server);
     }
     const metrics = async (side, width, height) => {
@@ -393,6 +420,12 @@ try {
         side.reduced = on;
     };
     const load = async (side, query = 'look=1&chrome=0') => {
+        if (pageIsSpent(side.loads)) {
+            await closePage(side);
+            await openPage(side);
+            pagesRenewed += 1;
+        }
+        side.loads += 1;
         await cdp.send('Page.navigate', { url: `${gallery}?${query}` }, side.sessionId);
         // Its own loop rather than `waitUntil`, so a showroom that never comes
         // up says what the page last answered.
@@ -624,6 +657,7 @@ try {
     group('inconclusive — both pairs differ only where a side does not agree with itself, or one pair differs by more than a flicker', 'inconclusive', '?');
     group('noise — one pair only, a few pixels', 'noise', '~');
     console.log('');
+    console.log(`  pages renewed after ${LOADS_PER_PAGE} loads each: ${pagesRenewed}`);
     for (const [screen, n] of onlyWork) {
         console.log(`  only in the working tree, not compared: ${screen} (${n} shot${n === 1 ? '' : 's'})`);
     }
