@@ -2794,3 +2794,9 @@ ink — "shows no ring to read", 10–38 glyph pixels for 13 letters;
 `first-stall` dropped from `RAIN_JOBS` — both of its keys named. 232
 figures in all, and the verdict now names every rule that failed rather
 than the first: a missing key used to hide the figures under the floor.
+
+**The quote face's pointer is measured** (round 8, the window's step 2).
+`.item-face > .pay-pointer` wears the outline on the quote's face, and no
+rain job painted that screen — an outline nobody read. `item-quote`, a
+geometry-only screen, joins `RAIN_JOBS` (Neo worn, the phone and the desk:
+453 jobs), and both faces join `RAIN_REQUIRED`.

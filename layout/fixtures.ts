@@ -526,7 +526,8 @@ export const SCREENS: Record<string, StallView> = {
      * The quote rail's face: the seller's words as the title, the genesis
      * name under it, the figure in the unit they wrote, Pay, and the fold.
      * In-flow where the rows were, no scrim. The listings' face is
-     * `item-listing`.
+     * `item-listing`. Its pointer to the other rail stands on the stall's
+     * ground, so it is sampled on Neo worn under the rain (`RAIN_JOBS`).
      */
     'item-quote': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },

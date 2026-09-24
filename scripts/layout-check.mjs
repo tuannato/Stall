@@ -314,6 +314,10 @@ const RAIN_REQUIRED = [
             'quotes-truncated',
             'first-stall',
             'sparse-pasted',
+            // The two faces: the back control, and the quote's pointer
+            // to the other rail (round 8).
+            'item-listing',
+            'item-quote',
         ].map((screen) => `${viewport}/${screen}/2/65535`),
     ),
     // And a wall: the shop window wears every decoration the seller chose,
