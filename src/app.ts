@@ -665,6 +665,18 @@ export function boot(
      * So it is a function, it takes the view, and everything that decides
      * anything about the wall goes through it.
      */
+    /**
+     * Whether the view holds a read of the seller's records that can be
+     * judged against (the critic's fourth pass, 2026-09-24): read, and not a
+     * walk that threw. A failed walk answers the floor it read before the
+     * throw, and three things read that floor as the seller's whole record —
+     * the prune took a chosen quote out of a customer's choice and said the
+     * seller had, the wall's frozen payment was closed as "moved", and the
+     * stored rail left the quotes. Our failure is never the seller's doing;
+     * all three ask this.
+     */
+    const recordsKnown = (view: StallView): boolean =>
+        view.prices !== undefined && view.descriptionsFailed !== true;
     const settled = (view: StallView = state.view): StallView =>
         view.window === undefined || wallWidth ? view : { ...view, window: undefined };
     /**
@@ -938,7 +950,7 @@ export function boot(
         // seller for it (the critic's P1, 2026-09-21). The same rule
         // `applyDescriptions` keeps: a walk that answered nothing erases
         // nothing.
-        if (state.view.prices !== undefined) {
+        if (recordsKnown(state.view) && state.view.prices !== undefined) {
             const quotedNow = new Set(quotedItems(state.view).map((item) => item.tokenId));
             const pruned = pruneSelection(selection, quotedNow, state.view.prices);
             if (pruned.dropped) {
@@ -962,7 +974,7 @@ export function boot(
          * the same two items, on the screen with nobody to ask (the critic's
          * P1-2). Any chosen item whose record moved closes the plate.
          */
-        if (windowPaying !== undefined && state.view.prices !== undefined) {
+        if (windowPaying !== undefined && recordsKnown(state.view) && state.view.prices !== undefined) {
             // Over a DEFINITE read only, the prune's own rule: `refresh()`
             // paints `opening` with no prices before its load answers, and a
             // comparison against that closed the plate every sixty seconds
@@ -1009,7 +1021,7 @@ export function boot(
                 windowLockSet = tokensAtBlock(state.offers, wall.upto);
             }
         }
-        if (state.view.prices !== undefined) {
+        if (recordsKnown(state.view)) {
             const params = wallParams();
             if (params !== undefined) {
                 const seen: StallView = {
@@ -2561,10 +2573,29 @@ export function boot(
         // The activity caption dates from here — the last full load — because
         // this function just emptied the ring; "since the page opened" would
         // claim coverage across a gap it cannot see.
+        /*
+         * A walk that threw, on a wall re-reading the SAME stall (the
+         * heartbeat), keeps the last good records: the refusal
+         * `applyDescriptions` already applies to a live re-read, applied to
+         * a load. The floor it read is not the seller's record, and a wall
+         * with a customer mid-choice must not repaint as if it were.
+         */
+        const keptRecords =
+            sameStall && next.view.descriptionsFailed === true && recordsKnown(state.view)
+                ? {
+                      descriptions: state.view.descriptions,
+                      shelves: state.view.shelves,
+                      prices: state.view.prices,
+                      quoteTimes: state.view.quoteTimes,
+                      descriptionsFailed: state.view.descriptionsFailed,
+                      descriptionsTruncated: state.view.descriptionsTruncated,
+                  }
+                : {};
         const loaded: AppState = {
             ...next,
             view: {
                 ...next.view,
+                ...keptRecords,
                 watchedSinceMs: Date.now(),
                 ...(walked === undefined ? {} : { history: walked }),
             },
