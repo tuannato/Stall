@@ -620,16 +620,27 @@ body {
  * Every drop crosses every line on the stall's bare ground within one drift,
  * and at the brightest drop the art draws, Neo's ink reads 2.84:1 bare
  * (2.18:1 where the aurora's cyan wash is worn with it) and its muted 1.27:1. So each line standing on that ground wears `text-shadow`
- * in `--s-bg` at alpha 1 and zero blur — a hard outline that hugs every
- * stroke, in the ground's own colour, so it cannot be seen where the ground
- * under a line is `--s-bg` itself (it can over a tinted ground: the aurora's
- * washes, the notice's wash, a pill's tint): one pixel all round for text of 14px and over
- * (`--rain-outline-1`), two for text under 14px (`--rain-outline-2`, the
- * eight one-pixel offsets and twelve at two). Nothing here paints a box: no
- * background, no box-shadow, no border (`a-decoration-lays-no-ground-under-
- * text`), and an outline is only ever these two sets, in `var(--s-bg)`, in a
- * rule scoped to a decoration (`an-outline-is-the-only-mark-under-text-on-a-
- * decoration`).
+ * at alpha 1 and zero blur — a hard outline that hugs every stroke: one
+ * pixel all round for text of 14px and over (`--rain-outline-1`), two for
+ * text under 14px (`--rain-outline-2`, the eight one-pixel offsets and
+ * twelve at two). Nothing here paints a box: no background, no box-shadow,
+ * no border (`a-decoration-lays-no-ground-under-text`), and an outline is
+ * only ever these two sets, in a rule scoped to a decoration
+ * (`an-outline-is-the-only-mark-under-text-on-a-decoration`).
+ *
+ * **The outline is in the colour of the ground it stands on** (option (b),
+ * the owner, 2026-09-25, after the pictures in
+ * `visible-batch-shots/13-outline-options/`), so at rest, with no drop
+ * behind it, it cannot be told from that ground: the two sets are written in
+ * `--rain-outline-ground`, which is `var(--s-bg)` on the stall's plain
+ * ground and, on each tinted surface a line stands on, that surface's own
+ * paint composited over the ground, in the tokens it paints with — never a
+ * literal but the notice's violet stop, which no token carries. A custom
+ * property is resolved where it is declared, so the sets are declared again
+ * on each surface, where its own colour is read. The probe fails an outline
+ * whose colour is not the painted ground under it
+ * (`an-outline-that-shows-at-rest`), and the static test holds each colour
+ * to the surface it names (`OUTLINE_GROUNDS`).
  *
  * Leaf lines only, never a container: `text-shadow` inherits, and a chip or
  * a tile with its own ground must not wear it (the probe's
@@ -643,15 +654,64 @@ body {
  * around its glyphs, with the rain at its brightest behind it (`ringRead` in
  * `scripts/layout-check.mjs`).
  */
-.stall.att-rainfall {
+.stall.att-rainfall,
+.stall.att-rainfall:not(.deck-stall)
+    :is([data-role='list-first'], .event-txid, .notice-invite, .notice:not(.stall-sign .notice), .studio-browser) {
     --rain-outline-1:
-        1px 0 0 var(--s-bg), -1px 0 0 var(--s-bg), 0 1px 0 var(--s-bg), 0 -1px 0 var(--s-bg),
-        1px 1px 0 var(--s-bg), 1px -1px 0 var(--s-bg), -1px 1px 0 var(--s-bg), -1px -1px 0 var(--s-bg);
+        1px 0 0 var(--rain-outline-ground), -1px 0 0 var(--rain-outline-ground), 0 1px 0 var(--rain-outline-ground),
+        0 -1px 0 var(--rain-outline-ground), 1px 1px 0 var(--rain-outline-ground), 1px -1px 0 var(--rain-outline-ground),
+        -1px 1px 0 var(--rain-outline-ground), -1px -1px 0 var(--rain-outline-ground);
     --rain-outline-2:
-        var(--rain-outline-1), 2px 0 0 var(--s-bg), -2px 0 0 var(--s-bg), 0 2px 0 var(--s-bg),
-        0 -2px 0 var(--s-bg), 2px 1px 0 var(--s-bg), -2px 1px 0 var(--s-bg), 2px -1px 0 var(--s-bg),
-        -2px -1px 0 var(--s-bg), 1px 2px 0 var(--s-bg), -1px 2px 0 var(--s-bg), 1px -2px 0 var(--s-bg),
-        -1px -2px 0 var(--s-bg);
+        var(--rain-outline-1), 2px 0 0 var(--rain-outline-ground), -2px 0 0 var(--rain-outline-ground),
+        0 2px 0 var(--rain-outline-ground), 0 -2px 0 var(--rain-outline-ground), 2px 1px 0 var(--rain-outline-ground),
+        -2px 1px 0 var(--rain-outline-ground), 2px -1px 0 var(--rain-outline-ground), -2px -1px 0 var(--rain-outline-ground),
+        1px 2px 0 var(--rain-outline-ground), -1px 2px 0 var(--rain-outline-ground), 1px -2px 0 var(--rain-outline-ground),
+        -1px -2px 0 var(--rain-outline-ground);
+}
+
+/* The plain ground: the look's own. */
+.stall.att-rainfall {
+    --rain-outline-ground: var(--s-bg);
+}
+
+/* The empty stall's call to action: Neo's `.cta` paints the accent at 16%. */
+.stall.att-rainfall:not(.deck-stall) [data-role='list-first'] {
+    --rain-outline-ground: color-mix(in srgb, var(--s-accent) 16%, var(--s-bg));
+}
+
+/* The Activity pill: the muted at 12% (`.event-txid`). */
+.stall.att-rainfall:not(.deck-stall) .event-txid {
+    --rain-outline-ground: color-mix(in srgb, var(--s-muted) 12%, var(--s-bg));
+}
+
+/* The notice invite's wash: Neo's second accent at 4% (`.t-neo .notice-invite`). */
+.stall.att-rainfall:not(.deck-stall) .notice-invite {
+    --rain-outline-ground: color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg));
+}
+
+/*
+ * The Studio's "This browser" box: Neo tints it with its accent at 4%
+ * (`.t-neo .studio-browser`). Not on the owner's list of four; the probe
+ * found it (`an-outline-that-shows-at-rest`), and the owner's rule is every
+ * tinted surface a line stands on.
+ */
+.stall.att-rainfall:not(.deck-stall) .studio-browser {
+    --rain-outline-ground: color-mix(in srgb, var(--s-accent) 4%, var(--s-bg));
+}
+
+/*
+ * The notice's wash (`.t-neo .notice`): a gradient from the second accent at
+ * 16% to a violet at 10%, which no single colour matches — its midpoint, the
+ * two stops each composited over the ground and mixed evenly. The violet is
+ * a literal of Neo's own sheet that no token carries; the static test holds
+ * it to the stop that sheet paints.
+ */
+.stall.att-rainfall:not(.deck-stall) .notice:not(.stall-sign .notice) {
+    --rain-outline-ground: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--s-accent-2) 16%, var(--s-bg)),
+        color-mix(in srgb, #8b7bff 10%, var(--s-bg))
+    );
 }
 
 /* Text under 14px: the two-pixel outline. */

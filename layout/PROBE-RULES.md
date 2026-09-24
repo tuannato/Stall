@@ -2928,7 +2928,9 @@ Not closed here, stated: `paintsOpaqueGround` still asks whether the rain
 shows through a ground, not whether the outline shows on it at rest, and
 does not see a `url()` ground, a pseudo-element's or a non-ancestor's (the
 critic's item 7, its last clause, which the pictures in
-`visible-batch-shots/13-outline-options/` answer for the owner).
+`visible-batch-shots/13-outline-options/` answer for the owner). The first
+half and the `url()` ground are closed in round 10, below; a
+pseudo-element's and a non-ancestor's ground are still not seen.
 
 **What the pictures show** (round 8, `visible-batch-shots/11-glyph-outline/`,
 Neo worn at one frozen instant, `main` beside this round at 390 and 1280,
@@ -2940,6 +2942,151 @@ screen had outline pixels away from any drop changed by more than 16
 levels, up to about 2,300 a screen. The mock the outline was chosen from
 (`review/E-outline-activity.jpg`) was the window's, not the owner's, and it
 showed the rain alone, on `--s-bg`; the look with the aurora worn is the
-owner's to see. **The outline awaits the owner** (round 9): it stays as
-committed until they choose between it and the options pictured in
-`visible-batch-shots/13-outline-options/`.
+owner's to see. The owner chose option (b) (round 10, below).
+
+## Round 10: the outline in the ground's own colour, and an outline that shows at rest (2026-09-25)
+
+**The owner's choice.** Option (b), from the pictures in
+`visible-batch-shots/13-outline-options/`. Wherever a line stands on a
+tinted surface, its outline takes that surface's colour. On the plain
+ground it stays `var(--s-bg)`. The two sets are written in
+`--rain-outline-ground`. A custom property is resolved where it is
+declared, so the sets are declared again on each surface, in one rule with
+the rain's root (`stall.css`). Each surface declares its own colour: its
+own paint over the ground, in the look's tokens.
+
+| Surface | Colour |
+|---|---|
+| The call to action | the accent at 16% |
+| The Activity pill | the muted at 12% |
+| The notice invite | the second accent at 4% |
+| The Studio's "This browser" box | the accent at 4% |
+| The notice's wash | the midpoint of its two stops, each over the ground |
+
+The Studio's box was not on the owner's list. The rule below found it
+(its note's outline read 9 levels off the box), and the owner's rule
+covers every tinted surface a line stands on. The notice's violet stop
+(`#8b7bff`) is a literal of Neo's own sheet that no token carries. It is
+the one literal in an outline colour.
+
+**`outlineOf` reads an outline in any one opaque colour.** Its opaque,
+unblurred shadows must be one colour and exactly one of the two sets. If
+they are some other set, or more than one colour, it answers -1, which
+fails as "neither outline set in one colour". A blurred or translucent
+shadow is the look's own and is left alone (Neo's heading glow). The ring
+read never depended on the colour.
+
+**`an-outline-that-shows-at-rest`** (probe, the geometry passes). An
+outlined line's outline colour must be the ground painted under it,
+within `AT_REST_LEVELS` (4) on every channel. `groundUnder` builds that
+ground in paint order: the stall root's own colour, then every background
+colour and full-size gradient between the line and the root (the line's
+own box included), composited over it.
+
+- A gradient under the line (the notice's wash) is no single colour. The
+  outline is held to the colours the gradient paints: between its stops,
+  each composited over what lies under it, 4 levels either side. The
+  midpoint passes, and the look's ground fails.
+- A full-size `url()` layer under the line is a ground this rule cannot
+  read, so it fails.
+- The stall root's image layers are not read as the ground. These are the
+  stated exceptions, with the levels they leave at rest in the table below:
+  - the rain, which is what the outline is for;
+  - Neo's own backdrop (the cyan glow over the stall's top 480 px, and a
+    1 px scanline every 4 px) and the aurora's washes, which are gradients
+    across the whole stall that no single colour matches;
+  - Neo's heading glow, which is a shadow under the heading's own outline,
+    not a ground.
+- Not read, stated:
+  - a gradient sized smaller than its box (the vacant box's corner
+    brackets);
+  - a pseudo-element's ground, or a non-ancestor's;
+  - an ancestor's `opacity` or blend.
+
+**Measured at rest** (`visible-batch-shots/15-outline-b/`, `levels.json`).
+Each figure is the largest level by which the outline changes a pixel with
+no drop behind the line, against the same frame with the outline off.
+"Before" is every outline in `var(--s-bg)`, as at `0d2a32e`.
+
+| Surface | Rain alone: before | Rain alone: (b) | Every decoration: before | Every decoration: (b) |
+|---|---|---|---|---|
+| The call to action | 47 | 11 | 68 | 55 |
+| The Activity pill | 34 | 13 | 54 | 31 |
+| The notice invite | 29 | 25 | 48 | 38 |
+| The Studio's box | 23 | 13 | 37 | 35 |
+| The notice's wash, phone | 43–45 | 23–24 | 50–56 | 29–30 |
+| The notice's wash, desk | 42 | 17 | 58 | 31 |
+| The plain ground | 12–36 | same | 37–69 | same |
+| The headings, beside their glow | 36–38 | same | 47–48 | same |
+
+With the rain alone, what is left on a tint is mostly the backdrop: the
+scanlines, and the glow near the top of the page, where the invite sits.
+With the aurora worn, a dark ring still shows on every surface.
+
+**Ring minima at the worst, (b)** (this round's run). The call to action
+10.64, the pill 5.48, the invite's words 5.64 and its ghost chip 9.08, the
+notice 11.65, and the Studio box's note 5.67 (6.09 in its ground's colour
+before). Every other kind is as in round 9.
+
+**The pictures of round 9 had a bug, and the probe never did.** The
+scratch script behind `13-outline-options/` read the root's size and
+position lists after it had changed the root's image list. A computed
+style is live, so the shorter list cycled the rain tiles' sizes onto Neo's
+backdrop, and its 480 px glow repeated down the page. That lifted and
+banded the ground in every "at rest" and "worst" frame there. The frames
+with drops crossing were correct. `flattenRain` reads every list first.
+The pictures in `15-outline-b/` come from the fixed script.
+
+**The static side** (`decor-gate.test.ts`, the outline tests):
+
+- An outline's shadows name their colour as `var(--s-bg)` or
+  `var(--rain-outline-ground)`, one of them, never a colour written into
+  the shadow.
+- `--rain-outline-ground` is declared on the rain's root as `var(--s-bg)`,
+  and on each surface `OUTLINE_GROUNDS` lists as the colour listed for it.
+  Each rule has one selector, and none is in a keyframe.
+- Each listed colour is a `color-mix` of the look's `--s-*` tokens. The one
+  exception is a literal that the surface's own paint carries and no token
+  does.
+- Each listed colour equals, on every look that wears the rain, the paint
+  of the rule it names: one fill, or a two-stop wash read at its midpoint,
+  over that look's ground, within one level
+  (`outlineGroundMismatches`).
+- The sets are declared once, in one rule: the root and the listed
+  surfaces.
+
+**Proved red.** One planted probe run, reverted:
+
+- the call to action back in the ground's colour: 2 at-rest failures
+  (`a.cta`, `rgb(5, 6, 13)` over `rgb(11, 42, 47)`);
+- the notice back in the ground's colour: 6 (over `rgb(18, 17, 30)` to
+  `rgb(45, 18, 37)`);
+- a whole outline in `#303030` on the shelf counts: 24 (over
+  `rgb(5, 6, 13)`);
+- a picture laid under the invite: 4 ("over a picture … this rule cannot
+  read");
+- a white hard shadow beside the footer's outline: 228 "neither outline set
+  in one colour".
+
+Every one of these showed at 390 and at 1280, and each was named. The
+static test was proved red on the real sheets, each plant reverted:
+
+- the call to action's colour at 20% in `stall.css`: red on
+  "declares every outline colour";
+- Neo's call to action painted at 20%: red on "holds each listed colour to
+  the paint";
+- the notice's violet moved in `stall.css`: red on "declares";
+- the Studio box taken off the sets' rule: red on "states the two sets
+  once".
+
+The test's own plants cover these as well:
+
+- a literal;
+- one surface's colour on another;
+- an unlisted surface;
+- the plain ground in a literal;
+- the parameter off the rain, on two selectors, or in a keyframe;
+- a listed colour that is no `color-mix`, that reads a variable no look
+  owns, or that carries a literal the paint lacks or a token carries;
+- a surface colour written into the shadow;
+- a set in two colours.

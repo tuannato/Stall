@@ -2281,21 +2281,30 @@ function shadowsOf(value: string): Shadow[] | undefined {
 
 /**
  * The outline `node` wears, from its computed `text-shadow` and never from a
- * marker: 1 or 2 when its shadows in its stall's own ground (alpha 1, zero
- * blur) are exactly one of the two sets, 0 when it wears none, and -1 when it
- * wears some other set in the ground's colour — which is not an outline this
- * page can read, and fails where it is checked (`outlineFaults`). Any other
- * shadow beside it (Neo's heading glow) is the look's own and is left alone.
+ * marker: its width — 1 or 2 when its opaque, unblurred shadows are all one
+ * colour and exactly one of the two sets, 0 when it wears none, and -1 when
+ * they are some other set or more than one colour, which is not an outline
+ * this page can read and fails where it is checked (`outlineFaults`) — and,
+ * for an outline, its colour. Any colour (option (b), the owner,
+ * 2026-09-25): on a tinted surface the outline takes that surface's own
+ * composited colour, and whether that colour is the ground under it is
+ * `an-outline-that-shows-at-rest`'s question, not this one's. A blurred or
+ * translucent shadow beside it (Neo's heading glow) is the look's own and is
+ * left alone.
  */
-function outlineOf(node: HTMLElement): number {
-    const stall = node.closest<HTMLElement>('.stall');
-    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
+function outlineRead(node: HTMLElement): { width: number; rgb?: readonly [number, number, number] } {
     const shadows = shadowsOf(getComputedStyle(node).textShadow);
-    if (ground === undefined || shadows === undefined) return 0;
-    const inGround = shadows.filter((sh) => sh.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1));
-    if (inGround.length === 0) return 0;
-    if (inGround.some((sh) => sh.alpha !== 1 || sh.blur !== 0)) return -1;
-    return outlineSet(inGround.map((sh) => [sh.x, sh.y] as const)) || -1;
+    if (shadows === undefined) return { width: 0 };
+    const hard = shadows.filter((sh) => sh.alpha === 1 && sh.blur === 0);
+    if (hard.length === 0) return { width: 0 };
+    const rgb = hard[0]!.rgb;
+    if (hard.some((sh) => sh.rgb.some((c, i) => c !== rgb[i]))) return { width: -1 };
+    const width = outlineSet(hard.map((sh) => [sh.x, sh.y] as const));
+    return width === 0 ? { width: -1 } : { width, rgb };
+}
+
+function outlineOf(node: HTMLElement): number {
+    return outlineRead(node).width;
 }
 
 /*
@@ -2313,7 +2322,10 @@ function outlineOf(node: HTMLElement): number {
  * - wears the set its size calls for: the two-pixel set under 14px, the
  *   one-pixel set at or over it — read off the computed size, which a
  *   stylesheet cannot know for a rule;
- * - wears one of the two sets exactly (`outlineOf` answers -1 otherwise);
+ * - wears one of the two sets exactly, in one colour (`outlineOf` answers
+ *   -1 otherwise);
+ * - wears it in the colour of the ground it stands on — "an outline that
+ *   shows at rest", its own check (`AT_REST_CHECK`, below);
  * - and is a contrast target or inside one ("an outline nobody reads") —
  *   and the runner holds each such target to having been read in the ring
  *   on some contrast job (`outlinedTargets`), so a screen no rain job
@@ -2324,6 +2336,94 @@ function outlineOf(node: HTMLElement): number {
  */
 const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
 let outlineChecks = 0;
+
+/*
+ * **An outline that shows at rest** (round 10, 2026-09-25: the owner's (b)
+ * as a guard). The outline is there for the moment a drop crosses a line;
+ * with no drop behind it, it must not be seen. So an outlined line's outline
+ * colour must be the ground painted under it, within `AT_REST_LEVELS` on
+ * every channel (`groundUnder`): the stall root's own colour, with every
+ * background colour and full-size gradient laid between the line and the
+ * root — the line's own box included — composited over it in paint order.
+ *
+ * - **A gradient** laid under the line (the notice's wash) is no single
+ *   colour, so the outline is held to the colours it paints — between its
+ *   stops, each composited over what lies under it, `AT_REST_LEVELS` either
+ *   side — and never to one: the notice's midpoint passes, the look's
+ *   ground under it fails. How far it shows at the wash's ends is measured
+ *   and stated in `PROBE-RULES.md`, not guarded.
+ * - **The root's own image layers are not read as the ground**, and are
+ *   the stated exceptions: the rain is what the outline is for; the
+ *   aurora's washes and Neo's own backdrop (its cyan falloff and its
+ *   scanlines) are gradients across the whole stall that no single colour
+ *   can match, and the outline on the plain ground stays `var(--s-bg)`
+ *   over them. Neo's heading glow is the third: a shadow the heading
+ *   paints under its own outline, not a ground, so this rule cannot see it.
+ *   Their levels at rest are measured and stated (`PROBE-RULES.md`,
+ *   round 10).
+ * - A picture laid under the line between it and the root (a full-size
+ *   `url()` layer) is a ground this rule cannot read, and fails.
+ * - Not read, stated: a gradient sized smaller than its box (the vacant
+ *   box's corner brackets — an ornament, not the ground under a line), a
+ *   ground painted by a pseudo-element or by a box that is not an ancestor,
+ *   and an ancestor's `opacity` or blend.
+ */
+const AT_REST_CHECK = 'an-outline-that-shows-at-rest';
+const AT_REST_LEVELS = 4;
+
+type Rgb = readonly [number, number, number];
+
+/** `colour` at its alpha over `under`. */
+function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
+    return under.map((c, i) => colour.rgb[i]! * colour.alpha + c * (1 - colour.alpha)) as unknown as Rgb;
+}
+
+/**
+ * The ground painted under `node` as its lowest and highest colour on each
+ * channel (one colour, when nothing between it and its stall's root is a
+ * gradient), or the box whose picture this rule cannot read.
+ */
+function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Element } | undefined {
+    const stall = node.closest<HTMLElement>('.stall');
+    const base = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
+    if (stall === null || base === undefined || base.alpha < 1) return undefined;
+    const chain: HTMLElement[] = [];
+    for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.unshift(at);
+    let lo: Rgb = base.rgb;
+    let hi: Rgb = base.rgb;
+    for (const el of chain) {
+        const cs = getComputedStyle(el);
+        const fill = colourOf(cs.backgroundColor);
+        if (fill !== undefined && fill.alpha > 0) {
+            lo = over(fill, lo);
+            hi = over(fill, hi);
+        }
+        if (cs.backgroundImage === 'none') continue;
+        const layers = splitLayers(cs.backgroundImage);
+        const sizes = splitLayers(cs.backgroundSize);
+        // Bottom layer first: the first layer listed paints on top.
+        for (let i = layers.length - 1; i >= 0; i -= 1) {
+            const size = sizes[i % sizes.length]!;
+            if (!['auto', 'auto auto', 'cover', '100% 100%', '100%'].includes(size)) continue;
+            const layer = layers[i]!;
+            if (/^url\(/.test(layer)) return { picture: el };
+            if (!/gradient\(/.test(layer)) continue;
+            const stops = (layer.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? [])
+                .map((c) => colourOf(c))
+                .filter((c): c is NonNullable<typeof c> => c !== undefined);
+            if (stops.length === 0) continue;
+            const painted = stops.flatMap((stop) => [over(stop, lo), over(stop, hi)]);
+            lo = [0, 1, 2].map((k) => Math.min(...painted.map((c) => c[k]!))) as unknown as Rgb;
+            hi = [0, 1, 2].map((k) => Math.max(...painted.map((c) => c[k]!))) as unknown as Rgb;
+        }
+    }
+    return { lo, hi };
+}
+
+/** An rgb triple as the probe prints one. */
+function rgbText(c: Rgb): string {
+    return `rgb(${c.map((v) => Math.round(v)).join(', ')})`;
+}
 /**
  * The contrast targets an outlined line was found in, described as the
  * contrast pass describes a target: the runner holds every one to having
@@ -2365,11 +2465,11 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
         }
         if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
-        const width = outlineOf(node);
+        const { width, rgb } = outlineRead(node);
         if (width === 0) continue;
         outlineChecks += 1;
         if (width < 0) {
-            fail(node, 'wears shadows in the ground’s colour that are neither outline set');
+            fail(node, 'wears opaque unblurred shadows that are neither outline set in one colour');
             continue;
         }
         const px = Number.parseFloat(getComputedStyle(node).fontSize);
@@ -2382,6 +2482,16 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (paintsOpaqueGround(getComputedStyle(at))) {
                 fail(node, `wears the outline over ${describe(at)}, a ground of its own — an outline where the text has its own ground`);
                 break;
+            }
+        }
+        const ground = rgb === undefined ? undefined : groundUnder(node);
+        if (rgb !== undefined && ground !== undefined) {
+            const said = `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" wears its outline in ${rgbText(rgb)}`;
+            if ('picture' in ground) {
+                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a picture on ${describe(ground.picture)} this rule cannot read — an outline that shows at rest` });
+            } else if (rgb.some((c, i) => c < ground.lo[i]! - AT_REST_LEVELS || c > ground.hi[i]! + AT_REST_LEVELS)) {
+                const painted = ground.lo.every((c, i) => Math.abs(c - ground.hi[i]!) < 0.5) ? rgbText(ground.lo) : `${rgbText(ground.lo)} to ${rgbText(ground.hi)}`;
+                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a ground painted ${painted} — an outline that shows at rest` });
             }
         }
         const target = node.closest(CONTRAST_TEXT);

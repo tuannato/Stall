@@ -914,15 +914,28 @@ describe('a-decoration-lays-no-ground-under-text', () => {
  * ---------------------------------------------------------------------------
  * An outline is the only mark under text on a decoration (round 8,
  * 2026-09-25): where a line does not read over a decoration, the owner's
- * "lớp nền tối ngay dưới nét chữ" is `text-shadow` in the look's own ground,
- * opaque and unblurred, one or two pixels wide (`layout/outline.ts`) — and
- * nothing else in the ground's colour ever sits under a glyph.
+ * "lớp nền tối ngay dưới nét chữ" is `text-shadow` in the colour of the
+ * ground the line stands on, opaque and unblurred, one or two pixels wide
+ * (`layout/outline.ts`) — and nothing else in a ground's colour ever sits
+ * under a glyph. The colour is `var(--s-bg)` on the plain ground and, on a
+ * tinted surface, that surface's own paint over the ground (option (b), the
+ * owner, 2026-09-25), always through `var(--rain-outline-ground)`, whose
+ * every value is declared in `OUTLINE_GROUNDS` with the surface it matches.
  * ---------------------------------------------------------------------------
  */
 
-/** Every value `value` can take with its custom properties substituted, `--s-bg` kept as the marker. */
+/**
+ * The two names an outline's colour is written in, kept as markers when a
+ * value is expanded: the look's ground, and the parameter the rain's two
+ * sets are written in (`--rain-outline-ground`), whose values are held on
+ * their own (`outlineGroundOffences`) — expanding it inside a twenty-shadow
+ * set would be five options twenty times over.
+ */
+const OUTLINE_COLOURS: ReadonlySet<string> = new Set(['--s-bg', '--rain-outline-ground']);
+
+/** Every value `value` can take with its custom properties substituted, the outline's colours kept as markers. */
 function expansions(value: string, defs: Map<string, string[]>, seen: ReadonlySet<string> = new Set()): string[] {
-    const call = varCalls(value).find((c) => c.name !== '--s-bg');
+    const call = varCalls(value).find((c) => !OUTLINE_COLOURS.has(c.name));
     if (call === undefined) return [value];
     // The call resolved on its own, a cycle refused along its own path; then
     // the rest of the value, so a property named twice is expanded twice.
@@ -964,14 +977,236 @@ function literalRgb(token: string): Rgb3 | undefined {
 
 type Rgb3 = readonly [number, number, number];
 
+/** An expression with its whitespace squashed, to compare as written. */
+const squash = (value: string): string =>
+    value.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim();
+
+/** How a shadow names an outline's colour: the look's ground, or the parameter the rain's sets are written in. */
+const OUTLINE_WRITTEN: ReadonlySet<string> = new Set(['var(--s-bg)', 'var(--rain-outline-ground)']);
+
+/** The rain's root, where the plain ground's colour is declared, and the scope every surface's own colour is. */
+const RAIN_ROOT = '.stall.att-rainfall';
+const RAIN_SCOPE = '.stall.att-rainfall:not(.deck-stall)';
+
+type OutlineGround = {
+    /** The colour `stall.css` gives `--rain-outline-ground` on this surface. */
+    colour: string;
+    /** Where the surface is painted: the rule, and whether its paint is one fill or a two-stop wash read at its midpoint. */
+    paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' };
+    reason: string;
+};
+
+/**
+ * Every colour the rain's outline takes other than the plain ground's
+ * `var(--s-bg)` (option (b), the owner, 2026-09-25, after the pictures in
+ * `visible-batch-shots/13-outline-options/`): keyed by the tinted surface as
+ * the outline rules name it, each the surface's own paint composited over
+ * the ground, written as a `color-mix` of the look's tokens — so at rest,
+ * with no drop behind a line, the outline is the ground it stands on
+ * (`an-outline-that-shows-at-rest` measures that in the browser). A literal
+ * is allowed inside one only where the surface's own paint carries it and
+ * no token of the look does: the notice's violet stop. Anything else is
+ * refused (`outlineGroundOffences`), and each colour is held to the paint
+ * it names (`outlineGroundMismatches`).
+ */
+const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
+    "[data-role='list-first']": {
+        colour: 'color-mix(in srgb, var(--s-accent) 16%, var(--s-bg))',
+        paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .cta', read: 'fill' },
+        reason: 'the empty stall’s call to action: Neo fills it with its accent at 16%',
+    },
+    '.event-txid': {
+        colour: 'color-mix(in srgb, var(--s-muted) 12%, var(--s-bg))',
+        paint: { sheet: 'src/ui/stall.css', rule: '.event-txid', read: 'fill' },
+        reason: 'the Activity pill: the muted at 12%',
+    },
+    '.notice-invite': {
+        colour: 'color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg))',
+        paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .notice-invite', read: 'fill' },
+        reason: 'the notice invite’s wash: Neo’s second accent at 4%, under its words and its ghost chip',
+    },
+    '.notice:not(.stall-sign .notice)': {
+        colour: 'color-mix(in srgb, color-mix(in srgb, var(--s-accent-2) 16%, var(--s-bg)), color-mix(in srgb, #8b7bff 10%, var(--s-bg)))',
+        paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .notice', read: 'midpoint' },
+        reason:
+            'the notice’s wash, a gradient from the second accent at 16% to a violet at 10% that no single colour matches: its midpoint, both stops over the ground mixed evenly; the violet is a literal of Neo’s own sheet that no token carries',
+    },
+    '.studio-browser': {
+        colour: 'color-mix(in srgb, var(--s-accent) 4%, var(--s-bg))',
+        paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .studio-browser', read: 'fill' },
+        reason:
+            'the Studio’s “This browser” box: Neo tints it with its accent at 4% — not on the owner’s list of four, found by `an-outline-that-shows-at-rest` (its note’s outline read 9 levels off the box)',
+    },
+};
+
+const LISTED_GROUNDS: ReadonlySet<string> = new Set(Object.values(OUTLINE_GROUNDS).map((g) => squash(g.colour)));
+
+type Paint = { rgb: Rgb3; alpha: number };
+
+/** A colour expression as `var()`, `transparent`, a hex or `rgb[a]()` literal, or a `color-mix(in srgb, …)` of those. */
+function paintOf(expr: string, vars: Readonly<Record<string, string>>, depth = 0): Paint | undefined {
+    const v = squash(expr);
+    if (depth > 8) return undefined;
+    const call = /^var\((--[a-zA-Z0-9-]+)\)$/.exec(v);
+    if (call !== null) {
+        const def = vars[call[1]!];
+        return def === undefined ? undefined : paintOf(def, vars, depth + 1);
+    }
+    if (v === 'transparent') return { rgb: [0, 0, 0], alpha: 0 };
+    const rgba = /^rgba?\(([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\)$/.exec(v);
+    if (rgba !== null) {
+        const a = rgba[4] === undefined ? 1 : Number(rgba[4]) / (rgba[5] === '%' ? 100 : 1);
+        return { rgb: [Number(rgba[1]), Number(rgba[2]), Number(rgba[3])], alpha: a };
+    }
+    const hex = literalRgb(v);
+    if (hex !== undefined && v.startsWith('#')) return { rgb: hex, alpha: 1 };
+    if (!v.startsWith('color-mix(') || !v.endsWith(')')) return undefined;
+    const args = topLevel(v.slice('color-mix('.length, -1));
+    if (args.length !== 3 || args[0] !== 'in srgb') return undefined;
+    const part = (arg: string): { c: string; p: number | undefined } => {
+        const m = /^(.*?)\s+([\d.]+)%$/.exec(arg);
+        return m === null ? { c: arg, p: undefined } : { c: m[1]!, p: Number(m[2]) };
+    };
+    const [a, b] = [part(args[1]!), part(args[2]!)];
+    const p1 = a.p ?? (b.p === undefined ? 50 : 100 - b.p);
+    const p2 = b.p ?? 100 - p1;
+    const c1 = paintOf(a.c, vars, depth + 1);
+    const c2 = paintOf(b.c, vars, depth + 1);
+    if (c1 === undefined || c2 === undefined || p1 + p2 <= 0) return undefined;
+    const [w1, w2] = [p1 / (p1 + p2), p2 / (p1 + p2)];
+    const alpha = c1.alpha * w1 + c2.alpha * w2;
+    const rgb = [0, 1, 2].map((k) => (alpha === 0 ? 0 : (c1.rgb[k]! * c1.alpha * w1 + c2.rgb[k]! * c2.alpha * w2) / alpha));
+    return { rgb: rgb as unknown as Rgb3, alpha: alpha * (Math.min(p1 + p2, 100) / 100) };
+}
+
+/** `paint` at its alpha over the opaque `ground`. */
+function paintOver(paint: Paint, ground: Rgb3): Rgb3 {
+    return ground.map((g, k) => paint.rgb[k]! * paint.alpha + g * (1 - paint.alpha)) as unknown as Rgb3;
+}
+
+/**
+ * Every offence against the rule that an outline's colour is declared, in
+ * `css`: `--rain-outline-ground` is set only on the rain's root, as
+ * `var(--s-bg)`, and on a surface `OUTLINE_GROUNDS` lists, as the colour
+ * listed for it — one selector a rule, never in a keyframe — and each
+ * listed colour is a `color-mix`, of the look's `--s-*` tokens alone but
+ * for a literal the surface's own paint carries and no token does.
+ */
+function outlineGroundOffences(
+    css: string,
+    table: Readonly<Record<string, OutlineGround>> = OUTLINE_GROUNDS,
+    sheetOf: (path: string) => string = (path) => readFileSync(join(UI_DIR, '..', '..', path), 'utf8'),
+): string[] {
+    const out: string[] = [];
+    for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = topLevel(m[1]!).map(squash);
+        for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === '--rain-outline-ground')) {
+            const value = squash(d.value.replace(/\s*!important\s*$/i, ''));
+            const at = `${selectors.join(', ')} { --rain-outline-ground: ${value.slice(0, 80)} }`;
+            const listed = Object.entries(table).find(([surface]) => selectors.length === 1 && selectors[0] === `${RAIN_SCOPE} ${surface}`);
+            if (selectors.length === 1 && selectors[0] === RAIN_ROOT) {
+                if (value !== 'var(--s-bg)') out.push(`${at}: the plain ground’s outline is var(--s-bg)`);
+            } else if (listed === undefined) {
+                out.push(`${at}: an outline colour on a surface OUTLINE_GROUNDS does not list`);
+            } else if (value !== squash(listed[1].colour)) {
+                out.push(`${at}: not the colour OUTLINE_GROUNDS lists for ${listed[0]}`);
+            }
+        }
+    }
+    for (const [surface, ground] of Object.entries(table)) {
+        const colour = squash(ground.colour);
+        if (!colour.startsWith('color-mix(')) out.push(`${surface}: its outline colour is not a color-mix of the look’s tokens`);
+        for (const call of varCalls(colour)) {
+            if (!call.name.startsWith('--s-')) out.push(`${surface}: its outline colour reads ${call.name}, not a look’s token`);
+        }
+        const paintRule = paintRuleOf(ground, sheetOf);
+        const literals = colour.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? [];
+        for (const literal of literals) {
+            const rgb = literalRgb(literal);
+            const inPaint = (paintRule?.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? []).some((p) => {
+                const q = literalRgb(p);
+                return rgb !== undefined && q !== undefined && q.every((c, i) => c === rgb[i]);
+            });
+            const aToken = RAIN_LOOKS.some((id) =>
+                Object.entries(themeVars(decodeTheme(id))).some(([name, value]) => {
+                    const t = literalRgb(value);
+                    return name.startsWith('--s-') && rgb !== undefined && t !== undefined && t.every((c, i) => c === rgb[i]);
+                }),
+            );
+            if (!inPaint) out.push(`${surface}: the literal ${literal} is not in the paint it names`);
+            if (aToken) out.push(`${surface}: the literal ${literal} is a colour a look’s token carries — write the token`);
+        }
+    }
+    return out;
+}
+
+/** The looks that wear the rain. */
+const RAIN_LOOKS: readonly number[] = [
+    ...new Set(SHIPPED_ATTACHMENTS.filter((row) => row.cls === 'att-rainfall').map((row) => row.themeId)),
+];
+
+/** The background a listed surface's paint rule declares, or `undefined` when the sheet has not exactly one such rule. */
+function paintRuleOf(ground: OutlineGround, sheetOf: (path: string) => string): string | undefined {
+    const css = sheetOf(ground.paint.sheet).replace(/\/\*[\s\S]*?\*\//g, '');
+    const values = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => topLevel(m[1]!).map(squash).includes(ground.paint.rule))
+        .flatMap((m) => declarationsOf(m[2]!).filter((d) => /^background(?:-color|-image)?$/.test(d.prop)))
+        .map((d) => squash(d.value));
+    return values.length === 1 ? values[0] : undefined;
+}
+
+/**
+ * Every listed outline colour that is not, on a look that wears the rain,
+ * the surface's own paint over that look's ground — its one fill, or a
+ * two-stop wash at its midpoint — within one level on each channel.
+ */
+function outlineGroundMismatches(
+    table: Readonly<Record<string, OutlineGround>> = OUTLINE_GROUNDS,
+    sheetOf: (path: string) => string = (path) => readFileSync(join(UI_DIR, '..', '..', path), 'utf8'),
+): string[] {
+    const out: string[] = [];
+    for (const id of RAIN_LOOKS) {
+        const vars = themeVars(decodeTheme(id));
+        const ground = paintOf('var(--s-bg)', vars);
+        for (const [surface, entry] of Object.entries(table)) {
+            const listed = paintOf(entry.colour, vars);
+            const rule = paintRuleOf(entry, sheetOf);
+            let painted: Rgb3 | undefined;
+            if (ground !== undefined && rule !== undefined && entry.paint.read === 'fill') {
+                const fill = paintOf(rule, vars);
+                painted = fill === undefined ? undefined : paintOver(fill, ground.rgb);
+            } else if (ground !== undefined && rule !== undefined) {
+                const inner = /^linear-gradient\((.*)\)$/.exec(rule)?.[1];
+                const args = inner === undefined ? [] : topLevel(inner);
+                const stops = (/^(?:-?[\d.]+deg|to [a-z ]+)$/.test(args[0] ?? '') ? args.slice(1) : args).map((stop) => paintOf(stop, vars));
+                if (stops.length === 2 && stops.every((stop) => stop !== undefined)) {
+                    const [a, b] = stops.map((stop) => paintOver(stop!, ground.rgb));
+                    painted = a!.map((c, k) => (c + b![k]!) / 2) as unknown as Rgb3;
+                }
+            }
+            if (listed === undefined || listed.alpha !== 1 || painted === undefined) {
+                out.push(`${surface} on look ${id}: the listed colour or the paint of ${entry.paint.rule} does not read`);
+            } else if (listed.rgb.some((c, k) => Math.abs(c - painted![k]!) > 1)) {
+                out.push(
+                    `${surface} on look ${id}: listed rgb(${listed.rgb.map(Math.round).join(', ')}), ${entry.paint.rule} paints rgb(${painted.map(Math.round).join(', ')})`,
+                );
+            }
+        }
+    }
+    return out;
+}
+
 /**
  * Every offence in `css` against the outline's shape: each `text-shadow`
- * whose shadows, custom properties substituted, include one in the ground's
- * colour — `var(--s-bg)`, or a literal any shipped look's `--s-bg` equals —
- * must stand in a rule every selector of which is scoped to a decoration,
- * name the ground as `var(--s-bg)`, blur nothing, offset no more than two
- * pixels, hold at most twenty such shadows, and be exactly one of the two
- * sets. Any other shadow beside it (Neo's heading glow) is the look's own.
+ * whose shadows, custom properties substituted, include one in a ground's
+ * colour — `var(--s-bg)`, `var(--rain-outline-ground)`, a literal any
+ * shipped look's `--s-bg` equals, or any colour written with `var(--s-bg)`
+ * in it or listed in `OUTLINE_GROUNDS` — must stand in a rule every
+ * selector of which is scoped to a decoration, name its colour as
+ * `var(--s-bg)` or `var(--rain-outline-ground)` and only one of them, blur
+ * nothing, offset no more than two pixels, hold at most twenty such
+ * shadows, and be exactly one of the two sets. Any other shadow beside it
+ * (Neo's heading glow) is the look's own.
  */
 function outlineOffences(css: string, defs: Map<string, string[]> = customProperties(css)): string[] {
     const grounds = (defs.get('--s-bg') ?? []).map(literalRgb).filter((c): c is Rgb3 => c !== undefined);
@@ -985,7 +1220,10 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
         for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === 'text-shadow')) {
             for (const value of expansions(d.value.replace(/\s*!important\s*$/i, ''), defs)) {
                 const shadows = topLevel(value).map((part) => {
-                    const colour = /var\(--s-bg\)|#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|color-mix\((?:[^()]|\([^()]*\))*\)/.exec(part)?.[0];
+                    const colour =
+                        /var\(--s-bg\)|var\(--rain-outline-ground\)|#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|color-mix\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/.exec(
+                            part,
+                        )?.[0];
                     const lengths = part
                         .replace(colour ?? '', ' ')
                         .trim()
@@ -996,7 +1234,10 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
                 const inGround = shadows.filter(
                     (sh) =>
                         sh.colour !== undefined &&
-                        (sh.colour === 'var(--s-bg)' || isGroundLiteral(sh.colour) || /var\(--s-bg\)/.test(sh.colour)),
+                        (OUTLINE_WRITTEN.has(sh.colour) ||
+                            isGroundLiteral(sh.colour) ||
+                            /var\(--s-bg\)/.test(sh.colour) ||
+                            LISTED_GROUNDS.has(squash(sh.colour))),
                 );
                 if (inGround.length === 0) continue;
                 const at = `${selectors.join(', ')} { text-shadow: ${d.value.replace(/\s+/g, ' ').slice(0, 80)} }`;
@@ -1004,7 +1245,10 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
                     out.push(`${at}: ${why}`);
                 };
                 if (!selectors.every((sel) => DECORATION_SCOPED.test(sel))) says('a shadow in the ground’s colour outside a decoration');
-                if (inGround.some((sh) => sh.colour !== 'var(--s-bg)')) says('the ground written other than as var(--s-bg)');
+                if (inGround.some((sh) => !OUTLINE_WRITTEN.has(sh.colour!))) {
+                    says('the ground written other than as var(--s-bg) or var(--rain-outline-ground)');
+                }
+                if (new Set(inGround.map((sh) => sh.colour)).size > 1) says('an outline in more than one colour');
                 const px = (w: string | undefined): number | undefined =>
                     w === undefined ? 0 : /^-?(?:\d+\.?\d*|\.\d+)(?:px)?$/.test(w) ? Number.parseFloat(w) : undefined;
                 const read = inGround.map((sh) => sh.lengths.map(px));
@@ -1043,13 +1287,16 @@ const DECORATION_GLOW: Readonly<Record<string, string>> = {
 
 /**
  * The shadows in `value` that are not the outline's, as written: a part is
- * the outline's when everything it can expand to is shadows in `--s-bg`
- * (whose shape `outlineOffences` holds), so a custom property hiding
- * anything else stays in the answer under its own name.
+ * the outline's when everything it can expand to is shadows in `--s-bg` or
+ * `--rain-outline-ground` (whose shape `outlineOffences` holds, and whose
+ * values `outlineGroundOffences` does), so a custom property hiding anything
+ * else stays in the answer under its own name.
  */
 function glowOf(value: string, defs: Map<string, string[]>): string {
     const inGround = (part: string): boolean =>
-        expansions(part, defs).every((one) => topLevel(one).every((shadow) => /var\(--s-bg\)/.test(shadow)));
+        expansions(part, defs).every((one) =>
+            topLevel(one).every((shadow) => /var\(--s-bg\)|var\(--rain-outline-ground\)/.test(shadow)),
+        );
     return topLevel(value)
         .filter((part) => !inGround(part))
         .join(', ');
@@ -1179,14 +1426,14 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         expect(marksUnderText('.t-neo .x { text-shadow: 0 0 20px #000; }')).toEqual([]);
     });
 
-    it('states the two sets once, on the rain, as the probe reads them', () => {
+    it('states the two sets once, on the rain and each surface it matches, in the ground’s colour, as the probe reads them', () => {
         const defs = customProperties('');
         const setOf = (name: string): number => {
             const [value, ...more] = expansions(`var(${name})`, defs);
             expect(more, name).toEqual([]);
             const offsets = topLevel(value!).map((part) => {
-                const [x, y, blur] = part.replace('var(--s-bg)', '').trim().split(/\s+/).map((w) => Number.parseFloat(w));
-                expect(part, name).toContain('var(--s-bg)');
+                const [x, y, blur] = part.replace('var(--rain-outline-ground)', '').trim().split(/\s+/).map((w) => Number.parseFloat(w));
+                expect(part, name).toContain('var(--rain-outline-ground)');
                 expect(blur, name).toBe(0);
                 return [x!, y!] as const;
             });
@@ -1197,11 +1444,84 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         expect(OUTLINE_1).toHaveLength(8);
         expect(OUTLINE_2).toHaveLength(20);
         expect(OUTLINE_2_UNDER_PX).toBe(14);
-        // Declared once, on the decoration's own root.
+        // Declared once, in one rule: on the decoration's own root and on
+        // every surface OUTLINE_GROUNDS lists — a custom property is resolved
+        // where it is declared, so a surface's own colour is read only where
+        // the sets are declared again — and in no other served sheet.
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+            for (const name of ['--rain-outline-1', '--rain-outline-2']) {
+                const at = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => declarationsOf(m[2]!).some((d) => d.prop === name));
+                const expected =
+                    sheet.path === 'src/ui/stall.css'
+                        ? [[RAIN_ROOT, `${RAIN_SCOPE} :is(${Object.keys(OUTLINE_GROUNDS).join(', ')})`].join(', ')]
+                        : [];
+                expect(at.map((m) => topLevel(m[1]!).map(squash).join(', ')), `${sheet.path} ${name}`).toEqual(expected);
+            }
+        }
+    });
+
+    it('declares every outline colour it paints: the look’s ground on the rain, and each tinted surface’s own paint, listed', () => {
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+            expect(outlineGroundOffences(css), sheet.path).toEqual([]);
+        }
+        // Every listed surface is declared, and nothing else is.
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-        for (const name of ['--rain-outline-1', '--rain-outline-2']) {
-            const at = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => declarationsOf(m[2]!).some((d) => d.prop === name));
-            expect(at.map((m) => m[1]!.trim()), name).toEqual(['.stall.att-rainfall']);
+        const declared = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+            .filter((m) => declarationsOf(m[2]!).some((d) => d.prop === '--rain-outline-ground'))
+            .map((m) => squash(m[1]!));
+        expect(declared.sort()).toEqual([RAIN_ROOT, ...Object.keys(OUTLINE_GROUNDS).map((key) => `${RAIN_SCOPE} ${key}`)].sort());
+        for (const planted of [
+            // A literal, even the right one.
+            `${RAIN_SCOPE} [data-role='list-first'] { --rain-outline-ground: rgb(11, 42, 47); }`,
+            // One surface's colour on another.
+            `${RAIN_SCOPE} .event-txid { --rain-outline-ground: color-mix(in srgb, var(--s-accent) 16%, var(--s-bg)); }`,
+            // A surface the list does not name, and the plain ground in another colour.
+            `${RAIN_SCOPE} .stall-foot .fine { --rain-outline-ground: color-mix(in srgb, var(--s-muted) 12%, var(--s-bg)); }`,
+            `${RAIN_ROOT} { --rain-outline-ground: #05060d; }`,
+            // Off the rain, two selectors in one rule, and in a keyframe.
+            '.stall { --rain-outline-ground: var(--s-bg); }',
+            `${RAIN_ROOT}, ${RAIN_SCOPE} .notice-invite { --rain-outline-ground: var(--s-bg); }`,
+            '@keyframes wk-g { to { --rain-outline-ground: var(--s-bg); } }',
+        ]) {
+            expect(outlineGroundOffences(planted), planted).not.toEqual([]);
+        }
+        // A listed colour that is no color-mix, that reads a variable no look
+        // owns, or that carries a literal the surface does not paint or a
+        // token carries.
+        const withCta = (colour: string): Record<string, OutlineGround> => ({
+            ...OUTLINE_GROUNDS,
+            "[data-role='list-first']": { ...OUTLINE_GROUNDS["[data-role='list-first']"]!, colour },
+        });
+        for (const colour of [
+            'rgb(11, 42, 47)',
+            'color-mix(in srgb, var(--wk-cyan) 16%, var(--s-bg))',
+            'color-mix(in srgb, #123456 16%, var(--s-bg))',
+            'color-mix(in srgb, #2ce9e0 16%, var(--s-bg))',
+        ]) {
+            expect(outlineGroundOffences('', withCta(colour)), colour).not.toEqual([]);
+        }
+        expect(outlineGroundOffences(`${RAIN_ROOT} { --rain-outline-ground: var(--s-bg); }`)).toEqual([]);
+    });
+
+    it('holds each listed colour to the paint of the surface it names, on every look that wears the rain', () => {
+        expect(RAIN_LOOKS).toEqual([NEO_CITY_THEME_ID]);
+        expect(outlineGroundMismatches()).toEqual([]);
+        // The call to action repainted at 20%, the notice's violet moved, and
+        // the pill's tint read from a rule that paints none.
+        const real = (path: string): string => readFileSync(join(UI_DIR, '..', '..', path), 'utf8');
+        const neo = real('src/ui/theme-neo.css');
+        expect(neo).toContain('background: rgba(44, 233, 224, 0.16);');
+        expect(neo).toContain('rgba(139, 123, 255, 0.1)');
+        for (const [path, from, to] of [
+            ['src/ui/theme-neo.css', 'background: rgba(44, 233, 224, 0.16);', 'background: rgba(44, 233, 224, 0.2);'],
+            ['src/ui/theme-neo.css', 'rgba(139, 123, 255, 0.1)', 'rgba(100, 123, 255, 0.1)'],
+            ['src/ui/stall.css', 'background: color-mix(in srgb, var(--s-muted) 12%, transparent);', 'color: var(--s-muted);'],
+        ] as const) {
+            const planted = (p: string): string => (p === path ? real(p).replace(from, to) : real(p));
+            expect(real(path)).toContain(from);
+            expect(outlineGroundMismatches(OUTLINE_GROUNDS, planted), `${path}: ${to}`).not.toEqual([]);
         }
     });
 
@@ -1221,9 +1541,14 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
             '.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), var(--rain-outline-2); }',
             // In a keyframe, whose selectors are no decoration's.
             '@keyframes wk-o { to { text-shadow: var(--rain-outline-1); } }',
+            // A surface's colour written into the shadow rather than through
+            // the parameter, and an outline in two colours at once.
+            `.stall.att-rainfall .cta { text-shadow: ${O1.replaceAll('var(--s-bg)', 'color-mix(in srgb, var(--s-accent) 16%, var(--s-bg))')}; }`,
+            `.stall.att-rainfall .fine { text-shadow: ${O1.replace('var(--s-bg)', 'var(--rain-outline-ground)')}; }`,
         ]) {
             expect(outlineOffences(planted), planted).not.toEqual([]);
         }
+        expect(outlineOffences(`.stall.att-rainfall .fine { text-shadow: ${O1.replaceAll('var(--s-bg)', 'var(--rain-outline-ground)')}; }`)).toEqual([]);
         expect(outlineOffences(`.stall.att-rainfall .fine { text-shadow: ${O1}; }`)).toEqual([]);
         expect(outlineOffences('.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
         // A shadow in another colour is the look's own and not this test's.

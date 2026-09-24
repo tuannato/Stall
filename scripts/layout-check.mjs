@@ -327,8 +327,9 @@ const RAIN_REQUIRED = [
 
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
- * (`outlineOf` in the probe: `text-shadow` in the look's own ground at alpha
- * 1, zero blur, one or two pixels wide) is not read over its box — the rain
+ * (`outlineOf` in the probe: `text-shadow` in one opaque colour — the ground
+ * it stands on, round 10 — at zero blur, one or two pixels wide) is not read
+ * over its box — the rain
  * between its strokes is in the box, and what a reader needs is the ground
  * right against every stroke. So the job is captured once more with the
  * outlined glyphs shown (`__contrastGlyphs`), and for each line of each

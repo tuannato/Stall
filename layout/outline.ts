@@ -2,10 +2,12 @@
  * The outline a line wears where a decoration falls behind it (round 8,
  * 2026-09-25) — pure, and the one statement of its two sets.
  *
- * `text-shadow` in the look's own ground (`var(--s-bg)`) at alpha 1 and zero
- * blur: the eight one-pixel offsets, or those and the twelve at two pixels.
- * `stall.css` states them as `--rain-outline-1` and `--rain-outline-2`; the
- * probe reads an outline off the computed `text-shadow` against these
+ * `text-shadow` at alpha 1 and zero blur, in one colour — the ground the line
+ * stands on (`--rain-outline-ground`: the look's own `var(--s-bg)`, or a
+ * tinted surface's own paint over it, round 10): the eight one-pixel
+ * offsets, or those and the twelve at two pixels. `stall.css` states them as
+ * `--rain-outline-1` and `--rain-outline-2`; the probe reads an outline off
+ * the computed `text-shadow` against these in any one opaque colour
  * (`outlineOf`), and `an-outline-is-the-only-mark-under-text-on-a-decoration`
  * (`src/ui/decor-gate.test.ts`) holds every served sheet to them.
  */
