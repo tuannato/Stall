@@ -576,10 +576,15 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         touch: true,
     });
 
-    it('a wall whose walk failed while its book answered keeps the choice, the payment and the quotes', async () => {
-        // The wall's own canonical path, so the refresh is the heartbeat's
-        // same-stall re-read (`identityOf` answers the address).
-        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+    it.each([
+        ['address', stallPath(ADDR)],
+        ['pubkey', stallPath(PK)],
+    ])('a wall at its %s path whose walk failed while its book answered keeps the choice, the payment and the quotes', async (_, path) => {
+        // The wall's own path in either form, so the refresh is the
+        // heartbeat's same-stall re-read — the stall compared, not a
+        // spelling (`pathNamesStall`): until 2026-09-25 a wall opened at
+        // its pubkey never matched itself and kept no records at all.
+        window.history.replaceState(null, '', `${path}?view=window&show=quotes&mode=browse&touch=on`);
         const good = stallEmpty({ tokens, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: wall('quotes') });
         const failed = stallEmpty({
             tokens,

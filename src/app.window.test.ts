@@ -4,6 +4,7 @@ import { shaRmd160, toHex } from 'ecash-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseWindowParams, stallPath } from './domain/route';
 import type { StallView, TokenMeta } from './domain/state';
+import { windowOutcome } from './ui/copy';
 
 /*
  * The shop window's three timers, in their OWN file.
@@ -793,6 +794,172 @@ describe('a-new-lock-height-on-the-same-stall-takes-a-fresh-set', () => {
         window.dispatchEvent(new PopStateEvent('popstate'));
         await vi.advanceTimersByTimeAsync(0);
         expect(names(root), 'locked at 100: only what was settled by then').toEqual(['Apples']);
+    });
+});
+
+describe('a-wall-knows-its-own-stall-by-either-name', () => {
+    /**
+     * A stall answers to two route forms, its pubkey and its address (CLAUDE
+     * §3), and a wall may be opened at either. `refresh()` decides whether
+     * it is re-reading the SAME stall — the heartbeat — or opening another,
+     * and it decided by comparing `stallPath(identityOf(view))` with the
+     * path: two spellings. `identityOf` answers the address, so a wall
+     * opened at `/s/<pubkey>` never matched itself, and every sixty-second
+     * beat painted `opening` over the shop for the length of a read and
+     * threw away its cursor, its rail and its lock set (2026-09-25). The
+     * address form was the only one any test opened a wall at.
+     *
+     * One offer set, two route forms, and the other half of the bargain: a
+     * navigation to a different stall by pubkey still blanks and resets.
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const id = (c: string): string => c.repeat(64);
+    const meta = (tokenId: string, name: string): TokenMeta =>
+        ({ tokenId, name, ticker: name.slice(0, 2).toUpperCase(), decimals: 0, tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' } }) as TokenMeta;
+    const NAMES = ['Apples', 'Barley', 'Cherries', 'Dates'];
+    const IDS = ['1', '2', '3', '4'].map(id);
+    const tokens = new Map(IDS.map((tokenId, i) => [tokenId, meta(tokenId, NAMES[i]!)]));
+    // Every listing settled by block 150, so a lock at 200 takes all four.
+    const settled = IDS.map((tokenId, i) => ({
+        ...OFFER,
+        tokenId,
+        outpoint: { txid: id(String(i + 1)), outIdx: i },
+        blockHeight: 90 + i * 20,
+    }));
+    // Barley partly sold after the lock: the remainder is a NEW utxo in a
+    // later block (§3), which a height test alone takes off a locked wall.
+    const barleyMoved = settled.map((offer) =>
+        offer.tokenId === IDS[1] ? { ...offer, outpoint: { txid: id('9'), outIdx: 0 }, blockHeight: 250 } : offer,
+    );
+    const OTHER_BYTES = (() => {
+        const bytes = new Uint8Array(33);
+        bytes[0] = 3;
+        bytes.fill(0x22, 1);
+        return bytes;
+    })();
+    const OTHER_PK = toHex(OTHER_BYTES);
+    const OTHER_ADDR = encodeCashAddress('ecash', 'p2pkh', shaRmd160(OTHER_BYTES));
+
+    /** A resolved stall as the loader answers it, the params read off the URL. */
+    const stallAt = (pubkeyHex: string, address: string, stallName: string, offers: typeof settled) => ({
+        view: {
+            route: { kind: 'pubkey' as const, pubkeyHex, address },
+            fetch: { kind: 'offers' as const, offers },
+            overlay: { kind: 'idle' as const },
+            address,
+            stallName,
+            tokens,
+            window: parseWindowParams(location.search)!,
+        },
+        offers,
+        pubkeyHex,
+    });
+    const shown = (root: HTMLElement): string =>
+        root.querySelector('[data-role="shop-window"] .item-n')?.textContent ?? '';
+    /** What a wall's status line says over `opening` — the wall's own word, not the shop's. */
+    const OPENING = windowOutcome('opening')!;
+    const names = (root: HTMLElement): string[] =>
+        [...root.querySelectorAll('[data-role="shop-window"] .item-n')].map((n) => n.textContent ?? '').sort();
+    /**
+     * A SLOW loader, as in `re-reads on its own`: the blank lives between
+     * `refresh()`'s first repaint and the load landing.
+     */
+    const SLOW = 5_000;
+    const bootSlow = (root: HTMLElement, answer: (load: number) => ReturnType<typeof stallAt>): void => {
+        let loads = 0;
+        boot(root, async () => {
+            loads += 1;
+            const state = answer(loads);
+            await new Promise((done) => setTimeout(done, SLOW));
+            return state;
+        });
+    };
+
+    const ROUTES: Array<[string, string]> = [
+        ['/s/<pubkey>', stallPath(PK)],
+        ['/s/<address>', stallPath(ADDR)],
+    ];
+
+    it('the two route forms are one stall', () => {
+        // The premise, pinned: a different path per form, one seller.
+        expect(stallPath(PK)).not.toBe(stallPath(ADDR));
+        expect(encodeCashAddress('ecash', 'p2pkh', HASH)).toBe(ADDR);
+    });
+
+    it.each(ROUTES)('on a wall at %s the heartbeat never blanks it and keeps its card', async (_, path) => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${path}?view=window&mode=cycle`);
+        const root = document.createElement('div');
+        bootSlow(root, () => stallAt(PK, ADDR, 'Riverside Goods', settled));
+        await vi.advanceTimersByTimeAsync(SLOW);
+        expect(shown(root)).toBe('Apples');
+        // Two dwells: the cursor is on the third card when the beat lands.
+        await vi.advanceTimersByTimeAsync(2 * WINDOW_CARD_MS + 1_000);
+        expect(shown(root)).toBe('Cherries');
+
+        // The beat, armed at the first paint, lands on the third card's due
+        // time too (60 s is three dwells), and its read takes SLOW. Whichever
+        // of the two runs first, the kept cursor says Dates once the read
+        // lands, and a reset one says Apples.
+        await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS - 2 * WINDOW_CARD_MS - 1_000 + 500);
+        expect(root.textContent, 'mid-read, the wall is not "opening"').not.toContain(OPENING);
+        expect(root.querySelector('.stall-name')?.textContent, 'and keeps the seller’s name').toBe('Riverside Goods');
+        expect(shown(root), 'and keeps a card on it').not.toBe('');
+
+        await vi.advanceTimersByTimeAsync(SLOW);
+        expect(shown(root), 'the read landed on the cursor the wall had, not the first card').toBe('Dates');
+    });
+
+    it.each(ROUTES)('on a wall at %s the heartbeat keeps the lock set a partial fill moved past', async (_, path) => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${path}?view=window&mode=browse&upto=200`);
+        const root = document.createElement('div');
+        bootSlow(root, (load) => stallAt(PK, ADDR, 'Riverside Goods', load === 1 ? settled : barleyMoved));
+        await vi.advanceTimersByTimeAsync(SLOW);
+        expect(names(root), 'locked at 200: all four').toEqual([...NAMES].sort());
+
+        await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS);
+        expect(root.textContent, 'mid-read, the wall is not "opening"').not.toContain(OPENING);
+        expect(names(root), 'and keeps its shelf').toEqual([...NAMES].sort());
+
+        // The beat's read: Barley's remainder now sits at block 250. The set
+        // remembered at the lock keeps it; a set rebuilt from this read at
+        // 200 would drop it as a reward for selling some of it.
+        await vi.advanceTimersByTimeAsync(SLOW);
+        expect(names(root), 'the remembered set still holds Barley').toEqual([...NAMES].sort());
+    });
+
+    it('a navigation to a different stall by pubkey still blanks and resets', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(PK)}?view=window&mode=cycle&upto=200`);
+        const root = document.createElement('div');
+        bootSlow(root, () =>
+            location.pathname === stallPath(OTHER_PK)
+                ? stallAt(OTHER_PK, OTHER_ADDR, 'Hillside Market', barleyMoved)
+                : stallAt(PK, ADDR, 'Riverside Goods', settled),
+        );
+        await vi.advanceTimersByTimeAsync(SLOW);
+        await vi.advanceTimersByTimeAsync(2 * WINDOW_CARD_MS + 1_000);
+        expect(shown(root), 'the cursor is on the third card').toBe('Cherries');
+
+        window.history.pushState(null, '', `${stallPath(OTHER_PK)}?view=window&mode=cycle&upto=200`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(root.textContent, 'another seller opens as "opening"').toContain(OPENING);
+        expect(root.textContent, 'with none of the last seller on screen').not.toContain('Riverside Goods');
+        expect(shown(root), 'and none of their goods').toBe('');
+
+        await vi.advanceTimersByTimeAsync(SLOW);
+        expect(root.querySelector('.stall-name')?.textContent).toBe('Hillside Market');
+        expect(shown(root), 'a new stall starts at its first card').toBe('Apples');
+        // Its own lock set, taken from its own read: Barley settled after 200
+        // on THIS stall, so the next card is Cherries. The last stall's set
+        // carried over would say Barley.
+        await vi.advanceTimersByTimeAsync(WINDOW_CARD_MS + 500);
+        expect(shown(root), 'and its own lock set').toBe('Cherries');
     });
 });
 

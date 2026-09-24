@@ -7,6 +7,7 @@ import { shortAddress,
     parseBroadcastParams,
     parsePayParam,
     parseSellerParam,
+    pathNamesStall,
     payLandingUrl,
     sellerFromPath,
     stallPath,
@@ -55,6 +56,49 @@ describe('sellerFromPath', () => {
         expect(sellerFromPath('/')).toBeUndefined();
         expect(sellerFromPath('/s/')).toBeUndefined();
         expect(sellerFromPath('/stall/x')).toBeUndefined();
+    });
+});
+
+describe('a-path-names-its-stall-by-pubkey-or-address', () => {
+    /*
+     * `refresh()` asks this to tell a wall's heartbeat (the same stall) from
+     * a navigation (another one). A stall answers to two route forms, so the
+     * path is compared with the name of the same form the view holds, never
+     * with `stallPath(identityOf(view))` — the address, which a wall opened at
+     * `/s/<pubkey>` never matched. The pairing of pubkey and address below is
+     * the view's own claim; this function does not re-derive it.
+     */
+    const pk = `02${'44'.repeat(32)}`;
+    const address = encodeCashAddress('ecash', 'p2pkh', '44'.repeat(20));
+    const resolved = { route: { kind: 'pubkey' as const, pubkeyHex: pk, address }, address };
+
+    it('matches a resolved stall by its pubkey path and by its address path, in any spelling', () => {
+        for (const path of [
+            stallPath(pk),
+            `/s/${pk.toUpperCase()}`,
+            stallPath(address),
+            `/s/${encodeURIComponent(address)}`,
+            `/s/${address.slice('ecash:'.length).toUpperCase()}`,
+        ]) {
+            expect(pathNamesStall(path, resolved), path).toBe(true);
+        }
+    });
+
+    it('never matches another seller, the door, or an unreadable path', () => {
+        const otherPk = `03${'44'.repeat(32)}`;
+        const otherAddress = encodeCashAddress('ecash', 'p2pkh', '55'.repeat(20));
+        for (const path of [stallPath(otherPk), stallPath(otherAddress), '/', '/s/', '/s/not-a-seller', stallPath(SAMPLE_P2SH)]) {
+            expect(pathNamesStall(path, resolved), path).toBe(false);
+        }
+    });
+
+    it('matches an address path on a view that only holds the address, and never a pubkey path there', () => {
+        const unresolvable = { route: { kind: 'unresolvable' as const, address } };
+        expect(pathNamesStall(stallPath(address), unresolvable)).toBe(true);
+        expect(pathNamesStall(stallPath(address), { ...unresolvable, address })).toBe(true);
+        // No pubkey was ever resolved, so a pubkey path names nothing here.
+        expect(pathNamesStall(stallPath(pk), { ...unresolvable, address })).toBe(false);
+        expect(pathNamesStall(stallPath(pk), { route: { kind: 'home' as const } })).toBe(false);
     });
 });
 

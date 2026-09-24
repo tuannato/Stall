@@ -8,6 +8,7 @@ import {
     parseWindowParams,
     parsePayParam,
     parseSellerParam,
+    pathNamesStall,
     sellerFromPath,
     stallPath,
 } from './domain/route';
@@ -2765,16 +2766,16 @@ export function boot(
         // Only for the SAME stall: a navigation to another seller must not
         // leave the previous one's goods on screen under the new one's link.
         const opening = openingFromLocation();
-        // Compared as PATHS. `identityOf` answers the prefixed address and
-        // `sellerFromPath` answers the bare payload, so comparing those two
-        // directly never matches — which left the guard permanently false and
-        // the wall still blanking, until a test that asserted mid-load said
-        // so. `stallPath` is the canonicaliser both sides already go through.
-        const here = identityOf(state.view);
-        const sameStall =
-            wallParams() !== undefined &&
-            here !== undefined &&
-            stallPath(here) === location.pathname;
+        // Compared as STALLS, not as spellings (`pathNamesStall`). A stall
+        // answers to its pubkey and its address, and this compared two
+        // spellings twice over: first the prefixed address against the bare
+        // payload, which never matched, then `stallPath(identityOf(view))`
+        // against the path — and `identityOf` answers the address, so a wall
+        // opened at `/s/<pubkey>` still never matched itself and blanked and
+        // reset on every beat. A pubkey path is compared with the view's
+        // resolved pubkey, an address path with its address, both through
+        // the route's own parser (`a-wall-knows-its-own-stall-by-either-name`).
+        const sameStall = wallParams() !== undefined && pathNamesStall(location.pathname, state.view);
         if (!sameStall) {
             state = opening;
             paint();

@@ -1,5 +1,5 @@
 import { decodeCashAddress, isValidCashAddress } from 'ecashaddrjs';
-import type { BroadcastParams, RouteParse, WindowParams } from './state';
+import type { BroadcastParams, RouteParse, StallView, WindowParams } from './state';
 
 const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 
@@ -80,6 +80,46 @@ export function stallPath(raw: string): string {
               ? parsed.address.slice('ecash:'.length)
               : raw.trim();
     return `/s/${encodeURIComponent(token)}`;
+}
+
+/**
+ * Whether `pathname` names the stall `view` is of — the STALL, never two
+ * spellings of it.
+ *
+ * A stall answers to two route forms, its pubkey and its address, and once
+ * the route resolves the view holds both. Comparing `stallPath` of the view's
+ * identity with the path compared spellings: the identity is the address, so
+ * a wall opened at `/s/<pubkey>` never matched itself, and every heartbeat
+ * repainted it as opening and threw away its cursor, its rail and its lock
+ * set (2026-09-25). So a pubkey path is compared with the view's resolved
+ * pubkey and an address path with the view's address, each side through
+ * `parseSellerParam` — the one canonicaliser (lower case, `ecash:` put back).
+ * Anything else — the door, an unreadable path, a pubkey path over a view
+ * that never resolved one — names no stall this view is.
+ */
+export function pathNamesStall(pathname: string, view: Pick<StallView, 'route' | 'address'>): boolean {
+    const raw = sellerFromPath(pathname);
+    if (raw === undefined) {
+        return false;
+    }
+    const asked = parseSellerParam(raw);
+    const { route } = view;
+    if (asked.kind === 'pubkey') {
+        if (route.kind !== 'pubkey') {
+            return false;
+        }
+        const held = parseSellerParam(route.pubkeyHex);
+        return held.kind === 'pubkey' && held.pubkeyHex === asked.pubkeyHex;
+    }
+    if (asked.kind === 'address') {
+        const address = view.address ?? ('address' in route ? route.address : undefined);
+        if (address === undefined) {
+            return false;
+        }
+        const held = parseSellerParam(address);
+        return held.kind === 'address' && held.address === asked.address;
+    }
+    return false;
 }
 
 /**
