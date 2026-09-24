@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
-import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, pageIsSpent, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
 
 /** A 10×10 RGBA frame, grey, with `paint` pixels set to red. */
 function frame(paint = []) {
@@ -173,5 +173,46 @@ describe('a-page-is-renewed-before-its-renderer-gives-out', () => {
         assert.equal(pageIsSpent(0), false);
         assert.equal(pageIsSpent(LOADS_PER_PAGE - 1), false);
         assert.equal(pageIsSpent(LOADS_PER_PAGE), true);
+    });
+});
+
+describe('looks-diff-expects-by-screen-look-and-variant', () => {
+    const compared = new Set(['offers', 'activity', 'unbuyable']);
+    const shot = (screen, look, variant, verdict = 'real') => ({ screen, look, variant, verdict });
+
+    it('reads a token as a screen, or a screen qualified by a look and a variant', () => {
+        assert.deepEqual(parseExpect('offers'), { token: 'offers', screen: 'offers', look: '*', variant: '*' });
+        assert.deepEqual(parseExpect('*:neo-city/worn'), { token: '*:neo-city/worn', screen: '*', look: 'neo-city', variant: 'worn' });
+        assert.deepEqual(parseExpect('offers:rural'), { token: 'offers:rural', screen: 'offers', look: 'rural', variant: '*' });
+        assert.equal(lookSlug('Neo city'), 'neo-city');
+        assert.throws(() => parseExpect('offers:neo-city/decorations'), /screen\[:look\[\/variant\]\]/);
+        assert.throws(() => parseExpect('Offers'));
+    });
+
+    it('passes Neo worn moving everywhere and nothing else, and fails a look beside it that moved', () => {
+        const rain = [shot('offers', 'neo-city', 'worn'), shot('activity', 'neo-city', 'worn')];
+        assert.equal(summarize(rain, { expected: ['*:neo-city/worn'], compared }).code, 0);
+        // The same screen on another look, or Neo bare, is not covered.
+        const beside = summarize([...rain, shot('offers', 'modern', 'worn'), shot('activity', 'neo-city', 'bare')], {
+            expected: ['*:neo-city/worn'],
+            compared,
+        });
+        assert.equal(beside.code, 1);
+        assert.deepEqual(
+            beside.unexpected.map((e) => `${e.screen}:${e.look}/${e.variant}`),
+            ['offers:modern/worn', 'activity:neo-city/bare'],
+        );
+        // A plain screen still covers every look and variant on it.
+        assert.equal(summarize([...rain, shot('unbuyable', 'rural', 'bare')], { expected: ['*:neo-city/worn', 'unbuyable'], compared }).code, 0);
+    });
+
+    it('fails a qualified token that covered no real difference, and one whose screen was not compared', () => {
+        const out = summarize([shot('offers', 'neo-city', 'worn')], {
+            expected: ['offers:neo-city/worn', 'activity:neo-city/worn', 'door:modern', '*:rural/worn'],
+            compared,
+        });
+        assert.equal(out.code, 1);
+        assert.deepEqual(out.unmet, ['activity:neo-city/worn', '*:rural/worn']);
+        assert.deepEqual(out.notCompared, ['door:modern']);
     });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `pnpm looks:diff <ref> [--expect <screen,screen,…>]` — what a change moved
+ * `pnpm looks:diff <ref> [--expect <screen[:look[/variant]],…>]` — what a change moved
  * on screen, in pixels.
  *
  * A CSS change that says "nothing a visitor sees moves" is a claim, and the
@@ -58,9 +58,12 @@
  *   **noise** when only one pair differs, by at most `NOISE_PX`; and
  *   **inconclusive** otherwise. Nothing is dropped: every non-identical shot
  *   is listed under its verdict, with its before / after / diff PNGs.
- * - **`--expect`** names the screens the change is meant to move. A run whose
- *   real differences are all on those screens, and on every one of them,
- *   passes with them listed as expected.
+ * - **`--expect`** names what the change is meant to move: a screen, or a
+ *   screen qualified by a look's slug and a variant — `offers`,
+ *   `offers:neo-city/worn`, `*:neo-city/worn` for every Neo worn shot
+ *   (`parseExpect`). A run whose real differences are all covered by the
+ *   tokens, and where every token covers one, passes with them listed as
+ *   expected; a plain screen is every look and variant on it.
  * - **What is written**: every non-identical shot as `<stem>-before.png`
  *   (`<ref>`), `<stem>-after.png` (the working tree) and `<stem>-diff.png`
  *   (the after, faded, with every differing pixel of the first pair in red),
@@ -85,7 +88,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, encodePng, findChrome } from './browser.mjs';
-import { LOADS_PER_PAGE, classify, diffMap, pageIsSpent, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, classify, diffMap, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -151,10 +154,10 @@ const EXIT_FAILED = 3;
 function usage(message) {
     console.error(
         `looks:diff: ${message}\n\n` +
-            'Usage: pnpm looks:diff <ref> [--expect <screen,screen,…>]\n' +
+            'Usage: pnpm looks:diff <ref> [--expect <screen[:look[/variant]],…>]\n' +
             '  Builds <ref> (a commit, tag or branch) and the working tree, shoots every shipped look\n' +
             '  on the probe\'s screens on both, and lists every shot whose pixels differ. --expect names\n' +
-            '  the screens the change is meant to move.',
+            '  what the change is meant to move: a screen, or screen:look/variant (look slug, bare|worn, * for any).',
     );
     process.exit(EXIT_FAILED);
 }
@@ -167,6 +170,8 @@ for (let i = 0; i < args.length; i += 1) {
         const list = args[i + 1];
         if (list === undefined || list.startsWith('--')) usage('--expect needs a comma-separated list of screens.');
         expected = list.split(',').map((s) => s.trim()).filter((s) => s !== '');
+        // Read now, so a malformed token stops the run before anything is built.
+        for (const token of expected) parseExpect(token);
         i += 1;
     } else if (args[i].startsWith('-')) {
         usage(`no option "${args[i]}".`);
@@ -618,7 +623,7 @@ try {
         const result = classify(images);
         // A look class that moved is never noise, whatever the pixels say.
         const verdict = entry.classNote !== '' && result.verdict !== 'real' ? 'inconclusive' : result.verdict;
-        verdicts.push({ screen: entry.job.screen, verdict, entry, result });
+        verdicts.push({ screen: entry.job.screen, look: lookSlug(entry.job.lookLabel), variant: entry.job.variant, verdict, entry, result });
         if (verdict !== 'identical') {
             const stem = join(SHOTS, entry.job.file);
             mkdirSync(dirname(stem), { recursive: true });
@@ -644,8 +649,8 @@ try {
         console.log(`\n  ${title}:`);
         for (const v of list) console.log(`  ${mark} ${line(v)}`);
     };
-    const expectedList = verdicts.filter((v) => v.verdict === 'real' && expected.includes(v.screen));
-    const unexpectedList = verdicts.filter((v) => v.verdict === 'real' && !expected.includes(v.screen));
+    const expectedList = out.expectedReal;
+    const unexpectedList = out.unexpected;
     if (expectedList.length > 0) {
         console.log('\n  real, and expected (--expect):');
         for (const v of expectedList) console.log(`  = ${line(v)}`);

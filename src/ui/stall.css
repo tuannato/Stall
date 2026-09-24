@@ -621,8 +621,9 @@ body {
  * and at the brightest drop the art draws, Neo's ink reads 2.84:1 bare
  * (2.18:1 where the aurora's cyan wash is worn with it) and its muted 1.27:1. So each line standing on that ground wears `text-shadow`
  * in `--s-bg` at alpha 1 and zero blur — a hard outline that hugs every
- * stroke and is invisible where nothing falls behind it, because it is the
- * ground's own colour: one pixel all round for text of 14px and over
+ * stroke, in the ground's own colour, so it cannot be seen where the ground
+ * under a line is `--s-bg` itself (it can over a tinted ground: the aurora's
+ * washes, the notice's wash, a pill's tint): one pixel all round for text of 14px and over
  * (`--rain-outline-1`), two for text under 14px (`--rain-outline-2`, the
  * eight one-pixel offsets and twelve at two). Nothing here paints a box: no
  * background, no box-shadow, no border (`a-decoration-lays-no-ground-under-

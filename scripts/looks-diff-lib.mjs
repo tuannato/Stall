@@ -124,30 +124,60 @@ export function classify({ before1, after1, before2, after2, masks = [] }) {
 }
 
 /**
- * What the run says. `entries` are `{ screen, verdict }` for every compared
- * shot; `expected` the screens `--expect` named; `compared` the set of
- * screens both sides painted.
+ * One `--expect` token, read: a screen, or a screen qualified by a look and a
+ * variant — `offers`, `offers:neo-city/worn`, `offers:neo-city` (either
+ * variant), and `*` for every screen (`*:neo-city/worn`: every Neo worn
+ * shot). The look is its label's slug (`Neo city` → `neo-city`), the
+ * variant `bare` or `worn`, and `*` stands for any. A plain screen is every
+ * look and variant on it, as before.
+ */
+export function parseExpect(token) {
+    const m = /^([a-z0-9*-]+)(?::([a-z0-9*-]+)(?:\/(bare|worn|\*))?)?$/.exec(token);
+    if (m === null) throw new Error(`--expect: "${token}" is not screen[:look[/variant]]`);
+    return { token, screen: m[1], look: m[2] ?? '*', variant: m[3] ?? '*' };
+}
+
+/** A label's slug, as the diff plan writes it (`layout/shotPlan.ts`). */
+export function lookSlug(label) {
+    return label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/** Whether a parsed token covers a shot: its screen, its look's slug and its variant. */
+export function expectCovers(want, entry) {
+    const is = (pattern, value) => pattern === '*' || pattern === value;
+    return is(want.screen, entry.screen) && is(want.look, entry.look ?? '') && is(want.variant, entry.variant ?? '');
+}
+
+/**
+ * What a run's verdicts prove against its `--expect` tokens (`parseExpect`):
  *
- * - `code` 1 when a real difference is on a screen not expected, or an
- *   expected screen was not compared or showed no real difference — the
- *   proof does not say what it was asked to;
+ * - `code` 1 when a real difference is on a shot no token covers, or a token
+ *   was not compared or covered no real difference — the proof does not say
+ *   what it was asked to. A token is compared when its screen was (a `*`
+ *   screen always is); it is met when some real difference is one it covers;
  * - else `code` 2 when anything is inconclusive — no ✓;
  * - else `code` 0.
  */
 export function summarize(entries, { expected = [], compared = new Set() } = {}) {
-    const want = new Set(expected);
+    const wants = expected.map(parseExpect);
+    const covered = (entry) => wants.some((want) => expectCovers(want, entry));
     const real = entries.filter((e) => e.verdict === 'real');
-    const unexpected = real.filter((e) => !want.has(e.screen));
-    const expectedSeen = new Set(real.filter((e) => want.has(e.screen)).map((e) => e.screen));
-    const notCompared = [...want].filter((screen) => !compared.has(screen));
-    const unmet = [...want].filter((screen) => compared.has(screen) && !expectedSeen.has(screen));
+    const unexpected = real.filter((e) => !covered(e));
+    const notCompared = wants.filter((want) => want.screen !== '*' && !compared.has(want.screen)).map((want) => want.token);
+    const unmet = wants
+        .filter((want) => want.screen === '*' || compared.has(want.screen))
+        .filter((want) => !real.some((e) => expectCovers(want, e)))
+        .map((want) => want.token);
     const inconclusive = entries.filter((e) => e.verdict === 'inconclusive');
     const noise = entries.filter((e) => e.verdict === 'noise');
     const code = unexpected.length > 0 || notCompared.length > 0 || unmet.length > 0 ? 1 : inconclusive.length > 0 ? 2 : 0;
     return {
         code,
         unexpected,
-        expectedReal: real.filter((e) => want.has(e.screen)),
+        expectedReal: real.filter(covered),
         notCompared,
         unmet,
         inconclusive,

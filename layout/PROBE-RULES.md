@@ -2875,3 +2875,14 @@ rules, and a hurried partial version inside this batch would be a weaker
 guard.
 Under the rain the first-stall link inherits its line's outline and is
 read in its ring, and the muted lift it wore for one round is gone.
+
+**What the pictures show** (round 8, `visible-batch-shots/11-glyph-outline/`,
+Neo worn at one frozen instant, `main` beside this round at 390 and 1280,
+the walls at 1280 and 1920; `measure.txt` has the numbers). The outline is
+not invisible off the drops: over the aurora's washes, the notice's wash,
+the Activity pill's, the invite's and the call to action's tints it is a
+dark stroke, and it covers the inner part of Neo's heading glow — every
+screen had outline pixels away from any drop changed by more than 16
+levels, up to about 2,300 a screen. The owner's mock
+(`review/E-outline-activity.jpg`) was the rain alone, on `--s-bg`; the
+look with the aurora worn is theirs to see.
