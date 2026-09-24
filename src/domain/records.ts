@@ -1,20 +1,33 @@
 /**
  * The seller's records when a walk threw part-way (the critic's sixth pass,
- * 2026-09-24, P1).
+ * 2026-09-24, P1; ranks, its eighth pass, 2026-09-25, item 4).
  *
- * A descriptions walk reads each index newest first, so what it collected
- * before a throw is the newest part of the seller's record: every token it
- * resolved (`DescriptionLookup.decided`) is resolved exactly as a finished
- * walk would resolve it — a new figure, new words, or a removal. Only the
- * tokens it never reached are unknown. Keeping the last good read WHOLE over
- * such a walk showed an older figure the walk had already read past (and
- * composed a payment at it), and offered an item the seller had removed.
+ * A descriptions walk reads each index newest BLOCK first, so what it
+ * collected before a throw is, nearly always, the newest part of the
+ * seller's record: every token it resolved (`DescriptionLookup.decided`) is
+ * resolved exactly as a finished walk would resolve it — a new figure, new
+ * words, or a removal. Only the tokens it never reached are unknown. Keeping
+ * the last good read WHOLE over such a walk showed an older figure the walk
+ * had already read past (and composed a payment at it), and offered an item
+ * the seller had removed.
+ *
+ * **Nearly always, not always.** Two settled records rank by the node's
+ * first sighting before their height (`compareManifestRank`), so a newer edit
+ * mined a block BEFORE an older one sits on a later page of the walk than
+ * the edit it supersedes. A walk that threw before that page decided the
+ * token at the older record, while the kept read — a walk that finished —
+ * holds the newer. So where both reads decided a token and both carry the
+ * winner's rank (`RecordMaps.ranks`), the higher rank wins, whichever read
+ * it came from; without a rank on either side, the failed walk's answer
+ * stands, as it did before ranks were carried.
  *
  * So the two are merged per token: the failed walk's decided tokens win,
- * absence included, and the kept records fill only the tokens it never
- * reached. Pure: no network, no DOM.
+ * absence included, unless the kept read's winner for that token outranks
+ * it; the kept records fill the tokens the walk never reached. Pure: no
+ * network, no DOM.
  */
 import type { TokenPrice } from './description';
+import { compareManifestRank, type ManifestRank } from './manifest';
 
 /** The four record maps a view carries, as one read left them. */
 export type RecordMaps = {
@@ -22,6 +35,12 @@ export type RecordMaps = {
     readonly shelves?: ReadonlyMap<string, string>;
     readonly prices?: ReadonlyMap<string, TokenPrice>;
     readonly quoteTimes?: ReadonlyMap<string, number>;
+    /**
+     * tokenId → the rank of the record that won that token, for every token
+     * the read decided, a removal included (`DescriptionLookup.ranks`).
+     * Absent where the read carried none: then nothing is compared.
+     */
+    readonly ranks?: ReadonlyMap<string, ManifestRank>;
 };
 
 /** The merged maps, and the tokens whose records came from the kept read. */
@@ -30,9 +49,12 @@ export type MergedRecords = {
     readonly shelves: ReadonlyMap<string, string>;
     readonly prices: ReadonlyMap<string, TokenPrice>;
     readonly quoteTimes: ReadonlyMap<string, number>;
+    /** The rank of whichever record each merged token was taken from. */
+    readonly ranks: ReadonlyMap<string, ManifestRank>;
     /**
-     * Every token shown from the kept read: in one of its maps and never
-     * decided by the walk that threw. Empty means nothing on screen is older
+     * Every token shown from the kept read: in one of its maps, and either
+     * never decided by the walk that threw or decided by it at a record the
+     * kept read's own winner outranks. Empty means nothing on screen is older
      * than this read, and the screen must not say it is.
      */
     readonly keptShown: ReadonlySet<string>;
@@ -41,7 +63,8 @@ export type MergedRecords = {
 /**
  * The tokens a read resolved: its explicit set when the walk said, and
  * otherwise every token its maps name — each entry in them is a winner, so
- * that is the set minus the removals, which only an explicit set can carry.
+ * that is the set minus the removals, which only an explicit set or a rank
+ * can carry.
  */
 export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<string> }): ReadonlySet<string> {
     if (read.decided !== undefined) {
@@ -52,27 +75,45 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
         ...(read.shelves?.keys() ?? []),
         ...(read.prices?.keys() ?? []),
         ...(read.quoteTimes?.keys() ?? []),
+        ...(read.ranks?.keys() ?? []),
     ]);
 }
 
 /**
  * A walk that threw (`read`, resolving `decided`) over the records kept from
  * the last read that finished (`kept`): per token, the walk's answer when it
- * resolved the token — a removal included, which drops the kept record — and
- * the kept record otherwise.
+ * resolved the token — a removal included, which drops the kept record —
+ * unless the kept read decided the same token at a higher rank, and the kept
+ * record otherwise.
  */
 export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, kept: RecordMaps): MergedRecords {
     // Anything the walk's own maps name it resolved, whatever set it passed.
     const resolved = new Set([...decided, ...decidedOf({ ...read, decided: undefined })]);
+    // A token both reads decided, where the kept read's winner is the newer
+    // record: the walk stopped before the page that held it.
+    const keptWins = new Set<string>();
+    for (const tokenId of resolved) {
+        const mine = read.ranks?.get(tokenId);
+        const theirs = kept.ranks?.get(tokenId);
+        if (mine !== undefined && theirs !== undefined && compareManifestRank(theirs, mine) > 0) {
+            keptWins.add(tokenId);
+        }
+    }
+    const fromWalk = (tokenId: string): boolean => resolved.has(tokenId) && !keptWins.has(tokenId);
     const keptShown = new Set<string>();
     const merge = <V>(
         fresh: ReadonlyMap<string, V> | undefined,
         old: ReadonlyMap<string, V> | undefined,
         shows: boolean,
     ): Map<string, V> => {
-        const out = new Map<string, V>(fresh ?? []);
+        const out = new Map<string, V>();
+        for (const [tokenId, value] of fresh ?? []) {
+            if (!keptWins.has(tokenId)) {
+                out.set(tokenId, value);
+            }
+        }
         for (const [tokenId, value] of old ?? []) {
-            if (!resolved.has(tokenId)) {
+            if (!fromWalk(tokenId)) {
                 out.set(tokenId, value);
                 if (shows) {
                     keptShown.add(tokenId);
@@ -88,6 +129,7 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         // A record's clock is not a record: a kept time beside nothing else
         // kept shows nothing, so it does not make the screen stale.
         quoteTimes: merge(read.quoteTimes, kept.quoteTimes, false),
+        ranks: merge(read.ranks, kept.ranks, false),
         keptShown,
     };
 }

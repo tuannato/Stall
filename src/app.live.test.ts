@@ -5,7 +5,7 @@ import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
-import { STLD_HEX, encodeDescriptionHex } from './domain/description';
+import { STLD_HEX, encodeDescriptionHex, encodeRemovalHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
 import { MAX_ACTIVITY_PAGES, MAX_STALL_EVENTS, type StallView } from './domain/state';
 import type { ChainTx, HistoryPage } from './net/chain';
@@ -18,6 +18,7 @@ import {
     SELECTION_DROPPED,
     QUOTE_MINTED_CHIP,
     WINDOW_QUOTES_AS_LAST_READ,
+    WINDOW_SOME_QUOTES_AS_LAST_READ,
     selectionUnread,
     selectionCapped,
     windowSelectionUnread,
@@ -1000,7 +1001,10 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect(wallRow(root, 'Plum Jam')?.textContent, 'and never the older one').not.toContain('5,000.00');
         expect(plate(root), 'the code at the older figure is closed').toBeNull();
         expect(wallRow(root, 'Rye Flour'), 'the record it never reached is kept').not.toBeUndefined();
-        expect(fresh(root), 'and said to be').toBe(WINDOW_QUOTES_AS_LAST_READ);
+        // One row read now, one kept: "some quotes", never a claim that the
+        // quote read just now is an old one (the critic's eighth pass, item 5).
+        expect(fresh(root), 'and said to be, of some quotes').toBe(WINDOW_SOME_QUOTES_AS_LAST_READ);
+        expect(WINDOW_SOME_QUOTES_AS_LAST_READ).not.toBe(WINDOW_QUOTES_AS_LAST_READ);
 
         await pay(root);
         expect(plate(root)?.getAttribute('data-pay-uri'), 'a new press composes the newer figure').toContain(
@@ -1084,6 +1088,36 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect(fresh(root), 'nothing kept is shown, so nothing is said to be').toBe('Updated just now');
     });
 
+    it('says nothing is as last read when what was kept is not on the quotes rail', async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { ...wall, touch: false };
+        // A carries words and no figure, so it is no quote row; B is read now.
+        const threw = stallEmpty({
+            tokens,
+            genesis,
+            prices: new Map([[B, XEC_B]]),
+            descriptionsFailed: true,
+            descriptionsDecided: new Set([B]),
+            window: params,
+        });
+        const root = bootSequence([
+            stallEmpty({
+                tokens,
+                genesis,
+                descriptions: new Map([[A, 'Words alone']]),
+                prices: new Map([[B, XEC_B]]),
+                window: params,
+            }),
+            threw,
+        ]);
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(painted.view?.recordsStale, 'a kept record is shown').toBe(true);
+        expect(wallRow(root, 'Rye Flour')).not.toBeUndefined();
+        expect(fresh(root), 'but every quote on the rail was read now').toBe('Updated just now');
+    });
+
     it('a wall whose book and walk both failed keeps the records and says so', async () => {
         window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
         const params = { ...wall, touch: false };
@@ -1118,6 +1152,49 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect(fresh(root), 'as last read').toBe(WINDOW_QUOTES_AS_LAST_READ);
     });
 
+    it('a walk that threw on the facts road still lands the genesis it passed', async () => {
+        // The eighth pass, item 11: the whole-answer road folds a walk's free
+        // genesis answers into the session; the kept road did not, so a
+        // token the walk resolved lost its attribution on a wall whose book
+        // and walk both failed.
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+        const params = { ...wall, touch: false };
+        const C = 'c3'.repeat(32);
+        const bookFailed: State = {
+            ...stallEmpty({
+                tokens: new Map([[C, fungible(C, 'Oat Milk')]]),
+                fetch: { kind: 'unreachable', triedAtMs: 0, hosts: [] },
+                window: params,
+            }),
+            pendingFacts: {
+                stall: { address: ADDR, hash: HASH },
+                pubkeyHex: PK,
+                manifest: Promise.resolve(undefined),
+                descriptions: Promise.resolve({
+                    descriptions: new Map<string, string>(),
+                    shelves: new Map<string, string>(),
+                    prices: new Map([[C, XEC_B]]),
+                    quoteTimes: new Map<string, number>(),
+                    decided: new Set<string>([C]),
+                    unreadable: new Set<string>(),
+                    truncated: false,
+                    failed: true,
+                    genesis: new Map([[C, 'attributed' as const]]),
+                }),
+            },
+        };
+        const root = bootSequence([
+            stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A], [B, XEC_B]]), window: params }),
+            bookFailed,
+        ]);
+        await flush();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(wallRow(root, 'Oat Milk'), 'the record the walk read is on the wall').not.toBeUndefined();
+        expect(painted.view?.genesis?.get(C), 'with the genesis it passed').toBe('attributed');
+        expect(wallRow(root, 'Oat Milk')?.textContent).toContain(QUOTE_MINTED_CHIP);
+    });
+
     it('a live walk that throws leaves the older records and says so', async () => {
         window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
         const params = { ...wall, touch: false };
@@ -1131,6 +1208,203 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect(chain.calls.stld, 'it did try').toBe(1);
         expect(wallRow(root, 'Plum Jam'), 'the older record stays').not.toBeUndefined();
         expect(fresh(root), 'and is said to be older').toBe(WINDOW_QUOTES_AS_LAST_READ);
+    });
+
+    /** A record the stall signed, mined at `height` and first seen at `seen`. */
+    const record = (txid: string, hex: string | undefined, height: number, seen?: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return {
+            ...signedTx({ txid, outputs: [`6a${hex}`], height }),
+            ...(seen === undefined ? {} : { timeFirstSeen: seen }),
+        };
+    };
+    /** A live walk whose page 0 answers `first` and whose page 1 throws. */
+    const liveWalkThatThrows = async (first: ChainTx[]): Promise<void> => {
+        for (const tx of first) {
+            chain.txs.set(tx.txid, tx);
+        }
+        chain.historyPages = [first, []];
+        chain.historyPageThrows = new Set([1]);
+        watches[0]!.hooks.onBurst?.([first[0]!.txid]);
+        await flush();
+        expect(chain.historyPageCalls, 'the walk reached the page that threw').toContain(1);
+    };
+    const pressForUrl = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`) as HTMLElement | null;
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+
+    describe('on a phone, a live walk that threw is merged per token (the eighth pass, item 3)', () => {
+        /**
+         * A phone has no heartbeat: until 2026-09-25 a live walk that threw
+         * was refused whole, so the records on screen stood — an older figure
+         * the walk had read past, an item the seller had removed — until the
+         * reader reloaded, and Pay and Pay several composed them. Now the
+         * walk's answer is merged over the records on screen per token.
+         */
+        const phone = (): State =>
+            stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A], [B, XEC_B]]), shopTab: 'quotes' });
+        const newerA = (): ChainTx => record('7a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_NEWER }), 7);
+        const removeB = (): ChainTx => record('7b'.repeat(32), encodeRemovalHex(B), 7);
+
+        it('Pay composes the figure the walk read, and the removed item has no Pay', async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            expect(root.querySelectorAll('[data-role="pay-open"]').length).toBe(2);
+            await liveWalkThatThrows([newerA(), removeB()]);
+
+            const opens = root.querySelectorAll<HTMLButtonElement>('[data-role="pay-open"]');
+            expect(opens.length, 'the removed item offers no Pay').toBe(1);
+            expect(root.textContent, 'nor its name').not.toContain('Rye Flour');
+            opens[0]!.click();
+            await flush();
+            expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('9,000');
+            const url = pressForUrl(root, 'pay');
+            expect(url, 'the link carries the figure the walk read').toContain('amount=9000.00');
+            expect(url, 'never the one it read past').not.toContain('amount=5000.00');
+        });
+
+        it('Pay several drops the removed item and composes the newer figure', async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            expect(painted.view?.selection?.size).toBe(2);
+            await liveWalkThatThrows([newerA(), removeB()]);
+
+            expect(painted.view?.selection?.has(B), 'the removed item leaves the choice').toBe(false);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(sheet?.querySelector('[data-role="price"]')?.textContent).toBe('9,000');
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Rye Flour');
+            const url = pressForUrl(root, 'pay-several');
+            expect(url).toContain('amount=9000.00');
+        });
+
+        it('keeps what the walk never reached, and says it is as last read', async () => {
+            bootStall(phone());
+            await flush();
+            await liveWalkThatThrows([newerA()]);
+            expect(painted.view?.prices?.get(A)).toEqual(XEC_A_NEWER);
+            expect(painted.view?.prices?.get(B), 'B was never reached').toEqual(XEC_B);
+            expect(painted.view?.recordsStale).toBe(true);
+        });
+    });
+
+    describe('a-newer-edit-mined-a-block-early-outranks-a-walk-that-threw-before-it', () => {
+        /**
+         * The critic's eighth pass, item 4. A walk reads newest BLOCK first,
+         * but two settled records rank by first sighting before height
+         * (`compareManifestRank`): the seller's newer edit, mined in block 5,
+         * sits on a later page than their older edit mined in block 6. A
+         * walk that finishes reads both and shows the newer; a walk that
+         * throws before the page holding it decided the token at the OLDER
+         * record — and the per-token merge used to hand it the token. The
+         * winner's rank rides the records now, and the higher one wins.
+         */
+        const OLDER_SEEN = 1_756_400_000;
+        const NEWER_SEEN = 1_756_400_600;
+        const olderAt6 = (): ChainTx =>
+            record('6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A }), 6, OLDER_SEEN);
+        const newerAt5 = (): ChainTx =>
+            record('5a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_NEWER }), 5, NEWER_SEEN);
+
+        it('on the live road', async () => {
+            bootStall(stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A]]), shopTab: 'quotes' }));
+            await flush();
+            // A walk that finishes: both edits read, the newer wins.
+            const older = olderAt6();
+            const newer = newerAt5();
+            chain.txs.set(older.txid, older);
+            chain.txs.set(newer.txid, newer);
+            chain.historyPages = [[older], [newer]];
+            watches[0]!.hooks.onBurst?.([older.txid]);
+            await flush();
+            expect(painted.view?.prices?.get(A), 'a finished walk shows the newer edit').toEqual(XEC_A_NEWER);
+
+            // The same walk, and the page holding the newer edit throws.
+            chain.historyPageThrows = new Set([1]);
+            watches[0]!.hooks.onBurst?.([older.txid]);
+            await flush();
+            expect(chain.historyPageCalls.filter((p) => p === 1).length, 'the second walk reached page 1').toBe(2);
+            expect(painted.view?.prices?.get(A), 'the older edit the walk decided does not win').toEqual(XEC_A_NEWER);
+        });
+
+        it('through the real load, on a wall re-reading its stall', async () => {
+            // `loadCurrent` itself must carry the walk's ranks onto the view,
+            // or the kept read has nothing to compare.
+            window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse`);
+            chain.genesis.set(A, {
+                genesisInfo: { tokenName: 'Plum Jam', tokenTicker: 'PLUM', decimals: 0, url: '' },
+                tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+            });
+            const older = olderAt6();
+            const newer = newerAt5();
+            chain.txs.set(older.txid, older);
+            chain.txs.set(newer.txid, newer);
+            chain.historyPages = [[older], [newer]];
+            const root = document.createElement('div');
+            boot(root);
+            await flush();
+            expect(wallRow(root, 'Plum Jam')?.textContent, 'a finished walk shows the newer edit').toContain('9,000.00');
+
+            chain.historyPageThrows = new Set([1]);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await flush();
+            expect(chain.historyPageCalls.filter((p) => p === 1).length, 'the re-read reached page 1').toBeGreaterThan(1);
+            expect(wallRow(root, 'Plum Jam')?.textContent, 'the newer edit stands').toContain('9,000.00');
+            expect(wallRow(root, 'Plum Jam')?.textContent).not.toContain('5,000.00');
+        });
+
+        it('on a wall re-reading its stall', async () => {
+            window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=quotes&mode=browse&touch=on`);
+            const rankOf = (tx: ChainTx) => ({
+                height: tx.block?.height,
+                isFinal: false,
+                txid: tx.txid,
+                firstSeen: tx.timeFirstSeen,
+            });
+            const finished = stallEmpty({
+                ...good().view,
+                descriptionsDecided: new Set([A, B]),
+                prices: new Map([[A, XEC_A_NEWER], [B, XEC_B]]),
+                descriptionRanks: new Map([[A, rankOf(newerAt5())]]),
+            });
+            // What `loadCurrent` answers when the walk read block 6 and threw.
+            const threw = stallEmpty({
+                tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                genesis: new Map([[A, 'attributed' as const]]),
+                prices: new Map([[A, XEC_A]]),
+                descriptionsFailed: true,
+                descriptionsDecided: new Set([A]),
+                descriptionRanks: new Map([[A, rankOf(olderAt6())]]),
+                window: wall,
+            });
+            const root = bootSequence([finished, threw]);
+            await flush();
+            expect(wallRow(root, 'Plum Jam')?.textContent).toContain('9,000.00');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            await flush();
+            expect(wallRow(root, 'Plum Jam')?.textContent, 'the newer edit stands').toContain('9,000.00');
+            expect(wallRow(root, 'Plum Jam')?.textContent).not.toContain('5,000.00');
+            expect(fresh(root), 'it came from the kept read, and is said to be').toBe(WINDOW_QUOTES_AS_LAST_READ);
+        });
     });
 
     it('a wall payment closes when a chosen item cannot be read', async () => {
@@ -2925,10 +3199,20 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
     });
 
     it('a-partial-answer-from-a-walk-that-threw-does-not-replace-the-map', async () => {
-        // The half the empty test cannot reach: page 0 answered with a record
-        // and page 1 threw, so the lookup carries one token and is `failed`.
-        // Applied, it would take this stall's own figure off the screen and
-        // put a stranger's in its place, from a read that never finished.
+        /**
+         * Page 0 answered with a record and page 1 threw, so the lookup
+         * carries one token and is `failed`. It does not REPLACE the map —
+         * a floor is not the seller's whole record — and since 2026-09-25 it
+         * is MERGED into it per token (`overKept`, the critic's eighth pass,
+         * item 3). The rule reversed because the old one was wrong on a
+         * phone: the walk reads newest block first, so a token it resolved
+         * is the seller's latest word, and refusing the whole answer kept a
+         * figure the walk had already read past (or an item the seller had
+         * removed) on a screen with no heartbeat to correct it — and Pay
+         * composed it. So the token the walk resolved shows what it read,
+         * and the token it never reached keeps the record on screen, said
+         * to be as last read.
+         */
         bootStall(
             stallEmpty({
                 fetch: { kind: 'offers', offers: [OFFER] },
@@ -2952,11 +3236,12 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
         await flush();
 
         expect(chain.historyPageCalls, 'it did try the second page').toContain(1);
-        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+        expect(painted.view?.prices?.get(TOKEN), 'the token it never reached keeps its record').toEqual(PRICE);
         expect(
-            painted.view?.prices?.has(TOKEN_B),
-            'a floor is not the record, and may not stand in for it',
-        ).toBe(false);
+            painted.view?.prices?.get(TOKEN_B),
+            'the token it resolved shows what it read',
+        ).toEqual({ code: 'xec', exponent: 2, amount: 900n });
+        expect(painted.view?.recordsStale, 'and the kept record is said to be as last read').toBe(true);
     });
 
     it('applies a walk that did find something', async () => {

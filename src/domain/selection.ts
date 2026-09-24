@@ -204,9 +204,14 @@ export function selectionTolerance(
  * that threw is never judged).
  *
  * `decided` are the tokens the read resolved even when it did not finish
- * (`StallView.descriptionsDecided`): a walk reads newest first, so a removal
- * it reached before our page cap or before a throw is the seller's, and the
- * item goes as it would after a complete read (the critic's sixth pass).
+ * (`StallView.descriptionsDecided`): a walk reads newest block first, so a
+ * removal it reached before our page cap or before a throw is the seller's,
+ * and the item goes as it would after a complete read (the critic's sixth
+ * pass). Nearly always: a newer record mined a block before an older one is
+ * on a later page (`DescriptionLookup.ranks`). Over a walk that threw the
+ * records were merged by rank before they reach here (`mergeFailedRead`); a
+ * walk that stopped at our cap is applied as read, and that gap is stated,
+ * not closed.
  */
 export function pruneSelection(
     selection: Selection,

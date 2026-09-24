@@ -781,8 +781,9 @@ export function boot(
      * Closure state, taken at paint time from a view `recordsKnown` accepts
      * (a kept view re-takes the same records), so a SECOND walk that throws
      * in a row still has something to keep. Two readers: a
-     * wall re-reading the same stall keeps it whole over a walk that threw,
-     * and any screen names a chosen item from it that its own read did not
+     * wall re-reading the same stall merges it per token under a walk that
+     * threw (`overKept`: the walk's answer where it decided a token, unless
+     * this read decided it at a higher rank — `ranks`), and any screen names a chosen item from it that its own read did not
      * reach (the strip, `chosenNames` below). Keyed by the stall's key, so
      * one seller's records never name another's items.
      */
@@ -795,6 +796,8 @@ export function boot(
               quoteTimes: StallView['quoteTimes'];
               descriptionsTruncated: StallView['descriptionsTruncated'];
               decided: ReadonlySet<string>;
+              /** Each decided token's winning rank, compared on the next merge. */
+              ranks: StallView['descriptionRanks'];
               tokens: StallView['tokens'];
               genesis: StallView['genesis'];
           }
@@ -1010,11 +1013,16 @@ export function boot(
      * A read whose walk threw (`view`: the floor it read, its names, and the
      * tokens it resolved) over records kept from an earlier read of the same
      * stall (the critic's sixth pass, 2026-09-24, P1). Per token: what the
-     * walk resolved wins, a removal included — it reads newest first, so
-     * that is the seller's latest word — and the kept records fill only the
-     * tokens it never reached, with their names and attributions wherever
-     * this read has none. `recordsStale` only while a kept record is shown,
-     * because that is the one thing the stale line says.
+     * walk resolved wins, a removal included — it reads newest block first,
+     * so that is nearly always the seller's latest word — unless the kept
+     * read decided the same token at a higher rank (a newer edit mined a
+     * block before an older one sits on a page the walk never reached; the
+     * eighth pass, item 4); the kept records fill the tokens it never
+     * reached, with their names and attributions wherever this read has
+     * none. `recordsStale` only while a kept record is shown, because that
+     * is the one thing the stale line says. Two roads: a wall's same-stall
+     * refresh keeps `lastGoodRecords`, and a live walk keeps the view's own
+     * records (`applyDescriptions`).
      */
     const overKept = (
         view: StallView,
@@ -1025,12 +1033,23 @@ export function boot(
             quoteTimes?: StallView['quoteTimes'];
             descriptionsTruncated?: StallView['descriptionsTruncated'];
             decided?: ReadonlySet<string>;
+            ranks?: StallView['descriptionRanks'];
             tokens?: StallView['tokens'];
             genesis?: StallView['genesis'];
         },
     ): Partial<StallView> => {
         const resolved = decidedOf({ ...view, decided: view.descriptionsDecided });
-        const merged = mergeFailedRead(view, resolved, kept);
+        const merged = mergeFailedRead(
+            {
+                descriptions: view.descriptions,
+                shelves: view.shelves,
+                prices: view.prices,
+                quoteTimes: view.quoteTimes,
+                ranks: view.descriptionRanks,
+            },
+            resolved,
+            kept,
+        );
         const tokens: SessionTokenCache = new Map(view.tokens);
         const genesis = new Map(view.genesis ?? []);
         for (const tokenId of merged.keptShown) {
@@ -1053,7 +1072,9 @@ export function boot(
             // A token the kept read resolved and this one did not is
             // resolved as of that read; one this read resolved, as of this.
             descriptionsDecided: new Set([...resolved, ...(kept.decided ?? [])]),
+            descriptionRanks: merged.ranks,
             recordsStale: merged.keptShown.size > 0 ? true : undefined,
+            recordsKept: merged.keptShown.size > 0 ? merged.keptShown : undefined,
             tokens,
             genesis,
         };
@@ -1157,6 +1178,7 @@ export function boot(
                 quoteTimes: state.view.quoteTimes,
                 descriptionsTruncated: state.view.descriptionsTruncated,
                 decided,
+                ranks: state.view.descriptionRanks,
                 tokens: names,
                 genesis,
             };
@@ -3420,8 +3442,14 @@ export function boot(
      *
      * **What is on screen is never replaced by an answer we cannot believe.**
      * A walk that threw carries what it managed to read, which is a floor and
-     * not the seller's record, so it may add to an empty view and may not
-     * overwrite a full one. An empty answer from a walk that finished is held
+     * not the seller's record — but a floor read newest block first, so every
+     * token it resolved is the seller's latest word unless the records on
+     * screen decided that token at a higher rank. So it adds to an empty view,
+     * and over a full one it is merged per token (`overKept`, the critic's
+     * eighth pass, item 3): refusing it whole, as this road did until
+     * 2026-09-25, left a figure the walk had read past on a phone that has no
+     * heartbeat to correct it, and Pay composed it. An empty answer from a
+     * walk that finished is held
      * back for a different reason and only where there is something to lose:
      * `loadDescriptions` cannot see the difference between a seller who
      * removed their words and a walk that found none of them, so a removed
@@ -3444,16 +3472,45 @@ export function boot(
             (state.view.shelves?.size ?? 0) > 0 ||
             (state.view.prices?.size ?? 0) > 0;
         /*
-         * A walk that threw on the facts road of a wall re-reading its own
-         * stall, beside a book that failed (`keptRead`, the critic's sixth
-         * pass, item 7): the load's own rule (`refresh`) — the last good
-         * records for every token it never reached, what it read for every
-         * token it resolved, a removal included (`overKept`), and stale
-         * while a kept record is shown.
+         * A walk that threw, merged per token over records it may not simply
+         * replace (`overKept`): what it resolved wins, a removal included,
+         * unless the kept read decided that token at a higher rank; the kept
+         * records fill every token it never reached; stale while a kept
+         * record is shown. Two kept reads. On the facts road of a wall
+         * re-reading its own stall beside a book that failed, the last good
+         * records (`keptRead`, the critic's sixth pass, item 7 — the load's
+         * own rule, `refresh`). On the live road, the records on screen
+         * (the eighth pass, item 3): a phone has no heartbeat, so refusing
+         * the walk's answer whole kept a figure it had read past until the
+         * reader reloaded.
          */
-        const over = lookup.failed ? keptRead : undefined;
+        const onScreen = state.view;
+        const over = !lookup.failed
+            ? undefined
+            : (keptRead ??
+              (hadSomething
+                  ? {
+                        descriptions: onScreen.descriptions,
+                        shelves: onScreen.shelves,
+                        prices: onScreen.prices,
+                        quoteTimes: onScreen.quoteTimes,
+                        descriptionsTruncated: onScreen.descriptionsTruncated,
+                        decided: decidedOf({ ...onScreen, decided: onScreen.descriptionsDecided }),
+                        ranks: onScreen.descriptionRanks,
+                        tokens: onScreen.tokens,
+                        genesis: onScreen.genesis,
+                    }
+                  : undefined));
         if (over !== undefined) {
             const pubkeyHex = state.pubkeyHex;
+            // The walk's free genesis answers, folded in as the whole-answer
+            // road below folds them: `genesisFor` reads the session cache,
+            // and a walk that threw may still have passed a genesis.
+            if (pubkeyHex !== undefined) {
+                for (const [tokenId, attribution] of lookup.genesis) {
+                    rememberGenesis(pubkeyHex, tokenId, decisionOf(attribution, 'paid'));
+                }
+            }
             const kept = overKept(
                 {
                     ...state.view,
@@ -3462,6 +3519,7 @@ export function boot(
                     prices: lookup.prices,
                     quoteTimes: lookup.quoteTimes,
                     descriptionsDecided: lookup.decided,
+                    descriptionRanks: lookup.ranks,
                 },
                 over,
             );
@@ -3470,6 +3528,12 @@ export function boot(
             const merged: StallView = {
                 ...state.view,
                 ...kept,
+                // Records on screen that were themselves a floor (a walk that
+                // threw on a failure screen) do not become a finished read by
+                // being merged with another floor.
+                ...(keptRead === undefined && onScreen.descriptionsFailed === true
+                    ? { descriptionsFailed: true }
+                    : {}),
                 genesis:
                     pubkeyHex === undefined || kept.prices === undefined
                         ? kept.genesis
@@ -3488,16 +3552,11 @@ export function boot(
             }
             return;
         }
-        if ((lookup.failed || gotNothing) && hadSomething) {
-            // A live walk that threw leaves the older records on screen, and
-            // says so: they are the last read that finished, and the wall's
-            // line reads `recordsStale` on every road (the sixth pass, item
-            // 7). A walk that finished and found nothing is not our failure
-            // and is not said to be.
-            if (lookup.failed && state.view.recordsStale !== true) {
-                state = { ...state, view: { ...state.view, recordsStale: true } };
-                livePaint();
-            }
+        if (gotNothing && hadSomething) {
+            // A walk that finished and found nothing (a walk that threw is
+            // merged above): not our failure and not said to be, but it
+            // cannot be told from a seller who removed every word, so the
+            // records on screen stand until a full load.
             // On an overlay showing quotes those figures came from this walk,
             // and this answer cannot be told from a seller who published
             // nothing — so the card already on screen stays, dimmed, exactly
@@ -3538,9 +3597,11 @@ export function boot(
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
             descriptionsDecided: lookup.decided,
+            descriptionRanks: lookup.ranks,
             // This walk's own answer replaces any records kept over an
             // earlier one that threw.
             recordsStale: undefined,
+            recordsKept: undefined,
             genesis:
                 pubkeyHex === undefined
                     ? state.view.genesis
@@ -4454,6 +4515,7 @@ async function loadCurrent(): Promise<AppState> {
             descriptionsTruncated: descriptionLookup.truncated,
             descriptionsFailed: descriptionLookup.failed,
             descriptionsDecided: descriptionLookup.decided,
+            descriptionRanks: descriptionLookup.ranks,
             genesis: genesisFor(route.pubkeyHex, descriptionLookup.prices.keys()),
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
@@ -4606,7 +4668,6 @@ function decisionOf(state: GenesisAttribution, strength: AttributionStrength): G
     return state === 'unknown' ? { state } : { state, strength };
 }
 
-/** What this session knows about these tokens, for the view. */
 /** A walk that answered nothing: every map empty, nothing resolved. */
 const NO_RECORDS: DescriptionLookup = {
     descriptions: new Map<string, string>(),
@@ -4620,6 +4681,7 @@ const NO_RECORDS: DescriptionLookup = {
     failed: false,
 };
 
+/** What this session knows about these tokens, for the view. */
 function genesisFor(
     pubkeyHex: string,
     tokenIds: Iterable<string>,

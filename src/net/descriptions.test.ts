@@ -566,6 +566,11 @@ describe('a-walk-says-which-tokens-it-resolved', () => {
         expect(out.failed).toBe(true);
         expect(out.descriptions.has(TOKEN_B), 'a removal is in no map').toBe(false);
         expect([...out.decided].sort()).toEqual([TOKEN_A, TOKEN_B].sort());
+        // Each resolved token carries its winner's rank, a removal included
+        // (the eighth pass, item 4): what a merge over an older read compares.
+        expect([...(out.ranks?.keys() ?? [])].sort()).toEqual([TOKEN_A, TOKEN_B].sort());
+        expect(out.ranks?.get(TOKEN_A)).toMatchObject({ height: 800_001, txid: 'a'.repeat(64) });
+        expect(out.ranks?.get(TOKEN_B)).toMatchObject({ height: 800_000, txid: 'b'.repeat(64) });
     });
 });
 

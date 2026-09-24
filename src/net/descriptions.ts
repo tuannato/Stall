@@ -87,14 +87,28 @@ export type DescriptionLookup = {
     /**
      * Every token whose record this walk resolved — a winner of any kind:
      * words, a shelf, a price, or a removal (a tombstone, which leaves the
-     * token out of every map above). A walk reads each index newest first,
-     * so a token it resolved before a throw or before our page cap is
-     * resolved as the whole read would have it; a token absent here was
-     * never reached. Explicit because a removal has no other trace, and a
+     * token out of every map above). A walk reads each index newest block
+     * first, so a token it resolved before a throw or before our page cap is
+     * resolved as the whole read would have it — save a newer record mined a
+     * block before an older one, which sits on a later page (`ranks`); a
+     * token absent here was never reached. Explicit because a removal has no other trace, and a
      * caller filling the unreached tokens from an older read must not fill
      * a token the seller removed (the critic's sixth pass, 2026-09-24).
      */
     readonly decided: ReadonlySet<string>;
+    /**
+     * tokenId → the rank of the record that won it, for every token in
+     * `decided`, a removal included. A walk reads newest BLOCK first, while
+     * two settled records rank by first sighting before height
+     * (`compareManifestRank`): a newer edit mined a block before an older
+     * one is on a later page, so a walk that threw before it decided the
+     * token at the older record. The rank is how a caller holding an earlier
+     * read that finished tells which of the two answers is the newer
+     * (`mergeFailedRead`, the critic's eighth pass, 2026-09-25). Optional
+     * only for a lookup no walk built (`NO_RECORDS`, a test's fixture): a
+     * missing rank is compared with nothing.
+     */
+    readonly ranks?: ReadonlyMap<string, ManifestRank>;
     /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
@@ -218,6 +232,7 @@ function collate(
     const prices = new Map<string, TokenPrice>();
     const quoteTimes = new Map<string, number>();
     const decided = new Set<string>();
+    const ranks = new Map<string, ManifestRank>();
     for (const [tokenId, records] of found) {
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
@@ -233,6 +248,14 @@ function collate(
             continue;
         }
         decided.add(tokenId);
+        // The winner's rank alone, never the record: what a caller merging
+        // this walk over an older one compares (`mergeFailedRead`).
+        ranks.set(tokenId, {
+            height: winner.height,
+            isFinal: winner.isFinal,
+            txid: winner.txid,
+            ...(winner.firstSeen === undefined ? {} : { firstSeen: winner.firstSeen }),
+        });
         // The winner's own clock, and only the winner's: a losing record's
         // stamp would date a document nobody is reading. A tombstone carries
         // it too — "when did the seller last say something about this token"
@@ -255,7 +278,7 @@ function collate(
         }
         descriptions.set(tokenId, winner.text);
     }
-    return { descriptions, shelves, prices, quoteTimes, decided, unreadable };
+    return { descriptions, shelves, prices, quoteTimes, decided, ranks, unreadable };
 }
 
 function collectPage(

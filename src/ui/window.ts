@@ -1134,11 +1134,18 @@ function statusBar(
     left.setAttribute('data-role', 'window-state');
     bar.append(left);
     // Over records kept from the last read that finished, the quotes rail
-    // says so where the book's stamp would claim they were read just now.
+    // says so where the book's stamp would claim they were read just now —
+    // "some" when the walk that threw still read some of the rows on it
+    // (`recordsKept` names the kept ones), and nothing of the kind when
+    // every row on it was read now (what was kept is off this rail).
+    const rows = rail === 'quotes' && view.recordsStale === true ? quotedItems(view) : [];
+    const keptRows = rows.filter((item) => view.recordsKept?.has(item.tokenId) ?? true).length;
     const fresh =
-        rail === 'quotes' && view.recordsStale === true
-            ? copy.WINDOW_QUOTES_AS_LAST_READ
-            : copy.windowFreshness(view.readAtMs, Date.now());
+        keptRows === 0
+            ? copy.windowFreshness(view.readAtMs, Date.now())
+            : keptRows < rows.length
+              ? copy.WINDOW_SOME_QUOTES_AS_LAST_READ
+              : copy.WINDOW_QUOTES_AS_LAST_READ;
     if (fresh !== undefined) {
         const right = el('span', 'sw-fresh', fresh);
         right.setAttribute('data-role', 'window-fresh');

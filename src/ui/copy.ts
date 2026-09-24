@@ -2426,6 +2426,14 @@ export const windowSelectionCapped = (n: number): string =>
  */
 export const WINDOW_QUOTES_AS_LAST_READ =
     'Quotes as last read \u00b7 this screen could not read them just now';
+/**
+ * The same line when the walk that threw still read some of the quotes on
+ * the rail (the critic's eighth pass, item 5): what it resolved shows what
+ * it read, per token, so "Quotes as last read" would call a quote read just
+ * now an old one.
+ */
+export const WINDOW_SOME_QUOTES_AS_LAST_READ =
+    'Some quotes as last read \u00b7 this screen could not read them just now';
 export const WINDOW_PAY_WHY_TEXT: Readonly<Record<PayRateWhy, string>> = {
     'no-answer':
         'No price feed answered just now, so there is no code to scan. Tap Pay again in a moment.',

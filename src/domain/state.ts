@@ -2,6 +2,7 @@ import type { RateCheck } from './fiat';
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
 import type { GenesisAttribution } from './genesis';
+import type { ManifestRank } from './manifest';
 import type { PaymentMemo } from './payment';
 import type { DecodedTheme } from './theme';
 
@@ -925,11 +926,21 @@ export type StallView = WindowState & {
      * The tokens the walk behind these records resolved — a winner of any
      * kind, a removal included (`DescriptionLookup.decided`). What a read
      * says about one of these is complete even when the read as a whole is
-     * not: a record it shows gone is gone, so the prune and the wall's
-     * plate judge them as a finished read would. Absent on a view no walk
+     * not — over a walk that threw, after the per-token merge by rank
+     * (`descriptionRanks`) — so a record it shows gone is gone, and the
+     * prune and the wall's plate judge them as a finished read would. Absent on a view no walk
      * built; then the tokens the maps name are the ones decided.
      */
     descriptionsDecided?: ReadonlySet<string>;
+    /**
+     * tokenId → the rank of the record each decided token was taken from
+     * (`DescriptionLookup.ranks`), a removal included. Carried so the next
+     * walk that throws can be merged over these records per token by rank
+     * (`mergeFailedRead`): a walk that stopped before the page holding a
+     * newer edit mined a block early decided that token at an older record.
+     * Absent on a view no walk built.
+     */
+    descriptionRanks?: ReadonlyMap<string, ManifestRank>;
     /**
      * Some of the records on the view are the last good read, kept because
      * this read's own walk threw before it reached them (a wall re-reading
@@ -944,6 +955,12 @@ export type StallView = WindowState & {
      * `app.ts`).
      */
     recordsStale?: boolean;
+    /**
+     * The tokens shown from the kept read (`MergedRecords.keptShown`), set
+     * with `recordsStale` and cleared with it: the wall's line says "some
+     * quotes" when a row on its rail was read just now beside a kept one.
+     */
+    recordsKept?: ReadonlySet<string>;
     /**
      * tokenId → whether this stall's own wallet minted that token.
      *

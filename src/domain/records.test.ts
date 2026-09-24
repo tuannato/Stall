@@ -63,6 +63,36 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect(clockOnly.keptShown.size).toBe(0);
     });
 
+    it('keeps the kept read where it decided a token at a higher rank (a newer edit mined a block early)', () => {
+        // The eighth pass, item 4: the walk decided A at the older edit in
+        // block 6 and threw before block 5, where the newer edit sits.
+        const older = { height: 6, isFinal: false, txid: '6'.repeat(64), firstSeen: 100 };
+        const newer = { height: 5, isFinal: false, txid: '5'.repeat(64), firstSeen: 200 };
+        const read = { prices: new Map([[A, price(500_000n)]]), ranks: new Map([[A, older]]) };
+        const out = mergeFailedRead(read, new Set([A]), {
+            ...kept,
+            prices: new Map([[A, price(900_000n)]]),
+            ranks: new Map([[A, newer]]),
+        });
+        expect(out.prices.get(A), 'the higher rank wins, whichever read it came from').toEqual(price(900_000n));
+        expect(out.descriptions.get(A), 'with the rest of its record').toBe('old words');
+        expect(out.ranks.get(A)).toEqual(newer);
+        expect(out.keptShown.has(A), 'shown from the kept read, so the screen says so').toBe(true);
+
+        // The walk's newer record wins as before, and a kept removal that
+        // outranks the walk's record takes the token out.
+        const fresher = mergeFailedRead(
+            { prices: new Map([[A, price(1n)]]), ranks: new Map([[A, { ...newer, firstSeen: 300 }]]) },
+            new Set([A]),
+            { ...kept, ranks: new Map([[A, newer]]) },
+        );
+        expect(fresher.prices.get(A)).toEqual(price(1n));
+        const removed = mergeFailedRead(read, new Set([A]), { ranks: new Map([[A, newer]]) });
+        expect(removed.prices.has(A), 'the kept read removed it, and that is newer').toBe(false);
+        // No rank on one side: the walk's answer stands.
+        expect(mergeFailedRead(read, new Set([A]), kept).prices.get(A)).toEqual(price(500_000n));
+    });
+
     it('reads the resolved set from the maps when a view carries none', () => {
         expect([...decidedOf({ prices: new Map([[A, price(1n)]]), shelves: new Map([[B, 'x']]) })].sort()).toEqual([A, B]);
         expect([...decidedOf({ decided: new Set([C]), prices: new Map([[A, price(1n)]]) })]).toEqual([C]);
