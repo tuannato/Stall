@@ -152,7 +152,7 @@
     border-radius: 0;
     background: transparent;
     color: #ff8fb0;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -187,7 +187,7 @@
     padding: 4px 9px;
     background: #ff4d7a;
     color: #1a070e;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.1em;
     border-radius: 0;
@@ -236,7 +236,7 @@
 }
 
 .t-neo .collection-count {
-    font-size: 10.5px;
+    font-size: 11px;
     color: #8aa6c9;
     letter-spacing: 0.06em;
 }
@@ -313,13 +313,13 @@
 }
 
 .t-neo .item-q {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--s-muted);
     letter-spacing: 0.05em;
 }
 
 .t-neo .item-from {
-    font-size: 9.5px;
+    font-size: 11px;
     color: #8aa6c9;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -351,30 +351,30 @@
 }
 
 .t-neo .item-u {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 800;
     color: #3df2ea;
 }
 
 .t-neo .item-rate {
-    font-size: 10px;
+    font-size: 11px;
     color: #8aa6c9;
 }
 
 .t-neo .item-fiat {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     color: #ff8fb0;
 }
 
 /* The glance's source, at the glance's own size, in the rate line's ink. */
 .t-neo .item-fiat-src {
-    font-size: 10.5px;
+    font-size: 11px;
     color: #8aa6c9;
 }
 
 .t-neo .item-lots {
-    font-size: 9.5px;
+    font-size: 11px;
     color: #8aa6c9;
 }
 
@@ -569,7 +569,7 @@
     padding: 4px 9px;
     border: 1px dashed rgba(255, 77, 122, 0.6);
     color: #ff8fb0;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -828,7 +828,7 @@
 .t-neo .wearing {
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    font-size: 10.5px;
+    font-size: 11px;
     color: #8aa6c9;
 }
 

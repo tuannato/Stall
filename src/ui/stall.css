@@ -162,7 +162,7 @@ body {
     min-height: 28px;
     padding: 4px 12px;
     font-family: var(--s-font);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.28em;
     text-transform: uppercase;
     text-align: center;
@@ -2720,10 +2720,10 @@ textarea.paste-in {
 .event-sum .item-ic.event-ic {
     width: 24px;
     height: 24px;
-    font-size: 9px;
+    font-size: 11px;
     border-radius: 6px;
     clip-path: none;
-    /* Letters a reader can read at 9px (round 8, 2026-09-15): ink on a
+    /* Letters a reader can read at this size (round 8, 2026-09-15): ink on a
        light accent tint with an accent hairline, instead of the shop tile's
        bg-coloured letters on an accent gradient — unreadable at this size
        on Neo and Rural. Both colours are tokens, so a mood moves them

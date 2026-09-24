@@ -2371,3 +2371,94 @@ with item 4's extra row restored.
 and much of Neo's groundless text is not among them — at the brightest drop
 Neo's ink reads 2.84:1 and its muted 1.27:1 over bare ground. The list is
 in CLAUDE §10, handed to the owner as more than a small ground.
+
+## Small text is at least 11px (2026-09-24, the owner's Q16)
+
+Re-derived before anything moved, declared and computed. Declared under 11px
+in the served sheets: stall.css `.orn` 10 and `.event-sum .item-ic.event-ic`
+9; Modern `.ghost-chip`, `.notice-chip`, `.item-from` 10.5; Neo `.item-from`,
+`.item-lots`, `.sm-cap` 9.5, `.notice-chip`, `.item-rate`, `.ghost-chip` 10,
+`.stall-sub`, `.collection-count`, `.item-q`, `.item-u`, `.item-fiat`,
+`.item-fiat-src`, `.wearing` 10.5; Rural `.item-from`, `.item-lots` 10,
+`.notice-chip`, `.item-rate`, `.ghost-chip` 10.5 — the critics' list, and
+nothing in window.css, broadcast.css or obsGuide.css. Computed, every fixture
+screen on the three looks bare and worn at 390 and 1280, and the canvas and
+wall screens at 1920×1080, 1080×1920 and 768×1024: all of those paint on
+some screen except `.ghost-chip` (the notice invite, a seller prompt no
+fixture stages); `.wearing-link` inherits `.wearing`'s 10.5; `.sm-cap` is
+the one inside an aria-hidden subtree (the sparse motif); nothing on the
+overlay or a wall is under 11; the door's deck minis paint five sub-11
+nodes, all in an aria-hidden, zoomed picture. The owner's rule (F1, with F2
+for the tile letters and the brand strip) raised every declared one to 11px
+in its own sheet except `.sm-cap`.
+
+**`small-text-is-at-least-11px`**: every node with its own text a reader is
+given — on every screen, look and variant of every pass, the phone, the
+desk, the canvas, the tall wall and the tablet — fails under
+`TEXT_FLOOR_PX`. The first version failed only the raised list and printed
+the rest (the critic's item 3: a planted 10px `.door-kicker` stayed green);
+now the one exception is a node inside an `aria-hidden="true"` subtree,
+which the owner's rule excludes — reported on the pass's `compared:` line,
+never failed, and today that is Neo's `.sm-cap` alone — unless it is one of
+the raised nodes (`FLOOR_NAMED`), which fail anywhere. The door's deck
+minis are skipped (zoomed pictures). The raised nodes read are counted
+(`floorNamedChecks`: 4625 on the phone pass, 5066 on the desk) and the
+runner requires some on both. **The declarations are held too**:
+`the-raised-small-text-stays-at-eleven-px` reads every `font-size` and every
+size inside a `font` shorthand in every served sheet and refuses a pixel
+size under 11, `.t-neo .sm-cap` the one listed exception — which is what
+holds the notice invite's `.ghost-chip`, painted by no fixture. It cannot
+see a size computed from `em`, `rem` or `calc()`; the probe measures those.
+
+**A tile shows its letters whole** (the critic's item 10). A token tile
+paints the name's initials until a picture lands, and it clips — so raising
+the Activity tile's letters to 11px could cut them with no rule seeing it
+(`text-spills` reads only a box whose overflow is visible). The `activity`
+fixture carries a payment row of its own naming `WIDE_INITIALS` ("Wool
+Mittens", "WM", the widest pair). For one day it did not: the added row
+pushed an open fold's line on Neo worn onto a drop of the rain at 2.7:1,
+and the builder moved the initials onto an existing row instead — a guard
+taught to look away. The row is added again, and the finding is fixed
+where it lives ("A line on the ground reads wherever a drop falls",
+above).
+**`a-tile-shows-its-letters-whole`**: for every `.item-ic` showing letters,
+the letters' extent (a Range over its text) must fit the tile's content box
+within a pixel. Measured: "WM" 22.1px of text in a 22px box on Modern,
+21.8 on Rural, 13.7 in Neo's mono. **Proved red** with
+`letter-spacing: 0.35em` on the tile: "WM" spans 28.7–29.4px in a 22px box
+on every look.
+
+**Proved red.** Neo's `.item-from` put back at 9.5px and the Activity tile's
+letters at 9 in one run: 281 failures on each of the phone and desk passes
+(Neo's "from" on every screen that paints one, in every Neo variant; the tile
+letters on `activity` on every look). A 10px `.door-kicker` — outside the
+raised list — left the first version green and printed it; the widened rule
+fails it ("p.door-kicker … paints at 10px") on the phone and the desk, and
+the static test names it. The static test also failed by name on Modern's
+`.ghost-chip` put back at 10.5px.
+
+**The price ladder held.** The widened "from" and unit take room from the
+name column on a phone, so each look's `tierCeilings` were re-checked at 390
+by painting the `offers` row that carries "from" at every tier's ceiling,
+with and without "from", on the widest digits ("888,888", "8,888", …): the
+name column kept 90–131px on Modern and Neo and 82–119px on Rural, against
+the name floor's 64 — the most any case lost was 6px (Neo, tier 0 with
+"from"). No ceiling moved. Not measured: a phone narrower than 390px.
+
+**Round 3 (the critic's second pass, 2026-09-24).** The steppers' counts
+(`.step-n` — the phone's `selection-count` — and the wall's `.sw-step-n`)
+join `FLOOR_NAMED`: they are `aria-hidden` because the count rides the two
+buttons' names, and a sighted customer reads them all the same, so the
+aria-hidden exception must not reach them. **Proved red** with `.step-n` at
+`0.6em` (a size the static test cannot read): 14 failures on each of the
+phone and desk passes, "b.step-n "2" paints at 8.1px" to 9px on the
+selection screens, where the first version only printed them. The same run
+had the Activity ground taken out with the restored row in the fixture: 15
+figures on Neo worn at 2.54–2.92:1, the added row's receipt amount among
+them — green with the ground. And
+`the-raised-small-text-stays-at-eleven-px` reads every served sheet — the
+static pages' (`public/*.css`) and the workshop kit's
+(`workshop/*.css`) with the app's — found by listing the directories, so a
+new sheet is read the day it lands. **Proved red** with a 10px rule planted
+in `public/stream.css` and a `font: 700 9px/1` planted in the kit's sheet,
+each named by the test.

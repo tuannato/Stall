@@ -1839,6 +1839,146 @@ function payLinesSayWhatTheyHide(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **Small text is at least 11px** (2026-09-24, the owner's Q16: F1 and F2).
+ * Shipped text under 11px was a look's choice in fourteen places —
+ * Modern's "from", its announcement chip; Neo's "from" and lowest-of line at
+ * 9.5px, its rate, chip and brand strip at 10, its rail label, unit, fiat
+ * line and source, section count, sign sub-line and wearing line at 10.5;
+ * Rural's "from" and lowest-of at 10, its rate and chip at 10.5 — plus the
+ * Activity tile's letters at 9 and the brand strip at 10, from stall.css.
+ * Each rose to 11px in its own sheet.
+ *
+ * **Every node with its own text a reader is given fails under
+ * `TEXT_FLOOR_PX`** (widened the same day, the critic's item 3: the first
+ * version failed only the raised list and a planted 10px `.door-kicker`
+ * stayed green), on every screen, look and variant every pass paints —
+ * the phone, the desk, the canvas, the tall wall and the tablet. What is
+ * not given to a reader is the one exception, and it is reported rather
+ * than failed (`smallText`, printed on the pass's line): a node inside an
+ * `aria-hidden="true"` subtree — the owner's rule; the sparse motif's
+ * "scan to enter" stays 9.5px — unless it is one of the raised nodes
+ * (`FLOOR_NAMED`: the brand strip and the tile letters are aria-hidden or
+ * decorative and rose anyway, F2; the steppers' counts are aria-hidden
+ * because the buttons carry them, and are read by the eye). The door's deck minis are pictures at
+ * 0.34–0.56 zoom and are skipped. The raised nodes read are counted
+ * (`floorNamedChecks`) and the runner requires some on the phone and desk
+ * passes. A class no fixture paints — the notice invite's `.ghost-chip`, a
+ * seller prompt — is held by the static test
+ * `the-raised-small-text-stays-at-eleven-px`, which reads every pixel size
+ * in every served sheet.
+ */
+const SMALL_TEXT_CHECK = 'small-text-is-at-least-11px';
+const TEXT_FLOOR_PX = 11;
+const FLOOR_NAMED = [
+    '.orn',
+    '.event-ic',
+    '.ghost-chip',
+    '.notice-chip',
+    '.item-from',
+    '.stall-sub',
+    '.collection-count',
+    '.item-q',
+    '.item-u',
+    '.item-rate',
+    '.item-fiat',
+    '.item-fiat-src',
+    '.item-lots',
+    '.wearing',
+    // The steppers' counts (the critic's P3, 2026-09-24): `aria-hidden`
+    // because the count rides the two buttons' names, and read by every
+    // sighted customer all the same — the exception is for text nobody is
+    // given, and this is given to the eye. The phone's (`.step-n`,
+    // `selection-count`) and the wall's.
+    '.step-n',
+    '.sw-step-n',
+];
+const FLOOR_NAMED_SELECTOR = FLOOR_NAMED.flatMap((sel) => [sel, `${sel} *`]).join(', ');
+let floorNamedChecks = 0;
+const smallTextElsewhere = new Set<string>();
+
+function smallTextFaults(screen: string, label: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    for (const node of root.querySelectorAll<HTMLElement>('*')) {
+        let own = '';
+        for (const child of node.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
+        }
+        if (own.trim() === '' || node.closest('.deck-stall') !== null) {
+            continue;
+        }
+        const cs = getComputedStyle(node);
+        const box = node.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility !== 'visible' || box.width === 0 || box.height === 0) {
+            continue;
+        }
+        const px = Number.parseFloat(cs.fontSize);
+        const named = node.matches(FLOOR_NAMED_SELECTOR);
+        if (named) {
+            floorNamedChecks += 1;
+        }
+        if (px >= TEXT_FLOOR_PX) {
+            continue;
+        }
+        if (named || node.closest('[aria-hidden="true"]') === null) {
+            out.push({
+                screen,
+                theme: label,
+                check: SMALL_TEXT_CHECK,
+                detail: `${describe(node)} "${own.trim().slice(0, 24)}" paints at ${cs.fontSize}, under the ${TEXT_FLOOR_PX}px floor`,
+            });
+        } else {
+            const look = [...(node.closest('.stall')?.classList ?? [])].find((c) => c.startsWith('t-')) ?? '-';
+            smallTextElsewhere.add(`${look} ${describe(node)} ${cs.fontSize} (aria-hidden)`);
+        }
+    }
+    return out;
+}
+
+/*
+ * **A tile shows its letters whole** (2026-09-24, the critic's item 10).
+ * A token tile (`.item-ic`) paints the name's initials until a picture
+ * lands, and it clips (`overflow: hidden`, a radius): the Activity row's
+ * tile is 24px, and with its letters raised to 11px the widest pair —
+ * "WM", `WIDE_INITIALS` on the `activity` fixture — measured 22.1px of text
+ * in a 22px content box on Modern (21.8 on Rural, 13.7 in Neo's mono). A
+ * clip cuts letters silently: `text-spills` reads only a box whose overflow
+ * is visible. So for every tile showing letters, the letters' own extent
+ * (a Range over its text) must fit the tile's content box, within a pixel.
+ */
+const TILE_CHECK = 'a-tile-shows-its-letters-whole';
+
+function tileLetterCuts(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const tile of document.querySelectorAll<HTMLElement>('#app .item-ic')) {
+        if (tile.closest('.deck-stall') !== null || tile.querySelector('img') !== null) {
+            continue;
+        }
+        const text = (tile.textContent ?? '').trim();
+        const box = tile.getBoundingClientRect();
+        if (text === '' || box.width === 0 || box.height === 0) {
+            continue;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(tile);
+        const ink = range.getBoundingClientRect();
+        const cs = getComputedStyle(tile);
+        const bl = Number.parseFloat(cs.borderLeftWidth) || 0;
+        const bt = Number.parseFloat(cs.borderTopWidth) || 0;
+        const inner = { left: box.left + bl, top: box.top + bt, right: box.left + bl + tile.clientWidth, bottom: box.top + bt + tile.clientHeight };
+        if (ink.left < inner.left - 1 || ink.right > inner.right + 1 || ink.top < inner.top - 1 || ink.bottom > inner.bottom + 1) {
+            out.push({
+                screen,
+                theme: label,
+                check: TILE_CHECK,
+                detail: `${describe(tile)} "${text}" spans ${ink.width.toFixed(1)}×${ink.height.toFixed(1)}px in a ${tile.clientWidth}×${tile.clientHeight}px box, so its clip cuts the letters`,
+            });
+        }
+    }
+    return out;
+}
+
+/*
  * **A shipped row states the sizes its sheet paints** (step 2e, 2026-09-23).
  * Each look's sheet sizes the tier-0 figure and the sign's name itself, and
  * the row carried other numbers — Modern said 30 and 25 where its sheet
@@ -1970,6 +2110,8 @@ for (const screen of measured) {
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
+            failures.push(...smallTextFaults(screen, label));
+            failures.push(...tileLetterCuts(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -2369,15 +2511,9 @@ const CONTRAST_TEXT = [
      * the next look, or the first one to reach for a token on one half,
      * is measured rather than trusted.
      *
-     * Its SIZE is still measured by nothing, and that gap is not this
-     * list's to close: `small-text-is-one-scale` and
-     * `muted-text-is-not-microscopic` both read `stall.css` alone, so the
-     * three looks' 10 / 10.5 / 10.5px overrides of the base rule's 11 are
-     * invisible to both. The chip's ink is not `--s-muted`, so the second
-     * test is correctly out of scope; the first one simply cannot see a
-     * theme file. Written down, not fixed — widening either guard to the
-     * theme sheets is a change with its own blast radius (§6: a look may
-     * set any metric), and the decision is the owner's.
+     * Its SIZE is measured since 2026-09-24: every look sets it at 11px or
+     * more, and `small-text-is-at-least-11px` fails it under that on every
+     * screen the probe paints it on.
      */
     '.notice-chip',
     // The surcharge lines (2026-09-21): the pay sheet's composed one and the
@@ -3097,6 +3233,8 @@ const verdict = {
     wallControlChecks,
     wallControlRoles,
     wallSlivers: [...wallSlivers].sort(),
+    floorNamedChecks,
+    smallText: [...smallTextElsewhere].sort(),
     ladderTiers,
     failures,
 };

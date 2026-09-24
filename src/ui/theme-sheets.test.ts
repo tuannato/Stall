@@ -12,7 +12,7 @@
  * watched for a read of a var nobody emits, which is how a rename in the
  * table would quietly turn a working rule into `var(--s-nothing)`.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -377,5 +377,66 @@ describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
         }
         expect(conditional, 'the test read no conditional rule at all').toBeGreaterThan(50);
         expect(dead).toEqual([]);
+    });
+});
+
+describe('the-raised-small-text-stays-at-eleven-px', () => {
+    /**
+     * The owner's Q16 (2026-09-24, F1 and F2): shipped text under 11px rose
+     * to 11 in its own sheet — the looks' "from", units, rail labels, chips,
+     * rate, fiat and lowest-of lines, section counts, sign sub-lines and
+     * wearing lines, the Activity tile's letters and the brand strip. The
+     * probe's `small-text-is-at-least-11px` holds what a fixture paints;
+     * this holds the declarations themselves, so a class no fixture paints
+     * (the notice invite's `.ghost-chip`, a seller prompt) is held too:
+     * **no pixel size under 11 anywhere in a served sheet** — a `font-size`
+     * or the size inside a `font` shorthand — but the one exception the
+     * owner's rule makes, text inside an aria-hidden subtree: the sparse
+     * motif's caption (`EXCEPT`). A new exception is a decision, not an
+     * edit to this list. What it cannot see: a size computed from `em`,
+     * `rem` or `calc()`, which the probe measures on what it paints.
+     *
+     * **Every served sheet, not only the app's** (the critic's P3,
+     * 2026-09-24): the static pages' sheets under `public/` (`/guide`,
+     * `/stream`, the 404 — served as they are, outside the bundle) and the
+     * workshop kit's look sheet, which a creator edits and the kit ships as
+     * a look. They are read from the directory, so a sheet added there is
+     * read the day it lands.
+     */
+    const EXCEPT = ['src/ui/theme-neo.css: .t-neo .sm-cap'];
+    const EXTRA = [
+        ...readdirSync(join(ROOT, 'public'))
+            .filter((file) => file.endsWith('.css'))
+            .map((file) => `public/${file}`),
+        ...readdirSync(join(ROOT, 'workshop'))
+            .filter((file) => file.endsWith('.css'))
+            .map((file) => `workshop/${file}`),
+    ];
+
+    it('reads the static pages’ sheets and the kit’s as well as the app’s', () => {
+        expect(EXTRA).toEqual(expect.arrayContaining(['public/guide.css', 'public/stream.css', 'workshop/theme-workshop.css']));
+    });
+
+    it('declares no pixel size under 11 in any served sheet, but the aria-hidden caption', () => {
+        const offenders: string[] = [];
+        let read = 0;
+        for (const sheet of [...SHEETS, ...EXTRA]) {
+            for (const m of stripped(sheet).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+                const body = m[2]!;
+                const sizes = [
+                    ...[...body.matchAll(/(?:^|;)\s*font-size:\s*([0-9.]+)px/g)].map((x) => x[1]!),
+                    ...[...body.matchAll(/(?:^|;)\s*font:\s*[^;]*?([0-9.]+)px/g)].map((x) => x[1]!),
+                ];
+                for (const px of sizes) {
+                    read += 1;
+                    const where = `${sheet}: ${m[1]!.trim().replace(/\s+/g, ' ')}`;
+                    if (Number(px) < 11 && !EXCEPT.includes(where)) {
+                        offenders.push(`${where} at ${px}px`);
+                    }
+                }
+            }
+        }
+        expect(read, 'the test read no size at all').toBeGreaterThan(100);
+        expect(offenders).toEqual([]);
     });
 });

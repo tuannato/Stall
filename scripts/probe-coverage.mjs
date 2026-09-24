@@ -25,6 +25,9 @@
  *   counts as nothing read. A "+N more" read whole is also the
  *   `a-payment-list-that-scrolls-says-how-many-lines-it-hides` rule
  *   comparing a nonzero count.
+ * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
+ *   the phone and desk passes; what it only reports (text under 11px inside
+ *   an aria-hidden subtree) is printed on the pass's `compared:` line.
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
@@ -90,6 +93,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
+    if (!((report.floorNamedChecks ?? 0) > 0)) {
+        gaps.push('small-text-is-at-least-11px read no named small-text node');
+    }
     const rows = new Set(report.rowSizeClasses ?? []);
     const minis = new Set(report.doorMiniClasses ?? []);
     for (const cls of shippedClasses) {
@@ -113,8 +119,11 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
 
 /** What a pass compared, in one line for the runner to print — empty for a pass that owes nothing. */
 export function probeCoverageLine(pass, report) {
+    // Text under 11px that no reader is given (aria-hidden) is reported,
+    // never failed — on every pass that paints some, not the page ones only.
+    const hiddenSmall = (report.smallText ?? []).length === 0 ? '' : ` · under 11px, aria-hidden: ${report.smallText.join('; ')}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0}` + sliverLine(report.wallSlivers ?? [])
+        ? `wall controls read: ${report.wallControlChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -130,12 +139,18 @@ export function probeCoverageLine(pass, report) {
         .map(([surface, n]) => `${surface} ${n}`)
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
-    if (!PAGE_PASSES.has(pass)) return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall].filter(Boolean).join(' · ');
+    if (!PAGE_PASSES.has(pass)) {
+        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || hiddenSmall.replace(/^ · /, '')]
+            .filter(Boolean)
+            .join(' · ');
+    }
     return (
         `unbuyable labels read: ${read || 'none'}` +
         skipped +
         ` · rows read: ${(report.rowSizeClasses ?? []).join(', ') || 'none'}` +
         ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
+        ` · small text read: ${report.floorNamedChecks ?? 0}` +
+        ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

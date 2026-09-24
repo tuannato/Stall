@@ -106,9 +106,11 @@ accepted. *(Stall at intake.)*
 serves, so it looks the same everywhere), a system monospace, or a system
 serif — the last two are whatever the reader's device has, so their widths
 differ between phones and computers; test at both widths. No new font files.
-Text is never smaller than Stall's small-text scale (11 px for labels,
-11.5 px for fine print), and every control keeps a 44 px touch target.
-*(Stall at intake, until the kit learns it.)*
+Text a reader is given is never smaller than 11 px — Stall's small-text
+scale is 11 px for labels and 11.5 px for fine print — and every control
+keeps a 44 px touch target. *(The kit — `workshop:probe` fails any text
+under 11 px outside an `aria-hidden` part, on every screen it paints; the
+fine-print step and the touch targets, Stall at intake.)*
 
 **Nothing loads from anywhere else.** No `@import`, no `@font-face`, no
 `url(data:…)`, no `url()` to another site or to an absolute path — art is

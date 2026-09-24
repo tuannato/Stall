@@ -41,6 +41,8 @@ export const LONGER = '44'.repeat(32);
  * only half of what the section paints.
  */
 export const QUOTED = '55'.repeat(32);
+/** A token whose initials are the widest pair ("WM"), for the Activity tile's letters. */
+export const WIDE_INITIALS = '66'.repeat(32);
 export const OUT: Outpoint = { txid: 'ab'.repeat(32), outIdx: 0 };
 
 /** A frozen instant, so a repainted screen is byte-identical to itself. */
@@ -84,6 +86,7 @@ export const tokens = new Map<string, TokenMeta>([
     [LONG, meta(LONG, 'Harvest Ledger', 'SLP_TOKEN_TYPE_FUNGIBLE')],
     [LONGER, meta(LONGER, 'Century Flag #7', 'SLP_TOKEN_TYPE_NFT1_CHILD')],
     [QUOTED, meta(QUOTED, 'Sticker pack', 'SLP_TOKEN_TYPE_FUNGIBLE')],
+    [WIDE_INITIALS, meta(WIDE_INITIALS, 'Wool Mittens', 'SLP_TOKEN_TYPE_FUNGIBLE')],
 ]);
 
 /**
@@ -639,6 +642,21 @@ export const SCREENS: Record<string, StallView> = {
                 seenAtMs: TRIED_AT_MS - 45_000,
                 sats: 1_000_000n,
                 payment: { kind: 'item' as const, tokenId: T2, quantity: 2n },
+            },
+            // The widest letters a tile gets, "WM" (the critic, 2026-09-24:
+            // the 24px tile clips, and its letters are 11px now;
+            // `a-tile-shows-its-letters-whole`), on a payment row of its own.
+            // An ADDED row, which makes the list longer: a longer list is a
+            // real stall's, and when this row first moved a line onto Neo's
+            // rain at 2.7:1 the fixture was bent around it for a day — the
+            // finding was the rain, and the rows have a ground now
+            // (`a-line-on-the-ground-reads-wherever-a-drop-falls`).
+            {
+                txid: 'af'.repeat(32),
+                kind: 'payment',
+                seenAtMs: TRIED_AT_MS - 50_000,
+                sats: 1_000_000n,
+                payment: { kind: 'item' as const, tokenId: WIDE_INITIALS, quantity: 1n },
             },
             {
                 txid: 'cd'.repeat(32),
