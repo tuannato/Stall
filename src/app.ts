@@ -407,6 +407,16 @@ export function boot(
      * driving another's cursor.
      */
     let windowCard: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * When the Cycle card is due to turn, and it outlives the timer
+     * (2026-09-24, the critic's second pass). The sixty-second heartbeat is a
+     * full `refresh()`, which clears every timer here, and `syncWindow`
+     * re-armed the card's from zero — so the card due when a beat landed
+     * stood another `WINDOW_CARD_MS`: one card a minute stood 40 s rather
+     * than the owner's 20. The stamp is kept across the clear and the timer
+     * re-armed with what is left of it; it is cleared only for a new stall.
+     */
+    let windowCardDueAt: number | undefined;
     let windowBeat: ReturnType<typeof setTimeout> | undefined;
     let windowRoll: ReturnType<typeof setTimeout> | undefined;
     /*
@@ -1655,10 +1665,16 @@ export function boot(
 
         if (params.mode === 'cycle') {
             if (windowCard === undefined) {
-                windowCard = setTimeout(function step() {
+                // What is left of the card's dwell, never a fresh one: the
+                // heartbeat clears this timer every minute (`windowCardDueAt`).
+                const now = Date.now();
+                windowCardDueAt ??= now + WINDOW_CARD_MS;
+                const step = (): void => {
+                    windowCardDueAt = Date.now() + WINDOW_CARD_MS;
                     windowCard = setTimeout(step, WINDOW_CARD_MS);
                     advanceWindowCard();
-                }, WINDOW_CARD_MS);
+                };
+                windowCard = setTimeout(step, Math.max(0, windowCardDueAt - now));
             }
             return;
         }
@@ -2476,6 +2492,7 @@ export function boot(
             // cross-stall contamination this project has already had once.
             windowLockSet = undefined;
             windowCursorAt = 0;
+            windowCardDueAt = undefined;
             windowRailAt = 'listings';
             broadcastRailAt = 'listings';
             windowTurnedAt = 0;

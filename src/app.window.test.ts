@@ -544,14 +544,63 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
             seen.push(shownName(root));
         }
         expect(seen).not.toContain('Stranded Pears');
-        expect(new Set(seen)).toEqual(new Set(['Apples', 'Cherries']));
-        // The first two dwells each move the card. Later ones are not held
-        // to it: the sixty-second heartbeat re-arms the card's timer, so the
-        // card at the third dwell stands a fourth whatever the list (measured
-        // with two buyable listings and no unbuyable one: Apples, Cherries,
-        // Apples, Apples, …).
-        expect(seen.slice(0, 3)).toEqual(['Apples', 'Cherries', 'Apples']);
+        // Every dwell moves the card, past the heartbeat too (the escape
+        // this assertion had while the beat reset the card's timer is gone:
+        // `the-wall-card-keeps-its-twenty-seconds-across-the-heartbeat`).
+        expect(seen).toEqual(['Apples', 'Cherries', 'Apples', 'Cherries', 'Apples', 'Cherries']);
         expect(root.textContent).not.toContain('Not buyable');
+    });
+
+    /**
+     * The critic's second pass, 2026-09-24: the sixty-second heartbeat is a
+     * full `refresh()`, which cleared the card's timer, and `syncWindow`
+     * re-armed it from zero — so the card due when a beat landed stood 40 s,
+     * one card a minute. `windowCardDueAt` survives the clear and the timer
+     * is re-armed with what is left. Ten dwells across three beats, each
+     * card standing its twenty seconds to within the sampling: the name just
+     * before the due time is the old card's, and just after it the next.
+     */
+    it('the-wall-card-keeps-its-twenty-seconds-across-the-heartbeat', async () => {
+        vi.useFakeTimers();
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&mode=cycle`);
+        const offers = [listing(id('1'), 1), listing(id('3'), 3)];
+        const tokens = new Map([
+            [id('1'), meta(id('1'), 'Apples')],
+            [id('3'), meta(id('3'), 'Cherries')],
+        ]);
+        let loads = 0;
+        const root = document.createElement('div');
+        boot(root, async () => {
+            loads += 1;
+            return {
+                view: {
+                    route: { kind: 'pubkey' as const, pubkeyHex: PK, address: ADDR },
+                    fetch: { kind: 'offers' as const, offers },
+                    overlay: { kind: 'idle' as const },
+                    address: ADDR,
+                    stallName: 'Riverside Goods',
+                    tokens,
+                    window: { show: 'listings' as const, mode: 'cycle' as const, payCode: true, turn: 'none' as const, touch: false as const },
+                },
+                offers,
+            };
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        const names = ['Apples', 'Cherries'];
+        expect(shownName(root)).toBe('Apples');
+        let at = 0;
+        for (let dwell = 1; dwell <= 10; dwell += 1) {
+            const due = dwell * WINDOW_CARD_MS;
+            await vi.advanceTimersByTimeAsync(due - 200 - at);
+            expect(shownName(root), `just before dwell ${dwell} ends`).toBe(names[(dwell - 1) % 2]);
+            await vi.advanceTimersByTimeAsync(400);
+            at = due + 200;
+            expect(shownName(root), `just after dwell ${dwell} ends`).toBe(names[dwell % 2]);
+        }
+        // Ten dwells are 200 s: the heartbeat ran three times in them, and
+        // is the thing this test is about.
+        expect(10 * WINDOW_CARD_MS).toBeGreaterThan(3 * WINDOW_BEAT_MS);
+        expect(loads, 'the first load and three beats').toBe(4);
     });
 
     /**
