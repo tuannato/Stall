@@ -6463,8 +6463,6 @@ describe('the-stream-skips-an-unbuyable-listing', () => {
         expect(ticker.textContent).not.toContain(copy.BROADCAST_EMPTY);
         const card = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded] }, tokens })).root;
         expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_BUYABLE);
-        // About the listings, never the stall.
-        expect(copy.BROADCAST_NO_LISTING_BUYABLE).toContain('listing');
         // Not on a stall that has something to show, nor on the quotes rail.
         const buyable = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens })).root;
         expect(buyable.textContent).not.toContain(copy.BROADCAST_NO_LISTING_BUYABLE);
@@ -6499,6 +6497,20 @@ describe('the-stream-skips-an-unbuyable-listing', () => {
         const fallback = tickerOf({ fetch: { kind: 'offers', offers: [stranded, OFFER] }, tokens }, 'quotes');
         expect(fallback.querySelectorAll('.tk-it').length).toBe(1);
         expect(fallback.querySelector('[data-role="ticker-rail"]')?.textContent).toBe(copy.BROADCAST_TICKER_LISTINGS);
+    });
+
+    it('says the withheld sentence over a book that mixes withheld and unbuyable listings', () => {
+        // The critic's fifth pass (2026-09-24): a withheld listing may be
+        // buyable, so "no listing can be bought" is a claim about goods this
+        // page never read. Any withheld offer takes the withheld sentence.
+        const withheld = { ...OFFER, tokenId: FIRMA_ID, outpoint: { txid: OUTPOINT.txid, outIdx: 7 } };
+        const mixed = new Map([...tokens, [FIRMA_ID, FIRMA_META]]);
+        const ticker = tickerOf({ fetch: { kind: 'offers', offers: [stranded, withheld] }, tokens: mixed });
+        expect(ticker.querySelector('.tk-run')).toBeNull();
+        expect(ticker.querySelector('.tk-clip .tk-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_CARRIED);
+        const card = paint(broadcastView({ fetch: { kind: 'offers', offers: [stranded, withheld] }, tokens: mixed })).root;
+        expect(card.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_NO_LISTING_CARRIED);
+        expect(card.textContent).not.toContain(copy.BROADCAST_NO_LISTING_BUYABLE);
     });
 
     it('says nothing listed here is shown over a book of only tokens this page does not carry', () => {
@@ -6863,6 +6875,27 @@ describe('an-empty-quote-set-shows-the-listings', () => {
         const { root } = paint(quoteCardView({ fetch: { kind: 'empty' } }));
         expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$5.00');
         expect(root.textContent).not.toContain(copy.BROADCAST_EMPTY);
+    });
+
+    /**
+     * The critic's fifth pass (2026-09-24): in `mode=rail` the card rests
+     * unmounted, and the empty line was gated on the MOUNTED card — so a
+     * stall with nothing listed and one payable quote said "nothing listed
+     * yet" at every rest, alternating with the quote card it contradicts.
+     * The list decides (`broadcastCards`), not the mount.
+     */
+    it('says nothing about an empty book at rest when a quote card is what the rail shows', () => {
+        const rail = { ...BROADCAST, mode: 'rail' as const, cards: 'quotes' as const };
+        for (const broadcastState of ['rest', 'live'] as const) {
+            const { root } = paint(quoteCardView({ fetch: { kind: 'empty' }, broadcast: rail, broadcastState }));
+            expect(root.textContent, broadcastState).not.toContain(copy.BROADCAST_EMPTY);
+            expect(root.querySelector('.bc-empty'), broadcastState).toBeNull();
+        }
+        // …and says it at rest where the list is empty.
+        const none = paint(
+            quoteCardView({ fetch: { kind: 'empty' }, prices: new Map(), broadcast: rail, broadcastState: 'rest' }),
+        ).root;
+        expect(none.querySelector('.bc-empty')?.textContent).toBe(copy.BROADCAST_EMPTY);
     });
 });
 

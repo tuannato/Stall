@@ -2597,7 +2597,11 @@ empty (`emptyOverlayReason`): `BROADCAST_NO_LISTING_BUYABLE` ("no listing
 can be bought right now") when every listing is unbuyable, and
 `BROADCAST_NO_LISTING_CARRIED` ("nothing listed here that this page shows")
 when every offer is a token this page does not carry — the two empty
-ribbons the old sentence left. A `cards=quotes` stream with no payable
+ribbons the old sentence left. (Round 6, the critic's fifth pass: a MIXED
+book — some offers withheld, the rest unbuyable — takes the withheld
+sentence, the only one true of it; and `BROADCAST_EMPTY` is gated on the
+card list, not the mounted card, so a `mode=rail` rest no longer prints it
+between quote cards. Both in `render.test.ts`, red on round 5's overlay.) A `cards=quotes` stream with no payable
 quote falls back to the listings (§4), and its ticker label now names the
 listings it shows rather than the quotes line. Tests in
 `the-stream-skips-an-unbuyable-listing`, red on the old overlay.

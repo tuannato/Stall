@@ -22,6 +22,7 @@ import { XEC_PRICE_CODE } from '../domain/description';
 import { satsForQuote, satsWithSurcharge } from '../domain/fiat';
 import { fitsQr } from '../domain/qr';
 import { DUST_SATS, formatAtoms, formatXec, isUnbuyable } from '../domain/money';
+import { isWithheldToken } from '../domain/withheld';
 import { payLandingUrl, stallPath } from '../domain/route';
 import type { BroadcastParams, StallView } from '../domain/state';
 import * as copy from './copy';
@@ -158,17 +159,24 @@ export function broadcastRail(view: StallView): 'listings' | 'quotes' {
  * empty ribbon under its label reads as a source that died (the critic's
  * third and fourth passes, 2026-09-24).
  *
- * - `unbuyable`: listed, and every listing is one nobody can take;
- * - `withheld`: offered, and every offer is a token this page does not carry.
+ * - `withheld`: offered, and some offer is a token this page does not
+ *   carry — the rest, if any, nobody can take. Said first, because it is
+ *   the only one of the two sentences true of a MIXED book: a withheld
+ *   listing may well be buyable, so "no listing can be bought" would be a
+ *   claim about goods this page never read (the critic's fifth pass,
+ *   2026-09-24);
+ * - `unbuyable`: listed, every listing carried, and every one of them is
+ *   one nobody can take.
  */
 export function emptyOverlayReason(view: StallView): 'unbuyable' | 'withheld' | undefined {
     if (view.fetch?.kind !== 'offers' || broadcastCards(view).length > 0) {
         return undefined;
     }
-    if (listingsInShopOrder(view).length > 0) {
-        return 'unbuyable';
+    const offers = view.fetch.offers;
+    if (offers.some((offer) => isWithheldToken(offer.tokenId, view.tokens.get(offer.tokenId)))) {
+        return 'withheld';
     }
-    return view.fetch.offers.length > 0 ? 'withheld' : undefined;
+    return listingsInShopOrder(view).length > 0 ? 'unbuyable' : undefined;
 }
 
 /** The sentence for `emptyOverlayReason`, or nothing. */
@@ -348,8 +356,11 @@ export function renderBroadcastView(view: StallView): HTMLElement {
     // "Nothing listed yet" is about the Agora book, and it is not printed over
     // a card: a quote card stands on a stall with nothing listed, and the two
     // together would tell a viewer the shop is empty while showing them
-    // something they can pay for.
-    if (fetch?.kind === 'empty' && ext === undefined) {
+    // something they can pay for. Nor BETWEEN cards: in `mode=rail` the card
+    // rests unmounted, and gating on the mounted card printed the line at
+    // every rest, alternating with the quote card it contradicts (the
+    // critic's fifth pass, 2026-09-24). The list, not the mount, decides.
+    if (fetch?.kind === 'empty' && broadcastCards(view).length === 0) {
         head.append(el('div', 'bc-empty', copy.BROADCAST_EMPTY));
     } else if (ext === undefined && emptyOverlayLine(view) !== undefined) {
         head.append(el('div', 'bc-empty', emptyOverlayLine(view)!));
