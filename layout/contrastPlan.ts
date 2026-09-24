@@ -29,7 +29,7 @@
  * Test: `the-contrast-plan-is-every-job-the-pass-owes`.
  */
 import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, paintsBareOnly } from './fixtures';
-import { RURAL_THEME_ID } from '../src/domain/theme';
+import { NEO_CITY_THEME_ID, RURAL_THEME_ID } from '../src/domain/theme';
 import { canWear, type Look } from './looks';
 import { screensAt } from './screenSplit';
 
@@ -78,11 +78,38 @@ export type ContrastJob = {
  */
 export const REDUCED_JOBS: ReadonlyArray<{ screen: string; look: number }> = [{ screen: 'unbuyable', look: RURAL_THEME_ID }];
 
+/**
+ * Screens sampled on Neo with every decoration worn and nowhere else
+ * (2026-09-24, the owner's condition on the rain ground): geometry-only
+ * screens whose failure and empty sentences, notes and checklist stand on
+ * the stall's own ground, which is where the rain falls — the quotes rail
+ * that did not finish, the one with nothing quoted yet, the one stopped at
+ * our cap, and the first-stall checklist. The rain is sampled at its
+ * brightest drop there (`a-line-on-the-ground-reads-wherever-a-drop-falls`).
+ */
+export const RAIN_JOBS: readonly string[] = ['quotes-failed', 'nothing-quoted', 'quotes-truncated', 'first-stall'];
+
 /** The overlay screens the pass samples; every other overlay screen is geometry. */
 export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);
 
-/** The screens the pass samples at one viewport, for the given looks. */
+/**
+ * The screens the pass samples at one viewport, for the given looks: every
+ * look's (`sampledScreens`), then the rain's own (`RAIN_JOBS`) where Neo is
+ * measured — in the order the plan walks them, which the runner compares.
+ */
 export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[]): string[] {
+    const regular = sampledScreens(width, canvas, looks);
+    const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID);
+    const at = screensAt(width, canvas);
+    const rain =
+        neo === undefined
+            ? []
+            : RAIN_JOBS.filter((screen) => at.includes(screen) && canWear(neo, screen) && !regular.includes(screen));
+    return [...regular, ...rain];
+}
+
+/** The screens every measured look is sampled on at one viewport. */
+function sampledScreens(width: number, canvas: boolean, looks: readonly Look[]): string[] {
     return screensAt(width, canvas).filter(
         (name) =>
             looks.some((look) => canWear(look, name)) &&
@@ -99,7 +126,7 @@ export function contrastScreens(width: number, canvas: boolean, looks: readonly 
 export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
     const jobs: ContrastJob[] = [];
     for (const viewport of CONTRAST_VIEWPORTS) {
-        for (const screen of contrastScreens(viewport.width, viewport.canvas, looks)) {
+        for (const screen of sampledScreens(viewport.width, viewport.canvas, looks)) {
             for (const look of looks) {
                 if (!canWear(look, screen)) {
                     continue;
@@ -121,6 +148,23 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                     }
                 }
             }
+        }
+        const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID);
+        const regular = sampledScreens(viewport.width, viewport.canvas, looks);
+        for (const screen of contrastScreens(viewport.width, viewport.canvas, looks).filter((name) => !regular.includes(name))) {
+            if (neo === undefined) {
+                continue;
+            }
+            jobs.push({
+                key: `${viewport.name}/${screen}/${neo.id}/${WORN_ALL}`,
+                viewport: viewport.name,
+                width: viewport.width,
+                height: viewport.height,
+                screen,
+                look: neo.id,
+                sheetClass: neo.theme.sheetClass,
+                flags: WORN_ALL,
+            });
         }
     }
     return jobs;

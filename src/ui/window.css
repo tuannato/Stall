@@ -261,6 +261,16 @@
     font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Where Neo's rain is worn the status line and the shop code's plate stand
+ * on the look's ground (the owner's condition on decision 1, 2026-09-24):
+ * both sat on the bare background, and the rain's brightest drop read the
+ * status line at 1.2:1 and the plate's caption at 1.1:1 on every wall.
+ */
+.stall.shop-window.att-rainfall :is(.sw-status, .sw-plate) {
+    background-color: var(--s-bg);
+}
+
 /* ---------- cycle: one item, two columns, one vertical rhythm ---------- */
 
 /*

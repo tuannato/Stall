@@ -2493,3 +2493,74 @@ Fixture `broadcast-ticker-none-buyable` (canvas, geometry: the sentence
 stands inside its cell); test
 `the-stream-skips-an-unbuyable-listing` › "says there is nothing to buy
 …", red with the sentence taken out.
+
+## Round 4: every line on the bare ground under Neo's rain (the owner's condition on decision 1)
+
+The owner chose "a ground" for the Activity rows on the promise that ANY
+other groundless Neo text the rain exposes gets the same, shown before
+merge. At the brightest drop Neo's ink reads 2.84:1 over the bare ground
+and its muted 1.27:1. **Found by sampling, not by list**: a scratch pass
+painted every fixture screen on Neo worn at 390, 1280 and 1920 with the
+rain flattened exactly as the rule does, blanked every text node and read
+the pixels under it, and compared with the same screens bare; every line
+that fell under 3:1 only with the rain is grounded. What it left, each
+looked at: text inside a sheet or a scroller sampled past its clip (the
+scratch pass does not clamp; the probe does), the Neo mini on the door
+(a picture), the sign's humming letter (the hum, not the rain), and the
+sparse motif's "scan to enter" (inside an aria-hidden picture), and the
+zoom sheet's text, which its own scrim already carries (read at 10:1+).
+
+**The grounds** (`stall.css`, `window.css`, all scoped to
+`.stall.att-rainfall`, longhands only): the brand strip, the footer, the
+section and shelf heads, the notice (its wash kept over the ground), the
+sparse shop's box and the Activity notes' fold get `var(--s-bg)`; the
+Studio's preference and share boxes their 4% tint restated over it; the
+first-stall checklist, which reads as a card, `var(--s-surface)`; a line
+on its own — `.mid-t`, `.mid-p`, `.pay-sec > .fine`, the quotes rail's
+title, `.stall-body > .fine`, the face's back control and its pointer —
+the ground with a 6px shadow halo, so nothing moves; and on a wall the
+status line and the shop code's plate.
+
+**The targets.** The failure and empty sentences and the other ground
+lines are contrast targets on every look (`.mid-t`, `.mid-p`,
+`.pay-sec > .fine` — `quotes-failed`, `-reading`, `-truncated`, the
+lede —, `.stall-body > .fine`, the sparse box's lines and button, the
+notice, the Activity notes, the face's pointer, the checklist's steps and
+note, `.sw-state`, `.sw-fresh`, the plate's caption); the brand strip,
+the Wearing line, the headings and the back control are targets where
+the rain is worn (`.stall.att-rainfall:not(.deck-stall) …`), because
+unscoped they read under 3:1 on other looks worn — Modern's shelf heads
+at 2.56:1 with every decoration, Rural's Wearing links and back control
+at 2.53:1, Rural's strip over its bunting at 1.1:1 — which is the owner's
+question, not this rule's (reported with the round). Four geometry-only
+screens are sampled on Neo worn alone (`RAIN_JOBS`: `quotes-failed`,
+`nothing-quoted`, `quotes-truncated`, `first-stall`), at the phone and
+the desk: 449 jobs.
+
+**The sampler, twice more honest.** A heading's in-flow marker (Neo's
+wedge, an inline-block `::before` inside the heading's box) is stepped
+past, not read as ground — it read every Neo heading at 1.2:1, bare or
+worn. And a target's pseudo-element glyphs are blanked with it, through
+an adopted stylesheet (the page's policy refuses an injected `<style>`):
+the Wearing line's cyan "// " was read as its own ground at 1.20:1.
+
+**The rule, tightened** (the critic's third pass): the door's deck minis
+are neither flattened nor counted; the runner requires the rain flattened,
+by key, on `activity`, `plugin-missing`, `empty`, `quotes-failed` and
+`nothing-quoted`, Neo worn, at the phone and the desk (`RAIN_REQUIRED`);
+the aurora is sampled with its tide at 1, its worst for the cyan drop;
+and `brightestDrop` refuses a sheet whose `<path>`s it cannot all read
+(or with an opacity on a group), which refuses the job.
+
+**Proved red.** With the grounds taken out: 395 figures on Neo worn under
+3:1 — the Wearing line and its links 1.12–2.21, the brand strip 1.84,
+the headings 2.03–2.23, `.mid-p` 1.09–1.16, the quotes rail's lines
+1.12–1.32, the wall's status line 1.23–1.36 and caption 2.70, the sparse
+box 1.14–1.86, the notice 2.37, the Activity notes' fold 2.52, the
+checklist's steps 2.49 — and nothing on any other look. With the rain
+dropped from Neo's worn set: "had the rain at its brightest on 0 job(s)
+but not on mobile/activity/2/65535, …" naming all ten required keys. With
+a full-opacity `<path>` added to the near sheet: 69 jobs refused ("1
+stall(s) wore the rain and 0 had it at its brightest") and the same ten.
+Green with the grounds: 449 jobs, 6,072 boxes, the rain at its brightest
+on 69.

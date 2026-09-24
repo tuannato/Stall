@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_THEME_ID } from '../src/domain/theme';
+import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, RAIN_JOBS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 192, desktop: 220, canvas: 29, total: 441 });
+        }).toEqual({ mobile: 196, desktop: 224, canvas: 29, total: 449 });
     });
 
     it('walks the runner’s own viewports', () => {
@@ -54,14 +54,19 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
     });
 
     it('samples every screen a look can wear, where the probe measures it, less the overlay’s and the geometry-only', () => {
-        // Derived from the fixture table, not through `screensAt`.
+        // Derived from the fixture table, not through `screensAt`. The rain's
+        // own jobs (Neo worn on four geometry-only screens) are held below.
         const sampled = (name: string): boolean =>
             (!NO_DECOR_SCREENS.has(name) ||
                 ['broadcast', 'broadcast-ticker'].includes(name)) &&
             !GEOMETRY_ONLY_SCREENS.has(name);
         const page = Object.keys(SCREENS).filter((name) => !CANVAS_SCREENS.has(name) && sampled(name));
         const at = (viewport: string): string[] => [
-            ...new Set(jobs.filter((job) => job.viewport === viewport).map((job) => job.screen)),
+            ...new Set(
+                jobs
+                    .filter((job) => job.viewport === viewport && !RAIN_JOBS.includes(job.screen))
+                    .map((job) => job.screen),
+            ),
         ];
         expect(at('desktop').sort()).toEqual([...page].sort());
         expect(at('mobile').sort()).toEqual(page.filter((name) => SCREENS[name]!.window === undefined).sort());
@@ -72,7 +77,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         const byCell = new Map<string, ContrastJob[]>();
         // The reduced-motion jobs are a second paint of a planned one, held
         // below; the rest are one job per look and variant.
-        for (const job of jobs.filter((j) => j.reduced !== true)) {
+        for (const job of jobs.filter((j) => j.reduced !== true && !RAIN_JOBS.includes(j.screen))) {
             const cell = `${job.viewport}/${job.screen}`;
             byCell.set(cell, [...(byCell.get(cell) ?? []), job]);
         }
@@ -103,6 +108,12 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             `desktop/unbuyable/3/${WORN_ALL}/reduce`,
         ]);
         expect(jobs.every((job) => job.flags === 0 || job.flags === WORN_ALL)).toBe(true);
+        // The rain's own jobs: Neo worn alone, at the phone and the desk, on
+        // the four geometry-only screens whose lines stand on the ground.
+        expect(RAIN_JOBS.every((screen) => GEOMETRY_ONLY_SCREENS.has(screen))).toBe(true);
+        expect(jobs.filter((j) => RAIN_JOBS.includes(j.screen)).map((j) => j.key)).toEqual(
+            ['mobile', 'desktop'].flatMap((vp) => RAIN_JOBS.map((screen) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${WORN_ALL}`)),
+        );
     });
 
     it('measures a workshop look alone, and never on the door', () => {

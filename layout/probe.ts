@@ -2627,6 +2627,49 @@ const CONTRAST_TEXT = [
      * `<img>`, so what this samples is the letters and never a picture.
      */
     '.item-ic',
+    /*
+     * The lines that stand on the stall's own ground (2026-09-24, the
+     * owner's condition on the rain ground): a failure or empty sentence,
+     * a note, the item face's pointer, the first-stall checklist, the wall's
+     * status line and caption. Found by sampling every text node on every
+     * screen on Neo worn over the brightest drop; each had no box of its
+     * own, so under the rain it read 1.1–2.9:1 and nothing here measured it.
+     * Every look samples these.
+     */
+    '.notice-text',
+    '.sparse-empty-t',
+    '.sparse-empty-s',
+    '[data-role="list-first"]',
+    '.mid-t',
+    '.mid-p',
+    '.pay-sec > .fine',
+    '.stall-body > .fine',
+    '.studio-browser .fine',
+    '[data-role="activity-about"] > .fold-sum',
+    '.activity-about .fine',
+    '.item-face > .pay-pointer',
+    '.first-stall .steps li > span',
+    '.first-stall .fine',
+    '.sw-state',
+    '.sw-fresh',
+    '.sw-plate .sw-cap',
+    /*
+     * And the rest of what the rain exposed, sampled where it is worn: the
+     * brand strip, the footer's Wearing line, the section and shelf heads,
+     * the face's back control. Unscoped, these read under 3:1 on other
+     * looks with every decoration worn — Modern's shelf heads at 2.56:1,
+     * Rural's Wearing links and back control at 2.53:1, Rural's strip over
+     * its bunting at 1.1:1 — which is a question for the owner and not this
+     * rule's to answer (PROBE-RULES.md, "A line on the ground reads wherever
+     * a drop falls").
+     */
+    '.stall.att-rainfall:not(.deck-stall) .orn',
+    '.stall.att-rainfall:not(.deck-stall) .wearing',
+    '.stall.att-rainfall:not(.deck-stall) .wearing-link',
+    '.stall.att-rainfall:not(.deck-stall) .section-title',
+    '.stall.att-rainfall:not(.deck-stall) .collection-name',
+    '.stall.att-rainfall:not(.deck-stall) .collection-count',
+    '.stall.att-rainfall:not(.deck-stall) .item-back',
 ].join(', ');
 
 /**
@@ -2800,6 +2843,21 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
     if (box.width < 2 || box.height < 2) {
         return undefined;
     }
+    // A heading's own in-flow marker is chrome, not its ground: Neo's
+    // section and shelf wedge is an inline-block `::before` at the start of
+    // the line, inside the heading's box, and the glyphs never cross it. Read
+    // as ground it put the heading at 1.2:1 against its own wedge on every
+    // Neo screen, bare or worn (2026-09-24). The band starts after it.
+    const mark = getComputedStyle(node, '::before');
+    if (mark.content !== 'none' && mark.content !== 'normal' && mark.display === 'inline-block') {
+        const lead =
+            (Number.parseFloat(mark.marginLeft) || 0) +
+            (Number.parseFloat(mark.width) || 0) +
+            (Number.parseFloat(mark.marginRight) || 0);
+        if (lead > 0 && lead < box.width / 2) {
+            box = { x: box.x + lead, y: box.y, width: box.width - lead, height: box.height };
+        }
+    }
     const style = getComputedStyle(node);
     // The element's OWN clip, narrowing the band to paint (see `clipBand`).
     // Resolved against `full`, which is the box a polygon's coordinates are
@@ -2964,7 +3022,17 @@ function brightestDrop(ground: string): Drop | undefined {
     }
     let best: (Drop & { lum: number }) | undefined;
     for (const sheet of RAIN_SHEETS) {
-        for (const m of sheet.matchAll(/stroke="#([0-9a-fA-F]{6})"\s+stroke-opacity="([0-9.]+)"/g)) {
+        // Every drop is read, or none is: a path whose paint the pattern
+        // does not match (a full-opacity stroke, swapped attributes, an
+        // opacity on its group) would otherwise drop out of the choice and
+        // leave a brighter drop unmodelled (the critic's third pass). A sheet
+        // the pattern cannot read whole refuses the flattening, and the
+        // runner refuses the job.
+        const drops = [...sheet.matchAll(/<path\b[^>]*\sstroke="#([0-9a-fA-F]{6})"\s+stroke-opacity="([0-9.]+)"/g)];
+        if (drops.length !== (sheet.match(/<path\b/g) ?? []).length || /<g\b[^>]*opacity/.test(sheet)) {
+            return undefined;
+        }
+        for (const m of drops) {
             const hex = m[1]!;
             const rgb = [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
             const alpha = Number(m[2]);
@@ -3011,11 +3079,17 @@ function splitLayers(value: string): string[] {
     return out.map((x) => x.trim());
 }
 
-/** Every rain-wearing stall's drop sheets as one flat layer of the brightest drop; how many wore it and how many were flattened. */
+/**
+ * Every rain-wearing stall's drop sheets as one flat layer of the brightest
+ * drop; how many wore it and how many were flattened. The door's deck minis
+ * are skipped and not counted (the critic's third pass, 2026-09-24): they are
+ * pictures, aria-hidden, with no line this pass samples, and the Neo mini
+ * counted made "flattened on at least one job" true on the door alone.
+ */
 function rainAtItsBrightest(): { worn: number; flattened: number } {
     let worn = 0;
     let flattened = 0;
-    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-rainfall')) {
+    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-rainfall:not(.deck-stall)')) {
         worn += 1;
         const cs = getComputedStyle(stall);
         const drop = brightestDrop(cs.backgroundColor);
@@ -3044,6 +3118,13 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
         set('background-size', rebuild(sizes, '100% 100%'));
         set('background-repeat', rebuild(repeats, 'no-repeat'));
         set('background-position', rebuild(positions, '0% 0%'));
+        // And the aurora at its worst for that drop: the tide at 1 puts the
+        // most cyan in the wash the drop is the same colour as, and the
+        // freeze read it near 0 (the critic's third pass: over the flat drop
+        // at the cyan corner, Neo's ink read 2.62:1 at the frozen tide and
+        // 2.07:1 at 1). Harmless where the aurora is not worn: nothing else
+        // reads the property.
+        set('--au-tide', '1');
         flattened += 1;
     }
     return { worn, flattened };
@@ -3091,6 +3172,9 @@ function pageHeight(scope: ParentNode): number {
     }
     return need;
 }
+
+/** Whether the sheet that blanks a target's pseudo-element glyphs is adopted (once per page). */
+let pseudoBlankAdopted = false;
 
 window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
     preparedNonce = nonce;
@@ -3178,7 +3262,23 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             el.style.transition = 'none';
             el.style.color = 'transparent';
             el.style.textShadow = 'none';
+            // And its pseudo-elements' glyphs (2026-09-24): Neo's Wearing
+            // line opens with a `::before` "// " in its own cyan, which an
+            // inline colour cannot reach — its glyphs stayed and were read
+            // as the line's ground at 1.20:1. A pseudo's background is not
+            // touched: that is ground, or chrome the band steps past.
+            el.setAttribute('data-probe-blank', '');
         }
+    }
+    // Through the CSSOM: the page's policy refuses an injected `<style>`
+    // (`style-src 'self'`), and a refused sheet blanks nothing, silently.
+    if (!pseudoBlankAdopted) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(
+            '[data-probe-blank]::before,[data-probe-blank]::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}',
+        );
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        pseudoBlankAdopted = true;
     }
     // Anything the prepare itself started — a fold it opened — is frozen too.
     freezeAnimations();

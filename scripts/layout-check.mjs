@@ -296,6 +296,16 @@ function contrast(la, lb) {
 
 /** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
 const PIXEL_CONTRAST_FLOOR = 3;
+/**
+ * The contrast jobs that must have had Neo's rain at its brightest drop
+ * (`a-line-on-the-ground-reads-wherever-a-drop-falls`): Neo worn, at the
+ * phone and the desk, on the screens whose lines stand on the stall's own
+ * ground — the Activity panel, two failure screens, the empty stall and the
+ * quotes rail's own two.
+ */
+const RAIN_REQUIRED = ['mobile', 'desktop'].flatMap((viewport) =>
+    ['activity', 'plugin-missing', 'empty', 'quotes-failed', 'nothing-quoted'].map((screen) => `${viewport}/${screen}/2/65535`),
+);
 
 /**
  * The worst contrast between a text colour and any sampled background pixel
@@ -1179,8 +1189,10 @@ try {
     const refused = [];
     try {
         let boxes = 0;
-        // Jobs whose rain was sampled at its brightest drop: the rule owes one.
+        // Jobs whose rain was sampled at its brightest drop, by key: the rule
+        // owes the screens whose lines stand on the ground (`RAIN_REQUIRED`).
         let rainJobs = 0;
+        const rainKeys = new Set();
         const dim = [];
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1331,7 +1343,10 @@ try {
                         continue;
                     }
                     for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
-                    if ((prep.rain?.flattened ?? 0) > 0) rainJobs += 1;
+                    if ((prep.rain?.flattened ?? 0) > 0) {
+                        rainJobs += 1;
+                        rainKeys.add(plannedJob.key);
+                    }
                     record.prepared = prep.targets.length;
                     record.nodes = prep.nodes;
                     record.classes = prep.sheetClasses ?? [];
@@ -1510,12 +1525,15 @@ try {
         } else if (sheetClassesWrong([...contrastClasses]) !== undefined) {
             failed = true;
             console.error(`✗ contrast: ${sheetClassesWrong([...contrastClasses])}`);
-        } else if (LOOKS === 'shipped' && rainJobs === 0) {
-            // Neo's worn jobs wear the rain; a run that flattened none read
-            // the moving decoration at one instant again, or not at all.
+        } else if (LOOKS === 'shipped' && RAIN_REQUIRED.some((key) => !rainKeys.has(key))) {
+            // Neo's worn jobs wear the rain; a run that did not flatten it on
+            // the screens whose lines stand on the ground read the moving
+            // decoration at one instant again, or not at all — named, so a
+            // door mini flattened alone can never stand in for them (the
+            // critic's third pass).
             failed = true;
             console.error(
-                '✗ contrast: a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on no job — a rule that compared nothing',
+                `✗ contrast: a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
         } else if (dim.length === 0) {
             // No tick over a walk that missed or repeated a job, or refused one.

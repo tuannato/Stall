@@ -2872,6 +2872,56 @@ textarea.paste-in {
     box-shadow: 0 -12px 0 0 var(--s-bg);
 }
 
+/*
+ * **And every other line that stands on the bare ground** (the owner's
+ * condition on decision 1, 2026-09-24: any groundless Neo text the rain
+ * exposes gets the same ground, shown before merge). At the brightest drop
+ * Neo's ink reads 2.84:1 over the bare ground and its muted 1.27:1, so a
+ * line with no box under it is unreadable for part of every 2.6 s drift.
+ * Found by sampling, not by list: every text node on every fixture screen
+ * on Neo worn, at 390, 1280 and 1920, painted over the brightest drop
+ * (`a-line-on-the-ground-reads-wherever-a-drop-falls`, and a scan kept in
+ * the round's notes). Three shapes, all longhands so no border, rail or
+ * image a region already draws is touched:
+ *
+ * - a REGION that is already a band or a box gets the look's ground: the
+ *   brand strip, the footer, the section and shelf heads, the notice (its
+ *   wash stays, over the ground), the sparse shop's box, the Activity
+ *   notes' fold, the pinned-preference and share boxes (their 4% tint
+ *   restated over the ground, since Neo writes it as the colour);
+ * - a block that reads as a CARD gets the card surface: the first-stall
+ *   checklist;
+ * - a LINE on its own — a failure or empty sentence, a note, the quotes
+ *   rail's title, the item face's back control and its pointer to the
+ *   other rail — gets the ground with a 6px halo drawn by a shadow, so the
+ *   line reads as a label and nothing moves.
+ */
+.stall.att-rainfall :is(
+        .orn,
+        .stall-foot,
+        .section-head,
+        .collection-head,
+        .notice,
+        .sparse-empty,
+        [data-role='activity-about']
+    ) {
+    background-color: var(--s-bg);
+}
+
+.stall.att-rainfall :is(.studio-browser, .share-ticket) {
+    background-color: color-mix(in srgb, var(--s-accent) 4%, var(--s-bg));
+}
+
+.stall.att-rainfall .first-stall {
+    background-color: var(--s-surface);
+}
+
+.stall.att-rainfall
+    :is(.mid-t, .mid-p, .pay-sec > .fine, .pay-sec > .section-title, .stall-body > .fine, .item-back, .item-face > .pay-pointer) {
+    background-color: var(--s-bg);
+    box-shadow: 0 0 0 6px var(--s-bg);
+}
+
 .event-time {
     grid-area: time;
     color: var(--s-muted);
