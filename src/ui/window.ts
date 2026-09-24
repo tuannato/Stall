@@ -664,6 +664,8 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
 
     const lines = el('dl', 'sw-pay-lines');
     lines.setAttribute('data-role', 'pay-lines');
+    const shown = [...paying.selection.keys()].filter((tokenId) => paying.prices.has(tokenId));
+    const borrowed = shown.filter((tokenId) => paying.borrowed.has(tokenId)).length;
     for (const [tokenId, at] of paying.selection) {
         const price = paying.prices.get(tokenId);
         if (price === undefined) {
@@ -676,14 +678,32 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
         if (surcharge !== null) {
             row.append(surcharge);
         }
-        if (paying.borrowed.has(tokenId)) {
-            const borrowed = el('dd', 'sw-pay-s warn', copy.QUOTE_NOT_MINTED_HERE);
-            borrowed.setAttribute('data-role', 'quote-not-minted');
-            row.append(borrowed);
+        // The mark says WHICH line; the sentence outside the scroller (below)
+        // is what says it at all. One line is the sentence's own item, and a
+        // second copy of the words beside it would say one thing twice.
+        if (paying.borrowed.has(tokenId) && shown.length > 1) {
+            const mark = el('dd', 'sw-pay-s warn', copy.QUOTE_NOT_MINTED_HERE);
+            mark.setAttribute('data-role', 'quote-not-minted');
+            row.append(mark);
         }
         lines.append(row);
     }
     what.append(lines);
+    /*
+     * Outside the scroller, both: how many lines it does not show whole, and
+     * whether a chosen item is on a token another wallet minted (the owner,
+     * 2026-09-24). The lines scroll under a cap (`window.css`), so a line
+     * that said either inside them could be out of view while the code
+     * stood. The count is geometry — the cap is in pixels and the lines'
+     * heights are the fonts' — so it is set once the tree is laid out
+     * (`sayHiddenPayLines`), and on every scroll; until then the node is
+     * hidden and says nothing.
+     */
+    const more = el('div', 'sw-pay-more');
+    more.setAttribute('data-role', 'pay-lines-more');
+    more.hidden = true;
+    what.append(more);
+    lines.addEventListener('scroll', () => sayHiddenPayLines(box), { passive: true });
 
     const glance = selectionGlance(paying.selection, paying.prices);
     const total = el(
@@ -697,6 +717,11 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
     );
     total.setAttribute('data-role', 'pay-total');
     what.append(total);
+    if (borrowed > 0) {
+        const said = el('div', 'sw-pay-borrowed', copy.windowPayBorrowed(borrowed, shown.length));
+        said.setAttribute('data-role', 'pay-borrowed');
+        what.append(said);
+    }
 
     /*
      * The rate that priced this figure, and how long the code lives. A
@@ -739,6 +764,46 @@ function payingPlate(paying: WallPayment, handlers: Partial<StallHandlers>): HTM
     }
     how.append(back);
     return box;
+}
+
+/**
+ * Says, under the payment's lines, how many of them the scroller does not
+ * show whole — nothing, and the node hidden, when it shows them all.
+ *
+ * A line is hidden when any part of it is outside the scroller's client box:
+ * the caps fit whole lines at the top (`window.css`), so at rest this is the
+ * lines past the cap, and mid-scroll a line cut at either edge counts too,
+ * because a customer cannot read it. Geometry, so it needs a laid-out tree:
+ * `renderStall` calls it once the wall is connected and again when the
+ * fonts land, and the scroller on every scroll. An unlaid tree (a scroller
+ * with no height) measures nothing and says nothing.
+ */
+export function sayHiddenPayLines(root: ParentNode): void {
+    const lines = root.querySelector<HTMLElement>('.sw-paying [data-role="pay-lines"]');
+    const more = root.querySelector<HTMLElement>('.sw-paying [data-role="pay-lines-more"]');
+    if (lines === null || more === null) {
+        return;
+    }
+    const hidden = hiddenPayLines(lines);
+    more.hidden = hidden === 0;
+    more.textContent = hidden === 0 ? '' : copy.windowPayMore(hidden);
+}
+
+/** The lines of `lines` not wholly inside its client box; 0 on an unlaid tree. */
+export function hiddenPayLines(lines: HTMLElement): number {
+    if (lines.clientHeight <= 0) {
+        return 0;
+    }
+    const top = lines.getBoundingClientRect().top + lines.clientTop;
+    const bottom = top + lines.clientHeight;
+    let hidden = 0;
+    for (const line of lines.children) {
+        const at = line.getBoundingClientRect();
+        if (at.top < top - 1 || at.bottom > bottom + 1) {
+            hidden += 1;
+        }
+    }
+    return hidden;
 }
 
 /**

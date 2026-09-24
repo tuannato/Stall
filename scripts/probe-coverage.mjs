@@ -16,13 +16,23 @@
  *   look's row, at both widths.
  * - **`a-door-mini-paints-as-its-own-look`** compares every shipped look's
  *   deck mini with that look's own shop, at both widths.
+ * - **`nothing-on-the-wall-is-cut-from-below`** reads the touch wall's
+ *   controls on the three passes that paint it: the canvas (1920x1080), the
+ *   portrait wall (1080x1920) and the counter tablet (768x1024) — every one
+ *   of its five controls on each, and the payment's two lines outside its
+ *   scroller, "+N more" and the borrowed-token sentence (`WALL_ROLES`), each
+ *   read WHOLE: a stepper cut to a sliver is printed on the pass's line and
+ *   counts as nothing read. A "+N more" read whole is also the
+ *   `a-payment-list-that-scrolls-says-how-many-lines-it-hides` rule
+ *   comparing a nonzero count.
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
- * Only the phone, desk and canvas passes owe anything; the others measure
- * other screens (`mobile`, `desktop` and `canvas` are the runner's pass
- * names). The canvas owes only the overlay's places: the step-2 row rules
- * read page screens.
+ * The phone and desk passes owe the page rules, the canvas the overlay's
+ * places and the wall's controls, and the portrait and tablet passes the
+ * wall's controls; the reduced-motion and contrast passes owe nothing here
+ * (`mobile`, `desktop`, `canvas`, `portrait` and `tablet` are the runner's
+ * pass names).
  */
 
 const UNBUYABLE_PLACES = {
@@ -37,6 +47,18 @@ const SKIP_SURFACES = {
 };
 /** The passes the row-size and ladder rules read: page screens only. */
 const PAGE_PASSES = new Set(['mobile', 'desktop']);
+/** The passes that paint the touch wall, whose controls the wall rule reads. */
+const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet']);
+/** The touch wall's controls and held lines, by role: a pass that read none of one read nothing of it. */
+const WALL_ROLES = [
+    'window-back',
+    'window-pay',
+    'window-clear',
+    'window-step-fewer',
+    'window-step-more',
+    'pay-lines-more',
+    'pay-borrowed',
+];
 
 /**
  * Why a pass compared less than it owes, as sentences — empty when it owes
@@ -45,9 +67,17 @@ const PAGE_PASSES = new Set(['mobile', 'desktop']);
  * measured (the ordinary run, not the kit's).
  */
 export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton = false } = {}) {
-    const places = UNBUYABLE_PLACES[pass];
-    if (places === undefined) return [];
     const gaps = [];
+    if (WALL_PASSES.has(pass)) {
+        const roles = report.wallControlRoles ?? {};
+        for (const role of WALL_ROLES) {
+            if (!((roles[role] ?? 0) > 0)) {
+                gaps.push(`nothing-on-the-wall-is-cut-from-below read no ${role} on a wall`);
+            }
+        }
+    }
+    const places = UNBUYABLE_PLACES[pass];
+    if (places === undefined) return gaps;
     const read = report.unbuyableChecks ?? {};
     for (const place of places) {
         if (!((read[place] ?? 0) > 0)) {
@@ -83,7 +113,10 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
 
 /** What a pass compared, in one line for the runner to print — empty for a pass that owes nothing. */
 export function probeCoverageLine(pass, report) {
-    if (UNBUYABLE_PLACES[pass] === undefined) return '';
+    const wall = WALL_PASSES.has(pass)
+        ? `wall controls read: ${report.wallControlChecks ?? 0}` + sliverLine(report.wallSlivers ?? [])
+        : '';
+    if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([place, n]) => `${place} ${n}`)
@@ -97,7 +130,7 @@ export function probeCoverageLine(pass, report) {
         .map(([surface, n]) => `${surface} ${n}`)
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
-    if (!PAGE_PASSES.has(pass)) return `unbuyable labels read: ${read || 'none'}${skipped}`;
+    if (!PAGE_PASSES.has(pass)) return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall].filter(Boolean).join(' · ');
     return (
         `unbuyable labels read: ${read || 'none'}` +
         skipped +
@@ -105,4 +138,25 @@ export function probeCoverageLine(pass, report) {
         ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
+}
+
+/**
+ * The slivers the wall rule printed rather than failed, by role: how many,
+ * and the least of each that showed. An entry is
+ * `<screen> <look>: <role> <shown>/<need>px <axis>`.
+ */
+function sliverLine(slivers) {
+    if (slivers.length === 0) return '';
+    const byRole = new Map();
+    for (const entry of slivers) {
+        const m = /: (\S+) (\d+)\/(\d+)px/.exec(entry);
+        if (m === null) continue;
+        const [, role, shown, need] = m;
+        const at = byRole.get(role) ?? { n: 0, least: Infinity, need: Number(need) };
+        at.n += 1;
+        at.least = Math.min(at.least, Number(shown));
+        byRole.set(role, at);
+    }
+    const parts = [...byRole].sort(([a], [b]) => a.localeCompare(b)).map(([role, at]) => `${role} ×${at.n} (least ${at.least}/${at.need}px)`);
+    return ` · shown only in part inside a scroller: ${parts.join(', ')}`;
 }

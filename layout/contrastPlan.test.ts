@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 192, desktop: 220, canvas: 22, total: 434 });
+        }).toEqual({ mobile: 192, desktop: 220, canvas: 29, total: 441 });
     });
 
     it('walks the runner’s own viewports', () => {

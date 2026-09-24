@@ -120,7 +120,7 @@ import {
 import { stallMark } from './brand';
 import * as copy from './copy';
 import { armTicker, renderBroadcastView } from './broadcast';
-import { renderShopWindow, shopWindowSheet, wallTouches } from './window';
+import { renderShopWindow, sayHiddenPayLines, shopWindowSheet, wallTouches } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide, OBS_GUIDE_LEDE } from './obsGuide';
 import {
     drawPoster,
@@ -509,6 +509,11 @@ export function renderStall(
     // sends a wall back to its first row — the same complaint §4 records
     // against the shop, on the screen where nobody is there to scroll again.
     const keptStrip = (root.querySelector('.sw-strip') as HTMLElement | null)?.scrollTop ?? 0;
+    // And the payment's own lines, which scroll inside the plate: a customer
+    // halfway down thirty-five lines lost their place to the heartbeat. Read
+    // only off a plate that stood — after Back there is none, so the next
+    // payment starts at its first line.
+    const keptPayLines = (root.querySelector('.sw-paying .sw-pay-lines') as HTMLElement | null)?.scrollTop ?? 0;
     const thisScreen = screenKey(view);
     const sameScreen = thisScreen === lastScreenKey;
     lastScreenKey = thisScreen;
@@ -625,16 +630,35 @@ export function renderStall(
         // setter terminates and the write is a silent no-op. The first version
         // wrote it before the append and happy-dom, which keeps `scrollTop` as
         // a plain property, could not have told anybody.
+        //
+        // Both restores look inside THIS paint's frame, never the root: two
+        // paints in one task queue two microtasks, and one that queried the
+        // root put the first tree's offset on the second — a payment the
+        // customer had just asked for opened scrolled to where the last one
+        // was (`the-payment-lines-keep-their-place-across-a-repaint`).
         if (sameScreen && keptStrip > 0) {
             queueMicrotask(() => {
-                const strip = root.querySelector('.sw-strip') as HTMLElement | null;
+                const strip = frame.querySelector('.sw-strip') as HTMLElement | null;
                 if (strip !== null && strip.isConnected) {
                     strip.scrollTop = keptStrip;
                 }
             });
         }
+        // The payment's "+N more" is geometry, so it is said once the tree is
+        // laid out — now, after the lines' offset is back, and when the
+        // fonts land (their heights are the fonts').
+        sayHiddenPayLines(frame);
+        if (sameScreen && keptPayLines > 0) {
+            queueMicrotask(() => {
+                const lines = frame.querySelector('.sw-paying .sw-pay-lines') as HTMLElement | null;
+                if (lines !== null && lines.isConnected) {
+                    lines.scrollTop = keptPayLines;
+                    sayHiddenPayLines(frame);
+                }
+            });
+        }
         applyMarquees(root, WINDOW_MARQUEE);
-        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines);
         // A touch wall has controls, so it has focus to keep: every socket
         // tick and the sixty-second heartbeat rebuild this tree, and without
         // the restore a customer counting on the stepper lost the control

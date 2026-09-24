@@ -2169,14 +2169,154 @@ before.
   a row that is not on screen at the instant shot is sampled only through
   the rows that are, which wear the same card over whatever the look paints
   at a different offset.
-- **A control the wall's body cuts from below.** Found while measuring the
-  band, on main and unchanged here: at 768×1024 the band is taller than the
-  body on Neo (bare and worn), Modern worn and Rural worn, the list shows no
-  row, and the body's `overflow: hidden` cuts Back from below, leaving 36
-  of its 72px on screen on Neo, 44 on Rural worn and 7 on Modern worn. `cutSideways` is sideways only, and no rule measures a
-  control cut from below on a wall.
+- ~~A control the wall's body cuts from below.~~ Measured since
+  2026-09-24 by `nothing-on-the-wall-is-cut-from-below`, below.
 - **`looks:diff` and `workshop:shots` grow the old way**
   (`max(document, region.scrollHeight)`). They shoot the showroom, which
   carries no verdict, so a page that fits was always shot at its own size
   there; a long page's last dock-height and a sheet's lower half are outside
   their shots.
+
+## Nothing on the wall is cut from below (2026-09-24, the owner's B)
+
+A wall is a screen nobody scrolls: `.stall-scroll` and, in Browse,
+`.stall-body` are `overflow: hidden`, so a control past a clip's foot is not
+below the fold, it is gone. Found while measuring the payment band ("Shot
+at the real height", above): at 768×1024 the band ran past the body and
+Back was cut from below. No rule could see it — the protected boxes are
+money figures and codes, `cutSideways` is sideways only, and `coveredBy`
+skips a point outside its clips as reachable by scrolling.
+
+**`nothing-on-the-wall-is-cut-from-below`**: every control on a wall screen
+(`button`, `a[href]`, `input`, `select` under `.stall.shop-window` — the
+touch wall's steppers, Clear all, Pay and Back) and every protected box on
+it (`PROTECTED`: the figures, the codes, the payment's lines and total) must
+stand whole — top, bottom and both sides — inside every clip above it up to
+the wall's frame, and inside the viewport. One allowance: inside a box that
+really scrolls on that axis (`overflow: auto | scroll` with something to
+scroll — the touch wall's list, the payment's lines) a node is reachable by
+scrolling it, so from there up it is the part of the scroller the outer
+clips leave showing that is measured. Where that part is shorter than the
+node, the case fails — unless the node is one of the list's two steppers,
+which is **printed, not failed** (`wallSlivers`, summarised by role on the
+pass's `compared:` line; narrowed from every role on 2026-09-24, below,
+when the list's figures shown in part at 768×1024 were found among them).
+It runs wherever a wall paints; the canvas (1920×1080), portrait
+(1080×1920) and tablet (768×1024) passes each owe every one of the touch
+wall's five controls and its two held lines read WHOLE
+(`wallControlRoles`, `probe-coverage.mjs`), and their verdicts print
+failures and coverage gaps together (a gap printed in place of the
+failures hid them — the critic's item 13).
+
+**Proved red first, on the layout as it stood** (main's `window.css`): 10
+failures, all Back on `shop-window-touch-quotes-pay` at 768×1024 — 8 of
+72px on Modern + Awning, 7 on Modern worn, 36 on Neo in all six variants,
+45 on Rural + Yard beetle and Rural worn — and nothing at 1920×1080 or
+1080×1920.
+
+**The fix, and a dead block found on the way.** The band's short-portrait
+rules sat in a container block before the band's base rules, at the same
+specificity, so every one of them but the caption's lost on source order:
+the step-down it described (lines 18px, total 19, rate and truths 15,
+figure 34, Back 64) never painted — measured 21 / 23 / 18 / 36 / 72. The
+block moved after the base rules, and the band there stops stacking
+everything beside the code: the rate under the amount beside the code, the
+two truths the full width under both, Back beside them (`.sw-pay-b` hands
+its children to the band with `display: contents` at that size alone).
+`a-container-rule-is-not-out-ranked-by-a-later-base-rule` now reads every
+served sheet for that shape — a conditional declaration taken back by a
+later unconditional rule of the same selector — and failed four times on
+main's `window.css`; it cannot see a different selector of equal
+specificity (Back's 72 came from `.sw-sel-btn` that way).
+
+**Several items (the critic's P1, the same day).** The fix held for one
+chosen item, and both touch fixtures chose one; a selection holds up to 35,
+one line each, and at 35 the band ran ~2,400px on every wall — Back, the
+rate, the total and the lines cut off at all three sizes. `.sw-pay-lines`
+now scrolls inside the plate (`overflow-y: auto`, `overscroll-behavior:
+contain`) under a cap measured in lines — two at 1920×1080 (120px, the
+code's height), five on the tall wall (309px), two on the tablet (111px) —
+and the total, the truths and Back stay put. Fixtures
+`shop-window-touch-quotes-pay-3` and `-35` (geometry only) ride the canvas,
+portrait and tablet passes. Measured after, Back whole on every look at
+every size with 3 and 35 items; at the tablet the list keeps 12–146px with
+3 and 0–123px with 35. **Proved red** by taking the caps out: 533 + 526 +
+281 cut surcharge lines and 19 each of the lines box, the total, the rate
+and Back across the three sizes on the 35-item screen; a Clear all planted
+700px to the right read "cut sideways by div.stall-scroll.sw" on every
+touch screen at 768×1024 and 1920×1080.
+
+**A sliver is the steppers' alone, and only a whole read counts (the
+critic's second pass, 2026-09-24).** The allowance above forgave a sliver
+of ANY role and counted it as read, so a Back, a Pay code or a money figure
+inside a scroller cut shorter than itself was printed and passed — a
+customer could never bring it whole into view. Now a sliver is printed only
+for `window-step-*` (`SLIVER_ROLES`); any other control or protected box
+cut so fails ("can never be brought whole into view"), and
+`wallControlRoles` counts a node only when it was read whole. **Proved
+red** with the wall's body planted `overflow-y: auto; max-height: 50px`:
+6,057 failures across the canvas, portrait and tablet passes — Back, the
+pay code's `svg`, the figure, the total, the lines, the list's figures and
+surcharge lines — plus a coverage gap on each. The same plant under the
+round-2 rule passed all three wall passes, printing `window-back`, `svg`,
+`price` and `pay-total` as "shown only in part" (only the canvas's
+clip-skip ceiling, a different guard, went red).
+
+**What the narrower rule found, and the fix (round 3).** At 768×1024 a
+wall row is 321–364px and the body 485–617px, so beside a 408–546px
+payment band the list kept 0–167px: never one whole row, and on the worn
+looks less than one figure — 33 of Modern + Awning's 48px with ONE item
+chosen, 49 of Rural worn's 51, 0 with three. 974 failures on the tablet
+pass, every one a quote figure or surcharge line in the list. The list now
+yields its row to the band there while a payment stands (`display: none`
+on `.sw-strip` under the short-portrait container; the chosen names stay on
+screen in the selection strip), and the payment's lines cap at ONE line at
+that size (56px), with the "+N more" line saying the rest — two lines, the
+count and a borrowed-token sentence ran the 35-item band to 528px in
+Modern worn's 485px body and cut Back by 10px. Measured after at
+768×1024: the band 408–491px in a 485–617px body on every look, bare and
+worn, with 1, 3 and 35 items. The owner's "the list keeps what it can"
+stands at 1920×1080 and 1080×1920 and is reversed at the tablet — stated
+in `window.css` as the owner's to confirm.
+
+**Two lines outside the payment's scroller are held whole (`WALL_HELD`).**
+The "+N more" line (`pay-lines-more`) and the borrowed-token sentence
+(`pay-borrowed`, owner's decision 4) are read like controls — whole inside
+every clip — and get no scroller allowance at all: inside a box that
+scrolls is itself a failure, since standing outside the payment's scroller
+is what they are for. The canvas, portrait and tablet passes each owe both
+read whole (`probe-coverage.mjs`); `shop-window-touch-quotes-pay-35`
+carries a borrowed item (the twenty-first, deep in the scroller) and is
+contrast-sampled for the two lines (`.sw-pay-more`, `.sw-pay-borrowed` in
+`CONTRAST_TEXT`; 6.73:1 at the least, Rural worn). **Proved red** by
+appending the borrowed sentence inside the lines: "div.sw-pay-borrowed is
+inside dl.sw-pay-lines, which scrolls" on every look at all three sizes,
+and "read no pay-borrowed on a wall" on each pass.
+
+## A payment list that scrolls says how many lines it hides (2026-09-24, the owner's decision 4)
+
+The payment's lines scroll inside the wall's plate under a cap in pixels —
+two lines at 1920×1080, five at 1080×1920, one at 768×1024 — and nothing
+said so: two lines of thirty-five showed over a total for all of them. The
+page now says `windowPayMore(n)` ("+33 more items: swipe the list") under
+the scroller, set after layout by `sayHiddenPayLines` (on the paint, when
+the fonts land, after a kept offset is put back, and on every scroll): a
+line counts when any part of it is outside the scroller's client box.
+happy-dom lays nothing out, so the unit tests stub the boxes; the real
+geometry is this rule's.
+
+**`a-payment-list-that-scrolls-says-how-many-lines-it-hides`**: on every
+wall screen with a payment standing, the probe counts for itself the lines
+not wholly inside `[data-role="pay-lines"]`'s client box and holds
+`[data-role="pay-lines-more"]` to it — hidden and silent at 0, shown and
+saying exactly `windowPayMore(n)` otherwise, never inside the scroller.
+Its coverage is the wall rule's: `pay-lines-more` read whole on each wall
+pass is a nonzero count compared (the 35-item plate at every size, the
+three-item one at 1920×1080 and 768×1024; three items fit the tall wall's
+five lines, and the line stays silent there). **Proved red** by taking the
+two calls out of `renderStall` (in one run with the borrowed-sentence
+plant above, whose failures are a different rule's): 95 failures — 30 of
+the 35 lines hidden at 1080×1920 and the line under them saying nothing
+where it owes "+30 more items: swipe the list", 33 at 1920×1080, 34 at
+768×1024, and on the three-item plate 1 at 1920×1080 and 2 at 768×1024 —
+and a coverage gap on each wall pass.

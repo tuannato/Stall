@@ -2377,6 +2377,26 @@ export const WINDOW_PAY_WHY_TEXT: Readonly<Record<PayRateWhy, string>> = {
 };
 export const windowPayCaption = (count: number): string =>
     `Scan with your phone wallet to pay ${count} ${count === 1 ? 'item' : 'items'}`;
+/**
+ * The payment's lines scroll inside the wall's plate — a selection holds up
+ * to 35 items and a wall cannot scroll — so how many of them the scroller
+ * does not show whole is said under it, and only when there are some
+ * (owner, 2026-09-24). "Swipe" because this plate exists on a touch wall
+ * alone.
+ */
+export const windowPayMore = (n: number): string =>
+    `+${n} more ${n === 1 ? 'item' : 'items'}: swipe the list`;
+/**
+ * A chosen item on a token another wallet minted, said outside the lines'
+ * scroller, where a customer reads it before scanning (the critic,
+ * 2026-09-24): inside it, the line that said so could be scrolled out of
+ * view while the code stood. One item is the item's own sentence; several
+ * are counted, and each line still carries the mark so the list says which.
+ */
+export const windowPayBorrowed = (borrowed: number, lines: number): string =>
+    lines === 1
+        ? QUOTE_NOT_MINTED_HERE
+        : `${borrowed} of these ${lines} items: ${QUOTE_NOT_MINTED_HERE.toLowerCase()} (marked in the list)`;
 /** Said in advance, because a customer at a wall has no refresh control to press. */
 export const windowPayGoodFor = (minutes: number): string =>
     `good for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;

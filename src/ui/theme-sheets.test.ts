@@ -303,3 +303,79 @@ describe('the-reduce-block-is-the-last-rule-in-its-sheet', () => {
         }
     });
 });
+
+describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
+    /**
+     * A declaration inside a `@container` or `@media` block loses to the SAME
+     * selector declaring the same property later in the sheet outside any
+     * block: equal specificity, and source order decides. The counter
+     * tablet's step-down for the wall's payment band sat in exactly that
+     * shape until 2026-09-24 — lines 18px, total 19, figure 34 written for
+     * the short-portrait wall and 21 / 23 / 36 painted, because the band's
+     * base rules came later (the critic's item 8). Reduced-motion blocks are
+     * not read: they state kills, and a kill that loses is the reduce test's
+     * to find. **What this cannot see** (the critic's P3, 2026-09-24), each
+     * a place the shape can come back green:
+     *
+     * - a different selector of equal specificity matching the same element
+     *   later — the cascade, not the text, decides that;
+     * - a shorthand against its longhand — property names are compared
+     *   literally, so a later base `font: …` taking back a conditional
+     *   `font-size` (or `margin` taking back `margin-top`) is not seen;
+     * - another sheet — each is read alone, so a base rule in a sheet the
+     *   bundle imports later (a look's, or `window.css` after `stall.css`)
+     *   out-ranking a conditional one in an earlier sheet is not seen;
+     * - a selector written two ways (`.a.b` against `.b.a`, or a comment
+     *   inside the selector list) — the text is compared after collapsing
+     *   whitespace and nothing else.
+     *
+     * Only the probe, which measures what painted, sees those.
+     */
+    type Rule = { selectors: string[]; props: string[]; cond: string; n: number };
+    const rulesOf = (css: string): Rule[] => {
+        const out: Rule[] = [];
+        const stack: string[] = [];
+        let start = 0;
+        let n = 0;
+        for (let i = 0; i < css.length; i += 1) {
+            if (css[i] === '{') {
+                stack.push(css.slice(start, i).trim());
+                start = i + 1;
+            } else if (css[i] === '}') {
+                const head = stack.pop();
+                if (head !== undefined && !head.startsWith('@') && !/^(from|to|[\d.]+%)/.test(head)) {
+                    out.push({
+                        selectors: head.split(',').map((x) => x.trim().replace(/\s+/g, ' ')),
+                        props: [...css.slice(start, i).matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map((m) => m[1]!),
+                        cond: stack.filter((h) => h.startsWith('@')).join(' '),
+                        n: (n += 1),
+                    });
+                }
+                start = i + 1;
+            }
+        }
+        return out;
+    };
+
+    it('finds no conditional declaration a later unconditional rule of the same selector takes back', () => {
+        const dead: string[] = [];
+        let conditional = 0;
+        for (const sheet of SHEETS) {
+            const rules = rulesOf(stripped(sheet));
+            for (const r of rules) {
+                if (r.cond === '' || /prefers-reduced-motion|keyframes/.test(r.cond)) continue;
+                conditional += 1;
+                for (const u of rules) {
+                    if (u.n <= r.n || u.cond !== '') continue;
+                    const selectors = r.selectors.filter((x) => u.selectors.includes(x));
+                    const props = r.props.filter((p) => u.props.includes(p));
+                    if (selectors.length > 0 && props.length > 0) {
+                        dead.push(`${sheet}: ${r.cond} ${selectors.join(', ')} { ${props.join(', ')} }`);
+                    }
+                }
+            }
+        }
+        expect(conditional, 'the test read no conditional rule at all').toBeGreaterThan(50);
+        expect(dead).toEqual([]);
+    });
+});

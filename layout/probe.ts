@@ -13,7 +13,7 @@
  * It asserts what only a browser can see.
  */
 import { PAY_QR_NARROWEST_PX, renderStall } from '../src/ui/render';
-import { UNBUYABLE_BADGE } from '../src/ui/copy';
+import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -1639,6 +1639,203 @@ function doorMiniFaults(): Failure[] {
 }
 
 /*
+ * **Nothing on the wall is cut from below** (2026-09-24, the owner's B). A
+ * wall is a screen nobody scrolls: `.stall-scroll` is `overflow: hidden`, so
+ * a control past the frame's foot is not below the fold, it is gone — and on
+ * a touch wall a customer has five controls and no way to reach a sixth
+ * pixel. Measured on the counter tablet (768x1024) with a payment standing:
+ * Back showed 7 of its 72px on Modern worn, and less on Neo and Rural worn.
+ * No rule saw it: every protected box is a money figure or a code, and the
+ * cover check skips a point outside its clips as "reachable by scrolling".
+ *
+ * For every control on a wall screen (`button`, `a[href]`, `input`,
+ * `select`) and every protected box on it (`PROTECTED`: the figures, the
+ * codes, the payment's lines and total — a money figure a clip cuts is as
+ * gone as a button), its box must stand whole — top, bottom and both sides — inside
+ * every clip above it up to the wall's frame, and inside the viewport. One
+ * allowance, and it is narrow (the critic, 2026-09-24): a control inside a
+ * box that really scrolls on that axis (`overflow: auto | scroll` with
+ * something to scroll) is reachable by scrolling it, so from there up it is
+ * the part of that scroller the outer clips leave showing that is measured.
+ * Where that part is shorter than the control — a scroller cut to a sliver,
+ * so the control can never be brought whole into view — the case is
+ * **printed, not failed** for the list's two steppers alone
+ * (`window-step-*`, `SLIVER_ROLES`; `wallSlivers`, on the pass's
+ * `compared:` line): the tablet's list keeps 12–49px while a payment stands
+ * on the short looks worn, which is the trade the owner took ("the list
+ * keeps what it can"). Any other control or box shown only in part inside a
+ * scroller fails (the critic, 2026-09-24: it forgave every role, so Back in
+ * a body planted to scroll read green). The two held lines (`WALL_HELD`)
+ * get no scroller allowance at all: inside one is a failure, since being
+ * outside the payment's scroller is what they are for. The controls and
+ * boxes read are counted per pass and per role (`wallControlRoles`) **only
+ * when read whole**
+ * — a sliver is printed and never counted as read — and the runner requires
+ * Back, Pay, Clear all, both steppers, the payment's "+N more" line and its
+ * borrowed-token sentence (`WALL_HELD`) on the canvas, portrait and tablet
+ * passes, where the touch wall is measured.
+ */
+const WALL_CUT_CHECK = 'nothing-on-the-wall-is-cut-from-below';
+/** The roles a scroller may cut to a sliver: the list's own steppers, and nothing else. */
+const SLIVER_ROLES = /^window-step-/;
+/**
+ * The payment's two lines outside the lines' scroller (2026-09-24): what
+ * they say is what the scroller may hide, so they are held whole like a
+ * control.
+ */
+const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"]';
+let wallControlChecks = 0;
+const wallControlRoles: Record<string, number> = {};
+const wallSlivers = new Set<string>();
+
+type Span = { lo: number; hi: number };
+
+function wallCuts(screen: string, label: string): Failure[] {
+    const frame = document.querySelector<HTMLElement>('#app .stall.shop-window');
+    if (frame === null) {
+        return [];
+    }
+    const out: Failure[] = [];
+    // Every control, and every protected box — the money and the code a
+    // customer reads off the wall are as gone as a button when a clip cuts
+    // them, and the cover check forgives a point outside its clips.
+    for (const control of frame.querySelectorAll<HTMLElement>(`button, a[href], input, select, ${PROTECTED}, ${WALL_HELD}`)) {
+        const own = control.getBoundingClientRect();
+        if (own.width === 0 || own.height === 0) {
+            continue;
+        }
+        const role = control.getAttribute('data-role') ?? describe(control);
+        const held = control.matches(WALL_HELD);
+        let sliver = false;
+        // The two axes walk the same ancestors; each carries what must stand
+        // whole there (the control, or the showing part of a scroller) and
+        // how much of it the control needs.
+        const axes = {
+            y: { span: { lo: own.top, hi: own.bottom } as Span, need: own.height, via: '' },
+            x: { span: { lo: own.left, hi: own.right } as Span, need: own.width, via: '' },
+        };
+        let fault: string | undefined;
+        const clipTo = (axis: 'y' | 'x', by: string, edge: Span, scrolled: boolean): void => {
+            const a = axes[axis];
+            const shown = Math.max(0, Math.min(a.span.hi, edge.hi) - Math.max(a.span.lo, edge.lo));
+            const whole = a.span.lo >= edge.lo - 1 && a.span.hi <= edge.hi + 1;
+            const side = axis === 'y' ? 'from below or above' : 'sideways';
+            if (!scrolled && !whole) {
+                fault ??= `${describe(control)}${a.via} is cut ${side} by ${by}: ${Math.round(shown)} of its ${Math.round(a.need)}px show (${Math.round(a.span.lo)}–${Math.round(a.span.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
+                return;
+            }
+            if (scrolled && shown + 1 < a.need) {
+                if (!SLIVER_ROLES.test(role)) {
+                    fault ??= `${describe(control)}${a.via} can never be brought whole into view: the scroller shows ${Math.round(shown)} of its ${Math.round(a.need)}px ${side} (${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
+                    return;
+                }
+                sliver = true;
+                wallSlivers.add(`${screen} ${label}: ${role} ${Math.round(shown)}/${Math.round(a.need)}px ${axis}`);
+            }
+            // Inside a scroller, only the part the clips leave is measured on.
+            a.span = { lo: Math.max(a.span.lo, edge.lo), hi: Math.min(a.span.hi, edge.hi) };
+        };
+        let scrolledY = false;
+        let scrolledX = false;
+        for (let at = control.parentElement; at !== null && fault === undefined; at = at.parentElement) {
+            const cs = getComputedStyle(at);
+            const box = at.getBoundingClientRect();
+            const scrollsY = (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && at.scrollHeight > at.clientHeight + 1;
+            const scrollsX = (cs.overflowX === 'auto' || cs.overflowX === 'scroll') && at.scrollWidth > at.clientWidth + 1;
+            if (scrollsY && held) {
+                // The two held lines exist to be read without scrolling: one
+                // inside a scroller is the defect they were moved out to fix.
+                fault ??= `${describe(control)} is inside ${describe(at)}, which scrolls — the line is held outside the payment's scroller so a customer reads it without scrolling`;
+                break;
+            }
+            if (scrollsY && !scrolledY) {
+                // Reachable inside this box by scrolling it: from here up the
+                // scroller's own box is what must show, at the control's size.
+                axes.y.span = { lo: box.top, hi: box.bottom };
+                axes.y.via = ` (in ${describe(at)}, which scrolls)`;
+                scrolledY = true;
+            } else if (at === frame || cs.overflowY !== 'visible' || at.classList.contains('stall-scroll')) {
+                clipTo('y', describe(at), { lo: box.top, hi: box.bottom }, scrolledY);
+            }
+            if (scrollsX && !scrolledX) {
+                axes.x.span = { lo: box.left, hi: box.right };
+                axes.x.via = ` (in ${describe(at)}, which scrolls)`;
+                scrolledX = true;
+            } else if (at === frame || cs.overflowX !== 'visible' || at.classList.contains('stall-scroll')) {
+                clipTo('x', describe(at), { lo: box.left, hi: box.right }, scrolledX);
+            }
+            if (at === frame) {
+                break;
+            }
+        }
+        if (fault === undefined) {
+            clipTo('y', 'the viewport', { lo: 0, hi: window.innerHeight }, scrolledY);
+            clipTo('x', 'the viewport', { lo: 0, hi: window.innerWidth }, scrolledX);
+        }
+        if (fault !== undefined) {
+            out.push({ screen, theme: label, check: WALL_CUT_CHECK, detail: `${fault} at ${window.innerWidth}x${window.innerHeight}` });
+        } else if (!sliver) {
+            // Read whole: the only read the runner's coverage counts.
+            wallControlChecks += 1;
+            wallControlRoles[role] = (wallControlRoles[role] ?? 0) + 1;
+        }
+    }
+    return out;
+}
+
+/*
+ * **A payment list that scrolls says how many lines it hides** (2026-09-24,
+ * the owner's decision 4). The payment's lines scroll inside the wall's
+ * plate under a cap in pixels (`window.css`), and nothing said so: a
+ * customer saw two lines of thirty-five and a total for all of them. The
+ * page says "+N more" under the scroller once the tree is laid out
+ * (`sayHiddenPayLines`) — geometry, which no unit test can see, since
+ * happy-dom lays nothing out. So on every wall screen with a payment
+ * standing the probe counts for itself the lines not wholly inside the
+ * scroller's client box and holds the line under it to that count: hidden
+ * and silent at 0, shown and saying `windowPayMore(n)` otherwise, and never
+ * inside the scroller it counts. The line read whole is `WALL_HELD`'s, so
+ * the runner's coverage of `pay-lines-more` is a nonzero count compared.
+ */
+const PAY_MORE_CHECK = 'a-payment-list-that-scrolls-says-how-many-lines-it-hides';
+
+function payLinesSayWhatTheyHide(screen: string, label: string): Failure[] {
+    const lines = document.querySelector<HTMLElement>('#app .stall.shop-window .sw-paying [data-role="pay-lines"]');
+    if (lines === null) {
+        return [];
+    }
+    const fail = (detail: string): Failure[] => [
+        { screen, theme: label, check: PAY_MORE_CHECK, detail: `${detail} at ${window.innerWidth}x${window.innerHeight}` },
+    ];
+    const more = document.querySelector<HTMLElement>('#app .stall.shop-window .sw-paying [data-role="pay-lines-more"]');
+    if (more === null) {
+        return fail('the payment has no line to say how many of its lines the scroller hides');
+    }
+    if (more.closest('[data-role="pay-lines"]') !== null) {
+        return fail('the line that counts the hidden lines is inside the scroller it counts');
+    }
+    const top = lines.getBoundingClientRect().top + lines.clientTop;
+    const bottom = top + lines.clientHeight;
+    let hidden = 0;
+    const rows = lines.querySelectorAll<HTMLElement>(':scope > .sw-pay-line');
+    for (const line of rows) {
+        const at = line.getBoundingClientRect();
+        if (at.top < top - 1 || at.bottom > bottom + 1) {
+            hidden += 1;
+        }
+    }
+    const box = more.getBoundingClientRect();
+    const said = !more.hidden && box.height > 0 ? (more.textContent ?? '') : '';
+    const want = hidden === 0 ? '' : windowPayMore(hidden);
+    if (said !== want) {
+        return fail(
+            `${hidden} of the payment's ${rows.length} lines are not wholly in view, and the line under them says ${said === '' ? 'nothing' : `"${said}"`}${want === '' ? '' : ` where it owes "${want}"`}`,
+        );
+    }
+    return [];
+}
+
+/*
  * **A shipped row states the sizes its sheet paints** (step 2e, 2026-09-23).
  * Each look's sheet sizes the tier-0 figure and the sign's name itself, and
  * the row carried other numbers — Modern said 30 and 25 where its sheet
@@ -1768,6 +1965,8 @@ for (const screen of measured) {
                 withQuote.add(screen);
             }
             failures.push(...unbuyableFaults(screen, label));
+            failures.push(...wallCuts(screen, label));
+            failures.push(...payLinesSayWhatTheyHide(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -2204,6 +2403,10 @@ const CONTRAST_TEXT = [
     '.sw-step-n',
     '.sw-pay-v',
     '.sw-pay-s',
+    // The two lines outside the payment's scroller (2026-09-24): "+N more"
+    // and the borrowed-token sentence, sampled on the 35-item plate.
+    '.sw-pay-more',
+    '.sw-pay-borrowed',
     '.sel-sub',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
@@ -2760,6 +2963,9 @@ const verdict = {
     skipChecks,
     rowSizeClasses: [...rowSizeClasses].sort(),
     doorMiniClasses: [...doorMiniClasses].sort(),
+    wallControlChecks,
+    wallControlRoles,
+    wallSlivers: [...wallSlivers].sort(),
     ladderTiers,
     failures,
 };

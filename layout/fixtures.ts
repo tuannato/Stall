@@ -148,6 +148,52 @@ export const QUOTE_WORDS = new Map<string, string>([
  */
 const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: Date.now() };
 
+/**
+ * A touch wall with a payment of `n` chosen items standing (the critic's P1,
+ * 2026-09-24): the tablet fix held for one item, and both touch fixtures
+ * chose one — `.sw-pay-lines` grows a line per item and a selection holds up
+ * to `MAX_SELECTION_ENTRIES` (35). Each item is a USD quote with a
+ * surcharge, the tallest line the plate paints (its figure and the record's
+ * surcharge line under it), chosen ×2.
+ */
+const SEVERAL_NAMES = [
+    'Roasted Beans', 'Green Tea', 'Rye Flour', 'Honey Jar', 'Plum Jam', 'Oat Bag', 'Chili Oil',
+    'Sea Salt', 'Dried Figs', 'Walnuts', 'Apple Butter', 'Maple Syrup', 'Pickled Beets', 'Brown Rice',
+    'Barley Tea', 'Rose Soap', 'Beeswax Candle', 'Linen Towel', 'Clay Mug', 'Wool Socks', 'Bread Knife',
+    'Seed Packet', 'Garlic Braid', 'Cider Vinegar', 'Hazelnuts', 'Lentils', 'Mustard', 'Sour Cherries',
+    'Buckwheat', 'Chamomile', 'Pear Butter', 'Smoked Salt', 'Dill Pickles', 'Poppy Seeds', 'Cocoa Nibs',
+];
+
+function severalPaying(n: number, borrowedAt: readonly number[] = []): Partial<StallView> {
+    const ids = SEVERAL_NAMES.slice(0, n).map((_, i) => (0x60 + i).toString(16).padStart(2, '0').repeat(32));
+    const borrowed = new Set(borrowedAt.map((i) => ids[i]!));
+    const quote: TokenPrice = { code: 'usd', exponent: 2, amount: 500n, surchargePct: 5 };
+    const chosen = new Map(ids.map((id) => [id, 2n] as const));
+    const prices = new Map(ids.map((id) => [id, quote] as const));
+    const names = new Map(ids.map((id, i) => [id, SEVERAL_NAMES[i]!] as const));
+    return {
+        tokens: new Map([...tokens, ...ids.map((id, i) => [id, meta(id, SEVERAL_NAMES[i]!, 'SLP_TOKEN_TYPE_FUNGIBLE')] as const)]),
+        prices,
+        genesis: new Map(
+            ids.map((id) => [id, (borrowed.has(id) ? 'not-attributed' : 'attributed') as GenesisAttribution] as const),
+        ),
+        selection: chosen,
+        windowPaying: {
+            // Each item 2 × $5.00 + 5% at $0.00002 a XEC: 525,000 XEC.
+            sats: 52_500_000n * BigInt(n),
+            uri: `${ADDR}?amount=${(525_000 * n).toFixed(2)}`,
+            selection: chosen,
+            prices,
+            names,
+            borrowed,
+            unit: 'usd',
+            rate: { rate: PAY_RATE.rate, atMs: PAY_RATE.atMs },
+            atMs: PAY_RATE.atMs,
+        },
+    };
+}
+
+
 /** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
 export const UNBROKEN = 'A'.repeat(178);
 
@@ -1023,6 +1069,28 @@ export const SCREENS: Record<string, StallView> = {
         },
     }),
     /*
+     * The same payment of several items (the critic's P1, 2026-09-24): three,
+     * where the tablet's band first ran past its body, and the cap of 35.
+     */
+    'shop-window-touch-quotes-pay-3': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        shopTab: 'quotes',
+        ...severalPaying(3),
+    }),
+    /*
+     * One of the thirty-five is on a token another wallet minted — the
+     * twenty-first, deep in the lines' scroller where no cap shows it — so
+     * the sentence outside the scroller is what a customer reads, and
+     * `nothing-on-the-wall-is-cut-from-below` holds it whole (2026-09-24).
+     */
+    'shop-window-touch-quotes-pay-35': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        shopTab: 'quotes',
+        ...severalPaying(35, [20]),
+    }),
+    /*
      * The same screen at the size it is actually hung at. The page pass runs
      * the three above at 390 and 1280 — a phone, where the render gate hands
      * back the ordinary stall, and a small shop television. This one is the
@@ -1403,6 +1471,11 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // The checklist is `unresolvable`'s ground with numbered steps on it;
     // its muted status lines are not contrast targets. Geometry only.
     'first-stall',
+    // The payment of three items (2026-09-24) is here for its geometry: the
+    // one-item plate is sampled on `shop-window-touch-quotes-pay`, and the
+    // 35-item one — which alone carries the two lines outside the scroller,
+    // "+N more" and the borrowed-token sentence — is sampled for those.
+    'shop-window-touch-quotes-pay-3',
     // The Cycle card that skips an unbuyable listing paints a buyable card
     // `shop-window-cycle` already samples. The unbuyable label itself is
     // sampled (2026-09-24, the critic: it is all a price cell says) on the
@@ -1463,6 +1536,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
+    'shop-window-touch-quotes-pay-3',
+    'shop-window-touch-quotes-pay-35',
 ]);
 
 /**

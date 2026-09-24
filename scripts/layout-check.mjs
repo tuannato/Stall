@@ -187,9 +187,12 @@ const WINDOW_SCREENS =
     // payment the press froze. Both passes below read this list, so both
     // the portrait screen and the counter tablet measure them.
     'shop-window-touch-quotes,shop-window-touch-quotes-pay,' +
-    // An unbuyable offer on a wall (2026-09-23), in a Browse row and on the
-    // Cycle card — the card with no code since 2026-09-24, which the tall
-    // wall and the tablet lay out on their own.
+    // A payment of several items, and of the cap (2026-09-24, the critic,
+    // P1): the tablet band held for one item and was cut again at three.
+    'shop-window-touch-quotes-pay-3,shop-window-touch-quotes-pay-35,' +
+    // An unbuyable offer on a wall (2026-09-23), in a Browse row, and the
+    // Cycle card that skips it (since 2026-09-24): the tall wall and the
+    // tablet lay both out on their own.
     'shop-window-unbuyable,shop-window-cycle-unbuyable';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
@@ -919,13 +922,29 @@ try {
                     `✗ ${label}: measured ${(pv.screensMeasured ?? []).length} of ${wanted}` +
                         ' screens — vacuous green.',
                 );
-            } else if (pv.failures.length === 0) {
-                console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}`);
             } else {
-                failed = true;
-                console.error(`✗ ${label}: ${pv.failures.length} failure(s) — ${took()}`);
-                for (const f of pv.failures) {
-                    console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                // Both halves, always: a coverage gap printed in place of the
+                // failures hid them (the critic, 2026-09-24). The wall rule
+                // owes every one of the touch wall's roles here — a fixture
+                // that stopped mounting its controls would leave it green
+                // over nothing (`probe-coverage.mjs`).
+                const gaps = probeCoverageGaps(PORTRAIT.name, pv);
+                const compared = probeCoverageLine(PORTRAIT.name, pv);
+                if (pv.failures.length === 0 && gaps.length === 0) {
+                    console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}`);
+                } else {
+                    failed = true;
+                    if (pv.failures.length > 0) {
+                        console.error(`✗ ${label}: ${pv.failures.length} failure(s) — ${took()}`);
+                        for (const f of pv.failures) {
+                            console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                        }
+                    }
+                    if (gaps.length > 0) {
+                        console.error(`✗ ${label}: a rule compared nothing it owes —`);
+                        for (const gap of gaps) console.error(`    ${gap}`);
+                    }
+                    console.error(`    compared: ${compared}`);
                 }
             }
         } catch (err) {
@@ -976,13 +995,29 @@ try {
                     `✗ ${label}: measured ${(tv.screensMeasured ?? []).length} of ${wanted}` +
                         ' screens — vacuous green.',
                 );
-            } else if (tv.failures.length === 0) {
-                console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}`);
             } else {
-                failed = true;
-                console.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${took()}`);
-                for (const f of tv.failures) {
-                    console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                // Both halves, always: a coverage gap printed in place of the
+                // failures hid them (the critic, 2026-09-24). The wall rule
+                // owes every one of the touch wall's roles here — a fixture
+                // that stopped mounting its controls would leave it green
+                // over nothing (`probe-coverage.mjs`).
+                const gaps = probeCoverageGaps(TABLET.name, tv);
+                const compared = probeCoverageLine(TABLET.name, tv);
+                if (tv.failures.length === 0 && gaps.length === 0) {
+                    console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}`);
+                } else {
+                    failed = true;
+                    if (tv.failures.length > 0) {
+                        console.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${took()}`);
+                        for (const f of tv.failures) {
+                            console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                        }
+                    }
+                    if (gaps.length > 0) {
+                        console.error(`✗ ${label}: a rule compared nothing it owes —`);
+                        for (const gap of gaps) console.error(`    ${gap}`);
+                    }
+                    console.error(`    compared: ${compared}`);
                 }
             }
         } catch (err) {

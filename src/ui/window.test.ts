@@ -9,6 +9,8 @@ import {
     WINDOW_QR_MIN_PX,
     WINDOW_QR_PX,
     cycleListings,
+    hiddenPayLines,
+    sayHiddenPayLines,
     shopWindowSheet,
     wallListings,
     windowItemLink,
@@ -1790,5 +1792,177 @@ describe('the-wall-cycle-skips-an-unbuyable-listing', () => {
         expect(link.value).toContain('mode=browse');
         expect(here.disabled).toBe(false);
         sheet.remove();
+    });
+});
+
+/**
+ * A wall payment of `ids`, each a USD quote chosen twice — the plate the
+ * three describes below paint. `borrowed` are the items whose genesis names
+ * another wallet.
+ */
+function payingWall(ids: readonly string[], borrowed: readonly string[] = []): HTMLElement {
+    const names = new Map(ids.map((id, i) => [id, `Item ${i + 1}`] as const));
+    const selection = new Map(ids.map((id) => [id, 2n] as const));
+    const prices = new Map(ids.map((id) => [id, QUOTE_USD] as const));
+    return paint(
+        windowView(
+            { show: 'quotes', mode: 'browse', touch: true },
+            {
+                tokens: new Map(ids.map((id, i) => tokenMeta(id, `Item ${i + 1}`))),
+                prices,
+                selection,
+                windowPaying: {
+                    sats: 52_500_000n * BigInt(ids.length),
+                    uri: `${ADDR}?amount=${(525_000 * ids.length).toFixed(2)}`,
+                    selection,
+                    prices,
+                    names,
+                    borrowed: new Set(borrowed),
+                    unit: 'usd',
+                    atMs: Date.now(),
+                },
+            } as unknown as Partial<StallView>,
+        ),
+    );
+}
+
+const SEVERAL = ['61', '62', '63'].map((b) => b.repeat(32));
+
+describe('a-borrowed-item-on-a-wall-payment-is-said-outside-the-scroll', () => {
+    /**
+     * The payment's lines scroll inside the plate under a cap, and the line
+     * that said an item's token was minted by another wallet was one of them:
+     * a customer could scan and pay with it scrolled out of view (the critic,
+     * 2026-09-24). The sentence stands outside the scroller now, whenever any
+     * chosen item is borrowed; the lines keep a mark saying which.
+     */
+    it('counts the borrowed items outside the lines, and marks each one in them', () => {
+        const root = payingWall(SEVERAL, [SEVERAL[1]!]);
+        const said = root.querySelector('[data-role="pay-borrowed"]');
+        expect(said?.textContent).toBe(copy.windowPayBorrowed(1, 3));
+        expect(said?.closest('[data-role="pay-lines"]'), 'outside the scroller').toBeNull();
+        expect(said?.closest('[data-role="window-paying"]'), 'on the plate').not.toBeNull();
+        const marks = root.querySelectorAll('[data-role="pay-lines"] [data-role="quote-not-minted"]');
+        expect(marks).toHaveLength(1);
+        expect(marks[0]!.closest('.sw-pay-line')?.textContent).toContain('Item 2');
+        expect(copy.windowPayBorrowed(2, 3)).toBe(
+            `2 of these 3 items: ${copy.QUOTE_NOT_MINTED_HERE.toLowerCase()} (marked in the list)`,
+        );
+    });
+
+    it('says one item’s own sentence once, and nothing when nothing is borrowed', () => {
+        const one = payingWall([SEVERAL[0]!], [SEVERAL[0]!]);
+        expect(one.querySelector('[data-role="pay-borrowed"]')?.textContent).toBe(copy.QUOTE_NOT_MINTED_HERE);
+        expect(
+            one.querySelector('[data-role="pay-lines"] [data-role="quote-not-minted"]'),
+            'one line is the sentence’s own item: not said twice',
+        ).toBeNull();
+        const none = payingWall(SEVERAL);
+        expect(none.querySelector('[data-role="pay-borrowed"]')).toBeNull();
+        expect(none.querySelector('[data-role="quote-not-minted"]')).toBeNull();
+    });
+});
+
+describe('a-payment-list-that-scrolls-says-how-many-lines-it-hides', () => {
+    /**
+     * The count is geometry — the cap is in pixels (`window.css`) and a
+     * line's height is its fonts' — so it is set once the tree is laid out.
+     * happy-dom lays nothing out: here the boxes are stubbed, and the probe
+     * (`PROBE-RULES.md`) holds the real ones at the three wall sizes.
+     */
+    const place = (node: Element, top: number, height: number): void => {
+        (node as HTMLElement).getBoundingClientRect = () =>
+            ({ top, bottom: top + height, left: 0, right: 600, width: 600, height, x: 0, y: top }) as DOMRect;
+    };
+
+    it('mounts the line outside the scroller, hidden and silent until it is measured', () => {
+        const root = payingWall(SEVERAL);
+        const more = root.querySelector<HTMLElement>('[data-role="pay-lines-more"]')!;
+        expect(more.closest('[data-role="pay-lines"]'), 'outside the scroller').toBeNull();
+        expect(more.hidden, 'an unlaid tree says nothing').toBe(true);
+        expect(more.textContent).toBe('');
+    });
+
+    it('counts the lines not wholly in the scroller’s box, singular and plural, and nothing when all show', () => {
+        const root = payingWall(SEVERAL);
+        const lines = root.querySelector<HTMLElement>('[data-role="pay-lines"]')!;
+        const more = root.querySelector<HTMLElement>('[data-role="pay-lines-more"]')!;
+        Object.defineProperty(lines, 'clientHeight', { value: 120, configurable: true });
+        place(lines, 500, 120);
+        const rows = [...lines.children];
+        // Two whole lines under the cap, the third past it.
+        rows.forEach((row, i) => place(row, 500 + i * 60, 57));
+        sayHiddenPayLines(root);
+        expect(hiddenPayLines(lines)).toBe(1);
+        expect(more.hidden).toBe(false);
+        expect(more.textContent).toBe(copy.windowPayMore(1));
+        expect(copy.windowPayMore(1)).toBe('+1 more item: swipe the list');
+        // Scrolled half a line: the first is cut at the top, the third at the
+        // foot — neither can be read, so both count.
+        rows.forEach((row, i) => place(row, 470 + i * 60, 57));
+        lines.dispatchEvent(new Event('scroll'));
+        expect(more.textContent).toBe(copy.windowPayMore(2));
+        expect(copy.windowPayMore(2)).toBe('+2 more items: swipe the list');
+        // A cap tall enough for all three: hidden and silent again.
+        Object.defineProperty(lines, 'clientHeight', { value: 200, configurable: true });
+        place(lines, 500, 200);
+        rows.forEach((row, i) => place(row, 500 + i * 60, 57));
+        sayHiddenPayLines(root);
+        expect(more.hidden).toBe(true);
+        expect(more.textContent).toBe('');
+    });
+});
+
+describe('the-payment-lines-keep-their-place-across-a-repaint', () => {
+    /**
+     * `.sw-pay-lines` scrolls inside the plate, and every socket tick and
+     * the sixty-second heartbeat rebuild the tree: a customer halfway down
+     * thirty-five lines went back to the first (the critic, 2026-09-24).
+     * The offset is read off the plate that stood and put back after the
+     * tree is connected — never onto the next payment, which starts at its
+     * first line.
+     */
+    const view = (paying: boolean): StallView => {
+        const selection = new Map(SEVERAL.map((id) => [id, 2n] as const));
+        const prices = new Map(SEVERAL.map((id) => [id, QUOTE_USD] as const));
+        return windowView(
+            { show: 'quotes', mode: 'browse', touch: true },
+            {
+                tokens: new Map(SEVERAL.map((id, i) => tokenMeta(id, `Item ${i + 1}`))),
+                prices,
+                selection,
+                ...(paying
+                    ? {
+                          windowPaying: {
+                              sats: 157_500_000n,
+                              uri: `${ADDR}?amount=1575000.00`,
+                              selection,
+                              prices,
+                              names: new Map(SEVERAL.map((id, i) => [id, `Item ${i + 1}`] as const)),
+                              borrowed: new Set<string>(),
+                              unit: 'usd',
+                              atMs: Date.now(),
+                          },
+                      }
+                    : {}),
+            } as unknown as Partial<StallView>,
+        );
+    };
+    const linesOf = (root: HTMLElement) => root.querySelector<HTMLElement>('.sw-paying .sw-pay-lines')!;
+
+    it('puts the offset back on a repaint, and a new payment starts at its first line', async () => {
+        const root = document.createElement('div');
+        document.body.append(root);
+        renderStall(root, view(true), handlers());
+        linesOf(root).scrollTop = 120;
+        renderStall(root, view(true), handlers());
+        await Promise.resolve();
+        expect(linesOf(root).scrollTop, 'a repaint keeps the place').toBe(120);
+        // Back: no plate; then Pay again — a new payment, from the top.
+        renderStall(root, view(false), handlers());
+        renderStall(root, view(true), handlers());
+        await Promise.resolve();
+        expect(linesOf(root).scrollTop).toBe(0);
+        root.remove();
     });
 });
