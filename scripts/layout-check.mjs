@@ -303,9 +303,174 @@ const PIXEL_CONTRAST_FLOOR = 3;
  * ground — the Activity panel, two failure screens, the empty stall and the
  * quotes rail's own two.
  */
-const RAIN_REQUIRED = ['mobile', 'desktop'].flatMap((viewport) =>
-    ['activity', 'plugin-missing', 'empty', 'quotes-failed', 'nothing-quoted'].map((screen) => `${viewport}/${screen}/2/65535`),
-);
+const RAIN_REQUIRED = [
+    ...['mobile', 'desktop'].flatMap((viewport) =>
+        [
+            'activity',
+            'plugin-missing',
+            'empty',
+            'quotes-failed',
+            'nothing-quoted',
+            'quotes-truncated',
+            'first-stall',
+            'sparse-pasted',
+        ].map((screen) => `${viewport}/${screen}/2/65535`),
+    ),
+    // And a wall: the shop window wears every decoration the seller chose,
+    // and its status line stands on the ground at 19px.
+    'desktop/shop-window-cycle/2/65535',
+];
+
+/*
+ * **The ring read** (round 8, 2026-09-25). A line that wears the outline
+ * (`outlineOf` in the probe: `text-shadow` in the look's own ground at alpha
+ * 1, zero blur, one or two pixels wide) is not read over its box — the rain
+ * between its strokes is in the box, and what a reader needs is the ground
+ * right against every stroke. So the job is captured once more with the
+ * outlined glyphs shown (`__contrastGlyphs`), and for each line of each
+ * outlined target:
+ *
+ * - the **glyph mask** is every pixel inside the line's rect (its text
+ *   node's characters on one line box, clipped like the box) where the
+ *   glyphs-shown capture moved at least halfway from the glyphs-blanked one
+ *   toward the line's ink (`RING_MASK_ALPHA`) — the letter's own painted
+ *   edge. A fainter antialiased pixel is the letter's fringe, which is read
+ *   as ring. Drawn icons are not text: their boxes are left out of both.
+ * - the **ring** is every pixel the outline's own offsets reach from the
+ *   mask and the mask does not hold — exactly where the outline paints a
+ *   copy of a glyph pixel at least half covered — inside the target's ring
+ *   box (its box, the outline's width wider, inside its clip) — **and only
+ *   its solid part**: the one-pixel offsets of the two-pixel set, the whole
+ *   of the one-pixel set. The two-pixel offsets reach the outline's own
+ *   antialiased rim, a pixel the outline covers exactly as much as the
+ *   glyph pixel it copies — half, at the mask's edge — so a verdict there
+ *   would rest on where the mask's threshold sits, not on the paint (round
+ *   8, the window's decision: 2.97:1 on Neo's muted at the rim, 5.88:1 or
+ *   better one pixel in). The rim is read and reported per kind, never
+ *   judged (the summary's `rim` figure).
+ * - the **worst ring pixel of the blanked capture** against the line's ink
+ *   must clear the 3:1 floor: every one, no percentile. That is the proof
+ *   the outline is present and a solid dark border at least one device
+ *   pixel wide around every glyph, with the rain at its brightest behind it.
+ * - a line whose mask holds fewer than `RING_MASK_PER_CHAR` pixels for each
+ *   letter or digit it shows, or none at all, fails too: a ring around
+ *   nothing proves nothing ("no ring to read"). Punctuation is held to one
+ *   pixel, because a lone middle dot is two.
+ *
+ * Every other target keeps the box read. A failing ring is read again on a
+ * fresh pair of captures before it is believed, like a failing box.
+ */
+const RING_MASK_ALPHA = 0.5;
+
+const RING_MASK_PER_CHAR = 3;
+
+/** A computed colour as rgb and alpha: `rgb()`, `rgba()` or `color(srgb …)`. */
+function rgbaOf(value) {
+    const m = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (m !== null) return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+    const f = value.match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/);
+    if (f !== null) return [...[f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255)), f[4] === undefined ? 1 : Number(f[4])];
+    throw new Error(`unreadable computed colour "${value}"`);
+}
+
+/**
+ * One outlined target read in the ring around its glyphs: the worst ring
+ * pixel's contrast against its line's ink, how many ring pixels were read,
+ * and the lines that showed too few glyph pixels for their characters.
+ */
+function ringRead(blank, shown, target) {
+    const W = blank.width;
+    const H = blank.height;
+    const bpp = blank.bpp;
+    const icons = target.icons ?? [];
+    const inIcon = (x, y) => icons.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h);
+    const rb = target.ringBox;
+    const rx0 = Math.max(0, Math.ceil(rb.x));
+    const ry0 = Math.max(0, Math.ceil(rb.y));
+    const rx1 = Math.min(W - 1, Math.floor(rb.x + rb.w) - 1);
+    const ry1 = Math.min(H - 1, Math.floor(rb.y + rb.h) - 1);
+    let worst = Infinity;
+    // Reported, never judged: the worst pixel of the two-pixel outline's own
+    // antialiased rim, per kind in the pass's summary.
+    let worstRim = Infinity;
+    let ringPx = 0;
+    let rimPx = 0;
+    let maskPx = 0;
+    let chars = 0;
+    const thin = [];
+    let why;
+    for (const line of target.lines ?? []) {
+        const [ir, ig, ib, ia] = rgbaOf(line.ink);
+        if (ia === 0) continue;
+        const inkLum = luminance(ir, ig, ib);
+        const x0 = Math.max(0, Math.floor(line.x));
+        const y0 = Math.max(0, Math.floor(line.y));
+        const x1 = Math.min(W - 1, Math.ceil(line.x + line.w) - 1);
+        const y1 = Math.min(H - 1, Math.ceil(line.y + line.h) - 1);
+        chars += line.chars;
+        if (x1 < x0 || y1 < y0) {
+            thin.push({ ...line, mask: 0 });
+            continue;
+        }
+        const mw = x1 - x0 + 1;
+        const mask = new Uint8Array(mw * (y1 - y0 + 1));
+        const held = [];
+        for (let y = y0; y <= y1; y += 1) {
+            for (let x = x0; x <= x1; x += 1) {
+                if (inIcon(x, y)) continue;
+                const i = (y * W + x) * bpp;
+                const dr = ir - blank.data[i];
+                const dg = ig - blank.data[i + 1];
+                const db = ib - blank.data[i + 2];
+                const den = dr * dr + dg * dg + db * db;
+                if (den < 1) continue;
+                const a =
+                    ((shown.data[i] - blank.data[i]) * dr +
+                        (shown.data[i + 1] - blank.data[i + 1]) * dg +
+                        (shown.data[i + 2] - blank.data[i + 2]) * db) /
+                    den;
+                if (a >= RING_MASK_ALPHA) {
+                    mask[(y - y0) * mw + (x - x0)] = 1;
+                    held.push(x, y);
+                }
+            }
+        }
+        maskPx += held.length / 2;
+        if (held.length === 0 || held.length / 2 < RING_MASK_PER_CHAR * line.chars) {
+            thin.push({ ...line, mask: held.length / 2 });
+        }
+        const inMask = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && mask[(y - y0) * mw + (x - x0)] === 1;
+        const seen = new Set();
+        // The solid offsets first, so a pixel a solid offset and a rim offset
+        // both reach is read as solid: the outline covers it whole.
+        const solid = ([dx, dy]) => target.ring === 1 || Math.max(Math.abs(dx), Math.abs(dy)) < target.ring;
+        const offsets = [...target.offsets.filter(solid), ...target.offsets.filter((o) => !solid(o))];
+        for (const [dx, dy] of offsets) {
+            const inRim = !solid([dx, dy]);
+            for (let k = 0; k < held.length; k += 2) {
+                const x = held[k] + dx;
+                const y = held[k + 1] + dy;
+                if (x < rx0 || x > rx1 || y < ry0 || y > ry1 || inMask(x, y) || inIcon(x, y)) continue;
+                const key = y * W + x;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const i = key * bpp;
+                const c = contrast(inkLum, luminance(blank.data[i], blank.data[i + 1], blank.data[i + 2]));
+                if (inRim) {
+                    rimPx += 1;
+                    worstRim = Math.min(worstRim, c);
+                    continue;
+                }
+                ringPx += 1;
+                if (c < worst) {
+                    worst = c;
+                    why = `worst ${c.toFixed(2)} at ${x},${y} ground rgb(${blank.data[i]},${blank.data[i + 1]},${blank.data[i + 2]}) ink ${line.ink}`;
+                }
+            }
+        }
+    }
+    return { worst, worstRim, ringPx, rimPx, maskPx, chars, thin, why };
+}
 
 /**
  * The worst contrast between a text colour and any sampled background pixel
@@ -1187,6 +1352,9 @@ try {
     // Jobs refused by their echo checks, one line each — said whatever else
     // the pass does, a pass that threw later included.
     const refused = [];
+    // The least ring read per kind of outlined line (`ringRead`), printed
+    // whatever the verdict.
+    const ringKindsOut = new Map();
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1194,10 +1362,12 @@ try {
         let rainJobs = 0;
         const rainKeys = new Set();
         const dim = [];
-        // A ground where the text reads without one (the owner's rule,
-        // 2026-09-24): every veiled box re-read with its veil off.
-        const needless = [];
-        let veiledRead = 0;
+        // The ring read (`ringRead`): outlined targets read, ring pixels
+        // read, and the least ring contrast per kind of line, for the report.
+        let ringTargets = 0;
+        let ringPixels = 0;
+        let ringLeastPerChar = Infinity;
+        const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
         const contrastClasses = new Set();
@@ -1419,6 +1589,8 @@ try {
                     let retryWhy = [];
                     for (let ti = 0; ti < targets.length; ti += 1) {
                         let t = targets[ti];
+                        // An outlined line is read in its ring, below.
+                        if (t.ring > 0) continue;
                         let worst = worstContrastInBox(img, t, t.color);
                         if (worst === undefined) {
                             dropped += 1;
@@ -1475,56 +1647,107 @@ try {
                         phases.set('sample', entry);
                     }
                     /*
-                     * **A ground where the text reads without one** (the
-                     * owner, 2026-09-24 evening: "nếu chữ vẫn đọc được thì
-                     * không nền đen/trắng"). On a job that flattened a moving
-                     * decoration, every box that wears a veil of its own
-                     * (`veiled`, the stall's ground made translucent) is read
-                     * once more with the veil and its ring taken off; one
-                     * that reads the floor bare did not need it. One more
-                     * shot a veiled job, nothing on any other.
+                     * The ring read (`ringRead`): every outlined target, on a
+                     * second capture with its glyphs shown. A failing ring is
+                     * read again on a fresh pair before it is believed — the
+                     * box read's own rule, and it shares that rule's one
+                     * re-shot per job.
                      */
-                    const veiled = targets.filter((t) => t.veiled);
-                    if (retryWhy.length === 0 && sampled > 0 && (prep.rain?.flattened ?? 0) > 0 && veiled.length > 0) {
-                        await evalJson(cdp, sessionId, `window.__contrastUnveil(${JSON.stringify(veiled.map((t) => t.i))})`);
-                        await sleep(60);
-                        const bare = await capture();
-                        const bareRead = await reread();
-                        const bareWhy = [...bare.why, ...bareRead.why];
-                        if (bareWhy.length > 0) {
-                            retryWhy = bareWhy.map((w) => `with the veils off, ${w}`);
-                        } else {
-                            /*
-                             * Judged per KIND of line (`kind`, the box and
-                             * its parent): a veil is a rule over a kind, and
-                             * a rule cannot tell a row by where it landed —
-                             * a long Activity list's last rows, far from the
-                             * aurora's glow, read 3.03:1 bare while its first
-                             * rows need the veil. A kind is needless when
-                             * every one of its lines on the job reads bare.
-                             */
-                            const now = new Map(bareRead.live.boxes.map((b) => [b.i, b]));
-                            const kinds = new Map();
-                            for (const t of veiled) {
-                                const box = now.get(t.i) ?? t;
-                                const worst = worstContrastInBox(bare.shot, box, t.color);
-                                if (worst === undefined) continue;
-                                veiledRead += 1;
-                                const kind = kinds.get(t.kind) ?? { reads: true, least: Infinity, box, sel: t.sel, n: 0 };
-                                kind.n += 1;
-                                kind.reads &&= worst >= PIXEL_CONTRAST_FLOOR;
-                                kind.least = Math.min(kind.least, worst);
-                                kinds.set(t.kind, kind);
+                    if (retryWhy.length === 0 && targets.some((t) => t.ring > 0)) {
+                        const ringStart = performance.now();
+                        const glyphs = async (show) => {
+                            const r = await cdp.send(
+                                'Runtime.evaluate',
+                                { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
+                                sessionId,
+                            );
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const shownPair = async () => {
+                            const n = await glyphs(true);
+                            const shownCap = await capture();
+                            const shownRead = await reread();
+                            await glyphs(false);
+                            const why = [...shownCap.why, ...shownRead.why];
+                            if (shownRead.live.boxes.length !== targets.length) {
+                                why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
                             }
-                            for (const [name, kind] of kinds) {
-                                if (kind.reads) {
-                                    needless.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
-                                            `${name} (${kind.n} line${kind.n === 1 ? '' : 's'}, first at ${Math.round(kind.box.x)},${Math.round(kind.box.y)}) reads ${kind.least.toFixed(2)}:1 or better with its veil taken off`,
-                                    );
-                                }
+                            if (n !== targets.filter((t) => t.ring > 0).length) {
+                                why.push(`${n} outlined targets shown where the read has ${targets.filter((t) => t.ring > 0).length}`);
+                            }
+                            return { shot: shownCap.shot, why };
+                        };
+                        const readAll = (shown) =>
+                            targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
+                        const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0;
+                        let pair = await shownPair();
+                        let results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                        if (pair.why.length === 0 && results.some(bad) && !retried) {
+                            await sleep(250);
+                            const again = await capture();
+                            const againRead = await reread();
+                            const whyAgain = [...again.why, ...againRead.why];
+                            if (whyAgain.length === 0 && againRead.live.boxes.length === targets.length) {
+                                img = again.shot;
+                                targets = againRead.live.boxes;
+                                retried = true;
+                                pair = await shownPair();
+                                results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                            } else {
+                                pair = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
                             }
                         }
+                        if (pair.why.length > 0) {
+                            retryWhy = pair.why.map((w) => `with the glyphs shown, ${w}`);
+                        }
+                        sampled += results.length;
+                        for (const { t, r } of results) {
+                            ringTargets += 1;
+                            ringPixels += r.ringPx;
+                            if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
+                            const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
+                            kind.n += 1;
+                            kind.least = Math.min(kind.least, r.worst);
+                            kind.rim = Math.min(kind.rim, r.worstRim);
+                            ringKinds.set(t.sel, kind);
+                            dumpBoxes.push({
+                                key: boxKey(job, t),
+                                job: record.key,
+                                i: t.i,
+                                sel: t.sel,
+                                x: t.x,
+                                y: t.y,
+                                w: t.w,
+                                h: t.h,
+                                color: t.color,
+                                worst: dumpValue(r.worst),
+                                ring: t.ring,
+                                ringPx: r.ringPx,
+                                rimPx: r.rimPx,
+                                rim: dumpValue(r.worstRim),
+                                maskPx: r.maskPx,
+                            });
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
+                            if (r.ringPx === 0 || r.thin.length > 0) {
+                                const line = r.thin[0];
+                                dim.push(
+                                    `${at} wears the ${t.ring}px outline and shows no ring to read` +
+                                        (line === undefined
+                                            ? ''
+                                            : ` — a line of ${line.chars} letter(s) at ${Math.round(line.x)},${Math.round(line.y)} showed ${line.mask} glyph pixel(s)`),
+                                );
+                            } else if (r.worst < PIXEL_CONTRAST_FLOOR) {
+                                dim.push(
+                                    `${at} wears the ${t.ring}px outline and its ring reads ${r.worst.toFixed(2)}:1` +
+                                        (process.env.LAYOUT_WHY ? `\n        ${r.why ?? ''}` : ''),
+                                );
+                            }
+                        }
+                        const entry = phases.get('ring') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - ringStart;
+                        phases.set('ring', entry);
                     }
                     record.sampled = sampled;
                     record.dropped = dropped;
@@ -1575,52 +1798,48 @@ try {
                     (stray.length === 0 ? '' : ` not in the plan: ${stray.join(', ')};`),
             );
         }
+        // Every rule that failed says so, one line each: a run that fails
+        // for one reason still names the others (round 8 — a missing rain
+        // key used to hide the figures under the floor).
+        const verdicts = [];
         if (boxes === 0) {
-            failed = true;
-            console.error('✗ contrast: no figure boxes were sampled — vacuous green.');
-        } else if (sheetClassesWrong([...contrastClasses]) !== undefined) {
-            failed = true;
-            console.error(`✗ contrast: ${sheetClassesWrong([...contrastClasses])}`);
-        } else if (LOOKS === 'shipped' && RAIN_REQUIRED.some((key) => !rainKeys.has(key))) {
+            verdicts.push('no figure boxes were sampled — vacuous green.');
+        }
+        if (sheetClassesWrong([...contrastClasses]) !== undefined) {
+            verdicts.push(sheetClassesWrong([...contrastClasses]));
+        }
+        if (LOOKS === 'shipped' && RAIN_REQUIRED.some((key) => !rainKeys.has(key))) {
             // Neo's worn jobs wear the rain; a run that did not flatten it on
             // the screens whose lines stand on the ground read the moving
             // decoration at one instant again, or not at all — named, so a
             // door mini flattened alone can never stand in for them (the
             // critic's third pass).
-            failed = true;
-            console.error(
-                `✗ contrast: a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
+            verdicts.push(
+                `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
-        } else if (LOOKS === 'shipped' && veiledRead === 0) {
-            // The rule has to have read something, or its green is vacuous:
-            // the shipped rain veils lines on every Neo worn screen.
-            failed = true;
-            console.error('✗ contrast: a-ground-where-the-text-reads-without-one read no veiled box with its veil off — vacuous green');
-        } else if (needless.length > 0) {
-            failed = true;
-            console.error(
-                `✗ contrast: ${needless.length} veiled line(s) read ${PIXEL_CONTRAST_FLOOR}:1 with the veil taken off — a ground where the text reads without one:`,
-            );
-            for (const line of needless) {
-                console.error(`    ${line}`);
-            }
-            for (const line of dim) {
-                console.error(`    (also below the floor) ${line}`);
-            }
-        } else if (dim.length === 0) {
+        }
+        if (LOOKS === 'shipped' && ringTargets === 0) {
+            // The ring read has to have read something, or its green is
+            // vacuous: the shipped rain outlines lines on every Neo worn
+            // screen the pass samples.
+            verdicts.push('the ring read read no outlined line — vacuous green');
+        }
+        if (dim.length > 0) {
+            verdicts.push(`${dim.length} figure(s) on paint below ${PIXEL_CONTRAST_FLOOR}:1 — ${took()}`);
+        }
+        if (verdicts.length === 0) {
             // No tick over a walk that missed or repeated a job, or refused one.
             if (walkOk && refused.length === 0) {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
-                        `${veiledRead} veiled box(es) read bare and none needed no veil — ${took()}`,
+                        `${ringTargets} outlined line(s) ring-read (${ringPixels} ring pixels, ` +
+                        `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );
             }
         } else {
             failed = true;
-            console.error(
-                `✗ contrast: ${dim.length} figure(s) on paint below ${PIXEL_CONTRAST_FLOOR}:1 — ${took()}`,
-            );
+            for (const line of verdicts) console.error(`✗ contrast: ${line}`);
             for (const line of dim) {
                 console.error(`    ${line}`);
             }
@@ -1633,6 +1852,23 @@ try {
         failed = true;
         console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
         for (const line of refused) console.error(`    ${line}`);
+    }
+    // The least ring read per kind of outlined line, whatever the verdict:
+    // what the outline buys each kind at the rain's worst, and
+    // what its antialiased rim reads, reported and never judged.
+    if (ringKindsOut.size > 0) {
+        console.log(
+            `  ring, least per kind (the solid ring; the rim reported): ` +
+                [...ringKindsOut]
+                    .sort((a, b) => a[1].least - b[1].least)
+                    .map(
+                        ([sel, k]) =>
+                            `${sel} ${k.least.toFixed(2)}` +
+                            (Number.isFinite(k.rim) ? ` (rim ${k.rim.toFixed(2)})` : '') +
+                            ` (${k.ring}px, ${k.n})`,
+                    )
+                    .join('; '),
+        );
     }
     // Printed whatever the verdict, a pass that threw included: a slow red
     // run is exactly the one whose phases someone needs to read.

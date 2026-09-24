@@ -21,6 +21,7 @@ import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import { brightestDrop, type Drop } from './rainDrop';
+import { OUTLINE_1, OUTLINE_2, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -2397,22 +2398,37 @@ type ContrastTarget = {
     /** What was measured, for a failure a person can find. */
     sel: string;
     /**
-     * The box wears a veil of its own: a `background-color` that is the
-     * stall's own ground made translucent (`isVeiled`). The runner reads
-     * every veiled box once more with its veil taken off, and a line that
-     * reads without it fails — "a ground where the text reads without one"
-     * (the owner's rule, 2026-09-24, `PROBE-RULES.md`).
+     * The outline this line wears where a decoration falls behind it
+     * (`--rain-outline-1` / `--rain-outline-2`, round 8): its width in CSS
+     * px, 0 for none, read from the computed `text-shadow` (`outlineOf`).
+     * An outlined target is read in the ring around its glyphs, never over
+     * its box (`a-line-on-the-ground-reads-wherever-a-drop-falls`).
      */
-    veiled: boolean;
+    ring: number;
     /**
-     * The kind of line this is — the box and its parent, described. A veil
-     * is a rule over a kind of line, never over one line where it happened
-     * to land, so the runner judges "reads without one" per kind on a job.
+     * An outlined target's lines of text — one per text node per line box,
+     * clipped like the box — each with the characters it shows and the ink
+     * its glyphs paint in. The runner's glyph mask is read inside these, and
+     * a line that shows too few glyph pixels for its characters fails.
      */
-    kind: string;
+    lines: RingLine[];
+    /** An outlined target's drawn icons: not text, left out of the mask and the ring. */
+    icons: Hole[];
+    /** Where an outlined target's ring may be read: the box, `ring` px wider, inside the clip. */
+    ringBox: Hole;
+    /** The outline's own offsets, which are where the ring lies around the glyph mask. */
+    offsets: readonly Offset[];
 };
 
 type Hole = { x: number; y: number; w: number; h: number };
+
+/**
+ * One line of an outlined target: a text node's glyphs on one line box —
+ * how many letters and digits it shows (`chars`, what the glyph mask is held
+ * in proportion to) and how many visible characters at all (`glyphs`: a
+ * lone middle dot between two links is a line too, and is two pixels).
+ */
+type RingLine = Hole & { chars: number; glyphs: number; ink: string };
 
 /**
  * Elements that are chrome ON a measured text box, never its ground: the
@@ -2451,6 +2467,7 @@ function chromeOver(node: HTMLElement, box: Hole): Hole[] {
     // Over the cap it is a cover, not a cue, and the pass reads it as such.
     return covered > CHROME_HOLE_CAP * box.w * box.h ? [] : holes;
 }
+
 
 const CONTRAST_TEXT = [
     '[data-role="price"]',
@@ -2653,6 +2670,8 @@ const CONTRAST_TEXT = [
      * is sampled: `.mid-p` on the failure screens and the empty stall on
      * every look; the quotes rail's failure lines, the checklist and the
      * notice invite on Neo worn alone (`RAIN_JOBS`, geometry-only screens).
+     * Where the rain is worn each wears the outline (round 8) and is read
+     * in the ring around its glyphs rather than over its box.
      */
     '.notice-text',
     '.sparse-empty-t',
@@ -2683,8 +2702,10 @@ const CONTRAST_TEXT = [
      * (2.56:1) read the heading's own 2px accent underline, inside the box
      * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
      * bunting row its box also holds. Rural's Wearing links and back control
-     * (2.53:1, sun-faded worn) are real and open. Scoped until the sampler
-     * reads behind a target's own text lines — the next step, not this one.
+     * (2.53:1, sun-faded worn) are real and open. Scoped to the rain, where
+     * each wears the outline and is read in the ring around its own glyphs
+     * (round 8, `ringRead` in the runner), which never reaches an underline
+     * or a bunting row; elsewhere the box read would.
      */
     '.stall.att-rainfall:not(.deck-stall) .orn',
     '.stall.att-rainfall:not(.deck-stall) .wearing',
@@ -2694,21 +2715,24 @@ const CONTRAST_TEXT = [
     '.stall.att-rainfall:not(.deck-stall) .collection-count',
     '.stall.att-rainfall:not(.deck-stall) .item-back',
     /*
-     * The rest of the lines round 6 veils on the rain (the owner's rule,
-     * 2026-09-24 evening: a veil hugs a line, so each line is a box the pass
-     * reads — the Activity rows, the first-stall steps' numbers, the
-     * footer's lines). On the rain only: elsewhere they stand on a card or
-     * on a ground every look was proved on.
+     * The rest of the lines standing on the rain's ground, each outlined
+     * there (round 8): the Activity rows, the first-stall steps' numbers,
+     * the footer's lines and the notice invite's chip. On the rain only: elsewhere they stand on a
+     * card or on a ground every look was proved on.
      */
     '.stall.att-rainfall:not(.deck-stall) .event-kind',
     '.stall.att-rainfall:not(.deck-stall) .event-time',
     '.stall.att-rainfall:not(.deck-stall) .event-txid',
     '.stall.att-rainfall:not(.deck-stall) .event-dt',
-    '.stall.att-rainfall:not(.deck-stall) .event-dd',
+    // A wide field holds its value and a copy control on its own ground:
+    // the line is the value (round 8), and the control is `.mini`'s.
+    '.stall.att-rainfall:not(.deck-stall) .event-dd:not(.wide)',
+    '.stall.att-rainfall:not(.deck-stall) .event-dd.wide > .event-txid-full',
     '.stall.att-rainfall:not(.deck-stall) .event-body > .fine',
     '.stall.att-rainfall:not(.deck-stall) .activity-sec > .fine',
     '.stall.att-rainfall:not(.deck-stall) .first-stall .steps li > i',
     '.stall.att-rainfall:not(.deck-stall) .stall-foot .fine',
+    '.stall.att-rainfall:not(.deck-stall) .notice-invite .ghost-chip',
 ].join(', ');
 
 /**
@@ -2750,8 +2774,11 @@ declare global {
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
-        /** Take the veil off the prepared boxes named, for the "reads without one" read. */
-        __contrastUnveil: (indices: number[]) => number;
+        /**
+         * Show (or blank again) the glyphs of every prepared target that
+         * wears the outline, for the ring read's second capture.
+         */
+        __contrastGlyphs: (show: boolean) => Promise<number>;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -2933,6 +2960,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
     const ink = node.style.color === 'transparent' ? node.dataset['probeInk']! : style.color;
     node.dataset['probeInk'] = ink;
     const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+    const ring = Math.max(0, outlineOf(node));
+    const ringBox = (() => {
+        const wide = { x: box.x - ring, y: box.y - ring, right: box.x + box.width + ring, bottom: box.y + box.height + ring };
+        const x = Math.max(wide.x, clip?.x ?? 0, 0);
+        const y = Math.max(wide.y, clip?.y ?? 0, 0);
+        const right = Math.min(wide.right, clip?.right ?? Infinity, window.innerWidth);
+        const bottom = Math.min(wide.bottom, clip?.bottom ?? Infinity, window.innerHeight);
+        return { x, y, w: Math.max(0, right - x), h: Math.max(0, bottom - y) };
+    })();
     return {
         x: box.x,
         y: box.y,
@@ -2963,8 +2999,17 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         pad: insideTransform(node) ? 8 : 0,
         holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
-        veiled: isVeiled(node, style),
-        kind: `${describe(node)} < ${node.parentElement === null ? '' : describe(node.parentElement)}`,
+        ring,
+        lines: ring > 0 ? ringLines(node, box) : [],
+        icons:
+            ring > 0
+                ? [...node.querySelectorAll('svg')].map((svg) => {
+                      const r = svg.getBoundingClientRect();
+                      return { x: r.x, y: r.y, w: r.width, h: r.height };
+                  })
+                : [],
+        ringBox,
+        offsets: ring === 1 ? OUTLINE_1 : ring === 2 ? OUTLINE_2 : [],
     };
 }
 
@@ -2995,41 +3040,122 @@ function colourOf(value: string): { rgb: [number, number, number]; alpha: number
 }
 
 /**
- * Whether a target wears a veil of its own: its `background-color` is its
- * stall's own ground, translucent — the only shape a decoration may lay
- * under text (`a-decoration-lays-no-opaque-ground-under-text`). A card, a
- * chip, a sign is opaque or another colour, and is never this.
+ * **The outline under a line on a decoration** (round 8, 2026-09-25; the
+ * owner's rule: no ground under text over a decoration, and "cho lớp nền tối
+ * ngay dưới nét chữ" where a line does not read). Every line standing on
+ * Neo's bare ground where the rain is worn wears `text-shadow` in the look's
+ * own ground at alpha 1 and zero blur — one of the two sets in
+ * `layout/outline.ts`.
  */
-function isVeiled(node: HTMLElement, style: CSSStyleDeclaration): boolean {
-    const own = colourOf(style.backgroundColor);
-    const stall = node.closest<HTMLElement>('.stall');
-    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
-    if (own === undefined || ground === undefined || own.alpha <= 0 || own.alpha >= 1) {
-        return false;
+type Shadow = { rgb: [number, number, number]; alpha: number; x: number; y: number; blur: number };
+
+/** A computed `text-shadow` as its shadows, or `undefined` when a part does not read. */
+function shadowsOf(value: string): Shadow[] | undefined {
+    if (value === 'none') return [];
+    const out: Shadow[] = [];
+    for (const part of splitLayers(value)) {
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
+        const colour = m === null ? undefined : colourOf(m[1]!);
+        if (m === null || colour === undefined) return undefined;
+        out.push({ ...colour, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4]) });
     }
-    return own.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1);
+    return out;
 }
 
 /**
- * **A ground where the text reads without one** (the owner, 2026-09-24:
- * "nếu chữ vẫn đọc được thì không nền đen/trắng"). The runner calls this on
- * a decoration job after its shot, with the prepared indices of the boxes
- * that wear a veil: each loses its own `background-color` and `box-shadow`
- * (the veil and its ring; a tint the look paints on top as an image stays,
- * being the look's), and the runner reads them again. A line that reads
- * 3:1 with nothing under it did not need the veil, and fails.
+ * The outline `node` wears, from its computed `text-shadow` and never from a
+ * marker: 1 or 2 when its shadows in its stall's own ground (alpha 1, zero
+ * blur) are exactly one of the two sets, 0 when it wears none, and -1 when it
+ * wears some other set in the ground's colour — which is not an outline this
+ * page can read, and is read over its box like any line without one. Any other
+ * shadow beside it (Neo's heading glow) is the look's own and is left alone.
  */
-window.__contrastUnveil = (indices: number[]) => {
-    let taken = 0;
-    for (const i of indices) {
-        const node = preparedNodes[i];
-        if (node === undefined) continue;
-        node.style.setProperty('background-color', 'transparent', 'important');
-        node.style.setProperty('box-shadow', 'none', 'important');
-        taken += 1;
+function outlineOf(node: HTMLElement): number {
+    const stall = node.closest<HTMLElement>('.stall');
+    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
+    const shadows = shadowsOf(getComputedStyle(node).textShadow);
+    if (ground === undefined || shadows === undefined) return 0;
+    const inGround = shadows.filter((sh) => sh.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1));
+    if (inGround.length === 0) return 0;
+    if (inGround.some((sh) => sh.alpha !== 1 || sh.blur !== 0)) return -1;
+    return outlineSet(inGround.map((sh) => [sh.x, sh.y] as const)) || -1;
+}
+
+/**
+ * An outlined target's lines: every text node's visible characters, grouped
+ * by the line box each sits on, each line's rect the union of its
+ * characters' and its ink the colour its own element paints them in. A
+ * character counts where its centre lies inside `box` (the target's box as
+ * the clip left it), so a line scrolled half out of a clip counts only what
+ * shows. Text inside an `<svg>` is a drawing, not a line.
+ */
+function ringLines(node: HTMLElement, box: { x: number; y: number; width: number; height: number }): RingLine[] {
+    const lines = new Map<string, RingLine>();
+    const range = document.createRange();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    let index = 0;
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode(), index += 1) {
+        const owner = text.parentElement;
+        if (owner === null || owner.closest('svg') !== null) continue;
+        const cs = getComputedStyle(owner);
+        if (cs.visibility !== 'visible') continue;
+        const ink = owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        const value = text.textContent ?? '';
+        for (let i = 0; i < value.length; ) {
+            const cp = value.codePointAt(i)!;
+            const len = cp > 0xffff ? 2 : 1;
+            if (!/\s/u.test(String.fromCodePoint(cp))) {
+                range.setStart(text, i);
+                range.setEnd(text, i + len);
+                const r = range.getBoundingClientRect();
+                const cx = r.x + r.width / 2;
+                const cy = r.y + r.height / 2;
+                if (r.width > 0 && r.height > 0 && cx >= box.x && cx <= box.x + box.width && cy >= box.y && cy <= box.y + box.height) {
+                    const key = `${index}|${Math.round(r.y)}`;
+                    const letter = /[\p{L}\p{N}]/u.test(String.fromCodePoint(cp)) ? 1 : 0;
+                    const x = Math.max(r.x, box.x);
+                    const y = Math.max(r.y, box.y);
+                    const right = Math.min(r.right, box.x + box.width);
+                    const bottom = Math.min(r.bottom, box.y + box.height);
+                    const line = lines.get(key);
+                    if (line === undefined) {
+                        lines.set(key, { x, y, w: right - x, h: bottom - y, chars: letter, glyphs: 1, ink });
+                    } else {
+                        const lx = Math.min(line.x, x);
+                        const ly = Math.min(line.y, y);
+                        line.w = Math.max(line.x + line.w, right) - lx;
+                        line.h = Math.max(line.y + line.h, bottom) - ly;
+                        line.x = lx;
+                        line.y = ly;
+                        line.chars += letter;
+                        line.glyphs += 1;
+                    }
+                }
+            }
+            i += len;
+        }
     }
-    freezeAnimations();
-    return taken;
+    return [...lines.values()];
+}
+
+/**
+ * The ring read's second capture: every prepared target that wears the
+ * outline, and each descendant, has its glyphs shown again (the colour the
+ * prepare blanked, put back) or blanked once more. Pseudo-elements stay
+ * blanked in both: the mask is read inside the text nodes' own line boxes.
+ */
+window.__contrastGlyphs = async (show: boolean) => {
+    let n = 0;
+    for (const node of preparedNodes) {
+        if (outlineOf(node) <= 0) continue;
+        n += 1;
+        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            if (el.dataset['probeColor'] === undefined) continue;
+            el.style.color = show ? el.dataset['probeColor'] : 'transparent';
+        }
+    }
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return n;
 };
 
 /**
@@ -3129,7 +3255,7 @@ window.__contrastFreeze = freezeAnimations;
  */
 const RAIN_SHEETS = [rainNearSvg, rainMidSvg, rainFarSvg];
 
-/** The drop derivation is `layout/rainDrop.ts`'s, shared with the veil test. */
+/** The drop derivation is `layout/rainDrop.ts`'s, held to the art by its own test. */
 function brightestDropOn(ground: string): Drop | undefined {
     const bg = parseRgb(ground);
     return bg === undefined ? undefined : brightestDrop(RAIN_SHEETS, bg);
@@ -3328,6 +3454,17 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             targets.push(target);
         }
     }
+    // Every ink in every target's subtree, before any of it is blanked: a
+    // child inherits its colour, and read after its parent went transparent
+    // it reads transparent — the ring read's lines are read against these.
+    for (const node of preparedNodes) {
+        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            if (el.dataset['probeColor'] === undefined) {
+                el.dataset['probeColor'] = el.style.color;
+                el.dataset['probeInk'] ??= getComputedStyle(el).color;
+            }
+        }
+    }
     for (const node of preparedNodes) {
         // The descendants too: a child with its own ink (`.tab-name` holds
         // the seller's name in the muted channel) does not inherit the
@@ -3342,7 +3479,15 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // mid-fade on one of them (step 3a, `PROBE-RULES.md`).
             el.style.transition = 'none';
             el.style.color = 'transparent';
-            el.style.textShadow = 'none';
+            // Every shadow off but an outline (round 8): the outline is the
+            // ground the ring read measures, so it stays in both captures;
+            // any other shadow is the glyph's own paint and goes with it.
+            // An element outside every outlined target wears none.
+            if (outlineOf(el) > 0) {
+                el.setAttribute('data-probe-outline', '');
+            } else {
+                el.style.textShadow = 'none';
+            }
             // And its pseudo-elements' glyphs (2026-09-24): Neo's Wearing
             // line opens with a `::before` "// " in its own cyan, which an
             // inline colour cannot reach — its glyphs stayed and were read
@@ -3356,7 +3501,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     if (!pseudoBlankAdopted) {
         const sheet = new CSSStyleSheet();
         sheet.replaceSync(
-            '[data-probe-blank]::before,[data-probe-blank]::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}',
+            '[data-probe-blank]::before,[data-probe-blank]::after{color:transparent!important;-webkit-text-fill-color:transparent!important}' +
+                '[data-probe-blank]:not([data-probe-outline])::before,[data-probe-blank]:not([data-probe-outline])::after{text-shadow:none!important}',
         );
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
         pseudoBlankAdopted = true;

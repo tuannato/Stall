@@ -2365,7 +2365,11 @@ where the rain is worn** (`.stall.att-rainfall .activity-sec`, a longhand
 `background-color`; the 12px between the two sections painted by a shadow
 the second casts upward). `--s-bg` and not the card surface, because it is
 the ground every ink and muted token was validated on. Green after, and
-with item 4's extra row restored.
+with item 4's extra row restored. **Superseded**: round 6 replaced the
+ground with veils, round 7 took every ground out (the owner: no ground of
+any kind under text over a decoration), and round 8 answers the drop with
+an outline in the look's own ground, read in the ring around the glyphs
+("Round 8", below). The extra row stays.
 
 **What it cannot see**: only the nodes `CONTRAST_TEXT` names are sampled,
 and much of Neo's groundless text is not among them — at the brightest drop
@@ -2520,9 +2524,10 @@ first-stall checklist, which reads as a card, `var(--s-surface)`; a line
 on its own — `.mid-t`, `.mid-p`, `.pay-sec > .fine`, the quotes rail's
 title, `.stall-body > .fine`, the face's back control and its pointer —
 the ground with a 6px shadow halo, so nothing moves; and on a wall the
-status line and the shop code's plate. **Superseded in round 6** by veils
+status line and the shop code's plate. **Superseded**, in round 6 by veils
 that hug the lines that need them ("A ground where the text reads without
-one", below): the owner found these grounds too heavy.
+one", below) when the owner found these grounds too heavy, and in round 8
+by an outline on each line when the owner refused any ground at all.
 
 **The targets.** The failure and empty sentences and the other ground
 lines are contrast targets that match on every look (`.mid-t`, `.mid-p`,
@@ -2561,7 +2566,8 @@ by key, on `activity`, `plugin-missing`, `empty`, `quotes-failed` and
 `nothing-quoted`, Neo worn, at the phone and the desk (`RAIN_REQUIRED`);
 the aurora is sampled with its tide at 1, its worst for the cyan drop;
 and `brightestDrop` refuses a sheet whose `<path>`s it cannot all read
-(or with an opacity on a group), which refuses the job.
+(or with an opacity on a group), which refuses the job — since round 8 by
+an allow-list of what a sheet may hold (`layout/rainDrop.ts`).
 
 **Proved red.** With the grounds taken out: 395 figures on Neo worn under
 3:1 — the Wearing line and its links 1.12–2.21, the brand strip 1.84,
@@ -2611,6 +2617,15 @@ listings it shows rather than the quotes line. Tests in
 
 ## A ground where the text reads without one (round 6, the owner, 2026-09-24 evening)
 
+**Withdrawn in round 7** (the owner, 2026-09-24 late, over these veils and
+a halo mock: "Tôi thấy làm nền rất xấu, còn ảnh hưởng đến theme và các
+decor bên dưới nó … giữ như ban đầu"): the veils, their steps,
+`a-rain-veil-is-the-least-that-reads` and the bare re-read left with them,
+and the static guard became `a-decoration-lays-no-ground-under-text`,
+which refuses every ground a decoration lays under a box. What answers the
+rain now is round 8's outline, below. This entry stays as the record of
+why no ground comes back.
+
 **The incident.** Round 4 and 5 answered Neo's rain with the look's own
 ground laid solid under every line on the bare background — full-width
 bars under the section heads, the vacant box, the footer band, the whole
@@ -2636,9 +2651,12 @@ over the owner's 60% cap, stopped and put to the owner**.
 
 1. **`a-rain-veil-is-the-least-that-reads`** (`decor-gate.test.ts`, pure):
    each stated step recomputed from the rain art (`layout/rainDrop.ts`,
-   the derivation this pass flattens with) and Neo's palette against the
-   lightest ground the worn stall can paint anywhere — every layer at its
-   worst at once — reads 3:1 for every ink it serves, a step 5% lighter
+   the derivation this pass flattens with) and Neo's palette against
+   every layer at its worst at once — an upper bound no pixel of the stall
+   reaches, so the steps were heavier than the least (the critic's fifth
+   pass: over the real geometry the worst ground is about rgb(39,184,179),
+   where Neo's ink reads 2.18:1 bare, not the 1.95:1 this entry and
+   CLAUDE §4 said) — reads 3:1 for every ink it serves, a step 5% lighter
    does not, and a step over 60% names its reason. Proved red: muted at
    60% ("would read at 55%"), at 50% ("expected false to be true"), and
    `dim` unlisted ("--rain-veil-dim is 80%").
@@ -2680,3 +2698,99 @@ inline background with `box-decoration-break: clone`) would leave gaps the
 pass reads as covered, and waits for the line-rect sampler
 (`SAMPLER-STEP-PLAN.md`), which measures behind the text's own lines.
 
+
+## Round 8: an outline in the look's own ground, read in the ring (2026-09-25)
+
+**The incident.** Round 7 took every ground out from under Neo-with-rain
+text (the owner: no ground of any kind under text over a decoration) and
+took the rain's flattening out with it; with Neo painted exactly as on
+`main`, round 4's line targets read 19 boxes under 3:1 — 17 of them fail on
+`main`'s own paint the moment they are measured, and the other two are
+`main`'s own target, the Activity receipt amount, which one more row moves
+onto a frozen drop (`visible-batch-shots/10-round7-rain-red/`). Real
+failures, answered by the owner's own words: "đổi màu chữ hoặc cho lớp nền
+tối ngay dưới nét chữ" — the ink lifted, or a dark layer right under the
+strokes.
+
+**The outline** (`stall.css`, on `.stall.att-rainfall:not(.deck-stall)`;
+the sets are `layout/outline.ts`): every line on Neo's bare ground under
+the rain wears `text-shadow` in `var(--s-bg)` at alpha 1 and zero blur —
+`--rain-outline-1`, eight one-pixel offsets, at 14px and over;
+`--rain-outline-2`, those and twelve at two pixels, under 14px. Leaf lines
+only; Neo's heading glow listed after it; an ink darker than the muted
+lifted to `var(--s-muted)` first (the vacant box's `#5e7799`, the invite's
+`#b08ca3`, the first-stall guide link's browser blue). A soft glow was
+measured first and could not honestly pass: at 2px or less it darkens a
+ring pixel by ≈0.55 at best, and muted needs 0.44 at every pixel over the
+drop and 0.51 with the aurora (the critic's P1).
+
+**`ringRead`** (runner) — an outlined target is read in the ring around its
+glyphs, never over its box:
+
+- the probe detects the outline from the computed `text-shadow` (`outlineOf`,
+  never a marker), keeps it and only it through the blanking — the
+  target's pseudo-elements keep theirs too, through the adopted sheet —
+  and hands the runner the target's lines (each text node's characters on
+  one line box, clipped like the box, with the ink its own element paints
+  them in) and its drawn icons;
+- the job is captured once more with those glyphs shown
+  (`__contrastGlyphs`); the **mask** is every pixel of a line's rect the
+  glyphs moved at least halfway from the blanked capture toward the ink
+  (`RING_MASK_ALPHA` 0.5 — the letter's own painted edge), icons left out;
+- the **ring** is where the outline's own offsets carry the mask, and the
+  verdict reads **its solid part only**: the one-pixel offsets of the
+  two-pixel set, all of the one-pixel set. The worst ring pixel of the
+  blanked capture against the line's ink must clear 3:1 — every one, no
+  percentile;
+- a line whose mask holds fewer than `RING_MASK_PER_CHAR` (3) pixels a
+  letter or digit, or none, fails as "no ring to read" (punctuation is held
+  to one pixel: a lone middle dot is two);
+- a failing ring is read again on a fresh pair of captures before it is
+  believed, sharing the box read's one re-shot per job;
+- every other target keeps the box read.
+
+**Why the solid part, and not the full width** (the window's decision,
+2026-09-25, after the builder stopped on it). Read at the outline's full
+width, the ring reaches the two-pixel set's own antialiased rim, and a rim
+pixel is covered exactly as much as the glyph pixel it copies — at the
+mask's edge, half. The first full run read Neo's muted at **2.97:1** there
+(`p.mid-p` on `unreadable`, `unresolvable` and `script` at 390, the quotes
+lede on `plugin-missing-quotes` at 1280; the worst pixel two pixels from a
+mask pixel at α = 0.500, ground `rgb(27,94,97)`) and at **5.88:1 or
+better** one pixel in, on every muted kind. That verdict rested on where
+the mask's threshold sits, not on the paint, and a threshold moved to pass
+it would be the same mistake the other way. **The verdict must rest on
+paint**: what an outline promises is a solid dark border at least one
+device pixel wide around every glyph at the rain's worst, and that is what
+is read. The rim is read too and reported per kind in the pass's summary
+(`rim`), never judged. Pictures of the rim pixel, ×10:
+`visible-batch-shots/11-glyph-outline/stop-rim/`.
+
+**Two sampler corrections came with it.** A descendant's ink is read before
+any node of its target's subtree is blanked: a child inherits its colour,
+and read after its parent went transparent it read transparent — the
+Activity's wide fields and the face's back control showed "no ring to read"
+until then. And a wide Activity field is two lines, its value and a copy
+control on its own ground: the target is the value
+(`.event-dd.wide > .event-txid-full`), and the control is `.mini`'s.
+
+**The rain at its worst, restored** from round 4, with round 7's
+withdrawal undone: the flattening, the aurora at tide 1, round 4's
+rain-scoped targets and `RAIN_JOBS`, `drawsNothing`, and `RAIN_REQUIRED`
+widened to `quotes-truncated`, `first-stall`, `sparse-pasted` (phone and
+desk) and the wall's `shop-window-cycle` at the desk. `brightestDrop` now
+reads the art through an allow-list (`the-rain-is-read-from-its-own-art`,
+nine plants, each refused).
+
+**What it costs.** One more capture on each job with an outlined target —
+61 of 451, 12.6 s of the pass (`ring` in the phase table) — and the pass
+prints the least solid-ring read per kind, with the rim beside it.
+
+**Proved red** (one planted run, reverted): `mix-blend-mode: screen` on the
+footer's lines — the outline screened into the drops, still detected —
+read the Wearing line's ring at 1.21–1.27:1 and its links' at 2.01–2.12:1;
+`opacity: 0.3` on the shelf counts — glyphs too faint to be half their
+ink — "shows no ring to read", 10–38 glyph pixels for 13 letters;
+`first-stall` dropped from `RAIN_JOBS` — both of its keys named. 232
+figures in all, and the verdict now names every rule that failed rather
+than the first: a missing key used to hide the figures under the floor.

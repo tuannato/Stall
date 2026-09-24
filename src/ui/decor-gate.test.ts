@@ -34,8 +34,14 @@ import {
     attachmentsForTheme,
     type ShippedAttachment,
 } from '../domain/attachments';
-import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID, decodeTheme } from '../domain/theme';
-import { leastVeil, over, readsAt, brightestDrop, type Rgb } from '../../layout/rainDrop';
+import {
+    DEFAULT_THEME_ID,
+    NEO_CITY_THEME_ID,
+    RURAL_THEME_ID,
+    SHIPPED_THEMES,
+    decodeTheme,
+    themeVars,
+} from '../domain/theme';
 import { SERVED_SHEETS } from '../../scripts/sheet-roles.mjs';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
@@ -567,259 +573,335 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
 
 /*
  * ---------------------------------------------------------------------------
- * Neo's rain and the veils that read on it (the owner, 2026-09-24 evening:
- * "nếu chữ vẫn đọc được thì không nền đen/trắng, nếu đọc không được thì nền
- * đen/trắng mờ ôm sát chữ và có độ trong suốt đủ đạt ngưỡng").
+ * A decoration lays no ground under text (the owner, 2026-09-24 late, over
+ * round 5's solid grounds and round 6's translucent veils: "làm nền rất xấu,
+ * còn ảnh hưởng đến theme và các decor bên dưới nó … giữ như ban đầu").
  * ---------------------------------------------------------------------------
  */
-const NEO_CSS = readFileSync(join(UI_DIR, 'theme-neo.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const RAIN_SHEETS = ['rain-near.svg', 'rain-mid.svg', 'rain-far.svg'].map((f) => readFileSync(join(UI_DIR, 'decor', f), 'utf8'));
-const rgbOf = (c: { r: number; g: number; b: number }): Rgb => [c.r, c.g, c.b];
-const hexRgb = (h: string): Rgb => [0, 2, 4].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as unknown as Rgb;
-
-/** The body of the one rule whose selector list is exactly `selector`. */
-function ruleBodyOf(css: string, selector: string): string {
-    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const selectors = m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim());
-        if (selectors.includes(selector)) {
-            return m[2]!;
-        }
-    }
-    throw new Error(`no rule for ${selector}`);
-}
-
-/** A literal ink Neo's own sheet paints a line in. */
-function neoInk(selector: string): Rgb {
-    const m = /(?:^|;)\s*color:\s*#([0-9a-f]{6})\s*(?:;|$)/i.exec(ruleBodyOf(NEO_CSS, selector));
-    if (m === null) {
-        throw new Error(`${selector} states no literal ink`);
-    }
-    return hexRgb(m[1]!);
-}
 
 /**
- * The lightest ground a line on the worn stall can stand on. Every layer at
- * its worst AT ONCE — the drop flattened as the probe paints it
- * (`brightestDrop`, the same derivation), the aurora at the tide the probe
- * pins (1) with its glows at their centres and its tint at either corner and
- * between, the backdrop's top band with a scanline on it — which no single
- * pixel reaches, so a step that reads over every one of these reads wherever
- * a line lands. With `underTint`, each again under the Studio boxes' own 4%
- * tint, for a rule that veils a line inside one: the lightest wash the look
- * paints under a veiled line.
+ * The declarations a decoration's own art is made of, each with the reason it
+ * is not a ground under text. Keyed `selector | property`, one selector of a
+ * list at a time. Everything else a rule scoped to a decoration class declares
+ * among the properties below is refused when its value, custom properties
+ * resolved, paints anything at all.
  */
-function rainGrounds(underTint = false): Rgb[] {
-    const neo = decodeTheme(NEO_CITY_THEME_ID);
-    const bg = rgbOf(neo.bg);
-    const accent = rgbOf(neo.accent);
-    const accent2 = rgbOf(neo.accentTwo);
-    const drop = brightestDrop(RAIN_SHEETS, bg);
-    if (drop === undefined) {
-        throw new Error('the rain art is not readable whole');
-    }
-    const backdrop = neo.backdrop ?? '';
-    const scan = /var\(--s-accent\) (\d+)%, transparent\)/.exec(backdrop);
-    const band = /var\(--s-accent\) (\d+)%, var\(--s-bg\)\)/.exec(backdrop);
-    if (scan === null || band === null) {
-        throw new Error("Neo's backdrop is no longer a band and a scanline: re-derive its brightest");
-    }
-    const bases = [bg, over(accent, Number(scan[1]) / 100, over(accent, Number(band[1]) / 100, bg))];
-    const hue = (name: string): Rgb => (name === 'accent' ? accent : accent2);
-    // The composite rule's four tide-driven layers, in the order it states
-    // them: the tint's two ends in front, then the two glows behind the rain.
-    const composite = ruleBodyOf(CSS, '.stall.att-rainfall.att-aurora');
-    const terms = [
-        ...composite.matchAll(/var\(--s-(accent(?:-2)?)\) calc\((\d+)% ([+-]) (\d+)% \* var\(--au-tide/g),
-    ].map((m) => ({ hue: hue(m[1]!), at1: (Number(m[2]) + (m[3] === '+' ? 1 : -1) * Number(m[4])) / 100 }));
-    if (terms.length !== 4) {
-        throw new Error(`the aurora composite has ${terms.length} tide-driven layers, not four`);
-    }
-    const [tintA, tintB, glowA, glowB] = terms as [(typeof terms)[0], (typeof terms)[0], (typeof terms)[0], (typeof terms)[0]];
-    const grounds: Rgb[] = [];
-    for (const base of bases) {
-        grounds.push(over(drop.rgb, drop.alpha, base));
-        const lit = over(drop.rgb, drop.alpha, over(glowA.hue, glowA.at1, over(glowB.hue, glowB.at1, base)));
-        grounds.push(lit, over(tintA.hue, tintA.at1, lit), over(tintB.hue, tintB.at1, lit));
-    }
-    const box = /background:\s*rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(ruleBodyOf(NEO_CSS, '.t-neo .studio-browser'));
-    if (box === null) {
-        throw new Error("the Studio box's tint is no longer a colour");
-    }
-    const tint: Rgb = [Number(box[1]), Number(box[2]), Number(box[3])];
-    return underTint ? [...grounds, ...grounds.map((g) => over(tint, Number(box[4]), g))] : grounds;
-}
-
-/**
- * Which inks each step serves: the test's statement, checked against the
- * sheet by the probe (a line veiled at a step its ink does not clear reads
- * under 3:1 at its own pixels).
- */
-function veilInks(): Record<string, Rgb[]> {
-    const neo = decodeTheme(NEO_CITY_THEME_ID);
-    return {
-        text: [rgbOf(neo.text)],
-        notice: [neoInk('.t-neo .notice-text')],
-        accent: [rgbOf(neo.accent), neoInk('.t-neo .collection-name')],
-        muted: [rgbOf(neo.muted)],
-        pill: [rgbOf(neo.muted)],
-        invite: [neoInk('.t-neo .notice-invite'), neoInk('.t-neo .ghost-chip')],
-        dim: [neoInk('.t-neo .sparse-empty-s')],
-    };
-}
-
-/**
- * A step over the owner's 60% cap stands only with its reason written here —
- * the builder stops on it and the owner decides (the round 6 brief).
- */
-const ABOVE_THE_CAP: Readonly<Record<string, string>> = {
-    dim: "The vacant box's second line is Neo's dimmest ink (#5e7799, 4.41:1 on the bare night) and reads only at 80%. Stopped and put to the owner on 2026-09-24: accept it, lift the line's ink, or give the box back a ground.",
+const DECORATION_ART: Readonly<Record<string, string>> = {
+    '.stall.att-awning | background-image':
+        'the canopy on the root: the stall’s own background, behind every card, and the hem’s discs are the root’s ground cutting its own stripes',
+    '.stall.att-rainfall | background-image': 'the drop sheets on the root: the stall’s own background, behind every card',
+    '.stall.att-aurora | background-image': 'the aurora’s glows and tint on the root: the stall’s own background',
+    '.stall.att-rainfall.att-aurora | background-image': 'the rain and the aurora as one root stack: the stall’s own background',
+    '.stall.att-sunburst | background-image': 'the rays on the root: the stall’s own background',
+    '.stall.att-confetti | background-image': 'the scrap sheets on the root: the stall’s own background',
+    '.stall.att-sunburst.att-confetti | background-image': 'the scraps and the rays as one root stack: the stall’s own background',
+    '.stall.att-pinstripe .item | border': 'Pinstripe’s card border: 2px of transparent width the stripes are painted into',
+    '.stall.att-pinstripe .item | background-image':
+        'Pinstripe’s card border: the card’s own surface restated in its padding box, the stripes only in its 2px border',
+    '.stall.att-horizon .stall-sign | background-image':
+        'the Horizon is a floor drawn on the sign’s own panel (`yard` on Neo), and its haze and scrim sink its own floor lines under the name, as shipped',
+    '.att-bunting | background': 'a decoration node’s own box: aria-hidden, no text in it',
+    '.att-beetle | background-image': 'a decoration node’s own box: the beetle’s rail, aria-hidden, no text in it',
+    '.att-beetle-bug | background': 'a decoration node’s own box: the beetle sprite, aria-hidden, no text in it',
 };
 
-describe('a-rain-veil-is-the-least-that-reads', () => {
-    const rainRule = [...CSS.matchAll(/\.stall\.att-rainfall\s*\{([^{}]*)\}/g)].map((m) => m[1]!).join(';');
-    const steps = new Map(
-        [...rainRule.matchAll(/--rain-veil-([a-z]+):\s*(\d+)%/g)].map((m) => [m[1]!, Number(m[2])] as const),
-    );
-    const neo = decodeTheme(NEO_CITY_THEME_ID);
-    const bg = rgbOf(neo.bg);
-    const tokens: Record<string, Rgb> = {
-        bg,
-        muted: rgbOf(neo.muted),
-        accent: rgbOf(neo.accent),
-        'accent-2': rgbOf(neo.accentTwo),
+/** Whether a rule reaches past a decoration class: its selector names one. */
+const DECORATION_SCOPED = /\.att-[a-z0-9-]/;
+
+/** The properties that lay a ground, a slab or a ring under a box. */
+const GROUND_PROPS =
+    /^(?:-webkit-)?(?:background|background-color|background-image|border|border-(?!radius$|[a-z-]*-radius$|spacing$|collapse$)[a-z-]+|outline|outline-(?!offset$)[a-z-]+|box-shadow|column-rule|column-rule-[a-z-]+)$/;
+
+/** A border or outline style that draws, in `currentColor` when no colour is named. */
+const DRAWN_STYLE = /\b(?:solid|dashed|dotted|double|groove|ridge|inset|outset|auto)\b/;
+
+/** Words a value may hold without painting anything. */
+const NO_PAINT = new Set([
+    'none', 'transparent', 'initial', 'unset', 'revert', 'revert-layer', 'hidden',
+    'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset',
+    'no-repeat', 'repeat', 'repeat-x', 'repeat-y', 'space', 'round', 'left', 'right', 'top',
+    'bottom', 'center', 'border-box', 'padding-box', 'content-box', 'fixed', 'scroll', 'local',
+    'auto', 'cover', 'contain', 'thin', 'medium', 'thick', '*', '+', '-',
+]);
+
+/** Every `@keyframes` body in `css`, by name, brace-counted. */
+function keyframesIn(css: string): Map<string, string> {
+    const out = new Map<string, string>();
+    const head = /@keyframes\s+([a-zA-Z0-9_-]+)\s*\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = head.exec(css)) !== null) {
+        let depth = 1;
+        let i = head.lastIndex;
+        while (i < css.length && depth > 0) {
+            if (css[i] === '{') depth += 1;
+            if (css[i] === '}') depth -= 1;
+            i += 1;
+        }
+        out.set(m[1]!, css.slice(head.lastIndex, i - 1));
+    }
+    return out;
+}
+
+type Declaration = { prop: string; value: string };
+
+const declarationsOf = (body: string): Declaration[] =>
+    body
+        .split(';')
+        .map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()] as const)
+        .filter(([prop]) => prop !== '' && !prop.includes('{'))
+        .map(([prop, value]) => ({ prop, value }));
+
+/** Every custom property's definitions: the served sheets', `extra`'s and every shipped look's `--s-*`. */
+function customProperties(extra: string): Map<string, string[]> {
+    const defs = new Map<string, string[]>();
+    const add = (name: string, value: string): void => {
+        defs.set(name, [...(defs.get(name) ?? []), value]);
     };
-    /*
-     * Every veil the sheet lays, rule by rule: the step it names, and the
-     * tint the rule keeps on top of it when the look paints one there.
-     */
-    const uses = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-        .filter((m) => m[1]!.includes('.att-rainfall'))
-        .flatMap((m) => {
-            const body = m[2]!;
-            const veil = /background-color:\s*color-mix\(\s*in srgb,\s*var\(--s-bg\)\s+var\(--rain-veil-([a-z]+)\),\s*transparent\s*\)/.exec(body);
-            if (veil === null) {
-                return [];
-            }
-            const tint = /background-image:\s*linear-gradient\(\s*color-mix\(\s*in srgb,\s*var\(--s-([a-z0-9-]+)\)\s+(\d+)%,\s*transparent\s*\)/.exec(body);
-            return [
-                {
-                    name: veil[1]!,
-                    tint: tint === null ? undefined : { rgb: tokens[tint[1]!]!, alpha: Number(tint[2]) / 100 },
-                    source: m[1]!.replace(/\s+/g, ' ').trim(),
-                    grounds: rainGrounds(m[1]!.includes('.studio-browser')),
-                },
-            ];
+    const sheets = SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'));
+    for (const css of [...sheets, extra]) {
+        for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(?:^|[;{])\s*(--[a-zA-Z0-9_-]+)\s*:\s*([^;{}]+)/g)) {
+            add(m[1]!, m[2]!.trim());
+        }
+    }
+    for (const { id } of SHIPPED_THEMES) {
+        for (const [name, value] of Object.entries(themeVars(decodeTheme(id)))) add(name, value);
+    }
+    return defs;
+}
+
+/** `var(--name[, fallback])` calls at the top of `value`'s nesting or anywhere inside it. */
+function varCalls(value: string): { name: string; fallback: string | undefined; whole: string }[] {
+    const out: { name: string; fallback: string | undefined; whole: string }[] = [];
+    let at = value.indexOf('var(');
+    while (at >= 0) {
+        let depth = 0;
+        let end = at + 3;
+        for (; end < value.length; end += 1) {
+            if (value[end] === '(') depth += 1;
+            if (value[end] === ')' && --depth === 0) break;
+        }
+        const inner = value.slice(at + 4, end);
+        const comma = inner.indexOf(',');
+        out.push({
+            name: (comma < 0 ? inner : inner.slice(0, comma)).trim(),
+            fallback: comma < 0 ? undefined : inner.slice(comma + 1).trim(),
+            whole: value.slice(at, end + 1),
         });
-    const grounds = rainGrounds();
-    const inks = veilInks();
+        at = value.indexOf('var(', end);
+    }
+    return out;
+}
 
-    it('states a step for every veil the sheet lays, and lays every step it states', () => {
-        expect(steps.size).toBeGreaterThan(0);
-        expect(new Set(uses.map((u) => u.name))).toEqual(new Set(steps.keys()));
-        expect(new Set(Object.keys(inks))).toEqual(new Set(steps.keys()));
-    });
+/**
+ * Whether `value` paints anything, custom properties resolved to every
+ * value any sheet or look gives them (a var painting in one place paints).
+ * Conservative on purpose: a function that is not arithmetic paints, and
+ * so does any word this reader does not know to be paintless.
+ */
+function paints(value: string, prop: string, defs: Map<string, string[]>, seen: ReadonlySet<string> = new Set()): boolean {
+    let bare = value;
+    for (const call of varCalls(value)) {
+        bare = bare.replace(call.whole, ' 0 ');
+        if (seen.has(call.name)) continue;
+        const next = new Set([...seen, call.name]);
+        const options = [...(defs.get(call.name) ?? []), ...(call.fallback === undefined ? [] : [call.fallback])];
+        if (options.some((option) => paints(option, prop, defs, next))) return true;
+    }
+    const v = bare
+        .toLowerCase()
+        .replace(/!important/g, ' ')
+        .replace(/\b(?:calc|min|max|clamp)\(/g, '(');
+    if (/[a-z-]+\(/.test(v)) return true;
+    const words = v.split(/[\s,/()]+/).filter((w) => w !== '');
+    if (words.some((w) => !NO_PAINT.has(w) && !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[a-z%]+)?$/.test(w))) return true;
+    // A drawn border or outline with no colour named is drawn in the text's own colour.
+    if (/^(?:-webkit-)?(?:border|outline|column-rule)/.test(prop) && DRAWN_STYLE.test(v) && !/\btransparent\b/.test(v)) {
+        return /(?:^|-)(?:style)$/.test(prop) || /^(?:border|outline|column-rule)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?$/.test(prop);
+    }
+    return false;
+}
 
-    it('each step reads over the lightest ground the worn stall can paint, and a step lighter does not', () => {
-        for (const [name, pct] of steps) {
-            const mine = uses.filter((u) => u.name === name);
-            for (const use of mine) {
-                expect(readsAt(inks[name]!, bg, use.grounds, pct, use.tint), `${name} at ${pct}% on ${use.source}`).toBe(true);
-            }
-            if (pct > 0) {
-                expect(
-                    mine.every((use) => readsAt(inks[name]!, bg, use.grounds, pct - 5, use.tint)),
-                    `${name} would read at ${pct - 5}%: the veil is heavier than the floor asks`,
-                ).toBe(false);
-            }
-            // The least, exactly: no usage needs more than stated.
-            const least = Math.max(...mine.map((use) => leastVeil(inks[name]!, bg, use.grounds, use.tint) ?? 101));
-            expect(least, `${name}: least ${least}`).toBe(pct);
-        }
-    });
-
-    it('no step is over the owner’s 60% cap without its reason', () => {
-        for (const [name, pct] of steps) {
-            if (pct > 60) {
-                expect(ABOVE_THE_CAP[name], `--rain-veil-${name} is ${pct}%`).toBeDefined();
-            }
-        }
-        for (const name of Object.keys(ABOVE_THE_CAP)) {
-            expect(steps.get(name) ?? 0, `${name} is listed over the cap and is not`).toBeGreaterThan(60);
-        }
-    });
-
-    it('a veil is a ground the text needs: every ink on the bare rain reads under the floor', () => {
-        // The other half of "no ground where the text reads": the probe
-        // fails a veiled line that reads without its veil at its own pixels;
-        // this holds the reason every step is above zero at all.
-        for (const [name, list] of Object.entries(inks)) {
-            expect(readsAt(list, bg, grounds, 0), name).toBe(false);
-        }
-    });
-});
-
-describe('a-decoration-lays-no-opaque-ground-under-text', () => {
-    /**
-     * The other half of the owner's rule (2026-09-24 evening), read from
-     * source: a rule scoped to a decoration never lays the look's own ground
-     * or its card surface under anything — round 5's answer to Neo's rain
-     * was a solid `var(--s-bg)` band under every line on the bare ground, and
-     * the owner's word for it was "quá đà". Under a decoration, a ground is a
-     * veil — `color-mix(in srgb, var(--s-bg) var(--rain-veil-…), transparent)`,
-     * at a step `a-rain-veil-is-the-least-that-reads` holds to the least that
-     * reads — or nothing. Every served sheet, the kit's included: a creator's
-     * decoration is held to it too. What a veil may not be (laid where the
-     * line reads without it) is the probe's to see, at the line's own pixels.
-     */
-    const VEIL = /color-mix\(\s*in srgb,\s*var\(--s-bg\)\s+var\(--rain-veil-[a-z]+\),\s*transparent\s*\)/g;
-    const GROUND = /var\(--s-(?:bg|surface)\)/;
-    const REPO_ROOT = join(UI_DIR, '..', '..');
-
-    /** Every declaration in a decoration-scoped rule that lays a ground from a look token other than as a veil. */
-    function offences(css: string): string[] {
-        const out: string[] = [];
+/**
+ * Where each custom property ends up: the ordinary properties that read it,
+ * directly or through other custom properties, across every served sheet and
+ * `extra`. A property nobody reads answers an empty set.
+ */
+function customUses(extra: string): (name: string) => Set<string> {
+    const readers = new Map<string, Set<string>>();
+    const sheets = SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'));
+    for (const css of [...sheets, extra]) {
         for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-            const selector = m[1]!.replace(/\s+/g, ' ').trim();
-            if (!/\.att-[a-z0-9-]/.test(selector)) {
-                continue;
+            for (const d of declarationsOf(m[2]!)) {
+                for (const call of varCalls(d.value)) {
+                    readers.set(call.name, new Set([...(readers.get(call.name) ?? []), d.prop]));
+                }
             }
-            for (const declaration of m[2]!.split(';')) {
-                const at = declaration.indexOf(':');
-                if (at < 0) continue;
-                const prop = declaration.slice(0, at).trim();
-                const value = declaration.slice(at + 1);
-                if (!/^(?:background|background-color|box-shadow|--[a-z0-9-]+)$/.test(prop)) {
-                    continue;
-                }
-                if (GROUND.test(value.replace(VEIL, ''))) {
-                    out.push(`${selector} { ${prop}: ${value.replace(/\s+/g, ' ').trim()} }`);
-                }
+        }
+    }
+    const uses = (name: string, seen: ReadonlySet<string>): Set<string> => {
+        const out = new Set<string>();
+        for (const prop of readers.get(name) ?? []) {
+            if (!prop.startsWith('--')) {
+                out.add(prop);
+            } else if (!seen.has(prop)) {
+                for (const p of uses(prop, new Set([...seen, prop]))) out.add(p);
             }
         }
         return out;
-    }
+    };
+    return (name) => uses(name, new Set([name]));
+}
 
-    it('lays a veil or nothing, in every served sheet', () => {
+/**
+ * Every declaration in `css` that lays a ground under a box from a rule
+ * scoped to a decoration class — directly, through a keyframe the rule runs,
+ * or as a custom property the rule sets for another rule to read — and that
+ * is not the decoration's own art (`DECORATION_ART`).
+ */
+function groundsUnderText(
+    css: string,
+    defs: Map<string, string[]> = customProperties(css),
+    usesOf: (name: string) => Set<string> = customUses(css),
+): string[] {
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const frames = keyframesIn(clean);
+    const out: string[] = [];
+    for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim());
+        const own = declarationsOf(m[2]!);
+        const run = own
+            .filter((d) => d.prop === 'animation' || d.prop === 'animation-name')
+            .flatMap((d) => d.value.split(','))
+            .flatMap((one) => one.trim().split(/\s+/))
+            .filter((word) => frames.has(word))
+            .flatMap((name) => declarationsOf(frames.get(name)!.replace(/[^{}]*\{|\}/g, ';')));
+        for (const selector of selectors.filter((s) => DECORATION_SCOPED.test(s))) {
+            for (const d of [...own, ...run]) {
+                const custom = d.prop.startsWith('--');
+                if (!custom && !GROUND_PROPS.test(d.prop)) continue;
+                // A custom property is judged where it is read (round 8): one
+                // that only ever reaches a shadow on the glyphs, a colour or
+                // a length lays no ground — the rain's outline sets are read
+                // by `text-shadow` alone, and read in the ring by the pass.
+                // One read by a ground, or by nothing a sheet here shows, is
+                // judged by what it holds.
+                if (custom) {
+                    const uses = usesOf(d.prop);
+                    if (uses.size > 0 && ![...uses].some((use) => GROUND_PROPS.test(use))) continue;
+                }
+                if (!custom && DECORATION_ART[`${selector} | ${d.prop}`] !== undefined) continue;
+                if (paints(d.value, d.prop, defs)) {
+                    out.push(`${selector} { ${d.prop}: ${d.value.replace(/\s+/g, ' ')} }`);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+describe('a-decoration-lays-no-ground-under-text', () => {
+    /**
+     * Read from source, over every served sheet (the workshop kit's
+     * included — a creator's decoration is held to it too): no rule scoped
+     * to a decoration class lays a ground, a slab or a ring under any box —
+     * `background` and its longhands, a gradient as a `background-image`,
+     * `border`, `outline` or `box-shadow` — whether it is written there, run
+     * through a keyframe, or handed to another rule as a custom property;
+     * values are read with every custom property resolved to what any sheet
+     * or look sets it to. The decoration's own art is the allow-list above,
+     * each entry with its reason. What a line over a decoration may do
+     * instead — an ink lifted, an outline hugging the strokes — is
+     * the rain's outline, in `text-shadow`, which is not on this list for
+     * that reason; a custom property is judged where it is read
+     * (`customUses`).
+     */
+    it('lays none in any served sheet', () => {
         for (const sheet of SERVED_SHEETS) {
-            expect(offences(readFileSync(join(REPO_ROOT, sheet.path), 'utf8')), sheet.path).toEqual([]);
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+            expect(groundsUnderText(css), sheet.path).toEqual([]);
         }
     });
 
-    it('refuses round 5’s grounds and anything that is not the veil’s own shape', () => {
-        for (const planted of [
-            '.stall.att-rainfall .activity-sec { background-color: var(--s-bg); }',
-            '.stall.att-rainfall .first-stall { background-color: var(--s-surface); }',
-            '.stall.att-rainfall .mid-t { box-shadow: 0 0 0 6px var(--s-bg); }',
-            '.stall.att-rainfall .notice { background: color-mix(in srgb, var(--s-accent) 4%, var(--s-bg)); }',
-            '.stall.att-rainfall .mid-p { background-color: color-mix(in srgb, var(--s-bg) 90%, transparent); }',
-            '@media (min-width: 680px) { .stall.att-aurora .orn { --ground: var(--s-bg); } }',
-        ]) {
-            expect(offences(planted), planted).toHaveLength(1);
+    it('names only art a served sheet still declares', () => {
+        const declared = new Set<string>();
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+            for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+                for (const selector of m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim())) {
+                    for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
+                }
+            }
         }
+        expect(Object.keys(DECORATION_ART).filter((key) => !declared.has(key))).toEqual([]);
+    });
+
+    it('refuses every shape of ground the rounds before it laid, and the critic’s plants', () => {
+        for (const planted of [
+            // Round 5's solid ground and its slab between two sections.
+            '.stall.att-rainfall .activity-sec { background-color: var(--s-bg); }',
+            '.stall.att-rainfall .activity-sec + .activity-sec { box-shadow: 0 -12px 0 0 var(--s-bg); }',
+            // Round 6's veil and its ring, on a line and on a box.
+            '.stall.att-rainfall .mid-t { background-color: color-mix(in srgb, var(--s-bg) 25%, transparent); }',
+            '.stall.att-rainfall .mid-t { box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) 25%, transparent); }',
+            // A literal ground, a named colour, a gradient slab, an outline slab.
+            '.stall.att-rainfall .stall-foot .fine { background: #05060d; }',
+            '.stall.att-rainfall .orn { background-color: black; }',
+            '.stall.att-rainfall .mid-p { background-image: linear-gradient(rgba(5, 6, 13, 0.5), rgba(5, 6, 13, 0.5)); }',
+            '.stall.att-rainfall .orn { outline: 6px solid rgba(5, 6, 13, 0.6); }',
+            '.stall.att-rainfall .orn { border-bottom: 3px solid; }',
+            // A decoration's own class on a list beside the root it may paint.
+            '.stall.att-rainfall, .stall.att-rainfall .notice { background-image: url(decor/rain-near.svg); }',
+            // Inside a media query, and under the look.
+            '@media (min-width: 680px) { .t-neo.att-aurora .section-head { background-color: #05060d; } }',
+            // Through a keyframe the decoration runs on a line.
+            '@keyframes wk-veil { to { background-color: rgba(5, 6, 13, 0.4); } } .stall.att-hum .sign-lamp { animation: wk-veil 1s; }',
+            // A custom property the decoration sets for a base rule to read.
+            '.stall.att-rainfall { --foot-ground: var(--s-bg); }',
+        ]) {
+            expect(groundsUnderText(planted), planted).toHaveLength(1);
+        }
+        // CRITIC-6 item 4's full-width veil and slab, as one rule: two grounds.
         expect(
-            offences(
-                '.stall.att-rainfall .mid-t { background-color: color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--s-bg) var(--rain-veil-text), transparent); }',
+            groundsUnderText(
+                '.stall.att-rainfall .activity-sec { background-color: color-mix(in srgb, var(--s-bg) 40%, transparent); box-shadow: 0 -12px 0 0 color-mix(in srgb, var(--s-bg) 40%, transparent); }',
             ),
+        ).toHaveLength(2);
+    });
+
+    it('resolves a custom property defined anywhere to what it holds', () => {
+        // A var holding the ground, defined in a rule no decoration scopes.
+        expect(
+            groundsUnderText('.stall-foot { --wk-ground: var(--s-bg); } .stall.att-rainfall .stall-foot .fine { background-color: var(--wk-ground); }'),
+        ).toHaveLength(1);
+        // Two hops, and a fallback that paints behind a var nobody defines.
+        expect(
+            groundsUnderText('.a { --wk-a: var(--wk-b); } .b { --wk-b: #05060d; } .stall.att-rainfall .fine { box-shadow: 0 0 0 4px var(--wk-a); }'),
+        ).toHaveLength(1);
+        expect(groundsUnderText('.stall.att-rainfall .fine { background: var(--wk-nobody, #05060d); }')).toHaveLength(1);
+        // And one that holds nothing paints nothing: the resolution, not the selector, decided.
+        expect(
+            groundsUnderText('.stall-foot { --wk-none: transparent; } .stall.att-rainfall .stall-foot .fine { background-color: var(--wk-none); }'),
         ).toEqual([]);
+        expect(groundsUnderText('.stall.att-rainfall .fine { background: none; border: 0; box-shadow: none; outline: none; }')).toEqual([]);
+        expect(groundsUnderText('.stall.att-rainfall { --wk-scale: calc(2 * var(--s-decor-scale, 1)); }')).toEqual([]);
+    });
+
+    it('judges a custom property where it is read', () => {
+        // Read by a shadow on the glyphs alone: no ground here.
+        expect(
+            groundsUnderText('.stall.att-rainfall { --wk-o: 1px 0 0 var(--s-bg); } .stall.att-rainfall .fine { text-shadow: var(--wk-o); }'),
+        ).toEqual([]);
+        // The same property also read by a ground in a rule no decoration scopes: refused.
+        expect(
+            groundsUnderText(
+                '.stall.att-rainfall { --wk-o: 1px 0 0 var(--s-bg); } .fine { text-shadow: var(--wk-o); } .stall-foot { box-shadow: var(--wk-o); }',
+            ),
+        ).toHaveLength(1);
+        // Read by a ground through another custom property: refused.
+        expect(
+            groundsUnderText('.stall.att-rainfall { --wk-g: var(--s-bg); } .x { --wk-h: var(--wk-g); } .stall-foot { background-color: var(--wk-h); }'),
+        ).toHaveLength(1);
+        // Read by nothing a sheet here shows: judged by what it holds (the plant above).
+        expect(groundsUnderText('.stall.att-rainfall { --wk-nobody-reads: var(--s-bg); }')).toHaveLength(1);
     });
 });

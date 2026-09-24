@@ -663,7 +663,8 @@ export const SCREENS: Record<string, StallView> = {
             // An ADDED row, which makes the list longer: a longer list is a
             // real stall's, and when this row first moved a line onto Neo's
             // rain at 2.7:1 the fixture was bent around it for a day — the
-            // finding was the rain, and the rows have a ground now
+            // finding was the rain, and it is never answered by moving a
+            // row: the rows wear an outline over the rain now
             // (`a-line-on-the-ground-reads-wherever-a-drop-falls`).
             {
                 txid: 'af'.repeat(32),
