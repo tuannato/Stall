@@ -1555,7 +1555,9 @@ function paintUnresolvable(
     acts.append(listInCashtab(), retryControl(handlers, copy.CHECK_AGAIN));
     card.append(acts);
     const watching = el('p', 'fine', copy.FIRST_STALL_WATCHING);
-    const guide = el('a', undefined, copy.FIRST_STALL_GUIDE_LINK);
+    // The `.cashtab-link` dress (`guide-link`): an anchor no look coloured
+    // painted the browser's own blue, 2.15:1 on Neo (CRITIC-4 item 5).
+    const guide = el('a', 'guide-link', copy.FIRST_STALL_GUIDE_LINK);
     guide.setAttribute('href', '/guide#listings');
     guide.setAttribute('data-role', 'first-stall-guide-link');
     watching.append(' ', guide);
@@ -7960,7 +7962,7 @@ function paintStudio(
         // until its seller names it — say where.
         const hint = el('p', 'fine', copy.STUDIO_ITEMS_HINT);
         hint.setAttribute('data-role', 'studio-items-hint');
-        const guide = el('a', undefined, copy.STUDIO_GUIDE_LINK);
+        const guide = el('a', 'guide-link', copy.STUDIO_GUIDE_LINK);
         guide.setAttribute('href', '/guide#quotes');
         guide.setAttribute('data-role', 'studio-guide-link');
         hint.append(' ', guide);

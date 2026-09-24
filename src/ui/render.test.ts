@@ -12974,6 +12974,8 @@ describe('the-guide-is-linked-from-the-door-the-studio-and-the-first-stall', () 
         const studioLink = studio.querySelector('[data-role="studio-guide-link"]') as HTMLAnchorElement;
         expect(studioLink.getAttribute('href')).toBe('/guide#quotes');
         expect(studioLink.closest('[data-role="studio-items-hint"]')).not.toBeNull();
+        // In a line of the card's own words: the `.cashtab-link` dress, not the browser's blue.
+        expect(studioLink.classList.contains('guide-link')).toBe(true);
 
         const first = paint({
             route: { kind: 'unresolvable', address: ADDR },
@@ -12985,6 +12987,7 @@ describe('the-guide-is-linked-from-the-door-the-studio-and-the-first-stall', () 
         const firstLink = first.querySelector('[data-role="first-stall-guide-link"]') as HTMLAnchorElement;
         expect(firstLink.getAttribute('href')).toBe('/guide#listings');
         expect(firstLink.closest('[data-role="first-stall"]')).not.toBeNull();
+        expect(firstLink.classList.contains('guide-link')).toBe(true);
     });
 });
 

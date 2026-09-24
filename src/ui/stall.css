@@ -705,13 +705,10 @@ body {
 /*
  * An ink darker than the look's own muted is lifted to it first, and then
  * outlined (the owner's order: "đổi màu chữ" before the dark layer). In a
- * token, so a mood that moves the muted moves the lift. The vacant box's
- * second line (`#5e7799`), the invite's words (`#b08ca3`) and the first-stall
- * guide link, which no look colours and so paints in the browser's own link
- * blue (`#0000ee`, 2.15:1 on Neo's bare ground with or without rain).
+ * token, so a mood that moves the muted moves the lift: the vacant box's
+ * second line (`#5e7799`) and the invite's words (`#b08ca3`).
  */
-.stall.att-rainfall:not(.deck-stall)
-    :is(.sparse-empty-s, .notice-invite .invite-text, [data-role='first-stall-guide-link']) {
+.stall.att-rainfall:not(.deck-stall) :is(.sparse-empty-s, .notice-invite .invite-text) {
     color: var(--s-muted);
 }
 
@@ -5865,7 +5862,12 @@ textarea.share-embed {
     height: 14px;
 }
 
-.cashtab-link {
+/* A same-origin guide link inside a line wears the same dress
+   (`guide-link`: the first-stall checklist's and the studio's), where no
+   look coloured it and it painted the browser's own blue (CRITIC-4 item 5:
+   2.15:1 on Neo, 1.84 visited). */
+.cashtab-link,
+.guide-link {
     color: var(--s-accent);
     font-weight: 600;
     text-decoration: underline;

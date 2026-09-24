@@ -2247,6 +2247,13 @@ const CONTRAST_TEXT = [
     '.stall.att-rainfall:not(.deck-stall) .first-stall .steps li > i',
     '.stall.att-rainfall:not(.deck-stall) .stall-foot .fine',
     '.stall.att-rainfall:not(.deck-stall) .notice-invite .ghost-chip',
+    // A guide link inside a line (CRITIC-4 item 5): the probe reads a
+    // target against its own ink, so an anchor with a different colour
+    // inside a measured line was never read — the first-stall and studio
+    // links painted the browser's blue at 2.15:1 on Neo. They wear
+    // `.cashtab-link`'s dress now (`guide-link`), and every guide link is
+    // read against its own.
+    '[data-role$="-guide-link"]',
 ].join(', ');
 
 /**

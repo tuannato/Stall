@@ -2848,3 +2848,30 @@ motif's caption outlined — 32 "no contrast target"; the 17px failure
 heading given the 2px set — 2 "its size owes the 1px one"; and `item-quote`
 out of both lists — "an outline nobody reads — … button.pay-pointer".
 The verdict named every one.
+
+**The guide links wear a dress and are read** (round 8, the window's step 3;
+CRITIC-4 item 5, a bug on `main`). The first-stall checklist's and the
+studio's guide links were plain anchors no look coloured: the browser's
+`#0000ee`, 2.15:1 on Neo's ground (1.84 visited, 1.95 under After hours),
+and the pass could not see it — a target is read against its own ink, and a
+nested anchor's ink is not the line's. Both wear `.cashtab-link`'s dress
+now (`guide-link`: the accent, weight 600, the underline), and
+`[data-role$="-guide-link"]` is a contrast target on every look where a
+fixture paints one on one line — today the checklist's, on Neo worn.
+
+**Open, owned by step 5b (the line-rect sampler, D7).** A wrapped inline
+target and a box holding a border arc are read per line fragment in step
+5b; the studio guide link and Rural's `.tool-lede` wait for it. Measured
+with a `studio-items` fixture (the studio over a stall with items, which
+paints the hint and its link; kept out of this batch): the box read put the
+dressed link at 1.00–1.84:1 on Modern, Neo, Rural, the skeleton and the kit
+— wherever it wraps, the union box holds the hint's own grey words — while
+per line fragment it reads 4.05–12.21:1 on every look, bare and worn; and
+Rural worn's `.tool-lede` at 2.99:1 at the desk, its box reaching the tool
+door's rounded border arc the glyphs never touch. Pictures:
+`visible-batch-shots/11-glyph-outline/stop-guide-link/`. Not answered here
+because 5b has its own critic-reviewed plan with clipping and silent-drop
+rules, and a hurried partial version inside this batch would be a weaker
+guard.
+Under the rain the first-stall link inherits its line's outline and is
+read in its ring, and the muted lift it wore for one round is gone.
