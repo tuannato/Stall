@@ -627,10 +627,13 @@ body {
  * eight one-pixel offsets and twelve at two). Nothing here paints a box: no
  * background, no box-shadow, no border (`a-decoration-lays-no-ground-under-
  * text`), and an outline is only ever these two sets, in `var(--s-bg)`, in a
- * rule scoped to a decoration.
+ * rule scoped to a decoration (`an-outline-is-the-only-mark-under-text-on-a-
+ * decoration`).
  *
  * Leaf lines only, never a container: `text-shadow` inherits, and a chip or
- * a tile with its own ground must not wear it. A control whose
+ * a tile with its own ground must not wear it (the probe's
+ * `an-outline-where-the-text-has-its-own-ground` fails one that does, and
+ * checks the width against the size the text is painted at). A control whose
  * words stand on the bare ground wears it like any line; its drawn icon is
  * not text and wears nothing. Neo's heading glow is listed after the outline,
  * so it still paints, below it.

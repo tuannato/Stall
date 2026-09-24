@@ -20,6 +20,7 @@ const full = {
         'pay-borrowed': 3,
     },
     floorNamedChecks: 900,
+    outlineChecks: 400,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
 };
 
@@ -38,6 +39,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 rowSizeClasses: ['t-modern', 't-rural'],
                 doorMiniClasses: ['t-modern', 't-neo'],
                 floorNamedChecks: 3,
+                outlineChecks: 5,
             },
             { shippedClasses: SHIPPED, skeleton: true },
         );
@@ -52,6 +54,14 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             skeleton: true,
         });
         assert.deepEqual(phone, ['the-skeletons-ladder-steps-the-rows-size read no tier-1 figure']);
+    });
+
+    it('owes an outlined line wherever Neo is measured, and nowhere else', () => {
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, outlineChecks: 0 }, { shippedClasses: SHIPPED }), [
+            'an-outline-where-the-text-has-its-own-ground read no outlined line',
+        ]);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...full, outlineChecks: 0 }, { shippedClasses: ['t-modern', 't-rural'] }).filter((g) => g.startsWith('an-outline')), []);
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, outlineChecks: 0 }, { shippedClasses: SHIPPED }), []);
     });
 
     it('asks the wall only of the desk, the stream only of the canvas, and nothing of the other passes', () => {
@@ -96,7 +106,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(

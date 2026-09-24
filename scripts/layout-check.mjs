@@ -365,6 +365,12 @@ const RAIN_REQUIRED = [
  * fresh pair of captures before it is believed, like a failing box.
  */
 const RING_MASK_ALPHA = 0.5;
+/**
+ * Every contrast target an outlined line was found in, by the geometry
+ * passes (`outlinedTargets` in the probe's verdict): each must be read in
+ * the ring on some contrast job, or the outline is one nobody reads.
+ */
+const outlinedTargetsSeen = new Set();
 
 const RING_MASK_PER_CHAR = 3;
 
@@ -1005,6 +1011,7 @@ try {
          * compared, and a pass that compared nothing where it owes a
          * comparison is refused (`probe-coverage.mjs`).
          */
+        for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
@@ -1114,6 +1121,7 @@ try {
                 // owes every one of the touch wall's roles here — a fixture
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
+                for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
                 if (pv.failures.length === 0 && gaps.length === 0) {
@@ -1187,6 +1195,7 @@ try {
                 // owes every one of the touch wall's roles here — a fixture
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
+                for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
                 if (tv.failures.length === 0 && gaps.length === 0) {
@@ -1821,6 +1830,13 @@ try {
             verdicts.push(
                 `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
+        }
+        const unread = [...outlinedTargetsSeen].filter((kind) => !ringKinds.has(kind));
+        if (unread.length > 0) {
+            // Every target an outlined line stands in was read in its ring
+            // somewhere, or the outline on it is one nobody reads: a screen
+            // no rain job samples paints it (`RAIN_JOBS`).
+            verdicts.push(`an outline nobody reads — outlined on a screen the pass paints and never ring-read: ${unread.join(', ')}`);
         }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is

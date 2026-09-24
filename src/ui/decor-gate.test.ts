@@ -43,6 +43,7 @@ import {
     themeVars,
 } from '../domain/theme';
 import { SERVED_SHEETS } from '../../scripts/sheet-roles.mjs';
+import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet } from '../../layout/outline';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -782,7 +783,7 @@ function groundsUnderText(
                 // A custom property is judged where it is read (round 8): one
                 // that only ever reaches a shadow on the glyphs, a colour or
                 // a length lays no ground — the rain's outline sets are read
-                // by `text-shadow` alone, and read in the ring by the pass.
+                // by `text-shadow` alone, and that use is the outline test's.
                 // One read by a ground, or by nothing a sheet here shows, is
                 // judged by what it holds.
                 if (custom) {
@@ -811,9 +812,9 @@ describe('a-decoration-lays-no-ground-under-text', () => {
      * or look sets it to. The decoration's own art is the allow-list above,
      * each entry with its reason. What a line over a decoration may do
      * instead — an ink lifted, an outline hugging the strokes — is
-     * the rain's outline, in `text-shadow`, which is not on this list for
-     * that reason; a custom property is judged where it is read
-     * (`customUses`).
+     * `an-outline-is-the-only-mark-under-text-on-a-decoration`'s, below, and
+     * `text-shadow` is not on this list for that reason; a custom property
+     * is judged where it is read (`customUses`).
      */
     it('lays none in any served sheet', () => {
         for (const sheet of SERVED_SHEETS) {
@@ -887,7 +888,7 @@ describe('a-decoration-lays-no-ground-under-text', () => {
     });
 
     it('judges a custom property where it is read', () => {
-        // Read by a shadow on the glyphs alone: no ground here.
+        // Read by a shadow on the glyphs alone: no ground here (the outline test's).
         expect(
             groundsUnderText('.stall.att-rainfall { --wk-o: 1px 0 0 var(--s-bg); } .stall.att-rainfall .fine { text-shadow: var(--wk-o); }'),
         ).toEqual([]);
@@ -903,5 +904,177 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         ).toHaveLength(1);
         // Read by nothing a sheet here shows: judged by what it holds (the plant above).
         expect(groundsUnderText('.stall.att-rainfall { --wk-nobody-reads: var(--s-bg); }')).toHaveLength(1);
+    });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * An outline is the only mark under text on a decoration (round 8,
+ * 2026-09-25): where a line does not read over a decoration, the owner's
+ * "lớp nền tối ngay dưới nét chữ" is `text-shadow` in the look's own ground,
+ * opaque and unblurred, one or two pixels wide (`layout/outline.ts`) — and
+ * nothing else in the ground's colour ever sits under a glyph.
+ * ---------------------------------------------------------------------------
+ */
+
+/** Every value `value` can take with its custom properties substituted, `--s-bg` kept as the marker. */
+function expansions(value: string, defs: Map<string, string[]>, seen: ReadonlySet<string> = new Set()): string[] {
+    const call = varCalls(value).find((c) => c.name !== '--s-bg');
+    if (call === undefined) return [value];
+    // The call resolved on its own, a cycle refused along its own path; then
+    // the rest of the value, so a property named twice is expanded twice.
+    const options = seen.has(call.name)
+        ? []
+        : [...new Set([...(defs.get(call.name) ?? []), ...(call.fallback === undefined ? [] : [call.fallback])])];
+    const resolved =
+        options.length === 0 ? ['unresolved'] : options.flatMap((option) => expansions(option, defs, new Set([...seen, call.name])));
+    return resolved.flatMap((one) => expansions(value.replace(call.whole, one), defs, seen)).slice(0, 64);
+}
+
+/** A comma-separated list split at its top-level commas. */
+function topLevel(value: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        if (value[i] === '(') depth += 1;
+        if (value[i] === ')') depth -= 1;
+        if (value[i] === ',' && depth === 0) {
+            out.push(value.slice(start, i).trim());
+            start = i + 1;
+        }
+    }
+    out.push(value.slice(start).trim());
+    return out.filter((part) => part !== '');
+}
+
+/** A literal colour as rgb, or `undefined` when it is not a literal this reader parses. */
+function literalRgb(token: string): Rgb3 | undefined {
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(token)?.[1];
+    if (hex !== undefined) {
+        const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
+        return [0, 2, 4].map((i) => Number.parseInt(full.slice(i, i + 2), 16)) as unknown as Rgb3;
+    }
+    const rgb = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(token);
+    return rgb === null ? undefined : [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+}
+
+type Rgb3 = readonly [number, number, number];
+
+/**
+ * Every offence in `css` against the outline's shape: each `text-shadow`
+ * whose shadows, custom properties substituted, include one in the ground's
+ * colour — `var(--s-bg)`, or a literal any shipped look's `--s-bg` equals —
+ * must stand in a rule every selector of which is scoped to a decoration,
+ * name the ground as `var(--s-bg)`, blur nothing, offset no more than two
+ * pixels, hold at most twenty such shadows, and be exactly one of the two
+ * sets. Any other shadow beside it (Neo's heading glow) is the look's own.
+ */
+function outlineOffences(css: string, defs: Map<string, string[]> = customProperties(css)): string[] {
+    const grounds = (defs.get('--s-bg') ?? []).map(literalRgb).filter((c): c is Rgb3 => c !== undefined);
+    const isGroundLiteral = (token: string): boolean => {
+        const rgb = literalRgb(token);
+        return rgb !== undefined && grounds.some((g) => g.every((c, i) => c === rgb[i]));
+    };
+    const out: string[] = [];
+    for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim());
+        for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === 'text-shadow')) {
+            for (const value of expansions(d.value.replace(/\s*!important\s*$/i, ''), defs)) {
+                const shadows = topLevel(value).map((part) => {
+                    const colour = /var\(--s-bg\)|#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|color-mix\((?:[^()]|\([^()]*\))*\)/.exec(part)?.[0];
+                    const lengths = part
+                        .replace(colour ?? '', ' ')
+                        .trim()
+                        .split(/\s+/)
+                        .filter((w) => w !== '');
+                    return { part, colour, lengths };
+                });
+                const inGround = shadows.filter(
+                    (sh) =>
+                        sh.colour !== undefined &&
+                        (sh.colour === 'var(--s-bg)' || isGroundLiteral(sh.colour) || /var\(--s-bg\)/.test(sh.colour)),
+                );
+                if (inGround.length === 0) continue;
+                const at = `${selectors.join(', ')} { text-shadow: ${d.value.replace(/\s+/g, ' ').slice(0, 80)} }`;
+                const says = (why: string): void => {
+                    out.push(`${at}: ${why}`);
+                };
+                if (!selectors.every((sel) => DECORATION_SCOPED.test(sel))) says('a shadow in the ground’s colour outside a decoration');
+                if (inGround.some((sh) => sh.colour !== 'var(--s-bg)')) says('the ground written other than as var(--s-bg)');
+                const px = (w: string | undefined): number | undefined =>
+                    w === undefined ? 0 : /^-?(?:\d+\.?\d*|\.\d+)(?:px)?$/.test(w) ? Number.parseFloat(w) : undefined;
+                const read = inGround.map((sh) => sh.lengths.map(px));
+                if (read.some((l) => l.length < 2 || l.length > 3 || l.some((n) => n === undefined))) {
+                    says('a shadow whose offsets and blur do not read as pixels');
+                    continue;
+                }
+                if (read.some((l) => (l[2] ?? 0) !== 0)) says('a blurred shadow in the ground’s colour');
+                if (read.some((l) => Math.abs(l[0]!) > 2 || Math.abs(l[1]!) > 2)) says('an offset over two pixels');
+                if (inGround.length > 20) says(`${inGround.length} shadows in the ground’s colour, over twenty`);
+                if (outlineSet(read.map((l) => [l[0]!, l[1]!] as const)) === 0) says('neither outline set');
+            }
+        }
+    }
+    return out;
+}
+
+describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
+    it('holds every served sheet to the outline’s shape', () => {
+        for (const sheet of SERVED_SHEETS) {
+            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+            expect(outlineOffences(css), sheet.path).toEqual([]);
+        }
+    });
+
+    it('states the two sets once, on the rain, as the probe reads them', () => {
+        const defs = customProperties('');
+        const setOf = (name: string): number => {
+            const [value, ...more] = expansions(`var(${name})`, defs);
+            expect(more, name).toEqual([]);
+            const offsets = topLevel(value!).map((part) => {
+                const [x, y, blur] = part.replace('var(--s-bg)', '').trim().split(/\s+/).map((w) => Number.parseFloat(w));
+                expect(part, name).toContain('var(--s-bg)');
+                expect(blur, name).toBe(0);
+                return [x!, y!] as const;
+            });
+            return outlineSet(offsets);
+        };
+        expect(setOf('--rain-outline-1')).toBe(1);
+        expect(setOf('--rain-outline-2')).toBe(2);
+        expect(OUTLINE_1).toHaveLength(8);
+        expect(OUTLINE_2).toHaveLength(20);
+        expect(OUTLINE_2_UNDER_PX).toBe(14);
+        // Declared once, on the decoration's own root.
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const name of ['--rain-outline-1', '--rain-outline-2']) {
+            const at = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => declarationsOf(m[2]!).some((d) => d.prop === name));
+            expect(at.map((m) => m[1]!.trim()), name).toEqual(['.stall.att-rainfall']);
+        }
+    });
+
+    it('refuses every other mark in the ground’s colour, and passes the outline with the look’s glow beside it', () => {
+        const O1 = '1px 0 0 var(--s-bg), -1px 0 0 var(--s-bg), 0 1px 0 var(--s-bg), 0 -1px 0 var(--s-bg), 1px 1px 0 var(--s-bg), 1px -1px 0 var(--s-bg), -1px 1px 0 var(--s-bg), -1px -1px 0 var(--s-bg)';
+        for (const planted of [
+            // Outside a decoration, directly and through a var defined elsewhere.
+            '.stall .fine { text-shadow: var(--rain-outline-2); }',
+            '.x { --wk-o: 1px 0 0 var(--s-bg); } .stall .fine { text-shadow: var(--wk-o); }',
+            // A glow — the halo round 7 withdrew — and a shadow too far out.
+            '.stall.att-rainfall .fine { text-shadow: 0 0 3px var(--s-bg); }',
+            '.stall.att-rainfall .fine { text-shadow: 3px 0 0 var(--s-bg); }',
+            // The ground as a literal, and a partial set.
+            `.stall.att-rainfall .fine { text-shadow: ${O1.replaceAll('var(--s-bg)', '#05060d')}; }`,
+            '.stall.att-rainfall .fine { text-shadow: 1px 0 0 var(--s-bg), -1px 0 0 var(--s-bg); }',
+            // A cloud of shadows past twenty: two copies of the two-pixel set.
+            '.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), var(--rain-outline-2); }',
+            // In a keyframe, whose selectors are no decoration's.
+            '@keyframes wk-o { to { text-shadow: var(--rain-outline-1); } }',
+        ]) {
+            expect(outlineOffences(planted), planted).not.toEqual([]);
+        }
+        expect(outlineOffences(`.stall.att-rainfall .fine { text-shadow: ${O1}; }`)).toEqual([]);
+        expect(outlineOffences('.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
+        // A shadow in another colour is the look's own and not this test's.
+        expect(outlineOffences('.t-neo .x { text-shadow: 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
     });
 });

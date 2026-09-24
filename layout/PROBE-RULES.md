@@ -2800,3 +2800,51 @@ than the first: a missing key used to hide the figures under the floor.
 rain job painted that screen — an outline nobody read. `item-quote`, a
 geometry-only screen, joins `RAIN_JOBS` (Neo worn, the phone and the desk:
 453 jobs), and both faces join `RAIN_REQUIRED`.
+
+**The outline's own guards** (round 8, the critic's item 5 on the rain
+round: a "not needed" rule read on the ground is vacuous and dodgeable, so
+the rule is structural).
+
+- **`an-outline-where-the-text-has-its-own-ground`** (probe, the geometry
+  passes — every screen, look and variant at the phone, the desk, the
+  canvas, the tall wall and the tablet): every element with text of its
+  own that wears the outline (`outlineOf`) fails when it wears shadows in
+  the ground's colour that are neither set; when its computed size and its
+  set disagree (under 14px owes the 2px set, 14px and over the 1px set —
+  the computed size is the only honest reading: `clamp()`, container units
+  and inheritance put it out of a stylesheet's reach); when anything
+  between it and its stall's root paints a ground of its own
+  (`paintsOpaqueGround`: a colour, or a full-size gradient, at half
+  opacity or more — a card, a chip, a sheet, Neo's 86% filled buttons;
+  the txid pill's 12%, the invite's 4% and the call to action's 16% are
+  tints the rain shows through); and when it is in no contrast target.
+  `outlineChecks` counts what it read, and `probe-coverage.mjs` owes one on
+  the phone and desk passes wherever Neo is measured.
+- **An outline nobody reads** (runner): every target an outlined line was
+  found in by the geometry passes (`outlinedTargets`) must have been read
+  in the ring on some contrast job — the quote face's pointer was exactly
+  that until `item-quote` joined `RAIN_JOBS`.
+- **`an-outline-is-the-only-mark-under-text-on-a-decoration`**
+  (`decor-gate.test.ts`, static, every served sheet): a `text-shadow` whose
+  shadows, custom properties substituted, include one in the ground's
+  colour — `var(--s-bg)`, or a literal any shipped look's `--s-bg` equals —
+  stands in a rule every selector of which is scoped to a decoration,
+  names the ground as `var(--s-bg)`, blurs nothing, offsets no more than
+  two pixels, holds at most twenty such shadows, and is exactly one of the
+  two sets; the two sets are stated once, on `.stall.att-rainfall`, as
+  `layout/outline.ts` has them. The size a set is owed is the probe's rule
+  above, not this one's: a stylesheet cannot know a computed size.
+
+**Proved red.** Static: the test's eight plants (outside a decoration, by a
+var defined elsewhere, a glow, a 3px offset, the ground as a literal, a
+partial set, two copies of the 2px set, a keyframe) and, in the real
+`stall.css`, a blurred shadow in `--rain-outline-2` with a plain
+`.stall .fine { text-shadow: 0 0 2px var(--s-bg) }` — three tests red.
+Probe, one planted run, reverted: the text inside the
+footer's filled buttons outlined — 125 "a ground of its own" (the 86%
+fill); the brand strip given two offsets — 121 "neither outline set" (and
+the static test's own "neither outline set" on the same sheet); the sparse
+motif's caption outlined — 32 "no contrast target"; the 17px failure
+heading given the 2px set — 2 "its size owes the 1px one"; and `item-quote`
+out of both lists — "an outline nobody reads — … button.pay-pointer".
+The verdict named every one.

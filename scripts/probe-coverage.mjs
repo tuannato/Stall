@@ -25,6 +25,8 @@
  *   counts as nothing read. A "+N more" read whole is also the
  *   `a-payment-list-that-scrolls-says-how-many-lines-it-hides` rule
  *   comparing a nonzero count.
+ * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines Neo's
+ *   rain outlines, on the phone and desk passes wherever Neo is measured.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -96,6 +98,11 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     if (!((report.floorNamedChecks ?? 0) > 0)) {
         gaps.push('small-text-is-at-least-11px read no named small-text node');
     }
+    // Neo's rain outlines every line on its bare ground, so a pass that
+    // measured Neo and read no outline read none of them.
+    if (shippedClasses.includes('t-neo') && !((report.outlineChecks ?? 0) > 0)) {
+        gaps.push('an-outline-where-the-text-has-its-own-ground read no outlined line');
+    }
     const rows = new Set(report.rowSizeClasses ?? []);
     const minis = new Set(report.doorMiniClasses ?? []);
     for (const cls of shippedClasses) {
@@ -151,6 +158,7 @@ export function probeCoverageLine(pass, report) {
         ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
         ` · small text read: ${report.floorNamedChecks ?? 0}` +
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
+        ` · outlined lines read: ${report.outlineChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

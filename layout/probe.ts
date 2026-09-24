@@ -21,7 +21,7 @@ import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import { brightestDrop, type Drop } from './rainDrop';
-import { OUTLINE_1, OUTLINE_2, outlineSet, type Offset } from './outline';
+import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
@@ -1978,6 +1978,416 @@ function smallTextFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * The contrast pass's targets. Declared here, ahead of the geometry pass's
+ * loop, because `outlineFaults` below asks it whether an outlined line is
+ * one — a `const` read before its line runs is a ReferenceError, not an
+ * empty list. The contrast pass itself is further down (`targetFor`).
+ */
+const CONTRAST_TEXT = [
+    '[data-role="price"]',
+    // "Not buyable" (2026-09-24, the critic): all an unbuyable offer's price
+    // cell says since the dash left, on the row, the face and its fold, the
+    // wall's Browse, the overlay card and the ticker — one role on every
+    // surface, whatever class dresses it there.
+    '[data-role="unbuyable"]',
+    '.row.big dd',
+    '.buy',
+    // The address's two text nodes, never the `.addr` box itself: the box
+    // holds a glyph beside the text, and sampling a container's box counted
+    // pixels that are not the ink's ground (2.84:1 on Modern, 2026-09-15, when
+    // the row held a copy pill). One of the two spans is display: none at
+    // every width (the short form at desk, the whole string on a phone), and
+    // a zero box is skipped, so each is measured where it is seen.
+    '.addr-short',
+    '.addr-full',
+    '[data-role="publish-hex"]',
+    '[data-role="describe-hex"]',
+    '[data-role="fiat"]',
+    '[data-role="rate"]',
+    // Whose figure the fiat glance is (owner, 2026-09-23): a span of its own
+    // beside `fiat`, muted where `fiat` wears the look's accent, so the
+    // figure's measurement says nothing about it.
+    '[data-role="fiat-source"]',
+    // The Activity fold's amount, on the fold's own ground, which no other
+    // screen puts a figure on.
+    '[data-role="receipt-amount"]',
+    // Every control on the publish/handoff path, and the dock: a theme file
+    // pairing a literal ink with a token ground shipped these at 2.31:1
+    // under the After-hours mood while this list looked elsewhere.
+    /*
+     * `:not(.sw-switch)` for the 2026-09-15 reason, met again on the shop
+     * window's sheet: a switch's box holds its state pill, which paints the
+     * accent when pressed, and `.mini`'s ink is the accent on two looks — so
+     * the button sampled its own label against the pill's ground and read
+     * 1.00:1 everywhere. The two spans below are the real targets, each in
+     * its own box.
+     */
+    '.mini:not(.sw-switch)',
+    '.sw-switch-label',
+    /*
+     * `.sw-switch-state` is deliberately NOT here, and the reason is the
+     * one the `r` clamp above already tells: a `border-radius: 999px` pill
+     * ~17px tall, whose sample band the insets cannot reliably land inside.
+     * It reported 1.00:1 on four of six look-and-decoration combinations —
+     * and 1.00:1 is not a colour this component can produce. Pressed it is
+     * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
+     * `--s-accent` over the button's `--s-surface`. **Measured across every
+     * shipped look and mood, the worst of those pairs is 4.05:1** (Rural
+     * under Sun-faded) against this pass's floor of 3 — not `legibleOn`,
+     * which arbitrates accent against `--s-bg` and never against
+     * `--s-surface`; the pair is held by the palettes' own numbers. Both
+     * sides are tokens declared in one rule, which
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` does
+     * read, and `window.css` is on that test's sheet list.
+     *
+     * **What produced 1.00 is unexplained**, and it is recorded as
+     * unexplained rather than as a theory: the first write-up blamed the
+     * sampler's insets, and the insets narrow horizontally only, by an
+     * amount that lands inside a pill this size. A false red is as useless
+     * as a false green — and a wrong reason for withdrawing a target is
+     * worse than both, because it is what stops the next person looking.
+     */
+    '.tab',
+    // The "Publishes:" line on both record sheets. It is the only sentence
+    // that says what a permanent record carries and how big it is, and it
+    // sits on `.pub`'s own muted ink over whatever ground the sheet has —
+    // a ground no other measured node puts a sentence on.
+    '[data-role="publish-summary"]',
+    '[data-role="describe-summary"]',
+    // The controls the two sheets are made of, which no other screen paints:
+    // a pressed segment inks itself on `--s-accent`, a pressed chip on a
+    // wash of it, and both are how a seller reads their own choice.
+    '.seg-b',
+    '.dec-chip',
+    // The overlay's name plate. It is the only line on a broadcast head that
+    // is not a money figure, and on a transparent wire it sits on the
+    // streamer's video with nothing but the plate between them.
+    '[data-role="stall-name"]',
+    // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
+    // a theme file, so nothing else measures the ink it declares — and the
+    // studio section is the one place a seller reads instructions rather than
+    // a figure.
+    '.obs-h',
+    // The pay rail's own three: the seller's quote, the chip that says whose
+    // figure it is, and the one line a Shop row carries about the other rail.
+    // All three ink themselves on `--s-accent` or on the card's own ground,
+    // which no other measured node puts a label on.
+    '[data-role="seller-price"]',
+    '.chip',
+    '.pay-pointer',
+    /*
+     * The announcement's chip (recorded 2026-09-22, acted on the same day).
+     * It is `<span class="notice-chip">` and NOT `.chip`, so the line above
+     * never matched it — the seller's own "From the seller" label, on the
+     * shop, the empty screen and the wall, was measured by nothing.
+     *
+     * No look was defective when it was added — but the pass went red
+     * anyway, twice, and both times the SAMPLER was wrong: a `clip-path`
+     * it could not see (fixed in `clipBand` above) and two far edges that
+     * rounded outward onto the box's own antialiased row (fixed in the
+     * runner). `PROBE-RULES.md`, "Rendered-pixel contrast", carries both
+     * with the numbers and the red proof.
+     *
+     * The looks themselves: all three declare BOTH
+     * halves as literals in their own block — white on #2563eb (5.17:1),
+     * #1a070e on #ff4d7a (6.10:1), #fff3ea on #9e4620 (5.75:1) — and a pair
+     * of literals cannot come apart under a mood, which is the failure
+     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` exists
+     * for and the reason that test is silent here too. It is on the list so
+     * the next look, or the first one to reach for a token on one half,
+     * is measured rather than trusted.
+     *
+     * Its SIZE is measured since 2026-09-24: every look sets it at 11px or
+     * more, and `small-text-is-at-least-11px` fails it under that on every
+     * screen the probe paints it on.
+     */
+    '.notice-chip',
+    // The surcharge lines (2026-09-21): the pay sheet's composed one and the
+    // record's line on the row, the face, the stream card and the wall — each
+    // a figure's other half, in muted or ink on its surface's own ground.
+    '[data-role="pay-surcharge"]',
+    '[data-role="quote-surcharge"]',
+    // "Pay several" (2026-09-21): the strip's total, the sheet's lines and
+    // total, the stepper's glyph on its own ground, and the row's line.
+    '[data-role="selection-total"]',
+    '[data-role="pay-lines"]',
+    '[data-role="pay-total"]',
+    '.step',
+    // The ticker (2026-09-22): the flag's rail line, the item's name and the
+    // provenance chip — the chip is `copy.SELLER_QUOTE_CHIP` under its own
+    // class, and a semantic under a class no list names is how `.item-ic`'s
+    // letters reached 1.10:1.
+    '.tk-rail',
+    '.tk-n',
+    '.tk-chip',
+    // The touch wall (2026-09-21): the strip's names and its note, the
+    // stepper's count, and the plate's own lines. Money and the words
+    // beside it, on a screen nobody attends.
+    '.sw-sel-n',
+    '.sw-sel-s',
+    '.sw-step-n',
+    '.sw-pay-v',
+    '.sw-pay-s',
+    // The two lines outside the payment's scroller (2026-09-24): "+N more"
+    // and the borrowed-token sentence, sampled on the 35-item plate.
+    '.sw-pay-more',
+    '.sw-pay-borrowed',
+    '.sel-sub',
+    // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
+    // at 9px, and the door's fact chips, restyled as facts — both contrast
+    // claims of the design board, measured here rather than asserted.
+    '.event-sum .event-ic',
+    '.door-chips li',
+    // The door's other ink (round 16, 2026-09-20): the kicker and lede, the
+    // site bar, the four tiles and their links, a pin's name, the deck's
+    // caption. Every one is a token over the door's ground; the probe's worn
+    // half paints that ground under After hours, which is where a literal
+    // read 2.59:1 once.
+    '.door-kicker',
+    '.door-lede',
+    '.door-nav a',
+    '.door-tile h3',
+    '.door-tile p',
+    '.door-more',
+    '.pinned-name',
+    '.deck-cap',
+    // The real-stall card's name line under the widget (same evening), and
+    // the empty pinned card's gesture demo: its sign's name and its row.
+    '.door-widget-name',
+    '.pin-demo-name',
+    '.pin-demo-row b',
+    // The Studio's four doors and a row's state line (round 16): the door's
+    // name and its one line sit on the surface, the state under a name on
+    // the card; both are new ink on a public panel every look dresses.
+    '.tool-t',
+    '.tool-lede',
+    '.tstate',
+    '.wchip',
+    /*
+     * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was
+     * added for exactly this class of defect and stopped at the Activity
+     * tile, so the tile beside every product name went unmeasured — and
+     * two looks replaced the base rule's accent gradient with a flat
+     * literal while leaving `color: var(--s-bg)` behind, landing at 1.10:1
+     * on Rural and 1.18:1 on Neo. `targetFor` skips a tile wearing an
+     * `<img>`, so what this samples is the letters and never a picture.
+     */
+    '.item-ic',
+    /*
+     * The lines that stand on the stall's own ground (2026-09-24, the
+     * owner's condition on the rain ground): a failure or empty sentence,
+     * a note, the item face's pointer, the first-stall checklist, the wall's
+     * status line and caption. Found by sampling every text node on every
+     * screen on Neo worn over the brightest drop; each had no box of its
+     * own, so under the rain it read 1.1–2.9:1 and nothing here measured it.
+     * They match on every look, but a target is read only where its screen
+     * is sampled: `.mid-p` on the failure screens and the empty stall on
+     * every look; the quotes rail's failure lines, the checklist and the
+     * notice invite on Neo worn alone (`RAIN_JOBS`, geometry-only screens).
+     * Where the rain is worn each wears the outline (round 8) and is read
+     * in the ring around its glyphs rather than over its box.
+     */
+    '.notice-text',
+    '.sparse-empty-t',
+    '.sparse-empty-s',
+    '[data-role="list-first"]',
+    '.mid-t',
+    '.mid-p',
+    '.pay-sec > .fine',
+    '.stall-body > .fine',
+    '.studio-browser .fine',
+    '[data-role="activity-about"] > .fold-sum',
+    '.activity-about .fine',
+    '.item-face > .pay-pointer',
+    '.first-stall .steps li > span',
+    '.first-stall .fine',
+    '.sw-state',
+    '.sw-fresh',
+    '.sw-plate .sw-cap',
+    // The notice invite's words, on its own wash over the ground
+    // (`sparse-pasted`, the critic's fourth pass).
+    '.notice-invite .invite-text',
+    /*
+     * And the rest of what the rain exposed, sampled where it is worn: the
+     * brand strip, the footer's Wearing line, the section and shelf heads,
+     * the face's back control. Unscoped, three reads fall under 3:1 on other
+     * looks with every decoration worn, and two of them are this sampler's
+     * mistakes (the critic's fourth pass): Modern's section and shelf heads
+     * (2.56:1) read the heading's own 2px accent underline, inside the box
+     * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
+     * bunting row its box also holds. Rural's Wearing links and back control
+     * (2.53:1, sun-faded worn) are real and open. Scoped to the rain, where
+     * each wears the outline and is read in the ring around its own glyphs
+     * (round 8, `ringRead` in the runner), which never reaches an underline
+     * or a bunting row; elsewhere the box read would.
+     */
+    '.stall.att-rainfall:not(.deck-stall) .orn',
+    '.stall.att-rainfall:not(.deck-stall) .wearing',
+    '.stall.att-rainfall:not(.deck-stall) .wearing-link',
+    '.stall.att-rainfall:not(.deck-stall) .section-title',
+    '.stall.att-rainfall:not(.deck-stall) .collection-name',
+    '.stall.att-rainfall:not(.deck-stall) .collection-count',
+    '.stall.att-rainfall:not(.deck-stall) .item-back',
+    /*
+     * The rest of the lines standing on the rain's ground, each outlined
+     * there (round 8): the Activity rows, the first-stall steps' numbers,
+     * the footer's lines and the notice invite's chip. On the rain only: elsewhere they stand on a
+     * card or on a ground every look was proved on.
+     */
+    '.stall.att-rainfall:not(.deck-stall) .event-kind',
+    '.stall.att-rainfall:not(.deck-stall) .event-time',
+    '.stall.att-rainfall:not(.deck-stall) .event-txid',
+    '.stall.att-rainfall:not(.deck-stall) .event-dt',
+    // A wide field holds its value and a copy control on its own ground:
+    // the line is the value (round 8), and the control is `.mini`'s.
+    '.stall.att-rainfall:not(.deck-stall) .event-dd:not(.wide)',
+    '.stall.att-rainfall:not(.deck-stall) .event-dd.wide > .event-txid-full',
+    '.stall.att-rainfall:not(.deck-stall) .event-body > .fine',
+    '.stall.att-rainfall:not(.deck-stall) .activity-sec > .fine',
+    '.stall.att-rainfall:not(.deck-stall) .first-stall .steps li > i',
+    '.stall.att-rainfall:not(.deck-stall) .stall-foot .fine',
+    '.stall.att-rainfall:not(.deck-stall) .notice-invite .ghost-chip',
+].join(', ');
+
+/**
+ * **The outline under a line on a decoration** (round 8, 2026-09-25; the
+ * owner's rule: no ground under text over a decoration, and "cho lớp nền tối
+ * ngay dưới nét chữ" where a line does not read). Every line standing on
+ * Neo's bare ground where the rain is worn wears `text-shadow` in the look's
+ * own ground at alpha 1 and zero blur — one of the two sets in
+ * `layout/outline.ts`.
+ */
+type Shadow = { rgb: [number, number, number]; alpha: number; x: number; y: number; blur: number };
+
+/** A computed `text-shadow` as its shadows, or `undefined` when a part does not read. */
+function shadowsOf(value: string): Shadow[] | undefined {
+    if (value === 'none') return [];
+    const out: Shadow[] = [];
+    for (const part of splitLayers(value)) {
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
+        const colour = m === null ? undefined : colourOf(m[1]!);
+        if (m === null || colour === undefined) return undefined;
+        out.push({ ...colour, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4]) });
+    }
+    return out;
+}
+
+/**
+ * The outline `node` wears, from its computed `text-shadow` and never from a
+ * marker: 1 or 2 when its shadows in its stall's own ground (alpha 1, zero
+ * blur) are exactly one of the two sets, 0 when it wears none, and -1 when it
+ * wears some other set in the ground's colour — which is not an outline this
+ * page can read, and fails where it is checked (`outlineFaults`). Any other
+ * shadow beside it (Neo's heading glow) is the look's own and is left alone.
+ */
+function outlineOf(node: HTMLElement): number {
+    const stall = node.closest<HTMLElement>('.stall');
+    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
+    const shadows = shadowsOf(getComputedStyle(node).textShadow);
+    if (ground === undefined || shadows === undefined) return 0;
+    const inGround = shadows.filter((sh) => sh.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1));
+    if (inGround.length === 0) return 0;
+    if (inGround.some((sh) => sh.alpha !== 1 || sh.blur !== 0)) return -1;
+    return outlineSet(inGround.map((sh) => [sh.x, sh.y] as const)) || -1;
+}
+
+/*
+ * **An outline is only where the text has no ground of its own** (round 8,
+ * 2026-09-25, the critic's item 5 on the rain round). The outline a line
+ * wears over a decoration (`outlineOf`) is the owner's "dark layer right
+ * under the strokes" — and on a card, a chip, a sheet or a filled button it
+ * is a mark the text never needed. So on every screen, look and variant of
+ * every pass, each element with text of its own that wears the outline:
+ *
+ * - has no ground of its own anywhere between it and its stall's root — a
+ *   background colour, or a full-size gradient, at half opacity or more
+ *   (`paintsOpaqueGround`: a card, a chip, a sheet, a filled button) —
+ *   "an outline where the text has its own ground";
+ * - wears the set its size calls for: the two-pixel set under 14px, the
+ *   one-pixel set at or over it — read off the computed size, which a
+ *   stylesheet cannot know for a rule;
+ * - wears one of the two sets exactly (`outlineOf` answers -1 otherwise);
+ * - and is a contrast target or inside one ("an outline nobody reads") —
+ *   and the runner holds each such target to having been read in the ring
+ *   on some contrast job (`outlinedTargets`), so a screen no rain job
+ *   samples cannot hide one.
+ *
+ * `outlineChecks` counts the outlined elements read, and the runner requires
+ * some on the phone and desk passes (`probe-coverage.mjs`).
+ */
+const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
+let outlineChecks = 0;
+/**
+ * The contrast targets an outlined line was found in, described as the
+ * contrast pass describes a target: the runner holds every one to having
+ * been read in the ring at least once ("an outline nobody reads"), so an
+ * outlined line on a screen no rain job samples fails the run.
+ */
+const outlinedTargets = new Set<string>();
+
+/**
+ * Whether an element paints a ground of its own over its whole box: a colour,
+ * or a full-size gradient whose every stop is, at half opacity or more. A
+ * filled button is 86% on Neo and is the button's own ground; a tint under
+ * text on the rain (the txid pill's 12%, the invite's 4%, the call to
+ * action's 16%) is not, and the rain shows through it.
+ */
+const OWN_GROUND_ALPHA = 0.5;
+
+function paintsOpaqueGround(cs: CSSStyleDeclaration): boolean {
+    if ((colourOf(cs.backgroundColor)?.alpha ?? 0) >= OWN_GROUND_ALPHA) return true;
+    if (cs.backgroundImage === 'none') return false;
+    const sizes = splitLayers(cs.backgroundSize);
+    return splitLayers(cs.backgroundImage).some((layer, i) => {
+        const size = sizes[i % sizes.length]!;
+        const full = ['auto', 'auto auto', 'cover', '100% 100%', '100%'].includes(size);
+        if (!full || !/gradient\(/.test(layer)) return false;
+        const stops = layer.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? [];
+        return stops.length > 0 && stops.every((c) => (colourOf(c)?.alpha ?? 0) >= OWN_GROUND_ALPHA);
+    });
+}
+
+function outlineFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const fail = (node: Element, what: string): void => {
+        out.push({ screen, theme: label, check: OUTLINE_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
+    };
+    for (const node of document.querySelectorAll<HTMLElement>('#app .stall *')) {
+        let own = '';
+        for (const child of node.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
+        }
+        if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
+        const width = outlineOf(node);
+        if (width === 0) continue;
+        outlineChecks += 1;
+        if (width < 0) {
+            fail(node, 'wears shadows in the ground’s colour that are neither outline set');
+            continue;
+        }
+        const px = Number.parseFloat(getComputedStyle(node).fontSize);
+        const owed = px < OUTLINE_2_UNDER_PX ? 2 : 1;
+        if (width !== owed) {
+            fail(node, `paints at ${px}px and wears the ${width}px outline; its size owes the ${owed}px one`);
+        }
+        const root = node.closest('.stall');
+        for (let at: HTMLElement | null = node; at !== null && at !== root; at = at.parentElement) {
+            if (paintsOpaqueGround(getComputedStyle(at))) {
+                fail(node, `wears the outline over ${describe(at)}, a ground of its own — an outline where the text has its own ground`);
+                break;
+            }
+        }
+        const target = node.closest(CONTRAST_TEXT);
+        if (target === null) {
+            fail(node, 'wears the outline and is no contrast target — an outline nobody reads');
+        } else {
+            outlinedTargets.add(describe(target));
+        }
+    }
+    return out;
+}
+
+/*
  * **A tile shows its letters whole** (2026-09-24, the critic's item 10).
  * A token tile (`.item-ic`) paints the name's initials until a picture
  * lands, and it clips (`overflow: hidden`, a radius): the Activity row's
@@ -2154,6 +2564,7 @@ for (const screen of measured) {
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
+            failures.push(...outlineFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -2469,272 +2880,6 @@ function chromeOver(node: HTMLElement, box: Hole): Hole[] {
 }
 
 
-const CONTRAST_TEXT = [
-    '[data-role="price"]',
-    // "Not buyable" (2026-09-24, the critic): all an unbuyable offer's price
-    // cell says since the dash left, on the row, the face and its fold, the
-    // wall's Browse, the overlay card and the ticker — one role on every
-    // surface, whatever class dresses it there.
-    '[data-role="unbuyable"]',
-    '.row.big dd',
-    '.buy',
-    // The address's two text nodes, never the `.addr` box itself: the box
-    // holds a glyph beside the text, and sampling a container's box counted
-    // pixels that are not the ink's ground (2.84:1 on Modern, 2026-09-15, when
-    // the row held a copy pill). One of the two spans is display: none at
-    // every width (the short form at desk, the whole string on a phone), and
-    // a zero box is skipped, so each is measured where it is seen.
-    '.addr-short',
-    '.addr-full',
-    '[data-role="publish-hex"]',
-    '[data-role="describe-hex"]',
-    '[data-role="fiat"]',
-    '[data-role="rate"]',
-    // Whose figure the fiat glance is (owner, 2026-09-23): a span of its own
-    // beside `fiat`, muted where `fiat` wears the look's accent, so the
-    // figure's measurement says nothing about it.
-    '[data-role="fiat-source"]',
-    // The Activity fold's amount, on the fold's own ground, which no other
-    // screen puts a figure on.
-    '[data-role="receipt-amount"]',
-    // Every control on the publish/handoff path, and the dock: a theme file
-    // pairing a literal ink with a token ground shipped these at 2.31:1
-    // under the After-hours mood while this list looked elsewhere.
-    /*
-     * `:not(.sw-switch)` for the 2026-09-15 reason, met again on the shop
-     * window's sheet: a switch's box holds its state pill, which paints the
-     * accent when pressed, and `.mini`'s ink is the accent on two looks — so
-     * the button sampled its own label against the pill's ground and read
-     * 1.00:1 everywhere. The two spans below are the real targets, each in
-     * its own box.
-     */
-    '.mini:not(.sw-switch)',
-    '.sw-switch-label',
-    /*
-     * `.sw-switch-state` is deliberately NOT here, and the reason is the
-     * one the `r` clamp above already tells: a `border-radius: 999px` pill
-     * ~17px tall, whose sample band the insets cannot reliably land inside.
-     * It reported 1.00:1 on four of six look-and-decoration combinations —
-     * and 1.00:1 is not a colour this component can produce. Pressed it is
-     * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
-     * `--s-accent` over the button's `--s-surface`. **Measured across every
-     * shipped look and mood, the worst of those pairs is 4.05:1** (Rural
-     * under Sun-faded) against this pass's floor of 3 — not `legibleOn`,
-     * which arbitrates accent against `--s-bg` and never against
-     * `--s-surface`; the pair is held by the palettes' own numbers. Both
-     * sides are tokens declared in one rule, which
-     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` does
-     * read, and `window.css` is on that test's sheet list.
-     *
-     * **What produced 1.00 is unexplained**, and it is recorded as
-     * unexplained rather than as a theory: the first write-up blamed the
-     * sampler's insets, and the insets narrow horizontally only, by an
-     * amount that lands inside a pill this size. A false red is as useless
-     * as a false green — and a wrong reason for withdrawing a target is
-     * worse than both, because it is what stops the next person looking.
-     */
-    '.tab',
-    // The "Publishes:" line on both record sheets. It is the only sentence
-    // that says what a permanent record carries and how big it is, and it
-    // sits on `.pub`'s own muted ink over whatever ground the sheet has —
-    // a ground no other measured node puts a sentence on.
-    '[data-role="publish-summary"]',
-    '[data-role="describe-summary"]',
-    // The controls the two sheets are made of, which no other screen paints:
-    // a pressed segment inks itself on `--s-accent`, a pressed chip on a
-    // wash of it, and both are how a seller reads their own choice.
-    '.seg-b',
-    '.dec-chip',
-    // The overlay's name plate. It is the only line on a broadcast head that
-    // is not a money figure, and on a transparent wire it sits on the
-    // streamer's video with nothing but the plate between them.
-    '[data-role="stall-name"]',
-    // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
-    // a theme file, so nothing else measures the ink it declares — and the
-    // studio section is the one place a seller reads instructions rather than
-    // a figure.
-    '.obs-h',
-    // The pay rail's own three: the seller's quote, the chip that says whose
-    // figure it is, and the one line a Shop row carries about the other rail.
-    // All three ink themselves on `--s-accent` or on the card's own ground,
-    // which no other measured node puts a label on.
-    '[data-role="seller-price"]',
-    '.chip',
-    '.pay-pointer',
-    /*
-     * The announcement's chip (recorded 2026-09-22, acted on the same day).
-     * It is `<span class="notice-chip">` and NOT `.chip`, so the line above
-     * never matched it — the seller's own "From the seller" label, on the
-     * shop, the empty screen and the wall, was measured by nothing.
-     *
-     * No look was defective when it was added — but the pass went red
-     * anyway, twice, and both times the SAMPLER was wrong: a `clip-path`
-     * it could not see (fixed in `clipBand` above) and two far edges that
-     * rounded outward onto the box's own antialiased row (fixed in the
-     * runner). `PROBE-RULES.md`, "Rendered-pixel contrast", carries both
-     * with the numbers and the red proof.
-     *
-     * The looks themselves: all three declare BOTH
-     * halves as literals in their own block — white on #2563eb (5.17:1),
-     * #1a070e on #ff4d7a (6.10:1), #fff3ea on #9e4620 (5.75:1) — and a pair
-     * of literals cannot come apart under a mood, which is the failure
-     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` exists
-     * for and the reason that test is silent here too. It is on the list so
-     * the next look, or the first one to reach for a token on one half,
-     * is measured rather than trusted.
-     *
-     * Its SIZE is measured since 2026-09-24: every look sets it at 11px or
-     * more, and `small-text-is-at-least-11px` fails it under that on every
-     * screen the probe paints it on.
-     */
-    '.notice-chip',
-    // The surcharge lines (2026-09-21): the pay sheet's composed one and the
-    // record's line on the row, the face, the stream card and the wall — each
-    // a figure's other half, in muted or ink on its surface's own ground.
-    '[data-role="pay-surcharge"]',
-    '[data-role="quote-surcharge"]',
-    // "Pay several" (2026-09-21): the strip's total, the sheet's lines and
-    // total, the stepper's glyph on its own ground, and the row's line.
-    '[data-role="selection-total"]',
-    '[data-role="pay-lines"]',
-    '[data-role="pay-total"]',
-    '.step',
-    // The ticker (2026-09-22): the flag's rail line, the item's name and the
-    // provenance chip — the chip is `copy.SELLER_QUOTE_CHIP` under its own
-    // class, and a semantic under a class no list names is how `.item-ic`'s
-    // letters reached 1.10:1.
-    '.tk-rail',
-    '.tk-n',
-    '.tk-chip',
-    // The touch wall (2026-09-21): the strip's names and its note, the
-    // stepper's count, and the plate's own lines. Money and the words
-    // beside it, on a screen nobody attends.
-    '.sw-sel-n',
-    '.sw-sel-s',
-    '.sw-step-n',
-    '.sw-pay-v',
-    '.sw-pay-s',
-    // The two lines outside the payment's scroller (2026-09-24): "+N more"
-    // and the borrowed-token sentence, sampled on the 35-item plate.
-    '.sw-pay-more',
-    '.sw-pay-borrowed',
-    '.sel-sub',
-    // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
-    // at 9px, and the door's fact chips, restyled as facts — both contrast
-    // claims of the design board, measured here rather than asserted.
-    '.event-sum .event-ic',
-    '.door-chips li',
-    // The door's other ink (round 16, 2026-09-20): the kicker and lede, the
-    // site bar, the four tiles and their links, a pin's name, the deck's
-    // caption. Every one is a token over the door's ground; the probe's worn
-    // half paints that ground under After hours, which is where a literal
-    // read 2.59:1 once.
-    '.door-kicker',
-    '.door-lede',
-    '.door-nav a',
-    '.door-tile h3',
-    '.door-tile p',
-    '.door-more',
-    '.pinned-name',
-    '.deck-cap',
-    // The real-stall card's name line under the widget (same evening), and
-    // the empty pinned card's gesture demo: its sign's name and its row.
-    '.door-widget-name',
-    '.pin-demo-name',
-    '.pin-demo-row b',
-    // The Studio's four doors and a row's state line (round 16): the door's
-    // name and its one line sit on the surface, the state under a name on
-    // the card; both are new ink on a public panel every look dresses.
-    '.tool-t',
-    '.tool-lede',
-    '.tstate',
-    '.wchip',
-    /*
-     * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was
-     * added for exactly this class of defect and stopped at the Activity
-     * tile, so the tile beside every product name went unmeasured — and
-     * two looks replaced the base rule's accent gradient with a flat
-     * literal while leaving `color: var(--s-bg)` behind, landing at 1.10:1
-     * on Rural and 1.18:1 on Neo. `targetFor` skips a tile wearing an
-     * `<img>`, so what this samples is the letters and never a picture.
-     */
-    '.item-ic',
-    /*
-     * The lines that stand on the stall's own ground (2026-09-24, the
-     * owner's condition on the rain ground): a failure or empty sentence,
-     * a note, the item face's pointer, the first-stall checklist, the wall's
-     * status line and caption. Found by sampling every text node on every
-     * screen on Neo worn over the brightest drop; each had no box of its
-     * own, so under the rain it read 1.1–2.9:1 and nothing here measured it.
-     * They match on every look, but a target is read only where its screen
-     * is sampled: `.mid-p` on the failure screens and the empty stall on
-     * every look; the quotes rail's failure lines, the checklist and the
-     * notice invite on Neo worn alone (`RAIN_JOBS`, geometry-only screens).
-     * Where the rain is worn each wears the outline (round 8) and is read
-     * in the ring around its glyphs rather than over its box.
-     */
-    '.notice-text',
-    '.sparse-empty-t',
-    '.sparse-empty-s',
-    '[data-role="list-first"]',
-    '.mid-t',
-    '.mid-p',
-    '.pay-sec > .fine',
-    '.stall-body > .fine',
-    '.studio-browser .fine',
-    '[data-role="activity-about"] > .fold-sum',
-    '.activity-about .fine',
-    '.item-face > .pay-pointer',
-    '.first-stall .steps li > span',
-    '.first-stall .fine',
-    '.sw-state',
-    '.sw-fresh',
-    '.sw-plate .sw-cap',
-    // The notice invite's words, on its own wash over the ground
-    // (`sparse-pasted`, the critic's fourth pass).
-    '.notice-invite .invite-text',
-    /*
-     * And the rest of what the rain exposed, sampled where it is worn: the
-     * brand strip, the footer's Wearing line, the section and shelf heads,
-     * the face's back control. Unscoped, three reads fall under 3:1 on other
-     * looks with every decoration worn, and two of them are this sampler's
-     * mistakes (the critic's fourth pass): Modern's section and shelf heads
-     * (2.56:1) read the heading's own 2px accent underline, inside the box
-     * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
-     * bunting row its box also holds. Rural's Wearing links and back control
-     * (2.53:1, sun-faded worn) are real and open. Scoped to the rain, where
-     * each wears the outline and is read in the ring around its own glyphs
-     * (round 8, `ringRead` in the runner), which never reaches an underline
-     * or a bunting row; elsewhere the box read would.
-     */
-    '.stall.att-rainfall:not(.deck-stall) .orn',
-    '.stall.att-rainfall:not(.deck-stall) .wearing',
-    '.stall.att-rainfall:not(.deck-stall) .wearing-link',
-    '.stall.att-rainfall:not(.deck-stall) .section-title',
-    '.stall.att-rainfall:not(.deck-stall) .collection-name',
-    '.stall.att-rainfall:not(.deck-stall) .collection-count',
-    '.stall.att-rainfall:not(.deck-stall) .item-back',
-    /*
-     * The rest of the lines standing on the rain's ground, each outlined
-     * there (round 8): the Activity rows, the first-stall steps' numbers,
-     * the footer's lines and the notice invite's chip. On the rain only: elsewhere they stand on a
-     * card or on a ground every look was proved on.
-     */
-    '.stall.att-rainfall:not(.deck-stall) .event-kind',
-    '.stall.att-rainfall:not(.deck-stall) .event-time',
-    '.stall.att-rainfall:not(.deck-stall) .event-txid',
-    '.stall.att-rainfall:not(.deck-stall) .event-dt',
-    // A wide field holds its value and a copy control on its own ground:
-    // the line is the value (round 8), and the control is `.mini`'s.
-    '.stall.att-rainfall:not(.deck-stall) .event-dd:not(.wide)',
-    '.stall.att-rainfall:not(.deck-stall) .event-dd.wide > .event-txid-full',
-    '.stall.att-rainfall:not(.deck-stall) .event-body > .fine',
-    '.stall.att-rainfall:not(.deck-stall) .activity-sec > .fine',
-    '.stall.att-rainfall:not(.deck-stall) .first-stall .steps li > i',
-    '.stall.att-rainfall:not(.deck-stall) .stall-foot .fine',
-    '.stall.att-rainfall:not(.deck-stall) .notice-invite .ghost-chip',
-].join(', ');
-
 /**
  * What one prepare hands back, echoing what it was asked for (step 3a, the
  * step-3 critic's P1 2): the runner's nonce, the combination it painted, the
@@ -3037,48 +3182,6 @@ function colourOf(value: string): { rgb: [number, number, number]; alpha: number
         return { rgb, alpha: f[4] === undefined ? 1 : Number(f[4]) };
     }
     return undefined;
-}
-
-/**
- * **The outline under a line on a decoration** (round 8, 2026-09-25; the
- * owner's rule: no ground under text over a decoration, and "cho lớp nền tối
- * ngay dưới nét chữ" where a line does not read). Every line standing on
- * Neo's bare ground where the rain is worn wears `text-shadow` in the look's
- * own ground at alpha 1 and zero blur — one of the two sets in
- * `layout/outline.ts`.
- */
-type Shadow = { rgb: [number, number, number]; alpha: number; x: number; y: number; blur: number };
-
-/** A computed `text-shadow` as its shadows, or `undefined` when a part does not read. */
-function shadowsOf(value: string): Shadow[] | undefined {
-    if (value === 'none') return [];
-    const out: Shadow[] = [];
-    for (const part of splitLayers(value)) {
-        const m = /^(rgba?\([^)]*\)|color\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
-        const colour = m === null ? undefined : colourOf(m[1]!);
-        if (m === null || colour === undefined) return undefined;
-        out.push({ ...colour, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4]) });
-    }
-    return out;
-}
-
-/**
- * The outline `node` wears, from its computed `text-shadow` and never from a
- * marker: 1 or 2 when its shadows in its stall's own ground (alpha 1, zero
- * blur) are exactly one of the two sets, 0 when it wears none, and -1 when it
- * wears some other set in the ground's colour — which is not an outline this
- * page can read, and is read over its box like any line without one. Any other
- * shadow beside it (Neo's heading glow) is the look's own and is left alone.
- */
-function outlineOf(node: HTMLElement): number {
-    const stall = node.closest<HTMLElement>('.stall');
-    const ground = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
-    const shadows = shadowsOf(getComputedStyle(node).textShadow);
-    if (ground === undefined || shadows === undefined) return 0;
-    const inGround = shadows.filter((sh) => sh.rgb.every((c, i) => Math.abs(c - ground.rgb[i]!) <= 1));
-    if (inGround.length === 0) return 0;
-    if (inGround.some((sh) => sh.alpha !== 1 || sh.blur !== 0)) return -1;
-    return outlineSet(inGround.map((sh) => [sh.x, sh.y] as const)) || -1;
 }
 
 /**
@@ -3601,6 +3704,8 @@ const verdict = {
     wallControlRoles,
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,
+    outlineChecks,
+    outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,
     failures,
