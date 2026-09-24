@@ -655,9 +655,16 @@ export function renderStall(
     applyTheme(
         stall,
         theme,
-        previewed !== undefined
-            ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
-            : (view.worn ?? []),
+        // The door wears no look of its own (`paintHome`), so it wears no
+        // decoration either — and a mood is one: `dressLook` merges a mood's
+        // palette into the inline vars, which the class strip cannot take
+        // back, so a worn door came out in the night palette production
+        // never paints (the critic, 2026-09-24).
+        view.route.kind === 'home'
+            ? []
+            : previewed !== undefined
+              ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+              : (view.worn ?? []),
     );
 
     switch (view.route.kind) {
@@ -955,6 +962,24 @@ function paintHome(
     handlers: StallHandlers,
 ): void {
     stall.classList.add('door');
+    /*
+     * The door wears no look of its own — no `t-*` class and no decoration
+     * class — only the default look's `--s-*` values, which `applyTheme`
+     * wrote inline (2026-09-24, the step-2 critic's item 8). A look's sheet
+     * selects by descent (`.t-modern .stall-name`), and CSS has no nearest
+     * ancestor for that: a door dressed `t-modern` reached into every mini
+     * of the deck wherever the mini's own sheet is silent, so the Neo mini's
+     * sign painted Modern's 27px where Neo's shop paints 25 and its figure
+     * Neo's ink where Neo's shop paints the accent. What the door's own
+     * chrome took from Modern's sheet — the root's 14.5px and the glyphs'
+     * line — is stated on `.stall.door` in stall.css. Probe:
+     * `a-door-mini-paints-as-its-own-look`.
+     */
+    for (const cls of [...stall.classList]) {
+        if (cls.startsWith('t-') || cls.startsWith('att-')) {
+            stall.classList.remove(cls);
+        }
+    }
     const canopy = el('div', 'door-canopy');
     canopy.setAttribute('aria-hidden', 'true');
     stall.append(canopy);

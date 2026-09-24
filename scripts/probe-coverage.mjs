@@ -14,6 +14,8 @@
  *   the canvas pass a stream card and a ticker item (`skipChecks`).
  * - **`a-shipped-row-states-the-sizes-its-sheet-paints`** reads every shipped
  *   look's row, at both widths.
+ * - **`a-door-mini-paints-as-its-own-look`** compares every shipped look's
+ *   deck mini with that look's own shop, at both widths.
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
@@ -59,9 +61,13 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
     const rows = new Set(report.rowSizeClasses ?? []);
+    const minis = new Set(report.doorMiniClasses ?? []);
     for (const cls of shippedClasses) {
         if (!rows.has(cls)) {
             gaps.push(`a-shipped-row-states-the-sizes-its-sheet-paints read no row for ${cls}`);
+        }
+        if (!minis.has(cls)) {
+            gaps.push(`a-door-mini-paints-as-its-own-look compared no ${cls} mini with its shop`);
         }
     }
     if (skeleton && pass === 'mobile') {
@@ -96,6 +102,7 @@ export function probeCoverageLine(pass, report) {
         `unbuyable labels read: ${read || 'none'}` +
         skipped +
         ` · rows read: ${(report.rowSizeClasses ?? []).join(', ') || 'none'}` +
+        ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

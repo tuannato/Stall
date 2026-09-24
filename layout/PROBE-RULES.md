@@ -1338,6 +1338,67 @@ row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
 
+## A door mini paints as its own look (2026-09-24)
+
+The step-2 critic's item 8: the door root was `stall t-modern door`, and a
+look's sheet selects by descent (`.t-modern .stall-name`) with no nearest
+ancestor, so every deck mini also matched Modern's rules wherever its own
+sheet is silent. Measured at 390px against each look's own `offers`: the Neo
+mini's sign 27px (Modern's) where Neo paints 25, its letter-spacing 1.35px
+against 1.25; the Neo mini's figure `rgb(223, 246, 255)` (Neo's ink through
+Modern's `color: var(--s-text)`) against the accent `rgb(44, 233, 224)`, at
+both widths; the Rural mini's sign at Modern's weight 800 and -0.58px
+tracking where Rural's shop paints 600 and normal (-0.88px at 1280). Nothing
+saw it: the door is measured under Modern alone, and the only rule reading
+the deck's rows looks away from them.
+
+**The fix: the door wears no look class and no decoration class**
+(`paintHome` strips `t-*` and `att-*` after `applyTheme`), keeping the
+default look's `--s-*` values inline. Measured first with every computed
+property of the door's 182 non-mini nodes and their pseudo-elements, with
+and without the class: the door's own chrome took two things from Modern's
+sheet — the root's `font-size: 14.5px` (inherited by every node that sizes
+nothing) and the glyph line `stroke-width: 2` on the four tiles' icons — and
+stall.css now states both on `.stall.door` (`.stall.door .ic:not(.deck-stall
+.ic)`, so a mini's glyphs stay its look's). `@scope (.t-x) to (.stall)` was
+the other road and was not taken: it wraps three whole sheets, moves every
+rule's specificity, and drops the look entirely where it is unsupported.
+**Nor does the door wear a decoration or a mood**: in the probe's worn
+variants it used to wear Modern's decoration classes on its root and — the
+critic's item 7 — After hours merged into its inline vars, a night-palette
+door production never paints, which the class strip could not take back.
+`renderStall` hands the home route no worn rows now, and the door is
+painted bare only (`paintsBareOnly` in `fixtures.ts`: the probe's variants,
+the contrast plan's), so its four worn contrast jobs and six worn probe
+variants went with it. Test: `dresses the door in no look of its own, even
+over a worn look` compares the worn door's `--s-*` with the bare door's —
+proved red with the home route's rows put back (`--s-bg` rgb(18, 21, 26)
+against rgb(242, 242, 239)).
+
+**`a-door-mini-paints-as-its-own-look`** compares, at the same width, every
+text part a mini shares with its look's own shop — the sign's name and
+tagline, a row's name and rail label, a tier-0 figure and its unit
+(`MINI_PARTS`) — on the seven properties a look dresses text with
+(`MINI_PROPS`: size, colour, family, weight, tracking, case, shadow). The
+shop side is `offers`, bare, per shipped look; the mini side is every
+`.deck-stall` on `door`, in every variant painted. Two properties would have
+caught today's leak and missed the next on another part; boxes and grounds
+would compare a 390px row with a zoomed `<div>` and fail on what a mini is
+for. A mini missing a part, a mini with no look class and a door with no
+mini fail. The looks compared are counted (`doorMiniClasses`) and the runner
+requires all three shipped ones on the phone and desk passes
+(`probe-coverage.mjs`). The contrast pass's echo holds the door to wearing
+**no** look class (`paintEcho`; it held `includes(t-modern)` before).
+
+**Measured green:** 70 part comparisons equal at 390 and 1280. **Proved
+red** (before the door went bare-only) by leaving the classes on the root:
+25 rule failures — the Neo sign's 27px and 1.35px at 390, the Neo figure's
+ink at both widths, the Rural sign's 800 and tracking at both widths, on
+each of the door's five variants —
+and the contrast echo refused all four door jobs ("the door wore t-modern");
+the unit test `dresses the door in no look of its own, even over a worn look`
+failed too.
+
 ## The probe's browser is off the network
 
 Since 2026-09-20 the runner starts Chrome with

@@ -5219,12 +5219,21 @@ textarea.share-embed {
 .stall.door {
     /* The slab below bleeds to the viewport edge; clip, never a scrollbar. */
     overflow-x: clip;
+    /* The default look's own size, stated: the door wears no look class
+       (`paintHome`), so Modern's `.stall.t-modern` no longer reaches it. */
+    font-size: 14.5px;
     background-image: radial-gradient(
         1200px 420px at 50% -140px,
         rgba(37, 99, 235, 0.08),
         transparent 70%
     );
     background-repeat: no-repeat;
+}
+
+/* The default look's glyph line, stated for the same reason — and never on
+   a deck mini, whose glyphs are its own look's. */
+.stall.door .ic:not(.deck-stall .ic) {
+    stroke-width: 2;
 }
 
 /*

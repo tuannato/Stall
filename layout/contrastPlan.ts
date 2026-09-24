@@ -28,7 +28,7 @@
  *
  * Test: `the-contrast-plan-is-every-job-the-pass-owes`.
  */
-import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS } from './fixtures';
+import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, paintsBareOnly } from './fixtures';
 import { RURAL_THEME_ID } from '../src/domain/theme';
 import { canWear, type Look } from './looks';
 import { screensAt } from './screenSplit';
@@ -104,7 +104,7 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                 if (!canWear(look, screen)) {
                     continue;
                 }
-                const variants = look.rows.length === 0 || NO_DECOR_SCREENS.has(screen) ? [0] : [0, WORN_ALL];
+                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, WORN_ALL];
                 for (const flags of variants) {
                     const job = {
                         viewport: viewport.name,

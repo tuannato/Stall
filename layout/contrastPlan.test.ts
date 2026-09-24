@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 193, desktop: 221, canvas: 22, total: 436 });
+        }).toEqual({ mobile: 192, desktop: 220, canvas: 22, total: 434 });
     });
 
     it('walks the runner’s own viewports', () => {
@@ -76,8 +76,12 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             const cell = `${job.viewport}/${job.screen}`;
             byCell.set(cell, [...(byCell.get(cell) ?? []), job]);
         }
+        // The door wears nothing since 2026-09-24, so it is painted bare
+        // alone, like the overlay.
         const variantsOf = (look: Look, screen: string): string[] =>
-            look.rows.length === 0 || NO_DECOR_SCREENS.has(screen) ? [`${look.id}:0`] : [`${look.id}:0`, `${look.id}:${WORN_ALL}`];
+            look.rows.length === 0 || NO_DECOR_SCREENS.has(screen) || screen === 'door'
+                ? [`${look.id}:0`]
+                : [`${look.id}:0`, `${look.id}:${WORN_ALL}`];
         for (const [cell, list] of byCell) {
             const screen = cell.split('/')[1]!;
             const wearers = screen === 'door' ? looks.filter((look) => look.id === DEFAULT_THEME_ID) : looks;

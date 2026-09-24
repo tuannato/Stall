@@ -14597,6 +14597,36 @@ describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
         expect(deck.textContent).toContain(copy.HOME_WORKSHOP_NEXT);
     });
 
+    /**
+     * The door wears no look class and no decoration class (2026-09-24): a
+     * look's sheet selects by descent, so a door dressed `t-modern` dressed
+     * every mini in Modern's rules wherever the mini's own sheet is silent
+     * (the Neo mini's sign at Modern's 27px). The door keeps the default
+     * look's values inline, which is all its own chrome reads. The probe's
+     * `a-door-mini-paints-as-its-own-look` measures what this cannot.
+     */
+    it('dresses the door in no look of its own, even over a worn look', () => {
+        const { root } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            worn: SHIPPED_ATTACHMENTS.filter((row) => row.themeId === DEFAULT_THEME_ID),
+        });
+        const door = root.querySelector('.stall.door') as HTMLElement;
+        expect([...door.classList].filter((c) => c.startsWith('t-') || c.startsWith('att-'))).toEqual([]);
+        expect(door.style.getPropertyValue('--s-bg')).not.toBe('');
+        // And no mood's palette either: a mood is merged into the inline vars,
+        // which the class strip cannot take back, so a worn door came out in
+        // the night palette production never paints (the critic's item 7).
+        const bare = paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() }).root.querySelector(
+            '.stall.door',
+        ) as HTMLElement;
+        for (const name of ['--s-bg', '--s-text', '--s-surface', '--s-accent']) {
+            expect(door.style.getPropertyValue(name), name).toBe(bare.style.getPropertyValue(name));
+        }
+        expect(root.querySelectorAll('.deck-stall.t-neo, .deck-stall.t-modern, .deck-stall.t-rural')).toHaveLength(3);
+    });
+
     it('does not claim the document for any of the three looks', () => {
         document.documentElement.style.backgroundColor = '';
         paint({ route: { kind: 'home' }, overlay: { kind: 'idle' }, tokens: new Map() });

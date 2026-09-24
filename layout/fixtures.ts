@@ -1465,6 +1465,18 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-touch-quotes-pay',
 ]);
 
+/**
+ * Whether a screen is painted bare and never worn: every overlay screen
+ * (`NO_DECOR_SCREENS`), and the door, which wears no look and no decoration
+ * of its own since 2026-09-24 (`renderStall` hands it no worn rows, and
+ * `paintHome` strips the look's class) — so its worn variants paint the bare
+ * door, and measuring them is time for nothing. Not the same question as
+ * `NO_DECOR_SCREENS`, which also says a screen is the overlay.
+ */
+export function paintsBareOnly(screen: string): boolean {
+    return NO_DECOR_SCREENS.has(screen) || screen === 'door';
+}
+
 export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-hero',

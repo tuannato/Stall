@@ -478,9 +478,11 @@ async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, no
  * the page gives a contrast job is held to the job before anything in it is
  * sampled: the nonce of the prepare it answers for, the combination it
  * painted, the viewport it measured, and the look classes this one paint
- * wore (the door's own stall among them — `includes` there, exactly the one
- * class everywhere else). Each returns why the answer is not the job's, or
- * nothing; a refused job fails the run and says which check refused it.
+ * wore — exactly the one class everywhere, and none on the door, which
+ * wears the default look's values and no look class of its own since
+ * 2026-09-24 (`paintHome`; its deck minis are not counted, `sheetClassesOn`).
+ * Each returns why the answer is not the job's, or nothing; a refused job
+ * fails the run and says which check refused it.
  */
 function paintEcho(job, out, nonce, width, height) {
     const why = [];
@@ -495,8 +497,11 @@ function paintEcho(job, out, nonce, width, height) {
         why.push(`the page measured ${out.vw}x${out.vh} where the job is ${width}x${height}`);
     }
     const classes = out.sheetClasses ?? [];
-    const wore = job.screen === 'door' ? classes.includes(job.sheetClass) : classes.length === 1 && classes[0] === job.sheetClass;
-    if (!wore) {
+    if (job.screen === 'door') {
+        if (classes.length > 0) {
+            why.push(`the door wore ${classes.join(', ')} where it wears no look class of its own`);
+        }
+    } else if (!(classes.length === 1 && classes[0] === job.sheetClass)) {
         why.push(`the paint wore ${classes.join(', ') || 'no look class'} where the job's look is ${job.sheetClass}`);
     }
     return why;

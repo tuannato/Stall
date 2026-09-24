@@ -7,6 +7,7 @@ const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
     skipChecks: { 'wall-cycle': 7, 'stream-card': 4, 'stream-ticker': 4 },
     rowSizeClasses: SHIPPED,
+    doorMiniClasses: SHIPPED,
     ladderTiers: { 1: 2, 2: 1, 3: 1 },
 };
 
@@ -20,13 +21,18 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     it('names each place, look and tier a pass read nothing on', () => {
         const gaps = probeCoverageGaps(
             'desktop',
-            { unbuyableChecks: { row: 3, face: 3 }, rowSizeClasses: ['t-modern', 't-rural'] },
+            {
+                unbuyableChecks: { row: 3, face: 3 },
+                rowSizeClasses: ['t-modern', 't-rural'],
+                doorMiniClasses: ['t-modern', 't-neo'],
+            },
             { shippedClasses: SHIPPED, skeleton: true },
         );
         assert.deepEqual(gaps, [
             'an-unbuyable-offer-paints-no-figure-and-says-so read no label on a wall-browse',
             'an-unbuyable-offer-paints-no-figure-and-says-so saw no wall-cycle skip an unbuyable listing',
             'a-shipped-row-states-the-sizes-its-sheet-paints read no row for t-neo',
+            'a-door-mini-paints-as-its-own-look compared no t-rural mini with its shop',
         ]);
         const phone = probeCoverageGaps('mobile', { ...full, ladderTiers: { 2: 1, 3: 1 } }, {
             shippedClasses: SHIPPED,
@@ -57,7 +63,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         assert.equal(
             probeCoverageLine('canvas', full),

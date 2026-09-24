@@ -29,6 +29,7 @@ import {
     CANVAS_SCREENS,
     NO_DECOR_SCREENS,
     SCREENS,
+    paintsBareOnly,
     STATE_SCREENS,
     T1,
     handlers,
@@ -1316,7 +1317,8 @@ function variantsFor(screen: string, look: Look): readonly (readonly ShippedAtta
     // `slot: 'mood'` rows and mounts no ornament strip, so every worn variant
     // paints the same tree. One bare pass, and the driver skips its `wornAll`
     // loop too — see NO_DECOR_SCREENS.
-    if (NO_DECOR_SCREENS.has(screen)) {
+    // The door too, since it wears nothing (`paintsBareOnly`).
+    if (paintsBareOnly(screen)) {
         return [[]];
     }
     const all = wornVariants(look);
@@ -1524,6 +1526,119 @@ function unbuyableFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A door mini paints as its own look** (2026-09-24, the step-2 critic's
+ * item 8). The door's deck is three real looks over one fixture, and its
+ * whole claim (CLAUDE §3) is that a look which moves in its own sheet moves
+ * there. It did not: the door root wore `t-modern`, a look's sheet selects by
+ * descent (`.t-modern .stall-name`) and CSS has no nearest ancestor, so every
+ * mini also matched Modern's rules wherever its own sheet is silent —
+ * measured at 390px, the Neo mini's sign 27px where Neo's shop paints 25, its
+ * figure `rgb(223, 246, 255)` where Neo's shop paints the accent
+ * `rgb(44, 233, 224)`, and the Rural mini's sign at Modern's weight 800
+ * against Rural's 600. The door wears no look class now (`paintHome`).
+ *
+ * The rule compares, at the same width, every text part a mini shares with
+ * the look's own shop — the sign's name and tagline, a row's name and rail
+ * label, a tier-0 figure and its unit — on the seven properties a look's
+ * sheet dresses text with (`MINI_PROPS`). The shop side is `offers`, bare,
+ * for each shipped look; the mini side is every `.deck-stall` on `door`, in
+ * every variant the pass paints it in. A narrower pair (the name's size and
+ * the figure's ink, the two the critic measured) would miss the next leak on
+ * another part or property; a wider one (boxes, grounds, borders) compares a
+ * 390px row with a mini that is a `<div>` at zoom and would fail on what the
+ * mini is for. The looks compared are counted (`doorMiniClasses`) and the
+ * runner requires every shipped one at a phone and a desk.
+ */
+const MINI_PARTS: ReadonlyArray<readonly [string, string, string]> = [
+    // [name, selector inside the mini, selector on the shop]
+    ['the sign\'s name', '.stall-name', '.stall-name'],
+    ['the tagline', '.stall-tagline', '.stall-tagline'],
+    ['a row\'s name', '.item-n', 'button.item-head:not([data-price-tier]) .item-n'],
+    ['the rail label', '.item-q', 'button.item-head:not([data-price-tier]) .item-q'],
+    ['a tier-0 figure', '.item-head:not([data-price-tier]) .item-x', 'button.item-head:not([data-price-tier]) [data-role="price"]'],
+    ['its unit', '.item-head:not([data-price-tier]) .item-a .item-u', 'button.item-head:not([data-price-tier]) .item-a .item-u'],
+];
+const MINI_PROPS = ['font-size', 'color', 'font-family', 'font-weight', 'letter-spacing', 'text-transform', 'text-shadow'];
+type TextDress = Record<string, string>;
+const shopDress = new Map<string, Map<string, TextDress>>();
+const miniDress: { cls: string; label: string; parts: Map<string, TextDress> }[] = [];
+const doorMiniClasses = new Set<string>();
+
+function dressOf(node: Element): TextDress {
+    const cs = getComputedStyle(node);
+    return Object.fromEntries(MINI_PROPS.map((p) => [p, cs.getPropertyValue(p)]));
+}
+
+function gatherShopDress(look: Look): void {
+    const root = document.getElementById('app')!;
+    const parts = new Map<string, TextDress>();
+    for (const [name, , sel] of MINI_PARTS) {
+        const node = root.querySelector(sel);
+        if (node !== null) parts.set(name, dressOf(node));
+    }
+    shopDress.set(look.theme.sheetClass, parts);
+}
+
+function gatherMiniDress(label: string): Failure[] {
+    const out: Failure[] = [];
+    const minis = document.querySelectorAll('#app .deck-stall');
+    if (minis.length === 0) {
+        out.push({ screen: 'door', theme: label, check: 'a-door-mini-paints-as-its-own-look', detail: 'the door painted no deck mini — the rule would compare nothing' });
+    }
+    for (const mini of minis) {
+        const cls = [...mini.classList].find((c) => c.startsWith('t-'));
+        if (cls === undefined) {
+            out.push({ screen: 'door', theme: label, check: 'a-door-mini-paints-as-its-own-look', detail: `${describe(mini)} wears no look class` });
+            continue;
+        }
+        const parts = new Map<string, TextDress>();
+        for (const [name, sel] of MINI_PARTS) {
+            const node = mini.querySelector(sel);
+            if (node !== null) parts.set(name, dressOf(node));
+        }
+        miniDress.push({ cls, label, parts });
+    }
+    return out;
+}
+
+/** Every mini against its look's own shop, once the pass has painted both. */
+function doorMiniFaults(): Failure[] {
+    const out: Failure[] = [];
+    for (const { cls, label, parts } of miniDress) {
+        const shop = shopDress.get(cls);
+        if (shop === undefined) {
+            continue; // a look this pass measured no shop for (the kit's runs paint no door)
+        }
+        let compared = 0;
+        for (const [name, mine] of parts) {
+            const theirs = shop.get(name);
+            if (theirs === undefined) continue;
+            compared += 1;
+            const off = MINI_PROPS.filter((p) => mine[p] !== theirs[p]).map((p) => `${p} ${mine[p]} where the shop paints ${theirs[p]}`);
+            if (off.length > 0) {
+                out.push({
+                    screen: 'door',
+                    theme: label,
+                    check: 'a-door-mini-paints-as-its-own-look',
+                    detail: `the ${cls} mini's ${name}: ${off.join('; ')} at ${window.innerWidth}px`,
+                });
+            }
+        }
+        if (compared === MINI_PARTS.length) {
+            doorMiniClasses.add(cls);
+        } else {
+            out.push({
+                screen: 'door',
+                theme: label,
+                check: 'a-door-mini-paints-as-its-own-look',
+                detail: `the ${cls} mini compared ${compared} of ${MINI_PARTS.length} parts with its shop — a part is missing on one side`,
+            });
+        }
+    }
+    return out;
+}
+
+/*
  * **A shipped row states the sizes its sheet paints** (step 2e, 2026-09-23).
  * Each look's sheet sizes the tier-0 figure and the sign's name itself, and
  * the row carried other numbers — Modern said 30 and 25 where its sheet
@@ -1655,6 +1770,10 @@ for (const screen of measured) {
             failures.push(...unbuyableFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
+                gatherShopDress(look);
+            }
+            if (screen === 'door') {
+                failures.push(...gatherMiniDress(label));
             }
             if (look.id === SKELETON_LOOK_ID) {
                 failures.push(...skeletonLadderFaults(screen, label));
@@ -1662,6 +1781,8 @@ for (const screen of measured) {
         }
     }
 }
+
+failures.push(...doorMiniFaults());
 
 /**
  * The billboard: a decoration nobody can see is not a product.
@@ -2638,6 +2759,7 @@ const verdict = {
     unbuyableChecks,
     skipChecks,
     rowSizeClasses: [...rowSizeClasses].sort(),
+    doorMiniClasses: [...doorMiniClasses].sort(),
     ladderTiers,
     failures,
 };
