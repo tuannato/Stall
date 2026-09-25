@@ -1675,6 +1675,42 @@ function withoutStates(selector: string): { base: string; last: string; state: s
     return { base: squash(`${ancestors}${bare}`), last: bare, state, elsewhere };
 }
 
+/**
+ * A compound's simple selectors that name WHAT it matches — its classes,
+ * ids and attribute tests, quotes normalised — with everything inside a
+ * `:not(…)` left out, since that names what it does not match.
+ */
+function simpleSet(compound: string): Set<string> {
+    let bare = compound;
+    for (let at = bare.indexOf(':not('); at >= 0; at = bare.indexOf(':not(')) {
+        let depth = 0;
+        let end = at + ':not'.length;
+        for (; end < bare.length; end += 1) {
+            if (bare[end] === '(') depth += 1;
+            if (bare[end] === ')') depth -= 1;
+            if (depth === 0) break;
+        }
+        bare = bare.slice(0, at) + bare.slice(end + 1);
+    }
+    return new Set([...bare.matchAll(/[.#][\w-]+|\[[^\]]+\]/g)].map((m) => m[0].replace(/\s+/g, '').replace(/"/g, "'")));
+}
+
+/**
+ * Whether a rule's last compound is the surface a key names, **by set, not
+ * by string** (CARRYOVER-2 item 11): every class, id and attribute test the
+ * key's own compound carries is on the rule's compound, in any order and
+ * beside any others — `.ghost.notice-invite` is `.notice-invite`, and
+ * `[data-role="list-first"]` is `[data-role='list-first']`. A rule matching
+ * the exact string alone let a surface repainted under an extra class, or
+ * with its quotes written the other way, through unlisted.
+ */
+function coversSurface(last: string, surface: string): boolean {
+    const want = simpleSet(lastCompound(squash(surface)).last);
+    if (want.size === 0) return false;
+    const have = simpleSet(last);
+    return [...want].every((part) => have.has(part));
+}
+
 /** The look classes of the looks that wear the rain; a rule scoped to any other look's class never paints under it. */
 const RAIN_LOOK_CLASSES: ReadonlySet<string> = new Set(RAIN_LOOKS.map((id) => decodeTheme(id).sheetClass));
 
@@ -1700,7 +1736,9 @@ function statesOfListedSurfaces(
                 const { base, last, state, elsewhere } = withoutStates(selector);
                 if (state === '' && elsewhere === '') continue;
                 for (const [surface, entry] of Object.entries(table)) {
-                    if (base === entry.paint.rule || last === surface) out.push({ path, selector, surface, state, elsewhere });
+                    if (base === entry.paint.rule || coversSurface(last, surface) || coversSurface(last, entry.paint.rule)) {
+                        out.push({ path, selector, surface, state, elsewhere });
+                    }
                 }
             }
         }
@@ -1807,6 +1845,12 @@ describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
             '.t-neo .notice-invite:has(:focus-visible) { background: rgba(255, 77, 122, 0.2); }',
             '.t-neo .stall-foot:has(:hover) .notice-invite { background-color: rgba(0, 0, 0, 0.2); }',
             '.t-neo .notice:is(:hover, :focus-within) .notice-invite { background: rgba(0, 0, 0, 0.2); }',
+            // The surface by its class set, not its string (CARRYOVER-2 item
+            // 11): an extra class, another order, the other quotes.
+            '.t-neo .ghost.notice-invite:hover { background: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice-invite.is-open:focus-visible { background-color: rgba(255, 77, 122, 0.2); }',
+            '.t-neo [data-role="list-first"]:hover { background: rgba(44, 233, 224, 0.3); }',
+            '.t-neo .cta.wide:active { background: rgba(44, 233, 224, 0.3); }',
         ]) {
             expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).not.toEqual([]);
         }
@@ -1818,6 +1862,8 @@ describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
             '.t-neo .item:hover { background: rgba(0, 0, 0, 0.2); }',
             '.t-modern .stall-foot:hover .notice-invite { background: #eee; }',
             '.t-neo .notice-invite:has(.chip) { background: rgba(255, 77, 122, 0.04); }',
+            // A look-alike class is not the surface.
+            '.t-neo .notice-invite-x:hover { background: rgba(0, 0, 0, 0.2); }',
         ]) {
             expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).toEqual([]);
         }

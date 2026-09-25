@@ -171,13 +171,23 @@ const SERVED_CSS: readonly string[] = SERVED_SHEETS.map((sheet) =>
  * 2026-09-25, item 10: `.stall { opacity }` and `.stall.att-sunburst {
  * filter }` fade the paper the confetti and the rays are read over, and a
  * reader of the confetti's rules alone let both through.
+ *
+ * **Or its subject is one of the root's ancestors** (CARRYOVER-2 item 11):
+ * opacity and a filter on an ancestor fade everything painted inside it,
+ * the root included, so `body { opacity }` or `#app { filter }` fades the
+ * paper as surely as `.stall { opacity }`. The ancestors, as the app mounts
+ * the root (`renderStall`: `.stall` inside `.frame` inside `#app`): the
+ * frame, the mount, `body`, `html` / `:root` — with any further classes or
+ * states on them, as `html.bc-clear` — and `*`, which matches the root
+ * itself.
  */
+const ROOT_ANCESTOR = /^(?:html|:root|body|#app|\.frame|\*)(?:[.#:[].*)?$/;
 const reachesRoot = (selector: string): boolean =>
     namesClass(selector, 'att-confetti') ||
     selector.split(',').some((one) => {
         const subject = one.trim().split(/\s*[\s>+~]\s*/).pop() ?? '';
         const bare = subject.replace(/:not\([^()]*\)/g, '');
-        return /^(?:\.(?:stall|t-[a-z0-9]+|att-[a-z0-9-]+))+$/.test(bare);
+        return /^(?:\.(?:stall|t-[a-z0-9]+|att-[a-z0-9-]+))+$/.test(bare) || ROOT_ANCESTOR.test(bare);
     });
 
 /**
@@ -308,6 +318,24 @@ describe('every-confetti-scrap-clears-three-to-one-under-every-ground-ink', () =
         expect(SERVED_CSS.length).toBe(SERVED_SHEETS.length);
         expect(rulesOf(CSS).some((r) => r.selector === '.stall' && reachesRoot(r.selector))).toBe(true);
         for (const other of ['.stall .item { opacity: 0.5; }', '.t-rural .notice { filter: blur(1px); }', '.deck { opacity: 0.4; }']) {
+            expect(rootAlterations([...SERVED_CSS, other]), other).toEqual([]);
+        }
+        // A fade on one of the root's ancestors fades the root with it
+        // (CARRYOVER-2 item 11); a descendant of one, or a look-alike name,
+        // is not an ancestor.
+        for (const plant of [
+            'body { opacity: 0.9; }',
+            '#app { filter: brightness(0.8); }',
+            'html.bc-clear { mix-blend-mode: multiply; }',
+            ':root { opacity: 0.95; }',
+            '.frame { backdrop-filter: blur(1px); }',
+            'html, body, #app { filter: saturate(0.5); }',
+            '* { opacity: 0.99; }',
+            'body { animation: wk-fade 9s infinite; } @keyframes wk-fade { to { opacity: 0.6; } }',
+        ]) {
+            expect(rootAlterations([...SERVED_CSS, plant]), plant).not.toEqual([]);
+        }
+        for (const other of ['.frame .item { opacity: 0.5; }', '.frame-x { opacity: 0.5; }', 'body .deck { opacity: 0.4; }', '#appendix { filter: blur(1px); }']) {
             expect(rootAlterations([...SERVED_CSS, other]), other).toEqual([]);
         }
     });
