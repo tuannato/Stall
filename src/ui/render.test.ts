@@ -11379,6 +11379,101 @@ describe('a-refresh-ask-out-says-asking-and-cannot-ask-twice', () => {
     }
 });
 
+describe('the-valves-own-ask-counts-as-asking', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 2 (the critic's `r9a`). A Pay press over an
+     * aged rate refetches it — the valve — and that ask set nothing: the
+     * refresh control stayed on the sheet, and Pay then "Get a fresh price",
+     * or the other way round, sent two asks, each answer moving the figure
+     * with a grace of its own. Now the valve's ask counts as asking, as the
+     * refresh control's does: that control is hidden while any ask is out,
+     * and a press on either control sends no second ask — one ask at a
+     * time, whichever control made it. The press after the answer's grace
+     * opens the figure on screen, one bigint with its link. The clock is
+     * held (`toFake: ['performance']`).
+     */
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+    const answer = scaleRate(0.000021)!;
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const order of ['Pay, then the refresh control', 'the refresh control, then Pay', 'Pay twice'] as const) {
+            it(`${kind}, ${order}, over an aged rate: two presses, one ask, and the press after the answer opens the figure on screen`, async () => {
+                vi.useFakeTimers({ toFake: ['performance'] });
+                const root = mountedRoot();
+                let settle: (value: { rate: bigint; atMs: number }) => void = () => undefined;
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayWalletOpened: vi.fn(),
+                    onPayRate: vi.fn(
+                        () =>
+                            new Promise<{ rate: bigint; atMs: number }>((resolve) => {
+                                settle = resolve;
+                            }),
+                    ),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        payRate: aged,
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                const pay = sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement;
+                const refreshControl = sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement;
+                const press = (control: HTMLElement): void => {
+                    control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                };
+                const [first, second] =
+                    order === 'Pay, then the refresh control'
+                        ? [pay, refreshControl]
+                        : order === 'the refresh control, then Pay'
+                          ? [refreshControl, pay]
+                          : [pay, pay];
+                expect(refreshControl.closest('[hidden]'), 'the refresh control stands before any ask').toBeNull();
+                const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+                press(first);
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                expect(refreshControl.closest('[hidden]'), 'the refresh control is hidden while an ask is out').not.toBeNull();
+                press(second);
+                expect(h.onPayRate, 'two presses, one ask').toHaveBeenCalledTimes(1);
+                expect(open, 'nothing opened over the aged rate').not.toHaveBeenCalled();
+
+                settle({ rate: answer, atMs: Date.now() });
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(h.onPayRate, 'and none after the answer').toHaveBeenCalledTimes(1);
+                const sats = satsForQuote(QUOTE_USD, 1n, answer)!;
+                expect(sheet.querySelector('[data-role="price"]')?.textContent, 'the answer is on the card').toBe(formatXec(sats));
+                expect(refreshControl.closest('[hidden]'), 'the control is back with the answer').toBeNull();
+
+                vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+                press(pay);
+                expect(open, 'after the grace, the press opens').toHaveBeenCalledTimes(1);
+                expect(String(open.mock.calls[0]![0]), 'the figure on screen').toContain(
+                    `amount=${formatXecUngrouped(sats)}`,
+                );
+                open.mockRestore();
+                expect(h.onPayRecordMoved, 'all in place').not.toHaveBeenCalled();
+            });
+        }
+    }
+});
+
 describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
     /**
      * CRITIC-CARRYOVER-7 item 2. The press that opens a wallet cleared the

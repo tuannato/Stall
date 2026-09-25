@@ -4980,6 +4980,14 @@ function paySheet(
      * the feeds are being asked — never that they did not answer.
      */
     let refreshAsking = false;
+    /**
+     * The valve's own refetch is out (CRITIC-CARRYOVER-9 item 2): a Pay
+     * press over an aged rate asks the feeds, and that ask counts as asking
+     * like the refresh control's — the refresh control is hidden while it is
+     * out, and a press on either control sends no second ask. One ask at a
+     * time, whichever control made it.
+     */
+    let valveAsking = false;
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -5691,9 +5699,10 @@ function paySheet(
         surcharge.textContent =
             added === undefined ? '' : copy.paySurchargeLine(added, quoteFigure(surchargedQuote(price)));
 
-        // Any ask out — the open's, one this sheet made for a moved unit, or
-        // the refresh control's own (CRITIC-CARRYOVER-8 item 3).
-        const askingNow = asking || refreshAsking;
+        // Any ask out — the open's, one this sheet made for a moved unit,
+        // the refresh control's own (CRITIC-CARRYOVER-8 item 3) or the
+        // valve's (CRITIC-CARRYOVER-9 item 2).
+        const askingNow = asking || refreshAsking || valveAsking;
         if (usesRate) {
             const glance = formatXecRate(rate?.rate, price.code);
             // No rate and no ask out: the row stays for its refresh control,
@@ -5906,6 +5915,18 @@ function paySheet(
                 handlers.onPayWalletOpened?.();
                 return;
             }
+            // One ask at a time (CRITIC-CARRYOVER-9 item 2): while any ask is
+            // out — the open's, a moved unit's, the refresh control's or this
+            // valve's own — a Pay press over an aged rate sends nothing, and
+            // the answer lands with a line that asks for the press again.
+            if (asking || refreshAsking || valveAsking) {
+                return;
+            }
+            // The valve's refetch counts as asking: the refresh control
+            // leaves until the answer. Painted before `opened` drops, so the
+            // line on screen does not change while the feeds are asked.
+            valveAsking = true;
+            refresh();
             // A Pay press that opens nothing: the valve's answer below may
             // ask for the press again.
             opened = false;
@@ -5915,6 +5936,7 @@ function paySheet(
             const at = composedAt;
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                valveAsking = false;
                 // A sheet a repaint replaced while the feeds were asked marks
                 // nothing and composes nothing: a fresh sheet on the same item
                 // is not this one (the critic, 2026-09-25, item 7).
@@ -5954,9 +5976,10 @@ function paySheet(
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
         // One ask at a time (CRITIC-CARRYOVER-8 item 3): the control is
-        // hidden while any ask is out, and a press that reaches it anyway
+        // hidden while any ask is out — the valve's included
+        // (CRITIC-CARRYOVER-9 item 2) — and a press that reaches it anyway
         // sends nothing.
-        if (refreshAsking || asking) {
+        if (refreshAsking || asking || valveAsking) {
             return;
         }
         if (recheck()) {
@@ -6400,6 +6423,8 @@ function paySeveralSheet(
     let asking = usesRate && view.payRateAsking === true;
     /** The single sheet's `refreshAsking`: the refresh control's own ask is out (CRITIC-CARRYOVER-8 item 3). */
     let refreshAsking = false;
+    /** The single sheet's `valveAsking`: the valve's own refetch is out (CRITIC-CARRYOVER-9 item 2). */
+    let valveAsking = false;
     // The seller's own name when they set one; never the address in a
     // sentence, which `displayName` would fall back to.
     const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
@@ -6851,7 +6876,7 @@ function paySeveralSheet(
         figure.textContent = sats === undefined ? '' : formatXec(sats);
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
         // Any ask out, the refresh control's own included: the single sheet's rule.
-        const askingNow = asking || refreshAsking;
+        const askingNow = asking || refreshAsking || valveAsking;
         if (usesRate && unit !== undefined) {
             const glanceRate = formatXecRate(rate?.rate, unit);
             // The single sheet's rule: no rate and no ask out keeps the
@@ -7026,6 +7051,18 @@ function paySeveralSheet(
                 handlers.onPayWalletOpened?.();
                 return;
             }
+            // One ask at a time (CRITIC-CARRYOVER-9 item 2): while any ask is
+            // out — the open's, a moved unit's, the refresh control's or this
+            // valve's own — a Pay press over an aged rate sends nothing, and
+            // the answer lands with a line that asks for the press again.
+            if (asking || refreshAsking || valveAsking) {
+                return;
+            }
+            // The valve's refetch counts as asking: the refresh control
+            // leaves until the answer. Painted before `opened` drops, so the
+            // line on screen does not change while the feeds are asked.
+            valveAsking = true;
+            refresh();
             // A Pay press that opens nothing: the valve's answer below may
             // ask for the press again.
             opened = false;
@@ -7033,6 +7070,7 @@ function paySeveralSheet(
             const at = composedAt;
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                valveAsking = false;
                 // A sheet a repaint replaced while the feeds were asked marks
                 // nothing and composes nothing: a fresh sheet on the same item
                 // is not this one (the critic, 2026-09-25, item 7).
@@ -7066,8 +7104,9 @@ function paySeveralSheet(
     // No Pay press: a move it finds is handed back with a line that asks
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
-        // One ask at a time, the single sheet's rule (CRITIC-CARRYOVER-8 item 3).
-        if (refreshAsking || asking) {
+        // One ask at a time, the single sheet's rule (CRITIC-CARRYOVER-8 item 3;
+        // the valve's ask included, CRITIC-CARRYOVER-9 item 2).
+        if (refreshAsking || asking || valveAsking) {
             return;
         }
         if (recheck()) {
