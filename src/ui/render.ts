@@ -5204,6 +5204,30 @@ function paySheet(
         changedAtMs = performance.now();
         handlers.onPayFigureChanged?.(changedAtMs, [tokenId]);
     };
+    /**
+     * When the valve's answer or the refresh control's last moved the
+     * figure on screen, on the same monotonic clock (CRITIC-CARRYOVER-5
+     * item 1): the owner's standing rule counts such an answer as a change,
+     * so every Pay press within `PAY_RECOMPOSE_GRACE_MS` of it opens
+     * nothing — the second tap of a double tap over the valve included.
+     * Sheet-local and never `stamp()`: the record did not move, so nothing
+     * is handed to the app, and a press inside it is absorbed IN PLACE
+     * (`absorbRatePress`) — the valve's line and the buyer's quantity stay,
+     * which a repaint from the app would drop.
+     */
+    let rateChangedAtMs: number | undefined;
+    /**
+     * `refresh()` after the valve's or the refresh control's answer,
+     * stamping the rate grace when the figure on screen changed — a figure
+     * where none stood included.
+     */
+    const refreshAfterRate = (): void => {
+        const before = shownSats;
+        refresh();
+        if (shownSats !== undefined && shownSats !== before) {
+            rateChangedAtMs = performance.now();
+        }
+    };
     /** Bumped by every recompose, so an ask's tail knows the figure it measured is no longer the one on screen. */
     let composedAt = 0;
 
@@ -5598,6 +5622,17 @@ function paySheet(
         speakRecompose(wrap, [lost() ? lostBox : valve], undefined, head);
         handlers.onPayRecordMoved?.(tokenId, true);
     };
+    /**
+     * A Pay press inside the grace of a rate answer that moved the figure
+     * (`rateChangedAtMs`): it opens nothing, and it is absorbed here, in
+     * place — the valve's line, which already asks for the press again, is
+     * spoken once more, and nothing is handed to the app (CRITIC-CARRYOVER-5
+     * item 1). The app does not carry the valve's outcome, so a repaint
+     * from it would drop the line the buyer is reading.
+     */
+    const absorbRatePress = (): void => {
+        speakRecompose(wrap, [valve], undefined, head);
+    };
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
         control.addEventListener('click', (event) => {
             if (control.hidden) {
@@ -5618,6 +5653,14 @@ function paySheet(
             // is the record as the page holds it.
             if (recheck() || insideGrace(event, changedAtMs)) {
                 absorbPress();
+                return;
+            }
+            // And inside the grace of a rate answer that moved the figure —
+            // the valve's own, or the refresh control's: a double tap over
+            // the valve is two presses, and the second was made over a
+            // figure painted a moment before (CRITIC-CARRYOVER-5 item 1).
+            if (insideGrace(event, rateChangedAtMs)) {
+                absorbRatePress();
                 return;
             }
             // The link is read AFTER the record check (CRITIC-CARRYOVER-4
@@ -5671,7 +5714,9 @@ function paySheet(
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
-                refresh();
+                // The answer's figure is a change on screen: the grace
+                // starts when it is painted (`rateChangedAtMs`).
+                refreshAfterRate();
             })();
         });
     };
@@ -5709,7 +5754,7 @@ function paySheet(
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
-            refresh();
+            refreshAfterRate();
         })();
     });
 
@@ -6314,6 +6359,23 @@ function paySeveralSheet(
         changedAtMs = performance.now();
         handlers.onPayFigureChanged?.(changedAtMs, tokenIds);
     };
+    /** The figure the last `refresh()` painted: a rate answer that moves it is a change. */
+    let shownSats: bigint | undefined;
+    /**
+     * The single sheet's `rateChangedAtMs` (CRITIC-CARRYOVER-5 item 1): when
+     * the valve's answer or the refresh control's last moved the figure on
+     * screen. Sheet-local, never `stamp()`, and a Pay press inside its grace
+     * is absorbed in place (`absorbRatePress`).
+     */
+    let rateChangedAtMs: number | undefined;
+    /** The single sheet's `refreshAfterRate`, over the choice. */
+    const refreshAfterRate = (): void => {
+        const before = shownSats;
+        refresh();
+        if (shownSats !== undefined && shownSats !== before) {
+            rateChangedAtMs = performance.now();
+        }
+    };
     let composedAt = 0;
 
     /**
@@ -6437,6 +6499,7 @@ function paySeveralSheet(
     const refresh = (): void => {
         at.clearQrTimer();
         const sats = lostAll ? undefined : selectionSats(selection, prices, rate?.rate);
+        shownSats = sats;
         const subDust = sats !== undefined && sats < DUST_SATS;
         const n = Number(selectionCount(selection));
         wrap.setAttribute('aria-label', lostAll ? copy.PAY_TITLE : copy.paySeveralTitle(n));
@@ -6621,6 +6684,10 @@ function paySeveralSheet(
         speakRecompose(wrap, lostAll ? [lostBox] : [valve, dropped], undefined, head);
         handlers.onPayRecordMoved?.(undefined, true);
     };
+    /** The single sheet's `absorbRatePress`: the valve's line spoken again, in place, nothing handed back. */
+    const absorbRatePress = (): void => {
+        speakRecompose(wrap, [valve], undefined, head);
+    };
     // The press-time valve, the single sheet's (its docblock says why a
     // second press is always required), over the selection's arithmetic.
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
@@ -6635,6 +6702,12 @@ function paySeveralSheet(
             // included; a press after the grace opens.
             if (recheck() || insideGrace(event, changedAtMs)) {
                 absorbPress();
+                return;
+            }
+            // And inside the grace of a rate answer that moved the figure,
+            // the single sheet's rule (CRITIC-CARRYOVER-5 item 1).
+            if (insideGrace(event, rateChangedAtMs)) {
+                absorbRatePress();
                 return;
             }
             // Read AFTER the record check (CRITIC-CARRYOVER-4 item 7).
@@ -6676,7 +6749,9 @@ function paySeveralSheet(
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
-                refresh();
+                // The answer's figure is a change on screen: the grace
+                // starts when it is painted (`rateChangedAtMs`).
+                refreshAfterRate();
             })();
         });
     };
@@ -6708,7 +6783,7 @@ function paySeveralSheet(
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
-            refresh();
+            refreshAfterRate();
         })();
     });
 

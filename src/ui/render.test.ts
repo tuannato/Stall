@@ -9765,6 +9765,121 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
     });
 });
 
+describe('a-double-tap-over-a-valve-or-refresh-answer-opens-nothing', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 1, and the owner's standing rule: every Pay
+     * press within `PAY_RECOMPOSE_GRACE_MS` of any change of the figure on
+     * screen opens nothing, a double tap included, and a rate answer that
+     * moves the figure is such a change — the valve's answer and the
+     * refresh control's alike. Both tails ended in `refresh()` with no
+     * stamp, so the second tap of a double tap over an aged rate opened the
+     * figure the valve had painted 150 ms earlier. The answer's figure now
+     * stamps a sheet-local grace (`rateChangedAtMs`), and a press inside it
+     * is absorbed IN PLACE: nothing is handed to the app, the valve's line
+     * stands and is spoken again, and the buyer's quantity stays. A press
+     * after the grace opens the figure on screen. The clock is held
+     * (`toFake: ['performance']`): the grace is a stamp on
+     * `performance.now()` against the press's own `event.timeStamp`, which
+     * happy-dom takes from the same clock.
+     */
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+    const answer = scaleRate(0.000025)!;
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['valve', 'refresh'] as const) {
+            it(`${kind}, the ${road}’s answer: a second tap inside the grace is absorbed in place, and a press after it opens the figure on screen`, async () => {
+                vi.useFakeTimers({ toFake: ['performance'] });
+                const root = mountedRoot();
+                const count = kind === 'pay' ? 3n : 1n;
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayRate: vi.fn(async () => ({ rate: answer, atMs: Date.now() })),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, count]]),
+                        payQuantity: count,
+                        payRate: road === 'valve' ? aged : { rate: aged.rate, atMs: Date.now() },
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+                const figure = (): string | undefined => sheet.querySelector('[data-role="price"]')?.textContent ?? undefined;
+                const valve = (): string | undefined => sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? undefined;
+                const was = satsForQuote(QUOTE_USD, count, aged.rate)!;
+                const now = satsForQuote(QUOTE_USD, count, answer)!;
+                expect(now, 'the answer moves the figure').not.toBe(was);
+                expect(figure()).toBe(formatXec(was));
+
+                if (road === 'valve') {
+                    expect(pressForUrl(root, 'pay-cashtab'), 'tap 1 over an aged rate: the valve asks').toBeUndefined();
+                } else {
+                    (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+                }
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                expect(figure(), 'the answer is on screen').toBe(formatXec(now));
+                const line = road === 'valve' ? copy.PAY_RATE_MOVED : copy.PAY_RATE_REFRESHED;
+                expect(valve()).toBe(line);
+
+                vi.advanceTimersByTime(150);
+                expect(pressForUrl(root, 'pay-cashtab'), 'tap 2, 150 ms after the new figure: absorbed').toBeUndefined();
+                vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS - 150);
+                expect(pressForUrl(root, 'pay-cashtab'), 'at the grace’s last millisecond: absorbed').toBeUndefined();
+                expect(h.onPayRecordMoved, 'absorbed in place: nothing handed back').not.toHaveBeenCalled();
+                expect(h.onPayFigureChanged, 'the record did not move').not.toHaveBeenCalled();
+                expect(h.onPayRate, 'no second ask').toHaveBeenCalledTimes(1);
+                expect(valve(), 'the valve’s line stands').toBe(line);
+                expect(document.getElementById('sr-live')?.textContent?.trim(), 'and is spoken again').toBe(line);
+                expect(figure(), 'the figure stands').toBe(formatXec(now));
+                if (kind === 'pay') {
+                    expect((sheet.querySelector('[data-role="pay-quantity"]') as HTMLInputElement).value, 'the quantity stays').toBe('3');
+                }
+
+                vi.advanceTimersByTime(1);
+                const memo = encodePaymentMemoHex(TOKEN_ID, count)!;
+                expect(pressForUrl(root, 'pay-cashtab'), 'after the grace: the figure on screen opens').toBe(
+                    cashtabPayUrl(ADDR, now, memo),
+                );
+            });
+        }
+    }
+
+    it('an answer that leaves the figure where it was starts no grace', async () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        const root = mountedRoot();
+        const h = {
+            ...handlers(),
+            onPayRecords: () => records,
+            onPayRecordMoved: vi.fn(),
+            onPayRate: vi.fn(async () => ({ rate: aged.rate, atMs: Date.now() })),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...aged, atMs: Date.now() } }), h);
+        (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        vi.advanceTimersByTime(100);
+        const sats = satsForQuote(QUOTE_USD, 1n, aged.rate)!;
+        expect(pressForUrl(root, 'pay-cashtab'), 'the figure did not change: the press opens it').toBe(
+            cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!),
+        );
+    });
+});
+
 describe('a-double-tap-inside-the-grace-opens-nothing', () => {
     /**
      * CRITIC-CARRYOVER-4 item 1 (the owner's grace rule, read as a window).
@@ -10681,8 +10796,12 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
      * silent no-op on every iPhone. A second press is always required.
      */
     const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     it('refetches, repaints in place and asks for the press again', async () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
         const view = payView({
             overlay: { kind: 'pay', tokenId: TOKEN_ID },
             payRate: stale,
@@ -10727,7 +10846,11 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
         expect(control.textContent, 'the control restates the figure it will open').toBe(
             copy.payFigure(formatXec(fresh)),
         );
-        // The second press, on a rate that is now fresh, is the one that opens.
+        // The second press, on a rate that is now fresh, is the one that
+        // opens — made after the grace the answer's new figure started (the
+        // owner's standing rule, CRITIC-CARRYOVER-5 item 1; a press inside
+        // it is `a-double-tap-over-a-valve-or-refresh-answer-opens-nothing`).
+        vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
         control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         expect(open).toHaveBeenCalledOnce();
         expect(String(open.mock.calls[0]![0])).toBe(
