@@ -62,6 +62,7 @@ import {
     PAY_OPEN_GUARD_MS,
     PAY_CHECK_TIMEOUT_MS,
     FIAT_GLANCE_TIMEOUT_MS,
+    type StallHandlers,
 } from './ui/render';
 
 /**
@@ -357,6 +358,13 @@ vi.mock('./net/priceCheck', () => ({
 const paintedViews = new WeakMap<HTMLElement, StallView>();
 /** The last view this root was painted with: this test's own app, never another's late paint. */
 const viewOf = (root: HTMLElement): StallView | undefined => paintedViews.get(root);
+/**
+ * The handlers this root was last painted with: a test that must hand the
+ * app a call no sheet makes today (`a-hand-back-with-no-record-change-keeps-its-grace`)
+ * makes it through the app's own handler.
+ */
+const paintedHandlers = new WeakMap<HTMLElement, StallHandlers>();
+const handlersOf = (root: HTMLElement): StallHandlers | undefined => paintedHandlers.get(root);
 
 vi.mock('./ui', async (importOriginal) => {
     const real = await importOriginal<typeof import('./ui')>();
@@ -364,6 +372,7 @@ vi.mock('./ui', async (importOriginal) => {
         ...real,
         renderStall: (root: HTMLElement, view: StallView, handlers: never) => {
             paintedViews.set(root, view);
+            paintedHandlers.set(root, handlers);
             return real.renderStall(root, view, handlers);
         },
     };
@@ -7886,6 +7895,100 @@ describe('a-sheet-with-no-rate-offers-a-way-to-ask-again', () => {
             expect(asks - opened, 'one press, one ask').toBe(1);
             expect(root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? '', 'the price arrived').not.toBe('');
         });
+    }
+});
+
+describe('a-hand-back-with-no-record-change-keeps-its-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 4. `onPayRecordMoved` carries a sheet's later
+     * stamp (`PayShown.changedAtMs`) and stamps now when the rate it paints
+     * differs from the one the sheet showed — but `paint()` put
+     * `payChangedAt` on the view only beside a record move on file, so a
+     * hand-back with no record change dropped the grace: the new figure
+     * could be opened by a press a moment after it appeared. No sheet makes
+     * such a hand-back today (every one follows a recompose), so the call is
+     * made through the app's own handler, as a sheet's `handBack` would.
+     * The grace is painted for its sheet on every paint now, and a grace
+     * with no move on file says no record changed.
+     */
+    const A = 'a9'.repeat(32);
+    const B = 'b9'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R0 = scaleRate(0.000019)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const lineOf = (root: HTMLElement, scope: string): string =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.closest('[hidden]') === null
+            ? (root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? '')
+            : '';
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        for (const road of ["the sheet's own rate grace", 'a rate that differs from the one the sheet showed'] as const) {
+            it(`${scope}, ${road}: the paint carries the grace, and says no record changed`, async () => {
+                const { root } = bootStall(phone());
+                await flush();
+                priceControl.fetch = async () => R1;
+                if (scope === 'pay') {
+                    (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                } else {
+                    (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                    for (const tokenId of [A, B]) {
+                        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                            .click();
+                    }
+                    (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+                }
+                await until(() => root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`)?.closest('[hidden]') === null);
+                later(2_000);
+                const before = root.querySelector(`[data-role="${scope}"]`);
+                handlersOf(root)!.onPayRecordMoved!(
+                    scope === 'pay' ? A : undefined,
+                    false,
+                    road === "the sheet's own rate grace"
+                        ? { rate: R1, changedAtMs: performance.now() }
+                        : { rate: R0, changedAtMs: undefined },
+                );
+                await flush();
+                expect(root.querySelector(`[data-role="${scope}"]`), 'the app painted the sheet again').not.toBe(before);
+                expect(viewOf(root)?.payRecordMoved, 'no record move on file').toBeUndefined();
+                expect(viewOf(root)?.payChangedAt, 'and the grace on the view all the same').toBeDefined();
+                expect(lineOf(root, scope), 'no record changed, and none is said to').toBe('');
+
+                later(100);
+                expect(press(root, scope), 'a press 100 ms after the hand-back opens nothing').toBeUndefined();
+                await flush();
+                expect(lineOf(root, scope), 'still no record said to have changed').not.toMatch(/changed/);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(press(root, scope), 'after the grace, the figure on screen opens').toBeDefined();
+            });
+        }
     }
 });
 

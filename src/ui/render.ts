@@ -5243,15 +5243,19 @@ function paySheet(
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
     /**
-     * The figure changed under this sheet before this paint — found by a
-     * press, by an ask's tail, or in place on the sheet this one replaced
-     * (`payRecordMoved`, `payChangedAt`): said on the valve's line until a
-     * valve outcome of its own replaces it, and the control restates the
-     * figure it will open, whatever the valve says after (the owner's
-     * rule, CRITIC-CARRYOVER-4: never the plain "Pay with Cashtab" once the
-     * figure has changed).
+     * The seller's record moved under this sheet before this paint — found
+     * by a press, by an ask's tail, or in place on the sheet this one
+     * replaced (`payRecordMoved`): said on the valve's line until a valve
+     * outcome of its own replaces it, and the control restates the figure
+     * it will open, whatever the valve says after (the owner's rule,
+     * CRITIC-CARRYOVER-4: never the plain "Pay with Cashtab" once the
+     * figure has changed). A grace carried with no move on file
+     * (`payChangedAt` alone: a hand-back that carried only a rate answer's
+     * stamp, or the app's stamp for a rate it paints) holds presses and
+     * restates the figure (`changedAtMs`), and says no record changed
+     * (CRITIC-CARRYOVER-7 item 4).
      */
-    const recordMoved = view.payRecordMoved !== undefined || view.payChangedAt !== undefined;
+    const recordMoved = view.payRecordMoved !== undefined;
     /**
      * Which of the valve's two lines is the newer, and so the one that
      * stands (CRITIC-CARRYOVER-6 item 4): a change of the record under the

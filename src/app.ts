@@ -583,8 +583,13 @@ export function boot(
      * figure on it — so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of it
      * opens nothing, across the repaint the first such press asks for
      * (CRITIC-CARRYOVER-4 items 1, 2 and 6). Cleared with `payRecordMovedFor`.
+     * Painted for the sheet it belongs to (`payChangedFor`) on every paint,
+     * a record move on file or not: a hand-back that carries only a rate
+     * answer's grace, or starts one because the rate it paints differs, is a
+     * figure put on screen like any other (CRITIC-CARRYOVER-7 item 4).
      */
     let payChangedAt: number | undefined;
+    let payChangedFor: string | undefined;
     /**
      * The records the open pay sheet was last painted from — the ones its
      * figure is composed of (`paint`). What a press found moved is judged
@@ -1416,8 +1421,10 @@ export function boot(
                 ? {
                       payRecordMoved: payRecordMovedItems,
                       ...(payRecordMovedPressed ? {} : { payRecordMovedUnpressed: true as const }),
-                      ...(payChangedAt === undefined ? {} : { payChangedAt }),
                   }
+                : {}),
+            ...(payChangedAt !== undefined && payChangedFor !== undefined && payChangedFor === payOverlayKey(state.view.overlay)
+                ? { payChangedAt }
                 : {}),
             selection: new Map(selection),
             /*
@@ -1562,6 +1569,7 @@ export function boot(
                 payRecordMovedItems = [...known, ...tokenIds.filter((tokenId) => !known.includes(tokenId))];
                 payRecordMovedPressed = false;
                 payChangedAt = atMs;
+                payChangedFor = key;
                 // A change in place is newer than any valve line carried.
                 payOutcomeCarried = undefined;
             },
@@ -1657,6 +1665,7 @@ export function boot(
                 payRecordMovedFor = undefined;
                 payRecordMovedItems = [];
                 payChangedAt = undefined;
+                payChangedFor = undefined;
                 payOutcomeCarried = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
@@ -2345,6 +2354,7 @@ export function boot(
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
         payChangedAt = undefined;
+        payChangedFor = undefined;
         payOutcomeCarried = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
@@ -2424,6 +2434,7 @@ export function boot(
     const payRateLanded = (): void => {
         if (payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)) {
             payChangedAt = performance.now();
+            payChangedFor = payRecordMovedFor;
         }
     };
 
@@ -2475,6 +2486,7 @@ export function boot(
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
         payChangedAt = undefined;
+        payChangedFor = undefined;
         payOutcomeCarried = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
@@ -2544,6 +2556,10 @@ export function boot(
         const moved = movedRecords(payPainted, recordsNow());
         const known = payRecordMovedFor === key ? payRecordMovedItems : [];
         const fresh = moved.filter((tokenId) => !known.includes(tokenId));
+        // A stamp another sheet left is not this one's.
+        if (payChangedFor !== key) {
+            payChangedAt = undefined;
+        }
         // The valve's line the sheet handed back with stands on the paint
         // that replaces it, unless a record change it never painted is the
         // newer fact (CRITIC-CARRYOVER-6 item 4).
@@ -2571,6 +2587,13 @@ export function boot(
         const painting = rateForAnotherUnit() ? undefined : payRate?.rate;
         if (painting !== (shown === undefined ? payPaintedRate : shown.rate)) {
             payChangedAt = performance.now();
+        }
+        // Painted for this sheet whether or not a record move is on file:
+        // the grace is the figure's, and a hand-back that carries only a
+        // rate answer's stamp, or starts one here, put a figure on screen
+        // all the same (CRITIC-CARRYOVER-7 item 4).
+        if (payChangedAt !== undefined) {
+            payChangedFor = key;
         }
         paint();
         const over = state.view.overlay;
@@ -3014,6 +3037,7 @@ export function boot(
             payRecordMovedFor = undefined;
             payRecordMovedItems = [];
             payChangedAt = undefined;
+            payChangedFor = undefined;
             payOutcomeCarried = undefined;
             return {
                 ...next,

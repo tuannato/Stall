@@ -850,8 +850,12 @@ export type StallView = WindowState & {
      * (`performance.now()`): carried across the repaint an absorbed press
      * asks for, so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of the
      * change opens nothing — the second tap of a double tap included
-     * (CRITIC-CARRYOVER-4 items 1 and 6). Closure state in `boot`, beside
-     * `payRecordMoved`.
+     * (CRITIC-CARRYOVER-4 items 1 and 6). Closure state in `boot`, painted
+     * for its sheet whether or not a record move is on file: a hand-back
+     * that carried only a rate answer's stamp, or the app's own stamp for a
+     * rate it paints, is a figure put on screen like a move
+     * (CRITIC-CARRYOVER-7 item 4). Alone it holds presses and says no record
+     * changed.
      */
     payChangedAt?: number;
     /**
