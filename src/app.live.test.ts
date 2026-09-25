@@ -1472,6 +1472,128 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
     });
 });
 
+describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
+    /**
+     * The critic, CARRYOVER-2 item 4, on a phone's live road. A walk that
+     * FINISHED was applied whole over the records on screen: a lagging
+     * replica that had not seen the seller's newest record answered an
+     * older one — a figure, or an old tombstone — and took the newer quote
+     * off the rail (or emptied it), and a walk that stopped at our own page
+     * cap after resolving only a removal took every quote it never reached
+     * off with it. Per token now (`mergeFinishedRead`): an answer below the
+     * rank on screen (`descriptionRanks`) is refused for that token, and a
+     * capped walk leaves the tokens it never reached as the screen has them.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c1'.repeat(32);
+    const B = 'c2'.repeat(32);
+    const XEC_A_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_A_NEWER = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const tokens = new Map([
+        [A, fungible(A, 'Plum Jam')],
+        [B, fungible(B, 'Rye Flour')],
+    ]);
+    const genesis = new Map([
+        [A, 'attributed' as const],
+        [B, 'attributed' as const],
+    ]);
+    /** A record the stall signed, mined at `height` and first seen at `seen`. */
+    const record = (txid: string, hex: string | undefined, height: number, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], height }), timeFirstSeen: seen };
+    };
+    const newerA = () => record('9a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_NEWER }), 9, 1_756_400_600);
+    const recB = () => record('8b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B }), 8, 1_756_400_500);
+    /** A walk of `pages`, woken by the socket on every open watch. */
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const tx of page) {
+                chain.txs.set(tx.txid, tx);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    /** The rail after a finished walk read the seller's newest records: Plum Jam at 9,000, Rye Flour at 7,000. */
+    const onScreen = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(stallEmpty({ tokens, genesis, shopTab: 'quotes' }));
+        await flush();
+        await walk([[newerA(), recB()]]);
+        expect(viewOf(root)?.prices?.get(A), 'the newest record is on screen').toEqual(XEC_A_NEWER);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.height).toBe(9);
+        // The opening side was decided before anything was quoted: the
+        // reader turns to the quotes.
+        (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelectorAll('[data-role="pay-open"]').length, 'both quotes are rows').toBe(2);
+        return root;
+    };
+    const payFigureOf = async (root: HTMLElement, name: string): Promise<string | undefined> => {
+        const row = [...root.querySelectorAll('.item')].find((r) => r.textContent?.includes(name));
+        const open = row?.querySelector<HTMLButtonElement>('[data-role="pay-open"]');
+        if (open === undefined || open === null) {
+            return undefined;
+        }
+        open.click();
+        await flush();
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent ?? undefined;
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement | null)?.click();
+        await flush();
+        return figure;
+    };
+
+    it('a lagging replica’s older figure does not take the newer one off the rail', async () => {
+        const root = await onScreen();
+        const olderA = record('6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_OLD }), 6, 1_756_400_000);
+        await walk([[olderA, recB()]]);
+        expect(chain.historyPageCalls, 'the walk ran').toContain(0);
+        expect(viewOf(root)?.prices?.get(A), 'the newer figure stands').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam'), 'and Pay composes it').toBe('9,000');
+    });
+
+    it('a lagging replica’s old tombstone does not empty the rail', async () => {
+        const root = await onScreen();
+        const tombA = record('6b'.repeat(32), encodeRemovalHex(A), 6, 1_756_400_000);
+        await walk([[tombA, recB()]]);
+        expect(viewOf(root)?.prices?.get(A), 'the quote stays on the rail').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam')).toBe('9,000');
+    });
+
+    it('a walk capped after a removal keeps every quote it never reached', async () => {
+        const root = await onScreen();
+        const removeB = record('ab'.repeat(32), encodeRemovalHex(B), 10, 1_756_400_900);
+        // Page 0 holds the removal; past our page cap, the walk never
+        // reaches the pages that hold A's record.
+        await walk([[removeB], ...Array.from({ length: 11 }, () => [] as ChainTx[])]);
+        expect(viewOf(root)?.descriptionsTruncated, 'the walk stopped at our cap').toBe(true);
+        expect(viewOf(root)?.prices?.has(B), 'the removal it read is applied').toBe(false);
+        expect(viewOf(root)?.prices?.get(A), 'the quote past the cap stays').toEqual(XEC_A_NEWER);
+        expect(root.textContent).not.toContain('Rye Flour');
+        expect(await payFigureOf(root, 'Plum Jam')).toBe('9,000');
+    });
+
+    it('a finished walk at or above the rank on screen is applied, a removal included', async () => {
+        const root = await onScreen();
+        const tombA = record('ac'.repeat(32), encodeRemovalHex(A), 10, 1_756_400_900);
+        await walk([[tombA, recB()]]);
+        expect(viewOf(root)?.prices?.has(A), 'the seller’s newer removal takes it off').toBe(false);
+        expect(viewOf(root)?.prices?.get(B)).toEqual(XEC_B);
+    });
+});
+
 describe('a-choice-is-not-called-unread-while-the-records-are-still-being-read', () => {
     const fungible = (tokenId: string, name: string) => ({
         tokenId,

@@ -165,6 +165,33 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
 }
 
 /**
+ * A walk that FINISHED (`read`, resolving `decided`) over the records on
+ * screen (`screen`), per token (the critic, CARRYOVER-2 item 4): the walk's
+ * answer wins, a removal included, unless the screen decided that token at
+ * a record that outranks the walk's on §5's ladder (`keptOutranks`) — a
+ * lagging replica that has not seen the seller's newest record answers an
+ * older one, and applied whole it took the newer figure off the rail, or
+ * emptied it with an old tombstone. And on a walk that stopped at our own
+ * page cap (`truncated`), the screen's records fill the tokens it never
+ * reached, as `mergeFailedRead` fills them: a capped walk that resolved only
+ * a removal used to be applied whole, and every quote past the cap left the
+ * rail with it. A walk that read to the end and never met a token on
+ * screen resolved it as absent, as before.
+ */
+export function mergeFinishedRead(
+    read: RecordMaps,
+    decided: ReadonlySet<string>,
+    truncated: boolean,
+    screen: RecordMaps,
+): MergedRecords {
+    return mergeFailedRead(
+        read,
+        truncated ? decided : new Set([...decided, ...decidedOf({ ...screen, decided: undefined })]),
+        screen,
+    );
+}
+
+/**
  * What the app holds of the seller's records at one instant, for a press to
  * judge a payment on screen against (`movedRecords`).
  */

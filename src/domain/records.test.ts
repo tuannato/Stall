@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TokenPrice } from './description';
-import { decidedOf, mergeFailedRead, movedRecords } from './records';
+import { decidedOf, mergeFailedRead, mergeFinishedRead, movedRecords } from './records';
 
 describe('a-walk-that-threw-keeps-the-records-per-token', () => {
     /**
@@ -174,6 +174,75 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
         expect(merge(at(undefined, 'f'), at(900, '2'))).toEqual(price(900_000n));
         // A walk rank with no height (finalized, unmined) outranks a mined kept one.
         expect(merge(at(900, 'f'), at(undefined, '2'))).toEqual(price(900_000n));
+    });
+});
+
+describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
+    /**
+     * The critic, CARRYOVER-2 item 4, at the merge. A walk that FINISHED was
+     * applied whole: a lagging replica that had not yet seen the seller's
+     * newest record answered an older one — an older figure, or an old
+     * tombstone — and it took the newer quote off the rail; and a walk that
+     * stopped at our page cap after resolving only a removal emptied every
+     * quote past the cap. Per token now (`mergeFinishedRead`): the walk's
+     * answer below the rank on screen is refused, and on a capped walk the
+     * tokens it never reached keep the records on screen.
+     */
+    const A = 'a'.repeat(64);
+    const B = 'b'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const at = (height: number, txid: string, firstSeen = 0) => ({ height, isFinal: true, txid: txid.repeat(64), firstSeen });
+    const screen = {
+        descriptions: new Map([[A, 'new words'], [B, 'rye']]),
+        prices: new Map([[A, price(900_000n)], [B, price(700_000n)]]),
+        quoteTimes: new Map([[A, 2], [B, 1]]),
+        ranks: new Map([[A, at(9, '9', 1756400600)], [B, at(8, '8', 1756400500)]]),
+    };
+
+    it('a lagging replica’s older record, or its old tombstone, does not take the newer quote off', () => {
+        const older = mergeFinishedRead(
+            { prices: new Map([[A, price(500_000n)], [B, price(700_000n)]]), ranks: new Map([[A, at(7, '7', 1756400000)], [B, at(8, '8', 1756400500)]]) },
+            new Set([A, B]),
+            false,
+            screen,
+        );
+        expect(older.prices.get(A), 'the newer figure on screen stands').toEqual(price(900_000n));
+        expect(older.descriptions.get(A)).toBe('new words');
+        expect(older.ranks.get(A)).toEqual(at(9, '9', 1756400600));
+        const tombstone = mergeFinishedRead({ ranks: new Map([[A, at(6, '6', 1756399000)]]) }, new Set([A]), false, screen);
+        expect(tombstone.prices.get(A), 'an old removal does not empty the rail').toEqual(price(900_000n));
+        // A complete walk that never met B resolved it as absent, as before.
+        expect(tombstone.prices.has(B)).toBe(false);
+    });
+
+    it('a walk at or above the rank on screen is applied, a removal included', () => {
+        const newer = mergeFinishedRead(
+            { prices: new Map([[A, price(1_000_000n)]]), ranks: new Map([[A, at(10, 'a', 1756400900)]]) },
+            new Set([A]),
+            false,
+            screen,
+        );
+        expect(newer.prices.get(A)).toEqual(price(1_000_000n));
+        const removal = mergeFinishedRead({ ranks: new Map([[A, at(10, 'a', 1756400900)]]) }, new Set([A]), false, screen);
+        expect(removal.prices.has(A), 'the seller’s newer removal takes it off').toBe(false);
+        // The same record read again, now mined: never refused as "below" itself.
+        const same = mergeFinishedRead(
+            { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, at(9, '9', 1756400600)]]) },
+            new Set([A]),
+            false,
+            { ...screen, ranks: new Map([[A, { height: undefined, isFinal: true, txid: '9'.repeat(64), firstSeen: 1756400600 }]]) },
+        );
+        expect(same.ranks.get(A)?.height).toBe(9);
+    });
+
+    it('a capped walk fills the tokens it never reached from the screen', () => {
+        // It read B's removal before our page cap and never reached A.
+        const capped = mergeFinishedRead({ ranks: new Map([[B, at(10, 'b', 1756400900)]]) }, new Set([B]), true, screen);
+        expect(capped.prices.get(A), 'a quote past the cap stays').toEqual(price(900_000n));
+        expect(capped.descriptions.get(A)).toBe('new words');
+        expect(capped.prices.has(B), 'the removal it read is applied').toBe(false);
+        // The same walk read to the end: A was never met, so it is absent.
+        expect(mergeFinishedRead({ ranks: new Map([[B, at(10, 'b', 1756400900)]]) }, new Set([B]), false, screen).prices.has(A)).toBe(false);
     });
 });
 

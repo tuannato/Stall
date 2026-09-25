@@ -34,7 +34,7 @@ import {
     selectionSats,
     selectionUnit,
 } from './domain/selection';
-import { decidedOf, mergeFailedRead, movedRecords, type RecordsNow } from './domain/records';
+import { decidedOf, mergeFailedRead, mergeFinishedRead, movedRecords, type RecordsNow } from './domain/records';
 import {
     clearSavedStall,
     forgetSurcharge,
@@ -3798,30 +3798,69 @@ export function boot(
                 rememberGenesis(pubkeyHex, tokenId, decisionOf(attribution, 'paid'));
             }
         }
+        /*
+         * A walk that finished is applied per token over the records on
+         * screen (the critic, CARRYOVER-2 item 4): an answer below the rank
+         * the screen holds for a token is refused for that token — a lagging
+         * replica's older figure, or its old tombstone, used to take the
+         * seller's newer quote off the rail — and a walk that stopped at our
+         * own page cap leaves the tokens it never reached as the screen has
+         * them, where it used to empty them (`mergeFinishedRead`). Over a
+         * screen with nothing on it there is nothing to merge.
+         */
+        const merged = hadSomething
+            ? mergeFinishedRead(
+                  {
+                      descriptions: lookup.descriptions,
+                      shelves: lookup.shelves,
+                      prices: lookup.prices,
+                      quoteTimes: lookup.quoteTimes,
+                      ...(lookup.ranks === undefined ? {} : { ranks: lookup.ranks }),
+                  },
+                  lookup.decided,
+                  lookup.truncated,
+                  {
+                      ...(state.view.descriptions === undefined ? {} : { descriptions: state.view.descriptions }),
+                      ...(state.view.shelves === undefined ? {} : { shelves: state.view.shelves }),
+                      ...(state.view.prices === undefined ? {} : { prices: state.view.prices }),
+                      ...(state.view.quoteTimes === undefined ? {} : { quoteTimes: state.view.quoteTimes }),
+                      ...(state.view.descriptionRanks === undefined ? {} : { ranks: state.view.descriptionRanks }),
+                  },
+              )
+            : undefined;
+        const prices = merged?.prices ?? lookup.prices;
+        const stillKept = new Set(
+            [...(merged?.keptShown ?? [])].filter((tokenId) => state.view.recordsKept?.has(tokenId) === true),
+        );
         const nextFacts: StallView = {
             ...state.view,
-            descriptions: lookup.descriptions,
-            shelves: lookup.shelves,
-            prices: lookup.prices,
+            descriptions: merged?.descriptions ?? lookup.descriptions,
+            shelves: merged?.shelves ?? lookup.shelves,
+            prices,
             // The winning record's own clock, replaced with the maps it came
             // from: a time held over from an earlier walk would date this
-            // walk's record from a record it never saw.
-            quoteTimes: lookup.quoteTimes,
+            // walk's record from a record it never saw — save a token kept
+            // from the screen, whose clock is its own record's.
+            quoteTimes: merged?.quoteTimes ?? lookup.quoteTimes,
             // Both are about this page and neither is about the seller, and a
             // screen that reads them (the `?pay=` note) must read the walk it
             // actually got rather than the one the load made.
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
-            descriptionsDecided: lookup.decided,
-            descriptionRanks: lookup.ranks,
+            // A token kept from the screen is resolved as of the read that
+            // put it there.
+            descriptionsDecided:
+                merged === undefined ? lookup.decided : new Set([...lookup.decided, ...merged.keptShown]),
+            descriptionRanks: merged?.ranks ?? lookup.ranks,
             // This walk's own answer replaces any records kept over an
-            // earlier one that threw.
-            recordsStale: undefined,
-            recordsKept: undefined,
+            // earlier one that threw — save one it did not reach and the
+            // screen still shows, which stays as old as it was.
+            recordsStale: stillKept.size > 0 ? true : undefined,
+            recordsKept: stillKept.size > 0 ? stillKept : undefined,
             genesis:
                 pubkeyHex === undefined
                     ? state.view.genesis
-                    : genesisFor(pubkeyHex, lookup.prices.keys()),
+                    : genesisFor(pubkeyHex, prices.keys()),
         };
         // The quotes are a card list too, and the shelves reorder the
         // listings, so a facts apply moves the carousel exactly as a book
