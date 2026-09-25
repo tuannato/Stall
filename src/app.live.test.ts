@@ -43,6 +43,7 @@ import {
     PAY_QUOTE_CHANGED,
     PAY_QUOTE_GONE,
     PAY_QUOTE_UNSHOWN,
+    PAY_CASHTAB,
     payFigure,
     payItemsChanged,
     payTolerance,
@@ -5373,7 +5374,15 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             prices,
             shopTab: 'quotes',
         });
-    /** The seller's own record, published and woken by the socket. */
+    /**
+     * The seller's own record, published and woken by the socket — on every
+     * open watch, as a real chain wakes every tab on the stall. An app an
+     * earlier test booted is never torn down, and a late refresh of one can
+     * open a watch before this test's app does, so `watches[0]` is not
+     * certainly this app's. Seen: a Pay several case red under `pnpm test`
+     * with its code never taken away, green alone; that this was the cause
+     * is inferred, not observed.
+     */
     const republish = async (txids: readonly [string, string | undefined][]): Promise<void> => {
         const ids = txids.map(([txid, hex]) => {
             if (hex === undefined) {
@@ -5381,7 +5390,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             }
             return publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
         });
-        watches[0]!.hooks.onBurst?.(ids);
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.(ids);
+        }
         await flush();
     };
     /** One press on the open sheet's Cashtab control: the URL a wallet was handed, or undefined. */
@@ -5583,5 +5594,113 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent ?? '').toBe('');
         expect(root.querySelector('[data-role="pay"] [data-role="pay-words"]')?.textContent).toBe('Now in a jar');
         expect(root.querySelector('[data-role="pay"] [data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
+    });
+
+    describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
+        /**
+         * The critic, 2026-09-25, item 2. The scan code is the one road off
+         * a pay sheet that no press guards, and an XEC code never ages. A
+         * re-read that moves what the buyer pays while the sheet is open now
+         * takes the code away IN PLACE — the sheet is not rebuilt under the
+         * buyer — and sets the valve's line; the press on that same sheet is
+         * still absorbed and repaints it from the record as it stands.
+         */
+        const RATE = 20_000_000n;
+        const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+        const USD_A2 = { code: 'usd', exponent: 2, amount: 700n };
+        const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+        const scope = (root: HTMLElement, name: string) => root.querySelector(`[data-role="${name}"]`) as HTMLElement | null;
+        const choose = async (root: HTMLElement): Promise<void> => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+        };
+        const cases = [
+            { unit: 'XEC', prices: new Map([[A, XEC_OLD], [B, XEC_B]]), moved: XEC_NEW },
+            { unit: 'USD', prices: new Map([[A, USD_A], [B, USD_B]]), moved: USD_A2 },
+        ] as const;
+
+        for (const c of cases) {
+            it(`${c.unit === 'XEC' ? 'an' : 'a'} ${c.unit} quote on the single sheet`, async () => {
+                priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+                const { root } = bootStall(phone(new Map(c.prices)));
+                await flush();
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                // A USD sheet is painted again when its rate lands: capture
+                // the sheet that holds the code, not the one asking.
+                await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay')!;
+                const figure = figureOf(root, 'pay');
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is drawn').not.toBeNull();
+
+                await republish([['6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })]]);
+                // The burst is a real timer (`until`'s own reason).
+                await until(() => sheet.querySelector('[data-role="pay-qr"]') === null);
+                expect(scope(root, 'pay'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is taken away').toBeNull();
+                expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                expect(figureOf(root, 'pay'), 'nothing on it is recomposed').toBe(figure);
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'no stale figure restated').toBe(PAY_CASHTAB);
+
+                expect(press(root, 'pay'), 'the press is still absorbed').toBeUndefined();
+                const again = scope(root, 'pay')!;
+                expect(again).not.toBe(sheet);
+                expect(figureOf(root, 'pay')).not.toBe(figure);
+                expect(again.querySelector('[data-role="pay-qr"]'), 'a code for the record as it stands').not.toBeNull();
+                expect(again.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                expect(press(root, 'pay')).toContain(`amount=${figureOf(root, 'pay')!.replace(/,/g, '')}`);
+            });
+
+            it(`${c.unit} quotes on Pay several`, async () => {
+                priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+                const { root } = bootStall(phone(new Map(c.prices)));
+                await flush();
+                await choose(root);
+                await until(() => scope(root, 'pay-several')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay-several')!;
+                const figure = figureOf(root, 'pay-several');
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is drawn').not.toBeNull();
+
+                await republish([
+                    ['6b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: c.prices.get(B)! })],
+                    ['6c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })],
+                ]);
+                await until(() => sheet.querySelector('[data-role="pay-qr"]') === null);
+                expect(scope(root, 'pay-several'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is taken away').toBeNull();
+                expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+                expect(figureOf(root, 'pay-several')).toBe(figure);
+
+                expect(press(root, 'pay-several'), 'the press is still absorbed').toBeUndefined();
+                expect(scope(root, 'pay-several')).not.toBe(sheet);
+                expect(figureOf(root, 'pay-several')).not.toBe(figure);
+                expect(scope(root, 'pay-several')!.querySelector('[data-role="pay-qr"]')).not.toBeNull();
+                expect(press(root, 'pay-several')).toContain(`amount=${figureOf(root, 'pay-several')!.replace(/,/g, '')}`);
+            });
+        }
+
+        it('a new margin and new words under the open sheet are taken in place, and the code stays', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+            const { root } = bootStall(phone(new Map([[A, USD_A]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+            const sheet = scope(root, 'pay')!;
+            await republish([['6d'.repeat(32), encodeDescriptionHex(A, 'Now in a jar', { price: { ...USD_A, tolerancePct: 5 } })]]);
+            await until(() => sheet.querySelector('[data-role="pay-words"]') !== null);
+            expect(scope(root, 'pay')).toBe(sheet);
+            expect(sheet.querySelector('[data-role="pay-qr"]'), 'the payment did not move').not.toBeNull();
+            expect(sheet.querySelector('[data-role="pay-words"]')?.textContent).toBe('Now in a jar');
+            expect(sheet.querySelector('[data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
+            expect(press(root, 'pay'), 'one press').toContain('amount=');
+        });
     });
 });

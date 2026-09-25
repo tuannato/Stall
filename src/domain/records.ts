@@ -204,9 +204,10 @@ export function samePayment(a: TokenPrice | undefined, b: TokenPrice | undefined
  * `applyDescriptions`) and what the merge holds is judged like any read. A
  * token a walk that stopped at our page cap did not reach has not moved;
  * one it resolved, a removal included, is judged. The touch wall's plate
- * closes on the same answer, and both pay sheets ask it at every press: a
- * sheet holds the live paint, so without it a press handed a wallet a figure
- * the page no longer held as the seller's quote, and said nothing.
+ * closes on the same answer, and both pay sheets ask it at every press and
+ * whenever a re-read lands under them (the scan code is no press): a sheet
+ * holds the live paint, so without it a press handed a wallet a figure the
+ * page no longer held as the seller's quote, and said nothing.
  */
 export function movedRecords(composed: ReadonlyMap<string, TokenPrice>, now: RecordsNow): string[] {
     if (!now.known || now.prices === undefined) {

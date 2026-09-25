@@ -102,6 +102,7 @@ import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfLis
 import { ADDR_COPIED_MS,
     PAY_RATE_MAX_AGE_MS,
     priceTier,
+    recheckPaySheet,
     renderStall,
     resetIconsForTests,
     stallBaseUrl,
@@ -9233,6 +9234,50 @@ describe('a-moved-quote-is-said-in-the-owners-words', () => {
         expect(emptied.querySelector('[data-role="pay-several"]')?.textContent).not.toContain(copy.SELECTION_EMPTY);
         const pruned = several({ selection: new Map() });
         expect(pruned.querySelector('[data-role="pay-several"]')?.textContent, 'no press, no claim about one').toContain(copy.SELECTION_EMPTY);
+    });
+});
+
+describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
+    /**
+     * The sheet's half of the critic's item 2 (the app's is in
+     * app.live.test.ts): `recheckPaySheet` answers per root, in place. A
+     * record that moved takes the code away and sets the line on the SAME
+     * sheet node; a paint of another root does not unhook it.
+     */
+    const records = (price: { code: string; exponent: number; amount: bigint }) => ({
+        prices: new Map([[TOKEN_ID, price]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+
+    it('takes the code away in place, and another root’s paint does not unhook the sheet', () => {
+        const xec = { code: 'xec', exponent: 2, amount: 500_000n };
+        let now = records(xec);
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        renderStall(root, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h);
+        const sheet = root.querySelector('[data-role="pay"]')!;
+        expect(sheet.querySelector('[data-role="pay-qr"]')).not.toBeNull();
+
+        // Another root paints between the sheet and the re-read.
+        renderStall(document.createElement('div'), payView(), handlers());
+        now = records({ ...xec, amount: 900_000n });
+        recheckPaySheet(root);
+        expect(root.querySelector('[data-role="pay"]'), 'not rebuilt').toBe(sheet);
+        expect(sheet.querySelector('[data-role="pay-qr"]')).toBeNull();
+        expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
+        expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
+        expect(h.onPayRecordMoved, 'the re-read repaints nothing; the press will').not.toHaveBeenCalled();
+
+        // A paint of the same root unhooks the sheet it replaced.
+        const again = document.createElement('div');
+        const h2 = { ...handlers(), onPayRecords: () => records({ ...xec, amount: 900_000n }), onPayRecordMoved: vi.fn() };
+        renderStall(again, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h2);
+        const first = again.querySelector('[data-role="pay"]')!;
+        renderStall(again, payView(), h2);
+        recheckPaySheet(again);
+        expect(first.querySelector('[data-role="pay-qr"]'), 'a detached sheet is not answered').not.toBeNull();
     });
 });
 

@@ -159,6 +159,7 @@ import {
     quotedItems,
     unreadChosen,
     renderStall,
+    recheckPaySheet,
     holdsLivePaint,
     shopWindowPaints,
     WINDOW_MIN_PX,
@@ -1746,6 +1747,12 @@ export function boot(
      */
     const livePaint = (): void => {
         if (holdsLivePaint(settled())) {
+            // A pay sheet answers the re-read in place, without a rebuild:
+            // its scan code is a road no press guards, so a record that moved
+            // under it takes the code away now (`recheckPaySheet`).
+            if (payOverlayKey(state.view.overlay) !== undefined) {
+                recheckPaySheet(root);
+            }
             return;
         }
         /*

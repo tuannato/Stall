@@ -500,8 +500,10 @@ export function renderStall(
     const serial = ++paintSerial;
     paintedIconCells.clear();
     // A timer from the paint before this one would fire against a tree that
-    // no longer exists; the sheet that wants one arms it again below.
+    // no longer exists; the sheet that wants one arms it again below. The
+    // record check likewise: only the sheet this paint builds answers it.
     clearPayQrTimer();
+    payRecordChecks.delete(root);
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     // Snapshot the opener on the idle→open edge only: a live repaint while
     // the sheet is up finds focus *inside* the sheet, and overwriting the
@@ -800,10 +802,18 @@ export function renderStall(
             stall.append(sheetOverlay(describeSheet(view, handlers), 'describe-sheet', handlers));
         } else if (view.overlay.kind === 'pay') {
             stall.classList.add('has-sheet');
-            stall.append(sheetOverlay(paySheet(view, handlers), 'pay-sheet', handlers));
+            stall.append(
+                sheetOverlay(paySheet(view, handlers, (check) => payRecordChecks.set(root, check)), 'pay-sheet', handlers),
+            );
         } else if (view.overlay.kind === 'pay-several') {
             stall.classList.add('has-sheet');
-            stall.append(sheetOverlay(paySeveralSheet(view, handlers), 'pay-several-sheet', handlers));
+            stall.append(
+                sheetOverlay(
+                    paySeveralSheet(view, handlers, (check) => payRecordChecks.set(root, check)),
+                    'pay-several-sheet',
+                    handlers,
+                ),
+            );
         } else if (view.overlay.kind === 'poster') {
             stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
@@ -4622,6 +4632,28 @@ const PAY_QR_OPEN_QUERY = '(min-width: 680px)';
 let payQrTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
+ * The open pay sheet's own record check, per root, beside its timer and for
+ * the same reason: a sheet holds the live paint (`holdsLivePaint`), so a
+ * re-read that moves the seller's record while it is open lands in the
+ * app's records and not on screen. The app calls `recheckPaySheet` whenever
+ * it holds a paint back for a pay sheet, and the sheet answers in place,
+ * without being rebuilt under the buyer: a record that moved what the buyer
+ * pays takes the scan code away and sets the valve's line (the press on the
+ * same sheet is still absorbed and repaints it from the record); one that
+ * changed only its margin or its words is taken in place. Cleared at the
+ * top of every paint of that root; set by the sheet that paint builds.
+ * Keyed by root rather than one module slot: any `renderStall` clearing
+ * another root's check would leave that sheet's code standing, which is the
+ * one thing the check is for.
+ */
+const payRecordChecks = new WeakMap<HTMLElement, () => void>();
+
+/** A re-read landed while a pay sheet holds the paint on `root`: let the sheet answer it in place. */
+export function recheckPaySheet(root: HTMLElement): void {
+    payRecordChecks.get(root)?.();
+}
+
+/**
  * The seller's tolerance as the rail says it: only for a quote that involves
  * a rate. An xec quote mounts no line at all — not the figure and not its
  * absence: the record may carry the byte (it is carried whatever the code),
@@ -4670,7 +4702,11 @@ function clearPayQrTimer(): void {
  * Every update this sheet makes itself — the refresh control, the press-time
  * valve, the code ageing out — is its own `refresh()`, in place.
  */
-function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
+function paySheet(
+    view: StallView,
+    handlers: StallHandlers,
+    registerCheck: (check: () => void) => void = () => undefined,
+): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay');
     wrap.setAttribute('role', 'dialog');
@@ -4987,6 +5023,14 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      */
     const recordMoved = view.payRecordMoved !== undefined;
     /**
+     * A re-read moved what the buyer pays while this sheet was open, and the
+     * sheet was not rebuilt (`payRecordChecks`): the code is taken away, the
+     * valve's line says the quote changed, and the control stops restating
+     * a figure the page no longer holds. The press is absorbed as ever
+     * (`recheck`), and the sheet it repaints is the record as it stands.
+     */
+    let movedUnder = false;
+    /**
      * The seller's record as the app holds it now, against the one this
      * sheet composed from. Asked at every press and after every await that
      * precedes a figure: the sheet holds the live paint, so a re-read that
@@ -5054,6 +5098,12 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
         return false;
     };
+    registerCheck((): void => {
+        if (recheck() && !movedUnder) {
+            movedUnder = true;
+            refresh();
+        }
+    });
 
     const refresh = (): void => {
         clearPayQrTimer();
@@ -5132,15 +5182,23 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         web.hidden = !linked;
         app.hidden = !linked;
         // After the price moved the control restates the figure it will open,
-        // composed from the same satoshis as the figure and both URLs.
+        // composed from the same satoshis as the figure and both URLs — but
+        // never once a re-read moved the record under the sheet: that figure
+        // is no longer the seller's, and the press will say so.
         web.textContent =
+            !movedUnder &&
             (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && recordMoved)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined && !recordMoved;
-        valve.textContent =
-            outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : recordMoved ? copy.PAY_QUOTE_CHANGED : '';
+        valve.hidden = !movedUnder && outcome === undefined && !recordMoved;
+        valve.textContent = movedUnder
+            ? copy.PAY_QUOTE_CHANGED
+            : outcome !== undefined
+              ? copy.PAY_VALVE_TEXT[outcome]
+              : recordMoved
+                ? copy.PAY_QUOTE_CHANGED
+                : '';
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -5162,7 +5220,14 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const aged =
             usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
         qrFold.hidden = bip21 === undefined;
-        if (bip21 !== undefined && !aged && fitsQr(bip21)) {
+        if (bip21 !== undefined && movedUnder) {
+            // The code carries a figure the page no longer holds as the
+            // seller's quote, XEC or not: taken away in place, never left
+            // scannable — a phone reads it without any press to guard.
+            const line = el('p', 'fine', copy.PAY_QUOTE_CHANGED);
+            line.setAttribute('data-role', 'pay-qr-why');
+            qrBody.replaceChildren(line);
+        } else if (bip21 !== undefined && !aged && fitsQr(bip21)) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
             box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
@@ -5202,7 +5267,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             // it stands, says so, and the next press is the one that opens —
             // the moved-rate valve's shape, for the other input. A record
             // that changed only its margin or its words is taken in place
-            // (`recheck`) and the press goes on.
+            // (`recheck`) and the press goes on. The scan code is no press:
+            // it is guarded by the re-read itself, which takes it away in
+            // place the moment the record moves (`payRecordChecks`) — so what
+            // a phone can still read is the figure the page held until then,
+            // and a phone that scanned it earlier holds what it holds.
             if (recheck()) {
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
@@ -5568,7 +5637,11 @@ function settleValve(
  * step 5), and the fine print says so. Tolerances are per item and shown
  * on each item's own sheet (D4); the valve measures against the tightest.
  */
-function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+function paySeveralSheet(
+    view: StallView,
+    handlers: StallHandlers,
+    registerCheck: (check: () => void) => void = () => undefined,
+): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay-several');
     wrap.setAttribute('role', 'dialog');
@@ -5732,21 +5805,29 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         }
     }
     /**
-     * The single sheet's `recheck`, over every chosen item: true when what
-     * the buyer pays moved for any of them (`movedRecords`); a record that
-     * changed only its margin is taken in place, and the valve measures
-     * against it.
+     * A re-read moved what the buyer pays for chosen items while this sheet
+     * was open, and the sheet was not rebuilt (`payRecordChecks`): their
+     * names, for the valve's line; the code is taken away. The single
+     * sheet's `movedUnder`.
      */
-    const recheck = (): boolean => {
+    let movedUnder: string | undefined;
+    /**
+     * The single sheet's `recheck`, over every chosen item: the items whose
+     * record moved what the buyer pays (`movedRecords`), empty when none
+     * did; a record that changed only its margin is taken in place, and the
+     * valve measures against it.
+     */
+    const movedNow = (): string[] => {
         const now = handlers.onPayRecords?.();
         if (now === undefined) {
-            return false;
+            return [];
         }
-        if (movedRecords(composed, now).length > 0) {
-            return true;
+        const moved = movedRecords(composed, now);
+        if (moved.length > 0) {
+            return moved;
         }
         if (!now.known) {
-            return false;
+            return [];
         }
         let changed = false;
         for (const [tokenId, painted] of composed) {
@@ -5760,8 +5841,16 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             prices = new Map([...(prices ?? []), ...composed]);
             refresh();
         }
-        return false;
+        return [];
     };
+    const recheck = (): boolean => movedNow().length > 0;
+    registerCheck((): void => {
+        const moved = movedNow();
+        if (moved.length > 0 && movedUnder === undefined) {
+            movedUnder = copy.payItemsChanged(copy.itemNames(moved.map((tokenId) => tokenName(view.tokens, tokenId))));
+            refresh();
+        }
+    });
 
     const refresh = (): void => {
         clearPayQrTimer();
@@ -5843,12 +5932,14 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         web.hidden = !linked;
         app.hidden = !linked;
         web.textContent =
+            movedUnder === undefined &&
             (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && movedLine !== undefined)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined && movedLine === undefined;
-        valve.textContent = outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? '');
+        valve.hidden = movedUnder === undefined && outcome === undefined && movedLine === undefined;
+        valve.textContent =
+            movedUnder ?? (outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? ''));
         if (linked) {
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
@@ -5869,7 +5960,13 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
          * the branch a too-long link fell into before this shipped.
          */
         const scans = bip21 !== undefined && qrScansInBox(bip21, PAY_QR_NARROWEST_PX);
-        if (bip21 !== undefined && !aged && scans) {
+        if (bip21 !== undefined && movedUnder !== undefined) {
+            // The single sheet's rule: a code over records that moved is
+            // taken away in place, XEC or not.
+            const line = el('p', 'fine', movedUnder);
+            line.setAttribute('data-role', 'pay-qr-why');
+            qrBody.replaceChildren(line);
+        } else if (bip21 !== undefined && !aged && scans) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
             box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
