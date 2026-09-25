@@ -1787,16 +1787,17 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
- * The same two facts without the ask: where nothing on the sheet can be
- * pressed (CRITIC-CARRYOVER-6 item 5) — a fence no state reaches since a
- * sheet with no rate keeps its refresh control (CRITIC-CARRYOVER-7 item
- * 3) — and once a press has opened a wallet (`PAY_VALVE_TEXT_AFTER_OPEN`).
- * The first clause alone, the rule the owner set for a line nobody should
- * act on by pressing (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the
- * card says why there is no figure.
+ * The same two facts without the ask: wherever no Pay control is on the
+ * sheet (the window's copy call, CRITIC-CARRYOVER-8 item 4) — "again"
+ * names the Pay press, and with no figure there is none to repeat; the
+ * refresh control that stays (CRITIC-CARRYOVER-7 item 3) names itself —
+ * and once a press has opened a wallet (`PAY_VALVE_TEXT_AFTER_OPEN`). The
+ * first clause alone, the rule the owner set for a line nobody should act
+ * on by pressing (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the card
+ * says why there is no figure.
  */
-export const PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS = 'No fresh price';
-export const PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS = 'No usable price';
+export const PAY_RATE_UNAVAILABLE_NO_PAY = 'No fresh price';
+export const PAY_RATE_IMPLAUSIBLE_NO_PAY = 'No usable price';
 /**
  * The two lines that ask for the Pay press again, once a press on the sheet
  * has opened a wallet (CRITIC-CARRYOVER-7 item 2): the first clause alone,
@@ -1904,13 +1905,13 @@ export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
     disagree: PAY_RATE_DISAGREE,
 };
 /**
- * The valve's line when neither Pay nor the refresh control is on the sheet
- * (`PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS`): only the two outcomes that
- * leave no figure have a form of their own; any other outcome keeps its line.
+ * The valve's line when no Pay control is on the sheet
+ * (`PAY_RATE_UNAVAILABLE_NO_PAY`): only the two outcomes that leave no
+ * figure have a form of their own; any other outcome keeps its line.
  */
-export const PAY_VALVE_TEXT_NOTHING_TO_PRESS: Readonly<Partial<Record<PayRateOutcome, string>>> = {
-    unavailable: PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
-    implausible: PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
+export const PAY_VALVE_TEXT_NO_PAY: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    unavailable: PAY_RATE_UNAVAILABLE_NO_PAY,
+    implausible: PAY_RATE_IMPLAUSIBLE_NO_PAY,
 };
 /**
  * The valve's line once a press on the sheet has opened a wallet, until a
@@ -1921,8 +1922,8 @@ export const PAY_VALVE_TEXT_NOTHING_TO_PRESS: Readonly<Partial<Record<PayRateOut
 export const PAY_VALVE_TEXT_AFTER_OPEN: Readonly<Partial<Record<PayRateOutcome, string>>> = {
     moved: PAY_RATE_MOVED_OPENED,
     refreshed: PAY_RATE_REFRESHED_OPENED,
-    unavailable: PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
-    implausible: PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
+    unavailable: PAY_RATE_UNAVAILABLE_NO_PAY,
+    implausible: PAY_RATE_IMPLAUSIBLE_NO_PAY,
 };
 export const PAY_QR_FOLD = 'Scan with a phone wallet';
 export const PAY_QR_ALT = 'QR code of the payment';

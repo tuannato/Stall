@@ -4691,18 +4691,19 @@ function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
 
 /**
  * The valve's line for an outcome, in the form that fits what the buyer can
- * press (CRITIC-CARRYOVER-6 item 5): when neither a Pay control nor the
- * refresh control is on the sheet, a line that asks for a press asks for
- * one nobody can make, and it is said without the ask — a fence no state
- * reaches since a sheet with no rate keeps its refresh control
- * (CRITIC-CARRYOVER-7 item 3). And once a press on the sheet has
- * opened a wallet (`opened`), no line asks for a press, until a Pay press
- * is absorbed again (CRITIC-CARRYOVER-7 item 2): the record line's rule.
+ * press (CRITIC-CARRYOVER-6 item 5): "press again" names the Pay press, so
+ * where no Pay control is on the sheet (`payStands` false) a line that asks
+ * for it is said without the ask — the refresh control that stays with no
+ * rate names itself, and "again" would name a press the buyer cannot repeat
+ * (the window's copy call, CRITIC-CARRYOVER-8 item 4). And once a press on
+ * the sheet has opened a wallet (`opened`), no line asks for a press, until
+ * a Pay press is absorbed again (CRITIC-CARRYOVER-7 item 2): the record
+ * line's rule.
  */
-function valveLine(outcome: PayRateOutcome, pressable: boolean, opened: boolean): string {
+function valveLine(outcome: PayRateOutcome, payStands: boolean, opened: boolean): string {
     return (
         (opened ? copy.PAY_VALVE_TEXT_AFTER_OPEN[outcome] : undefined) ??
-        (pressable ? undefined : copy.PAY_VALVE_TEXT_NOTHING_TO_PRESS[outcome]) ??
+        (payStands ? undefined : copy.PAY_VALVE_TEXT_NO_PAY[outcome]) ??
         copy.PAY_VALVE_TEXT[outcome]
     );
 }
@@ -5741,13 +5742,12 @@ function paySheet(
         // control stands to press again (CRITIC-CARRYOVER-4 item 4).
         const recordLine =
             pressedLine && linked ? copy.PAY_QUOTE_CHANGED : copy.PAY_QUOTE_CHANGED_UNPRESSED;
-        // The newer of the two lines (`lineFrom`), asking for a press only
-        // where one can be made (`valveLine`).
+        // The newer of the two lines (`lineFrom`), asking for the Pay press
+        // only where a Pay control stands (`valveLine`).
         const standing = rateLineStands() ? outcome : undefined;
-        const pressable = linked || onSheet(wrap, refreshRate);
         valve.textContent =
             standing !== undefined
-                ? valveLine(standing, pressable, opened)
+                ? valveLine(standing, linked, opened)
                 : recordLineStands()
                   ? recordLine
                   : '';
@@ -6910,9 +6910,8 @@ function paySeveralSheet(
                 : pressedLine && linked
                   ? copy.payItemsChanged(movedNames(changedNames))
                   : copy.payItemsChangedUnpressed(movedNames(changedNames));
-        // Asking for a press only where one can be made (`valveLine`).
-        const outcomeLine =
-            outcome !== undefined ? valveLine(outcome, linked || onSheet(wrap, refreshRate), opened) : undefined;
+        // Asking for the Pay press only where a Pay control stands (`valveLine`).
+        const outcomeLine = outcome !== undefined ? valveLine(outcome, linked, opened) : undefined;
         const line = lineFrom === 'record' ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
         valve.hidden = lostAll || line === undefined;
         valve.textContent = line ?? '';
