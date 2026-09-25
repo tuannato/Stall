@@ -1514,6 +1514,11 @@ describe('cashtab-link-is-not-inside-the-row-button', () => {
         expect(back.contains(link)).toBe(false);
         expect(link.closest('button')).toBeNull();
 
+        // A live `_blank` link: happy-dom follows it from its own Window
+        // instance, which a `window.open` stub never sees, so its default
+        // is cancelled or the click asks cashtab.com for the page
+        // (`no-test-reaches-the-network`).
+        link.addEventListener('click', (e) => e.preventDefault(), { once: true });
         link.click();
         expect(h.onOpenItem).not.toHaveBeenCalled();
         expect(h.onCloseSheet).not.toHaveBeenCalled();
