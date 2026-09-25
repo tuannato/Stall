@@ -98,3 +98,55 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         expect([...decidedOf({ decided: new Set([C]), prices: new Map([[A, price(1n)]]) })]).toEqual([C]);
     });
 });
+
+describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk', () => {
+    /**
+     * The critic's final merge, item 1. The kept read was taken while its
+     * record was finalized and unmined, so its rank is frozen above every
+     * height; the walk that threw later read a newer record mined at 900 by
+     * a node that never saw it in its mempool (first-seen 0, unknown).
+     * Compared whole, the frozen rank beat the walk and the older figure —
+     * or an item the seller had since removed — came back. The kept read may
+     * outrank the walk only on the one order a walk reading newest block
+     * first can get backwards: both stamps known, the kept one later.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const keptRank = { height: undefined, isFinal: true, txid: '1'.repeat(64), firstSeen: 1756400000 };
+    const walkRank = { height: 900, isFinal: true, txid: '2'.repeat(64), firstSeen: 0 };
+    const kept = {
+        descriptions: new Map([[A, 'old words']]),
+        prices: new Map([[A, price(500_000n)]]),
+        quoteTimes: new Map([[A, 1]]),
+        ranks: new Map([[A, keptRank]]),
+    };
+
+    it('keeps the walk\'s newer figure', () => {
+        const read = {
+            descriptions: new Map([[A, 'new words']]),
+            prices: new Map([[A, price(900_000n)]]),
+            ranks: new Map([[A, walkRank]]),
+        };
+        const out = mergeFailedRead(read, new Set([A]), kept);
+        expect(out.prices.get(A), 'the figure the walk read, not the one it read past').toEqual(price(900_000n));
+        expect(out.descriptions.get(A)).toBe('new words');
+        expect(out.ranks.get(A)).toEqual(walkRank);
+        expect(out.keptShown.has(A), 'nothing on screen came from the kept read').toBe(false);
+    });
+
+    it('keeps the walk\'s removal', () => {
+        const read = { ranks: new Map([[A, walkRank]]) };
+        const out = mergeFailedRead(read, new Set([A]), kept);
+        expect(out.prices.has(A), 'the item the seller removed does not come back').toBe(false);
+        expect(out.descriptions.has(A)).toBe(false);
+        expect(out.keptShown.size).toBe(0);
+    });
+
+    it('still lets a kept record outrank the walk when both stamps say it is later', () => {
+        const read = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { ...walkRank, firstSeen: 1756300000 }]]) };
+        expect(mergeFailedRead(read, new Set([A]), kept).prices.get(A)).toEqual(price(500_000n));
+        // Equal stamps: the walk's answer stands.
+        const tie = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { ...walkRank, firstSeen: 1756400000 }]]) };
+        expect(mergeFailedRead(tie, new Set([A]), kept).prices.get(A)).toEqual(price(900_000n));
+    });
+});
