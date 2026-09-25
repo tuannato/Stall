@@ -11161,6 +11161,164 @@ describe('a-replaced-sheets-late-answer-marks-nothing', () => {
     });
 });
 
+describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 2. The press that opens a wallet cleared the
+     * record line's ask (`pressedLine`) and left the valve's standing:
+     * "Rate refreshed \u2014 press Pay again" or "Price updated \u2014 review
+     * and pay again" went on asking after the wallet opened, and a buyer
+     * asked for another press may pay twice. Now the valve's line falls
+     * back to its first clause, as the record line does, and stays so until
+     * a Pay press opens nothing: the refresh control is no Pay press, so its
+     * answer after an open asks for none; an absorbed Pay press may ask
+     * again. The flag rides a hand-back (`PayShown.opened`) and a paint
+     * (`payWalletOpened`). The clock is held (`toFake: ['performance']`).
+     */
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+    const answer = scaleRate(0.000025)!;
+    const again = scaleRate(0.00003)!;
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['valve', 'refresh'] as const) {
+            it(`${kind}, the ${road}’s line: the press that opens drops the ask, a refresh after it asks for none, and an absorbed Pay press asks again`, async () => {
+                vi.useFakeTimers({ toFake: ['performance'] });
+                const root = mountedRoot();
+                const rates = [answer, again];
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayWalletOpened: vi.fn(),
+                    onPayRate: vi.fn(async () => ({ rate: rates.shift()!, atMs: Date.now() })),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        payRate: road === 'valve' ? aged : { rate: aged.rate, atMs: Date.now() },
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+                const valve = (): string | undefined => sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? undefined;
+                const refresh = (): void => (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+                if (road === 'valve') {
+                    expect(pressForUrl(root, 'pay-cashtab'), 'over an aged rate: the valve asks').toBeUndefined();
+                } else {
+                    refresh();
+                }
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                const [asking, first] =
+                    road === 'valve'
+                        ? [copy.PAY_RATE_MOVED, copy.PAY_RATE_MOVED_OPENED]
+                        : [copy.PAY_RATE_REFRESHED, copy.PAY_RATE_REFRESHED_OPENED];
+                expect(valve(), 'before any wallet opened, the line asks').toBe(asking);
+                expect(asking.startsWith(`${first} \u2014 `), 'the first clause').toBe(true);
+
+                vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(pressForUrl(root, 'pay-cashtab'), 'after the grace: a wallet opens').toBeDefined();
+                expect(h.onPayWalletOpened).toHaveBeenCalledTimes(1);
+                expect(valve(), 'the press that opened drops the ask').toBe(first);
+                expect(valve()).not.toMatch(/again/i);
+
+                // The refresh control is no Pay press: its answer after an
+                // open asks for none, though it moved the figure.
+                refresh();
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(h.onPayRate).toHaveBeenCalledTimes(2);
+                expect(valve(), 'a refresh after the open asks for no press').toBe(copy.PAY_RATE_REFRESHED_OPENED);
+
+                // A Pay press inside that answer's grace opens nothing: it
+                // may ask again.
+                vi.advanceTimersByTime(100);
+                expect(pressForUrl(root, 'pay-cashtab'), 'inside the answer’s grace').toBeUndefined();
+                expect(valve(), 'an absorbed Pay press asks again').toBe(copy.PAY_RATE_REFRESHED);
+                expect(document.getElementById('sr-live')?.textContent?.trim()).toBe(copy.PAY_RATE_REFRESHED);
+
+                vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(pressForUrl(root, 'pay-cashtab'), 'after the grace: a wallet opens again').toBeDefined();
+                expect(valve(), 'and the ask drops again').toBe(copy.PAY_RATE_REFRESHED_OPENED);
+                expect(h.onPayRecordMoved, 'all in place').not.toHaveBeenCalled();
+            });
+        }
+
+        it(`${kind}: a line painted after a wallet opened asks for no press`, () => {
+            const root = mountedRoot();
+            const view = payView({
+                overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n]]),
+                payRate: { rate: aged.rate, atMs: Date.now() },
+                payRateOutcome: 'refreshed',
+            });
+            const valve = (at: HTMLElement): string | undefined =>
+                at.querySelector(`[data-role="${kind}"] [data-role="pay-valve"]`)?.textContent ?? undefined;
+            renderStall(root, view, { ...handlers(), onPayRecords: () => records });
+            expect(valve(root), 'a carried line asks, before any open').toBe(copy.PAY_RATE_REFRESHED);
+            const after = mountedRoot();
+            renderStall(after, { ...view, payWalletOpened: true }, { ...handlers(), onPayRecords: () => records });
+            expect(valve(after), 'painted after an open: no ask').toBe(copy.PAY_RATE_REFRESHED_OPENED);
+        });
+    }
+
+    it('pay-several: a hand-back that carries the line carries the open with it', () => {
+        // The one road a sheet hands itself back with the valve's line
+        // standing and no Pay press: a refresh press finds a chosen item
+        // taken out, and the items still chosen did not change.
+        const TEA_USD = { code: 'usd', exponent: 2, amount: 300n } as TokenPrice;
+        const both = { ...records, prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice], [TOKEN_UNLISTED, TEA_USD]]) };
+        let now: typeof records = both;
+        const root = mountedRoot();
+        const h = {
+            ...handlers(),
+            onPayRecords: () => now,
+            onPayRecordMoved: vi.fn(),
+            onPayFigureChanged: vi.fn(),
+            onPayWalletOpened: vi.fn(),
+        };
+        renderStall(
+            root,
+            payView({
+                overlay: { kind: 'pay-several' },
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, PAY_TEA],
+                ]),
+                prices: both.prices,
+                selectionOpen: true,
+                selection: new Map([
+                    [TOKEN_ID, 1n],
+                    [TOKEN_UNLISTED, 1n],
+                ]),
+                payRate: { rate: aged.rate, atMs: Date.now() },
+                payRateOutcome: 'refreshed',
+            }),
+            h,
+        );
+        expect(pressForUrl(root, 'pay-cashtab'), 'a wallet opens').toBeDefined();
+        now = records;
+        (root.querySelector('[data-role="pay-several"] [data-role="pay-refresh"]') as HTMLElement).click();
+        expect(h.onPayRecordMoved).toHaveBeenCalledTimes(1);
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith(
+            undefined,
+            false,
+            expect.objectContaining({ outcome: 'refreshed', opened: true }),
+        );
+    });
+});
+
 describe('a-margin-or-words-change-is-taken-in-place-and-the-press-opens', () => {
     /**
      * The owner (2026-09-25): "moved" is what the buyer pays changing — the

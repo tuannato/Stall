@@ -1778,7 +1778,8 @@ export const PAY_OTHER_WALLET = 'Pay with another wallet app';
  * The press-time valve. A rate older than `PAY_RATE_MAX_AGE_MS` is refetched
  * on the press, and the press never opens a wallet afterwards \u2014 so each of
  * these ends by asking for the press again, and the figure it refers to has
- * already been repainted above it.
+ * already been repainted above it. Once a press has opened a wallet, the
+ * line is said without the ask (`PAY_VALVE_TEXT_AFTER_OPEN`).
  */
 export const PAY_RATE_MOVED = 'Price updated \u2014 review and pay again';
 export const PAY_RATE_REFRESHED = 'Rate refreshed \u2014 press Pay again';
@@ -1796,6 +1797,15 @@ export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
  */
 export const PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS = 'No fresh price';
 export const PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS = 'No usable price';
+/**
+ * The two lines that ask for the Pay press again, once a press on the sheet
+ * has opened a wallet (CRITIC-CARRYOVER-7 item 2): the first clause alone,
+ * the record line's rule (`PAY_QUOTE_CHANGED_UNPRESSED`; the owner's
+ * CRITIC-CARRYOVER-4 item 4) — after a wallet opened there is no "again"
+ * to ask for, and a buyer asked for one may pay twice.
+ */
+export const PAY_RATE_MOVED_OPENED = 'Price updated';
+export const PAY_RATE_REFRESHED_OPENED = 'Rate refreshed';
 /**
  * The seller's record moved while the sheet was open — what the buyer pays
  * changed: the figure, the unit or the surcharge — and the sheet was
@@ -1888,6 +1898,18 @@ export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
  * leave no figure have a form of their own; any other outcome keeps its line.
  */
 export const PAY_VALVE_TEXT_NOTHING_TO_PRESS: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    unavailable: PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
+    implausible: PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
+};
+/**
+ * The valve's line once a press on the sheet has opened a wallet, until a
+ * Pay press is absorbed again (`PAY_RATE_MOVED_OPENED`): every line that
+ * asks for a press, without the ask. The disagreement line asks for none
+ * and keeps its words.
+ */
+export const PAY_VALVE_TEXT_AFTER_OPEN: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    moved: PAY_RATE_MOVED_OPENED,
+    refreshed: PAY_RATE_REFRESHED_OPENED,
     unavailable: PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
     implausible: PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
 };

@@ -172,6 +172,13 @@ export type PayShown = {
      * line stands.
      */
     readonly outcome?: PayRateOutcome;
+    /**
+     * A press on the sheet opened a wallet after it last absorbed a Pay
+     * press, so that line is said without its ask on the paint that
+     * replaces the sheet too (`PAY_VALVE_TEXT_AFTER_OPEN`;
+     * CRITIC-CARRYOVER-7 item 2). Meaningful beside `outcome` alone.
+     */
+    readonly opened?: boolean;
 };
 
 export type StallHandlers = {
@@ -4687,10 +4694,16 @@ function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
  * press (CRITIC-CARRYOVER-6 item 5): when neither a Pay control nor the
  * refresh control is on the sheet — a read with no answer leaves no figure
  * and no rate row — a line that asks for a press asks for one nobody can
- * make, and it is said without the ask.
+ * make, and it is said without the ask. And once a press on the sheet has
+ * opened a wallet (`opened`), no line asks for a press, until a Pay press
+ * is absorbed again (CRITIC-CARRYOVER-7 item 2): the record line's rule.
  */
-function valveLine(outcome: PayRateOutcome, pressable: boolean): string {
-    return (pressable ? undefined : copy.PAY_VALVE_TEXT_NOTHING_TO_PRESS[outcome]) ?? copy.PAY_VALVE_TEXT[outcome];
+function valveLine(outcome: PayRateOutcome, pressable: boolean, opened: boolean): string {
+    return (
+        (opened ? copy.PAY_VALVE_TEXT_AFTER_OPEN[outcome] : undefined) ??
+        (pressable ? undefined : copy.PAY_VALVE_TEXT_NOTHING_TO_PRESS[outcome]) ??
+        copy.PAY_VALVE_TEXT[outcome]
+    );
 }
 
 /** Whether a control is on the sheet: inside it, and under nothing hidden. */
@@ -5262,6 +5275,16 @@ function paySheet(
      */
     let pressedLine = view.payRecordMoved !== undefined && view.payRecordMovedUnpressed !== true;
     /**
+     * A press on this sheet has opened a wallet since it last absorbed a Pay
+     * press — seeded from the paint (`payWalletOpened`, beside the valve's
+     * carried line) — so the valve's line asks for no press
+     * (`PAY_VALVE_TEXT_AFTER_OPEN`; CRITIC-CARRYOVER-7 item 2): set by the
+     * press that opened, taken off by a Pay press that opened nothing,
+     * whose line may ask again. The refresh control is no Pay press: its
+     * answer after an open asks for none.
+     */
+    let opened = view.payWalletOpened === true;
+    /**
      * What a re-read did to the record under the open sheet (the owner,
      * 2026-09-25): `changed` — still quoted, and the sheet recomposed in
      * place from it, the buyer's quantity kept — a return to the record the
@@ -5336,7 +5359,7 @@ function paySheet(
         handlers.onPayRecordMoved?.(tokenId, pressed, {
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
-            ...(rateLineStands() && outcome !== undefined ? { outcome } : {}),
+            ...(rateLineStands() && outcome !== undefined ? { outcome, ...(opened ? { opened } : {}) } : {}),
         });
     };
     /**
@@ -5680,7 +5703,7 @@ function paySheet(
         const pressable = linked || onSheet(wrap, refreshRate);
         valve.textContent =
             standing !== undefined
-                ? valveLine(standing, pressable)
+                ? valveLine(standing, pressable, opened)
                 : recordLineStands()
                   ? recordLine
                   : '';
@@ -5749,6 +5772,7 @@ function paySheet(
      */
     const absorbPress = (): void => {
         pressedLine = true;
+        opened = false;
         refresh();
         speakRecompose(wrap, [lost() ? lostBox : valve], undefined, head);
         handBack(true);
@@ -5762,6 +5786,12 @@ function paySheet(
      * from it would drop the line the buyer is reading.
      */
     const absorbRatePress = (): void => {
+        // A Pay press that opened nothing: after an open, its line may ask
+        // for the press again.
+        if (opened) {
+            opened = false;
+            refresh();
+        }
         speakRecompose(wrap, [valve], undefined, head);
     };
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
@@ -5813,14 +5843,20 @@ function paySheet(
                 // the origin's `Referrer-Policy: no-referrer` header is the belt
                 // behind it.
                 window.open(url, '_blank', 'noopener,noreferrer');
-                // A wallet opened: there is no "again" left to ask for.
-                if (pressedLine) {
-                    pressedLine = false;
+                // A wallet opened: there is no "again" left to ask for, on
+                // the record's line or the valve's (CRITIC-CARRYOVER-7 item 2).
+                const asked = pressedLine || (outcome !== undefined && !opened);
+                pressedLine = false;
+                opened = true;
+                if (asked) {
                     refresh();
                 }
                 handlers.onPayWalletOpened?.();
                 return;
             }
+            // A Pay press that opens nothing: the valve's answer below may
+            // ask for the press again.
+            opened = false;
             // Measured on the figure this sheet composes — surcharge included —
             // through the verdict both pay sheets share (`settleValve`).
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
@@ -6461,6 +6497,8 @@ function paySeveralSheet(
      * (the single sheet's `pressedLine`; CRITIC-CARRYOVER-4 item 4).
      */
     let pressedLine = view.payRecordMoved !== undefined && view.payRecordMovedUnpressed !== true;
+    /** The single sheet's `opened`: a wallet opened, so the valve's line asks for no press. */
+    let opened = view.payWalletOpened === true;
     /** The records this sheet composes from: every chosen item's, as painted. */
     const composed = new Map<string, TokenPrice>();
     for (const tokenId of selection.keys()) {
@@ -6531,7 +6569,7 @@ function paySeveralSheet(
         handlers.onPayRecordMoved?.(undefined, pressed, {
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
-            ...(standing === undefined ? {} : { outcome: standing }),
+            ...(standing === undefined ? {} : { outcome: standing, ...(opened ? { opened } : {}) }),
         });
     };
     let composedAt = 0;
@@ -6795,7 +6833,7 @@ function paySeveralSheet(
                   : copy.payItemsChangedUnpressed(movedNames(changedNames));
         // Asking for a press only where one can be made (`valveLine`).
         const outcomeLine =
-            outcome !== undefined ? valveLine(outcome, linked || onSheet(wrap, refreshRate)) : undefined;
+            outcome !== undefined ? valveLine(outcome, linked || onSheet(wrap, refreshRate), opened) : undefined;
         const line = lineFrom === 'record' ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
         valve.hidden = lostAll || line === undefined;
         valve.textContent = line ?? '';
@@ -6842,12 +6880,19 @@ function paySeveralSheet(
     /** The single sheet's `absorbPress`, over the choice: said, spoken, handed back with the grace. */
     const absorbPress = (): void => {
         pressedLine = true;
+        opened = false;
         refresh();
         speakRecompose(wrap, lostAll ? [lostBox] : [valve, dropped], undefined, head);
         handBack(true);
     };
     /** The single sheet's `absorbRatePress`: the valve's line spoken again, in place, nothing handed back. */
     const absorbRatePress = (): void => {
+        // A Pay press that opened nothing: after an open, its line may ask
+        // for the press again.
+        if (opened) {
+            opened = false;
+            refresh();
+        }
         speakRecompose(wrap, [valve], undefined, head);
     };
     // The press-time valve, the single sheet's (its docblock says why a
@@ -6884,14 +6929,20 @@ function paySeveralSheet(
             }
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 window.open(url, '_blank', 'noopener,noreferrer');
-                // A wallet opened: there is no "again" left to ask for.
-                if (pressedLine) {
-                    pressedLine = false;
+                // A wallet opened: there is no "again" left to ask for, on
+                // the record's line or the valve's (CRITIC-CARRYOVER-7 item 2).
+                const asked = pressedLine || (outcome !== undefined && !opened);
+                pressedLine = false;
+                opened = true;
+                if (asked) {
                     refresh();
                 }
                 handlers.onPayWalletOpened?.();
                 return;
             }
+            // A Pay press that opens nothing: the valve's answer below may
+            // ask for the press again.
+            opened = false;
             const before = selectionSats(selection, prices, rate.rate);
             const at = composedAt;
             void (async () => {

@@ -814,6 +814,15 @@ export type StallView = WindowState & {
      */
     payRateOutcome?: PayRateOutcome;
     /**
+     * A press on the open sheet opened a wallet after the valve's line
+     * (`payRateOutcome`) was set, and no Pay press was absorbed since: the
+     * line is said without its ask (`PAY_VALVE_TEXT_AFTER_OPEN`;
+     * CRITIC-CARRYOVER-7 item 2). Carried with the line across a hand-back
+     * (`PayShown.opened`) and set by the open (`onPayWalletOpened`).
+     * Present only beside `payRateOutcome`.
+     */
+    payWalletOpened?: true;
+    /**
      * The figure on the open pay sheet changed under the buyer while it was
      * open — a re-read recomposed it in place (a return to the record it
      * was opened on included), a press or an ask's tail found the seller's

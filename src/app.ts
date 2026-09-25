@@ -616,9 +616,14 @@ export function boot(
      * sheet it belongs to: painted as `payRateOutcome`, so the sheet the app
      * paints next says the line the buyer was reading. Dropped by a record
      * change this app or the sheet finds after it — that line is the newer —
-     * and whenever a pay sheet opens or closes.
+     * and whenever a pay sheet opens or closes. `opened`: a press on the
+     * sheet has opened a wallet since it last absorbed a Pay press, so the
+     * line is painted without its ask (`payWalletOpened`; CRITIC-CARRYOVER-7
+     * item 2).
      */
-    let payOutcomeCarried: { readonly key: string; readonly outcome: PayRateOutcome } | undefined;
+    let payOutcomeCarried:
+        | { readonly key: string; readonly outcome: PayRateOutcome; readonly opened?: true }
+        | undefined;
     /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
@@ -1400,7 +1405,10 @@ export function boot(
             payQuantity,
             ...(payOpenedAt === undefined ? {} : { payOpenedAt }),
             ...(payOutcomeCarried !== undefined && payOutcomeCarried.key === payOverlayKey(state.view.overlay)
-                ? { payRateOutcome: payOutcomeCarried.outcome }
+                ? {
+                      payRateOutcome: payOutcomeCarried.outcome,
+                      ...(payOutcomeCarried.opened === true ? { payWalletOpened: true as const } : {}),
+                  }
                 : {}),
             ...(payRecordMovedFor !== undefined &&
             payRecordMovedFor === payOverlayKey(state.view.overlay) &&
@@ -1558,8 +1566,14 @@ export function boot(
                 payOutcomeCarried = undefined;
             },
             onPayWalletOpened: () => {
-                if (payRecordMovedFor === payOverlayKey(state.view.overlay)) {
+                const key = payOverlayKey(state.view.overlay);
+                if (payRecordMovedFor === key) {
                     payRecordMovedPressed = false;
+                }
+                // The valve's carried line too: no ask after a wallet opened
+                // (CRITIC-CARRYOVER-7 item 2).
+                if (payOutcomeCarried !== undefined && payOutcomeCarried.key === key) {
+                    payOutcomeCarried = { ...payOutcomeCarried, opened: true };
                 }
             },
             onToggleSelection: () => {
@@ -2534,7 +2548,9 @@ export function boot(
         // that replaces it, unless a record change it never painted is the
         // newer fact (CRITIC-CARRYOVER-6 item 4).
         payOutcomeCarried =
-            fresh.length === 0 && shown?.outcome !== undefined ? { key, outcome: shown.outcome } : undefined;
+            fresh.length === 0 && shown?.outcome !== undefined
+                ? { key, outcome: shown.outcome, ...(shown.opened === true ? { opened: true as const } : {}) }
+                : undefined;
         if (known.length + fresh.length > 0) {
             payRecordMovedFor = key;
             payRecordMovedItems = [...known, ...fresh];

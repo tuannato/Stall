@@ -44,6 +44,7 @@ import {
     PAY_QUOTE_CHANGED,
     PAY_QUOTE_CHANGED_UNPRESSED,
     PAY_RATE_REFRESHED,
+    PAY_RATE_REFRESHED_OPENED,
     PAY_QUOTE_GONE,
     PAY_QUOTE_UNSHOWN,
     PAY_SEVERAL_GONE,
@@ -7701,6 +7702,122 @@ describe('a-rate-answer-after-a-change-in-place-says-its-own-line', () => {
             await flush();
             expect(lineOf(root, scope)).toBe(PAY_RATE_REFRESHED);
             expect(spoken(), 'the absorbed press repeats it').toBe(PAY_RATE_REFRESHED);
+        });
+    }
+});
+
+describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 2, through the real app (the sheet's half is
+     * in render.test.ts under the same name): the critic's H3. A re-read
+     * moves Plum Jam in place; the refresh control's answer moves the
+     * figure — "Rate refreshed \u2014 press Pay again"; a Pay press inside
+     * the record's grace is handed back, and the app paints the sheet again
+     * with that line carried. The press after the grace opens the wallet,
+     * and the line went on asking for another. Now it drops the ask; a
+     * refresh after it asks for none; an absorbed Pay press asks again.
+     */
+    const A = 'ae'.repeat(32);
+    const B = 'be'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    const R3 = scaleRate(0.00003)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const lineOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? undefined;
+    const FIGURES = {
+        pay: { inPlace: '300,000', answered: '240,000', again: '200,000' },
+        'pay-several': { inPlace: '450,000', answered: '360,000', again: '300,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the press that opens drops the carried line's ask, a refresh after it asks for none, and an absorbed Pay press asks again`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            later(2_000);
+            const hex = encodeDescriptionHex(A, 'Words', { price: USD(600n) });
+            const id = publish(signedTx({ txid: 'ae1'.padEnd(64, '0'), outputs: [`6a${hex!}`], height: 7 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([id]);
+            }
+            await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+            later(50);
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+            later(250);
+            answer(R2);
+            await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+            expect(lineOf(root, scope)).toBe(PAY_RATE_REFRESHED);
+
+            later(700);
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            expect(press(root, scope), 'inside the record grace').toBeUndefined();
+            await flush();
+            expect(root.querySelector(`[data-role="${scope}"]`), 'handed back: the app painted the sheet').not.toBe(before);
+            expect(lineOf(root, scope), 'the carried line asks, before any open').toBe(PAY_RATE_REFRESHED);
+
+            later(801);
+            const url = press(root, scope);
+            expect(url, 'after the graces: the wallet opens').toBeDefined();
+            expect(lineOf(root, scope), 'the press that opened drops the ask').toBe(PAY_RATE_REFRESHED_OPENED);
+            expect(lineOf(root, scope)).not.toMatch(/again/i);
+
+            priceControl.fetch = async () => R3;
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await until(() => figureOf(root, scope) === FIGURES[scope].again);
+            expect(lineOf(root, scope), 'a refresh after the open asks for no press').toBe(PAY_RATE_REFRESHED_OPENED);
+
+            later(100);
+            expect(press(root, scope), 'inside that answer’s grace').toBeUndefined();
+            await flush();
+            expect(lineOf(root, scope), 'an absorbed Pay press asks again').toBe(PAY_RATE_REFRESHED);
         });
     }
 });
