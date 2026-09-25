@@ -46,8 +46,10 @@ import {
     PAY_RATE_REFRESHED,
     PAY_RATE_REFRESHED_OPENED,
     PAY_QUOTE_GONE,
+    PAY_QUOTE_GONE_OPENED,
     PAY_QUOTE_UNSHOWN,
     PAY_SEVERAL_GONE,
+    PAY_SEVERAL_GONE_OPENED,
     payItemsChangedUnpressed,
     selectionDroppedCheck,
     selectionDroppedCheckPressed,
@@ -7921,6 +7923,103 @@ describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
             expect(press(root, scope), 'inside that answer’s grace').toBeUndefined();
             await flush();
             expect(lineOf(root, scope), 'an absorbed Pay press asks again').toBe(PAY_RATE_REFRESHED);
+        });
+    }
+});
+
+describe('a-lost-sheet-never-says-no-wallet-opened-after-one-did', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 2, the hand-back road through the real app (the
+     * in-place cases are in render.test.ts under the same name). A Pay press
+     * opens the wallet; the buyer presses "Get a fresh price"; while that ask
+     * is out the seller takes the item off the rail, and the sheet goes lost
+     * in place. The ask's answer finds the sheet recomposed and hands it
+     * back, and the app paints the lost sheet again from the records — the
+     * branch that read only `payRecordMoved`, and said "\u2026 \u2014 no wallet
+     * was opened" to a buyer who had just opened one. The app keeps the open
+     * for the sheet (`payWalletWasOpened`), and both sheets say their first
+     * clause alone.
+     */
+    const A = 'af'.repeat(32);
+    const B = 'bf'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const lostOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-lost"]`)?.textContent ?? undefined;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the record leaves under the refresh control's ask after a wallet opened, and the sheet the app paints says the first clause`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? '') !== '');
+            later(2_000);
+            expect(press(root, scope), 'a wallet opened').toBeDefined();
+
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+
+            const removals = (scope === 'pay' ? [A] : [A, B]).map((tokenId, i) =>
+                publish(signedTx({ txid: `af${i}`.padEnd(64, '0'), outputs: [`6a${encodeRemovalHex(tokenId)!}`], height: 7 })),
+            );
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.(removals);
+            }
+            const inPlace = root.querySelector(`[data-role="${scope}"]`);
+            await until(() => lostOf(root, scope) !== undefined);
+            const first = scope === 'pay' ? PAY_QUOTE_GONE_OPENED : PAY_SEVERAL_GONE_OPENED;
+            expect(lostOf(root, scope), 'in place').toBe(first);
+
+            answer(R2);
+            await until(() => root.querySelector(`[data-role="${scope}"]`) !== inPlace);
+            await flush();
+            expect(lostOf(root, scope), 'the sheet the app painted after the hand-back').toBe(first);
+            expect(root.querySelector(`[data-role="${scope}"]`)?.textContent ?? '').not.toContain('no wallet was opened');
+            expect(viewOf(root)?.payWalletWasOpened).toBe(true);
         });
     }
 });

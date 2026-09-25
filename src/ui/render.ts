@@ -4898,12 +4898,20 @@ function paySheet(
         //
         // Said once, in the box: the head carries the sheet's title and no
         // second copy of the sentence under it (the window, 2026-09-25).
+        // Once a press on this sheet opened a wallet, never "no wallet was
+        // opened": the first clause alone (`payWalletWasOpened`;
+        // CRITIC-CARRYOVER-8 item 2).
+        const walletWasOpened = view.payWalletWasOpened === true;
         const gone =
             view.payRecordMoved === undefined
                 ? copy.PAY_HINT_UNKNOWN
                 : view.prices?.has(tokenId) === true
-                  ? copy.PAY_QUOTE_UNSHOWN
-                  : copy.PAY_QUOTE_GONE;
+                  ? walletWasOpened
+                      ? copy.PAY_QUOTE_UNSHOWN_OPENED
+                      : copy.PAY_QUOTE_UNSHOWN
+                  : walletWasOpened
+                    ? copy.PAY_QUOTE_GONE_OPENED
+                    : copy.PAY_QUOTE_GONE;
         wrap.append(sheetHead(copy.PAY_TITLE, '', handlers));
         const said = el('p', 'ctx', gone);
         said.setAttribute('data-role', 'pay-lost');
@@ -5290,6 +5298,14 @@ function paySheet(
      */
     let opened = view.payWalletOpened === true;
     /**
+     * A press on this sheet has opened a wallet since it opened — seeded from
+     * the paint (`payWalletWasOpened`, kept by the app across every
+     * hand-back) and set by the press that opened, never taken off: a sheet
+     * whose record left then says its sentence without "no wallet was
+     * opened" (`PAY_QUOTE_GONE_OPENED`; CRITIC-CARRYOVER-8 item 2).
+     */
+    let walletWasOpened = view.payWalletWasOpened === true;
+    /**
      * What a re-read did to the record under the open sheet (the owner,
      * 2026-09-25): `changed` — still quoted, and the sheet recomposed in
      * place from it, the buyer's quantity kept — a return to the record the
@@ -5609,7 +5625,15 @@ function paySheet(
             lostBox.remove();
         }
         lostBox.textContent =
-            movedUnder === 'unshown' ? copy.PAY_QUOTE_UNSHOWN : movedUnder === 'gone' ? copy.PAY_QUOTE_GONE : '';
+            movedUnder === 'unshown'
+                ? walletWasOpened
+                    ? copy.PAY_QUOTE_UNSHOWN_OPENED
+                    : copy.PAY_QUOTE_UNSHOWN
+                : movedUnder === 'gone'
+                  ? walletWasOpened
+                      ? copy.PAY_QUOTE_GONE_OPENED
+                      : copy.PAY_QUOTE_GONE
+                  : '';
         paintHead(head, gone ? undefined : { title: named.title, sub: headNote });
         card.hidden = gone;
         qtyRow.hidden = gone;
@@ -5856,6 +5880,7 @@ function paySheet(
                 const asked = pressedLine || (outcome !== undefined && !opened);
                 pressedLine = false;
                 opened = true;
+                walletWasOpened = true;
                 if (asked) {
                     refresh();
                 }
@@ -6299,10 +6324,14 @@ function paySeveralSheet(
             ...(failed > 0 ? [copy.selectionUnread(failed)] : []),
             ...(capped > 0 ? [copy.selectionCapped(capped)] : []),
         ].join(' ');
+        // Once a press on this sheet opened a wallet, never "no wallet was
+        // opened" (`payWalletWasOpened`; CRITIC-CARRYOVER-8 item 2).
         const empty =
             selection.size === 0
                 ? view.payRecordMoved !== undefined
-                    ? copy.PAY_SEVERAL_GONE
+                    ? view.payWalletWasOpened === true
+                        ? copy.PAY_SEVERAL_GONE_OPENED
+                        : copy.PAY_SEVERAL_GONE
                     : copy.SELECTION_EMPTY
                 : ours !== ''
                   ? ours
@@ -6507,6 +6536,8 @@ function paySeveralSheet(
     let pressedLine = view.payRecordMoved !== undefined && view.payRecordMovedUnpressed !== true;
     /** The single sheet's `opened`: a wallet opened, so the valve's line asks for no press. */
     let opened = view.payWalletOpened === true;
+    /** The single sheet's `walletWasOpened`: never taken off, so a lost choice never says no wallet was opened. */
+    let walletWasOpened = view.payWalletWasOpened === true;
     /** The records this sheet composes from: every chosen item's, as painted. */
     const composed = new Map<string, TokenPrice>();
     for (const tokenId of selection.keys()) {
@@ -6717,6 +6748,7 @@ function paySeveralSheet(
         } else if (!lostAll) {
             lostBox.remove();
         }
+        lostBox.textContent = walletWasOpened ? copy.PAY_SEVERAL_GONE_OPENED : copy.PAY_SEVERAL_GONE;
         card.hidden = lostAll;
         acts.hidden = lostAll;
         final.hidden = lostAll;
@@ -6944,6 +6976,7 @@ function paySeveralSheet(
                 const asked = pressedLine || (outcome !== undefined && !opened);
                 pressedLine = false;
                 opened = true;
+                walletWasOpened = true;
                 if (asked) {
                     refresh();
                 }

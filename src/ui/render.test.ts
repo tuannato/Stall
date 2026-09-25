@@ -11372,6 +11372,146 @@ describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
     });
 });
 
+describe('a-lost-sheet-never-says-no-wallet-opened-after-one-did', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 2 (the critic's `r1`); the hand-back half is in
+     * app.live.test.ts under the same name. A Pay press opens a wallet; the
+     * seller then takes the item off the rail — they saw the payment on
+     * Activity — or republishes it in a unit this page does not paint, and
+     * the sheet goes lost in place. It said "\u2026 \u2014 no wallet was opened"
+     * to a buyer who may just have paid. Once a wallet has opened, the lost
+     * sheet says its first clause alone, on both sheets, in place and on the
+     * sheet painted after a hand-back (`payWalletWasOpened`), whatever the
+     * sheet absorbed since.
+     */
+    const records = (prices: Map<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set([TOKEN_ID]),
+    });
+    const quoted = () => records(new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]));
+    const moves = {
+        gone: () => records(new Map()),
+        unshown: () => records(new Map([[TOKEN_ID, { ...QUOTE_USD, code: 'zzz' } as TokenPrice]])),
+    } as const;
+    const firstClause = {
+        pay: { gone: copy.PAY_QUOTE_GONE_OPENED, unshown: copy.PAY_QUOTE_UNSHOWN_OPENED },
+        'pay-several': { gone: copy.PAY_SEVERAL_GONE_OPENED, unshown: copy.PAY_SEVERAL_GONE_OPENED },
+    } as const;
+    const whole = {
+        pay: { gone: copy.PAY_QUOTE_GONE, unshown: copy.PAY_QUOTE_UNSHOWN },
+        'pay-several': { gone: copy.PAY_SEVERAL_GONE, unshown: copy.PAY_SEVERAL_GONE },
+    } as const;
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('each first clause is its sentence’s own, and none of them says no wallet was opened', () => {
+        for (const [short, long] of [
+            [copy.PAY_QUOTE_GONE_OPENED, copy.PAY_QUOTE_GONE],
+            [copy.PAY_QUOTE_UNSHOWN_OPENED, copy.PAY_QUOTE_UNSHOWN],
+            [copy.PAY_SEVERAL_GONE_OPENED, copy.PAY_SEVERAL_GONE],
+        ] as const) {
+            expect(long).toBe(`${short} \u2014 no wallet was opened`);
+            expect(short).not.toMatch(/wallet/i);
+        }
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        const overlay = kind === 'pay' ? ({ kind: 'pay', tokenId: TOKEN_ID } as const) : ({ kind: 'pay-several' } as const);
+        for (const move of ['gone', 'unshown'] as const) {
+            it(`${kind}: a re-read ${move} in place after the press that opened says the first clause`, () => {
+                let now = quoted();
+                const root = mountedRoot();
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => now,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayWalletOpened: vi.fn(),
+                };
+                renderStall(
+                    root,
+                    payView({ overlay, selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]), payRate: PAY_RATE }),
+                    h,
+                );
+                expect(pressForUrl(root, 'pay-cashtab'), 'a wallet opened').toBeDefined();
+                now = moves[move]();
+                recheckPaySheet(root);
+                const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+                expect(sheet.querySelector('[data-role="pay-lost"]')?.textContent).toBe(firstClause[kind][move]);
+                expect(sheet.textContent).not.toContain('no wallet was opened');
+                expect(document.getElementById('sr-live')?.textContent?.trim(), 'and that is what is spoken').toBe(
+                    firstClause[kind][move],
+                );
+            });
+
+            it(`${kind}: ${move}, with no wallet opened, still says so`, () => {
+                let now = quoted();
+                const root = mountedRoot();
+                renderStall(
+                    root,
+                    payView({ overlay, selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]), payRate: PAY_RATE }),
+                    { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayFigureChanged: vi.fn() },
+                );
+                now = moves[move]();
+                recheckPaySheet(root);
+                expect(root.querySelector('[data-role="pay-lost"]')?.textContent).toBe(whole[kind][move]);
+            });
+
+            it(`${kind}: ${move}, painted after a hand-back from a sheet that opened a wallet, says the first clause`, () => {
+                const lostView = (opened: boolean): StallView =>
+                    payView({
+                        overlay,
+                        prices: moves[move]().prices,
+                        selectionOpen: true,
+                        // The app's paint prunes the choice; the sheet it paints
+                        // then holds nothing chosen.
+                        selection: kind === 'pay' ? new Map([[TOKEN_ID, 1n]]) : new Map(),
+                        payRecordMoved: [TOKEN_ID],
+                        ...(opened ? { payWalletWasOpened: true as const } : {}),
+                    });
+                const after = mountedRoot();
+                renderStall(after, lostView(true), handlers());
+                expect(after.querySelector('[data-role="pay-lost"]')?.textContent).toBe(firstClause[kind][move]);
+                const before = mountedRoot();
+                renderStall(before, lostView(false), handlers());
+                expect(before.querySelector('[data-role="pay-lost"]')?.textContent, 'no wallet opened').toBe(
+                    whole[kind][move],
+                );
+            });
+        }
+
+        it(`${kind}: a Pay press absorbed after the open does not bring the claim back`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            const moved = { ...QUOTE_USD, amount: 600n } as TokenPrice;
+            let now = quoted();
+            const root = mountedRoot();
+            const h = {
+                ...handlers(),
+                onPayRecords: () => now,
+                onPayRecordMoved: vi.fn(),
+                onPayFigureChanged: vi.fn(),
+                onPayWalletOpened: vi.fn(),
+            };
+            renderStall(
+                root,
+                payView({ overlay, selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]), payRate: PAY_RATE }),
+                h,
+            );
+            expect(pressForUrl(root, 'pay-cashtab'), 'a wallet opened').toBeDefined();
+            now = records(new Map([[TOKEN_ID, moved]]));
+            recheckPaySheet(root);
+            expect(pressForUrl(root, 'pay-cashtab'), 'inside the grace of the move: absorbed').toBeUndefined();
+            expect(h.onPayRecordMoved, 'handed back').toHaveBeenCalledTimes(1);
+            now = moves.gone();
+            recheckPaySheet(root);
+            expect(root.querySelector('[data-role="pay-lost"]')?.textContent).toBe(firstClause[kind].gone);
+        });
+    }
+});
+
 describe('a-margin-or-words-change-is-taken-in-place-and-the-press-opens', () => {
     /**
      * The owner (2026-09-25): "moved" is what the buyer pays changing — the

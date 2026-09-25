@@ -823,6 +823,15 @@ export type StallView = WindowState & {
      */
     payWalletOpened?: true;
     /**
+     * A Pay press on the open sheet has opened a wallet since the sheet
+     * opened — whatever it absorbed since, unlike `payWalletOpened` — so a
+     * sheet whose record left says so without "no wallet was opened"
+     * (`PAY_QUOTE_GONE_OPENED`; CRITIC-CARRYOVER-8 item 2). Set by the open
+     * (`onPayWalletOpened`), kept for that sheet across every hand-back, and
+     * dropped when a pay sheet opens or closes.
+     */
+    payWalletWasOpened?: true;
+    /**
      * The figure on the open pay sheet changed under the buyer while it was
      * open — a re-read recomposed it in place (a return to the record it
      * was opened on included), a press or an ask's tail found the seller's

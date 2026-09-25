@@ -1861,6 +1861,17 @@ export const PAY_QUOTE_UNSHOWN = 'This page can no longer show this quote \u2014
  */
 export const PAY_SEVERAL_GONE =
     'None of the items you chose is still quoted as it was \u2014 no wallet was opened';
+/**
+ * The three sentences above, once a press on the sheet has opened a wallet
+ * (CRITIC-CARRYOVER-8 item 2): their first clause alone, on the sheet in
+ * place and on the one the app paints after a hand-back. "No wallet was
+ * opened" is then a false claim about this page, made to a buyer who may
+ * just have paid — the seller seeing the payment and taking a one-off item
+ * off the rail is the ordinary way this state is reached.
+ */
+export const PAY_QUOTE_GONE_OPENED = 'This quote is no longer on the stall';
+export const PAY_QUOTE_UNSHOWN_OPENED = 'This page can no longer show this quote';
+export const PAY_SEVERAL_GONE_OPENED = 'None of the items you chose is still quoted as it was';
 /** Item names in a sentence: "A", "A and B", "A, B and C". */
 export const itemNames = (names: readonly string[]): string =>
     names.length <= 1

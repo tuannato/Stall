@@ -630,6 +630,15 @@ export function boot(
         | { readonly key: string; readonly outcome: PayRateOutcome; readonly opened?: true }
         | undefined;
     /**
+     * The open pay sheet a Pay press has opened a wallet from since it
+     * opened (`payOverlayKey`): painted as `payWalletWasOpened`, so the sheet
+     * the app paints after a hand-back — the record gone — never says "no
+     * wallet was opened" (CRITIC-CARRYOVER-8 item 2). Set by the open
+     * (`onPayWalletOpened`), and dropped wherever a pay sheet opens or
+     * closes, beside `payOutcomeCarried`.
+     */
+    let payWalletWasOpenedFor: string | undefined;
+    /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
      * view at paint time for `shopTab`'s reason; the two one-shots are
@@ -1409,6 +1418,9 @@ export function boot(
             payRateAsking,
             payQuantity,
             ...(payOpenedAt === undefined ? {} : { payOpenedAt }),
+            ...(payWalletWasOpenedFor !== undefined && payWalletWasOpenedFor === payOverlayKey(state.view.overlay)
+                ? { payWalletWasOpened: true as const }
+                : {}),
             ...(payOutcomeCarried !== undefined && payOutcomeCarried.key === payOverlayKey(state.view.overlay)
                 ? {
                       payRateOutcome: payOutcomeCarried.outcome,
@@ -1575,6 +1587,7 @@ export function boot(
             },
             onPayWalletOpened: () => {
                 const key = payOverlayKey(state.view.overlay);
+                payWalletWasOpenedFor = key;
                 if (payRecordMovedFor === key) {
                     payRecordMovedPressed = false;
                 }
@@ -1667,6 +1680,7 @@ export function boot(
                 payChangedAt = undefined;
                 payChangedFor = undefined;
                 payOutcomeCarried = undefined;
+                payWalletWasOpenedFor = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -2356,6 +2370,7 @@ export function boot(
         payChangedAt = undefined;
         payChangedFor = undefined;
         payOutcomeCarried = undefined;
+        payWalletWasOpenedFor = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2488,6 +2503,7 @@ export function boot(
         payChangedAt = undefined;
         payChangedFor = undefined;
         payOutcomeCarried = undefined;
+        payWalletWasOpenedFor = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -3039,6 +3055,7 @@ export function boot(
             payChangedAt = undefined;
             payChangedFor = undefined;
             payOutcomeCarried = undefined;
+            payWalletWasOpenedFor = undefined;
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },
