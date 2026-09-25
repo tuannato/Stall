@@ -3829,7 +3829,9 @@ export function boot(
             lookup.decided.size === 0;
         // …and a rank is something too: a screen whose only record is the
         // tombstone of the seller's last quote shows no map at all, but it
-        // holds that removal's rank and the older records it read below it.
+        // holds that removal's rank and the older records below it — the
+        // ones its read ranked there, and the quote it replaced on screen
+        // (`mergeFailedRead`; CRITIC-CARRYOVER-6 item 3).
         // Counted as nothing, a lagging replica's answer replaced the screen
         // whole on a walk that finished, and was painted as the floor on
         // one that threw: the removed quote came back at its old figure and

@@ -11388,11 +11388,21 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
             h,
         );
         const press = new MouseEvent('click', { bubbles: true, cancelable: true });
-        (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
-            press,
-        );
-        expect(press.defaultPrevented).toBe(false);
-        expect(h.onPayRate).not.toHaveBeenCalled();
+        // Stubbed: happy-dom's own `window.open` loads the page it is handed,
+        // and this press opens one — a real request to cashtab.com from the
+        // test run, surfacing as an unhandled parse error whenever it
+        // answered before the file ended (carry-over round 7).
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLAnchorElement).dispatchEvent(
+                press,
+            );
+            expect(press.defaultPrevented).toBe(false);
+            expect(h.onPayRate).not.toHaveBeenCalled();
+            expect(open, 'the fresh rate opens at once').toHaveBeenCalledTimes(1);
+        } finally {
+            open.mockRestore();
+        }
     });
 });
 
