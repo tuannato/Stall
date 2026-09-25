@@ -1786,6 +1786,22 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
+ * The press found the seller's record moved since the sheet was painted (a
+ * new figure, unit, tolerance or surcharge), so it sent nothing and the
+ * sheet was painted again from the record as it stands (the critic's final
+ * merge, item 11). The valve's shape: the figure above is already the new
+ * one, and the control restates it.
+ */
+export const PAY_QUOTE_CHANGED = 'The seller changed this quote \u2014 review and pay again';
+/** The same, on "Pay several": one or more chosen items' records moved. */
+export const PAY_QUOTES_CHANGED = 'The seller changed a quote here \u2014 review and pay again';
+/**
+ * The press found the item's record gone — taken off, or moved to a unit
+ * this page does not paint — so there is nothing left to compose, and the
+ * press sent nothing.
+ */
+export const PAY_QUOTE_GONE = 'This quote is no longer on the stall \u2014 nothing was sent';
+/**
  * The second feed disagrees with the first past `RATE_DISAGREE_PCT`. Said,
  * never refused: the figure stands (it is the first feed's), the control
  * restates it, and the buyer decides with the fact in front of them — the

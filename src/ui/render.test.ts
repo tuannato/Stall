@@ -9096,6 +9096,84 @@ describe('a-sub-dust-quote-has-no-pay-link', () => {
     });
 });
 
+describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
+    /**
+     * The critic's final merge, item 11, at the sheet: the press asks the
+     * app's records (`onPayRecords`) before anything opens, and again after
+     * the valve's refetch — a record that moved during that ask is priced by
+     * the app in its new unit, so nothing is composed from the answer here;
+     * the sheet is handed back (`onPayRecordMoved`) to be painted again from
+     * the record as it stands.
+     */
+    const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+    const records = (price: typeof QUOTE_USD | { code: string; exponent: number; amount: bigint }) => ({
+        prices: new Map([[TOKEN_ID, price]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+
+    it('a record that moved before the press opens nothing and composes nothing', () => {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => ({ rate: scaleRate(0.00001)!, atMs: Date.now() })),
+            onPayRecords: () => records({ ...QUOTE_USD, amount: 700n }),
+            onPayRecordMoved: vi.fn(),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...stale, atMs: Date.now() } }), h);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        expect(open).not.toHaveBeenCalled();
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+        expect(h.onPayRate, 'no valve runs over a record that moved').not.toHaveBeenCalled();
+        open.mockRestore();
+    });
+
+    it('a record that moved during the valve’s ask composes nothing from the answer', async () => {
+        const root = document.createElement('div');
+        let moved = false;
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => {
+                moved = true;
+                return { rate: scaleRate(0.00001)!, atMs: Date.now() };
+            }),
+            onPayRecords: () => records(moved ? { ...QUOTE_USD, amount: 700n } : QUOTE_USD),
+            onPayRecordMoved: vi.fn(),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }), h);
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent;
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(h.onPayRate).toHaveBeenCalledTimes(1);
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+        expect(open).not.toHaveBeenCalled();
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
+            'the answer was not composed over the old record',
+        ).toBe(figure);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_MOVED);
+        open.mockRestore();
+    });
+
+    it('a sheet painted after a move says so, restates the figure, and a gone quote says nothing was sent', () => {
+        const { root } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...stale, atMs: Date.now() }, payRecordMoved: true }));
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent ?? '';
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
+        expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(copy.payFigure(figure));
+        const gone = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map(), payRecordMoved: true }));
+        expect(gone.root.querySelector('[data-role="pay"]')?.textContent).toContain(copy.PAY_QUOTE_GONE);
+        const unknown = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map() }));
+        expect(unknown.root.querySelector('[data-role="pay"]')?.textContent, 'a link that named nothing is not a quote that left').toContain(copy.PAY_HINT_UNKNOWN);
+    });
+});
+
 describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () => {
     /**
      * The press is where a stale rate is caught, and the press never opens a

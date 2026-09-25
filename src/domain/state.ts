@@ -809,6 +809,15 @@ export type StallView = WindowState & {
      */
     payRateOutcome?: PayRateOutcome;
     /**
+     * A Pay press on the open sheet found the seller's record moved since
+     * the sheet was painted (`movedRecords`), and the sheet was painted
+     * again from the records as they stand: it says so in the valve's line,
+     * restates the figure on the control, and the next press is the one
+     * that opens a wallet. Closure state in `boot`, written onto the view at
+     * paint time and cleared when a pay sheet opens or closes.
+     */
+    payRecordMoved?: boolean;
+    /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never
      * against the chain.

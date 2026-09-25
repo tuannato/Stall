@@ -34,7 +34,7 @@ import {
     selectionSats,
     selectionUnit,
 } from './domain/selection';
-import { decidedOf, mergeFailedRead } from './domain/records';
+import { decidedOf, mergeFailedRead, movedRecords, type RecordsNow } from './domain/records';
 import {
     clearSavedStall,
     forgetSurcharge,
@@ -98,7 +98,7 @@ import {
     type GenesisDecision,
 } from './domain/genesis';
 import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
-import { XEC_PRICE_CODE, samePrice, type TokenPrice } from './domain/description';
+import { XEC_PRICE_CODE, type TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
     NO_FACTS,
@@ -550,6 +550,21 @@ export function boot(
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
+     * The unit `payRate` was read for. A sheet is painted again from the
+     * seller's record when a press finds it moved (`onPayRecordMoved`), and
+     * a record can move to another unit: a rate read for the old one is then
+     * never written onto the sheet, or it would compose a figure in one
+     * currency from another's rate.
+     */
+    let payRateUnit: string | undefined;
+    /**
+     * The open pay sheet whose press found the seller's record moved
+     * (`payOverlayKey`), so the paint that follows says so. Cleared when a
+     * pay sheet opens or closes; a key that is not the open sheet's says
+     * nothing.
+     */
+    let payRecordMovedFor: string | undefined;
+    /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
      * view at paint time for `shopTab`'s reason; the two one-shots are
@@ -691,6 +706,21 @@ export function boot(
      */
     const recordsKnown = (view: StallView): boolean =>
         view.prices !== undefined && view.descriptionsFailed !== true;
+    /**
+     * The seller's records as this page holds them now, for a payment on
+     * screen to be judged against (`movedRecords`): the touch wall's plate
+     * at every paint, and a pay sheet at every press — a sheet holds the
+     * live paint, so what it painted can be older than `state.view`.
+     */
+    const recordsNow = (): RecordsNow => ({
+        ...(state.view.prices === undefined ? {} : { prices: state.view.prices }),
+        known: recordsKnown(state.view),
+        complete: state.view.descriptionsTruncated !== true,
+        decided: decidedOf({ ...state.view, decided: state.view.descriptionsDecided }),
+    });
+    /** The open pay sheet, as a key — its token, or "several" — and undefined when none is open. */
+    const payOverlayKey = (overlay: StallView['overlay']): string | undefined =>
+        overlay.kind === 'pay' ? `pay:${overlay.tokenId}` : overlay.kind === 'pay-several' ? 'pay-several' : undefined;
     /**
      * The wall's own params, settled, without building a view.
      *
@@ -1126,23 +1156,14 @@ export function boot(
          * the same two items, on the screen with nobody to ask (the critic's
          * P1-2). Any chosen item whose record moved closes the plate.
          */
-        if (windowPaying !== undefined && recordsKnown(state.view) && state.view.prices !== undefined) {
-            // Over a DEFINITE read only, the prune's own rule: `refresh()`
-            // paints `opening` with no prices before its load answers, and a
-            // comparison against that closed the plate every sixty seconds
-            // on a wall nobody had touched.
-            for (const [tokenId, price] of windowPaying.prices) {
-                const now = state.view.prices.get(tokenId);
-                // A record a capped walk did not reach has not moved; one it
-                // resolved, a removal included, is judged.
-                if (now === undefined && !complete && !decided.has(tokenId)) {
-                    continue;
-                }
-                if (!samePrice(price, now)) {
-                    cancelWallPayment();
-                    break;
-                }
-            }
+        // Over a DEFINITE read only, the prune's own rule: `refresh()` paints
+        // `opening` with no prices before its load answers, and a comparison
+        // against that closed the plate every sixty seconds on a wall nobody
+        // had touched. A record a capped walk did not reach has not moved;
+        // one it resolved, a removal included, is judged (`movedRecords`,
+        // the rule both pay sheets ask at the press).
+        if (windowPaying !== undefined && movedRecords(windowPaying.prices, recordsNow()).length > 0) {
+            cancelWallPayment();
         }
         /*
          * And whenever a chosen item cannot be read (the owner's (f),
@@ -1293,10 +1314,16 @@ export function boot(
             // that always works.
             ...(seenBlockOf(state.offers) === undefined ? {} : { tipHeight: seenBlockOf(state.offers) }),
             fiatRate,
-            payRate,
+            // Never a rate read for another unit than the open sheet composes
+            // in: a press that found the seller's record moved paints the
+            // sheet again from it, and the record may have changed unit.
+            payRate: payOverlayKey(state.view.overlay) !== undefined && rateForAnotherUnit() ? undefined : payRate,
             payRateWhy,
             payRateAsking,
             payQuantity,
+            ...(payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)
+                ? { payRecordMoved: true }
+                : {}),
             selection: new Map(selection),
             /*
              * A chosen item this read did not reach is still named — the
@@ -1405,6 +1432,10 @@ export function boot(
                 onOpenPay(tokenId);
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onPayRecords: () => recordsNow(),
+            onPayRecordMoved: (tokenId) => {
+                onPayRecordMoved(tokenId);
+            },
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;
                 selectionAsk = undefined;
@@ -1475,6 +1506,7 @@ export function boot(
                 if (state.view.overlay.kind === 'pay') {
                     dropPayParam();
                 }
+                payRecordMovedFor = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -2153,6 +2185,7 @@ export function boot(
         payRate = undefined;
         payRateWhy = undefined;
         payQuantity = undefined;
+        payRecordMovedFor = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2183,9 +2216,23 @@ export function boot(
             ) {
                 return;
             }
+            if (rateForAnotherUnit()) {
+                onPayRecordMoved(tokenId);
+                return;
+            }
             paint();
         })();
     };
+
+    /**
+     * The held rate was read for another unit than the open sheet now
+     * composes in: the seller's record changed unit while the feeds were
+     * being asked. The paint would carry no rate (`payRateUnit`), and "did
+     * not answer" would be false, so the sheet is handled as a record that
+     * moved under it — said, and its own unit asked for.
+     */
+    const rateForAnotherUnit = (): boolean =>
+        payRate !== undefined && payRateUnit !== undefined && payRateUnit !== quoteUnitOnScreen();
 
     /** True for a quote written in XEC: its sheet reads no rate, so no feed is asked. */
     const quoteNeedsNoRate = (tokenId: string): boolean =>
@@ -2231,6 +2278,7 @@ export function boot(
         payRate = undefined;
         payRateWhy = undefined;
         payQuantity = undefined;
+        payRecordMovedFor = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -2247,6 +2295,63 @@ export function boot(
             }
             payRateAsking = false;
             if (claimed !== generation || state.view.overlay.kind !== 'pay-several') {
+                return;
+            }
+            if (rateForAnotherUnit()) {
+                onPayRecordMoved();
+                return;
+            }
+            paint();
+        })();
+    };
+
+    /**
+     * A Pay press found the seller's record moved under its open sheet (the
+     * critic's final merge, item 11). A sheet holds the live paint, so the
+     * re-read that moved it is in `state.view` and not on screen: paint the
+     * sheet again from the records as they stand — "Pay several"'s choice
+     * pruned as every paint prunes it — saying so, and the next press is the
+     * one that opens a wallet, the moved-rate valve's shape. The press sent
+     * nothing. A record now in a unit the held rate was not read for asks
+     * for its own rate, as an open does; until it answers the paint above
+     * carries no rate (`payRateUnit`), so no figure is composed across units.
+     */
+    const onPayRecordMoved = (tokenId?: string): void => {
+        const key = payOverlayKey(state.view.overlay);
+        if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
+            return;
+        }
+        payRecordMovedFor = key;
+        paint();
+        const over = state.view.overlay;
+        const composes =
+            over.kind === 'pay' ? state.view.prices?.get(over.tokenId) !== undefined : selection.size > 0;
+        const needs =
+            over.kind === 'pay'
+                ? !quoteNeedsNoRate(over.tokenId)
+                : !selectionNeedsNoRate(selection, state.view.prices);
+        const unit = quoteUnitOnScreen();
+        if (!composes || !needs || (payRate !== undefined && payRateUnit === unit)) {
+            return;
+        }
+        const claimed = generation;
+        const session = ++paySession;
+        payRate = undefined;
+        payRateWhy = undefined;
+        payRateAsking = true;
+        paint();
+        void (async () => {
+            await readPayRate(PAY_RATE_TIMEOUT_MS, session, unit);
+            if (session !== paySession) {
+                return;
+            }
+            payRateAsking = false;
+            if (claimed !== generation || payOverlayKey(state.view.overlay) !== key) {
+                return;
+            }
+            if (rateForAnotherUnit()) {
+                // Moved again while its own rate was asked for.
+                onPayRecordMoved(tokenId);
                 return;
             }
             paint();
@@ -2473,6 +2578,7 @@ export function boot(
                 ? undefined
                 : { rate: answer.rate, atMs: answer.atMs, check: answer.check };
         payRateWhy = answer.rate === undefined ? answer.why : undefined;
+        payRateUnit = answer.rate === undefined ? undefined : code;
         state = { ...state, view: { ...state.view, payRate, payRateWhy } };
         return answer;
     };
@@ -2645,10 +2751,15 @@ export function boot(
                         ) {
                             return;
                         }
+                        if (rateForAnotherUnit()) {
+                            onPayRecordMoved(tokenId);
+                            return;
+                        }
                         paint();
                     })();
                 }
             });
+            payRecordMovedFor = undefined;
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },

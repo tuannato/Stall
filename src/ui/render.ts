@@ -50,6 +50,7 @@ import {
     surchargedQuote,
     type TokenPrice,
 } from '../domain/description';
+import { movedRecords, type RecordsNow } from '../domain/records';
 import {
     compareOffers,
     DUST_SATS,
@@ -240,6 +241,19 @@ export type StallHandlers = {
      * `undefined` is tolerated and read as no answer.
      */
     onPayRate?: (timeoutMs?: number) => Promise<PayRateAnswer | undefined>;
+    /**
+     * The seller's records as the app holds them now, for a Pay press to
+     * judge the records its sheet composed from against (`movedRecords`): a
+     * sheet holds the live paint, so what it painted may be older than this.
+     */
+    onPayRecords?: () => RecordsNow;
+    /**
+     * A Pay press found a record moved: paint the open sheet again from the
+     * records as they stand, saying so. `tokenId` names the single sheet's
+     * item and is absent for "Pay several"; a sheet no longer open is left
+     * alone.
+     */
+    onPayRecordMoved?: (tokenId?: string) => void;
     /**
      * One token, on the seller's own ask: its genesis facts, and whether this
      * stall's own wallet minted it.
@@ -4669,9 +4683,11 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // A scanned link, or a re-read, can name a token this stall does not
         // quote. Say that rather than painting a sheet with no figure on it —
         // and keep the sheet's own title, because there is no item to name
-        // here and a bare token id in a head is not one.
-        wrap.append(sheetHead(copy.PAY_TITLE, copy.PAY_HINT_UNKNOWN, handlers));
-        wrap.append(el('p', 'ctx', copy.PAY_HINT_UNKNOWN));
+        // here and a bare token id in a head is not one. A press that found
+        // the record gone says that instead, and that nothing was sent.
+        const gone = view.payRecordMoved === true ? copy.PAY_QUOTE_GONE : copy.PAY_HINT_UNKNOWN;
+        wrap.append(sheetHead(copy.PAY_TITLE, gone, handlers));
+        wrap.append(el('p', 'ctx', gone));
         wrap.append(payFoot(handlers));
         return wrap;
     }
@@ -4938,6 +4954,22 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      */
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
+    /**
+     * A press found the seller's record moved and this sheet was painted
+     * again from it: said on the valve's line until a valve outcome of its
+     * own replaces it, with the figure restated on the control.
+     */
+    const recordMoved = view.payRecordMoved === true;
+    /**
+     * Whether the record this sheet composed from is still the seller's
+     * (`movedRecords`). Asked at every press and after every await that
+     * precedes a figure: the sheet holds the live paint, so a re-read that
+     * landed while it was open is in the app's records and not on screen.
+     */
+    const composedMoved = (): boolean => {
+        const now = handlers.onPayRecords?.();
+        return now !== undefined && movedRecords(new Map([[tokenId, price]]), now).length > 0;
+    };
 
     const refresh = (): void => {
         clearPayQrTimer();
@@ -5018,11 +5050,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // After the price moved the control restates the figure it will open,
         // composed from the same satoshis as the figure and both URLs.
         web.textContent =
-            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && recordMoved)) &&
+            sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined;
-        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
+        valve.hidden = outcome === undefined && !recordMoved;
+        valve.textContent =
+            outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : recordMoved ? copy.PAY_QUOTE_CHANGED : '';
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -5078,6 +5112,15 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             if (url === undefined) {
                 return;
             }
+            // The seller's record first (the critic's final merge, item 11):
+            // a figure the page no longer holds as their quote is never
+            // handed to a wallet. The sheet is painted again from the record
+            // as it stands, says so, and the next press is the one that
+            // opens — the moved-rate valve's shape, for the other input.
+            if (composedMoved()) {
+                handlers.onPayRecordMoved?.(tokenId);
+                return;
+            }
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 // Synchronously, inside the buyer's own press — the one open a
                 // browser treats as theirs. `noreferrer` on top of `noopener`;
@@ -5091,6 +5134,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                // A record that moved during the ask: the fresh rate is read
+                // for the unit the app holds now, which may not be this
+                // sheet's, so nothing is composed from it here.
+                if (composedMoved()) {
+                    handlers.onPayRecordMoved?.(tokenId);
+                    return;
+                }
                 const settled = settleValve(
                     fresh,
                     before,
@@ -5109,8 +5159,16 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     armValve(app, () => appUrl);
 
     refreshRate.addEventListener('click', () => {
+        if (composedMoved()) {
+            handlers.onPayRecordMoved?.(tokenId);
+            return;
+        }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            if (composedMoved()) {
+                handlers.onPayRecordMoved?.(tokenId);
+                return;
+            }
             const settled = settleValve(
                 fresh,
                 undefined,
@@ -5562,6 +5620,21 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
 
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
+    /** A press found a chosen item's record moved and this sheet was painted again from the records (the single sheet's rule). */
+    const recordMoved = view.payRecordMoved === true;
+    /** The records this sheet composes from: every chosen item's, as painted. */
+    const composed = new Map<string, TokenPrice>();
+    for (const tokenId of selection.keys()) {
+        const painted = prices?.get(tokenId);
+        if (painted !== undefined) {
+            composed.set(tokenId, painted);
+        }
+    }
+    /** Whether any of them is no longer the seller's (`movedRecords`), asked at the press and after its awaits. */
+    const composedMoved = (): boolean => {
+        const now = handlers.onPayRecords?.();
+        return now !== undefined && movedRecords(composed, now).length > 0;
+    };
 
     const refresh = (): void => {
         clearPayQrTimer();
@@ -5643,11 +5716,13 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         web.hidden = !linked;
         app.hidden = !linked;
         web.textContent =
-            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && recordMoved)) &&
+            sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined;
-        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
+        valve.hidden = outcome === undefined && !recordMoved;
+        valve.textContent =
+            outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : recordMoved ? copy.PAY_QUOTES_CHANGED : '';
         if (linked) {
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
@@ -5694,6 +5769,12 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             if (url === undefined) {
                 return;
             }
+            // The records first, the single sheet's rule: a chosen item's
+            // record that moved sends nothing and paints the sheet again.
+            if (composedMoved()) {
+                handlers.onPayRecordMoved?.();
+                return;
+            }
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 window.open(url, '_blank', 'noopener,noreferrer');
                 return;
@@ -5701,6 +5782,10 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             const before = selectionSats(selection, prices, rate.rate);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                if (composedMoved()) {
+                    handlers.onPayRecordMoved?.();
+                    return;
+                }
                 const settled = settleValve(
                     fresh,
                     before,
@@ -5718,8 +5803,16 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     armValve(web, () => webUrl);
     armValve(app, () => appUrl);
     refreshRate.addEventListener('click', () => {
+        if (composedMoved()) {
+            handlers.onPayRecordMoved?.();
+            return;
+        }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            if (composedMoved()) {
+                handlers.onPayRecordMoved?.();
+                return;
+            }
             const settled = settleValve(fresh, undefined, (r) => selectionSats(selection, prices, r), undefined);
             rate = settled.rate;
             asking = false;

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { DUST_SATS } from './domain/money';
+import { DUST_SATS, formatXec } from './domain/money';
 import { encodeCashAddress } from 'ecashaddrjs';
 import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
@@ -40,8 +40,12 @@ import {
     PAY_RATE_IMPLAUSIBLE_WHY,
     RATE_SOURCE_CHECK,
     RATE_SOURCE_PRIMARY,
+    PAY_QUOTE_CHANGED,
+    PAY_QUOTES_CHANGED,
+    PAY_QUOTE_GONE,
+    payFigure,
 } from './ui/copy';
-import { scaleRate } from './domain/fiat';
+import { satsForQuote, scaleRate } from './domain/fiat';
 import {
     PAY_CHECK_TIMEOUT_MS,
     FIAT_GLANCE_TIMEOUT_MS,
@@ -5333,5 +5337,206 @@ describe('a-listing-arriving-does-not-turn-the-stream-off-its-quote-card', () =>
 
         expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
         expect(card(), 'and the card a viewer is reading stays').toBe('quote');
+    });
+});
+
+describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', () => {
+    /**
+     * The critic's final merge, item 11. A pay sheet holds the live paint, so
+     * a re-read that moves the seller's record while it is open lands in the
+     * app's state and not on screen. The press used to open the wallet on the
+     * sheet's own closure — the figure on screen, and one the page no longer
+     * held as the seller's quote — and say nothing. Now the press asks the
+     * records first: if the one it composed from moved, it sends nothing,
+     * the sheet is painted again from the record as it stands with one line
+     * saying so, and the next press is the one that opens.
+     */
+    const A = 'a4'.repeat(32);
+    const B = 'b4'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_NEW = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const phone = (prices: Map<string, { code: string; exponent: number; amount: bigint }>): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices,
+            shopTab: 'quotes',
+        });
+    /** The seller's own record, published and woken by the socket. */
+    const republish = async (txids: readonly [string, string | undefined][]): Promise<void> => {
+        const ids = txids.map(([txid, hex]) => {
+            if (hex === undefined) {
+                throw new Error('fixture is not encodable');
+            }
+            return publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        });
+        watches[0]!.hooks.onBurst?.(ids);
+        await flush();
+    };
+    /** One press on the open sheet's Cashtab control: the URL a wallet was handed, or undefined. */
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`) as HTMLElement | null;
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+
+    it('a new figure: the press sends nothing, the sheet shows the new one and says so, and the next press pays it', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+        expect(figureOf(root, 'pay'), 'the sheet holds the live paint').toBe('5,000');
+
+        expect(press(root, 'pay'), 'a figure the seller no longer quotes is never handed over').toBeUndefined();
+        expect(figureOf(root, 'pay')).toBe('9,000');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="pay-cashtab"]')?.textContent,
+            'the control restates the figure it will open',
+        ).toBe(payFigure('9,000'));
+
+        const url = press(root, 'pay');
+        expect(url, 'the second press pays the record as it stands').toContain('amount=9000.00');
+    });
+
+    it('a removal: the press sends nothing and the sheet says the quote is gone', async () => {
+        // B stays quoted: a walk whose whole answer is empty is refused over
+        // records on screen (`applyDescriptions`), so the page would still
+        // hold A — this is the removal the page does read.
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+        await republish([
+            ['7b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+            ['7d'.repeat(32), encodeRemovalHex(A)],
+        ]);
+
+        expect(press(root, 'pay')).toBeUndefined();
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
+    });
+
+    it('the same record republished: the press opens at once', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        await republish([['7e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD })]]);
+
+        expect(press(root, 'pay')).toContain('amount=5000.00');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent ?? '').not.toBe(PAY_QUOTE_CHANGED);
+    });
+
+    it('a new unit: the rate held for the old one is never used, and the new one is asked for', async () => {
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        const asked: string[] = [];
+        priceControl.fetch = async (code) => {
+            asked.push(code);
+            return code === 'usd' ? USD_RATE : code === 'eur' ? EUR_RATE : undefined;
+        };
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, USD_RATE)!));
+        asked.length = 0;
+
+        await republish([['7f'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+        expect(press(root, 'pay')).toBeUndefined();
+        await flush();
+
+        expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
+        const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
+        expect(figureOf(root, 'pay')).toBe(eur);
+        expect(figureOf(root, 'pay'), 'never the euro quote at the dollar’s rate').not.toBe(
+            formatXec(satsForQuote(EUR_QUOTE, 1n, USD_RATE)!),
+        );
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
+    });
+
+    it('a new unit while the open’s own rate is asked for: never composed across units, and said', async () => {
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const asked: string[] = [];
+        priceControl.fetch = async (code) => {
+            asked.push(code);
+            if (asked.length === 1) {
+                // The open's own ask, held while the seller republishes.
+                await gate;
+            }
+            return code === 'usd' ? USD_RATE : code === 'eur' ? EUR_RATE : undefined;
+        };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        const { root } = bootStall(phone(new Map([[A, { code: 'usd', exponent: 2, amount: 500n }]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(asked).toEqual(['usd']);
+
+        await republish([['7a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+        release();
+        await flush();
+
+        expect(figureOf(root, 'pay') ?? '', 'never the euro quote at the dollar’s rate').not.toBe(
+            formatXec(satsForQuote(EUR_QUOTE, 1n, USD_RATE)!),
+        );
+        expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
+        const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
+        expect(figureOf(root, 'pay')).toBe(eur);
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
+    });
+
+    it('Pay several: a chosen item’s new figure sends nothing, the total is the new one, and the next press pays it', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        for (const tokenId of [A, B]) {
+            [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                .click();
+        }
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay-several')).toBe('12,000');
+
+        await republish([
+            ['8b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+            ['8a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })],
+        ]);
+        expect(figureOf(root, 'pay-several'), 'the sheet holds the live paint').toBe('12,000');
+
+        expect(press(root, 'pay-several')).toBeUndefined();
+        expect(figureOf(root, 'pay-several')).toBe('16,000');
+        expect(root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
+            PAY_QUOTES_CHANGED,
+        );
+        expect(press(root, 'pay-several')).toContain('amount=16000.00');
     });
 });

@@ -36,7 +36,7 @@
  * seen later; the kept records fill the tokens the walk never reached. Pure:
  * no network, no DOM.
  */
-import type { TokenPrice } from './description';
+import { samePrice, type TokenPrice } from './description';
 import { knownSeen, type ManifestRank } from './manifest';
 
 /** The four record maps a view carries, as one read left them. */
@@ -145,4 +145,49 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         ranks: merge(read.ranks, kept.ranks, false),
         keptShown,
     };
+}
+
+/**
+ * What the app holds of the seller's records at one instant, for a press to
+ * judge a payment on screen against (`movedRecords`).
+ */
+export type RecordsNow = {
+    readonly prices?: ReadonlyMap<string, TokenPrice>;
+    /** A definite read: the records were read and the walk did not throw. */
+    readonly known: boolean;
+    /** The walk read to the end, rather than stopping at our page cap. */
+    readonly complete: boolean;
+    /** The tokens the read resolved, a removal included (`decidedOf`). */
+    readonly decided: ReadonlySet<string>;
+};
+
+/**
+ * The tokens among `composed` — the records a payment on screen was composed
+ * from — whose record the app now holds otherwise (`samePrice`: the figure,
+ * the unit, the tolerance, the surcharge, or the record gone).
+ *
+ * Over a definite read only: a read that has not answered, or a walk that
+ * threw, cannot say a record moved, and saying so would stop a payment on
+ * our own failure. A token a walk that stopped at our page cap did not
+ * reach has not moved; one it resolved, a removal included, is judged. The
+ * touch wall's plate closes on the same answer, and both pay sheets ask it
+ * at the press (the critic's final merge, item 11): a sheet holds the live
+ * paint, so without it a press handed a wallet a figure the page no longer
+ * held as the seller's quote, and said nothing.
+ */
+export function movedRecords(composed: ReadonlyMap<string, TokenPrice>, now: RecordsNow): string[] {
+    if (!now.known || now.prices === undefined) {
+        return [];
+    }
+    const moved: string[] = [];
+    for (const [tokenId, price] of composed) {
+        const current = now.prices.get(tokenId);
+        if (current === undefined && !now.complete && !now.decided.has(tokenId)) {
+            continue;
+        }
+        if (!samePrice(price, current)) {
+            moved.push(tokenId);
+        }
+    }
+    return moved;
 }
