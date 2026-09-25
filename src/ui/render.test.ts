@@ -9977,6 +9977,90 @@ describe('a-recompose-that-changes-nothing-does-not-cancel-a-rate-answer', () =>
     }
 });
 
+describe('a-rate-answer-that-hides-the-focused-control-keeps-focus-in-the-sheet', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 7. A change in place kept focus in the dialog
+     * (`speakRecompose`), but the rate tails did not go through it: a
+     * refresh the feed did not answer hides the rate row with the refresh
+     * control in it, and a valve answer with no rate hides the Pay controls
+     * — and focus stayed on a hidden control, which a browser drops onto the
+     * page behind the dialog. Both tails keep focus in the sheet now
+     * (`keepFocusIn`): on the line that says what happened, else the head.
+     * Measured in happy-dom, which leaves focus on the hidden control rather
+     * than moving it — so "not under a hidden ancestor" is what fails.
+     */
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    const fresh = { rate: scaleRate(0.00002)!, atMs: Date.now() };
+    const aged = { rate: fresh.rate, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['a refresh the feed did not answer', 'a valve answer with no rate'] as const) {
+            it(`${kind}, ${road}: focus moves to the valve's line, inside the sheet`, async () => {
+                const root = mountedRoot();
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayRate: vi.fn(async () => ({ why: 'no-answer' as const })),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        payRate: road === 'a valve answer with no rate' ? aged : fresh,
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                const control = sheet.querySelector(
+                    road === 'a valve answer with no rate' ? '[data-role="pay-cashtab"]' : '[data-role="pay-refresh"]',
+                ) as HTMLElement;
+                // The sheet takes focus on open (a microtask); the buyer
+                // then moves it to the control.
+                await Promise.resolve();
+                control.focus();
+                expect(document.activeElement, 'focus starts on the control').toBe(control);
+                const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+                control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(open, 'nothing opened').not.toHaveBeenCalled();
+                open.mockRestore();
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                expect(control.closest('[hidden]'), 'the answer hid the control').not.toBeNull();
+                const active = document.activeElement as HTMLElement | null;
+                expect(active !== null && sheet.contains(active), 'focus is inside the sheet').toBe(true);
+                expect(active?.closest('[hidden]') ?? null, 'and on nothing hidden').toBeNull();
+                const valve = sheet.querySelector('[data-role="pay-valve"]');
+                expect(valve?.textContent).toBe(copy.PAY_RATE_UNAVAILABLE);
+                expect(active, 'on the line that says what happened').toBe(valve);
+            });
+        }
+    }
+
+    it('focus a rate answer did not take away stays where it was', async () => {
+        const root = mountedRoot();
+        const h = {
+            ...handlers(),
+            onPayRecords: () => records,
+            onPayRate: vi.fn(async () => ({ rate: scaleRate(0.000025)!, atMs: Date.now() })),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: fresh }), h);
+        const refresh = root.querySelector('[data-role="pay-refresh"]') as HTMLElement;
+        await Promise.resolve();
+        refresh.focus();
+        refresh.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(document.activeElement).toBe(refresh);
+    });
+});
+
 describe('a-double-tap-inside-the-grace-opens-nothing', () => {
     /**
      * CRITIC-CARRYOVER-4 item 1 (the owner's grace rule, read as a window).

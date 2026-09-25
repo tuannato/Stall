@@ -38,7 +38,11 @@
  * ranked below its winner (`RecordRank.older`), and a later answer whose
  * winner is one of them is older by construction and never beats the
  * screen (the owner, CRITIC-CARRYOVER-4 item 9) — on a walk that threw
- * and on a walk that finished alike, since both merge here.
+ * and on a walk that finished alike, since both merge here. Read both ways,
+ * and only when exactly one side's set holds the other's winner: each set
+ * is one node's ladder, and two nodes that disagree are left to the ladder
+ * (CRITIC-CARRYOVER-5 item 4). Two reads that crowned the same record keep
+ * the union of their sets (item 3).
  *
  * So the two are merged per token: the failed walk's decided tokens win,
  * absence included, unless the kept read's winner for that token outranks

@@ -5219,14 +5219,18 @@ function paySheet(
     /**
      * `refresh()` after the valve's or the refresh control's answer,
      * stamping the rate grace when the figure on screen changed — a figure
-     * where none stood included.
+     * where none stood included — and keeping focus in the dialog when the
+     * answer hid the control it was on (`keepFocusIn`, CRITIC-CARRYOVER-5
+     * item 7).
      */
     const refreshAfterRate = (): void => {
+        const focused = focusedIn(wrap);
         const before = shownSats;
         refresh();
         if (shownSats !== undefined && shownSats !== before) {
             rateChangedAtMs = performance.now();
         }
+        keepFocusIn(wrap, [valve, why], focused, head);
     };
     /**
      * Bumped by every recompose that changed something on screen, so an
@@ -5293,6 +5297,7 @@ function paySheet(
             } else {
                 payWhy = fresh?.why ?? 'no-answer';
             }
+            const focused = focusedIn(wrap);
             const before = shownSats;
             refresh();
             // The figure this answer puts on screen is a change like a
@@ -5301,6 +5306,7 @@ function paySheet(
             if (shownSats !== undefined && shownSats !== before) {
                 stamp();
             }
+            keepFocusIn(wrap, [valve, why], focused, head);
         });
     };
 
@@ -6375,13 +6381,15 @@ function paySeveralSheet(
      * is absorbed in place (`absorbRatePress`).
      */
     let rateChangedAtMs: number | undefined;
-    /** The single sheet's `refreshAfterRate`, over the choice. */
+    /** The single sheet's `refreshAfterRate`, over the choice, focus kept in the dialog. */
     const refreshAfterRate = (): void => {
+        const focused = focusedIn(wrap);
         const before = shownSats;
         refresh();
         if (shownSats !== undefined && shownSats !== before) {
             rateChangedAtMs = performance.now();
         }
+        keepFocusIn(wrap, [valve, why], focused, head);
     };
     let composedAt = 0;
 
@@ -6871,18 +6879,44 @@ function speakRecompose(
     focused: HTMLElement | undefined,
     head: HTMLElement,
 ): void {
-    const shown = lines.filter(
-        (line) =>
-            line.isConnected && wrap.contains(line) && line.closest('[hidden]') === null && (line.textContent ?? '') !== '',
-    );
-    const said = shown.map((line) => line.textContent ?? '').join(' ');
+    const said = shownLines(wrap, lines)
+        .map((line) => line.textContent ?? '')
+        .join(' ');
     if (said !== '') {
         announce(wrap.ownerDocument, said);
     }
+    keepFocusIn(wrap, lines, focused, head);
+}
+
+/** The lines among `lines` that are on the sheet, shown, and say something. */
+function shownLines(wrap: HTMLElement, lines: readonly HTMLElement[]): HTMLElement[] {
+    return lines.filter(
+        (line) =>
+            line.isConnected && wrap.contains(line) && line.closest('[hidden]') === null && (line.textContent ?? '') !== '',
+    );
+}
+
+/**
+ * Focus kept inside a sheet whose change took away the element it was on
+ * (`focused`, read before the change): hidden, removed, or left under a
+ * hidden ancestor. It moves to the first of `lines` shown — the line that
+ * now says what happened — or to the sheet's head, never onto the page
+ * behind the dialog. Every change a sheet makes in place goes through it:
+ * a recompose (`speakRecompose`), and a rate answer that hid the control
+ * focus was on — a refresh the feed did not answer, which takes the rate
+ * row and its control away, or a valve answer with no rate, which takes the
+ * Pay controls (CRITIC-CARRYOVER-5 item 7).
+ */
+function keepFocusIn(
+    wrap: HTMLElement,
+    lines: readonly HTMLElement[],
+    focused: HTMLElement | undefined,
+    head: HTMLElement,
+): void {
     if (focused === undefined || (wrap.contains(focused) && focused.closest('[hidden]') === null)) {
         return;
     }
-    const target = shown[0] ?? head.querySelector<HTMLElement>('.sheet-head-t > .item-n') ?? head;
+    const target = shownLines(wrap, lines)[0] ?? head.querySelector<HTMLElement>('.sheet-head-t > .item-n') ?? head;
     target.setAttribute('tabindex', '-1');
     target.focus();
 }
