@@ -690,6 +690,19 @@ body {
 }
 
 /*
+ * And under a pointer, where Neo deepens that wash to 9%
+ * (`.t-neo .notice-invite:hover`): the sets declared on the invite read this
+ * colour in that state, so the outline stays the wash it stands on. The
+ * wash's own 0.2s transition runs past it once each way; the outline is
+ * the new colour at once. Every state that changes a listed surface's
+ * background carries its own colour
+ * (`every-state-of-a-listed-surface-has-its-outline-colour`).
+ */
+.stall.att-rainfall:not(.deck-stall) .notice-invite:hover {
+    --rain-outline-ground: color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg));
+}
+
+/*
  * The Studio's "This browser" box: Neo tints it with its accent at 4%
  * (`.t-neo .studio-browser`). Not on the owner's list of four; the probe
  * found it (`an-outline-that-shows-at-rest`), and the owner's rule is every
