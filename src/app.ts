@@ -599,6 +599,17 @@ export function boot(
      */
     let payPaintedRate: bigint | undefined;
     /**
+     * When the open pay sheet was first painted, and which sheet that was
+     * (`payOverlayKey`): stamped by the paint that mounts it — every road
+     * that opens one (a row's Pay, the item face, the Pay several strip, a
+     * `?pay=` link) ends in `paint()` — and kept across every repaint of the
+     * same sheet, so a rate landing inside a double tap does not move it.
+     * A Pay press within `PAY_OPEN_GUARD_MS` of it is ignored silently (the
+     * owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2).
+     */
+    let payOpenedAt: number | undefined;
+    let payOpenedFor: string | undefined;
+    /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
      * view at paint time for `shopTab`'s reason; the two one-shots are
@@ -1303,6 +1314,13 @@ export function boot(
                 broadcastRailAt = broadcastRail(withRail(state.view));
             }
         }
+        // The open edge of a pay sheet: the paint that mounts it, whichever
+        // road opened it. A repaint of the same sheet keeps the stamp.
+        const openKey = payOverlayKey(state.view.overlay);
+        if (openKey !== payOpenedFor) {
+            payOpenedFor = openKey;
+            payOpenedAt = openKey === undefined ? undefined : performance.now();
+        }
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
@@ -1370,6 +1388,7 @@ export function boot(
             payRateWhy,
             payRateAsking,
             payQuantity,
+            ...(payOpenedAt === undefined ? {} : { payOpenedAt }),
             ...(payRecordMovedFor !== undefined &&
             payRecordMovedFor === payOverlayKey(state.view.overlay) &&
             payRecordMovedItems.length > 0
@@ -2361,8 +2380,15 @@ export function boot(
      * the buyer: the figure the paint that follows puts on screen is a
      * change in its own right — it was not there while the feeds were asked
      * — and its grace starts when it is painted, never at the change that
-     * made the sheet ask (CRITIC-CARRYOVER-4 item 6). A fresh sheet's first
-     * figure is no change.
+     * made the sheet ask (CRITIC-CARRYOVER-4 item 6).
+     *
+     * **A fresh sheet's first figure is no change**, and the change grace
+     * does not guard it: `PAY_OPEN_GUARD_MS` does (the owner, 2026-09-25,
+     * CRITIC-CARRYOVER-6 item 2). A tap on the sheet within half a second
+     * of it appearing is ignored, however fast the feed answered, and a
+     * press after that opens the figure — it has stood on screen since it
+     * landed. The sheet's own rule for a figure that appears LATER, where
+     * none stood, is the other half of the same line (`refreshAfterRate`).
      */
     const payRateLanded = (): void => {
         if (payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)) {

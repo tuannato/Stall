@@ -843,6 +843,15 @@ export type StallView = WindowState & {
      */
     payChangedAt?: number;
     /**
+     * When the open pay sheet was first painted — the paint that mounted
+     * it, whichever road opened it — on the page's monotonic clock: every
+     * Pay press within `PAY_OPEN_GUARD_MS` of it is the second tap of the
+     * double tap that opened the sheet, and is ignored silently (the owner,
+     * 2026-09-25, CRITIC-CARRYOVER-6 item 2). Closure state in `boot`, kept
+     * across every repaint of the same sheet.
+     */
+    payOpenedAt?: number;
+    /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never
      * against the chain.

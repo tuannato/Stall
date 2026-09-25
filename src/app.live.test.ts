@@ -57,6 +57,7 @@ import { satsForQuote, scaleRate } from './domain/fiat';
 import {
     qrSvg,
     PAY_RECOMPOSE_GRACE_MS,
+    PAY_OPEN_GUARD_MS,
     PAY_CHECK_TIMEOUT_MS,
     FIAT_GLANCE_TIMEOUT_MS,
 } from './ui/render';
@@ -1343,6 +1344,8 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             opens[0]!.click();
             await flush();
             expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('9,000');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
             const url = pressForUrl(root, 'pay');
             expect(url, 'the link carries the figure the walk read').toContain('amount=9000.00');
             expect(url, 'never the one it read past').not.toContain('amount=5000.00');
@@ -1367,6 +1370,8 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             const sheet = root.querySelector('[data-role="pay-several"]');
             expect(sheet?.querySelector('[data-role="price"]')?.textContent).toBe('9,000');
             expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Rye Flour');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
             const url = pressForUrl(root, 'pay-several');
             expect(url).toContain('amount=9000.00');
         });
@@ -2063,6 +2068,8 @@ describe('a-removed-item-never-comes-back-into-pay-several', () => {
             await flush();
             expect(figureOf(root)).toBe(want);
             expect(root.querySelector('[data-role="pay-several"] [data-role="pay-lines"]')?.textContent ?? '').not.toContain('Roasted Beans');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
             expect(press(root), 'the press pays what stayed').toContain(`amount=${want.replace(',', '')}.00`);
         });
     }
@@ -6097,6 +6104,14 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
     beforeEach(() => {
         later = holdClock();
     });
+    /**
+     * Every test here is about a change under a sheet that is already open,
+     * never about the tap that opened it: the buyer reads the sheet before
+     * pressing, past the second tap of a double tap (`PAY_OPEN_GUARD_MS`,
+     * the owner's ruling, CRITIC-CARRYOVER-6 item 2 — which
+     * `a-double-tap-that-opens-the-sheet-opens-no-wallet` asserts).
+     */
+    const pastTheOpeningTap = (): void => later(PAY_OPEN_GUARD_MS + 1);
     const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
     const XEC_NEW = { code: 'xec', exponent: 2, amount: 900_000n };
     const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
@@ -6150,6 +6165,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(figureOf(root, 'pay')).toBe('5,000');
 
@@ -6180,6 +6196,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(figureOf(root, 'pay')).toBe('5,000');
         await republish([
@@ -6200,6 +6217,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(figureOf(root, 'pay')).toBe('5,000');
         await republish([['7d'.repeat(32), encodeRemovalHex(A)]]);
@@ -6214,6 +6232,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         await republish([['7e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD })]]);
 
@@ -6236,6 +6255,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(figureOf(root, 'pay')).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, USD_RATE)!));
         asked.length = 0;
@@ -6278,6 +6298,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, { code: 'usd', exponent: 2, amount: 500n }]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(asked).toEqual(['usd']);
 
@@ -6314,6 +6335,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 .click();
         }
         (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         expect(figureOf(root, 'pay-several')).toBe('12,000');
 
@@ -6340,6 +6362,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
 
@@ -6358,6 +6381,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
         await flush();
         const figure = figureOf(root, 'pay');
         expect(figure).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, RATE)!));
@@ -6414,6 +6438,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             await flush();
             const { release } = holdNextAsk();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             await republish([['4a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { ...USD_QUOTE, amount: 700n } })]]);
             release();
@@ -6455,6 +6480,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             const { asked, release } = holdNextAsk();
             // Recomposed in place, and the euro's own rate asked for — held
@@ -6485,6 +6511,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             }
             const { release } = holdNextAsk();
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             await republish([
                 ['4f'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: USD_B })],
@@ -6528,6 +6555,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                     .click();
             }
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
         };
         const cases = [
@@ -6541,6 +6569,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 const { root } = bootStall(phone(new Map(c.prices)));
                 await flush();
                 (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                pastTheOpeningTap();
                 // A USD sheet is painted again when its rate lands: capture
                 // the sheet that holds the code, not the one asking.
                 await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
@@ -6609,6 +6638,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
                 await flush();
                 (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                pastTheOpeningTap();
                 await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
                 const sheet = scope(root, 'pay')!;
                 await republish([
@@ -6630,6 +6660,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
             const sheet = scope(root, 'pay')!;
             await republish([['5e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
@@ -6662,6 +6693,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, USD_A]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
             const sheet = scope(root, 'pay')!;
             await republish([['6d'.repeat(32), encodeDescriptionHex(A, 'Now in a jar', { price: { ...USD_A, tolerancePct: 5 } })]]);
@@ -6718,6 +6750,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                     .click();
             }
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
         };
         const stale = [PAY_QUOTE_GONE, PAY_QUOTE_UNSHOWN, PAY_SEVERAL_GONE];
@@ -6726,6 +6759,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             const sheet = sheetOf(root, 'pay');
             expect(figureOf(root, 'pay')).toBe('5,000');
@@ -6749,6 +6783,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             const sheet = sheetOf(root, 'pay');
             await republish([['c4'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
@@ -6840,6 +6875,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                     .click();
             }
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
         };
 
@@ -6847,6 +6883,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             await republish([['f1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
             await until(() => figureOf(root, 'pay') === '9,000');
@@ -6861,6 +6898,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             const sheet = root.querySelector('[data-role="pay"]');
             await republish([['f2'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
@@ -6931,6 +6969,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
             expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'the rest, in the unit they were chosen in').toContain('7,000');
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             expect(root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent).toBe(
                 selectionDroppedItems('Plum Jam', 1),
@@ -6944,6 +6983,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             await flush();
             pick(root);
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             expect(figureOf(root, 'pay-several')).toBe('12,000');
             await republish([
@@ -7021,6 +7061,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             await republish([['c1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
             await until(() => figureOf(root, 'pay') === '9,000');
@@ -7044,6 +7085,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                     .click();
             }
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             await flush();
             await republish([
                 ['c2'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
@@ -7082,6 +7124,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                     .click();
             }
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
             // The open's own rate has landed: the sheet composes, and is the
             // one the refresh control is pressed on.
             await until(() => root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]') !== null);
@@ -7347,6 +7390,170 @@ describe('a-hand-back-keeps-a-later-rate-grace', () => {
             expect(figureOf(root, scope)).toBe(FIGURES[scope].answered);
         });
     }
+});
+
+describe('a-double-tap-that-opens-the-sheet-opens-no-wallet', () => {
+    /**
+     * The owner, 2026-09-25 (CRITIC-CARRYOVER-6 item 2), through the real
+     * app. The first tap on a row's Pay pill or the Pay several strip paints
+     * the sheet under the finger at once, and the second tap of the same
+     * double tap lands on the sheet's Pay — it opened the wallet (the
+     * critic's D1–D3). A Pay press within `PAY_OPEN_GUARD_MS` of the sheet
+     * appearing is ignored SILENTLY: nothing opens, no line, nothing spoken,
+     * nothing handed back — the same sheet stays, untouched. A press after
+     * the guard opens exactly the figure on screen. For a USD quote the rate
+     * lands 100 ms after the first tap, inside the interval, and the guard
+     * still holds: it runs from the sheet's first paint, not from its first
+     * figure. The clock is held (`holdClock`).
+     */
+    const A = 'ac'.repeat(32);
+    const B = 'bc'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 300_000n };
+    const USD_A = USD(500n);
+    const USD_B = USD(300n);
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (prices: Map<string, { code: string; exponent: number; amount: bigint }>, over: Partial<State['view']> = {}): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices,
+            shopTab: 'quotes',
+            ...over,
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const spoken = (): string => document.getElementById('sr-live')?.textContent ?? '';
+    /** The second tap, 150 ms after the first: nothing opens, nothing is said, nothing is handed back. */
+    const secondTap = (root: HTMLElement, scope: string): void => {
+        const sheet = root.querySelector(`[data-role="${scope}"]`);
+        const valve = sheet?.querySelector('[data-role="pay-valve"]') as HTMLElement | null;
+        const line = valve?.hidden === true ? '' : (valve?.textContent ?? '');
+        const said = spoken();
+        const before = viewOf(root);
+        expect(press(root, scope), 'the second tap of the double tap opens no wallet').toBeUndefined();
+        expect(root.querySelector(`[data-role="${scope}"]`), 'nothing handed back: the same sheet').toBe(sheet);
+        expect(viewOf(root), 'and no paint').toBe(before);
+        const after = sheet?.querySelector('[data-role="pay-valve"]') as HTMLElement | null;
+        expect(after?.hidden === true ? '' : (after?.textContent ?? ''), 'no line').toBe(line);
+        expect(spoken(), 'nothing spoken').toBe(said);
+        expect(viewOf(root)?.payRecordMoved).toBeUndefined();
+    };
+    /** After the guard, the press opens exactly the figure on screen. */
+    const thenAPressOpens = (root: HTMLElement, scope: string, figure: string): void => {
+        later(PAY_OPEN_GUARD_MS - 150 + 1);
+        expect(figureOf(root, scope)).toBe(figure);
+        expect(press(root, scope), 'a press after the guard opens the figure on screen').toContain(
+            `amount=${figure.replace(/,/g, '')}.00`,
+        );
+    };
+    const choose = (root: HTMLElement): void => {
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        for (const tokenId of [A, B]) {
+            [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                .click();
+        }
+    };
+
+    it('the row’s Pay pill, an XEC quote', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_A]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        expect(figureOf(root, 'pay'), 'the figure is there at once').toBe('5,000');
+        later(150);
+        secondTap(root, 'pay');
+        thenAPressOpens(root, 'pay', '5,000');
+    });
+
+    it('the row’s Pay pill, a USD quote whose rate lands inside the tap interval', async () => {
+        const { root } = bootStall(phone(new Map([[A, USD_A]])));
+        await flush();
+        let answer: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () =>
+            new Promise<bigint | undefined>((resolve) => {
+                answer = resolve;
+            });
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay') ?? '', 'asking: no figure yet').toBe('');
+        later(100);
+        answer(R1);
+        await until(() => figureOf(root, 'pay') === '250,000');
+        expect(figureOf(root, 'pay'), 'the rate landed 100 ms after the first tap').toBe('250,000');
+        later(50);
+        secondTap(root, 'pay');
+        thenAPressOpens(root, 'pay', '250,000');
+    });
+
+    it('the Pay several strip, XEC quotes', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_A], [B, XEC_B]])));
+        await flush();
+        choose(root);
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        expect(figureOf(root, 'pay-several'), 'the figure is there at once').toBe('8,000');
+        later(150);
+        secondTap(root, 'pay-several');
+        thenAPressOpens(root, 'pay-several', '8,000');
+    });
+
+    it('the Pay several strip, USD quotes whose rate lands inside the tap interval', async () => {
+        const { root } = bootStall(phone(new Map([[A, USD_A], [B, USD_B]])));
+        await flush();
+        choose(root);
+        let answer: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () =>
+            new Promise<bigint | undefined>((resolve) => {
+                answer = resolve;
+            });
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay-several') ?? '', 'asking: no figure yet').toBe('');
+        later(100);
+        answer(R1);
+        await until(() => figureOf(root, 'pay-several') === '400,000');
+        expect(figureOf(root, 'pay-several')).toBe('400,000');
+        later(50);
+        secondTap(root, 'pay-several');
+        thenAPressOpens(root, 'pay-several', '400,000');
+    });
+
+    it('whichever road opened it: the item face’s Pay, and a `?pay=` link', async () => {
+        const face = bootStall(phone(new Map([[A, XEC_A]])));
+        await flush();
+        (face.root.querySelector('[data-role="item-open"]') as HTMLButtonElement).click();
+        (face.root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        expect(figureOf(face.root, 'pay')).toBe('5,000');
+        later(150);
+        secondTap(face.root, 'pay');
+        thenAPressOpens(face.root, 'pay', '5,000');
+
+        later(PAY_OPEN_GUARD_MS * 4);
+        const link = bootStall(phone(new Map([[A, XEC_A]]), { payHint: A.slice(0, 12) }));
+        await flush();
+        expect(figureOf(link.root, 'pay'), 'the link opened the sheet').toBe('5,000');
+        later(150);
+        secondTap(link.root, 'pay');
+        thenAPressOpens(link.root, 'pay', '5,000');
+    });
 });
 
 describe('the-taken-out-words-are-in-every-taken-out-sentence', () => {

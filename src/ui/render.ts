@@ -4633,6 +4633,31 @@ export const PAY_RATE_TIMEOUT_MS = 8_000;
 export const PAY_RECOMPOSE_GRACE_MS = 1_500;
 
 /**
+ * How long after a pay sheet first appears a Pay press on it is ignored
+ * (the owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2). The sheet paints
+ * synchronously under the press that opened it and has no entrance, so the
+ * second tap of a double tap on a row's Pay pill, the Pay several strip or
+ * the item face lands on whichever control is now under the finger — and a
+ * sheet's Pay spans the sheet near where a row's pill sat. That tap is not
+ * a press anyone meant, so it is ignored SILENTLY: no line, no
+ * announcement, nothing handed back. A press after it opens as usual.
+ *
+ * **A sheet's first figure is guarded by this, not by the change grace**
+ * (`PAY_RECOMPOSE_GRACE_MS`): the rate a USD sheet opens with lands a moment
+ * after the sheet appears, and inside this span a tap on it is ignored
+ * however fast the feed answered; after it, the first figure is no change
+ * and a press opens it. Measured from the paint that mounted the sheet
+ * (`payOpenedAt`), whichever road opened it, on the page's monotonic clock,
+ * against the press's own `event.timeStamp` (`pressedAt`), as the grace is.
+ */
+export const PAY_OPEN_GUARD_MS = 500;
+
+/** Whether a press made at `event` is the second tap of the double tap that opened its sheet. */
+function insideOpenGuard(event: Event, openedAtMs: number | undefined): boolean {
+    return openedAtMs !== undefined && pressedAt(event) - openedAtMs <= PAY_OPEN_GUARD_MS;
+}
+
+/**
  * When a press was made, on the clock the grace is stamped on: the event's
  * own `timeStamp` (monotonic, the time origin `performance.now()` counts
  * from), or now where an event carries none this page can read. A stamp
@@ -5247,7 +5272,10 @@ function paySheet(
      * stamping the rate grace when the figure on screen changed — a figure
      * where none stood included — and keeping focus in the dialog when the
      * answer hid the control it was on (`keepFocusIn`, CRITIC-CARRYOVER-5
-     * item 7).
+     * item 7). A figure where none stood is a change HERE because it is not
+     * this sheet's first: that one came with the open, and is guarded by
+     * `PAY_OPEN_GUARD_MS` rather than the change grace (the app's
+     * `payRateLanded`; the owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2).
      */
     const refreshAfterRate = (): void => {
         const focused = focusedIn(wrap);
@@ -5691,6 +5719,12 @@ function paySheet(
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
         control.addEventListener('click', (event) => {
             if (control.hidden) {
+                return;
+            }
+            // The second tap of the double tap that opened this sheet
+            // (`PAY_OPEN_GUARD_MS`): ignored silently — no line, no
+            // announcement, nothing asked, nothing handed back.
+            if (insideOpenGuard(event, view.payOpenedAt)) {
                 return;
             }
             // The seller's record first (the critic's final merge, item 11):
@@ -6424,7 +6458,11 @@ function paySeveralSheet(
      * (`handBack`).
      */
     let rateChangedAtMs: number | undefined;
-    /** The single sheet's `refreshAfterRate`, over the choice, focus kept in the dialog. */
+    /**
+     * The single sheet's `refreshAfterRate`, over the choice, focus kept in
+     * the dialog: a figure where none stood is a change here, the sheet's
+     * first having come with its open (`PAY_OPEN_GUARD_MS`).
+     */
     const refreshAfterRate = (): void => {
         const focused = focusedIn(wrap);
         const before = shownSats;
@@ -6760,6 +6798,11 @@ function paySeveralSheet(
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
         control.addEventListener('click', (event) => {
             if (control.hidden) {
+                return;
+            }
+            // The second tap of the double tap that opened this sheet, the
+            // single sheet's rule (`PAY_OPEN_GUARD_MS`): ignored silently.
+            if (insideOpenGuard(event, view.payOpenedAt)) {
                 return;
             }
             // The records first, the single sheet's rule: a chosen item's

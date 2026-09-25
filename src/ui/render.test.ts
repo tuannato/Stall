@@ -102,6 +102,7 @@ import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfLis
 import { ADDR_COPIED_MS,
     PAY_RATE_MAX_AGE_MS,
     PAY_RECOMPOSE_GRACE_MS,
+    PAY_OPEN_GUARD_MS,
     priceTier,
     recheckPaySheet,
     renderStall,
@@ -9770,6 +9771,77 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
         expect(open, 'pressed 200 ms after the change: absorbed').not.toHaveBeenCalled();
         open.mockRestore();
     });
+});
+
+describe('a-double-tap-that-opens-the-sheet-opens-no-wallet', () => {
+    /**
+     * The owner, 2026-09-25 (CRITIC-CARRYOVER-6 item 2), at the sheet; the
+     * app's half — every road that opens a sheet stamping its first paint —
+     * is in app.live.test.ts under the same name. A Pay press within
+     * `PAY_OPEN_GUARD_MS` of the sheet's first paint (`payOpenedAt`) is the
+     * second tap of the double tap that opened it and is ignored SILENTLY:
+     * no wallet, no record asked, nothing handed back, no line, nothing
+     * spoken. A press past it opens the figure on screen. The clock is
+     * faked (`toFake: ['performance']`).
+     */
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+    const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+
+    it('pins the guard by value', () => {
+        expect(PAY_OPEN_GUARD_MS).toBe(500);
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: a press at the guard's last millisecond is ignored silently, and one past it opens`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            const root = document.createElement('div');
+            const h = {
+                ...handlers(),
+                onPayRecords: vi.fn(() => ({
+                    prices: new Map([[TOKEN_ID, xec]]),
+                    known: true,
+                    complete: true,
+                    decided: new Set<string>(),
+                })),
+                onPayRecordMoved: vi.fn(),
+                onPayFigureChanged: vi.fn(),
+                onPayWalletOpened: vi.fn(),
+            };
+            renderStall(
+                root,
+                payView({
+                    prices: new Map([[TOKEN_ID, xec]]),
+                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n]]),
+                    payOpenedAt: performance.now(),
+                }),
+                h,
+            );
+            const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+            const valve = sheet.querySelector('[data-role="pay-valve"]') as HTMLElement;
+            const said = document.getElementById('sr-live')?.textContent ?? '';
+            vi.advanceTimersByTime(PAY_OPEN_GUARD_MS);
+            expect(pressForUrl(root, 'pay-cashtab'), 'the guard’s last millisecond: no wallet').toBeUndefined();
+            expect(h.onPayRecords, 'nothing asked').not.toHaveBeenCalled();
+            expect(h.onPayRecordMoved, 'nothing handed back').not.toHaveBeenCalled();
+            expect(h.onPayFigureChanged).not.toHaveBeenCalled();
+            expect(h.onPayWalletOpened).not.toHaveBeenCalled();
+            expect(valve.hidden, 'no line').toBe(true);
+            expect(document.getElementById('sr-live')?.textContent ?? '', 'nothing spoken').toBe(said);
+            expect(root.querySelector(`[data-role="${kind}"]`), 'the same sheet').toBe(sheet);
+
+            vi.advanceTimersByTime(1);
+            const sats = satsForQuote(xec, 1n, undefined)!;
+            expect(pressForUrl(root, 'pay-cashtab'), 'past it: the figure on screen').toBe(
+                // One item on Pay several writes the single memo shape.
+                cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!),
+            );
+            expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
+        });
+    }
 });
 
 describe('a-double-tap-over-a-valve-or-refresh-answer-opens-nothing', () => {
