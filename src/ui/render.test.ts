@@ -8784,6 +8784,13 @@ beforeEach(() => {
  * 2026-09-25, item 7), so a test of a tail mounts its root; each is removed
  * after its test.
  */
+/**
+ * What a sheet handing itself back says it had on screen (`PayShown`;
+ * CRITIC-CARRYOVER-6 item 1): every hand-back follows a change on screen,
+ * so it carries a stamp. The two tests named for that item assert the
+ * values through the real app.
+ */
+const HANDED_BACK = expect.objectContaining({ changedAtMs: expect.any(Number) });
 const onPage: HTMLElement[] = [];
 function mountedRoot(): HTMLElement {
     const root = document.createElement('div');
@@ -9158,7 +9165,7 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
             new MouseEvent('click', { bubbles: true, cancelable: true }),
         );
         expect(open).not.toHaveBeenCalled();
-        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true, HANDED_BACK);
         expect(h.onPayRate, 'no valve runs over a record that moved').not.toHaveBeenCalled();
         open.mockRestore();
     });
@@ -9183,7 +9190,7 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
-        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true, HANDED_BACK);
         expect(open).not.toHaveBeenCalled();
         // The sheet is recomposed in place from the record as it stands, at
         // the rate it already held — never at the answer the ask brought
@@ -9454,7 +9461,7 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(h.onPayRecordMoved, 'the re-read repaints nothing').not.toHaveBeenCalled();
 
             expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
-            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
+            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true, HANDED_BACK);
             expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'and the line asks for it again').toBe(
                 copy.PAY_QUOTE_CHANGED,
             );
@@ -9507,7 +9514,7 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(pathOf(sheet), 'the code is the new total').toBe(codeFor(sats, memoHex));
 
             expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
-            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true);
+            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true, HANDED_BACK);
             expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'and the line asks for it again').toBe(
                 copy.payItemsChanged('Roasted Beans'),
             );
@@ -10134,7 +10141,7 @@ describe('a-double-tap-inside-the-grace-opens-nothing', () => {
                 h,
             );
             expect(pressForUrl(root, 'pay-cashtab'), '300 ms after the change, on a fresh sheet').toBeUndefined();
-            expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true);
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true, HANDED_BACK);
             vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
             expect(pressForUrl(root, 'pay-cashtab'), 'after the grace').toContain('amount=9000.00');
             expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent, 'still restated').toBe(copy.payFigure('9,000'));
@@ -10199,7 +10206,7 @@ describe('a-return-to-the-opened-record-is-a-change-with-its-own-grace', () => {
 
                 vi.advanceTimersByTime(100);
                 expect(pressForUrl(root, 'pay-cashtab'), '100 ms after the flip back').toBeUndefined();
-                expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true);
+                expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true, HANDED_BACK);
                 vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
                 expect(pressForUrl(root, 'pay-cashtab'), 'after its grace').toContain('amount=5000.00');
                 expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'never the plain control again').toBe(
@@ -10490,7 +10497,7 @@ describe('the-press-again-line-shows-only-over-a-pay-press-that-was-absorbed', (
         recheckPaySheet(root);
         expect(droppedOf(root), 'in place, no press').toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
         expect(pressForUrl(root, 'pay-cashtab'), 'a Pay press inside the grace').toBeUndefined();
-        expect(h.onPayRecordMoved).toHaveBeenCalledWith(undefined, true);
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith(undefined, true, HANDED_BACK);
         expect(droppedOf(root), 'the press-again line').toBe(copy.selectionDroppedCheckPressed('Roasted Beans', 1));
         vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
         expect(pressForUrl(root, 'pay-cashtab')).toContain('amount=3000.00');
@@ -10593,7 +10600,7 @@ describe('the-press-again-line-shows-only-over-a-pay-press-that-was-absorbed', (
             // control's own record check finds it.
             now = records(kind === 'pay' ? new Map([[TOKEN_ID, { ...usd, amount: 700n }], [OTHER, usd]]) : new Map([[OTHER, usd]]));
             (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
-            expect(h.onPayRecordMoved, 'no Pay press did it').toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, false);
+            expect(h.onPayRecordMoved, 'no Pay press did it').toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, false, HANDED_BACK);
             expect(h.onPayRate).not.toHaveBeenCalled();
             if (kind === 'pay') {
                 expect(valveOf(root, 'pay')).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
@@ -10695,7 +10702,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
             view: () => payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map([[TOKEN_ID, usd]]), payRate: { ...PAY_RATE } }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd]])),
             at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)!,
-            handedBack: [TOKEN_ID, false],
+            handedBack: [TOKEN_ID, false, HANDED_BACK],
         },
         {
             name: 'Pay several',
@@ -10710,7 +10717,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
                 }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd], [OTHER, usd]])),
             at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)! + satsForQuote(usd, 1n, rate)!,
-            handedBack: [undefined, false],
+            handedBack: [undefined, false, HANDED_BACK],
         },
     ] as const;
 
@@ -10798,7 +10805,7 @@ describe('pay-several-asks-the-record-after-the-valve', () => {
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
         expect(open, 'nothing opens').not.toHaveBeenCalled();
         open.mockRestore();
-        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true);
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true, HANDED_BACK);
         // Recomposed in place from the moved record at the rate the sheet
         // held (0.00002), never at the answer the ask brought back (0.00001).
         const held = scaleRate(0.00002)!;

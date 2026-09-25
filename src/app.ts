@@ -177,6 +177,7 @@ import {
     PAY_CHECK_TIMEOUT_MS,
     PAY_RATE_MAX_AGE_MS,
     PAY_RATE_TIMEOUT_MS,
+    type PayShown,
 } from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
@@ -590,6 +591,13 @@ export function boot(
      * what a rate happened to be read for.
      */
     let payPainted = new Map<string, TokenPrice>();
+    /**
+     * The rate the open pay sheet's figure was last painted at by this app
+     * (`paint`), beside `payPainted`. What a hand-back from the app's own
+     * tail is judged against; a sheet handing itself back says what it
+     * showed instead (`PayShown`), since it may have taken a rate in place.
+     */
+    let payPaintedRate: bigint | undefined;
     /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
@@ -1408,6 +1416,7 @@ export function boot(
         // hands them to it: the single sheet's item when it is a quoted row,
         // every chosen item's on "Pay several" (`payPainted`).
         payPainted = new Map();
+        payPaintedRate = view.payRate?.rate;
         if (view.overlay.kind === 'pay') {
             const tokenId = view.overlay.tokenId;
             const item = quotedItems(view).find((row) => row.tokenId === tokenId);
@@ -1498,8 +1507,8 @@ export function boot(
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
             onPayRecords: () => recordsNow(),
-            onPayRecordMoved: (tokenId, pressed) => {
-                onPayRecordMoved(tokenId, pressed);
+            onPayRecordMoved: (tokenId, pressed, shown) => {
+                onPayRecordMoved(tokenId, pressed, shown);
             },
             onPayFigureChanged: (atMs, tokenIds) => {
                 // The sheet changed in place and said so with no press: the
@@ -2455,8 +2464,18 @@ export function boot(
      * ask for the press again: never for an ask's tail (`sheetOutOfStep`),
      * never for the refresh control (CRITIC-CARRYOVER-4 item 4). The caller
      * says which; there is no default.
+     *
+     * **A figure this paint puts on screen is a change, whatever put it
+     * there** (CRITIC-CARRYOVER-6 item 1). A sheet handing itself back says
+     * what it showed (`shown`): the later of its stamps is carried, so a
+     * rate answer's grace outlives the repaint, and a paint composed at
+     * another rate than the one the sheet showed — the valve's or the
+     * refresh control's answer, which the ask wrote to `payRate` before its
+     * tail handed the sheet back instead of taking it — starts its own
+     * grace now. The app's own tails, with no sheet to ask, are judged
+     * against the rate this app last painted (`payPaintedRate`).
      */
-    const onPayRecordMoved = (tokenId: string | undefined, pressed: boolean): void => {
+    const onPayRecordMoved = (tokenId: string | undefined, pressed: boolean, shown?: PayShown): void => {
         const key = payOverlayKey(state.view.overlay);
         if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
             return;
@@ -2476,6 +2495,17 @@ export function boot(
             if (fresh.length > 0) {
                 payChangedAt = performance.now();
             }
+        }
+        // The sheet's own later stamp — a rate answer's is sheet-local until
+        // now — is carried, never shortened.
+        if (shown?.changedAtMs !== undefined && (payChangedAt === undefined || shown.changedAtMs > payChangedAt)) {
+            payChangedAt = shown.changedAtMs;
+        }
+        // The rate this paint composes at (the view's own rule: never one
+        // read for another unit), against the rate the sheet showed.
+        const painting = rateForAnotherUnit() ? undefined : payRate?.rate;
+        if (painting !== (shown === undefined ? payPaintedRate : shown.rate)) {
+            payChangedAt = performance.now();
         }
         paint();
         const over = state.view.overlay;

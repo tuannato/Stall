@@ -150,6 +150,22 @@ import './theme-neo.css';
 import './theme-rural.css';
 import './broadcast.css';
 
+/**
+ * What an open pay sheet had on screen as it handed itself back to the app
+ * (`onPayRecordMoved`; CRITIC-CARRYOVER-6 item 1): the rate its figure was
+ * composed at — a rate it took in place (the valve's answer, the refresh
+ * control's, its own ask for a moved unit) is one the app never painted —
+ * and the later of its two change stamps, on the page's monotonic clock: a
+ * record's, which the app already holds (`onPayFigureChanged`), and a rate
+ * answer's, which is sheet-local until now. The app's paint then carries a
+ * grace still running, and a figure composed at another rate than this one
+ * is a change on screen that starts its own.
+ */
+export type PayShown = {
+    readonly rate: bigint | undefined;
+    readonly changedAtMs: number | undefined;
+};
+
 export type StallHandlers = {
     /**
      * Open the shop window's options. The Studio's own control; the window
@@ -257,9 +273,11 @@ export type StallHandlers = {
      * sheet's item and is absent for "Pay several"; a sheet no longer open is
      * left alone. `pressed` says whether a PAY press did it — never the
      * refresh control, and never an ask's tail — because only then may the
-     * line ask for the press again (CRITIC-CARRYOVER-4 item 4).
+     * line ask for the press again (CRITIC-CARRYOVER-4 item 4). `shown` is
+     * what the sheet had on screen as it handed itself back (`PayShown`),
+     * absent when the app's own tail does it.
      */
-    onPayRecordMoved?: (tokenId: string | undefined, pressed: boolean) => void;
+    onPayRecordMoved?: (tokenId: string | undefined, pressed: boolean, shown?: PayShown) => void;
     /**
      * The figure on the open sheet changed under the buyer, in place (a
      * re-read recomposed it, or a rate the sheet asked for itself moved it):
@@ -4630,6 +4648,11 @@ function pressedAt(event: Event): number {
 function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
     return changedAtMs !== undefined && pressedAt(event) - changedAtMs <= PAY_RECOMPOSE_GRACE_MS;
 }
+
+/** The later of two change stamps, either of which may be absent: the grace that runs longest. */
+function laterStamp(a: number | undefined, b: number | undefined): number | undefined {
+    return a === undefined ? b : b === undefined ? a : Math.max(a, b);
+}
 /**
  * The boot-time glance fetch's ceiling. It ran with none, and a request
  * started while the document is still loading holds WebKit's progress bar
@@ -5213,7 +5236,10 @@ function paySheet(
      * Sheet-local and never `stamp()`: the record did not move, so nothing
      * is handed to the app, and a press inside it is absorbed IN PLACE
      * (`absorbRatePress`) — the valve's line and the buyer's quantity stay,
-     * which a repaint from the app would drop.
+     * which a repaint from the app would drop. When the sheet hands itself
+     * back for another reason, the stamp rides the hand-back (`handBack`),
+     * or the app's paint would drop a grace still running
+     * (CRITIC-CARRYOVER-6 item 1).
      */
     let rateChangedAtMs: number | undefined;
     /**
@@ -5231,6 +5257,20 @@ function paySheet(
             rateChangedAtMs = performance.now();
         }
         keepFocusIn(wrap, [valve, why], focused, head);
+    };
+    /**
+     * The sheet hands itself back to be painted again from the records as
+     * they stand (`onPayRecordMoved`), with what it had on screen
+     * (`PayShown`; CRITIC-CARRYOVER-6 item 1): the rate its figure was
+     * composed at — never an answer this hand-back is instead of — and the
+     * later of its two stamps, so a rate grace still running is not dropped
+     * by the paint that replaces this sheet.
+     */
+    const handBack = (pressed: boolean): void => {
+        handlers.onPayRecordMoved?.(tokenId, pressed, {
+            rate: rate?.rate,
+            changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+        });
     };
     /**
      * Bumped by every recompose that changed something on screen, so an
@@ -5626,14 +5666,16 @@ function paySheet(
      * A Pay press that opened nothing because the figure changed under it:
      * the line says so in the owner's whole sentence (a Pay control stands
      * to press again), it is spoken, and the sheet is handed back to be
-     * painted again from the records as they stand — carrying the grace, so
-     * the second tap of a double tap is absorbed too.
+     * painted again from the records as they stand — carrying the later of
+     * its two graces (`handBack`), so the second tap of a double tap is
+     * absorbed too, and a rate answer's grace outlives the repaint
+     * (CRITIC-CARRYOVER-6 item 1).
      */
     const absorbPress = (): void => {
         pressedLine = true;
         refresh();
         speakRecompose(wrap, [lost() ? lostBox : valve], undefined, head);
-        handlers.onPayRecordMoved?.(tokenId, true);
+        handBack(true);
     };
     /**
      * A Pay press inside the grace of a rate answer that moved the figure
@@ -5740,7 +5782,7 @@ function paySheet(
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
         if (recheck()) {
-            handlers.onPayRecordMoved?.(tokenId, false);
+            handBack(false);
             return;
         }
         const at = composedAt;
@@ -5753,7 +5795,7 @@ function paySheet(
                 return;
             }
             if (recheck() || composedAt !== at) {
-                handlers.onPayRecordMoved?.(tokenId, false);
+                handBack(false);
                 return;
             }
             const settled = settleValve(
@@ -6377,8 +6419,9 @@ function paySeveralSheet(
     /**
      * The single sheet's `rateChangedAtMs` (CRITIC-CARRYOVER-5 item 1): when
      * the valve's answer or the refresh control's last moved the figure on
-     * screen. Sheet-local, never `stamp()`, and a Pay press inside its grace
-     * is absorbed in place (`absorbRatePress`).
+     * screen. Sheet-local, never `stamp()`, a Pay press inside its grace is
+     * absorbed in place (`absorbRatePress`), and it rides a hand-back
+     * (`handBack`).
      */
     let rateChangedAtMs: number | undefined;
     /** The single sheet's `refreshAfterRate`, over the choice, focus kept in the dialog. */
@@ -6390,6 +6433,13 @@ function paySeveralSheet(
             rateChangedAtMs = performance.now();
         }
         keepFocusIn(wrap, [valve, why], focused, head);
+    };
+    /** The single sheet's `handBack`, over the choice. */
+    const handBack = (pressed: boolean): void => {
+        handlers.onPayRecordMoved?.(undefined, pressed, {
+            rate: rate?.rate,
+            changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+        });
     };
     let composedAt = 0;
 
@@ -6699,7 +6749,7 @@ function paySeveralSheet(
         pressedLine = true;
         refresh();
         speakRecompose(wrap, lostAll ? [lostBox] : [valve, dropped], undefined, head);
-        handlers.onPayRecordMoved?.(undefined, true);
+        handBack(true);
     };
     /** The single sheet's `absorbRatePress`: the valve's line spoken again, in place, nothing handed back. */
     const absorbRatePress = (): void => {
@@ -6778,7 +6828,7 @@ function paySeveralSheet(
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
         if (recheck()) {
-            handlers.onPayRecordMoved?.(undefined, false);
+            handBack(false);
             return;
         }
         const at = composedAt;
@@ -6791,7 +6841,7 @@ function paySeveralSheet(
                 return;
             }
             if (recheck() || composedAt !== at) {
-                handlers.onPayRecordMoved?.(undefined, false);
+                handBack(false);
                 return;
             }
             const settled = settleValve(fresh, undefined, (r) => selectionSats(selection, prices, r), undefined);
