@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SERVED_SHEETS } from '../../scripts/sheet-roles.mjs';
 
 import {
     SHIPPED_ATTACHMENTS,
@@ -150,19 +151,46 @@ const confettiTiles = (): string[] => {
 };
 
 /**
- * What would make a scrap paint other than its fill: the root's own
- * opacity, a blend of the element or of its background layers, a filter.
- * The ratio below reads each fill as the colour on screen, which is true
- * only while no rule naming the confetti — nor a keyframe one of them runs
- * — sets any of these.
+ * What would make a scrap or a ray paint other than its colour: the root's
+ * own opacity, a blend of the element or of its background layers, a
+ * filter. Both ratios below read each colour as the colour on screen, which
+ * is true only while no rule that reaches the root sets any of these — nor
+ * a keyframe one of them runs.
  */
 const CONFETTI_ALTERS = ['opacity', 'mix-blend-mode', 'background-blend-mode', 'filter', 'backdrop-filter'] as const;
 
-/** Every declaration in `css` that alters the confetti's paint (`CONFETTI_ALTERS`). */
-const confettiAlterations = (css: string = CSS): string[] => {
-    const frames = keyframesOf(css);
+/** Every served sheet, as the app and its pages load them (`SERVED_SHEETS`). */
+const SERVED_CSS: readonly string[] = SERVED_SHEETS.map((sheet) =>
+    readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'),
+);
+
+/**
+ * Whether a rule reaches the stall root: it names the confetti, or its
+ * subject — the last compound, `:not(…)` aside — is nothing but the root's
+ * own classes (`stall`, a look's `t-*`, a worn `att-*`). The critic,
+ * 2026-09-25, item 10: `.stall { opacity }` and `.stall.att-sunburst {
+ * filter }` fade the paper the confetti and the rays are read over, and a
+ * reader of the confetti's rules alone let both through.
+ */
+const reachesRoot = (selector: string): boolean =>
+    namesClass(selector, 'att-confetti') ||
+    selector.split(',').some((one) => {
+        const subject = one.trim().split(/\s*[\s>+~]\s*/).pop() ?? '';
+        const bare = subject.replace(/:not\([^()]*\)/g, '');
+        return /^(?:\.(?:stall|t-[a-z0-9]+|att-[a-z0-9-]+))+$/.test(bare);
+    });
+
+/**
+ * Every declaration in `sheets` that alters the paint of the confetti or
+ * the wheel (`CONFETTI_ALTERS`): in every rule that reaches the stall root
+ * (`reachesRoot`), in any served sheet, and in every keyframe such a rule
+ * runs.
+ */
+const rootAlterations = (sheets: string | readonly string[] = SERVED_CSS): string[] => {
+    const all = typeof sheets === 'string' ? [sheets] : sheets;
+    const frames = new Map(all.flatMap((css) => [...keyframesOf(css)]));
     const out: string[] = [];
-    for (const rule of rulesOf(css).filter((r) => namesClass(r.selector, 'att-confetti'))) {
+    for (const rule of all.flatMap(rulesOf).filter((r) => reachesRoot(r.selector))) {
         const run = ['animation', 'animation-name']
             .flatMap((property) => (declared(rule.body, property) ?? '').split(/[\s,]+/))
             .filter((word) => frames.has(word));
@@ -186,7 +214,7 @@ describe('every-confetti-scrap-clears-three-to-one-under-every-ground-ink', () =
 
         const tiles = confettiTiles();
         expect(tiles.length, 'the confetti rules name their tiles').toBeGreaterThan(0);
-        expect(confettiAlterations(), 'a fill is the colour on screen: nothing fades, blends or filters the paper').toEqual([]);
+        expect(rootAlterations(), 'a fill is the colour on screen: nothing fades, blends or filters the paper').toEqual([]);
         const scraps: { tile: string; fill: string }[] = [];
         for (const tile of tiles) {
             expect(tile, `${tile}: a confetti tile is drawn art in decor/`).toMatch(
@@ -244,8 +272,8 @@ describe('every-confetti-scrap-clears-three-to-one-under-every-ground-ink', () =
 
     it('refuses a confetti rule, or a keyframe one runs, that fades, blends or filters the paper', () => {
         const worn = '.stall.att-confetti { animation: att-confetti-fall 26s linear infinite; } @keyframes att-confetti-fall { to { background-position: 0 0; } }';
-        expect(confettiAlterations(worn)).toEqual([]);
-        expect(confettiAlterations('.stall.att-confetti, .stall.att-sunburst { animation: none; }')).toEqual([]);
+        expect(rootAlterations(worn)).toEqual([]);
+        expect(rootAlterations('.stall.att-confetti, .stall.att-sunburst { animation: none; }')).toEqual([]);
         const plants = [
             '.stall.att-confetti { opacity: 0.85; }',
             '.stall.att-sunburst.att-confetti { mix-blend-mode: multiply; }',
@@ -256,10 +284,32 @@ describe('every-confetti-scrap-clears-three-to-one-under-every-ground-ink', () =
             '.stall.att-confetti { animation: wk-fade 26s linear infinite; } @keyframes wk-fade { from { opacity: 1; } to { opacity: 0.6; } }',
         ];
         for (const plant of plants) {
-            expect(confettiAlterations(plant), plant).not.toEqual([]);
+            expect(rootAlterations(plant), plant).not.toEqual([]);
         }
         // The real sheet with one of them added goes red too.
-        expect(confettiAlterations(`${CSS}\n.stall.att-confetti { opacity: 0.9; }`)).not.toEqual([]);
+        expect(rootAlterations(`${CSS}\n.stall.att-confetti { opacity: 0.9; }`)).not.toEqual([]);
+    });
+
+    it('refuses a fade on the stall root itself, in any served sheet', () => {
+        // The critic, 2026-09-25, item 10: a rule that never names the
+        // confetti fades its paper just the same when its subject is the root.
+        for (const plant of [
+            '.stall { opacity: 0.9; }',
+            '.stall.att-sunburst { filter: contrast(0.8); }',
+            '.t-rural { mix-blend-mode: multiply; }',
+            '.t-rural.stall:not(.deck-stall) { opacity: 0.95; }',
+            '#app > .stall.att-confetti.t-rural { backdrop-filter: blur(1px); }',
+            '.stall.att-sunburst { animation: wk-dim 9s infinite; } @keyframes wk-dim { to { filter: brightness(0.7); } }',
+        ]) {
+            expect(rootAlterations([...SERVED_CSS, plant]), plant).not.toEqual([]);
+        }
+        // It reads the served sheets and finds the root in them; a
+        // descendant of the root, or another surface, is not the root.
+        expect(SERVED_CSS.length).toBe(SERVED_SHEETS.length);
+        expect(rulesOf(CSS).some((r) => r.selector === '.stall' && reachesRoot(r.selector))).toBe(true);
+        for (const other of ['.stall .item { opacity: 0.5; }', '.t-rural .notice { filter: blur(1px); }', '.deck { opacity: 0.4; }']) {
+            expect(rootAlterations([...SERVED_CSS, other]), other).toEqual([]);
+        }
     });
 });
 
@@ -343,6 +393,19 @@ const paperOf = (rules: readonly Rule[]): string | undefined => {
 };
 
 /**
+ * A radial gradient's leading shape, size or position: `circle`, `ellipse`,
+ * an extent keyword, a length, or `at …`. Anything else in `args[0]` is a
+ * colour stop.
+ */
+const RADIAL_DESCRIPTOR = /^(?:circle|ellipse|closest-side|closest-corner|farthest-side|farthest-corner|at\s|-?\d)/;
+
+/** A `radial-gradient(…)` layer's colour stops, its descriptor (if any) dropped. */
+const falloffStops = (layer: string): string[] => {
+    const args = topLevel(argsOf(layer, 'radial-gradient') ?? '');
+    return RADIAL_DESCRIPTOR.test(args[0] ?? '') ? args.slice(1) : args;
+};
+
+/**
  * Every falloff stop, other than the transparent centre, that is not the
  * root's paper token or a token lighter than it on every channel under
  * every Rural palette. The ray is read at full tint at the wheel's centre;
@@ -361,7 +424,15 @@ const falloffOffences = (rules: readonly Rule[] = RULES): string[] => {
         const layers = topLevel(declared(rule.body, 'background-image') ?? '');
         const at = layers.findIndex((l) => l.startsWith('repeating-conic-gradient('));
         for (const layer of layers.slice(0, at).filter((l) => l.startsWith('radial-gradient('))) {
-            for (const stop of topLevel(argsOf(layer, 'radial-gradient') ?? '').slice(2)) {
+            // The first stop is read as the transparent centre only where it
+            // IS the first stop: a gradient with no shape descriptor has its
+            // first colour in `args[0]`, which a fixed `.slice(2)` skipped
+            // (the critic, 2026-09-25, item 10).
+            const [centre, ...stops] = falloffStops(layer);
+            if (!/^transparent 0 [1-9]\d*%$/.test(centre ?? '')) {
+                out.push(`${rule.selector}: the falloff's first stop "${centre ?? ''}" is not its transparent centre`);
+            }
+            for (const stop of stops) {
                 const token = /^var\((--s-[a-z0-9-]+)\)(?: -?\d+(?:\.\d+)?(?:%|px))*$/.exec(stop)?.[1];
                 if (token === undefined) {
                     out.push(`${rule.selector}: the falloff stop "${stop}" is not a token of the look`);
@@ -404,9 +475,8 @@ const sunburstLayers = () => {
             if (/^url\(\s*'decor\/confetti-[a-z]+\.svg'\s*\)$/.test(layer)) {
                 continue;
             }
-            const radial = argsOf(layer, 'radial-gradient');
-            const centre = radial === undefined ? undefined : topLevel(radial)[1];
-            if (layer.startsWith('radial-gradient(') && centre !== undefined && /^transparent 0 [1-9]\d*%$/.test(centre)) {
+            const centre = layer.startsWith('radial-gradient(') ? falloffStops(layer)[0] : undefined;
+            if (centre !== undefined && /^transparent 0 [1-9]\d*%$/.test(centre)) {
                 continue;
             }
             throw new Error(`${rule.selector}: "${layer.slice(0, 60)}" sits over the ray; re-derive this test`);
@@ -461,6 +531,7 @@ describe('every-sunburst-ray-clears-three-to-one-under-every-ground-ink', () => 
         const paper = paperOf(RULES);
         expect(paper, "the root's ground is one token").toBeDefined();
         expect(falloffOffences(), 'the falloff only lifts the ray toward the paper').toEqual([]);
+        expect(rootAlterations(), 'a ray is the colour on screen: nothing fades, blends or filters the root').toEqual([]);
 
         const failures: string[] = [];
         let worst = { ratio: Infinity, what: '' };
@@ -514,6 +585,21 @@ describe('every-sunburst-ray-clears-three-to-one-under-every-ground-ink', () => 
         ];
         for (const plant of plants) {
             expect(falloffOffences(wheel(plant)), plant).not.toEqual([]);
+        }
+        // No shape descriptor: the first colour is `args[0]`, and it is read
+        // as a stop, never skipped (the critic, 2026-09-25, item 10).
+        const bare = (falloff: string): Rule[] =>
+            rulesOf(`.stall { background-color: var(--s-bg); }
+                .stall.att-sunburst { background-image: radial-gradient(${falloff}),
+                    repeating-conic-gradient(from 0deg at 50% 110px, color-mix(in srgb, var(--s-accent-2) 17%, transparent) 0 9deg, transparent 9deg 18deg),
+                    var(--s-backdrop); }`);
+        expect(falloffOffences(bare('transparent 0 30%, var(--s-bg) 64%')), 'a bare falloff that is right is right').toEqual([]);
+        for (const plant of [
+            'var(--s-text) 0 30%, var(--s-bg) 64%',
+            'transparent 0 30%, var(--s-muted) 50%, var(--s-bg) 64%',
+            'var(--s-muted) 30%, var(--s-bg) 64%',
+        ]) {
+            expect(falloffOffences(bare(plant)), `no descriptor: ${plant}`).not.toEqual([]);
         }
         // The real sheet with its falloff's paper stop moved to the ink goes red too.
         expect(CSS).toContain('var(--s-bg) 64%');

@@ -4369,12 +4369,23 @@ describe('a-pay-sheet-opened-cold-learns-its-attribution-in-place', () => {
                 [COLD],
             ),
         );
-        await flush();
-        const sheet = root.querySelector('[data-role="pay"]');
-        expect(sheet, 'the link opened the sheet').not.toBeNull();
-        expect(sheet!.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(
-            QUOTE_NOT_MINTED_HERE,
-        );
+        // On the page, as the app's root is: the sheet paints its answer in
+        // place only while it is connected (`wrap.isConnected`).
+        document.body.append(root);
+        try {
+            await flush();
+            const sheet = root.querySelector('[data-role="pay"]');
+            expect(sheet, 'the link opened the sheet').not.toBeNull();
+            const line = sheet!.querySelector('[data-role="quote-not-minted"]') as HTMLElement | null;
+            expect(line?.textContent).toBe(QUOTE_NOT_MINTED_HERE);
+            // The line exists from the start, hidden: what the sheet learned
+            // is that it shows (this read `textContent` alone, which a hidden
+            // line carries too).
+            await until(() => line?.hidden === false);
+            expect(line?.hidden, 'the sheet learned its attribution in place').toBe(false);
+        } finally {
+            root.remove();
+        }
     });
 });
 
@@ -5391,7 +5402,7 @@ describe('a-finished-walk-that-read-the-last-removal-takes-the-quote-off', () =>
         await wake([removal]);
         await until(() => root.querySelector('[data-role="pay-open"]') === null);
         expect(root.querySelector('[data-role="pay-open"]'), 'the seller took it off').toBeNull();
-        expect(painted.view?.prices?.has(A) ?? false).toBe(false);
+        expect(root.textContent, 'nor its name on the rail').not.toContain('Plum Jam');
     });
 
     it('still holds the records on screen over a finished walk that resolved nothing', async () => {
@@ -5672,6 +5683,126 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(root.querySelector('[data-role="pay"] [data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
     });
 
+    describe('the-line-is-decided-against-the-record-the-sheet-was-opened-on', () => {
+        /**
+         * The critic, 2026-09-25, item 7, and item 6's untested tails. After
+         * an ask, a sheet is handed back to `onPayRecordMoved` when the
+         * records it was painted from moved — not only when the rate
+         * arrived for another unit — so a move in the SAME unit during the
+         * open's own ask is said, where it was painted in silence; and every
+         * road that asks (the open, the `?pay=` link, Pay several's open,
+         * the move's own ask) composes only at the unit the record now
+         * stands in.
+         */
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        const GBP_RATE = 16_000_000n;
+        const rates: Record<string, bigint> = { usd: USD_RATE, eur: EUR_RATE, gbp: GBP_RATE };
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        const GBP_QUOTE = { code: 'gbp', exponent: 2, amount: 500n };
+        /** The price feed, with the next ask held until `release`. */
+        const holdNextAsk = (): { asked: string[]; release: () => void } => {
+            const asked: string[] = [];
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            let held = false;
+            priceControl.fetch = async (code) => {
+                asked.push(code);
+                if (!held) {
+                    held = true;
+                    await gate;
+                }
+                return rates[code];
+            };
+            return { asked, release: () => release() };
+        };
+        const at = (quote: { code: string; exponent: number; amount: bigint }, rate: bigint): string =>
+            formatXec(satsForQuote(quote, 1n, rate)!);
+
+        it('a new figure in the same unit during the open’s own ask is said', async () => {
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+            await flush();
+            const { release } = holdNextAsk();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await flush();
+            await republish([['4a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { ...USD_QUOTE, amount: 700n } })]]);
+            release();
+            await until(() => figureOf(root, 'pay') !== undefined && figureOf(root, 'pay') !== '');
+            expect(figureOf(root, 'pay')).toBe(at({ ...USD_QUOTE, amount: 700n }, USD_RATE));
+            expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent, 'the buyer is told').toBe(PAY_QUOTE_CHANGED);
+        });
+
+        describe('a-pay-hint-sheet-never-composes-across-units', () => {
+            it('a `?pay=` sheet whose record moves to another unit during its ask asks that unit and says so', async () => {
+                const { root } = bootStall(
+                    stallEmpty({
+                        tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                        prices: new Map([[A, USD_QUOTE]]),
+                        shopTab: 'quotes',
+                        payHint: A.slice(0, 12),
+                    }),
+                );
+                const { asked, release } = holdNextAsk();
+                await flush();
+                expect(root.querySelector('[data-role="pay"]'), 'the link opened the sheet').not.toBeNull();
+                await republish([['4b'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+                release();
+                await until(() => figureOf(root, 'pay') === at(EUR_QUOTE, EUR_RATE));
+                expect(asked, 'the new unit’s own rate').toContain('eur');
+                expect(figureOf(root, 'pay'), 'never the euro quote at the dollar’s rate').toBe(at(EUR_QUOTE, EUR_RATE));
+                expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+            });
+        });
+
+        it('a record that moves again while the move’s own rate is asked for composes at the last unit', async () => {
+            priceControl.fetch = async (code) => rates[code];
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await flush();
+            await republish([['4c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+            const { asked, release } = holdNextAsk();
+            expect(press(root, 'pay'), 'the press is absorbed').toBeUndefined();
+            await flush();
+            expect(asked).toEqual(['usd', 'eur']);
+            await republish([['4d'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: GBP_QUOTE })]]);
+            release();
+            await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
+            expect(figureOf(root, 'pay'), 'never the pound quote at the euro’s rate').toBe(at(GBP_QUOTE, GBP_RATE));
+            expect(asked).toContain('gbp');
+            expect(press(root, 'pay')).toContain(`amount=${at(GBP_QUOTE, GBP_RATE).replace(/,/g, '')}`);
+        });
+
+        it('Pay several: a chosen item that moves unit during the open’s ask leaves, and the rest compose at the chosen unit', async () => {
+            priceControl.fetch = async (code) => rates[code];
+            const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE], [B, USD_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            const { release } = holdNextAsk();
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            await republish([
+                ['4f'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: USD_B })],
+                ['4e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })],
+            ]);
+            release();
+            await until(() => figureOf(root, 'pay-several') === at(USD_B, USD_RATE));
+            expect(figureOf(root, 'pay-several'), 'Rye Flour alone, at the dollar’s rate').toBe(at(USD_B, USD_RATE));
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
+        });
+    });
+
     describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
         /**
          * The critic, 2026-09-25, item 2. The scan code is the one road off
@@ -5808,8 +5939,10 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 ['5b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
                 ['5a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
             ]);
-            await until(() => painted.view?.selection?.has(A) === false);
-            expect([...(painted.view?.selection?.keys() ?? [])], 'the item that moved leaves, the rest stay').toEqual([B]);
+            // Read off this app's own tree: `painted` is the last view ANY
+            // app in the file painted (see `overlapping-bursts-…`).
+            await until(() => root.querySelector('[data-role="selection-dropped"]') !== null);
+            expect(root.querySelector('[data-role="selection-names"]')?.textContent, 'the item that moved leaves, the rest stay').toBe('Rye Flour ×1');
             expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
             expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'the rest, in the unit they were chosen in').toContain('7,000');
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();

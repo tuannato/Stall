@@ -1619,23 +1619,60 @@ function lastCompound(selector: string): { head: string; last: string } {
     return { head: selector.slice(0, cut + 1), last: selector.slice(cut + 1) };
 }
 
+/** Every `:has(…)` in a compound, balanced, as written. */
+function hasClauses(compound: string): string[] {
+    const out: string[] = [];
+    for (let at = compound.indexOf(':has('); at >= 0; at = compound.indexOf(':has(', at + 1)) {
+        let depth = 0;
+        for (let i = at + ':has'.length; i < compound.length; i += 1) {
+            if (compound[i] === '(') depth += 1;
+            if (compound[i] === ')') depth -= 1;
+            if (depth === 0) {
+                out.push(compound.slice(at, i + 1));
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 /**
  * A selector's last compound with its states taken out — each bare state
  * pseudo-class, and an `:is()` or `:where()` holding nothing else — and the
- * states as written, whitespace dropped. A state on an ancestor is not the
- * surface's own and stays in the selector.
+ * states as written, whitespace dropped. **A state anywhere else is a state
+ * too** (the critic, 2026-09-25, item 9): on an ancestor
+ * (`.stall-foot:hover .notice-invite`) it repaints the surface when a
+ * pointer is over the ancestor, and inside a `:has()`
+ * (`.notice-invite:has(:focus-visible)`) when a descendant is focused. Both
+ * are taken out of `base` and `last` so the surface is still recognised,
+ * and named in `elsewhere`, because the outline's colour is declared on the
+ * surface with the state after it and neither shape can be listed so.
  */
-function withoutStates(selector: string): { base: string; last: string; state: string } {
+function withoutStates(selector: string): { base: string; last: string; state: string; elsewhere: string } {
     const { head, last } = lastCompound(squash(selector));
+    const hasState = new RegExp(STATE_WORD);
+    let elsewhere = '';
+    let within = last;
+    for (const clause of hasClauses(last)) {
+        if (hasState.test(clause)) {
+            elsewhere += clause.replace(/\s+/g, '');
+            within = within.replace(clause, '');
+        }
+    }
+    let ancestors = head;
+    if (hasState.test(head)) {
+        elsewhere += head.replace(/\s+/g, '');
+        ancestors = head.replace(new RegExp(STATE_WORD, 'g'), '');
+    }
     let state = '';
     const take = (whole: string): string => {
         state += whole.replace(/\s+/g, '');
         return '';
     };
-    const bare = last
+    const bare = within
         .replace(new RegExp(`:(?:is|where)\\(\\s*${STATE_WORD}(?:\\s*,\\s*${STATE_WORD})*\\s*\\)`, 'g'), take)
         .replace(new RegExp(STATE_WORD, 'g'), take);
-    return { base: squash(`${head}${bare}`), last: bare, state };
+    return { base: squash(`${ancestors}${bare}`), last: bare, state, elsewhere };
 }
 
 /** The look classes of the looks that wear the rain; a rule scoped to any other look's class never paints under it. */
@@ -1652,18 +1689,18 @@ const RAIN_LOOK_CLASSES: ReadonlySet<string> = new Set(RAIN_LOOKS.map((id) => de
 function statesOfListedSurfaces(
     sheets: readonly { path: string; css: string }[],
     table: Readonly<Record<string, OutlineGround>> = OUTLINE_GROUNDS,
-): { path: string; selector: string; surface: string; state: string }[] {
-    const out: { path: string; selector: string; surface: string; state: string }[] = [];
+): { path: string; selector: string; surface: string; state: string; elsewhere: string }[] {
+    const out: { path: string; selector: string; surface: string; state: string; elsewhere: string }[] = [];
     for (const { path, css } of sheets) {
         for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
             if (!declarationsOf(m[2]!).some((d) => /^background(?:-color|-image)?$/.test(d.prop))) continue;
             for (const selector of topLevel(m[1]!).map(squash)) {
                 const looks = [...selector.matchAll(/\.(t-[a-z0-9]+)(?![\w-])/g)].map((l) => l[1]!);
                 if (looks.some((cls) => !RAIN_LOOK_CLASSES.has(cls))) continue;
-                const { base, last, state } = withoutStates(selector);
-                if (state === '') continue;
+                const { base, last, state, elsewhere } = withoutStates(selector);
+                if (state === '' && elsewhere === '') continue;
                 for (const [surface, entry] of Object.entries(table)) {
-                    if (base === entry.paint.rule || last === surface) out.push({ path, selector, surface, state });
+                    if (base === entry.paint.rule || last === surface) out.push({ path, selector, surface, state, elsewhere });
                 }
             }
         }
@@ -1693,8 +1730,15 @@ function statesWithoutOutline(
         }
     }
     const out: string[] = [];
-    for (const { path, selector, surface, state } of statesOfListedSurfaces(sheets, table)) {
+    for (const { path, selector, surface, state, elsewhere } of statesOfListedSurfaces(sheets, table)) {
         const at = `${path}: ${selector} repaints ${surface}`;
+        if (elsewhere !== '') {
+            // The outline's colour is declared on the surface with its state
+            // after it; a state on an ancestor or inside `:has()` cannot be
+            // listed so, and is refused rather than let through unlisted.
+            out.push(`${at} in a state on an ancestor or inside :has() (${elsewhere}); put the state on the surface, where its outline colour can be listed`);
+            continue;
+        }
         const listed = table[surface]?.states?.[state];
         if (listed === undefined) {
             out.push(`${at}, and OUTLINE_GROUNDS lists no outline colour for ${surface}${state}`);
@@ -1722,7 +1766,9 @@ describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
      * `:focus-visible`, `:focus-within` or `:active` rule in a served sheet
      * that changes a listed surface's background carries a listed outline
      * colour, declared in `stall.css` on that surface in that state, and
-     * held to that rule's paint (`outlineGroundMismatches`).
+     * held to that rule's paint (`outlineGroundMismatches`). A state on an
+     * ancestor or inside `:has()` is a state too, and is refused: the
+     * outline's colour cannot be listed on such a selector.
      */
     const sheets = SERVED_SHEETS.map((sheet) => ({ path: sheet.path, css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8') }));
     const stall = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
@@ -1753,16 +1799,25 @@ describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
             '.event-txid:is(:hover, :focus-visible) { background-color: rgba(0, 0, 0, 0.2); }',
             '.t-neo .notice-invite:active { background: rgba(255, 77, 122, 0.2); }',
             '.t-neo .studio-browser:focus-within { background-image: linear-gradient(red, blue); }',
+            // A state on an ancestor repaints the surface as surely as its
+            // own, and so does one inside `:has()` (the critic, 2026-09-25,
+            // item 9): this test pinned the first as silent, and read the
+            // second as `:has()` with nothing in it.
+            '.t-neo .stall-foot:hover .notice-invite { background: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice-invite:has(:focus-visible) { background: rgba(255, 77, 122, 0.2); }',
+            '.t-neo .stall-foot:has(:hover) .notice-invite { background-color: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice:is(:hover, :focus-within) .notice-invite { background: rgba(0, 0, 0, 0.2); }',
         ]) {
             expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).not.toEqual([]);
         }
-        // Not a background, not a listed surface, a look that does not wear
-        // the rain, or a state on an ancestor: nothing to answer.
+        // Not a background, not a listed surface, or a look that does not
+        // wear the rain: nothing to answer.
         for (const planted of [
             '.t-neo .cta:hover { box-shadow: 0 0 16px rgba(44, 233, 224, 0.35); }',
             '.t-modern .notice-invite:hover { background: #eee; }',
             '.t-neo .item:hover { background: rgba(0, 0, 0, 0.2); }',
-            '.t-neo .stall-foot:hover .notice-invite { background: rgba(0, 0, 0, 0.2); }',
+            '.t-modern .stall-foot:hover .notice-invite { background: #eee; }',
+            '.t-neo .notice-invite:has(.chip) { background: rgba(255, 77, 122, 0.04); }',
         ]) {
             expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).toEqual([]);
         }

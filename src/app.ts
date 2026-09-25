@@ -2276,7 +2276,7 @@ export function boot(
             ) {
                 return;
             }
-            if (rateForAnotherUnit()) {
+            if (sheetOutOfStep()) {
                 onPayRecordMoved(tokenId);
                 return;
             }
@@ -2293,6 +2293,17 @@ export function boot(
      */
     const rateForAnotherUnit = (): boolean =>
         payRate !== undefined && payRateUnit !== undefined && payRateUnit !== quoteUnitOnScreen();
+
+    /**
+     * After an ask, whether the open sheet is out of step with the app: the
+     * records it was painted from moved (`payPainted`, what the buyer was
+     * shown — the critic, 2026-09-25, item 7: a same-unit move during the
+     * open's own ask was painted in silence), or the rate arrived for another
+     * unit than it now composes in. Either is handed to `onPayRecordMoved`,
+     * which says the line only for the first.
+     */
+    const sheetOutOfStep = (): boolean =>
+        movedRecords(payPainted, recordsNow()).length > 0 || rateForAnotherUnit();
 
     /** True for a quote written in XEC: its sheet reads no rate, so no feed is asked. */
     const quoteNeedsNoRate = (tokenId: string): boolean =>
@@ -2359,7 +2370,7 @@ export function boot(
             if (claimed !== generation || state.view.overlay.kind !== 'pay-several') {
                 return;
             }
-            if (rateForAnotherUnit()) {
+            if (sheetOutOfStep()) {
                 onPayRecordMoved();
                 return;
             }
@@ -2417,7 +2428,7 @@ export function boot(
             if (claimed !== generation || payOverlayKey(state.view.overlay) !== key) {
                 return;
             }
-            if (rateForAnotherUnit()) {
+            if (sheetOutOfStep()) {
                 // Moved again while its own rate was asked for.
                 onPayRecordMoved(tokenId);
                 return;
@@ -2819,7 +2830,7 @@ export function boot(
                         ) {
                             return;
                         }
-                        if (rateForAnotherUnit()) {
+                        if (sheetOutOfStep()) {
                             onPayRecordMoved(tokenId);
                             return;
                         }

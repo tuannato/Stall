@@ -3,7 +3,7 @@ import { encodeCashAddress } from 'ecashaddrjs';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDoorTyping } from './doorTyping';
 import { ICON_HERO_SIZE, ICON_HOST, iconUrl } from '../domain/icons';
 import {
@@ -8765,7 +8765,35 @@ const PAY_TEA: TokenMeta = {
 // Frozen *now*: the pay controls open a wallet only over a rate younger than
 // `PAY_RATE_MAX_AGE_MS`, so a fixture stamped in the past presses into the
 // valve instead of the wallet.
-const PAY_RATE = { rate: scaleRate(0.00002)!, atMs: Date.now()};
+/**
+ * The pay sheets' frozen rate. Stamped at every test, not at module load
+ * (the critic, 2026-09-25, item 11): a stamp from the file's load ages under
+ * a slow run, and past `PAY_RATE_MAX_AGE_MS` every sheet built from it paints
+ * `PAY_QR_STALE` where the test meant a fresh code.
+ */
+const PAY_RATE: { rate: bigint; atMs: number } = { rate: scaleRate(0.00002)!, atMs: Date.now() };
+beforeEach(() => {
+    PAY_RATE.atMs = Date.now();
+});
+
+/**
+ * A root in the document, as the app's is. A pay sheet's async tail answers
+ * only while the sheet is on the page (`wrap.isConnected`, the critic,
+ * 2026-09-25, item 7), so a test of a tail mounts its root; each is removed
+ * after its test.
+ */
+const onPage: HTMLElement[] = [];
+function mountedRoot(): HTMLElement {
+    const root = document.createElement('div');
+    document.body.append(root);
+    onPage.push(root);
+    return root;
+}
+afterEach(() => {
+    for (const root of onPage.splice(0)) {
+        root.remove();
+    }
+});
 
 /**
  * The quote rail as a reader meets it: on the quotes side of the Shop panel.
@@ -9134,7 +9162,7 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
     });
 
     it('a record that moved during the valve’s ask composes nothing from the answer', async () => {
-        const root = document.createElement('div');
+        const root = mountedRoot();
         let moved = false;
         const h = {
             ...handlers(),
@@ -9281,6 +9309,174 @@ describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
     });
 });
 
+describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
+    /**
+     * The critic, 2026-09-25, item 6: the refresh control's two record checks
+     * had no test. Before its ask, a record that moved hands the sheet back
+     * and asks no feed; after it, a record that moved during the ask hands
+     * the sheet back and nothing is composed from the answer. On both sheets.
+     */
+    const OTHER = '7a'.repeat(32);
+    const usd = { code: 'usd', exponent: 2, amount: 500n };
+    const moved = { ...usd, amount: 700n };
+    const records = (prices: Map<string, typeof usd>) => ({ prices, known: true, complete: true, decided: new Set<string>() });
+    const sheets = [
+        {
+            name: 'the single sheet',
+            view: () => payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map([[TOKEN_ID, usd]]), payRate: { ...PAY_RATE } }),
+            now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd]])),
+            handedBack: [TOKEN_ID],
+        },
+        {
+            name: 'Pay several',
+            view: () =>
+                payView({
+                    tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                    prices: new Map([[TOKEN_ID, usd], [OTHER, usd]]),
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                    payRate: { ...PAY_RATE },
+                }),
+            now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd], [OTHER, usd]])),
+            handedBack: [],
+        },
+    ] as const;
+
+    for (const sheet of sheets) {
+        it(`${sheet.name}: a record that moved before the press asks no feed`, () => {
+            const root = mountedRoot();
+            const h = { ...handlers(), onPayRate: vi.fn(async () => ({ rate: PAY_RATE.rate, atMs: Date.now() })), onPayRecords: () => sheet.now(true), onPayRecordMoved: vi.fn() };
+            renderStall(root, sheet.view(), h);
+            (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+            expect(h.onPayRate, 'no feed is asked over a record that moved').not.toHaveBeenCalled();
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith(...sheet.handedBack);
+        });
+
+        it(`${sheet.name}: a record that moved during the ask composes nothing from the answer`, async () => {
+            const root = mountedRoot();
+            let m = false;
+            const h = {
+                ...handlers(),
+                onPayRate: vi.fn(async () => {
+                    m = true;
+                    return { rate: scaleRate(0.00001)!, atMs: Date.now() };
+                }),
+                onPayRecords: () => sheet.now(m),
+                onPayRecordMoved: vi.fn(),
+            };
+            renderStall(root, sheet.view(), h);
+            const figure = root.querySelector('[data-role="price"]')?.textContent;
+            (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(h.onPayRate).toHaveBeenCalledTimes(1);
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith(...sheet.handedBack);
+            expect(root.querySelector('[data-role="price"]')?.textContent, 'the answer was not composed').toBe(figure);
+            expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_REFRESHED);
+        });
+    }
+});
+
+describe('pay-several-asks-the-record-after-the-valve', () => {
+    /**
+     * The critic, 2026-09-25, item 6: Pay several's check after the valve's
+     * refetch had no test. A chosen item's record that moved during the ask
+     * opens nothing, composes nothing from the answer, and hands the sheet
+     * back.
+     */
+    it('opens nothing and composes nothing when a chosen record moved during the ask', async () => {
+        const OTHER = '7b'.repeat(32);
+        const usd = { code: 'usd', exponent: 2, amount: 500n };
+        let m = false;
+        const root = mountedRoot();
+        const h = {
+            ...handlers(),
+            onPayRate: vi.fn(async () => {
+                m = true;
+                return { rate: scaleRate(0.00001)!, atMs: Date.now() };
+            }),
+            onPayRecords: () => ({
+                prices: new Map([[TOKEN_ID, m ? { ...usd, amount: 700n } : usd], [OTHER, usd]]),
+                known: true,
+                complete: true,
+                decided: new Set<string>(),
+            }),
+            onPayRecordMoved: vi.fn(),
+        };
+        renderStall(
+            root,
+            payView({
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                prices: new Map([[TOKEN_ID, usd], [OTHER, usd]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 },
+            }),
+            h,
+        );
+        const figure = root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent;
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(h.onPayRate).toHaveBeenCalledTimes(1);
+        expect(open, 'nothing opens').not.toHaveBeenCalled();
+        open.mockRestore();
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith();
+        expect(root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent).toBe(figure);
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_MOVED);
+    });
+});
+
+describe('a-replaced-sheets-late-answer-marks-nothing', () => {
+    /**
+     * The critic, 2026-09-25, item 7: an ask whose sheet a repaint replaced
+     * came back to a detached sheet and handed it back as moved — marking
+     * the FRESH sheet on the same item — or recomposed it, clearing the
+     * fresh sheet's code timer. A tail answers only while its sheet is on
+     * the page (`wrap.isConnected`).
+     */
+    it('a valve and a refresh whose sheet was repainted mark and compose nothing', async () => {
+        for (const control of ['pay-cashtab', 'pay-refresh'] as const) {
+            const root = mountedRoot();
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            let m = false;
+            const h = {
+                ...handlers(),
+                onPayRate: vi.fn(async () => {
+                    await gate;
+                    return { rate: scaleRate(0.00001)!, atMs: Date.now() };
+                }),
+                onPayRecords: () => ({
+                    prices: new Map([[TOKEN_ID, m ? { ...QUOTE_USD, amount: 700n } : QUOTE_USD]]),
+                    known: true,
+                    complete: true,
+                    decided: new Set<string>(),
+                }),
+                onPayRecordMoved: vi.fn(),
+            };
+            const view = payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 } });
+            renderStall(root, view, h);
+            const first = root.querySelector('[data-role="pay"]')!;
+            const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+            (root.querySelector(`[data-role="${control}"]`) as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            // The sheet is repainted while the feeds are asked, and the
+            // record moves: the fresh sheet is not the one that asked.
+            renderStall(root, view, h);
+            m = true;
+            release();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            open.mockRestore();
+            expect(first.isConnected).toBe(false);
+            expect(h.onPayRecordMoved, `${control}: a detached tail hands nothing back`).not.toHaveBeenCalled();
+            expect(first.querySelector('[data-role="pay-valve"]')?.textContent ?? '', `${control}: nor recomposes`).toBe('');
+        }
+    });
+});
+
 describe('a-margin-or-words-change-is-taken-in-place-and-the-press-opens', () => {
     /**
      * The owner (2026-09-25): "moved" is what the buyer pays changing — the
@@ -9337,7 +9533,7 @@ describe('a-margin-or-words-change-is-taken-in-place-and-the-press-opens', () =>
         // record now states 10%, and the fresh rate moves the figure ~5%.
         const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
         const valveAfter = async (now: ReturnType<typeof records>): Promise<string> => {
-            const root = document.createElement('div');
+            const root = mountedRoot();
             const h = {
                 ...handlers(),
                 onPayRate: vi.fn(async () => ({ rate: scaleRate(0.000019)!, atMs: Date.now() })),
@@ -9405,7 +9601,7 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
             overlay: { kind: 'pay', tokenId: TOKEN_ID },
             payRate: stale,
         });
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = {
             ...handlers(),
             onPayRate: vi.fn(async () => ({
@@ -9455,7 +9651,7 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
     });
 
     it('says the rate merely refreshed when the figure did not move', async () => {
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = {
             ...handlers(),
             onPayRate: vi.fn(async () => ({ rate: stale.rate, atMs: Date.now() })),
@@ -9475,7 +9671,7 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
     });
 
     it('says so when no fresh price arrived', async () => {
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = { ...handlers(), onPayRate: vi.fn(async () => undefined) };
         renderStall(
             root,
@@ -11898,7 +12094,7 @@ describe('a-stale-rate-never-reaches-a-wallet', () => {
      */
     it('opens nothing on a press over an aged rate', async () => {
         const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = {
             ...handlers(),
             onPayRate: vi.fn(async () => ({ rate: stale.rate, atMs: Date.now() })),
@@ -12443,7 +12639,7 @@ describe('an-implausible-rate-is-said-and-never-called-no-answer', () => {
 
     it('a press whose refetch is refused says so on the valve, and opens nothing', async () => {
         const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = {
             ...handlers(),
             onPayRate: vi.fn(async () => ({ why: 'implausible' as const })),
@@ -12534,7 +12730,7 @@ describe('a-disagreeing-check-is-said-and-the-figure-stands', () => {
     });
 
     it('a refresh that disagrees does not say no fresh price', async () => {
-        const root = document.createElement('div');
+        const root = mountedRoot();
         const h = {
             ...handlers(),
             onPayRate: vi.fn(async () => ({ rate: PAY_RATE.rate, atMs: Date.now(), check: 'disagree' as const })),

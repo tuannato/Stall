@@ -4831,7 +4831,9 @@ function paySheet(
         void handlers
             .onLookupToken(tokenId)
             .then((answer) => {
-                if (wrap.parentNode !== null) {
+                // `isConnected`, not a parent: a repaint detaches the stall
+                // around the sheet, and the sheet keeps its scrim as a parent.
+                if (wrap.isConnected) {
                     paintProvenance(answer.attribution);
                 }
             })
@@ -5289,6 +5291,12 @@ function paySheet(
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                // A sheet a repaint replaced while the feeds were asked marks
+                // nothing and composes nothing: a fresh sheet on the same item
+                // is not this one (the critic, 2026-09-25, item 7).
+                if (!wrap.isConnected) {
+                    return;
+                }
                 // A record that moved during the ask: the fresh rate is read
                 // for the unit the app holds now, which may not be this
                 // sheet's, so nothing is composed from it here.
@@ -5320,6 +5328,12 @@ function paySheet(
         }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            // A sheet a repaint replaced while the feeds were asked marks
+            // nothing and composes nothing: a fresh sheet on the same item
+            // is not this one (the critic, 2026-09-25, item 7).
+            if (!wrap.isConnected) {
+                return;
+            }
             if (recheck()) {
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
@@ -6036,6 +6050,12 @@ function paySeveralSheet(
             const before = selectionSats(selection, prices, rate.rate);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                // A sheet a repaint replaced while the feeds were asked marks
+                // nothing and composes nothing: a fresh sheet on the same item
+                // is not this one (the critic, 2026-09-25, item 7).
+                if (!wrap.isConnected) {
+                    return;
+                }
                 if (recheck()) {
                     handlers.onPayRecordMoved?.();
                     return;
@@ -6063,6 +6083,12 @@ function paySeveralSheet(
         }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            // A sheet a repaint replaced while the feeds were asked marks
+            // nothing and composes nothing: a fresh sheet on the same item
+            // is not this one (the critic, 2026-09-25, item 7).
+            if (!wrap.isConnected) {
+                return;
+            }
             if (recheck()) {
                 handlers.onPayRecordMoved?.();
                 return;
