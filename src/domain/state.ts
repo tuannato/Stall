@@ -994,7 +994,9 @@ export type StallView = WindowState & {
     /**
      * tokenId → the rank of the record each decided token was taken from
      * (`DescriptionLookup.ranks`), a removal included, with the records the
-     * read that crowned it ranked below it (`RecordRank.older`). Carried so
+     * read that crowned it ranked below it (`RecordRank.older`) and, for a
+     * winner read finalized and unmined, the height its page showed
+     * (`RecordRank.seenHeight`). Carried so
      * the next walk — one that throws or one that finishes — can be merged
      * over these records per token by rank (`mergeFailedRead`): a walk that
      * stopped before the page holding a newer edit mined a block early

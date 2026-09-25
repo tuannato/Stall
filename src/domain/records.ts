@@ -27,12 +27,24 @@
  * record the walk read mined at a height, by a node that never saw it in
  * its mempool (first-seen 0, unknown) — and the older figure, or an item the
  * seller had since removed, came back (the critic's final merge,
- * 2026-09-25, item 1). So a kept rank with no height never beats a walk
+ * 2026-09-25, item 1). So a kept rank with no height does not beat a walk
  * rank with one (the owner, 2026-09-25): the kept record may since have
  * been mined anywhere, and the walk read what is mined now.
  *
- * **Except a record the kept read already ranked below its own.** That
- * rule handed the screen back to a lagging replica that answered the
+ * **Unless the kept read saw that height already** (the owner's first
+ * ruling, "ranks carry the tip height seen at read time", built without a
+ * new request; CRITIC-CARRYOVER-8 item 1). A read that crowns a record
+ * finalized and unmined records beside its rank the highest block height
+ * among the transactions of the page response that carried it
+ * (`RecordRank.seenHeight`) — never across pages or hosts, since a
+ * failover can change host between pages. A walk winner mined at or below
+ * that height was already in a block when the kept read saw the chain and
+ * still put the unmined record on top, so the kept record is the newer one
+ * and wins. Only a walk winner mined above it — or any, when no height was
+ * seen — takes the exception.
+ *
+ * **And a record the kept read already ranked below its own.** The
+ * exception handed the screen back to a lagging replica that answered the
  * OLDER record, mined, with first-seen 0, over a fresh record finalized
  * and unmined on screen. So a read remembers, per token, the records it
  * ranked below its winner (`RecordRank.older`), and a later answer whose
@@ -44,10 +56,12 @@
  * (CRITIC-CARRYOVER-5 item 4). Two reads that crowned the same record keep
  * the union of their sets (item 3), and a read whose winner replaced the
  * screen's keeps the one it replaced and that one's set as well
- * (CRITIC-CARRYOVER-6 item 3) — unless the no-height exception alone gave
- * it the win, which remembers nothing (CRITIC-CARRYOVER-7, the window's
- * decision): that is the win that can be wrong, and remembered it would
- * hold the right record below the wrong one for the session.
+ * (CRITIC-CARRYOVER-6 item 3) — every win, the exception's included
+ * (CRITIC-CARRYOVER-8 item 1): the height seen is what keeps a wrong
+ * exception win from being made, and a right one remembered is what keeps
+ * a lagging replica from undoing it. The cost, stated: a wrong exception
+ * win over a read that saw no mined transaction on its page is still made,
+ * and remembered for the session.
  *
  * So the two are merged per token: the failed walk's decided tokens win,
  * absence included, unless the kept read's winner for that token outranks
@@ -63,13 +77,24 @@ import { compareManifestRank, knownSeen, type ManifestRank } from './manifest';
  * walk read that lost to the winner (the owner, CRITIC-CARRYOVER-4 item 9:
  * "remember the older records"), and, once merged (`mergeFailedRead`), what
  * every read that crowned the same record ranked below it, and the winner
- * it replaced on screen with that one's own set (not when the no-height
- * exception alone decided that replacement: `verdictOf`). Bounded by the seller's own
+ * it replaced on screen with that one's own set. Bounded by the seller's own
  * records for the token: every txid in it is one `collectTx` accepted.
  * Unsettled records (unmined and unfinalized) are not ranked and are not in
  * it: one of those may yet win.
  */
-export type RecordRank = ManifestRank & { readonly older?: ReadonlySet<string> };
+export type RecordRank = ManifestRank & {
+    readonly older?: ReadonlySet<string>;
+    /**
+     * For a winner read finalized and unmined, and only for one: the highest
+     * block height among the transactions of the page response that carried
+     * it — never taken across pages or hosts (a failover can change host
+     * between pages). A lower bound on the tip the read saw while the record
+     * was still unmined, so a record mined at or below it was already in a
+     * block then, and is the older one (`keptOutranks`). Absent when that
+     * page carried no mined transaction.
+     */
+    readonly seenHeight?: number;
+};
 
 /** The four record maps a view carries, as one read left them. */
 export type RecordMaps = {
@@ -144,41 +169,39 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
  *
  * The ladder (`compareManifestRank`: known, differing first-seen stamps;
  * then heights; then txid) — except that a kept rank read before its record
- * was mined (no height) never beats a walk rank that has one. **That
- * exception decides only what the older sets cannot see**: a walk winner the
- * kept read never read at all (a newer record, mined since, or an older one
- * past the kept read's own page cap). No read this page makes carries the
- * tip height, so nothing finer is built.
+ * was mined (no height) does not beat a walk rank that has one, **unless
+ * the walk's winner was mined at or below the height the kept read saw**
+ * (`RecordRank.seenHeight`; CRITIC-CARRYOVER-8 item 1): then it was already
+ * in a block when the kept read put the unmined record on top, and the kept
+ * record is the newer. The exception decides only what the older sets
+ * cannot see: a walk winner the kept read never read at all (a newer
+ * record, mined since, or an older one past the kept read's own page cap).
  */
 function keptOutranks(kept: RecordRank, walk: RecordRank): boolean {
-    return verdictOf(kept, walk) === 'kept';
-}
-
-/**
- * Which winner a token keeps (`keptOutranks`), and whether the walk's win
- * rests on the no-height exception alone: the ladder would have kept the
- * screen's record, and only the rule that a kept rank with no height never
- * beats a walk rank with one gave it to the walk. Such a win is the one
- * that can be wrong (a lagging replica answering an older record mined with
- * first-seen 0 over a fresh one finalized and unmined), so it remembers
- * nothing (`mergeFailedRead`).
- */
-function verdictOf(kept: RecordRank, walk: RecordRank): 'kept' | 'walk' | 'walk-by-no-height' {
+    // One record, read twice: the walk's is the later look at it (mined
+    // since, perhaps), never an older record.
+    if (kept.txid === walk.txid) {
+        return false;
+    }
     const keptRankedWalkBelow = kept.older?.has(walk.txid) === true;
     const walkRankedKeptBelow = walk.older?.has(kept.txid) === true;
     if (keptRankedWalkBelow !== walkRankedKeptBelow) {
-        return keptRankedWalkBelow ? 'kept' : 'walk';
+        return keptRankedWalkBelow;
     }
     const keptSeen = knownSeen(kept.firstSeen);
     const walkSeen = knownSeen(walk.firstSeen);
     if (keptSeen !== undefined && walkSeen !== undefined && keptSeen !== walkSeen) {
-        return keptSeen > walkSeen ? 'kept' : 'walk';
+        return keptSeen > walkSeen;
     }
-    const ladder = compareManifestRank(kept, walk) > 0;
     if (kept.height === undefined && walk.height !== undefined) {
-        return ladder ? 'walk-by-no-height' : 'walk';
+        return kept.isFinal && kept.seenHeight !== undefined && walk.height <= kept.seenHeight;
     }
-    return ladder ? 'kept' : 'walk';
+    return compareManifestRank(kept, walk) > 0;
+}
+
+/** The higher of two seen heights, either of which may be absent. */
+function higherSeen(a: number | undefined, b: number | undefined): number | undefined {
+    return a === undefined ? b : b === undefined ? a : Math.max(a, b);
 }
 
 /**
@@ -193,12 +216,9 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
     const resolved = new Set([...decided, ...decidedOf({ ...read, decided: undefined })]);
     // A token both reads decided, where the kept read's winner outranks the
     // walk's on §5's ladder: the walk stopped before the page that held it.
-    // A kept rank with no height never beats a walk rank with one
-    // (`keptOutranks`).
+    // A kept rank with no height beats a walk rank with one only where the
+    // kept read saw that height already (`keptOutranks`).
     const keptWins = new Set<string>();
-    // A token the walk won on the no-height exception alone: its win adds
-    // nothing to the older set (`verdictOf`).
-    const noHeightWins = new Set<string>();
     for (const tokenId of resolved) {
         const mine = read.ranks?.get(tokenId);
         const theirs = kept.ranks?.get(tokenId);
@@ -207,8 +227,6 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         }
         if (keptOutranks(theirs, mine)) {
             keptWins.add(tokenId);
-        } else if (verdictOf(theirs, mine) === 'walk-by-no-height') {
-            noHeightWins.add(tokenId);
         }
     }
     const fromWalk = (tokenId: string): boolean => resolved.has(tokenId) && !keptWins.has(tokenId);
@@ -259,20 +277,25 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         // last quote) beat the new winner on the ladder: the old figure, or
         // the removed quote, came back.
         //
-        // **Except a win the no-height exception alone decided** (the
-        // window's decision, CRITIC-CARRYOVER-7): the ladder would have kept
-        // the screen's record, and the exception is the rule that can be
-        // wrong — a lagging replica's older record, mined and first seen 0,
-        // crowned over a fresh one finalized and unmined. Remembered, that
-        // wrong winner held the fresh record in its set, and the next read
-        // that crowned the fresh record without reaching the older one lost
-        // to it for the session: 500,000 stayed where 600,000 should have
-        // come back. So it remembers nothing: the walk's own set stands and
-        // the replaced record is not added.
+        // Every win, the no-height exception's included (CRITIC-CARRYOVER-8
+        // item 1; the window's narrowing of CRITIC-CARRYOVER-7 is undone):
+        // the height the kept read saw (`RecordRank.seenHeight`) is now what
+        // keeps a wrong exception win from being made, and a RIGHT one — the
+        // seller's newer record, mined, first seen 0, over the record a read
+        // before its block saw unmined — must remember what it replaced, or
+        // a lagging replica answering that record undid it: the old figure,
+        // or the removed quote, came back.
         const replaced = mine.txid !== theirs.txid && !keptWins.has(tokenId);
-        if (mine.txid !== theirs.txid && (!replaced || noHeightWins.has(tokenId))) {
+        if (mine.txid !== theirs.txid && !replaced) {
             continue;
         }
+        // One record, both reads still seeing it unmined: the higher of the
+        // two heights they saw it unmined at. Each came from the page that
+        // carried it; neither is lent to a record it was not seen beside.
+        const seenHeight =
+            mine.txid === theirs.txid && rank.height === undefined && theirs.height === undefined
+                ? higherSeen(mine.seenHeight, theirs.seenHeight)
+                : rank.seenHeight;
         const older = new Set([
             ...(mine.older ?? []),
             ...(replaced ? [theirs.txid] : []),
@@ -281,9 +304,12 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         // A winner is never below itself: the screen's set may hold the new
         // winner when two nodes disagreed (`keptOutranks`).
         older.delete(rank.txid);
-        if (older.size > 0) {
-            ranks.set(tokenId, { ...rank, older });
-        }
+        const { older: _own, seenHeight: _seen, ...bare } = rank;
+        ranks.set(tokenId, {
+            ...bare,
+            ...(older.size > 0 ? { older } : {}),
+            ...(seenHeight === undefined ? {} : { seenHeight }),
+        });
     }
     return {
         descriptions: merge(read.descriptions, kept.descriptions, true),

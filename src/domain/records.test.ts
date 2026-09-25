@@ -109,8 +109,11 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
      * Compared whole, the frozen rank beat the walk and the older figure —
      * or an item the seller had since removed — came back. The kept read
      * outranks the walk on §5's ladder (stamps, heights, txid), and a kept
-     * rank with no height never beats a walk rank that has one (the owner,
-     * 2026-09-25).
+     * rank with no height does not beat a walk rank mined above the height
+     * the kept read saw — nor any, when it saw none, as here (the owner,
+     * 2026-09-25; the height seen, CRITIC-CARRYOVER-8 item 1:
+     * `a-lagging-replicas-older-mined-record-loses-to-the-height-seen`).
+     * The walk's win remembers the record it replaced, as every win does.
      */
     const A = 'a'.repeat(64);
     const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
@@ -132,10 +135,10 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
         const out = mergeFailedRead(read, new Set([A]), kept);
         expect(out.prices.get(A), 'the figure the walk read, not the one it read past').toEqual(price(900_000n));
         expect(out.descriptions.get(A)).toBe('new words');
-        // The walk's rank alone: the no-height exception decided this win,
-        // so it does not remember the record it replaced
-        // (`a-win-decided-by-the-no-height-rule-remembers-nothing`).
-        expect(out.ranks.get(A)).toEqual(walkRank);
+        // The walk's rank, remembering the record it replaced: a lagging
+        // replica answering that record never undoes this right win
+        // (`a-correct-exception-win-is-not-undone-by-a-lagging-replica`).
+        expect(out.ranks.get(A)).toEqual({ ...walkRank, older: new Set([keptRank.txid]) });
         expect(out.keptShown.has(A), 'nothing on screen came from the kept read').toBe(false);
     });
 
@@ -173,7 +176,8 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
         // Both heights known, stamps unknown: the higher block.
         expect(merge(at(901, '2'), at(900, 'f'))).toEqual(price(500_000n));
         expect(merge(at(899, 'f'), at(900, '2'))).toEqual(price(900_000n));
-        // A kept rank with no height never beats a mined walk rank, whatever its txid.
+        // A kept rank with no height, and no height seen, does not beat a
+        // mined walk rank, whatever its txid.
         expect(merge(at(undefined, 'f'), at(900, '2'))).toEqual(price(900_000n));
         // A walk rank with no height (finalized, unmined) outranks a mined kept one.
         expect(merge(at(900, 'f'), at(undefined, '2'))).toEqual(price(900_000n));
@@ -576,66 +580,162 @@ describe('a-new-winner-remembers-the-record-it-replaced', () => {
     });
 });
 
-describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
+describe('a-lagging-replicas-older-mined-record-loses-to-the-height-seen', () => {
     /**
-     * CRITIC-CARRYOVER-7 item 3, narrowed by the window's decision; the app's
-     * half is in app.live.test.ts under the same name. On screen: R1, the
-     * seller's fresh record, finalized and unmined, from a read that did not
-     * reach R0. A lagging replica answers R0, mined at 6 and first seen 0:
-     * the ladder would keep R1, and only the no-height exception crowns R0 —
-     * the stated limit. Remembering R1 below that wrong winner entrenched
-     * it: a correct read of R1 that again stopped short of R0 lost to it,
-     * and 500,000 stayed where 600,000 should come back. A win the exception
-     * alone decided adds nothing to the older set; R1's next read wins on
-     * the ladder, and that win remembers R0 as every other win does.
+     * CRITIC-CARRYOVER-8 item 1, the owner's first ruling ("ranks carry the
+     * tip height seen at read time"); the app's half, and the walk that
+     * records the height, are in app.live.test.ts and descriptions.test.ts
+     * under the same name. On screen: R1, the seller's fresh record
+     * (600,000), finalized and unmined, read on a page whose newest mined
+     * transaction was at 7, from a read that did not reach R0. A lagging
+     * replica answers R0 (500,000), mined at 6 and first seen 0: the no-height
+     * exception alone would crown it. R0 was already in a block when the
+     * kept read saw the chain at 7 and still put R1 on top, so R1 is the
+     * newer: the kept record wins, and the old figure never comes back. The
+     * round-7 entrenchment sequence — a correct read of R1 after it — ends at
+     * 600,000.
      */
     const A = 'a'.repeat(64);
     const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
     const R0 = '0'.repeat(64);
     const R1 = '1'.repeat(64);
     const Rz = 'f'.repeat(64);
-    const fresh = () => ({
+    const fresh = (seenHeight: number | undefined) => ({
         prices: new Map([[A, price(600_000n)]]),
-        ranks: new Map([[A, { txid: R1, height: undefined, isFinal: true, firstSeen: 5_000 }]]),
+        ranks: new Map([
+            [
+                A,
+                {
+                    txid: R1,
+                    height: undefined,
+                    isFinal: true,
+                    firstSeen: 5_000,
+                    ...(seenHeight === undefined ? {} : { seenHeight }),
+                },
+            ],
+        ]),
     });
-    const lagging = {
+    const lagging = (height: number) => ({
         prices: new Map([[A, price(500_000n)]]),
-        ranks: new Map([[A, { txid: R0, height: 6, isFinal: true, firstSeen: 0, older: new Set([Rz]) }]]),
-    };
+        ranks: new Map([[A, { txid: R0, height, isFinal: true, firstSeen: 0, older: new Set([Rz]) }]]),
+    });
 
     for (const [road, merge] of [
         ['a walk that threw', mergeFailedRead],
-        ['a walk that finished (capped)', mergeFinishedRead],
+        ['a walk that finished', mergeFinishedRead],
     ] as const) {
-        it(`${road}: the no-height win adds no older record, and the fresh record comes back`, () => {
-            const mid = mergeFinishedRead(lagging, new Set([A]), fresh());
-            expect(mid.prices.get(A), 'the stated limit: the exception crowns R0').toEqual(price(500_000n));
-            expect(mid.ranks.get(A)?.txid).toBe(R0);
-            expect(mid.ranks.get(A)?.older, 'its own set, and not the record it replaced').toEqual(new Set([Rz]));
+        it(`${road}: R0, mined at or below the height R1's read saw, never beats R1, and a read of R1 after it ends at 600,000`, () => {
+            const mid = merge(lagging(6), new Set([A]), fresh(7));
+            expect(mid.prices.get(A), 'the old figure does not come back').toEqual(price(600_000n));
+            expect(mid.ranks.get(A)?.txid).toBe(R1);
+            expect(mid.ranks.get(A)?.seenHeight, 'the kept rank keeps the height it saw').toBe(7);
+            expect(mid.keptShown.has(A), 'the figure on screen is the kept read’s').toBe(true);
 
-            const out = merge(fresh(), new Set([A]), mid);
-            expect(out.prices.get(A), '600,000 comes back').toEqual(price(600_000n));
+            const out = merge(fresh(7), new Set([A]), mid);
+            expect(out.prices.get(A), 'the round-7 sequence: 600,000, not 500,000').toEqual(price(600_000n));
             expect(out.ranks.get(A)?.txid).toBe(R1);
-            expect(out.ranks.get(A)?.older, 'a ladder win remembers what it replaced').toEqual(new Set([R0, Rz]));
+        });
+
+        it(`${road}: at the height seen exactly, the kept record wins; one block above it, the exception stands and is remembered`, () => {
+            expect(merge(lagging(7), new Set([A]), fresh(7)).prices.get(A), 'mined at the height seen').toEqual(
+                price(600_000n),
+            );
+            const above = merge(lagging(8), new Set([A]), fresh(7));
+            expect(above.prices.get(A), 'mined after the kept read saw the chain: the walk’s').toEqual(price(500_000n));
+            expect(above.ranks.get(A)?.older, 'every win remembers what it replaced').toEqual(new Set([Rz, R1]));
         });
     }
 
-    it('a replacement the ladder decided still remembers the record it replaced', () => {
-        // The same two records the other way round: R1 on screen, mined at 6;
-        // R2 read finalized and unmined, no stamps to compare. The ladder
-        // crowns R2 (finalized and unmined outranks every height): not the
-        // exception, so R1 is remembered.
-        const R2 = '2'.repeat(64);
-        const screen = {
-            prices: new Map([[A, price(500_000n)]]),
-            ranks: new Map([[A, { txid: R1, height: 6, isFinal: true, firstSeen: 0 }]]),
-        };
-        const walk = {
-            prices: new Map([[A, price(600_000n)]]),
-            ranks: new Map([[A, { txid: R2, height: undefined, isFinal: true, firstSeen: 0 }]]),
-        };
-        const out = mergeFailedRead(walk, new Set([A]), screen);
-        expect(out.prices.get(A)).toEqual(price(600_000n));
-        expect(out.ranks.get(A)?.older).toEqual(new Set([R1]));
+    it('the stated cost: a read of R1 that saw no mined transaction on its page does not stop the wrong win, and the win is remembered', () => {
+        // The discriminator is what keeps a wrong win from being made: with
+        // no height seen, the exception crowns R0 as it always did, and —
+        // every win remembering what it replaced — R1 is below it for the
+        // session.
+        const mid = mergeFinishedRead(lagging(6), new Set([A]), fresh(undefined));
+        expect(mid.prices.get(A)).toEqual(price(500_000n));
+        expect(mid.ranks.get(A)?.older).toEqual(new Set([Rz, R1]));
+        expect(mergeFailedRead(fresh(undefined), new Set([A]), mid).prices.get(A)).toEqual(price(500_000n));
     });
+
+    it('two reads that crowned one record, both seeing it unmined, keep the higher height either saw', () => {
+        const out = mergeFinishedRead(fresh(5), new Set([A]), fresh(9));
+        expect(out.ranks.get(A)?.seenHeight).toBe(9);
+        const back = mergeFinishedRead(fresh(9), new Set([A]), fresh(5));
+        expect(back.ranks.get(A)?.seenHeight).toBe(9);
+        // Mined since: the rank has a height, and a height seen means nothing.
+        const mined = {
+            prices: new Map([[A, price(600_000n)]]),
+            ranks: new Map([[A, { txid: R1, height: 10, isFinal: true, firstSeen: 5_000 }]]),
+        };
+        expect(mergeFinishedRead(mined, new Set([A]), fresh(9)).ranks.get(A)).toEqual({
+            txid: R1,
+            height: 10,
+            isFinal: true,
+            firstSeen: 5_000,
+        });
+    });
+});
+
+describe('a-correct-exception-win-is-not-undone-by-a-lagging-replica', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 1, the mirror (the critic's `y8` and `y8b`);
+     * the app's half is in app.live.test.ts under the same name. On screen:
+     * R1 (500,000), read finalized and unmined before block 900. A walk that
+     * stops short of R1 reads the seller's newer record R2 (900,000) — or
+     * their removal T2 — mined at 900 and first seen 0: above the height R1's
+     * read saw, so the exception crowns it, and that is right. The win
+     * remembers R1. A replica behind R1's block then answers R1, finalized
+     * and unmined: it never beats the win, so 900,000 stays, and the removed
+     * quote stays off.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R1 = '1'.repeat(64);
+    const R2 = '2'.repeat(64);
+    const unminedR1 = (seenHeight: number | undefined) => ({
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([
+            [
+                A,
+                {
+                    txid: R1,
+                    height: undefined,
+                    isFinal: true,
+                    firstSeen: 1_756_400_000,
+                    ...(seenHeight === undefined ? {} : { seenHeight }),
+                },
+            ],
+        ]),
+    });
+    const edit = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { txid: R2, height: 900, isFinal: true, firstSeen: 0 }]]) };
+    const removal = { ranks: new Map([[A, { txid: R2, height: 900, isFinal: true, firstSeen: 0 }]]) };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        for (const seen of [850, undefined] as const) {
+            const saw = seen === undefined ? 'no height' : `height ${seen}`;
+            it(`${road}, R1 read seeing ${saw}: the newer figure stands against a lagging R1`, () => {
+                const mid = merge(edit, new Set([A]), unminedR1(seen));
+                expect(mid.prices.get(A), 'the exception crowns the newer record').toEqual(price(900_000n));
+                expect(mid.ranks.get(A)?.older, 'and the win remembers what it replaced').toEqual(new Set([R1]));
+                for (const lag of [mergeFailedRead, mergeFinishedRead]) {
+                    expect(lag(unminedR1(seen), new Set([A]), mid).prices.get(A), '900,000 stays').toEqual(
+                        price(900_000n),
+                    );
+                }
+            });
+
+            it(`${road}, R1 read seeing ${saw}: the removal stands against a lagging R1`, () => {
+                const mid = merge(removal, new Set([A]), unminedR1(seen));
+                expect(mid.prices.has(A), 'the removal is on screen').toBe(false);
+                for (const lag of [mergeFailedRead, mergeFinishedRead]) {
+                    const out = lag(unminedR1(seen), new Set([A]), mid);
+                    expect(out.prices.has(A), 'the removed quote stays off').toBe(false);
+                    expect(out.descriptions.has(A)).toBe(false);
+                }
+            });
+        }
+    }
 });

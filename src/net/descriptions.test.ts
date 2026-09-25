@@ -479,6 +479,53 @@ describe('a-walk-remembers-the-records-it-ranked-below-each-winner', () => {
     });
 });
 
+describe('a-lagging-replicas-older-mined-record-loses-to-the-height-seen', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 1, the walk's half (the merge's is in
+     * records.test.ts, the app's in app.live.test.ts, under the same name).
+     * A winner read finalized and unmined carries the highest block height
+     * among the transactions of the page response that carried it — that
+     * page alone, never another page's (a failover can change host between
+     * pages), and nothing on a mined winner.
+     */
+    const pagedChronik = (pages: ChainTx[][]): ManifestChronik => ({
+        address: () => ({ history: () => Promise.resolve({ txs: [], numTxs: 9999, numPages: 1 }) }),
+        lokadId: () => ({
+            history: (p = 0) =>
+                Promise.resolve({ txs: pages[p] ?? [], numTxs: pages.flat().length, numPages: pages.length }),
+        }),
+        tx: () => Promise.reject(new Error('not used')),
+    });
+
+    it('records the newest block of the page that carried an unmined winner, and of no other page', async () => {
+        const out = await load(
+            pagedChronik([
+                [
+                    tx({ txid: '2a'.repeat(32), isFinal: true, outputs: [stld(TOKEN_A, 'fresh, unmined')] }),
+                    tx({ txid: '2b'.repeat(32), height: 7, outputs: [stld(TOKEN_B, 'mined at 7')] }),
+                    tx({ txid: '2c'.repeat(32), height: 5, outputs: [stld(TOKEN_B, 'mined at 5')] }),
+                ],
+                // Another response, perhaps another host, further ahead.
+                [tx({ txid: '2d'.repeat(32), height: 20, outputs: [stld(TOKEN_A, 'a later page')] })],
+            ]),
+        );
+        expect(out.ranks?.get(TOKEN_A)).toMatchObject({ txid: '2a'.repeat(32), height: undefined, seenHeight: 7 });
+        expect(out.ranks?.get(TOKEN_B)?.height).toBe(7);
+        expect(out.ranks?.get(TOKEN_B), 'a mined winner carries no height seen').not.toHaveProperty('seenHeight');
+    });
+
+    it('records none when the page that carried the unmined winner held no mined transaction', async () => {
+        const out = await load(
+            pagedChronik([
+                [tx({ txid: '3a'.repeat(32), isFinal: true, outputs: [stld(TOKEN_A, 'fresh, unmined')] })],
+                [tx({ txid: '3b'.repeat(32), height: 9, outputs: [stld(TOKEN_A, 'older, mined')] })],
+            ]),
+        );
+        expect(out.ranks?.get(TOKEN_A)?.txid).toBe('3a'.repeat(32));
+        expect(out.ranks?.get(TOKEN_A), 'no height from another page').not.toHaveProperty('seenHeight');
+    });
+});
+
 describe('truncated-description-walk-is-not-a-seller-who-wrote-none', () => {
     it('says the walk stopped short', () => {
         const many = page([], 40);

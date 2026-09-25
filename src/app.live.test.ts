@@ -2061,18 +2061,18 @@ describe('a-new-winner-remembers-the-record-it-replaced', () => {
     }
 });
 
-describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
+describe('a-lagging-replicas-older-mined-record-loses-to-the-height-seen', () => {
     /**
-     * CRITIC-CARRYOVER-7 item 3, narrowed by the window's decision, through
-     * the real app (the pure half is in records.test.ts under the same
+     * CRITIC-CARRYOVER-8 item 1 through the real app (the merge's half is in
+     * records.test.ts, the walk's in descriptions.test.ts, under the same
      * name). A read stops at our page cap after the seller's fresh R1
      * (600,000, finalized and unmined) and before R0 (500,000, mined at 6):
-     * R1 is on screen and its set lacks R0. A lagging replica answers R0,
-     * first seen 0 — the ladder would keep R1, and only the no-height
-     * exception crowns R0 (the stated limit). That win used to remember R1
-     * below R0, so the next correct read of R1 that again stopped short of
-     * R0 lost to it and 500,000 stayed for the session. A win the exception
-     * alone decided now remembers nothing, and 600,000 comes back.
+     * R1's page also carries a payment mined at 7, the newest block that
+     * response shows, so R1's rank records 7 as the height seen. A lagging
+     * replica answers R0, first seen 0: mined at or below 7, it was in a
+     * block when R1's read saw the chain and put R1 on top, so R1 stands —
+     * the old figure never comes back — and the round-7 sequence (a correct
+     * read of R1 after it, again short of R0) ends at 600,000.
      */
     const fungible = (tokenId: string, name: string) => ({
         tokenId,
@@ -2096,6 +2096,8 @@ describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
     const r0 = (seen: number) => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 6, isFinal: true }, seen);
     /** The seller's fresh record, finalized by avalanche, not yet mined. */
     const r1 = () => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { isFinal: true }, 1_756_400_600);
+    /** An ordinary payment to the stall, mined at 7: on R1's page, the newest block that response shows. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '6c'.repeat(32), outputs: [], height: 7, isFinal: true }), timeFirstSeen: 1_756_400_100 });
     const capped = (first: ChainTx[]): ChainTx[][] => [
         first,
         ...Array.from({ length: 11 }, () => [] as ChainTx[]),
@@ -2116,7 +2118,7 @@ describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
     };
 
     for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
-        it(`a correct read that ${road} brings the fresh figure back over the lagging replica's win`, async () => {
+        it(`the lagging replica's R0 never beats R1, and a correct read that ${road} ends at 600,000`, async () => {
             const { root } = bootStall(
                 stallEmpty({
                     tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
@@ -2125,33 +2127,125 @@ describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
                 }),
             );
             await flush();
-            await walk(capped([r1()]));
+            await walk(capped([r1(), paid()]));
             await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
             expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0) ?? false, 'the capped read never reached R0').toBe(false);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight, 'the height R1’s page showed').toBe(7);
 
             let calls = chain.historyPageCalls.length;
             await walk([[r0(0)]]);
             await until(() => chain.historyPageCalls.length > calls);
             await flush(20);
-            expect(viewOf(root)?.prices?.get(A), 'the stated limit: the exception crowns R0').toEqual(XEC_R0);
-            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R0);
-            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R1) ?? false, 'that win remembers nothing').toBe(false);
+            expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
 
             calls = chain.historyPageCalls.length;
             if (road === 'threw after its first page') {
                 chain.historyPageThrows = new Set([1]);
-                await walk([[r1()], [r0(1_756_399_000)]]);
+                await walk([[r1(), paid()], [r0(1_756_399_000)]]);
                 await until(() => chain.historyPageCalls.slice(calls).includes(1));
             } else {
-                await walk(capped([r1()]));
+                await walk(capped([r1(), paid()]));
                 // The cap is page MAX_HISTORY_PAGES - 1: the walk asked it and stopped.
                 await until(() => chain.historyPageCalls.slice(calls).includes(9));
             }
             await flush(20);
             chain.historyPageThrows = new Set();
-            expect(viewOf(root)?.prices?.get(A), '600,000 comes back').toEqual(XEC_R1);
+            expect(viewOf(root)?.prices?.get(A), '600,000, not 500,000').toEqual(XEC_R1);
             expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
-            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0), 'a ladder win remembers what it replaced').toBe(true);
+        });
+    }
+});
+
+describe('a-correct-exception-win-is-not-undone-by-a-lagging-replica', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 1, the mirror (the critic's `y8` and `y8b`),
+     * through the real app; the pure half is in records.test.ts under the
+     * same name. A read puts R1 (500,000) on screen, finalized and unmined,
+     * on a page whose newest block is 850. The seller edits — R2, 900,000 —
+     * or removes the quote — T2 — and both are mined at 900 by a node that
+     * never saw them in its mempool (first seen 0). A walk that stops at our
+     * page cap reads R2 or T2 and never reaches R1: mined above the height
+     * R1's read saw, the exception crowns it, which is right, and the win
+     * remembers R1. A replica behind R1's block then answers R1, finalized
+     * and unmined: it never undoes the win, so 900,000 stays, or the removed
+     * quote stays off.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'ce'.repeat(32);
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R2 = { code: 'xec', exponent: 2, amount: 900_000n };
+    const R1 = '7a'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** R1, finalized and not yet mined when it was read. */
+    const r1 = () => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { isFinal: true }, 1_756_400_000);
+    /** An ordinary payment mined at 850, on R1's page. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '7c'.repeat(32), outputs: [], height: 850, isFinal: true }), timeFirstSeen: 1_756_399_000 });
+    const edit = () => tx('7b'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R2 }), { height: 900, isFinal: true }, 0);
+    const tomb = () => tx('7d'.repeat(32), encodeRemovalHex(A), { height: 900, isFinal: true }, 0);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const change of ['a price change', 'the quote removed'] as const) {
+        it(`${change}, crowned by the exception over a walk that stopped at our cap, then a lagging R1: ${change === 'a price change' ? '900,000 stays' : 'the quote stays off'}`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk([[r1(), paid()]]);
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight).toBe(850);
+
+            let calls = chain.historyPageCalls.length;
+            await walk([[change === 'a price change' ? edit() : tomb()], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [r1(), paid()]]);
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await flush(20);
+            if (change === 'a price change') {
+                expect(viewOf(root)?.prices?.get(A), 'the exception crowns the newer record').toEqual(XEC_R2);
+            } else {
+                expect(viewOf(root)?.prices?.has(A), 'the removal is on screen').toBe(false);
+            }
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R1), 'the win remembers what it replaced').toBe(true);
+
+            calls = chain.historyPageCalls.length;
+            await walk([[r1()]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+            (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+            await flush();
+            if (change === 'a price change') {
+                expect(viewOf(root)?.prices?.get(A), '900,000 stays').toEqual(XEC_R2);
+            } else {
+                expect(viewOf(root)?.prices?.has(A), 'the removed quote stays off').toBe(false);
+                expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+            }
         });
     }
 });

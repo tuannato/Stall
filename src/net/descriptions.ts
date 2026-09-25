@@ -49,6 +49,15 @@ export type LoadedDescription = TokenDescription &
          * input to the ordering.
          */
         readonly timeS?: number;
+        /**
+         * The highest block height among the transactions of the page
+         * response this record was read from — one response, one host, never
+         * a height from another page (a failover can change host between
+         * pages). Carried onto the rank of a winner read finalized and
+         * unmined (`RecordRank.seenHeight`) and nowhere else; absent when
+         * that page carried no mined transaction.
+         */
+        readonly seenHeight?: number;
     };
 
 export type DescriptionLookup = {
@@ -260,12 +269,18 @@ function collate(
                 .filter((record) => record.txid !== winner.txid && (record.height !== undefined || record.isFinal))
                 .map((record) => record.txid),
         );
+        // A winner read finalized and unmined carries the height its page
+        // saw (`RecordRank.seenHeight`): a record mined at or below it was
+        // already in a block while this one was not (CRITIC-CARRYOVER-8
+        // item 1).
+        const unmined = winner.height === undefined && winner.isFinal;
         ranks.set(tokenId, {
             height: winner.height,
             isFinal: winner.isFinal,
             txid: winner.txid,
             ...(winner.firstSeen === undefined ? {} : { firstSeen: winner.firstSeen }),
             ...(older.size === 0 ? {} : { older }),
+            ...(unmined && winner.seenHeight !== undefined ? { seenHeight: winner.seenHeight } : {}),
         });
         // The winner's own clock, and only the winner's: a losing record's
         // stamp would date a document nobody is reading. A tombstone carries
@@ -299,8 +314,16 @@ function collectPage(
     unreadable: Set<string>,
     genesis?: Map<string, GenesisAttribution>,
 ): void {
+    // The newest block this one response shows — this page, this host.
+    let seenHeight: number | undefined;
     for (const tx of page.txs) {
-        collectTx(tx, hash, found, unreadable, genesis);
+        const height = tx.block?.height;
+        if (typeof height === 'number' && Number.isSafeInteger(height) && height >= 0) {
+            seenHeight = seenHeight === undefined ? height : Math.max(seenHeight, height);
+        }
+    }
+    for (const tx of page.txs) {
+        collectTx(tx, hash, found, unreadable, genesis, seenHeight);
     }
 }
 
@@ -332,6 +355,7 @@ function collectTx(
     found: Map<string, LoadedDescription[]>,
     unreadable: Set<string>,
     genesis?: Map<string, GenesisAttribution>,
+    seenHeight?: number,
 ): void {
     /*
      * Whose token this is, decided **before** the authorship return below and
@@ -426,6 +450,7 @@ function collectTx(
             // of the chain's clock, so a record whose stamp is unknown stays
             // undated rather than borrowing another record's.
             ...(timeS === undefined ? {} : { timeS }),
+            ...(seenHeight === undefined ? {} : { seenHeight }),
         };
         if (list === undefined) {
             found.set(record.tokenId, [loaded]);
