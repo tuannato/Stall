@@ -6203,6 +6203,42 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Plum Jam');
             expect(press(root, 'pay-several')).toContain('amount=7000.00');
         });
+
+        it('on a touch wall', async () => {
+            // The critic, CARRYOVER-2 item 5: the wall's prune was untested.
+            // The wall reads the same chosen unit (`selectionChosenUnit`) and
+            // says the generic `SELECTION_DROPPED`.
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const state = phone(new Map([[A, XEC_OLD], [B, XEC_B]]));
+            state.view = {
+                ...state.view,
+                window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+            };
+            const { root } = bootStall(state);
+            await flush();
+            for (const tokenId of [A, B]) {
+                const more = root.querySelector<HTMLButtonElement>(`[data-focus-key="window-step-more:${tokenId}"]`);
+                expect(more, `the wall offers + for ${tokenId === A ? 'Plum Jam' : 'Rye Flour'}`).not.toBeNull();
+                more!.click();
+                await flush();
+            }
+            const strip = (): Element | null => root.querySelector('[data-role="window-selection"]');
+            expect(strip()?.textContent).toContain('Plum Jam');
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'chosen in XEC').toContain('12,000');
+
+            await republish([
+                ['5f'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            await until(() => root.querySelector('[data-role="selection-dropped"]') !== null);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+            expect(strip()?.querySelector('.sw-sel-n')?.textContent ?? '', 'the item that moved leaves').not.toContain('Plum Jam');
+            expect(strip()?.querySelector('.sw-sel-n')?.textContent, 'the rest stay').toContain('Rye Flour');
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'in the unit they were chosen in').toContain('7,000');
+            (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+            await flush();
+            expect(root.querySelector('[data-role="window-paying"]')?.getAttribute('data-pay-uri')).toContain('amount=7000.00');
+        });
     });
 });
 

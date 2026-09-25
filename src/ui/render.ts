@@ -503,7 +503,7 @@ export function renderStall(
     // A timer from the paint before this one would fire against a tree that
     // no longer exists; the sheet that wants one arms it again below. The
     // record check likewise: only the sheet this paint builds answers it.
-    clearPayQrTimer();
+    clearPayQrTimer(root);
     payRecordChecks.delete(root);
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     // Snapshot the opener on the idle→open edge only: a live repaint while
@@ -804,13 +804,13 @@ export function renderStall(
         } else if (view.overlay.kind === 'pay') {
             stall.classList.add('has-sheet');
             stall.append(
-                sheetOverlay(paySheet(view, handlers, (check) => payRecordChecks.set(root, check)), 'pay-sheet', handlers),
+                sheetOverlay(paySheet(view, handlers, paySheetRoot(root)), 'pay-sheet', handlers),
             );
         } else if (view.overlay.kind === 'pay-several') {
             stall.classList.add('has-sheet');
             stall.append(
                 sheetOverlay(
-                    paySeveralSheet(view, handlers, (check) => payRecordChecks.set(root, check)),
+                    paySeveralSheet(view, handlers, paySheetRoot(root)),
                     'pay-several-sheet',
                     handlers,
                 ),
@@ -4625,12 +4625,16 @@ const MAX_PAY_QUANTITY = (1n << 64n) - 1n;
 const PAY_QR_OPEN_QUERY = '(min-width: 680px)';
 
 /**
- * The open sheet's own timer, in module state because `renderStall` throws the
- * tree away on every paint and a timer left armed would fire against a sheet
- * that is no longer there. Cleared at the top of every paint, re-armed by the
- * sheet that wants it.
+ * The open sheet's own code timer, in module state because `renderStall`
+ * throws the tree away on every paint and a timer left armed would fire
+ * against a sheet that is no longer there. Cleared at the top of every paint
+ * of its root, re-armed by the sheet that wants it. **One slot per root**
+ * (the critic, CARRYOVER-2 item 10), for `payRecordChecks`' own reason: a
+ * module-wide slot was cleared by any other root's paint, and taken by any
+ * other root's sheet, and the sheet it belonged to then kept a code past its
+ * rate's lifetime.
  */
-let payQrTimer: ReturnType<typeof setTimeout> | undefined;
+const payQrTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 /**
  * The open pay sheet's own record check, per root, beside its timer and for
@@ -4683,11 +4687,34 @@ export function toleranceLine(price: TokenPrice): HTMLElement | null {
     return line;
 }
 
-function clearPayQrTimer(): void {
-    if (payQrTimer !== undefined) {
-        clearTimeout(payQrTimer);
-        payQrTimer = undefined;
+function clearPayQrTimer(root: HTMLElement): void {
+    const timer = payQrTimers.get(root);
+    if (timer !== undefined) {
+        clearTimeout(timer);
+        payQrTimers.delete(root);
     }
+}
+
+/**
+ * What a pay sheet is handed of the root it is painted on: the record check
+ * it registers (`payRecordChecks`) and its code timer (`payQrTimers`), both
+ * keyed by that root.
+ */
+type PaySheetRoot = {
+    readonly registerCheck: (check: () => void) => void;
+    readonly armQrTimer: (run: () => void, ms: number) => void;
+    readonly clearQrTimer: () => void;
+};
+
+function paySheetRoot(root: HTMLElement): PaySheetRoot {
+    return {
+        registerCheck: (check) => payRecordChecks.set(root, check),
+        armQrTimer: (run, ms) => {
+            clearPayQrTimer(root);
+            payQrTimers.set(root, setTimeout(run, ms));
+        },
+        clearQrTimer: () => clearPayQrTimer(root),
+    };
 }
 
 /**
@@ -4709,7 +4736,7 @@ function clearPayQrTimer(): void {
 function paySheet(
     view: StallView,
     handlers: StallHandlers,
-    registerCheck: (check: () => void) => void = () => undefined,
+    at: PaySheetRoot,
 ): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay');
@@ -5279,12 +5306,12 @@ function paySheet(
         }
         return false;
     };
-    registerCheck((): void => {
+    at.registerCheck((): void => {
         recheck();
     });
 
     const refresh = (): void => {
-        clearPayQrTimer();
+        at.clearQrTimer();
         const gone = lost();
         // One bigint: the quote converted, then the seller's surcharge on top
         // (rounded up, both steps), and that same number feeds the figure,
@@ -5431,7 +5458,7 @@ function paySheet(
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
-                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+                at.armQrTimer(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
             qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
@@ -5873,7 +5900,7 @@ function settleValve(
 function paySeveralSheet(
     view: StallView,
     handlers: StallHandlers,
-    registerCheck: (check: () => void) => void = () => undefined,
+    at: PaySheetRoot,
 ): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay-several');
@@ -6197,12 +6224,12 @@ function paySeveralSheet(
         }
         return false;
     };
-    registerCheck((): void => {
+    at.registerCheck((): void => {
         recheck();
     });
 
     const refresh = (): void => {
-        clearPayQrTimer();
+        at.clearQrTimer();
         const sats = lostAll ? undefined : selectionSats(selection, prices, rate?.rate);
         const subDust = sats !== undefined && sats < DUST_SATS;
         const n = Number(selectionCount(selection));
@@ -6354,7 +6381,7 @@ function paySeveralSheet(
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
-                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+                at.armQrTimer(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
             const line = el('p', 'fine', aged ? copy.PAY_QR_STALE : copy.PAY_QR_TOO_MANY);

@@ -9988,6 +9988,43 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
     });
 });
 
+describe('a-pay-codes-timer-is-kept-per-root', () => {
+    /**
+     * The critic, CARRYOVER-2 item 10. The code timer that takes a pay
+     * sheet's code away when its rate ages was one module-wide slot: any
+     * other root's paint cleared it, and any other root's sheet took it, so
+     * the first sheet kept a code past its rate's lifetime. One slot per
+     * root now (`payQrTimers`), beside the record check (`payRecordChecks`).
+     */
+    it('another root’s sheet and another root’s paint leave this sheet’s timer armed', () => {
+        vi.useFakeTimers();
+        try {
+            const now = Date.now();
+            const aging = { rate: PAY_RATE.rate, atMs: now - PAY_RATE_MAX_AGE_MS + 1_000 };
+            const a = document.createElement('div');
+            renderStall(a, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: aging }), handlers());
+            expect(a.querySelector('[data-role="pay-qr"]'), 'the code is drawn').not.toBeNull();
+            // Another root's sheet arms a timer of its own; a third root paints.
+            const b = document.createElement('div');
+            renderStall(b, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...aging, atMs: now } }), handlers());
+            renderStall(document.createElement('div'), payView(), handlers());
+            vi.advanceTimersByTime(1_001);
+            expect(a.querySelector('[data-role="pay-qr"]'), 'this sheet’s code aged out on time').toBeNull();
+            expect(a.textContent).toContain(copy.PAY_QR_STALE);
+            expect(b.querySelector('[data-role="pay-qr"]'), 'the other sheet’s rate is still young').not.toBeNull();
+            // A paint of the same root still clears the timer it replaced.
+            const c = document.createElement('div');
+            renderStall(c, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...aging, atMs: Date.now() - PAY_RATE_MAX_AGE_MS + 1_000 } }), handlers());
+            const first = c.querySelector('[data-role="pay"]')!;
+            renderStall(c, payView(), handlers());
+            vi.advanceTimersByTime(1_001);
+            expect(first.querySelector('[data-role="pay-qr"]'), 'a replaced sheet is not refreshed').not.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
 describe('a-pay-qr-never-carries-a-stale-amount', () => {
     /**
      * A phone can scan a code an hour after it was painted, and the amount in
