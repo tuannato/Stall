@@ -629,8 +629,10 @@ body {
  * (`an-outline-is-the-only-mark-under-text-on-a-decoration`).
  *
  * **The outline is in the colour of the ground it stands on** (option (b),
- * the owner, 2026-09-25, after the pictures in
- * `visible-batch-shots/13-outline-options/`), so at rest, with no drop
+ * the owner's choice, 2026-09-25, re-confirmed that morning after the
+ * corrected pictures in `visible-batch-shots/15-outline-b/` — the at-rest
+ * frames of `13-outline-options/`, where it was first chosen, came from a
+ * script with a bug), so at rest, with no drop
  * behind it, it cannot be told from that ground: the two sets are written in
  * `--rain-outline-ground`, which is `var(--s-bg)` on the stall's plain
  * ground and, on each tinted surface a line stands on, that surface's own

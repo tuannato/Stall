@@ -919,7 +919,8 @@ describe('a-decoration-lays-no-ground-under-text', () => {
  * (`layout/outline.ts`) — and nothing else in a ground's colour ever sits
  * under a glyph. The colour is `var(--s-bg)` on the plain ground and, on a
  * tinted surface, that surface's own paint over the ground (option (b), the
- * owner, 2026-09-25), always through `var(--rain-outline-ground)`, whose
+ * owner, 2026-09-25, re-confirmed after `visible-batch-shots/15-outline-b/`),
+ * always through `var(--rain-outline-ground)`, whose
  * every value is declared in `OUTLINE_GROUNDS` with the surface it matches.
  * ---------------------------------------------------------------------------
  */
@@ -1031,8 +1032,11 @@ function groundRows(table: Readonly<Record<string, OutlineGround>>): GroundRow[]
 
 /**
  * Every colour the rain's outline takes other than the plain ground's
- * `var(--s-bg)` (option (b), the owner, 2026-09-25, after the pictures in
- * `visible-batch-shots/13-outline-options/`): keyed by the tinted surface as
+ * `var(--s-bg)` (option (b): the owner's choice, 2026-09-25, re-confirmed
+ * that morning after the corrected pictures in
+ * `visible-batch-shots/15-outline-b/` — the at-rest frames of
+ * `13-outline-options/`, where it was first chosen, came from a script with
+ * a bug): keyed by the tinted surface as
  * the outline rules name it, each the surface's own paint composited over
  * the ground, written as a `color-mix` of the look's tokens — so at rest,
  * with no drop behind a line, the outline is the ground it stands on
