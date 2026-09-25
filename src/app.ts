@@ -388,10 +388,19 @@ export type AppState = {
     genesisPending?: { pubkeyHex: string; hash: string; tokenIds: readonly string[] };
 };
 
+/**
+ * Paints the app into `root` and keeps it live. Returns its teardown
+ * (CRITIC-CARRYOVER-9 item 5): the listeners `boot` put on the window and
+ * the document come off, the socket closes, every timer is cleared, a load
+ * or a tail still in flight is dropped, and nothing paints or refreshes
+ * again. The page never calls it — one app lives as long as the document —
+ * so it exists for a test file that boots many apps in one document, where
+ * each earlier app went on refreshing on every later `popstate`.
+ */
 export function boot(
     root: HTMLElement,
     load: () => Promise<AppState> = loadCurrent,
-): void {
+): () => void {
     /**
      * Every refresh claims a generation. A response that resolves after a newer
      * refresh started belongs to a page the visitor already left, so it is
@@ -399,6 +408,8 @@ export function boot(
      * A -> B -> A.
      */
     let generation = 0;
+    /** Set by the teardown `boot` returns: nothing paints or refreshes after it. */
+    let stopped = false;
     /** One socket per painted stall. Closed before the next one opens. */
     let live: LiveHandle | undefined;
     /**
@@ -1199,6 +1210,9 @@ export function boot(
     };
 
     const paint = (): void => {
+        if (stopped) {
+            return;
+        }
         // A quote that left the rail leaves the selection (D8), judged
         // against what this paint will show — never a count on an item the
         // seller no longer quotes.
@@ -3146,6 +3160,9 @@ export function boot(
         view.payHint !== undefined || view.fetch?.kind !== 'empty' || recordsKnown(view);
 
     const refresh = async (): Promise<void> => {
+        if (stopped) {
+            return;
+        }
         const claimed = ++generation;
         live?.close();
         live = undefined;
@@ -4497,9 +4514,10 @@ export function boot(
         void refresh();
     };
 
-    window.addEventListener('popstate', () => {
+    const onPopState = (): void => {
         void refresh();
-    });
+    };
+    window.addEventListener('popstate', onPopState);
 
     /**
      * A backgrounded tab does not need a socket, and holding one is how a
@@ -4528,41 +4546,37 @@ export function boot(
      * listener on the ribbon would be lost with it. Only the ribbon's own
      * keyframe counts: the pulse and the card fade fire the same event.
      */
-    document.addEventListener(
-        'animationiteration',
-        (event) => {
-            if ((event as AnimationEvent).animationName === 'tk-run') {
-                onTickerWrap();
-            }
-        },
-        { capture: true },
-    );
+    const onAnimationIteration = (event: Event): void => {
+        if ((event as AnimationEvent).animationName === 'tk-run') {
+            onTickerWrap();
+        }
+    };
+    document.addEventListener('animationiteration', onAnimationIteration, { capture: true });
     /*
      * A reduce toggle mid-pass cancels the ribbon's animation, so no wrap
      * ever arrives to release the hold; the preference is re-read here and
      * the ticker repainted at once — still and paging, or moving again.
      */
-    motionQuery()?.addEventListener?.('change', (event) => {
+    const motion = motionQuery();
+    const onMotionChange = (event: MediaQueryListEvent): void => {
         tickerStill = event.matches;
         if (state.view.broadcast?.preset === 'ticker') {
             tickerRunning = false;
             paint();
         }
-    });
+    };
+    motion?.addEventListener?.('change', onMotionChange);
 
+    const onWindowTouch = (): void => {
+        if (wallParams() !== undefined) {
+            windowTouchedAt = Date.now();
+        }
+    };
     for (const kind of WINDOW_TOUCHES) {
-        document.addEventListener(
-            kind,
-            () => {
-                if (wallParams() !== undefined) {
-                    windowTouchedAt = Date.now();
-                }
-            },
-            { passive: true, capture: true },
-        );
+        document.addEventListener(kind, onWindowTouch, { passive: true, capture: true });
     }
 
-    document.addEventListener('visibilitychange', () => {
+    const onVisibilityChange = (): void => {
         if (document.visibilityState === 'hidden') {
             live?.pause();
         } else {
@@ -4573,7 +4587,8 @@ export function boot(
         // This is the only road for a sleep: the timer does not run while
         // hidden, and a browser throttles it there anyway.
         syncGlance();
-    });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     // Cold start only. Someone who typed the bare domain gets the stall they
     // chose; `replaceState` rather than `pushState` so Back leaves the site
     // instead of bouncing between the door and the stall. In-app navigation to
@@ -4598,6 +4613,30 @@ export function boot(
         }
     }
     void refresh();
+
+    return (): void => {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
+        // A load, a walk or a tail still in flight belongs to an app that
+        // is gone: the generation it claimed is no longer current.
+        generation += 1;
+        live?.close();
+        live = undefined;
+        clearBroadcastTimers();
+        if (glanceTimer !== undefined) {
+            clearTimeout(glanceTimer);
+            glanceTimer = undefined;
+        }
+        window.removeEventListener('popstate', onPopState);
+        document.removeEventListener('animationiteration', onAnimationIteration, { capture: true });
+        motion?.removeEventListener?.('change', onMotionChange);
+        for (const kind of WINDOW_TOUCHES) {
+            document.removeEventListener(kind, onWindowTouch, { capture: true });
+        }
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
 }
 
 async function loadCurrent(): Promise<AppState> {

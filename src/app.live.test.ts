@@ -380,7 +380,28 @@ vi.mock('./ui', async (importOriginal) => {
     };
 });
 
-const { boot } = await import('./app');
+const { boot: bootApp } = await import('./app');
+
+/**
+ * Every app a test booted, torn down after it (CRITIC-CARRYOVER-9 item 5).
+ * One document holds every test's app, and `boot` puts its listeners on the
+ * window and the document: an app no test tore down went on refreshing on
+ * every later `popstate`, and the two tests here that navigate between
+ * stalls spent nearly all their time in earlier tests' apps — 10 s and 8 s
+ * in this file alone, 16–20 s in `pnpm test`, against 0.3 s run by name. So
+ * `boot` here is the app's, keeping the teardown it returns, and each test's
+ * apps stop when it ends: their listeners off, their sockets closed, their
+ * timers cleared, and nothing of theirs painting again.
+ */
+const running: Array<() => void> = [];
+function boot(...args: Parameters<typeof bootApp>): void {
+    running.push(bootApp(...args));
+}
+afterEach(() => {
+    for (const stop of running.splice(0)) {
+        stop();
+    }
+});
 
 /**
  * The words every "taken out" sentence shares — the wall's
@@ -424,16 +445,6 @@ async function until(cond: () => boolean, ms = 3_000): Promise<void> {
  * `Date.now()`, which runs on.
  */
 let heldClock: { mockRestore: () => void } | undefined;
-/**
- * The budget of the two tests here that navigate between stalls with every
- * app an earlier test booted still listening: each of those refreshes on the
- * `popstate`. Measured 2026-09-26: 7–10 s when this file runs alone (the
- * same at 5befcfb), 14–17 s in `pnpm test`, and each timed out once at
- * vitest's 20 s under that load. Their assertions are unchanged; only the
- * time they may take is theirs (the config's own rule: "slow tests still
- * carry their own larger budgets").
- */
-const SLOW_UNDER_LOAD_MS = 40_000;
 
 function holdClock(): (ms: number) => void {
     let at = performance.now();
@@ -539,8 +550,8 @@ function publish(tx: ChainTx): string {
  * sheet's async tails answer only while it is connected
  * (`wrap.isConnected`), and a detached root made every such tail return
  * early — so a test through `bootStall` never saw what they do. The app a
- * test booted keeps its listeners (`boot` removes none), so a later test's
- * `popstate` still repaints it: off the page, where it touches nothing.
+ * test booted is torn down after it (`running`), so a later test's
+ * `popstate` repaints nothing of it.
  */
 const onPage: HTMLElement[] = [];
 
@@ -3617,14 +3628,11 @@ describe('event-ring-is-capped-and-newest-first', () => {
         const route = viewOf(root)?.route;
         expect(route?.kind === 'pubkey' ? route.pubkeyHex : undefined, 'the other stall is on screen').toBe(PK_B);
 
-        // **Every watch the navigation opened, not one of them.** `boot`
-        // never removes its `popstate` listener, so every instance booted
-        // earlier in this file refreshes on this event too and opens a watch
-        // of its own, in the order their loads answer — which is not the
-        // order they were booted. "The last watch is this test's" held only
-        // while the view was read from a file-wide capture that any of them
-        // could have written; read per root (`viewOf`), it did not. Each app
-        // records into its own ring, so waking all of them wakes this one.
+        // **Every watch the navigation opened, not one of them.** Written
+        // when every app booted earlier in this file still refreshed on this
+        // event and opened a watch of its own; they are torn down after each
+        // test now (`running`), and waking every watch the navigation opened
+        // still wakes this app's, whatever else is listening.
         const opened = watches.slice(before).filter((w) => !w.closed);
 
         // Asserted by recording on the *new* stall rather than by reading the
@@ -3650,7 +3658,7 @@ describe('event-ring-is-capped-and-newest-first', () => {
             events.some((event) => event.txid === first),
             'the previous stall traffic followed the visitor',
         ).toBe(false);
-    }, SLOW_UNDER_LOAD_MS);
+    });
 });
 
 describe('a-panel-switch-does-not-reload-the-stall', () => {
@@ -6126,9 +6134,9 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
             }),
             pubkeyHex: PK_B,
         };
-        // Every instance booted earlier in this file still listens for
-        // `popstate`, so the watches and the last paint are shared: this
-        // test finds its own watch by the key it watches.
+        // The watches are shared with whatever else in this file is
+        // listening (earlier tests' apps are torn down, `running`): this test
+        // finds its own watch by the key it watches.
         const before = watches.length;
         boot(root, async () => (location.pathname === stallPath(PK_B) ? stateB : stateA));
         await flush();
@@ -6185,7 +6193,7 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
         expect(row?.kind).toBe('description');
         expect(row?.recordAuthority, 'B’s own record is B’s, not “from another wallet”').toBe('stalls');
         root.remove();
-    }, SLOW_UNDER_LOAD_MS);
+    });
 });
 
 describe('an-older-book-read-does-not-overwrite-a-newer-one', () => {
@@ -8471,5 +8479,47 @@ describe('the-taken-out-words-are-in-every-taken-out-sentence', () => {
         expect(SELECTION_DROPPED).toContain(DROPPED_WORDS);
         expect(selectionDroppedItems('Plum Jam', 1)).toContain(DROPPED_WORDS);
         expect(selectionDroppedItems('Plum Jam and Rye Flour', 2)).toContain(DROPPED_WORDS);
+    });
+});
+
+describe('boot-returns-a-teardown-that-stops-the-app', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 5. `boot` returns its teardown, and this file
+     * calls it after every test (`running`): an app nobody tore down went on
+     * refreshing on every later `popstate` in the document, and the two tests
+     * that navigate between stalls spent nearly all their time in earlier
+     * tests' apps. After the teardown a `popstate` loads nothing, the socket
+     * is closed, and a hook of the closed socket paints nothing.
+     */
+    it('after the teardown, a popstate loads nothing, the socket is closed, and nothing paints', async () => {
+        const root = document.createElement('div');
+        let loads = 0;
+        const stop = bootApp(root, async () => {
+            loads += 1;
+            return stallEmpty();
+        });
+        await flush();
+        expect(loads).toBe(1);
+        const mine = watches.filter((w) => !w.closed);
+        expect(mine.length, 'the app watches its stall').toBeGreaterThan(0);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(loads, 'a live app refreshes on popstate').toBe(2);
+
+        stop();
+        expect(watches.every((w) => w.closed), 'every socket it opened is closed').toBe(true);
+        const painted = root.firstElementChild;
+        expect(painted, 'it painted before').not.toBeNull();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        const txid = publish(signedTx({ txid: '9d'.repeat(32), outputs: [stl1Output('After Hours')], height: 800_010 }));
+        for (const watch of watches) {
+            watch.hooks.onBurst?.([txid]);
+            watch.hooks.onReestablished?.();
+        }
+        await flush(20);
+        expect(loads, 'a popstate after the teardown loads nothing').toBe(2);
+        expect(root.firstElementChild, 'and nothing paints').toBe(painted);
+        stop();
     });
 });
