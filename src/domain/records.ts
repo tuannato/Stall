@@ -63,6 +63,16 @@
  * win over a read that saw no mined transaction on its page is still made,
  * and remembered for the session.
  *
+ * **One record read twice keeps its known height** (CRITIC-CARRYOVER-9
+ * item 1, the window's decision by recommendation). Where both reads
+ * crowned the same record, one saw it mined at a height and the other saw
+ * it finalized and unmined, the second is a replica behind that record's
+ * block and not a later look: the merged rank keeps the known height and
+ * that look's own height-seen context. Taken whole, the unmined look put
+ * the record back above every height with the lagging replica's low height
+ * seen, and an older record mined between the two then won — and was
+ * remembered as the winner for the session.
+ *
  * So the two are merged per token: the failed walk's decided tokens win,
  * absence included, unless the kept read's winner for that token outranks
  * it on that ladder; the kept records fill the tokens the walk never
@@ -178,8 +188,9 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
  * record, mined since, or an older one past the kept read's own page cap).
  */
 function keptOutranks(kept: RecordRank, walk: RecordRank): boolean {
-    // One record, read twice: the walk's is the later look at it (mined
-    // since, perhaps), never an older record.
+    // One record, read twice: never an older record, so its maps are the
+    // walk's (they are the same record's). Which look's RANK the merge keeps
+    // is `mergeFailedRead`'s: a known height outranks an unmined look.
     if (kept.txid === walk.txid) {
         return false;
     }
@@ -289,13 +300,23 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         if (mine.txid !== theirs.txid && !replaced) {
             continue;
         }
+        // One record, and the kept read saw it mined at a known height while
+        // the walk sees it unmined: a replica behind that record's block,
+        // not a later look (CRITIC-CARRYOVER-9 item 1, the window's decision
+        // by recommendation). The known height is kept, with the kept rank's
+        // own height-seen context — never the unmined look whole: its
+        // no-height rank and its own low height seen let an older record
+        // mined between the two beat the record on screen, and remembered
+        // (`older`) the loss for the session.
+        const look =
+            mine.txid === theirs.txid && mine.height === undefined && theirs.height !== undefined ? theirs : rank;
         // One record, both reads still seeing it unmined: the higher of the
         // two heights they saw it unmined at. Each came from the page that
         // carried it; neither is lent to a record it was not seen beside.
         const seenHeight =
-            mine.txid === theirs.txid && rank.height === undefined && theirs.height === undefined
+            mine.txid === theirs.txid && mine.height === undefined && theirs.height === undefined
                 ? higherSeen(mine.seenHeight, theirs.seenHeight)
-                : rank.seenHeight;
+                : look.seenHeight;
         const older = new Set([
             ...(mine.older ?? []),
             ...(replaced ? [theirs.txid] : []),
@@ -303,8 +324,8 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         ]);
         // A winner is never below itself: the screen's set may hold the new
         // winner when two nodes disagreed (`keptOutranks`).
-        older.delete(rank.txid);
-        const { older: _own, seenHeight: _seen, ...bare } = rank;
+        older.delete(look.txid);
+        const { older: _own, seenHeight: _seen, ...bare } = look;
         ranks.set(tokenId, {
             ...bare,
             ...(older.size > 0 ? { older } : {}),

@@ -2263,6 +2263,112 @@ describe('a-correct-exception-win-is-not-undone-by-a-lagging-replica', () => {
     }
 });
 
+describe('a-lagging-look-at-the-screens-record-keeps-its-height', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 1 through the real app (the critic's `y9`; the
+     * merge's half is in records.test.ts under the same name). A read that
+     * stops at our page cap puts R1 (600,000) on screen, mined at 900, and
+     * never reaches R0. Replica B, behind block 900 and behind R0's block,
+     * reads R1 finalized and unmined on a page whose newest block is 850 —
+     * the same record, a lagging look at it. Replica C then answers R0
+     * (500,000), mined at 870 and first seen 0, and never saw R1. Taken whole,
+     * B's look put R1 back above every height with 850 as its height seen,
+     * and C's R0 won and stayed. The known height is kept: 600,000 holds, and
+     * a fresh read of R1 after it ends at 600,000.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'cf'.repeat(32);
+    const XEC_R0 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 600_000n };
+    const R0 = '8a'.repeat(32);
+    const R1 = '8b'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The older record, mined at 870; C never saw it in its mempool. */
+    const r0 = (seen: number) => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 870, isFinal: true }, seen);
+    /** The seller's newer record: mined at 900, or — to a replica behind that block — finalized and unmined. */
+    const r1 = (height: number | undefined) =>
+        tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { height, isFinal: true }, 1_756_400_600);
+    /** An ordinary payment mined at 850: on B's page, the newest block that response shows. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '8c'.repeat(32), outputs: [], height: 850, isFinal: true }), timeFirstSeen: 1_756_400_100 });
+    const capped = (first: ChainTx[]): ChainTx[][] => [
+        first,
+        ...Array.from({ length: 11 }, () => [] as ChainTx[]),
+        [r0(1_756_399_000)],
+    ];
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const road of ['finished', 'threw after its first page'] as const) {
+        it(`B's unmined look at R1, from a walk that ${road}, keeps R1's height, and C's R0 never beats it`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk(capped([r1(900)]));
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'R1 read mined at 900').toBe(900);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0) ?? false, 'the capped read never reached R0').toBe(false);
+
+            let calls = chain.historyPageCalls.length;
+            if (road === 'finished') {
+                await walk([[r1(undefined), paid()]]);
+                await until(() => chain.historyPageCalls.length > calls);
+            } else {
+                chain.historyPageThrows = new Set([1]);
+                await walk([[r1(undefined), paid()], []]);
+                await until(() => chain.historyPageCalls.slice(calls).includes(1));
+            }
+            await flush(20);
+            chain.historyPageThrows = new Set();
+            expect(viewOf(root)?.prices?.get(A)).toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'the known height, never the unmined look').toBe(900);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight, 'nor its low height seen').toBeUndefined();
+
+            calls = chain.historyPageCalls.length;
+            await walk([[r0(0)]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'C’s walk finished').not.toBe(true);
+            expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+
+            calls = chain.historyPageCalls.length;
+            await walk(capped([r1(900)]));
+            // The cap is page MAX_HISTORY_PAGES - 1: the walk asked it and stopped.
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await flush(20);
+            expect(viewOf(root)?.prices?.get(A), '600,000, not 500,000').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+        });
+    }
+});
+
 describe('a-removed-item-never-comes-back-into-pay-several', () => {
     /**
      * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the

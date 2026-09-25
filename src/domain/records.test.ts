@@ -739,3 +739,75 @@ describe('a-correct-exception-win-is-not-undone-by-a-lagging-replica', () => {
         }
     }
 });
+
+describe('a-lagging-look-at-the-screens-record-keeps-its-height', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 1 (the critic's `y9`; the window's decision by
+     * recommendation); the app's half is in app.live.test.ts under the same
+     * name. On screen: R1 (600,000), read mined at 900 by a read that never
+     * reached R0. Replica B, behind block 900 (and behind R0's), answers R1
+     * finalized and unmined, on a page whose newest mined transaction is at
+     * 850. Replica C answers R0 (500,000), mined at 870 and first seen 0, and
+     * never saw R1. Taken whole, B's look put R1 back above every height with
+     * 850 as its height seen, so C's R0 (870, above it) won the exception —
+     * and, remembered, it beat a fresh read of R1 at 900 for the session.
+     * One record read twice keeps its known height: 600,000 holds.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R0 = '0'.repeat(64);
+    const R1 = '1'.repeat(64);
+    const Rz = 'f'.repeat(64);
+    const screen = {
+        prices: new Map([[A, price(600_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: 900, isFinal: true, firstSeen: 1_000 }]]),
+    };
+    const lagging = {
+        prices: new Map([[A, price(600_000n)]]),
+        ranks: new Map([
+            [A, { txid: R1, height: undefined, isFinal: true, firstSeen: 1_000, seenHeight: 850, older: new Set([Rz]) }],
+        ]),
+    };
+    const older = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R0, height: 870, isFinal: true, firstSeen: 0 }]]),
+    };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: B's unmined look keeps R1's height 900, so C's R0 at 870 never wins, and a fresh R1 ends at 600,000`, () => {
+            const s1 = merge(lagging, new Set([A]), screen);
+            expect(s1.prices.get(A)).toEqual(price(600_000n));
+            expect(s1.ranks.get(A), 'the known height, never the unmined look whole').toEqual({
+                txid: R1,
+                height: 900,
+                isFinal: true,
+                firstSeen: 1_000,
+                // Whatever either read ranked below the record is still older than it.
+                older: new Set([Rz]),
+            });
+            expect(s1.ranks.get(A)?.seenHeight, "the lagging replica's height seen is not lent to the mined rank").toBeUndefined();
+
+            for (const next of [mergeFailedRead, mergeFinishedRead]) {
+                const s2 = next(older, new Set([A]), s1);
+                expect(s2.prices.get(A), 'R0, mined below R1’s block, does not win').toEqual(price(600_000n));
+                expect(s2.ranks.get(A)?.txid).toBe(R1);
+                const s3 = next(screen, new Set([A]), s2);
+                expect(s3.prices.get(A), '600,000 holds').toEqual(price(600_000n));
+                expect(s3.ranks.get(A)?.txid).toBe(R1);
+            }
+        });
+
+        it(`${road}: the control — C straight over the screen, with no lagging look — is the same answer`, () => {
+            expect(merge(older, new Set([A]), screen).prices.get(A)).toEqual(price(600_000n));
+        });
+
+        it(`${road}: the other way round is a later look, and is taken: a record read unmined, then mined, takes its height`, () => {
+            const unmined = { ...lagging, ranks: new Map([[A, { ...lagging.ranks.get(A)!, older: undefined }]]) };
+            const out = merge(screen, new Set([A]), unmined);
+            expect(out.ranks.get(A)).toEqual({ txid: R1, height: 900, isFinal: true, firstSeen: 1_000 });
+        });
+    }
+});
