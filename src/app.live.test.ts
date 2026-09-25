@@ -424,6 +424,17 @@ async function until(cond: () => boolean, ms = 3_000): Promise<void> {
  * `Date.now()`, which runs on.
  */
 let heldClock: { mockRestore: () => void } | undefined;
+/**
+ * The budget of the two tests here that navigate between stalls with every
+ * app an earlier test booted still listening: each of those refreshes on the
+ * `popstate`. Measured 2026-09-26: 7–10 s when this file runs alone (the
+ * same at 5befcfb), 14–17 s in `pnpm test`, and each timed out once at
+ * vitest's 20 s under that load. Their assertions are unchanged; only the
+ * time they may take is theirs (the config's own rule: "slow tests still
+ * carry their own larger budgets").
+ */
+const SLOW_UNDER_LOAD_MS = 40_000;
+
 function holdClock(): (ms: number) => void {
     let at = performance.now();
     heldClock?.mockRestore();
@@ -3533,7 +3544,7 @@ describe('event-ring-is-capped-and-newest-first', () => {
             events.some((event) => event.txid === first),
             'the previous stall traffic followed the visitor',
         ).toBe(false);
-    });
+    }, SLOW_UNDER_LOAD_MS);
 });
 
 describe('a-panel-switch-does-not-reload-the-stall', () => {
@@ -6068,7 +6079,7 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
         expect(row?.kind).toBe('description');
         expect(row?.recordAuthority, 'B’s own record is B’s, not “from another wallet”').toBe('stalls');
         root.remove();
-    });
+    }, SLOW_UNDER_LOAD_MS);
 });
 
 describe('an-older-book-read-does-not-overwrite-a-newer-one', () => {
