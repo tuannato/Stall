@@ -1632,6 +1632,135 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
     });
 });
 
+describe('a-removed-item-never-comes-back-into-pay-several', () => {
+    /**
+     * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the
+     * sheet's half — never composing an item it saw leave — is in
+     * render.test.ts under the same name). Pay several over Roasted Beans at
+     * 5,000 and Green Tea at 3,000; a walk read to the end decides Roasted
+     * Beans' removal; then a walk stops at our page cap before the page
+     * that holds it. The finished road's `descriptionsDecided` was this
+     * walk's decided set and the tokens kept from the screen's MAPS — never
+     * a removal, which no map shows — so Roasted Beans read as our gap: the
+     * prune kept it chosen, and the sheet the app painted next could not
+     * compose a choice holding an item with no record (the strip said this
+     * page "could not read" it). The screen holds its tombstone's rank, and
+     * that is a decision: it stays decided, and out.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'd1'.repeat(32);
+    const B = 'd2'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 300_000n };
+    const XEC_B_MOVED = { code: 'xec', exponent: 2, amount: 350_000n };
+    const record = (txid: string, hex: string | undefined, height: number, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], height }), timeFirstSeen: seen };
+    };
+    /** A walk of `pages`, woken by the socket on every open watch. */
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const tx of page) {
+                chain.txs.set(tx.txid, tx);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const figureOf = (root: HTMLElement): string | undefined =>
+        root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent ?? undefined;
+    const press = (root: HTMLElement): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]') as HTMLElement | null;
+            expect(control, 'the sheet carries a Pay control').not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+
+    for (const road of ['unchanged', 'moved'] as const) {
+        it(`Green Tea ${road} on the capped read: in place, and on the sheet the app paints next, Roasted Beans stays out`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Roasted Beans')], [B, fungible(B, 'Green Tea')]]),
+                    prices: new Map([[A, XEC_A], [B, XEC_B]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(figureOf(root)).toBe('8,000');
+
+            // A walk read to the end decides the removal.
+            await walk([[
+                record('e1'.repeat(32), encodeRemovalHex(A), 10, 1_756_400_900),
+                record('e2'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: XEC_B }), 8, 1_756_400_500),
+            ]]);
+            await until(() => figureOf(root) === '3,000');
+            expect(figureOf(root)).toBe('3,000');
+
+            // The next walk stops at our page cap before the page that holds it.
+            const b = road === 'unchanged' ? XEC_B : XEC_B_MOVED;
+            const want = road === 'unchanged' ? '3,000' : '3,500';
+            const calls = chain.historyPageCalls.length;
+            await walk([
+                [
+                    road === 'unchanged'
+                        ? record('e2'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: b }), 8, 1_756_400_500)
+                        : record('e3'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: b }), 11, 1_756_401_000),
+                ],
+                ...Array.from({ length: 11 }, () => [] as ChainTx[]),
+            ]);
+            // Ten pages asked and the eleventh never: the walk stopped at our
+            // cap. (The sheet holds the paint, so the view is read after it
+            // closes.)
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await until(() => figureOf(root) === want);
+            expect(chain.historyPageCalls.slice(calls)).not.toContain(10);
+            expect(figureOf(root), 'in place: the removed item is not composed again').toBe(want);
+
+            // The sheet the app paints next: closed and opened again, the
+            // choice pruned as every paint prunes it.
+            (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+            await flush();
+            expect(viewOf(root)?.descriptionsTruncated, 'the walk stopped at our cap').toBe(true);
+            expect(viewOf(root)?.descriptionsDecided?.has(A), 'the removal on screen stays decided').toBe(true);
+            expect(root.textContent, 'our cap is not claimed over a removal this page read').not.toContain(
+                selectionCapped(1),
+            );
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent ?? '').toContain(want);
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(figureOf(root)).toBe(want);
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-lines"]')?.textContent ?? '').not.toContain('Roasted Beans');
+            expect(press(root), 'the press pays what stayed').toContain(`amount=${want.replace(',', '')}.00`);
+        });
+    }
+});
+
 describe('a-choice-is-not-called-unread-while-the-records-are-still-being-read', () => {
     const fungible = (tokenId: string, name: string) => ({
         tokenId,

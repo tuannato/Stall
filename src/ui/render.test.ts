@@ -9611,6 +9611,82 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
     });
 });
 
+describe('a-removed-item-never-comes-back-into-pay-several', () => {
+    /**
+     * The critic, CRITIC-CARRYOVER-4 item 3, at the sheet (the app's half —
+     * the kept rank that makes the removal stay decided — is in
+     * app.live.test.ts under the same name). A choice of Roasted Beans at
+     * 5,000 and Green Tea at 3,000; a walk read to the end decides Roasted
+     * Beans' removal; then a walk that stops at our page cap before that
+     * removal answers with Roasted Beans absent and undecided — our gap.
+     * The sheet had SEEN it leave, and put it back at the figure it was
+     * opened on: 8,000 on the reset road (Green Tea unchanged), 8,500 on the
+     * recompose road (Green Tea moved to 3,500), the memo naming Roasted
+     * Beans and the dropped line gone.
+     */
+    const OTHER = '7d'.repeat(32);
+    const beans = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+    const tea = { code: 'xec', exponent: 2, amount: 300_000n } as TokenPrice;
+    const teaMoved = { ...tea, amount: 350_000n };
+    type Now = { prices: Map<string, TokenPrice>; known: boolean; complete: boolean; decided: Set<string> };
+    const T = Date.UTC(2026, 8, 25, 12);
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const road of ['reset', 'recompose'] as const) {
+        it(`${road}: a capped read that never reached the removal leaves the item out`, () => {
+            vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+            vi.setSystemTime(T);
+            const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+            let now: Now = { prices: new Map([[TOKEN_ID, beans], [OTHER, tea]]), known: true, complete: true, decided: new Set() };
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: new Map([[TOKEN_ID, beans], [OTHER, tea]]),
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="pay-several"]')!;
+            const figure = () => sheet.querySelector('[data-role="price"]')?.textContent;
+            const dropped = () => sheet.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '';
+            expect(figure()).toBe('8,000');
+
+            // A walk read to the end decides the removal.
+            now = { prices: new Map([[OTHER, tea]]), known: true, complete: true, decided: new Set([TOKEN_ID, OTHER]) };
+            recheckPaySheet(root);
+            expect(figure()).toBe('3,000');
+            expect(dropped()).toContain('Roasted Beans');
+
+            // The next walk stops at our cap before the removal: absent, undecided.
+            const teaNow = road === 'reset' ? tea : teaMoved;
+            now = {
+                prices: new Map([[OTHER, teaNow]]),
+                known: true,
+                complete: false,
+                decided: new Set(road === 'reset' ? [] : [OTHER]),
+            };
+            recheckPaySheet(root);
+            const sats = satsForQuote(teaNow, 1n, undefined)!;
+            expect(figure(), 'the removed item is not composed again').toBe(formatXec(sats));
+            expect(sheet.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Roasted Beans');
+            expect(dropped(), 'and it is still said to be out').toContain('Roasted Beans');
+
+            vi.advanceTimersByTime(60_000);
+            vi.setSystemTime(T + 60_000);
+            expect(pressForUrl(root, 'pay-cashtab'), 'the press pays what stayed, and its memo names it alone').toBe(
+                cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(OTHER, 1n)!),
+            );
+        });
+    }
+});
+
 describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
     /**
      * The owner, 2026-09-25 (CRITIC-CARRYOVER-3 item 2), at the sheet; the

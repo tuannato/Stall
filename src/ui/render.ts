@@ -6237,11 +6237,23 @@ function paySeveralSheet(
         composedAt += 1;
         const nowPrices = now.prices ?? new Map<string, TokenPrice>();
         const pruned = pruneSelection(openedChoice, nowPrices, now.complete, now.decided, unit);
-        selection = pruned.selection;
-        droppedHere = pruned.dropped;
+        // An item the prune keeps with no record in this read is our gap —
+        // a walk that stopped at our page cap before it — and composes at the
+        // record the sheet last SAW (`seen`), never at the one it was opened
+        // on: that could be older than a move the sheet already took. An
+        // item the sheet SAW leave is never put back by a read that did not
+        // reach it (the critic, CRITIC-CARRYOVER-4 item 3): it stays out,
+        // named on the dropped line, until a read shows its record again.
+        const sawLeave = [...pruned.selection.keys()].filter(
+            (tokenId) => !nowPrices.has(tokenId) && seen.get(tokenId) === undefined,
+        );
+        selection = new Map([...pruned.selection].filter(([tokenId]) => !sawLeave.includes(tokenId)));
+        droppedHere = [...openedChoice.keys()].filter(
+            (tokenId) => pruned.dropped.includes(tokenId) || sawLeave.includes(tokenId),
+        );
         composed.clear();
         for (const tokenId of selection.keys()) {
-            const record = nowPrices.get(tokenId) ?? opened.get(tokenId);
+            const record = nowPrices.get(tokenId) ?? seen.get(tokenId);
             if (record !== undefined) {
                 composed.set(tokenId, record);
             }
@@ -6298,24 +6310,6 @@ function paySeveralSheet(
         }
         if (redraw) {
             prices = new Map([...(prices ?? []), ...composed]);
-        }
-        if (
-            (movedUnder !== undefined || droppedHere.length > 0 || lostAll) &&
-            movedRecords(opened, now).length === 0
-        ) {
-            selection = openedChoice;
-            movedUnder = undefined;
-            droppedHere = [];
-            lostAll = false;
-            absorb = false;
-            for (const [tokenId, record] of opened) {
-                composed.set(tokenId, now.prices?.get(tokenId) ?? record);
-            }
-            prices = new Map([...(prices ?? []), ...composed]);
-            paintLines();
-            redraw = true;
-        }
-        if (redraw) {
             refresh();
         }
         return false;

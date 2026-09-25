@@ -3849,9 +3849,18 @@ export function boot(
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
             // A token kept from the screen is resolved as of the read that
-            // put it there.
+            // put it there — and so is every token the screen holds a rank
+            // for, a removal included, which no map shows (the critic,
+            // CRITIC-CARRYOVER-4 item 3; the thrown road's `overKept` keeps
+            // the screen's set the same way). Without it, a walk capped
+            // before the page holding a removal the screen had applied
+            // left that token undecided, absent and our gap: the prune kept
+            // the removed item chosen and Pay several put it back into the
+            // payment at the figure it had before.
             descriptionsDecided:
-                merged === undefined ? lookup.decided : new Set([...lookup.decided, ...merged.keptShown]),
+                merged === undefined
+                    ? lookup.decided
+                    : new Set([...lookup.decided, ...merged.keptShown, ...merged.ranks.keys()]),
             descriptionRanks: merged?.ranks ?? lookup.ranks,
             // This walk's own answer replaces any records kept over an
             // earlier one that threw — save one it did not reach and the
