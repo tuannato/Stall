@@ -4692,9 +4692,10 @@ function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
 /**
  * The valve's line for an outcome, in the form that fits what the buyer can
  * press (CRITIC-CARRYOVER-6 item 5): when neither a Pay control nor the
- * refresh control is on the sheet — a read with no answer leaves no figure
- * and no rate row — a line that asks for a press asks for one nobody can
- * make, and it is said without the ask. And once a press on the sheet has
+ * refresh control is on the sheet, a line that asks for a press asks for
+ * one nobody can make, and it is said without the ask — a fence no state
+ * reaches since a sheet with no rate keeps its refresh control
+ * (CRITIC-CARRYOVER-7 item 3). And once a press on the sheet has
  * opened a wallet (`opened`), no line asks for a press, until a Pay press
  * is absorbed again (CRITIC-CARRYOVER-7 item 2): the record line's rule.
  */
@@ -5649,7 +5650,10 @@ function paySheet(
 
         if (usesRate) {
             const glance = formatXecRate(rate?.rate, price.code);
-            rateRow.hidden = glance === undefined;
+            // No rate and no ask out: the row stays for its refresh control,
+            // the way on the sentence under it promises ("until a price
+            // arrives"; CRITIC-CARRYOVER-7 item 3), its label empty.
+            rateRow.hidden = glance === undefined && (rate !== undefined || asking);
             rateLabel.textContent =
                 glance === undefined || rate === undefined
                     ? ''
@@ -6772,7 +6776,9 @@ function paySeveralSheet(
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
         if (usesRate && unit !== undefined) {
             const glanceRate = formatXecRate(rate?.rate, unit);
-            rateRow.hidden = glanceRate === undefined;
+            // The single sheet's rule: no rate and no ask out keeps the
+            // refresh control (CRITIC-CARRYOVER-7 item 3).
+            rateRow.hidden = glanceRate === undefined && (rate !== undefined || asking);
             rateLabel.textContent =
                 glanceRate === undefined || rate === undefined
                     ? ''
@@ -7107,9 +7113,9 @@ function shownLines(wrap: HTMLElement, lines: readonly HTMLElement[]): HTMLEleme
  * now says what happened — or to the sheet's head, never onto the page
  * behind the dialog. Every change a sheet makes in place goes through it:
  * a recompose (`speakRecompose`), and a rate answer that hid the control
- * focus was on — a refresh the feed did not answer, which takes the rate
- * row and its control away, or a valve answer with no rate, which takes the
- * Pay controls (CRITIC-CARRYOVER-5 item 7).
+ * focus was on — a valve answer with no rate, which takes the Pay controls
+ * (CRITIC-CARRYOVER-5 item 7). A refresh the feed did not answer keeps its
+ * control since CRITIC-CARRYOVER-7 item 3, so focus stays on it.
  */
 function keepFocusIn(
     wrap: HTMLElement,

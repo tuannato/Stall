@@ -7822,6 +7822,73 @@ describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
     }
 });
 
+describe('a-sheet-with-no-rate-offers-a-way-to-ask-again', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 3, through the real app (the sheet's half is
+     * in render.test.ts under the same name): the open's ask got no answer,
+     * the sheet said "no link and no code until a price arrives", and
+     * nothing on it would ever ask again — the refresh control hid with the
+     * rate row. It stays now, and one press asks once.
+     */
+    const A = 'af'.repeat(32);
+    const B = 'bf'.repeat(32);
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const shown = (root: HTMLElement, scope: string, role: string): boolean => {
+        const node = root.querySelector(`[data-role="${scope}"] [data-role="${role}"]`);
+        return node !== null && node.closest('[hidden]') === null;
+    };
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the open's ask got no answer, the refresh control stays, and one press asks once`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            let asks = 0;
+            priceControl.fetch = async () => {
+                asks += 1;
+                return undefined;
+            };
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (root.querySelector(`[data-role="${scope}"]`)?.textContent ?? '').includes(PAY_NO_RATE_WHY));
+            await flush(20);
+            const opened = asks;
+            expect(opened, 'the open asked').toBeGreaterThan(0);
+            expect(shown(root, scope, 'pay-cashtab'), 'no figure, so no Pay').toBe(false);
+            expect(shown(root, scope, 'pay-refresh'), 'the way to ask again').toBe(true);
+
+            priceControl.fetch = async () => {
+                asks += 1;
+                return scaleRate(0.00002)!;
+            };
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await until(() => shown(root, scope, 'pay-cashtab'));
+            await flush(20);
+            expect(asks - opened, 'one press, one ask').toBe(1);
+            expect(root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? '', 'the price arrived').not.toBe('');
+        });
+    }
+});
+
 describe('a-double-tap-that-opens-the-sheet-opens-no-wallet', () => {
     /**
      * The owner, 2026-09-25 (CRITIC-CARRYOVER-6 item 2), through the real

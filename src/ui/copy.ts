@@ -1787,13 +1787,13 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
- * The same two facts when the answer left nothing on the sheet to press
- * (CRITIC-CARRYOVER-6 item 5): no rate means no figure, so no Pay, and no
- * rate row, so no refresh control — "press again" asked for a press there
- * was no control for, and focus moves onto this line. The first clause
- * alone, the rule the owner set for a line nobody can act on by pressing
- * (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the card says why there
- * is no figure.
+ * The same two facts without the ask: where nothing on the sheet can be
+ * pressed (CRITIC-CARRYOVER-6 item 5) — a fence no state reaches since a
+ * sheet with no rate keeps its refresh control (CRITIC-CARRYOVER-7 item
+ * 3) — and once a press has opened a wallet (`PAY_VALVE_TEXT_AFTER_OPEN`).
+ * The first clause alone, the rule the owner set for a line nobody should
+ * act on by pressing (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the
+ * card says why there is no figure.
  */
 export const PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS = 'No fresh price';
 export const PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS = 'No usable price';
