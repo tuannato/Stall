@@ -132,9 +132,10 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
         const out = mergeFailedRead(read, new Set([A]), kept);
         expect(out.prices.get(A), 'the figure the walk read, not the one it read past').toEqual(price(900_000n));
         expect(out.descriptions.get(A)).toBe('new words');
-        // The walk's rank, remembering the record it replaced
-        // (`a-new-winner-remembers-the-record-it-replaced`).
-        expect(out.ranks.get(A)).toEqual({ ...walkRank, older: new Set([keptRank.txid]) });
+        // The walk's rank alone: the no-height exception decided this win,
+        // so it does not remember the record it replaced
+        // (`a-win-decided-by-the-no-height-rule-remembers-nothing`).
+        expect(out.ranks.get(A)).toEqual(walkRank);
         expect(out.keptShown.has(A), 'nothing on screen came from the kept read').toBe(false);
     });
 
@@ -572,5 +573,69 @@ describe('a-new-winner-remembers-the-record-it-replaced', () => {
         const out = mergeFailedRead(walk, new Set([A]), disagreeing);
         expect(out.prices.get(A)).toEqual(price(600_000n));
         expect(out.ranks.get(A)?.older).toEqual(new Set([R1, R0]));
+    });
+});
+
+describe('a-win-decided-by-the-no-height-rule-remembers-nothing', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 3, narrowed by the window's decision; the app's
+     * half is in app.live.test.ts under the same name. On screen: R1, the
+     * seller's fresh record, finalized and unmined, from a read that did not
+     * reach R0. A lagging replica answers R0, mined at 6 and first seen 0:
+     * the ladder would keep R1, and only the no-height exception crowns R0 —
+     * the stated limit. Remembering R1 below that wrong winner entrenched
+     * it: a correct read of R1 that again stopped short of R0 lost to it,
+     * and 500,000 stayed where 600,000 should come back. A win the exception
+     * alone decided adds nothing to the older set; R1's next read wins on
+     * the ladder, and that win remembers R0 as every other win does.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R0 = '0'.repeat(64);
+    const R1 = '1'.repeat(64);
+    const Rz = 'f'.repeat(64);
+    const fresh = () => ({
+        prices: new Map([[A, price(600_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: undefined, isFinal: true, firstSeen: 5_000 }]]),
+    });
+    const lagging = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R0, height: 6, isFinal: true, firstSeen: 0, older: new Set([Rz]) }]]),
+    };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished (capped)', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: the no-height win adds no older record, and the fresh record comes back`, () => {
+            const mid = mergeFinishedRead(lagging, new Set([A]), fresh());
+            expect(mid.prices.get(A), 'the stated limit: the exception crowns R0').toEqual(price(500_000n));
+            expect(mid.ranks.get(A)?.txid).toBe(R0);
+            expect(mid.ranks.get(A)?.older, 'its own set, and not the record it replaced').toEqual(new Set([Rz]));
+
+            const out = merge(fresh(), new Set([A]), mid);
+            expect(out.prices.get(A), '600,000 comes back').toEqual(price(600_000n));
+            expect(out.ranks.get(A)?.txid).toBe(R1);
+            expect(out.ranks.get(A)?.older, 'a ladder win remembers what it replaced').toEqual(new Set([R0, Rz]));
+        });
+    }
+
+    it('a replacement the ladder decided still remembers the record it replaced', () => {
+        // The same two records the other way round: R1 on screen, mined at 6;
+        // R2 read finalized and unmined, no stamps to compare. The ladder
+        // crowns R2 (finalized and unmined outranks every height): not the
+        // exception, so R1 is remembered.
+        const R2 = '2'.repeat(64);
+        const screen = {
+            prices: new Map([[A, price(500_000n)]]),
+            ranks: new Map([[A, { txid: R1, height: 6, isFinal: true, firstSeen: 0 }]]),
+        };
+        const walk = {
+            prices: new Map([[A, price(600_000n)]]),
+            ranks: new Map([[A, { txid: R2, height: undefined, isFinal: true, firstSeen: 0 }]]),
+        };
+        const out = mergeFailedRead(walk, new Set([A]), screen);
+        expect(out.prices.get(A)).toEqual(price(600_000n));
+        expect(out.ranks.get(A)?.older).toEqual(new Set([R1]));
     });
 });
