@@ -6340,11 +6340,17 @@ function paySeveralSheet(
         appUrl = pay;
         web.hidden = !linked;
         app.hidden = !linked;
+        // Restated whenever the figure is a recomposed one: the rate moved,
+        // two feeds disagree, a re-read moved or took out a chosen item in
+        // place, or a press found the records moved and this sheet was
+        // painted again from them — an item that left changes the total as
+        // surely as one that moved, and is named on the dropped line alone.
         web.textContent =
             (movedUnder !== undefined ||
+                droppedHere.length > 0 ||
                 outcome === 'moved' ||
                 outcome === 'disagree' ||
-                (outcome === undefined && movedLine !== undefined)) &&
+                (outcome === undefined && view.payRecordMoved !== undefined)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;

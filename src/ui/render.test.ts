@@ -9318,6 +9318,18 @@ describe('a-moved-quote-is-said-in-the-owners-words', () => {
         // Roasted Beans moved and left the choice: the dropped line names it.
         expect(several({ payRecordMoved: [TOKEN_ID, OTHER] })).toBe(copy.payItemsChanged('Green Tea'));
         expect(several({ payRecordMoved: [TOKEN_ID] }) ?? '', 'nothing moved is still chosen').toBe('');
+        // The total it left is still a recomposed figure, and restated.
+        const left = paint(
+            payView({
+                tokens,
+                prices: new Map([[OTHER, { code: 'xec', exponent: 2, amount: 700_000n }]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[OTHER, 1n]]),
+                payRecordMoved: [TOKEN_ID],
+            }),
+        ).root;
+        expect(left.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]')?.textContent).toBe(copy.payFigure('7,000'));
         expect(several({ payRecordMoved: [OTHER], payRecordMovedUnpressed: true })).toBe(copy.payItemsChangedUnpressed('Green Tea'));
         const single = paint(
             payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, payRecordMoved: [TOKEN_ID], payRecordMovedUnpressed: true }),
@@ -9528,6 +9540,9 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
         );
         expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', 'a moved item that left is not named twice').toBe('');
         expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(satsForQuote(xec, 1n, undefined)!));
+        expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the new total is restated').toBe(
+            copy.payFigure(formatXec(satsForQuote(xec, 1n, undefined)!)),
+        );
         // Both leave.
         now = records(new Map());
         recheckPaySheet(root);
