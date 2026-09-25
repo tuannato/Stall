@@ -811,25 +811,37 @@ export type StallView = WindowState & {
      */
     payRateOutcome?: PayRateOutcome;
     /**
-     * A Pay press on the open sheet found the seller's record moved since
-     * the sheet was painted (`movedRecords`: what the buyer pays changed),
-     * and the sheet was painted again from the records as they stand: the
-     * tokens whose records moved, so the valve's line can name them on "Pay
-     * several"; the control restates the figure, and the next press is the
-     * one that opens a wallet. Never empty when present. Closure state in
-     * `boot`, written onto the view at paint time and cleared when a pay
-     * sheet opens or closes.
+     * The figure on the open pay sheet changed under the buyer while it was
+     * open — a re-read recomposed it in place (a return to the record it
+     * was opened on included), a press or an ask's tail found the seller's
+     * records moved since the sheet was painted (`movedRecords`: what the
+     * buyer pays changed) — and the sheet is painted from the records as
+     * they stand: every token whose record changed, so the valve's line can
+     * name the chosen ones on "Pay several"; the control restates the
+     * figure. Never empty when present. Closure state in `boot`, written
+     * onto the view at paint time and cleared when a pay sheet opens or
+     * closes.
      */
     payRecordMoved?: readonly string[];
     /**
-     * The paint after the move was not a press: an ask's tail — the open, a
-     * `?pay=` landing, a moved unit's own rate — found the records moved
-     * (`sheetOutOfStep`) and painted the sheet again from them. The next
-     * press is then the one that opens, so the line asks for no second
-     * press (`PAY_QUOTE_CHANGED_UNPRESSED`): the owner's sentence is for
-     * after a press. Present only beside `payRecordMoved`.
+     * The latest word on that change was not an absorbed PAY press: the
+     * sheet changed in place, an ask's tail or the refresh control found
+     * the records moved (`sheetOutOfStep`), or a press has since opened a
+     * wallet. The line then asks for no second press
+     * (`PAY_QUOTE_CHANGED_UNPRESSED`, `selectionDroppedCheck`): the owner's
+     * whole sentence is for after a Pay press that opened nothing
+     * (CRITIC-CARRYOVER-4 item 4). Present only beside `payRecordMoved`.
      */
     payRecordMovedUnpressed?: true;
+    /**
+     * When that change was last painted, on the page's monotonic clock
+     * (`performance.now()`): carried across the repaint an absorbed press
+     * asks for, so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of the
+     * change opens nothing — the second tap of a double tap included
+     * (CRITIC-CARRYOVER-4 items 1 and 6). Closure state in `boot`, beside
+     * `payRecordMoved`.
+     */
+    payChangedAt?: number;
     /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never

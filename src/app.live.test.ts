@@ -3,7 +3,7 @@ import { DUST_SATS, formatXec } from './domain/money';
 import { encodeCashAddress } from 'ecashaddrjs';
 import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
 import { STLD_HEX, encodeDescriptionHex, encodeRemovalHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
@@ -49,7 +49,6 @@ import {
     payItemsChangedUnpressed,
     selectionDroppedCheck,
     selectionDroppedCheckPressed,
-    PAY_CASHTAB,
     payFigure,
     payItemsChanged,
     payTolerance,
@@ -400,6 +399,29 @@ async function until(cond: () => boolean, ms = 3_000): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 5));
     }
 }
+
+/**
+ * The page's monotonic clock, held still for the rest of one test (the
+ * critic, CRITIC-CARRYOVER-4 item 10): a pay sheet's grace is a change's
+ * `performance.now()` stamp against a press's `event.timeStamp`, which
+ * happy-dom takes from the same clock — so a pause under load between a
+ * change and a press moves neither, and only the test moves it on. Nothing
+ * else in the app reads this clock; `until` and the app's floors read
+ * `Date.now()`, which runs on.
+ */
+let heldClock: { mockRestore: () => void } | undefined;
+function holdClock(): (ms: number) => void {
+    let at = performance.now();
+    heldClock?.mockRestore();
+    heldClock = vi.spyOn(performance, 'now').mockImplementation(() => at);
+    return (ms) => {
+        at += ms;
+    };
+}
+afterEach(() => {
+    heldClock?.mockRestore();
+    heldClock = undefined;
+});
 
 function stallEmpty(over: Partial<State['view']> = {}): State {
     return {
@@ -5781,6 +5803,15 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
      */
     const A = 'a4'.repeat(32);
     const B = 'b4'.repeat(32);
+    /**
+     * Held still for every test here: every Pay press inside the grace of a
+     * change on screen is absorbed (`PAY_RECOMPOSE_GRACE_MS`), so the press
+     * that opens is made after `later` moves the clock past it.
+     */
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
     const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
     const XEC_NEW = { code: 'xec', exponent: 2, amount: 900_000n };
     const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
@@ -5852,8 +5883,10 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             'the control restates the figure it will open',
         ).toBe(payFigure('9,000'));
 
+        expect(press(root, 'pay'), 'a second press inside the grace is absorbed too').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
         const url = press(root, 'pay');
-        expect(url, 'the second press pays the record as it stands').toContain('amount=9000.00');
+        expect(url, 'a press after the grace pays the record as it stands').toContain('amount=9000.00');
     });
 
     it('a removal: the sheet says the quote is gone and offers nothing to press', async () => {
@@ -5936,6 +5969,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
         await flush();
         expect(figureOf(root, 'pay')).toBe(eur);
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
         expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
     });
 
@@ -5963,6 +5997,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(asked).toEqual(['usd']);
 
         await republish([['7a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+        // The feeds answer long after the move was painted: the figure
+        // that answer puts on screen is what the grace is measured from.
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
         release();
         await flush();
 
@@ -5973,8 +6010,12 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
         expect(figureOf(root, 'pay')).toBe(eur);
         // Painted by the open's own tail, which no press asked for: the
-        // line asks for no second press, and the next press opens.
+        // line asks for no second press. The figure that answer put on
+        // screen is a change of its own (CRITIC-CARRYOVER-4 item 6): a
+        // press inside its grace is absorbed, and one after it opens.
         expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+        expect(press(root, 'pay'), 'inside the grace of the figure the answer painted').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
         expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
     });
 
@@ -6002,6 +6043,8 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
             payItemsChanged('Plum Jam'),
         );
+        expect(press(root, 'pay-several'), 'a second press inside the grace is absorbed too').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
         expect(press(root, 'pay-several')).toContain('amount=16000.00');
     });
 
@@ -6140,6 +6183,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(asked).toContain('gbp');
             expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
             await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(press(root, 'pay')).toContain(`amount=${at(GBP_QUOTE, GBP_RATE).replace(/,/g, '')}`);
         });
 
@@ -6239,6 +6283,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 expect(figureOf(root, 'pay')).toBe(moved);
                 expect(again.querySelector('[data-role="pay-qr"]')).not.toBeNull();
                 expect(again.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
                 expect(press(root, 'pay')).toContain(`amount=${moved.replace(/,/g, '')}`);
             });
 
@@ -6266,6 +6311,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 expect(press(root, 'pay-several'), 'the press after the move is absorbed').toBeUndefined();
                 expect(scope(root, 'pay-several')).not.toBe(sheet);
                 expect(figureOf(root, 'pay-several')).toBe(moved);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
                 expect(press(root, 'pay-several')).toContain(`amount=${moved.replace(/,/g, '')}`);
             });
         }
@@ -6293,7 +6339,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             }
         });
 
-        it('a record back to what the sheet was opened on clears the line, and the press opens at once', async () => {
+        it('a-return-to-the-opened-record-is-a-change-with-its-own-grace: the line stays, the figure is restated, a press inside its grace opens nothing', async () => {
+            // CRITIC-CARRYOVER-4 item 2, through the real app (the sheet's
+            // own half is in render.test.ts under the same name).
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
@@ -6310,9 +6358,18 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             }
             await until(() => figureOf(root, 'pay') === '5,000');
             expect(scope(root, 'pay')).toBe(sheet);
-            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', 'the line clears').toBe('');
-            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'nothing restated').toBe(PAY_CASHTAB);
-            expect(press(root, 'pay'), 'no press is absorbed').toContain('amount=5000.00');
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'the line stays').toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the figure is restated').toBe(payFigure('5,000'));
+            expect(press(root, 'pay'), 'inside the return’s own grace').toBeUndefined();
+            const rebuilt = scope(root, 'pay')!;
+            expect(rebuilt, 'painted again').not.toBe(sheet);
+            expect(rebuilt.querySelector('[data-role="pay-valve"]')?.textContent, 'the absorbed press says so').toBe(PAY_QUOTE_CHANGED);
+            expect(rebuilt.querySelector('[data-role="pay-cashtab"]')?.textContent, 'never the plain control again').toBe(
+                payFigure('5,000'),
+            );
+            expect(press(root, 'pay'), 'a second tap on the sheet the app painted').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay'), 'after the grace').toContain('amount=5000.00');
         });
 
         it('a new margin and new words under the open sheet are taken in place, and the code stays', async () => {
@@ -6359,7 +6416,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(code, 'a code for the records as they stand').toBeTruthy();
             let url = press(root, name);
             if (url === undefined) {
-                // The press after an in-place recompose is absorbed once.
+                // Every press inside the grace of a change is absorbed; a
+                // press after it opens.
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
                 url = press(root, name);
             }
             expect(url, 'the link').toContain(`amount=${figure.replace(/,/g, '')}.00`);
@@ -6478,19 +6537,12 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
          * is painted again asking for the press again, and the press after
          * it opens. A press after the grace opens the new figure at once.
          * On Pay several, a re-read that only took an item out says so on
-         * the dropped line with "check the total". The sheet's clock is
-         * `Date.now()`, shifted here rather than frozen: `until` and the
-         * app's own floors read it too.
+         * the dropped line with "check the total". The grace is measured on
+         * the page's monotonic clock, held still for the whole test
+         * (`holdClock`, the describe's `later`; CRITIC-CARRYOVER-4 item 10):
+         * a pause under load between the change and the press cannot turn
+         * "inside" into "after".
          */
-        const shiftClock = (): ((ms: number) => void) => {
-            const real = Date.now.bind(Date);
-            let offset = 0;
-            const spy = vi.spyOn(Date, 'now').mockImplementation(() => real() + offset);
-            onTestFinished(() => spy.mockRestore());
-            return (ms) => {
-                offset += ms;
-            };
-        };
         const valveOf = (root: HTMLElement, name: string): string =>
             root.querySelector(`[data-role="${name}"] [data-role="pay-valve"]`)?.textContent ?? '';
         const droppedOf = (root: HTMLElement): string =>
@@ -6507,7 +6559,6 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         };
 
         it('the single sheet, inside the grace: absorbed, and the sheet asks for the press again', async () => {
-            shiftClock();
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
@@ -6517,11 +6568,11 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(valveOf(root, 'pay')).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
             expect(press(root, 'pay'), 'inside the grace').toBeUndefined();
             expect(valveOf(root, 'pay'), 'the absorbed press says so').toBe(PAY_QUOTE_CHANGED);
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(press(root, 'pay')).toContain('amount=9000.00');
         });
 
         it('the single sheet, after the grace: the press opens the new figure', async () => {
-            const later = shiftClock();
             const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
@@ -6535,7 +6586,6 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         });
 
         it('Pay several, an item taken out: "check the total" in place; inside the grace absorbed and said, after it open', async () => {
-            const later = shiftClock();
             for (const inside of [true, false]) {
                 const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
                 await flush();
@@ -6550,10 +6600,14 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 if (inside) {
                     expect(press(root, 'pay-several'), 'inside the grace').toBeUndefined();
                     expect(droppedOf(root), 'the absorbed press says so').toBe(selectionDroppedCheckPressed('Plum Jam', 1));
-                } else {
-                    later(PAY_RECOMPOSE_GRACE_MS + 1);
                 }
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
                 expect(press(root, 'pay-several')).toContain('amount=7000.00');
+                if (inside) {
+                    expect(droppedOf(root), 'a wallet opened: nothing left to press again').toBe(
+                        selectionDroppedCheck('Plum Jam', 1),
+                    );
+                }
             }
         });
     });
@@ -6627,6 +6681,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
             expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedCheckPressed('Plum Jam', 1));
             expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Plum Jam');
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(press(root, 'pay-several')).toContain('amount=7000.00');
         });
 
@@ -6664,6 +6719,110 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
             await flush();
             expect(root.querySelector('[data-role="window-paying"]')?.getAttribute('data-pay-uri')).toContain('amount=7000.00');
+        });
+    });
+
+    describe('a-double-tap-inside-the-grace-opens-nothing', () => {
+        /**
+         * CRITIC-CARRYOVER-4 item 1, through the real app (the sheet's half
+         * is in render.test.ts under the same name). The first press of a
+         * double tap inside the grace was absorbed and asked the app to
+         * paint the sheet again — and the sheet it painted started with no
+         * grace, so the second tap opened the new figure a few hundred
+         * milliseconds after it appeared. The app carries the stamp across
+         * that paint (`payChangedAt`).
+         */
+        it('the single sheet: both taps absorbed, and a press after the grace opens', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await flush();
+            await republish([['c1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            const sheet = root.querySelector('[data-role="pay"]');
+            later(100);
+            expect(press(root, 'pay'), 'the first tap').toBeUndefined();
+            expect(root.querySelector('[data-role="pay"]'), 'the app painted the sheet again').not.toBe(sheet);
+            later(250);
+            expect(press(root, 'pay'), 'the second tap, on the sheet the app painted').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS);
+            expect(press(root, 'pay'), 'after the grace').toContain('amount=9000.00');
+        });
+
+        it('Pay several: both taps absorbed, and a press after the grace opens', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            await republish([
+                ['c2'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['c3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })],
+            ]);
+            await until(() => figureOf(root, 'pay-several') === '16,000');
+            later(100);
+            expect(press(root, 'pay-several'), 'the first tap').toBeUndefined();
+            later(250);
+            expect(press(root, 'pay-several'), 'the second tap').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS);
+            expect(press(root, 'pay-several'), 'after the grace').toContain('amount=16000.00');
+        });
+    });
+
+    describe('the-press-again-line-shows-only-over-a-pay-press-that-was-absorbed', () => {
+        /**
+         * CRITIC-CARRYOVER-4 item 4, through the real app (the sheet's half
+         * is in render.test.ts under the same name). The refresh control's
+         * ask came back after a re-read had taken an item out under it: the
+         * sheet was handed back, and `onPayRecordMoved` defaulted to a Pay
+         * press — so the sheet the app painted asked for the press again
+         * although nobody had pressed Pay. The caller says now.
+         */
+        it('Pay several: the refresh control’s tail paints "check the total", never the press-again line', async () => {
+            const RATE = 20_000_000n;
+            const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+            const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+            priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+            const { root } = bootStall(phone(new Map([[A, USD_A], [B, USD_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            // The open's own rate has landed: the sheet composes, and is the
+            // one the refresh control is pressed on.
+            await until(() => root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]') !== null);
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]'), 'composed').not.toBeNull();
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            priceControl.fetch = async (code) => {
+                await gate;
+                return code === 'usd' ? RATE : undefined;
+            };
+            (root.querySelector('[data-role="pay-several"] [data-role="pay-refresh"]') as HTMLButtonElement).click();
+            await republish([
+                ['c4'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: USD_B })],
+                ['c5'.repeat(32), encodeRemovalHex(A)],
+            ]);
+            await until(() => (root.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '').includes('Plum Jam'));
+            expect(root.querySelector('[data-role="pay-several"]'), 'recomposed in place').toBe(sheet);
+            release();
+            await until(() => root.querySelector('[data-role="pay-several"]') !== sheet);
+            const dropped = root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent;
+            expect(root.querySelector('[data-role="pay-several"]'), 'handed back and painted again').not.toBe(sheet);
+            expect(viewOf(root)?.payRecordMovedUnpressed, 'no Pay press did it').toBe(true);
+            expect(dropped).toBe(selectionDroppedCheck('Plum Jam', 1));
         });
     });
 });

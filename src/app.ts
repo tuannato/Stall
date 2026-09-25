@@ -567,11 +567,22 @@ export function boot(
     let payRecordMovedFor: string | undefined;
     let payRecordMovedItems: readonly string[] = [];
     /**
-     * Whether the paint that says so followed a press. An ask's tail that
-     * found the records moved (`sheetOutOfStep`) is no press, and its line
-     * asks for none (`payRecordMovedUnpressed`).
+     * Whether the latest word on it was an absorbed PAY press. A change in
+     * place, an ask's tail that found the records moved (`sheetOutOfStep`)
+     * and the refresh control are no Pay press, and a press that opened a
+     * wallet leaves no "again" to ask for: the line then asks for none
+     * (`payRecordMovedUnpressed`; CRITIC-CARRYOVER-4 item 4).
      */
-    let payRecordMovedPressed = true;
+    let payRecordMovedPressed = false;
+    /**
+     * When the figure on that sheet last changed under the buyer, on the
+     * page's monotonic clock — stamped by the sheet as it paints the change
+     * (`onPayFigureChanged`), or here when a paint of this app's puts a new
+     * figure on it — so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of it
+     * opens nothing, across the repaint the first such press asks for
+     * (CRITIC-CARRYOVER-4 items 1, 2 and 6). Cleared with `payRecordMovedFor`.
+     */
+    let payChangedAt: number | undefined;
     /**
      * The records the open pay sheet was last painted from — the ones its
      * figure is composed of (`paint`). What a press found moved is judged
@@ -1357,6 +1368,7 @@ export function boot(
                 ? {
                       payRecordMoved: payRecordMovedItems,
                       ...(payRecordMovedPressed ? {} : { payRecordMovedUnpressed: true as const }),
+                      ...(payChangedAt === undefined ? {} : { payChangedAt }),
                   }
                 : {}),
             selection: new Map(selection),
@@ -1486,8 +1498,26 @@ export function boot(
             },
             onPayRate: (timeoutMs) => readPayRate(timeoutMs),
             onPayRecords: () => recordsNow(),
-            onPayRecordMoved: (tokenId) => {
-                onPayRecordMoved(tokenId);
+            onPayRecordMoved: (tokenId, pressed) => {
+                onPayRecordMoved(tokenId, pressed);
+            },
+            onPayFigureChanged: (atMs, tokenIds) => {
+                // The sheet changed in place and said so with no press: the
+                // app keeps what changed and when, for the next paint.
+                const key = payOverlayKey(state.view.overlay);
+                if (key === undefined) {
+                    return;
+                }
+                const known = payRecordMovedFor === key ? payRecordMovedItems : [];
+                payRecordMovedFor = key;
+                payRecordMovedItems = [...known, ...tokenIds.filter((tokenId) => !known.includes(tokenId))];
+                payRecordMovedPressed = false;
+                payChangedAt = atMs;
+            },
+            onPayWalletOpened: () => {
+                if (payRecordMovedFor === payOverlayKey(state.view.overlay)) {
+                    payRecordMovedPressed = false;
+                }
             },
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;
@@ -1569,6 +1599,7 @@ export function boot(
                 }
                 payRecordMovedFor = undefined;
                 payRecordMovedItems = [];
+                payChangedAt = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -2255,6 +2286,7 @@ export function boot(
         payQuantity = undefined;
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
+        payChangedAt = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2285,6 +2317,7 @@ export function boot(
             ) {
                 return;
             }
+            payRateLanded();
             if (sheetOutOfStep()) {
                 onPayRecordMoved(tokenId, false);
                 return;
@@ -2313,6 +2346,20 @@ export function boot(
      */
     const sheetOutOfStep = (): boolean =>
         movedRecords(payPainted, recordsNow()).length > 0 || rateForAnotherUnit();
+
+    /**
+     * An ask's rate landed on a sheet whose figure had already changed under
+     * the buyer: the figure the paint that follows puts on screen is a
+     * change in its own right — it was not there while the feeds were asked
+     * — and its grace starts when it is painted, never at the change that
+     * made the sheet ask (CRITIC-CARRYOVER-4 item 6). A fresh sheet's first
+     * figure is no change.
+     */
+    const payRateLanded = (): void => {
+        if (payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)) {
+            payChangedAt = performance.now();
+        }
+    };
 
     /** True for a quote written in XEC: its sheet reads no rate, so no feed is asked. */
     const quoteNeedsNoRate = (tokenId: string): boolean =>
@@ -2361,6 +2408,7 @@ export function boot(
         payQuantity = undefined;
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
+        payChangedAt = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -2379,6 +2427,7 @@ export function boot(
             if (claimed !== generation || state.view.overlay.kind !== 'pay-several') {
                 return;
             }
+            payRateLanded();
             if (sheetOutOfStep()) {
                 onPayRecordMoved(undefined, false);
                 return;
@@ -2388,33 +2437,45 @@ export function boot(
     };
 
     /**
-     * A Pay press found the seller's record moved under its open sheet (the
-     * critic's final merge, item 11), or was the first press after a re-read
-     * recomposed the sheet in place (the owner, 2026-09-25: absorbed once).
-     * A sheet holds the live paint, so the re-read that moved it is in
-     * `state.view` and not in the app's paint: paint the sheet again from
-     * the records as they stand — "Pay several"'s choice pruned as every
-     * paint prunes it — saying so, and the next press is the one that opens
-     * a wallet, the moved-rate valve's shape. The press sent nothing. A
+     * A press found the seller's record moved under its open sheet (the
+     * critic's final merge, item 11), or was a Pay press inside the grace
+     * of a change on screen (`PAY_RECOMPOSE_GRACE_MS`; the owner,
+     * 2026-09-25, a window since CRITIC-CARRYOVER-4). A sheet holds the
+     * live paint, so the re-read that moved it is in `state.view` and not
+     * in the app's paint: paint the sheet again from the records as they
+     * stand — "Pay several"'s choice pruned as every paint prunes it —
+     * saying so, carrying the grace (`payChangedAt`), and a press after the
+     * grace is the one that opens a wallet, the moved-rate valve's shape.
+     * The press sent nothing. A
      * record now in a unit the held rate was not read for asks for its own
      * rate, as an open does; until it answers the paint above carries no
      * rate (`payRateUnit`), so no figure is composed across units.
      *
-     * `pressed` is false for an ask's tail (`sheetOutOfStep`): no press was
-     * made, so the line asks for none (`payRecordMovedUnpressed`).
+     * `pressed` says whether a PAY press did it, and only then does the line
+     * ask for the press again: never for an ask's tail (`sheetOutOfStep`),
+     * never for the refresh control (CRITIC-CARRYOVER-4 item 4). The caller
+     * says which; there is no default.
      */
-    const onPayRecordMoved = (tokenId?: string, pressed = true): void => {
+    const onPayRecordMoved = (tokenId: string | undefined, pressed: boolean): void => {
         const key = payOverlayKey(state.view.overlay);
         if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
             return;
         }
         // Judged against the records the sheet was painted from: the line
-        // says what the buyer was shown moved, and names it on "Pay several".
+        // says what the buyer was shown moved, and names it on "Pay several"
+        // — beside whatever the sheet already said changed in place.
         const moved = movedRecords(payPainted, recordsNow());
-        if (moved.length > 0) {
+        const known = payRecordMovedFor === key ? payRecordMovedItems : [];
+        const fresh = moved.filter((tokenId) => !known.includes(tokenId));
+        if (known.length + fresh.length > 0) {
             payRecordMovedFor = key;
-            payRecordMovedItems = moved;
+            payRecordMovedItems = [...known, ...fresh];
             payRecordMovedPressed = pressed;
+            // A move the sheet never painted is a new figure this paint puts
+            // on screen: its grace starts now.
+            if (fresh.length > 0) {
+                payChangedAt = performance.now();
+            }
         }
         paint();
         const over = state.view.overlay;
@@ -2443,6 +2504,7 @@ export function boot(
             if (claimed !== generation || payOverlayKey(state.view.overlay) !== key) {
                 return;
             }
+            payRateLanded();
             if (sheetOutOfStep()) {
                 // Moved again while its own rate was asked for: a tail, no press.
                 onPayRecordMoved(tokenId, false);
@@ -2845,6 +2907,7 @@ export function boot(
                         ) {
                             return;
                         }
+                        payRateLanded();
                         if (sheetOutOfStep()) {
                             onPayRecordMoved(tokenId, false);
                             return;
@@ -2855,6 +2918,7 @@ export function boot(
             });
             payRecordMovedFor = undefined;
             payRecordMovedItems = [];
+            payChangedAt = undefined;
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },

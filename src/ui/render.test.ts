@@ -9158,7 +9158,7 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
             new MouseEvent('click', { bubbles: true, cancelable: true }),
         );
         expect(open).not.toHaveBeenCalled();
-        expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
         expect(h.onPayRate, 'no valve runs over a record that moved').not.toHaveBeenCalled();
         open.mockRestore();
     });
@@ -9183,7 +9183,7 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
-        expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
         expect(open).not.toHaveBeenCalled();
         // The sheet is recomposed in place from the record as it stands, at
         // the rate it already held — never at the answer the ask brought
@@ -9364,13 +9364,18 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
      * SAME sheet node from the record as it stands: the figure,
      * `seller-price`, the surcharge, the rate row, both links, the code and
      * the restated figure, the buyer's quantity kept — one bigint for all of
-     * them — and the line says so; the next press is absorbed once and
-     * hands the sheet back, and the press after it opens. A record gone says
-     * `PAY_QUOTE_GONE`, one in a unit this page does not paint
-     * `PAY_QUOTE_UNSHOWN`, once each, with no figure, code or Pay. A record
-     * back to what the sheet was opened on clears the line and the absorb.
+     * them — and the line says so; every press inside the grace
+     * (`PAY_RECOMPOSE_GRACE_MS`) is absorbed and hands the sheet back — a
+     * double tap included (CRITIC-CARRYOVER-4 item 1) — and a press after it
+     * opens. A record gone says `PAY_QUOTE_GONE`, one in a unit this page
+     * does not paint `PAY_QUOTE_UNSHOWN`, once each, with no figure, code or
+     * Pay. A record back to what the sheet was opened on is a change of its
+     * own (`a-return-to-the-opened-record-is-a-change-with-its-own-grace`).
      */
     const OTHER = '7e'.repeat(32);
+    afterEach(() => {
+        vi.useRealTimers();
+    });
     const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
         prices,
         known: true,
@@ -9401,7 +9406,8 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
     ] as const;
 
     for (const u of units) {
-        it(`the single sheet, ${u.unit}: recomposed in place, quantity kept, the press absorbed once`, () => {
+        it(`the single sheet, ${u.unit}: recomposed in place, quantity kept, every press inside the grace absorbed`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
             let now = records(new Map([[TOKEN_ID, u.before]]));
             const root = document.createElement('div');
             const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
@@ -9448,14 +9454,22 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(h.onPayRecordMoved, 'the re-read repaints nothing').not.toHaveBeenCalled();
 
             expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
-            expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(TOKEN_ID, true);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'and the line asks for it again').toBe(
+                copy.PAY_QUOTE_CHANGED,
+            );
             // The mock hands nothing back, so the same sheet takes the next
-            // press — once absorbed, never twice — and the link is the figure.
+            // press: inside the grace it is absorbed too (a double tap);
+            // past it, the link is the figure.
+            expect(pressForUrl(root, 'pay-cashtab'), 'a second tap inside the grace').toBeUndefined();
+            expect(h.onPayRecordMoved).toHaveBeenCalledTimes(2);
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, memo));
             expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats, memo));
         });
 
-        it(`Pay several, ${u.unit}: recomposed in place, the line names the item, the press absorbed once`, () => {
+        it(`Pay several, ${u.unit}: recomposed in place, the line names the item, every press inside the grace absorbed`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
             const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
             const choice = new Map([[TOKEN_ID, 2n], [OTHER, 1n]]);
             let now = records(new Map([[TOKEN_ID, u.before], [OTHER, u.before]]));
@@ -9493,7 +9507,12 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(pathOf(sheet), 'the code is the new total').toBe(codeFor(sats, memoHex));
 
             expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
-            expect(h.onPayRecordMoved).toHaveBeenCalledWith();
+            expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'and the line asks for it again').toBe(
+                copy.payItemsChanged('Roasted Beans'),
+            );
+            expect(pressForUrl(root, 'pay-cashtab'), 'a second tap inside the grace').toBeUndefined();
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, memoHex));
         });
     }
@@ -9574,40 +9593,6 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
         );
         expect(sheet.querySelector('[data-role="pay-cashtab"]')).toBeNull();
         expect(sheet.querySelector('[data-role="pay-qr"]')).toBeNull();
-    });
-
-    it('a record back to what the sheet was opened on clears the line and the absorbed press', () => {
-        for (const kind of ['pay', 'pay-several'] as const) {
-            const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
-            const moved = { ...xec, amount: 900_000n };
-            let now = records(new Map([[TOKEN_ID, xec]]));
-            const root = document.createElement('div');
-            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
-            renderStall(
-                root,
-                payView({
-                    prices: new Map([[TOKEN_ID, xec]]),
-                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
-                    selectionOpen: true,
-                    selection: new Map([[TOKEN_ID, 1n]]),
-                }),
-                h,
-            );
-            const sheet = root.querySelector(`[data-role="${kind}"]`)!;
-            for (const back of [moved, undefined]) {
-                now = records(back === undefined ? new Map() : new Map([[TOKEN_ID, back]]));
-                recheckPaySheet(root);
-                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent || sheet.querySelector('[data-role="pay-lost"]')?.textContent, kind).not.toBe('');
-                now = records(new Map([[TOKEN_ID, xec]]));
-                recheckPaySheet(root);
-                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', `${kind}: the line clears`).toBe('');
-                expect(sheet.querySelector('[data-role="pay-lost"]'), `${kind}: nothing left to say`).toBeNull();
-                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, `${kind}: nothing restated`).toBe(copy.PAY_CASHTAB);
-                expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe('5,000');
-            }
-            expect(pressForUrl(root, 'pay-cashtab'), `${kind}: the press opens at once`).toContain('amount=5000.00');
-            expect(h.onPayRecordMoved).not.toHaveBeenCalled();
-        }
     });
 });
 
@@ -9693,10 +9678,12 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
      * app's half — the absorbed press saying so — is in app.live.test.ts.
      * The press after an in-place recompose was absorbed however long after
      * it came: a buyer who read the new figure and its line and pressed a
-     * minute later got a dead press. Now only a press within
-     * `PAY_RECOMPOSE_GRACE_MS` of the recompose is absorbed, measured on the
-     * sheet's own clock (`Date.now()`, faked here); a press after it opens
-     * the new figure. The in-place line asks for no press: its first clause.
+     * minute later got a dead press. Only a press within
+     * `PAY_RECOMPOSE_GRACE_MS` of the change is absorbed, timed by the
+     * press's own `event.timeStamp` against the change's `performance.now()`
+     * stamp — the page's monotonic clock (CRITIC-CARRYOVER-4 item 6), faked
+     * here; a press after it opens the new figure. The in-place line asks
+     * for no press: its first clause.
      */
     const OTHER = '7d'.repeat(32);
     const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
@@ -9708,7 +9695,6 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
         complete: true,
         decided: new Set<string>(),
     });
-    const T = Date.UTC(2026, 8, 25, 12);
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -9719,8 +9705,7 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
 
     for (const kind of ['pay', 'pay-several'] as const) {
         it(`${kind}: a press at the grace's last millisecond is absorbed, and one past it opens the new figure`, () => {
-            vi.useFakeTimers({ toFake: ['Date'] });
-            vi.setSystemTime(T);
+            vi.useFakeTimers({ toFake: ['performance'] });
             const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
             let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
             const root = document.createElement('div');
@@ -9743,23 +9728,247 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
             now = records(new Map([[TOKEN_ID, moved], [OTHER, xec]]));
             recheckPaySheet(root);
             expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'in place, no press was made').toBe(line);
-            vi.setSystemTime(T + PAY_RECOMPOSE_GRACE_MS);
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
             expect(pressForUrl(root, 'pay-cashtab'), 'inside the grace: absorbed').toBeUndefined();
             expect(h.onPayRecordMoved, 'handed back to be said again').toHaveBeenCalledTimes(1);
 
             // Another re-read under the same sheet; the buyer presses after
             // the grace, over the figure and its line.
-            const T2 = T + 60_000;
-            vi.setSystemTime(T2);
+            vi.advanceTimersByTime(60_000);
             now = records(new Map([[TOKEN_ID, again], [OTHER, xec]]));
             recheckPaySheet(root);
             const sats = satsForQuote(again, 1n, undefined)!;
             expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
-            vi.setSystemTime(T2 + PAY_RECOMPOSE_GRACE_MS + 1);
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
             expect(pressForUrl(root, 'pay-cashtab'), 'after the grace: the new figure opens').toBe(cashtabPayUrl(ADDR, sats, memo));
             expect(h.onPayRecordMoved, 'nothing handed back').toHaveBeenCalledTimes(1);
         });
     }
+
+    it('a press is timed by its own event, not by when the handler ran', () => {
+        // A click queued behind a long task: pressed inside the grace, its
+        // handler runs after it. The press's own `timeStamp` decides.
+        vi.useFakeTimers({ toFake: ['performance'] });
+        let now = records(new Map([[TOKEN_ID, xec]]));
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        renderStall(root, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h);
+        now = records(new Map([[TOKEN_ID, moved]]));
+        recheckPaySheet(root);
+        vi.advanceTimersByTime(200);
+        const press = new MouseEvent('click', { bubbles: true, cancelable: true });
+        vi.advanceTimersByTime(5_000);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        root.querySelector('[data-role="pay-cashtab"]')!.dispatchEvent(press);
+        expect(open, 'pressed 200 ms after the change: absorbed').not.toHaveBeenCalled();
+        open.mockRestore();
+    });
+});
+
+describe('a-double-tap-inside-the-grace-opens-nothing', () => {
+    /**
+     * CRITIC-CARRYOVER-4 item 1 (the owner's grace rule, read as a window).
+     * The grace absorbed ONE press: the press cleared it, and the sheet the
+     * app painted next started with none — so the second tap of a double
+     * tap opened the new figure a few hundred milliseconds after it
+     * appeared. Every Pay press inside the grace opens nothing now: on the
+     * same sheet, and on the sheet the app paints next, which carries the
+     * stamp (`payChangedAt`). The app's half is in app.live.test.ts.
+     */
+    const OTHER = '7b'.repeat(32);
+    const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+    const moved = { ...xec, amount: 900_000n };
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        const overlay = kind === 'pay' ? ({ kind: 'pay', tokenId: TOKEN_ID } as const) : ({ kind: 'pay-several' } as const);
+        const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+
+        it(`${kind}: two taps on the same sheet, then one after the grace`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            let now = records(new Map([[TOKEN_ID, xec]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayFigureChanged: vi.fn() };
+            renderStall(
+                root,
+                payView({ tokens, prices: new Map([[TOKEN_ID, xec]]), overlay, selectionOpen: true, selection: new Map([[TOKEN_ID, 1n]]) }),
+                h,
+            );
+            now = records(new Map([[TOKEN_ID, moved]]));
+            recheckPaySheet(root);
+            expect(h.onPayFigureChanged, 'the change is handed to the app with its stamp').toHaveBeenCalledWith(
+                performance.now(),
+                [TOKEN_ID],
+            );
+            vi.advanceTimersByTime(100);
+            expect(pressForUrl(root, 'pay-cashtab'), 'the first tap').toBeUndefined();
+            vi.advanceTimersByTime(150);
+            expect(pressForUrl(root, 'pay-cashtab'), 'the second tap').toBeUndefined();
+            expect(h.onPayRecordMoved).toHaveBeenCalledTimes(2);
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
+            expect(pressForUrl(root, 'pay-cashtab'), 'after the grace').toContain('amount=9000.00');
+        });
+
+        it(`${kind}: the sheet the app paints next carries the grace`, () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            vi.advanceTimersByTime(10_000);
+            const changedAt = performance.now();
+            vi.advanceTimersByTime(300);
+            const h = { ...handlers(), onPayRecords: () => records(new Map([[TOKEN_ID, moved]])), onPayRecordMoved: vi.fn() };
+            const root = document.createElement('div');
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: new Map([[TOKEN_ID, moved]]),
+                    overlay,
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n]]),
+                    payRecordMoved: [TOKEN_ID],
+                    payChangedAt: changedAt,
+                }),
+                h,
+            );
+            expect(pressForUrl(root, 'pay-cashtab'), '300 ms after the change, on a fresh sheet').toBeUndefined();
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true);
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
+            expect(pressForUrl(root, 'pay-cashtab'), 'after the grace').toContain('amount=9000.00');
+            expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent, 'still restated').toBe(copy.payFigure('9,000'));
+        });
+    }
+});
+
+describe('a-return-to-the-opened-record-is-a-change-with-its-own-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-4 item 2. A re-read that brought the record back to
+     * what the sheet was opened on cleared the line, the restated figure and
+     * the absorb: a buyer reading 4,000 for ten seconds saw it flip back to
+     * 5,000 under "Pay with Cashtab", and a press 100 ms after the flip
+     * opened 5,000. A return is a change of the figure on screen like any
+     * other: stamped, with its own grace, the in-place line kept and the
+     * figure restated. The same for a record that left and came back.
+     */
+    const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+    const moved = { ...xec, amount: 400_000n };
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const away of ['moved', 'gone'] as const) {
+            it(`${kind}: back from ${away} to the record it was opened on`, () => {
+                vi.useFakeTimers({ toFake: ['performance'] });
+                let now = records(new Map([[TOKEN_ID, xec]]));
+                const root = mountedRoot();
+                const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+                renderStall(
+                    root,
+                    payView({
+                        prices: new Map([[TOKEN_ID, xec]]),
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+                now = records(away === 'moved' ? new Map([[TOKEN_ID, moved]]) : new Map());
+                recheckPaySheet(root);
+                vi.advanceTimersByTime(10_000);
+
+                now = records(new Map([[TOKEN_ID, xec]]));
+                recheckPaySheet(root);
+                const line = kind === 'pay' ? copy.PAY_QUOTE_CHANGED_UNPRESSED : copy.payItemsChangedUnpressed('Roasted Beans');
+                expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe('5,000');
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'the in-place line stays').toBe(line);
+                expect(sheet.querySelector('[data-role="pay-lost"]')).toBeNull();
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the figure is restated').toBe(
+                    copy.payFigure('5,000'),
+                );
+                expect((document.getElementById('sr-live')?.textContent ?? '').trim(), 'and spoken').toBe(line);
+
+                vi.advanceTimersByTime(100);
+                expect(pressForUrl(root, 'pay-cashtab'), '100 ms after the flip back').toBeUndefined();
+                expect(h.onPayRecordMoved).toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, true);
+                vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
+                expect(pressForUrl(root, 'pay-cashtab'), 'after its grace').toContain('amount=5000.00');
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'never the plain control again').toBe(
+                    copy.payFigure('5,000'),
+                );
+            });
+        }
+    }
+});
+
+describe('a-rate-answer-that-moves-the-figure-restarts-the-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-4 item 6. The grace started at the recompose, not
+     * when the figure first painted: after a unit move the sheet asks its
+     * new unit's rate in place, and an answer landing after the grace put
+     * the figure on screen with Pay under it — a press right away opened it.
+     * The answer that moves the figure is a change of its own.
+     */
+    const usd = { code: 'usd', exponent: 2, amount: 500n } as TokenPrice;
+    const eur = { code: 'eur', exponent: 2, amount: 500n } as TokenPrice;
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('the figure a late rate answer paints is absorbed for the grace, and opens after it', async () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        let now = { prices: new Map([[TOKEN_ID, usd]]), known: true, complete: true, decided: new Set<string>() };
+        let answer: (value: { rate: bigint; atMs: number }) => void = () => undefined;
+        const h = {
+            ...handlers(),
+            onPayRecords: () => now,
+            onPayRecordMoved: vi.fn(),
+            onPayFigureChanged: vi.fn(),
+            onPayRate: vi.fn(
+                () =>
+                    new Promise<{ rate: bigint; atMs: number }>((resolve) => {
+                        answer = resolve;
+                    }),
+            ),
+        };
+        const root = mountedRoot();
+        renderStall(
+            root,
+            payView({ prices: new Map([[TOKEN_ID, usd]]), overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...PAY_RATE } }),
+            h,
+        );
+        now = { ...now, prices: new Map([[TOKEN_ID, eur]]) };
+        recheckPaySheet(root);
+        expect(h.onPayRate, 'the new unit is asked for in place').toHaveBeenCalledTimes(1);
+        expect(root.querySelector('[data-role="pay-cashtab"]'), 'no figure, no Pay, while it is asked').toBeNull();
+
+        vi.advanceTimersByTime(5_000);
+        answer({ rate: scaleRate(0.00002)!, atMs: Date.now() });
+        await Promise.resolve();
+        await Promise.resolve();
+        const sats = satsForQuote(eur, 1n, scaleRate(0.00002)!)!;
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(formatXec(sats));
+        expect(h.onPayFigureChanged, 'the figure it painted is a change').toHaveBeenLastCalledWith(performance.now(), [TOKEN_ID]);
+        vi.advanceTimersByTime(100);
+        expect(pressForUrl(root, 'pay-cashtab'), '100 ms after the figure appeared').toBeUndefined();
+        vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS);
+        expect(pressForUrl(root, 'pay-cashtab'), 'after its grace').toBe(
+            cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!),
+        );
+    });
 });
 
 describe('an-in-place-recompose-is-spoken-and-keeps-focus-in-the-sheet', () => {
@@ -9857,6 +10066,320 @@ describe('an-in-place-recompose-is-spoken-and-keeps-focus-in-the-sheet', () => {
         expect(headOf(rebuilt)).toEqual({ title: copy.PAY_TITLE, sub: '' });
         expect(rebuilt.getAttribute('aria-label')).toBe(copy.PAY_TITLE);
     });
+
+    it('a control that leaves the sheet — the rate row, on a move to XEC — hands focus to the line, never out of the dialog', () => {
+        // CRITIC-CARRYOVER-4 item 5: the rate row is removed, not hidden,
+        // and focus on its refresh control fell to the page behind.
+        const usd = { code: 'usd', exponent: 2, amount: 500n } as TokenPrice;
+        let now = records(new Map([[TOKEN_ID, usd]]));
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayRate: vi.fn() };
+        const root = mountedRoot();
+        renderStall(
+            root,
+            payView({ prices: new Map([[TOKEN_ID, usd]]), overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...PAY_RATE } }),
+            h,
+        );
+        const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+        (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).focus();
+        expect(document.activeElement?.getAttribute('data-role')).toBe('pay-refresh');
+        now = records(new Map([[TOKEN_ID, xec]]));
+        recheckPaySheet(root);
+        expect(sheet.querySelector('[data-role="pay-refresh"]'), 'the rate row left').toBeNull();
+        expect(document.activeElement, 'focus stays in the dialog, on the line').toBe(sheet.querySelector('[data-role="pay-valve"]'));
+    });
+
+    it('a line focus was on, taken off by a return, hands focus to the line that stands', () => {
+        let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        const { root, sheet } = sheetFor('pay', h);
+        (sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement).focus();
+        now = records(new Map([[OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(document.activeElement, 'on the lost line').toBe(sheet.querySelector('[data-role="pay-lost"]'));
+        now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(sheet.querySelector('[data-role="pay-lost"]'), 'the lost line left').toBeNull();
+        expect(document.activeElement, 'focus stays in the dialog, on the line that stands').toBe(
+            sheet.querySelector('[data-role="pay-valve"]'),
+        );
+        expect(spoken()).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: an absorbed press is spoken`, () => {
+            let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            const { root } = sheetFor(kind, h);
+            now = records(new Map([[TOKEN_ID, { ...xec, amount: 900_000n }], [OTHER, xec]]));
+            recheckPaySheet(root);
+            expect(pressForUrl(root, 'pay-cashtab'), 'absorbed').toBeUndefined();
+            expect(spoken()).toBe(kind === 'pay' ? copy.PAY_QUOTE_CHANGED : copy.payItemsChanged('Roasted Beans'));
+        });
+    }
+
+    it('Pay several: a return speaks what returned, never an older sentence still standing', () => {
+        // The critic's sequence: an item the app's prune took out before the
+        // sheet opened stands on the dropped line; a chosen item moves and
+        // comes back. What is spoken is the return.
+        let now = records(new Map([[TOKEN_ID, xec]]));
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        const root = mountedRoot();
+        renderStall(
+            root,
+            payView({
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                prices: new Map([[TOKEN_ID, xec]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n]]),
+                selectionDropped: [OTHER],
+            }),
+            h,
+        );
+        now = records(new Map([[TOKEN_ID, { ...xec, amount: 900_000n }]]));
+        recheckPaySheet(root);
+        now = records(new Map([[TOKEN_ID, xec]]));
+        recheckPaySheet(root);
+        expect(spoken()).toBe(copy.payItemsChangedUnpressed('Roasted Beans'));
+        expect(spoken()).not.toContain('Green Tea');
+    });
+});
+
+describe('the-press-again-line-shows-only-over-a-pay-press-that-was-absorbed', () => {
+    /**
+     * CRITIC-CARRYOVER-4 item 4; the owner kept "… — check the total and
+     * press Pay again" (`selectionDroppedCheckPressed`, and the single
+     * sheet's `PAY_QUOTE_CHANGED`) with three fixes. The line asks for the
+     * press again only where a Pay control stands and a PAY press was
+     * absorbed: never over a remainder under the dust floor, never after the
+     * refresh control (which hands the sheet back with `pressed` false), and
+     * no longer once a press has opened a wallet. The app's half — the
+     * refresh control's tail and a wallet opened, across a repaint — is in
+     * app.live.test.ts.
+     */
+    const OTHER = '7f'.repeat(32);
+    const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+    const xec = (amount: bigint) => ({ code: 'xec', exponent: 2, amount }) as TokenPrice;
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    const droppedOf = (root: HTMLElement) =>
+        root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent ?? '';
+    const valveOf = (root: HTMLElement, kind: string) =>
+        root.querySelector(`[data-role="${kind}"] [data-role="pay-valve"]`)?.textContent ?? '';
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('Pay several: over an absorbed Pay press, and back to "check the total" once a wallet opens', () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        let now = records(new Map([[TOKEN_ID, xec(500_000n)], [OTHER, xec(300_000n)]]));
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayWalletOpened: vi.fn() };
+        renderStall(
+            root,
+            payView({
+                tokens,
+                prices: now.prices,
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+            }),
+            h,
+        );
+        now = records(new Map([[OTHER, xec(300_000n)]]));
+        recheckPaySheet(root);
+        expect(droppedOf(root), 'in place, no press').toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+        expect(pressForUrl(root, 'pay-cashtab'), 'a Pay press inside the grace').toBeUndefined();
+        expect(h.onPayRecordMoved).toHaveBeenCalledWith(undefined, true);
+        expect(droppedOf(root), 'the press-again line').toBe(copy.selectionDroppedCheckPressed('Roasted Beans', 1));
+        vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+        expect(pressForUrl(root, 'pay-cashtab')).toContain('amount=3000.00');
+        expect(h.onPayWalletOpened).toHaveBeenCalledTimes(1);
+        expect(droppedOf(root), 'a wallet opened: nothing to press again').toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+    });
+
+    it('the single sheet: over an absorbed Pay press, and back to its first clause once a wallet opens', () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        let now = records(new Map([[TOKEN_ID, xec(500_000n)]]));
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayWalletOpened: vi.fn() };
+        renderStall(root, payView({ prices: now.prices, overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h);
+        now = records(new Map([[TOKEN_ID, xec(900_000n)]]));
+        recheckPaySheet(root);
+        expect(pressForUrl(root, 'pay-cashtab')).toBeUndefined();
+        expect(valveOf(root, 'pay')).toBe(copy.PAY_QUOTE_CHANGED);
+        vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+        expect(pressForUrl(root, 'pay-cashtab')).toContain('amount=9000.00');
+        expect(valveOf(root, 'pay')).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+        expect(h.onPayWalletOpened).toHaveBeenCalledTimes(1);
+    });
+
+    it('never over a remainder under the dust floor, where no Pay control stands', () => {
+        // The critic's sequence: the app painted the sheet again after a Pay
+        // press found Roasted Beans gone, and what stayed is 3 XEC.
+        const several = paint(
+            payView({
+                tokens,
+                prices: new Map([[OTHER, xec(300n)]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[OTHER, 1n]]),
+                selectionDropped: [TOKEN_ID],
+                payRecordMoved: [TOKEN_ID],
+            }),
+        ).root;
+        expect(several.querySelector('[data-role="pay-cashtab"]'), 'no Pay control').toBeNull();
+        expect(several.textContent).toContain(copy.PAY_SUB_DUST_SEVERAL);
+        expect(droppedOf(several)).toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+        const single = paint(
+            payView({ prices: new Map([[TOKEN_ID, xec(300n)]]), overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRecordMoved: [TOKEN_ID] }),
+        ).root;
+        expect(single.querySelector('[data-role="pay-cashtab"]'), 'no Pay control').toBeNull();
+        expect(valveOf(single, 'pay')).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+    });
+
+    it('Pay several: a re-read that only changes an item already out of the choice starts no grace and says nothing', () => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        const usd = { code: 'usd', exponent: 2, amount: 500n } as TokenPrice;
+        let now = records(new Map([[TOKEN_ID, xec(500_000n)], [OTHER, xec(300_000n)]]));
+        const root = mountedRoot();
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayFigureChanged: vi.fn() };
+        renderStall(
+            root,
+            payView({
+                tokens,
+                prices: now.prices,
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+            }),
+            h,
+        );
+        // Roasted Beans moves to another unit: out of the choice, said.
+        now = records(new Map([[TOKEN_ID, usd], [OTHER, xec(300_000n)]]));
+        recheckPaySheet(root);
+        expect(droppedOf(root)).toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+        expect(h.onPayFigureChanged).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+        const said = document.getElementById('sr-live')?.textContent;
+        // It is re-priced in that other unit: nothing on screen moves.
+        now = records(new Map([[TOKEN_ID, { ...usd, amount: 600n }], [OTHER, xec(300_000n)]]));
+        recheckPaySheet(root);
+        expect(h.onPayFigureChanged, 'no change stamped').toHaveBeenCalledTimes(1);
+        expect(document.getElementById('sr-live')?.textContent, 'nothing spoken').toBe(said);
+        expect(pressForUrl(root, 'pay-cashtab'), 'the press is not dead: it opens').toContain('amount=3000.00');
+        expect(h.onPayRecordMoved).not.toHaveBeenCalled();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: never after the refresh control`, () => {
+            const usd = { code: 'usd', exponent: 2, amount: 500n } as TokenPrice;
+            let now = records(new Map([[TOKEN_ID, usd], [OTHER, usd]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn(), onPayRate: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: now.prices,
+                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                    payRate: { ...PAY_RATE },
+                }),
+                h,
+            );
+            // The records move and nothing tells the sheet: the refresh
+            // control's own record check finds it.
+            now = records(kind === 'pay' ? new Map([[TOKEN_ID, { ...usd, amount: 700n }], [OTHER, usd]]) : new Map([[OTHER, usd]]));
+            (root.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+            expect(h.onPayRecordMoved, 'no Pay press did it').toHaveBeenCalledWith(kind === 'pay' ? TOKEN_ID : undefined, false);
+            expect(h.onPayRate).not.toHaveBeenCalled();
+            if (kind === 'pay') {
+                expect(valveOf(root, 'pay')).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+            } else {
+                expect(droppedOf(root)).toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+            }
+        });
+    }
+});
+
+describe('a-recheck-that-changes-the-figure-and-returns-false-never-opens-the-old-link', () => {
+    /**
+     * CRITIC-CARRYOVER-4 item 7. Both press handlers read the link BEFORE
+     * the record check: safe only while every road that changes the figure
+     * inside `recheck()` also answers true or opens the grace. They read it
+     * after now, so whatever the check leaves on screen is what a press
+     * opens. No road today changes the figure without both, so the test
+     * builds one: the press's record check lands a re-read that recomposes
+     * the sheet (a nested check, as a re-read landing under the press
+     * would) and then finds nothing more to move — answering false — with
+     * the change stamped long before the press (the clock held back for the
+     * nested check), so the grace is out of the way and the order alone
+     * decides which link opens.
+     */
+    const OTHER = '79'.repeat(32);
+    const xec = (amount: bigint) => ({ code: 'xec', exponent: 2, amount }) as TokenPrice;
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: the press opens the figure the check left on screen`, () => {
+            const before = new Map([[TOKEN_ID, xec(500_000n)]]);
+            const after = new Map([[TOKEN_ID, xec(900_000n)]]);
+            let now = records(before);
+            let nested = false;
+            let armed = false;
+            let clock = 100_000;
+            const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+            const root = document.createElement('div');
+            const h = {
+                ...handlers(),
+                onPayRecordMoved: vi.fn(),
+                onPayRecords: () => {
+                    if (armed && !nested) {
+                        armed = false;
+                        nested = true;
+                        now = records(after);
+                        const at = clock;
+                        clock = 1_000;
+                        recheckPaySheet(root);
+                        clock = at;
+                        nested = false;
+                    }
+                    return now;
+                },
+            };
+            try {
+                renderStall(
+                    root,
+                    payView({
+                        tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                        prices: before,
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                    }),
+                    h,
+                );
+                armed = true;
+                const url = pressForUrl(root, 'pay-cashtab');
+                expect(root.querySelector(`[data-role="${kind}"] [data-role="price"]`)?.textContent, 'the check moved the figure').toBe('9,000');
+                expect(h.onPayRecordMoved, 'and answered false').not.toHaveBeenCalled();
+                expect(url, 'the link the check left on screen').toContain('amount=9000.00');
+            } finally {
+                spy.mockRestore();
+            }
+        });
+    }
 });
 
 describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
@@ -9876,7 +10399,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
             view: () => payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map([[TOKEN_ID, usd]]), payRate: { ...PAY_RATE } }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd]])),
             at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)!,
-            handedBack: [TOKEN_ID],
+            handedBack: [TOKEN_ID, false],
         },
         {
             name: 'Pay several',
@@ -9891,7 +10414,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
                 }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd], [OTHER, usd]])),
             at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)! + satsForQuote(usd, 1n, rate)!,
-            handedBack: [],
+            handedBack: [undefined, false],
         },
     ] as const;
 
@@ -9979,7 +10502,7 @@ describe('pay-several-asks-the-record-after-the-valve', () => {
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
         expect(open, 'nothing opens').not.toHaveBeenCalled();
         open.mockRestore();
-        expect(h.onPayRecordMoved).toHaveBeenCalledWith();
+        expect(h.onPayRecordMoved, 'a Pay press did it').toHaveBeenCalledWith(undefined, true);
         // Recomposed in place from the moved record at the rate the sheet
         // held (0.00002), never at the answer the ask brought back (0.00001).
         const held = scaleRate(0.00002)!;

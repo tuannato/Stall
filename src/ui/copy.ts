@@ -1791,9 +1791,12 @@ export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
  * recomposed from the record as it stands: a re-read landing under it, in
  * place, or a press that found it moved, which opened nothing. The valve's
  * shape: the figure above is already the new one, the control restates it,
- * and the next press after an in-place recompose is still absorbed. The
- * owner's wording (2026-09-25). A change to the tolerance or the words is
- * not a move: the sheet takes it in place.
+ * and every press inside the grace of the change opens nothing
+ * (`PAY_RECOMPOSE_GRACE_MS`). The owner's wording (2026-09-25), said only
+ * after a PAY press was absorbed, while a Pay control stands, and until a
+ * press opens a wallet — otherwise its first clause
+ * (`PAY_QUOTE_CHANGED_UNPRESSED`; CRITIC-CARRYOVER-4 item 4). A change to
+ * the tolerance or the words is not a move: the sheet takes it in place.
  */
 export const PAY_QUOTE_CHANGED =
     'This quote changed while this sheet was open \u2014 check the figure and press Pay again';
@@ -2047,8 +2050,12 @@ export const selectionDroppedCheck = (names: string, n: number): string =>
     `${selectionDroppedItems(names, n)} \u2014 check the total`;
 /**
  * The same after a Pay press found it within the grace and opened nothing:
- * the pressed form, in the shape of the owner's `payItemsChanged` — the
- * absorbed press changes what the sheet says, and the next press opens.
+ * the pressed form, in the shape of the owner's `payItemsChanged`. The
+ * owner's approved wording (2026-09-25, CRITIC-CARRYOVER-4 item 4), on
+ * three conditions: only where the sheet has a Pay control (never over a
+ * remainder under the dust floor), only after a PAY press was absorbed
+ * (never after the refresh control), and only until a press opens a wallet
+ * — then the line is `selectionDroppedCheck` again.
  */
 export const selectionDroppedCheckPressed = (names: string, n: number): string =>
     `${selectionDroppedItems(names, n)} \u2014 check the total and press Pay again`;
