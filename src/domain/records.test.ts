@@ -107,9 +107,10 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
      * height; the walk that threw later read a newer record mined at 900 by
      * a node that never saw it in its mempool (first-seen 0, unknown).
      * Compared whole, the frozen rank beat the walk and the older figure —
-     * or an item the seller had since removed — came back. The kept read may
-     * outrank the walk only on the one order a walk reading newest block
-     * first can get backwards: both stamps known, the kept one later.
+     * or an item the seller had since removed — came back. The kept read
+     * outranks the walk on §5's ladder (stamps, heights, txid), and a kept
+     * rank with no height never beats a walk rank that has one (the owner,
+     * 2026-09-25).
      */
     const A = 'a'.repeat(64);
     const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
@@ -146,9 +147,33 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
     it('still lets a kept record outrank the walk when both stamps say it is later', () => {
         const read = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { ...walkRank, firstSeen: 1756300000 }]]) };
         expect(mergeFailedRead(read, new Set([A]), kept).prices.get(A)).toEqual(price(500_000n));
-        // Equal stamps: the walk's answer stands.
+        // Equal stamps: the ladder goes on to the heights, and a kept rank
+        // with none never beats a walk rank that has one.
         const tie = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { ...walkRank, firstSeen: 1756400000 }]]) };
         expect(mergeFailedRead(tie, new Set([A]), kept).prices.get(A)).toEqual(price(900_000n));
+    });
+
+    it('follows §5’s ladder where the stamps do not decide: the heights, then the txid', () => {
+        // The critic, 2026-09-25, item 5: the stamps-only rule left the walk
+        // standing wherever the stamps were unknown, where §5 ranks by height
+        // and then txid. The owner: §5's ladder, except the unmined kept rank.
+        const at = (height: number | undefined, txid: string) => ({ height, isFinal: true, txid: txid.repeat(64), firstSeen: 0 });
+        const merge = (keptRank: ReturnType<typeof at>, walkRank: ReturnType<typeof at>) =>
+            mergeFailedRead(
+                { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, walkRank]]) },
+                new Set([A]),
+                { prices: new Map([[A, price(500_000n)]]), ranks: new Map([[A, keptRank]]) },
+            ).prices.get(A);
+        // Same height, both stamps 0: the txid decides, whichever read it came from.
+        expect(merge(at(900, 'f'), at(900, '2')), 'the kept txid is higher').toEqual(price(500_000n));
+        expect(merge(at(900, '2'), at(900, 'f')), 'the walk’s txid is higher').toEqual(price(900_000n));
+        // Both heights known, stamps unknown: the higher block.
+        expect(merge(at(901, '2'), at(900, 'f'))).toEqual(price(500_000n));
+        expect(merge(at(899, 'f'), at(900, '2'))).toEqual(price(900_000n));
+        // A kept rank with no height never beats a mined walk rank, whatever its txid.
+        expect(merge(at(undefined, 'f'), at(900, '2'))).toEqual(price(900_000n));
+        // A walk rank with no height (finalized, unmined) outranks a mined kept one.
+        expect(merge(at(900, 'f'), at(undefined, '2'))).toEqual(price(900_000n));
     });
 });
 

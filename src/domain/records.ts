@@ -16,28 +16,28 @@
  * mined a block BEFORE an older one sits on a later page of the walk than
  * the edit it supersedes. A walk that threw before that page decided the
  * token at the older record, while the kept read — a walk that finished —
- * holds the newer. That is the one order a walk reading newest block first
- * gets backwards, so it is the one the kept read may correct: where both
- * reads decided a token and both winners' first-seen stamps are known
- * (`RecordMaps.ranks`, `knownSeen`), the kept record wins only when its
- * stamp is later. Everywhere else the failed walk's answer stands.
+ * holds the newer. So where both reads decided a token and both carry the
+ * winner's rank (`RecordMaps.ranks`), the two winners are ranked by §5's
+ * own ladder (`keptOutranks`): the first-seen stamps when both are known and
+ * differ, then the heights, then the txid.
  *
- * **Never the whole rank.** A rank is frozen when it is read, and a record
- * read while finalized and unmined ranks above every height. Compared whole,
- * such a kept rank beat a newer record the walk read mined at a height, by
- * a node that never saw it in its mempool (first-seen 0, unknown) — and the
- * older figure, or an item the seller had since removed, came back (the
- * critic's final merge, 2026-09-25, item 1). Without a known stamp on both
- * sides the height ladder is the walk's own order, and the walk has already
- * read it.
+ * **With one exception, and never the whole rank.** A rank is frozen when it
+ * is read, and a record read while finalized and unmined has no height and
+ * ranks above every height. Compared whole, such a kept rank beat a newer
+ * record the walk read mined at a height, by a node that never saw it in
+ * its mempool (first-seen 0, unknown) — and the older figure, or an item the
+ * seller had since removed, came back (the critic's final merge,
+ * 2026-09-25, item 1). So a kept rank with no height never beats a walk
+ * rank with one (the owner, 2026-09-25): the kept record may since have
+ * been mined anywhere, and the walk read what is mined now.
  *
  * So the two are merged per token: the failed walk's decided tokens win,
- * absence included, unless the kept read's winner for that token was first
- * seen later; the kept records fill the tokens the walk never reached. Pure:
- * no network, no DOM.
+ * absence included, unless the kept read's winner for that token outranks
+ * it on that ladder; the kept records fill the tokens the walk never
+ * reached. Pure: no network, no DOM.
  */
 import type { TokenPrice } from './description';
-import { knownSeen, type ManifestRank } from './manifest';
+import { compareManifestRank, knownSeen, type ManifestRank } from './manifest';
 
 /** The four record maps a view carries, as one read left them. */
 export type RecordMaps = {
@@ -64,8 +64,8 @@ export type MergedRecords = {
     /**
      * Every token shown from the kept read: in one of its maps, and either
      * never decided by the walk that threw or decided by it at a record the
-     * kept read's own winner was first seen after. Empty means nothing on
-     * screen is older than this read, and the screen must not say it is.
+     * kept read's own winner outranks. Empty means nothing on screen is older
+     * than this read, and the screen must not say it is.
      */
     readonly keptShown: ReadonlySet<string>;
 };
@@ -90,25 +90,42 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
 }
 
 /**
+ * Whether the kept read's winner for a token outranks the walk's, on §5's
+ * ladder (`compareManifestRank`: known, differing first-seen stamps; then
+ * heights; then txid) — except that a kept rank read before its record was
+ * mined (no height) never beats a walk rank that has one.
+ */
+function keptOutranks(kept: ManifestRank, walk: ManifestRank): boolean {
+    const keptSeen = knownSeen(kept.firstSeen);
+    const walkSeen = knownSeen(walk.firstSeen);
+    if (keptSeen !== undefined && walkSeen !== undefined && keptSeen !== walkSeen) {
+        return keptSeen > walkSeen;
+    }
+    if (kept.height === undefined && walk.height !== undefined) {
+        return false;
+    }
+    return compareManifestRank(kept, walk) > 0;
+}
+
+/**
  * A walk that threw (`read`, resolving `decided`) over the records kept from
  * the last read that finished (`kept`): per token, the walk's answer when it
  * resolved the token — a removal included, which drops the kept record —
- * unless the kept read decided the same token at a record both stamps say
- * was first seen later, and the kept record otherwise.
+ * unless the kept read decided the same token at a record that outranks it
+ * (`keptOutranks`), and the kept record otherwise.
  */
 export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, kept: RecordMaps): MergedRecords {
     // Anything the walk's own maps name it resolved, whatever set it passed.
     const resolved = new Set([...decided, ...decidedOf({ ...read, decided: undefined })]);
-    // A token both reads decided, where both first-seen stamps are known and
-    // the kept read's winner is the later one: the walk stopped before the
-    // page that held it. Never the whole rank — a kept rank read before its
-    // record was mined sits above every height and would beat a newer mined
-    // record whose stamp is unknown.
+    // A token both reads decided, where the kept read's winner outranks the
+    // walk's on §5's ladder: the walk stopped before the page that held it.
+    // A kept rank with no height never beats a walk rank with one
+    // (`keptOutranks`).
     const keptWins = new Set<string>();
     for (const tokenId of resolved) {
-        const mine = knownSeen(read.ranks?.get(tokenId)?.firstSeen);
-        const theirs = knownSeen(kept.ranks?.get(tokenId)?.firstSeen);
-        if (mine !== undefined && theirs !== undefined && theirs > mine) {
+        const mine = read.ranks?.get(tokenId);
+        const theirs = kept.ranks?.get(tokenId);
+        if (mine !== undefined && theirs !== undefined && keptOutranks(theirs, mine)) {
             keptWins.add(tokenId);
         }
     }
