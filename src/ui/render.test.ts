@@ -10346,7 +10346,10 @@ describe('a-sheet-with-no-rate-offers-a-way-to-ask-again', () => {
                         open.mockRestore();
                         expect(h.onPayRate).toHaveBeenCalledTimes(1);
                         if (road === 'refresh') {
-                            expect(document.activeElement, 'the control stayed, and focus on it').toBe(control);
+                            // Hidden while its own ask was out, focus kept in
+                            // the dialog meanwhile and given back with the
+                            // answer (`a-refresh-ask-out-says-asking-and-cannot-ask-twice`).
+                            expect(document.activeElement, 'the control is back, and focus on it').toBe(control);
                         }
                     }
 
@@ -11212,6 +11215,95 @@ describe('a-replaced-sheets-late-answer-marks-nothing', () => {
             expect(first.querySelector('[data-role="pay-valve"]')?.textContent ?? '', `${control}: nor recomposes`).toBe('');
         }
     });
+});
+
+describe('a-refresh-ask-out-says-asking-and-cannot-ask-twice', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 3 (the critic's `r2`). The refresh control's own
+     * ask was no ask at all: with no rate, a press on "Get a fresh price" left
+     * the control on the sheet, a second press sent a second ask, and the
+     * card went on saying CoinGecko did not answer while the feeds were being
+     * asked. Now its ask counts as asking, on both sheets: the control is
+     * hidden until the answer, a press that reaches it anyway sends nothing,
+     * a card with no figure says the feeds are being asked, and focus stays
+     * in the dialog. Over a figure the card keeps its figure — "the link and
+     * the code appear when one arrives" would be false over a link — and the
+     * control is hidden all the same.
+     */
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    const answer = scaleRate(0.000025)!;
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const start of ['no rate', 'a rate'] as const) {
+            it(`${kind}, over ${start}: one press, one ask, the control hidden and the card saying so until the answer`, async () => {
+                const root = mountedRoot();
+                let settle: (value: { rate: bigint; atMs: number }) => void = () => undefined;
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayRate: vi.fn(
+                        () =>
+                            new Promise<{ rate: bigint; atMs: number }>((resolve) => {
+                                settle = resolve;
+                            }),
+                    ),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        ...(start === 'no rate' ? { payRateWhy: 'no-answer' as const } : { payRate: PAY_RATE }),
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                const control = sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement;
+                const figure = (): string => sheet.querySelector('[data-role="price"]')?.textContent ?? '';
+                const before = figure();
+                await Promise.resolve();
+                control.focus();
+                control.click();
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                expect(control.closest('[hidden]'), 'the control is hidden while its ask is out').not.toBeNull();
+                expect(sheet.contains(document.activeElement), 'focus stays in the sheet').toBe(true);
+                if (start === 'no rate') {
+                    expect(sheet.textContent, 'the card says the feeds are being asked').toContain(copy.PAY_RATE_ASKING);
+                    expect(sheet.textContent, 'never that they did not answer').not.toContain(copy.PAY_NO_RATE_WHY);
+                } else {
+                    expect(figure(), 'a figure on the card stays').toBe(before);
+                    expect(sheet.textContent, 'no asking sentence over a figure and its link').not.toContain(
+                        copy.PAY_RATE_ASKING,
+                    );
+                }
+                // A press that reaches the hidden control sends nothing.
+                control.click();
+                control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                expect(h.onPayRate, 'one press, one ask').toHaveBeenCalledTimes(1);
+
+                settle({ rate: answer, atMs: Date.now() });
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(figure(), 'the answer is on the card').toBe(formatXec(satsForQuote(QUOTE_USD, 1n, answer)!));
+                expect(control.closest('[hidden]'), 'and the control is back').toBeNull();
+                if (start === 'a rate') {
+                    // Focus was parked on the head; the answer moved nothing
+                    // a buyer must read, so it goes back to the control.
+                    expect(document.activeElement, 'focus given back to the control').toBe(control);
+                }
+                expect(sheet.textContent).not.toContain(copy.PAY_RATE_ASKING);
+                control.click();
+                expect(h.onPayRate, 'a press after the answer asks again').toHaveBeenCalledTimes(2);
+            });
+        }
+    }
 });
 
 describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {

@@ -4969,6 +4969,13 @@ function paySheet(
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
     /** The feeds are still being asked: say that, never "did not answer". */
     let asking = usesRate && view.payRateAsking === true;
+    /**
+     * The refresh control's own ask is out (CRITIC-CARRYOVER-8 item 3): an
+     * ask like the open's, so while it is out the control is hidden, a press
+     * that reaches it anyway sends nothing, and a card with no figure says
+     * the feeds are being asked — never that they did not answer.
+     */
+    let refreshAsking = false;
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -5676,12 +5683,17 @@ function paySheet(
         surcharge.textContent =
             added === undefined ? '' : copy.paySurchargeLine(added, quoteFigure(surchargedQuote(price)));
 
+        // Any ask out — the open's, one this sheet made for a moved unit, or
+        // the refresh control's own (CRITIC-CARRYOVER-8 item 3).
+        const askingNow = asking || refreshAsking;
         if (usesRate) {
             const glance = formatXecRate(rate?.rate, price.code);
             // No rate and no ask out: the row stays for its refresh control,
             // the way on the sentence under it promises ("until a price
-            // arrives"; CRITIC-CARRYOVER-7 item 3), its label empty.
-            rateRow.hidden = glance === undefined && (rate !== undefined || asking);
+            // arrives"; CRITIC-CARRYOVER-7 item 3), its label empty. While an
+            // ask is out the control is hidden, whatever the row shows.
+            rateRow.hidden = glance === undefined && (rate !== undefined || askingNow);
+            refreshRate.hidden = askingNow;
             rateLabel.textContent =
                 glance === undefined || rate === undefined
                     ? ''
@@ -5697,7 +5709,7 @@ function paySheet(
         why.textContent = subDust
             ? copy.PAY_SUB_DUST
             : sats === undefined
-              ? asking
+              ? askingNow
                   ? copy.PAY_RATE_ASKING
                   : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
@@ -5934,13 +5946,29 @@ function paySheet(
     // No Pay press: a move it finds is handed back with a line that asks
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
+        // One ask at a time (CRITIC-CARRYOVER-8 item 3): the control is
+        // hidden while any ask is out, and a press that reaches it anyway
+        // sends nothing.
+        if (refreshAsking || asking) {
+            return;
+        }
         if (recheck()) {
             handBack(false);
             return;
         }
         const at = composedAt;
+        // Asking, said before the await: the control leaves, a card with no
+        // figure says the feeds are being asked, and focus stays in the
+        // dialog (`keepFocusIn`) — parked, and given back to the control
+        // with the answer unless the buyer or the answer moved it since.
+        const focused = focusedIn(wrap);
+        refreshAsking = true;
+        refresh();
+        keepFocusIn(wrap, [why], focused, head);
+        const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            refreshAsking = false;
             // A sheet a repaint replaced while the feeds were asked marks
             // nothing and composes nothing: a fresh sheet on the same item
             // is not this one (the critic, 2026-09-25, item 7).
@@ -5948,6 +5976,8 @@ function paySheet(
                 return;
             }
             if (recheck() || composedAt !== at) {
+                // The ask is no longer out, on the sheet handed back too.
+                refresh();
                 handBack(false);
                 return;
             }
@@ -5964,6 +5994,7 @@ function paySheet(
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
             lineFrom = 'rate';
             refreshAfterRate();
+            giveFocusBack(wrap, refreshRate, parked);
         })();
     });
 
@@ -6360,6 +6391,8 @@ function paySeveralSheet(
     let rate = usesRate ? view.payRate : undefined;
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
     let asking = usesRate && view.payRateAsking === true;
+    /** The single sheet's `refreshAsking`: the refresh control's own ask is out (CRITIC-CARRYOVER-8 item 3). */
+    let refreshAsking = false;
     // The seller's own name when they set one; never the address in a
     // sentence, which `displayName` would fall back to.
     const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
@@ -6810,11 +6843,15 @@ function paySeveralSheet(
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
+        // Any ask out, the refresh control's own included: the single sheet's rule.
+        const askingNow = asking || refreshAsking;
         if (usesRate && unit !== undefined) {
             const glanceRate = formatXecRate(rate?.rate, unit);
             // The single sheet's rule: no rate and no ask out keeps the
-            // refresh control (CRITIC-CARRYOVER-7 item 3).
-            rateRow.hidden = glanceRate === undefined && (rate !== undefined || asking);
+            // refresh control (CRITIC-CARRYOVER-7 item 3), and while an ask
+            // is out the control is hidden (CRITIC-CARRYOVER-8 item 3).
+            rateRow.hidden = glanceRate === undefined && (rate !== undefined || askingNow);
+            refreshRate.hidden = askingNow;
             rateLabel.textContent =
                 glanceRate === undefined || rate === undefined
                     ? ''
@@ -6828,7 +6865,7 @@ function paySeveralSheet(
         why.textContent = subDust
             ? copy.PAY_SUB_DUST_SEVERAL
             : sats === undefined
-              ? asking
+              ? askingNow
                   ? copy.PAY_RATE_ASKING
                   : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
@@ -7023,13 +7060,23 @@ function paySeveralSheet(
     // No Pay press: a move it finds is handed back with a line that asks
     // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
+        // One ask at a time, the single sheet's rule (CRITIC-CARRYOVER-8 item 3).
+        if (refreshAsking || asking) {
+            return;
+        }
         if (recheck()) {
             handBack(false);
             return;
         }
         const at = composedAt;
+        const focused = focusedIn(wrap);
+        refreshAsking = true;
+        refresh();
+        keepFocusIn(wrap, [why], focused, head);
+        const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            refreshAsking = false;
             // A sheet a repaint replaced while the feeds were asked marks
             // nothing and composes nothing: a fresh sheet on the same item
             // is not this one (the critic, 2026-09-25, item 7).
@@ -7037,6 +7084,8 @@ function paySeveralSheet(
                 return;
             }
             if (recheck() || composedAt !== at) {
+                // The ask is no longer out, on the sheet handed back too.
+                refresh();
                 handBack(false);
                 return;
             }
@@ -7048,6 +7097,7 @@ function paySeveralSheet(
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
             lineFrom = 'rate';
             refreshAfterRate();
+            giveFocusBack(wrap, refreshRate, parked);
         })();
     });
 
@@ -7099,6 +7149,19 @@ function payFoot(handlers: StallHandlers): HTMLElement {
     }
     foot.append(close);
     return foot;
+}
+
+/**
+ * Focus given back to the refresh control when its answer brings it back
+ * (CRITIC-CARRYOVER-8 item 3): its own ask hid it, and focus was parked in
+ * the dialog (`parked`) meanwhile. Only while focus is still where it was
+ * parked — never over a place the buyer moved to, or the line an answer
+ * moved it to so it would be read.
+ */
+function giveFocusBack(wrap: HTMLElement, control: HTMLElement, parked: HTMLElement | undefined): void {
+    if (parked !== undefined && onSheet(wrap, control) && focusedIn(wrap) === parked) {
+        control.focus();
+    }
 }
 
 /** The element focus is on, when it is inside `wrap` — read before a recompose moves anything. */
