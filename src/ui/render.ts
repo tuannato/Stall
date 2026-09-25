@@ -5228,7 +5228,14 @@ function paySheet(
             rateChangedAtMs = performance.now();
         }
     };
-    /** Bumped by every recompose, so an ask's tail knows the figure it measured is no longer the one on screen. */
+    /**
+     * Bumped by every recompose that changed something on screen, so an
+     * ask's tail knows the figure it measured is no longer the one there. A
+     * recompose that changed nothing — a record this page cannot show
+     * replaced by another it cannot show — bumps nothing: it cancelled an
+     * in-flight valve or refresh answer that nothing had made stale
+     * (CRITIC-CARRYOVER-5 item 6).
+     */
     let composedAt = 0;
 
     /** The record's margin lines, taken in place (`marginLines`). */
@@ -5311,7 +5318,6 @@ function paySheet(
      * false, so a press over it goes on.
      */
     const recompose = (now: RecordsNow, current: TokenPrice | undefined): boolean => {
-        composedAt += 1;
         const focused = focusedIn(wrap);
         const was = movedUnder;
         const wasLost = lost();
@@ -5344,6 +5350,7 @@ function paySheet(
         if (wasLost && lost() && was === movedUnder) {
             return false;
         }
+        composedAt += 1;
         // In place, no press was made: the line asks for none.
         pressedLine = false;
         refresh();
@@ -6394,7 +6401,6 @@ function paySeveralSheet(
      * goes on (CRITIC-CARRYOVER-4 item 4).
      */
     const recompose = (now: RecordsNow, movedSince: readonly string[]): boolean => {
-        composedAt += 1;
         const focused = focusedIn(wrap);
         const before = { selection, composed: new Map(composed), lostAll, dropped: droppedHere };
         const nowPrices = now.prices ?? new Map<string, TokenPrice>();
@@ -6430,6 +6436,9 @@ function paySeveralSheet(
         if (unchanged) {
             return false;
         }
+        // Only a recompose that changed something on screen tells an ask's
+        // tail its answer is stale (the single sheet's `composedAt`).
+        composedAt += 1;
         for (const tokenId of movedSince) {
             changedItems.add(tokenId);
         }

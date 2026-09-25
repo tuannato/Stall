@@ -9880,6 +9880,103 @@ describe('a-double-tap-over-a-valve-or-refresh-answer-opens-nothing', () => {
     });
 });
 
+describe('a-recompose-that-changes-nothing-does-not-cancel-a-rate-answer', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 6, the critic's sequence V3. `composedAt` was
+     * bumped at the top of `recompose`, before the check that finds nothing
+     * changed on screen. On Pay several, Roasted Beans has already left the
+     * choice (it moved to XEC; the choice was made in USD). While the
+     * valve's ask — or the refresh control's — is out, Roasted Beans is
+     * re-priced again: a re-read that moves only an item already out of the
+     * choice changes nothing on screen, starts no grace and says nothing.
+     * But the bump told the ask's tail its answer was stale: the answer was
+     * thrown away, the sheet handed back as if a Pay press had found the
+     * records moved, and the app painted the fresh rate's figure with no
+     * grace and without the valve's line. Only a recompose that changed
+     * something bumps it now, and the answer is taken, with its line.
+     */
+    const OTHER = '7c'.repeat(32);
+    const tokens = new Map([
+        [TOKEN_ID, BEANS],
+        [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }],
+    ]);
+    const usd = (amount: bigint) => ({ code: 'usd', exponent: 2, amount }) as TokenPrice;
+    const xec = (amount: bigint) => ({ code: 'xec', exponent: 2, amount }) as TokenPrice;
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    const held = scaleRate(0.00002)!;
+    const answer = scaleRate(0.000025)!;
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const road of ['valve', 'refresh'] as const) {
+        it(`the ${road}’s answer is taken over an out-of-choice re-price, with its line`, async () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            let now = records(new Map([[TOKEN_ID, usd(500n)], [OTHER, usd(300n)]]));
+            let reply: (value: { rate: bigint; atMs: number }) => void = () => undefined;
+            const root = mountedRoot();
+            const h = {
+                ...handlers(),
+                onPayRecords: () => now,
+                onPayRecordMoved: vi.fn(),
+                onPayFigureChanged: vi.fn(),
+                onPayRate: vi.fn(
+                    () =>
+                        new Promise<{ rate: bigint; atMs: number }>((resolve) => {
+                            reply = resolve;
+                        }),
+                ),
+            };
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: now.prices,
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                    payRate: { rate: held, atMs: road === 'valve' ? Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 : Date.now() },
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="pay-several"]')!;
+            // Roasted Beans moves to XEC: out of the choice, chosen in USD.
+            now = records(new Map([[TOKEN_ID, xec(900_000n)], [OTHER, usd(300n)]]));
+            recheckPaySheet(root);
+            expect(sheet.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '').toContain('Roasted Beans');
+            vi.advanceTimersByTime(10_000);
+            if (road === 'valve') {
+                expect(pressForUrl(root, 'pay-cashtab'), 'an aged rate: the valve asks').toBeUndefined();
+            } else {
+                (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+            }
+            expect(h.onPayRate).toHaveBeenCalledTimes(1);
+            // Roasted Beans, already out, is re-priced while the ask is out.
+            now = records(new Map([[TOKEN_ID, xec(950_000n)], [OTHER, usd(300n)]]));
+            recheckPaySheet(root);
+            const changes = h.onPayFigureChanged.mock.calls.length;
+            reply({ rate: answer, atMs: Date.now() });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(h.onPayRecordMoved, 'nothing handed back').not.toHaveBeenCalled();
+            expect(h.onPayFigureChanged.mock.calls.length, 'no record change was stamped').toBe(changes);
+            const sats = satsForQuote(usd(300n), 1n, answer)!;
+            expect(sheet.querySelector('[data-role="price"]')?.textContent, 'the answer is composed').toBe(formatXec(sats));
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'with its line').toBe(
+                road === 'valve' ? copy.PAY_RATE_MOVED : copy.PAY_RATE_REFRESHED,
+            );
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(pressForUrl(root, 'pay-cashtab'), 'and after the grace it opens').toBe(
+                cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(OTHER, 1n)!),
+            );
+        });
+    }
+});
+
 describe('a-double-tap-inside-the-grace-opens-nothing', () => {
     /**
      * CRITIC-CARRYOVER-4 item 1 (the owner's grace rule, read as a window).
