@@ -30,6 +30,7 @@ import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import {
     MAX_SELECTION_ENTRIES,
+    pruneSelection,
     selectionCount,
     selectionGlance,
     selectionHasSurcharge,
@@ -4638,13 +4639,16 @@ let payQrTimer: ReturnType<typeof setTimeout> | undefined;
  * app's records and not on screen. The app calls `recheckPaySheet` whenever
  * it holds a paint back for a pay sheet, and the sheet answers in place,
  * without being rebuilt under the buyer: a record that moved what the buyer
- * pays takes the scan code away and sets the valve's line (the press on the
- * same sheet is still absorbed and repaints it from the record); one that
- * changed only its margin or its words is taken in place. Cleared at the
- * top of every paint of that root; set by the sheet that paint builds.
- * Keyed by root rather than one module slot: any `renderStall` clearing
- * another root's check would leave that sheet's code standing, which is the
- * one thing the check is for.
+ * pays recomposes the sheet from the record as it stands — the figure, the
+ * quote, the surcharge, the rate row, both links, the code and the restated
+ * figure, the quantity kept — says so on the valve's line, and absorbs the
+ * next press once (the owner, 2026-09-25); a record gone, or no longer
+ * painted as a quote, leaves no figure, code or Pay; one that changed only
+ * its margin or its words is taken in place. Cleared at the top of every
+ * paint of that root; set by the sheet that paint builds. Keyed by root
+ * rather than one module slot: any `renderStall` clearing another root's
+ * check would leave that sheet composing a record the page no longer holds,
+ * which is the one thing the check is for.
  */
 const payRecordChecks = new WeakMap<HTMLElement, () => void>();
 
@@ -4725,14 +4729,19 @@ function paySheet(
         // and a record still there in a form this page does not paint as a
         // quote (a unit it does not write, a genesis it never read) is our
         // gap, never "no longer on the stall" (the critic, 2026-09-25).
+        //
+        // Said once, in the box: the head carries the sheet's title and no
+        // second copy of the sentence under it (the window, 2026-09-25).
         const gone =
             view.payRecordMoved === undefined
                 ? copy.PAY_HINT_UNKNOWN
                 : view.prices?.has(tokenId) === true
                   ? copy.PAY_QUOTE_UNSHOWN
                   : copy.PAY_QUOTE_GONE;
-        wrap.append(sheetHead(copy.PAY_TITLE, gone, handlers));
-        wrap.append(el('p', 'ctx', gone));
+        wrap.append(sheetHead(copy.PAY_TITLE, '', handlers));
+        const said = el('p', 'ctx', gone);
+        said.setAttribute('data-role', 'pay-lost');
+        wrap.append(said);
         wrap.append(payFoot(handlers));
         return wrap;
     }
@@ -4743,18 +4752,34 @@ function paySheet(
     const head = sheetHead(named.title, named.note ?? '', handlers);
     wrap.append(head);
     /**
-     * The record the figure is composed from. Replaced in place only by one
-     * that asks the buyer for the same payment (`recheck`): a new tolerance,
-     * or the figure restated at another exponent — the satoshis are the same
-     * by construction (`samePayment`).
+     * The record the sheet was opened on — what the buyer was first shown.
+     * A re-read that brings the record back to it clears the line and the
+     * absorbed press (`recheck`).
+     */
+    const opened = new Map([[tokenId, item.price]]);
+    /**
+     * The record the figure is composed from. A re-read that moves what the
+     * buyer pays recomposes the sheet in place from the record as it stands
+     * (the owner, 2026-09-25); one that asks the same payment — a new
+     * tolerance, or the figure restated at another exponent — is taken in
+     * place without a line (`samePayment`).
      */
     let price = item.price;
-    const usesRate = price.code !== XEC_PRICE_CODE;
+    /** An XEC quote reads no rate; a record that moved unit changes this. */
+    let usesRate = price.code !== XEC_PRICE_CODE;
 
     /** The buyer's own quantity: whole items, at least one. */
     let quantity = view.payQuantity ?? 1n;
     /** The rate this sheet froze, and when. Never `view.fiatRate`. */
     let rate = usesRate ? view.payRate : undefined;
+    /**
+     * The unit `rate` was read for: the painted record's, because the app
+     * never hands a sheet a rate read for another unit (`payRateUnit`). A
+     * record recomposed in another unit drops it — a figure composed in one
+     * currency from another's rate is the one mistake this rail exists to
+     * make impossible.
+     */
+    let rateUnit: string | undefined = usesRate ? price.code : undefined;
     /** Why there is none, for the sentence: the feed did not answer, or was refused. */
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
     /** The feeds are still being asked: say that, never "did not answer". */
@@ -4793,6 +4818,19 @@ function paySheet(
     const why = el('p', 'fine', '');
     why.hidden = true;
     card.append(why);
+    /**
+     * The rate row is mounted only for a quote that reads a rate — an XEC
+     * sheet carries no rate node at all — so a record recomposed into
+     * another unit mounts it, or takes it off, in its own place above the
+     * card's sentence.
+     */
+    const mountRateRow = (): void => {
+        if (usesRate && rateRow.parentNode === null) {
+            why.before(rateRow);
+        } else if (!usesRate) {
+            rateRow.remove();
+        }
+    };
     // The rail's own limits, under the figure and inside the card: this is
     // where a buyer is looking when they decide, and a note further down the
     // sheet is a note read after the decision.
@@ -5003,8 +5041,17 @@ function paySheet(
     (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
     wrap.append(final);
     wrap.append(qrFold);
-    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
+    const howFold = sheetFold('pay-how', copy.PAY_HOW_FOLD, how);
+    wrap.append(howFold);
     wrap.append(payFoot(handlers));
+    /**
+     * The sentence a record that left says, in the box the rebuilt sheet
+     * says it in (the `item === undefined` branch): mounted under the head
+     * only while the sheet has nothing to compose, so the fence before Pay
+     * never meets it.
+     */
+    const lostBox = el('p', 'ctx', '');
+    lostBox.setAttribute('data-role', 'pay-lost');
 
     /**
      * Everything the figure touches, recomposed from one `satsForQuote`
@@ -5021,107 +5068,255 @@ function paySheet(
     /**
      * A press found the seller's record moved and this sheet was painted
      * again from it: said on the valve's line until a valve outcome of its
-     * own replaces it, with the figure restated on the control.
+     * own replaces it, with the figure restated on the control. After a
+     * paint nobody pressed for — an ask's tail found the records moved
+     * (`payRecordMovedUnpressed`) — the line asks for no second press.
      */
     const recordMoved = view.payRecordMoved !== undefined;
+    const recordMovedLine =
+        view.payRecordMovedUnpressed === true ? copy.PAY_QUOTE_CHANGED_UNPRESSED : copy.PAY_QUOTE_CHANGED;
     /**
-     * A re-read moved what the buyer pays while this sheet was open, and the
-     * sheet was not rebuilt (`payRecordChecks`): the code is taken away, the
-     * valve's line says the quote changed, and the control stops restating
-     * a figure the page no longer holds. The press is absorbed as ever
-     * (`recheck`), and the sheet it repaints is the record as it stands.
+     * What a re-read did to the record under the open sheet (the owner,
+     * 2026-09-25): `changed` — still quoted, and the sheet recomposed in
+     * place from it, the buyer's quantity kept; `gone` — taken off;
+     * `unshown` — still there in a form this page does not paint as a quote
+     * (a unit it does not write, a genesis it never read). The last two
+     * compose nothing: no figure, no code, no Pay. Cleared when the record
+     * comes back to what the sheet was opened on.
      */
-    let movedUnder = false;
+    let movedUnder: 'changed' | 'gone' | 'unshown' | undefined;
+    const lost = (): boolean => movedUnder === 'gone' || movedUnder === 'unshown';
     /**
-     * The seller's record as the app holds it now, against the one this
-     * sheet composed from. Asked at every press and after every await that
-     * precedes a figure: the sheet holds the live paint, so a re-read that
-     * landed while it was open is in the app's records and not on screen.
+     * The next Pay press after an in-place recompose opens nothing, once: a
+     * buyer about to press as the re-read landed must not open a figure they
+     * never saw. That press hands the sheet back (`onPayRecordMoved`), which
+     * paints it again from the same records, and the press after it opens.
+     */
+    let absorb = false;
+    /** Bumped by every recompose, so an ask's tail knows the figure it measured is no longer the one on screen. */
+    let composedAt = 0;
+
+    /** The record's margin lines, taken in place (`marginLines`). */
+    const takeMargins = (): void => {
+        const next = marginLines(price);
+        for (const line of margins) {
+            line.remove();
+        }
+        someWallets.after(...next);
+        margins = next;
+    };
+
+    /**
+     * The unit an ask for this sheet's rate is out for: the open's own (the
+     * app's, answered by a paint of its own) or one this sheet made in place
+     * (`askRate`). A recompose asks only when none is out; an ask whose
+     * unit the record has since left asks again for the one it stands in.
+     */
+    let askingUnit: string | undefined = asking ? price.code : undefined;
+    /**
+     * A rate for the unit a recompose moved the sheet into, asked in place.
+     * The app answers for the unit its records hold now, which is this
+     * sheet's; an answer landing after the record moved again is written
+     * nowhere, and one landing on a sheet a repaint replaced is dropped.
+     */
+    const askRate = (): void => {
+        if (handlers.onPayRate === undefined) {
+            return;
+        }
+        const unit = price.code;
+        askingUnit = unit;
+        asking = true;
+        payWhy = undefined;
+        void handlers.onPayRate(PAY_RATE_TIMEOUT_MS).then((fresh) => {
+            if (!wrap.isConnected || askingUnit !== unit) {
+                return;
+            }
+            askingUnit = undefined;
+            if (price.code !== unit) {
+                // Moved again while this unit was asked for: never composed
+                // across units — the unit it stands in now is asked for.
+                if (usesRate && rate === undefined) {
+                    askRate();
+                } else {
+                    asking = false;
+                    refresh();
+                }
+                return;
+            }
+            asking = false;
+            if (fresh !== undefined && fresh.rate !== undefined) {
+                rate = fresh;
+                rateUnit = unit;
+                payWhy = undefined;
+            } else {
+                payWhy = fresh?.why ?? 'no-answer';
+            }
+            refresh();
+        });
+    };
+
+    /**
+     * The sheet recomposed in place from the record as it stands, after a
+     * move in what the buyer pays: the figure, the quote, the surcharge, the
+     * rate row, both links, the code and the restated figure — one bigint,
+     * as ever (`refresh`) — or, for a record gone or no longer painted as a
+     * quote, nothing composed at all. The next press is absorbed once.
+     */
+    const recompose = (now: RecordsNow, current: TokenPrice | undefined): void => {
+        composedAt += 1;
+        const quoted =
+            current !== undefined &&
+            quotedItems({ ...view, prices: now.prices }).some((row) => row.tokenId === tokenId);
+        if (current === undefined || !quoted) {
+            movedUnder = current === undefined ? 'gone' : 'unshown';
+        } else {
+            price = current;
+            usesRate = price.code !== XEC_PRICE_CODE;
+            const unitMoved = usesRate && rateUnit !== price.code;
+            if (rateUnit !== price.code) {
+                // A rate read for another unit composes nothing here.
+                rate = undefined;
+                rateUnit = undefined;
+                payWhy = undefined;
+                outcome = undefined;
+            }
+            mountRateRow();
+            takeMargins();
+            movedUnder = 'changed';
+            // Only a unit the sheet holds no rate for is asked, and only
+            // when no ask is already out: a feed that did not answer for
+            // the same unit is the refresh control's to ask again.
+            if (unitMoved && askingUnit === undefined) {
+                askRate();
+            }
+        }
+        absorb = true;
+        if (movedRecords(opened, now).length === 0) {
+            // Back to what the sheet was opened on: nothing to say, nothing to absorb.
+            movedUnder = undefined;
+            absorb = false;
+        }
+        refresh();
+    };
+
+    /**
+     * The seller's record as the app holds it now, taken onto the sheet.
+     * Asked whenever a re-read lands while the sheet holds the paint
+     * (`payRecordChecks`), at every press, and after every await that
+     * precedes a figure.
      *
-     * True when what the buyer pays moved — the figure, the unit or the
-     * surcharge, or the record gone (`movedRecords`) — which the caller
-     * answers by opening nothing. A record that asks the same payment but
-     * changed its tolerance, its words or its clock is taken in place here,
-     * and the press goes on: no stop, no second press (the owner,
-     * 2026-09-25). The valve then measures against the margin the record
-     * states now.
+     * True when what the buyer pays moved since the sheet last composed —
+     * the figure, the unit or the surcharge, or the record gone
+     * (`movedRecords`) — and the sheet was recomposed in place from the
+     * record as it stands (`recompose`). A record that asks the same payment
+     * but changed its tolerance, its words or its clock is taken in place
+     * with no line and no stop (the owner, 2026-09-25); the valve then
+     * measures against the margin the record states now. A record that came
+     * back to what the sheet was opened on clears the line and the absorbed
+     * press.
      */
     const recheck = (): boolean => {
         const now = handlers.onPayRecords?.();
         if (now === undefined) {
             return false;
         }
+        // Not reached by a read that stopped at our cap, or no definite read
+        // at all: nothing to take.
+        const current = now.known ? now.prices?.get(tokenId) : undefined;
+        if (current !== undefined) {
+            const words = now.descriptions?.get(tokenId);
+            if (words !== wordsShown) {
+                wordsShown = words;
+                const next = wordsNode(words);
+                if (said !== null && next !== null) {
+                    said.replaceWith(next);
+                } else if (said !== null) {
+                    said.remove();
+                } else if (next !== null) {
+                    valve.before(next);
+                }
+                said = next;
+                if (said !== null) {
+                    said.hidden = lost();
+                }
+                const note = head.querySelector('.sheet-head-t > .fine');
+                if (note !== null) {
+                    note.textContent = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
+                }
+            }
+            const ageNow = quoteAgeNode({ ...view, quoteTimes: now.quoteTimes }, tokenId, 'p', 'fine');
+            if (ageNow?.textContent !== age?.textContent) {
+                if (age !== null && ageNow !== null) {
+                    age.replaceWith(ageNow);
+                } else if (age !== null) {
+                    age.remove();
+                } else if (ageNow !== null) {
+                    minted.before(ageNow);
+                }
+                age = ageNow;
+            }
+        }
         if (movedRecords(new Map([[tokenId, price]]), now).length > 0) {
+            recompose(now, current);
             return true;
         }
-        const current = now.known ? now.prices?.get(tokenId) : undefined;
         if (current === undefined) {
-            // Not reached by a read that stopped at our cap, or no definite
-            // read at all: nothing to take, and nothing moved.
             return false;
         }
-        const words = now.descriptions?.get(tokenId);
-        if (words !== wordsShown) {
-            wordsShown = words;
-            const next = wordsNode(words);
-            if (said !== null && next !== null) {
-                said.replaceWith(next);
-            } else if (said !== null) {
-                said.remove();
-            } else if (next !== null) {
-                valve.before(next);
-            }
-            said = next;
-            const note = head.querySelector('.sheet-head-t > .fine');
-            if (note !== null) {
-                note.textContent = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
-            }
-        }
-        const ageNow = quoteAgeNode({ ...view, quoteTimes: now.quoteTimes }, tokenId, 'p', 'fine');
-        if (ageNow?.textContent !== age?.textContent) {
-            if (age !== null && ageNow !== null) {
-                age.replaceWith(ageNow);
-            } else if (age !== null) {
-                age.remove();
-            } else if (ageNow !== null) {
-                minted.before(ageNow);
-            }
-            age = ageNow;
-        }
+        let redraw = false;
         if (!samePrice(price, current)) {
             price = current;
-            const next = marginLines(price);
-            for (const line of margins) {
-                line.remove();
-            }
-            someWallets.after(...next);
-            margins = next;
+            takeMargins();
+            redraw = true;
+        }
+        if (movedUnder !== undefined && movedRecords(opened, now).length === 0) {
+            movedUnder = undefined;
+            absorb = false;
+            redraw = true;
+        }
+        if (redraw) {
             refresh();
         }
         return false;
     };
     registerCheck((): void => {
-        if (recheck() && !movedUnder) {
-            movedUnder = true;
-            refresh();
-        }
+        recheck();
     });
 
     const refresh = (): void => {
         clearPayQrTimer();
+        const gone = lost();
         // One bigint: the quote converted, then the seller's surcharge on top
         // (rounded up, both steps), and that same number feeds the figure,
-        // both links and the code below.
-        const sats = satsWithSurcharge(
-            satsForQuote(price, quantity, rate?.rate),
-            price.surchargePct,
-        );
+        // both links and the code below. Nothing at all over a record that
+        // left.
+        const sats = gone
+            ? undefined
+            : satsWithSurcharge(satsForQuote(price, quantity, rate?.rate), price.surchargePct);
         const memoHex = encodePaymentMemoHex(tokenId, quantity);
         const subDust = sats !== undefined && sats < DUST_SATS;
         const composable = sats !== undefined && memoHex !== undefined;
         const bip21 = composable ? payBip21(address, sats, memoHex) : undefined;
         const cashtab = composable ? cashtabPayUrl(address, sats, memoHex) : undefined;
         const pay = composable ? payECashPayUrl(address, sats, memoHex) : undefined;
+
+        // A record gone or no longer painted as a quote: the head, one
+        // sentence, the way out — the shape the rebuilt sheet has.
+        if (gone && lostBox.parentNode === null) {
+            head.after(lostBox);
+        } else if (!gone) {
+            lostBox.remove();
+        }
+        lostBox.textContent =
+            movedUnder === 'unshown' ? copy.PAY_QUOTE_UNSHOWN : movedUnder === 'gone' ? copy.PAY_QUOTE_GONE : '';
+        card.hidden = gone;
+        qtyRow.hidden = gone;
+        acts.hidden = gone;
+        final.hidden = gone;
+        howFold.hidden = gone;
+        if (said !== null) {
+            said.hidden = gone;
+        }
 
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
@@ -5184,23 +5379,28 @@ function paySheet(
         web.hidden = !linked;
         app.hidden = !linked;
         // After the price moved the control restates the figure it will open,
-        // composed from the same satoshis as the figure and both URLs — but
-        // never once a re-read moved the record under the sheet: that figure
-        // is no longer the seller's, and the press will say so.
+        // composed from the same satoshis as the figure and both URLs — the
+        // rate after a valve, the record after a re-read or a press.
         web.textContent =
-            !movedUnder &&
-            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && recordMoved)) &&
+            (movedUnder === 'changed' ||
+                outcome === 'moved' ||
+                outcome === 'disagree' ||
+                (outcome === undefined && recordMoved)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = !movedUnder && outcome === undefined && !recordMoved;
-        valve.textContent = movedUnder
-            ? copy.PAY_QUOTE_CHANGED
-            : outcome !== undefined
-              ? copy.PAY_VALVE_TEXT[outcome]
-              : recordMoved
+        valve.hidden = movedUnder !== 'changed' && outcome === undefined && !recordMoved;
+        valve.textContent =
+            movedUnder === 'changed'
                 ? copy.PAY_QUOTE_CHANGED
-                : '';
+                : outcome !== undefined
+                  ? copy.PAY_VALVE_TEXT[outcome]
+                  : recordMoved
+                    ? recordMovedLine
+                    : '';
+        if (gone) {
+            valve.hidden = true;
+        }
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -5217,19 +5417,14 @@ function paySheet(
          * after it was painted, and the amount inside it came from a rate that
          * has moved since — so it is taken away rather than left scannable,
          * and a timer does that without anyone touching the page. An XEC quote
-         * never ages: no rate is involved in it at all.
+         * never ages: no rate is involved in it at all. A record that moved
+         * under the sheet is recomposed into it (`recompose`), so what a
+         * phone reads is the record as the page holds it now.
          */
         const aged =
             usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
         qrFold.hidden = bip21 === undefined;
-        if (bip21 !== undefined && movedUnder) {
-            // The code carries a figure the page no longer holds as the
-            // seller's quote, XEC or not: taken away in place, never left
-            // scannable — a phone reads it without any press to guard.
-            const line = el('p', 'fine', copy.PAY_QUOTE_CHANGED);
-            line.setAttribute('data-role', 'pay-qr-why');
-            qrBody.replaceChildren(line);
-        } else if (bip21 !== undefined && !aged && fitsQr(bip21)) {
+        if (bip21 !== undefined && !aged && fitsQr(bip21)) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
             box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
@@ -5265,16 +5460,17 @@ function paySheet(
             }
             // The seller's record first (the critic's final merge, item 11):
             // a figure the page no longer holds as their quote is not opened
-            // from this press. The sheet is painted again from the record as
-            // it stands, says so, and the next press is the one that opens —
-            // the moved-rate valve's shape, for the other input. A record
-            // that changed only its margin or its words is taken in place
-            // (`recheck`) and the press goes on. The scan code is no press:
-            // it is guarded by the re-read itself, which takes it away in
-            // place the moment the record moves (`payRecordChecks`) — so what
-            // a phone can still read is the figure the page held until then,
-            // and a phone that scanned it earlier holds what it holds.
-            if (recheck()) {
+            // from this press, and neither is one a re-read recomposed under
+            // the sheet since the last press (`absorb`). The sheet is handed
+            // back, painted again from the record as it stands, says so, and
+            // the next press is the one that opens — the moved-rate valve's
+            // shape, for the other input. A record that changed only its
+            // margin or its words is taken in place (`recheck`) and the press
+            // goes on. The scan code is no press: a re-read recomposes it in
+            // place the moment the record moves (`payRecordChecks`), so what
+            // a phone can read is the record as the page holds it.
+            if (recheck() || absorb) {
+                absorb = false;
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
             }
@@ -5289,6 +5485,7 @@ function paySheet(
             // Measured on the figure this sheet composes — surcharge included —
             // through the verdict both pay sheets share (`settleValve`).
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
+            const at = composedAt;
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
                 // A sheet a repaint replaced while the feeds were asked marks
@@ -5298,9 +5495,11 @@ function paySheet(
                     return;
                 }
                 // A record that moved during the ask: the fresh rate is read
-                // for the unit the app holds now, which may not be this
-                // sheet's, so nothing is composed from it here.
-                if (recheck()) {
+                // for the unit the app holds now, which may not be the one
+                // `before` was measured in, so nothing is composed from it
+                // here and the sheet is handed back.
+                if (recheck() || composedAt !== at) {
+                    absorb = false;
                     handlers.onPayRecordMoved?.(tokenId);
                     return;
                 }
@@ -5323,9 +5522,11 @@ function paySheet(
 
     refreshRate.addEventListener('click', () => {
         if (recheck()) {
+            absorb = false;
             handlers.onPayRecordMoved?.(tokenId);
             return;
         }
+        const at = composedAt;
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
             // A sheet a repaint replaced while the feeds were asked marks
@@ -5334,7 +5535,8 @@ function paySheet(
             if (!wrap.isConnected) {
                 return;
             }
-            if (recheck()) {
+            if (recheck() || composedAt !== at) {
+                absorb = false;
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
             }
@@ -5677,25 +5879,51 @@ function paySeveralSheet(
     wrap.setAttribute('data-role', 'pay-several');
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    const selection = view.selection ?? new Map<string, bigint>();
+    /** The choice as it was painted; a re-read that took an item out of it takes it out here too, in place (`recompose`). */
+    const openedChoice: ReadonlyMap<string, bigint> = view.selection ?? new Map<string, bigint>();
+    let selection: ReadonlyMap<string, bigint> = openedChoice;
     /**
-     * The records the sheet composes from. Replaced in place only by records
-     * that ask the buyer for the same payment (`recheck`): a margin the
-     * valve then measures against, never a figure.
+     * The records the sheet composes from. A re-read that moves what the
+     * buyer pays for a chosen item recomposes the sheet in place from the
+     * records as they stand (the owner, 2026-09-25); one that asks the same
+     * payment is taken in place with no line: a margin the valve then
+     * measures against, never a figure.
      */
     let prices = view.prices;
-    const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    const rows = (): QuotedItem[] =>
+        quotedItems({ ...view, prices }).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    const items = rows();
     const address = view.address ?? '';
     const count = Number(selectionCount(selection));
     wrap.setAttribute('aria-label', copy.paySeveralTitle(count));
     if (items.length === 0) {
-        // A live prune emptied the selection under the sheet: say so, with
-        // the sheet's own way out, rather than composing nothing in silence
-        // — and when a press found the records moved and the paint that
-        // followed emptied it, that no wallet was opened.
-        const empty = view.payRecordMoved !== undefined ? copy.PAY_SEVERAL_GONE : copy.SELECTION_EMPTY;
-        wrap.append(sheetHead(copy.paySeveralTitle(0), empty, handlers));
-        wrap.append(el('p', 'ctx', empty));
+        // No chosen item is a row. A choice the paint emptied after a press
+        // found the records moved is the seller's change, said so, with that
+        // no wallet was opened — but only a choice that is really empty
+        // (the critic, 2026-09-25, item 2): an item still chosen that this
+        // page could not read is our gap, said in the strip's own words, and
+        // a live prune that emptied the choice under no press is the empty
+        // choice's own line. Said once, in the box, never again under the
+        // head (the window, 2026-09-25).
+        const unread = unreadChosen(selection, view);
+        const failed = unread.filter((u) => u.why === 'unread').length;
+        const capped = unread.filter((u) => u.why === 'capped').length;
+        const ours = [
+            ...(failed > 0 ? [copy.selectionUnread(failed)] : []),
+            ...(capped > 0 ? [copy.selectionCapped(capped)] : []),
+        ].join(' ');
+        const empty =
+            selection.size === 0
+                ? view.payRecordMoved !== undefined
+                    ? copy.PAY_SEVERAL_GONE
+                    : copy.SELECTION_EMPTY
+                : ours !== ''
+                  ? ours
+                  : copy.SELECTION_EMPTY;
+        wrap.append(sheetHead(copy.paySeveralTitle(0), '', handlers));
+        const said = el('p', 'ctx', empty);
+        said.setAttribute('data-role', 'pay-lost');
+        wrap.append(said);
         const droppedLine = selectionDroppedLine(view);
         if (droppedLine !== undefined) {
             const dropped = el('p', 'fine', droppedLine);
@@ -5705,6 +5933,7 @@ function paySeveralSheet(
         wrap.append(payFoot(handlers));
         return wrap;
     }
+    /** The unit the choice was made in: a record that moved out of it leaves the choice, never the unit. */
     const unit = selectionUnit(selection, prices);
     const usesRate = unit !== XEC_PRICE_CODE;
     let rate = usesRate ? view.payRate : undefined;
@@ -5713,13 +5942,12 @@ function paySeveralSheet(
     // The seller's own name when they set one; never the address in a
     // sentence, which `displayName` would fall back to.
     const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
-    wrap.append(
-        sheetHead(
-            copy.paySeveralTitle(count),
-            stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName),
-            handlers,
-        ),
+    const head = sheetHead(
+        copy.paySeveralTitle(count),
+        stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName),
+        handlers,
     );
+    wrap.append(head);
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -5731,50 +5959,54 @@ function paySeveralSheet(
     card.append(figureRow);
     const lines = el('dl', 'pay-lines');
     lines.setAttribute('data-role', 'pay-lines');
-    for (const item of items) {
-        const n = selection.get(item.tokenId)!;
-        // One group per item: the name × count, the line's figure, then the
-        // record's own lines as further `dd`s (a `dt` may carry several).
-        // The sub-lines are NOT inside the figure's `dd`: a column sized by
-        // "+5% surcharge · the seller's record" left the name 90px on Neo's
-        // mono and "Roasted Beans × 2" broke onto three lines (measured at
-        // 390, 2026-09-21); as their own row they span the whole line.
-        const line = el('div', 'pay-line');
-        line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
-        const value = el('dd', 'pay-line-v');
-        value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
-        line.append(value);
-        const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
-        if (surcharge !== null) {
-            line.append(surcharge);
+    /** One group per chosen row, from the records the sheet composes now. */
+    const paintLines = (): void => {
+        const groups: HTMLElement[] = [];
+        for (const item of rows()) {
+            const n = selection.get(item.tokenId)!;
+            // One group per item: the name × count, the line's figure, then the
+            // record's own lines as further `dd`s (a `dt` may carry several).
+            // The sub-lines are NOT inside the figure's `dd`: a column sized by
+            // "+5% surcharge · the seller's record" left the name 90px on Neo's
+            // mono and "Roasted Beans × 2" broke onto three lines (measured at
+            // 390, 2026-09-21); as their own row they span the whole line.
+            const line = el('div', 'pay-line');
+            line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
+            const value = el('dd', 'pay-line-v');
+            value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
+            line.append(value);
+            const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
+            if (surcharge !== null) {
+                line.append(surcharge);
+            }
+            // The borrowed-id warning stays where a buyer decides, per item
+            // (the single sheet's own rule): the genesis is another wallet's.
+            if (view.genesis?.get(item.tokenId) === 'not-attributed') {
+                const borrowed = el('dd', 'pay-line-s warn', copy.QUOTE_NOT_MINTED_HERE);
+                borrowed.setAttribute('data-role', 'quote-not-minted');
+                line.append(borrowed);
+            }
+            groups.push(line);
         }
-        // The borrowed-id warning stays where a buyer decides, per item
-        // (the single sheet's own rule): the genesis is another wallet's.
-        if (view.genesis?.get(item.tokenId) === 'not-attributed') {
-            const borrowed = el('dd', 'pay-line-s warn', copy.QUOTE_NOT_MINTED_HERE);
-            borrowed.setAttribute('data-role', 'quote-not-minted');
-            line.append(borrowed);
-        }
-        lines.append(line);
-    }
+        lines.replaceChildren(...groups);
+    };
+    paintLines();
     card.append(lines);
     // Which chosen item a re-read took out, under the lines it left: the
-    // total below is over what stayed.
-    const droppedLine = selectionDroppedLine(view);
-    if (droppedLine !== undefined) {
-        const dropped = el('p', 'fine', droppedLine);
-        dropped.setAttribute('data-role', 'pay-several-dropped');
-        card.append(dropped);
-    }
-    const glance = selectionGlance(selection, prices);
+    // total below is over what stayed. The items this paint's prune took out
+    // (`view.selectionDropped`), and any a re-read took out since, in place.
+    const dropped = el('p', 'fine', '');
+    dropped.setAttribute('data-role', 'pay-several-dropped');
+    /** The items a re-read took out of the choice while the sheet was open (`recompose`). */
+    let droppedHere: readonly string[] = [];
+    const droppedNow = (): string | undefined => {
+        const names = [...(view.selectionDropped ?? []), ...droppedHere.filter((t) => !(view.selectionDropped ?? []).includes(t))];
+        return names.length === 0
+            ? undefined
+            : copy.selectionDroppedItems(copy.itemNames(names.map((tokenId) => tokenName(view.tokens, tokenId))), names.length);
+    };
     const total = el('div', 'pay-total', '');
     total.setAttribute('data-role', 'pay-total');
-    total.textContent =
-        glance === undefined
-            ? ''
-            : selectionHasSurcharge(selection, prices)
-              ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
-              : copy.paySeveralTotal(quoteFigure(glance));
     card.append(total);
     const rateRow = el('div', 'pay-rate-row');
     const rateLabel = el('span', 'pay-rate', '');
@@ -5827,20 +6059,32 @@ function paySeveralSheet(
     (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
     wrap.append(final);
     wrap.append(qrFold);
-    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
+    const howFold = sheetFold('pay-how', copy.PAY_HOW_FOLD, how);
+    wrap.append(howFold);
     wrap.append(payFoot(handlers));
+    /** The sentence a choice that emptied under the sheet says, in the box the rebuilt sheet says it in. */
+    const lostBox = el('p', 'ctx', copy.PAY_SEVERAL_GONE);
+    lostBox.setAttribute('data-role', 'pay-lost');
 
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
     /**
      * A press found chosen items' records moved and this sheet was painted
      * again from the records (the single sheet's rule): the line names them,
-     * by the owner's per-item form.
+     * by the owner's per-item form — only the moved items still chosen (the
+     * critic, 2026-09-25, item 6): one the paint's prune took out is said
+     * by the dropped line and never twice. After a paint nobody pressed for,
+     * the form asks for no second press (`payRecordMovedUnpressed`).
      */
+    const movedChosen = (view.payRecordMoved ?? []).filter((tokenId) => selection.has(tokenId));
+    const movedNames = (tokens: readonly string[]): string =>
+        copy.itemNames(tokens.map((tokenId) => tokenName(view.tokens, tokenId)));
     const movedLine =
-        view.payRecordMoved === undefined
+        movedChosen.length === 0
             ? undefined
-            : copy.payItemsChanged(copy.itemNames(view.payRecordMoved.map((tokenId) => tokenName(view.tokens, tokenId))));
+            : view.payRecordMovedUnpressed === true
+              ? copy.payItemsChangedUnpressed(movedNames(movedChosen))
+              : copy.payItemsChanged(movedNames(movedChosen));
     /** The records this sheet composes from: every chosen item's, as painted. */
     const composed = new Map<string, TokenPrice>();
     for (const tokenId of selection.keys()) {
@@ -5849,58 +6093,151 @@ function paySeveralSheet(
             composed.set(tokenId, painted);
         }
     }
+    /** What the sheet was opened on; a re-read that brings every record back to it clears the line and the absorbed press. */
+    const opened: ReadonlyMap<string, TokenPrice> = new Map(composed);
     /**
      * A re-read moved what the buyer pays for chosen items while this sheet
-     * was open, and the sheet was not rebuilt (`payRecordChecks`): their
-     * names, for the valve's line; the code is taken away. The single
-     * sheet's `movedUnder`.
+     * was open, and the sheet was recomposed in place (`recompose`): the
+     * chosen items whose records moved and are still chosen, for the valve's
+     * line (item 6). The single sheet's `movedUnder`.
      */
-    let movedUnder: string | undefined;
+    let movedUnder: readonly string[] | undefined;
+    /** Every chosen item left under the sheet: nothing to compose, no figure, no code, no Pay. */
+    let lostAll = false;
+    /** The single sheet's: the next Pay press after an in-place recompose opens nothing, once. */
+    let absorb = false;
+    let composedAt = 0;
+
     /**
-     * The single sheet's `recheck`, over every chosen item: the items whose
-     * record moved what the buyer pays (`movedRecords`), empty when none
-     * did; a record that changed only its margin is taken in place, and the
-     * valve measures against it.
+     * The sheet recomposed in place from the records as they stand (the
+     * owner, 2026-09-25): the choice pruned as a paint prunes it
+     * (`pruneSelection`, in the unit it was chosen in) — an item removed or
+     * moved to another unit leaves it and is named on the dropped line —
+     * and the lines, the total, the figure, both links, the code and the
+     * restated figure composed from what stayed. The next press is absorbed
+     * once.
      */
-    const movedNow = (): string[] => {
+    const recompose = (now: RecordsNow): void => {
+        composedAt += 1;
+        const nowPrices = now.prices ?? new Map<string, TokenPrice>();
+        const pruned = pruneSelection(openedChoice, nowPrices, now.complete, now.decided, unit);
+        selection = pruned.selection;
+        droppedHere = pruned.dropped;
+        composed.clear();
+        for (const tokenId of selection.keys()) {
+            const record = nowPrices.get(tokenId) ?? opened.get(tokenId);
+            if (record !== undefined) {
+                composed.set(tokenId, record);
+            }
+        }
+        prices = new Map([...(prices ?? []), ...composed]);
+        const moved = movedRecords(opened, now).filter((tokenId) => selection.has(tokenId));
+        movedUnder = moved.length > 0 ? moved : undefined;
+        lostAll = selection.size === 0;
+        absorb = true;
+        if (movedRecords(opened, now).length === 0) {
+            movedUnder = undefined;
+            droppedHere = [];
+            lostAll = false;
+            absorb = false;
+        }
+        paintLines();
+        refresh();
+    };
+
+    /**
+     * The single sheet's `recheck`, over every chosen item: true when a
+     * chosen item's record moved what the buyer pays since the sheet last
+     * composed (`movedRecords`) and the sheet was recomposed in place; a
+     * record that changed only its margin is taken in place, and the valve
+     * measures against it; every record back to what the sheet was opened
+     * on clears the line and the absorbed press.
+     */
+    const recheck = (): boolean => {
         const now = handlers.onPayRecords?.();
         if (now === undefined) {
-            return [];
+            return false;
         }
-        const moved = movedRecords(composed, now);
-        if (moved.length > 0) {
-            return moved;
+        if (movedRecords(composed, now).length > 0) {
+            recompose(now);
+            return true;
         }
         if (!now.known) {
-            return [];
+            return false;
         }
-        let changed = false;
+        let redraw = false;
         for (const [tokenId, painted] of composed) {
             const current = now.prices?.get(tokenId);
             if (current !== undefined && !samePrice(painted, current)) {
                 composed.set(tokenId, current);
-                changed = true;
+                redraw = true;
             }
         }
-        if (changed) {
+        if (redraw) {
             prices = new Map([...(prices ?? []), ...composed]);
+        }
+        if (
+            (movedUnder !== undefined || droppedHere.length > 0 || lostAll) &&
+            movedRecords(opened, now).length === 0
+        ) {
+            selection = openedChoice;
+            movedUnder = undefined;
+            droppedHere = [];
+            lostAll = false;
+            absorb = false;
+            for (const [tokenId, record] of opened) {
+                composed.set(tokenId, now.prices?.get(tokenId) ?? record);
+            }
+            prices = new Map([...(prices ?? []), ...composed]);
+            paintLines();
+            redraw = true;
+        }
+        if (redraw) {
             refresh();
         }
-        return [];
+        return false;
     };
-    const recheck = (): boolean => movedNow().length > 0;
     registerCheck((): void => {
-        const moved = movedNow();
-        if (moved.length > 0 && movedUnder === undefined) {
-            movedUnder = copy.payItemsChanged(copy.itemNames(moved.map((tokenId) => tokenName(view.tokens, tokenId))));
-            refresh();
-        }
+        recheck();
     });
 
     const refresh = (): void => {
         clearPayQrTimer();
-        const sats = selectionSats(selection, prices, rate?.rate);
+        const sats = lostAll ? undefined : selectionSats(selection, prices, rate?.rate);
         const subDust = sats !== undefined && sats < DUST_SATS;
+        const n = Number(selectionCount(selection));
+        wrap.setAttribute('aria-label', copy.paySeveralTitle(n));
+        const title = head.querySelector('.item-n');
+        if (title !== null) {
+            title.textContent = copy.paySeveralTitle(n);
+        }
+        // Every chosen item left: the head, one sentence, who left, the way
+        // out — the shape the rebuilt sheet has.
+        if (lostAll && lostBox.parentNode === null) {
+            head.after(lostBox);
+        } else if (!lostAll) {
+            lostBox.remove();
+        }
+        const droppedText = droppedNow();
+        dropped.textContent = droppedText ?? '';
+        if (droppedText === undefined) {
+            dropped.remove();
+        } else if (lostAll) {
+            lostBox.after(dropped);
+        } else {
+            lines.after(dropped);
+        }
+        card.hidden = lostAll;
+        acts.hidden = lostAll;
+        final.hidden = lostAll;
+        howFold.hidden = lostAll;
+        const glance = selectionGlance(selection, prices);
+        total.textContent =
+            glance === undefined
+                ? ''
+                : selectionHasSurcharge(selection, prices)
+                  ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
+                  : copy.paySeveralTotal(quoteFigure(glance));
         /*
          * The memo names the items this payment covers (`STLP`'s second
          * shape). **One item composes the shape that already exists**, which
@@ -5910,7 +6247,7 @@ function paySeveralSheet(
          * the code are composed without it and the fold says which happened.
          */
         const entries = [...selection].map(([tokenId, quantity]) => ({ tokenId, quantity }));
-        const composed =
+        const encoded =
             entries.length === 0
                 ? undefined
                 : entries.length === 1
@@ -5922,15 +6259,15 @@ function paySeveralSheet(
         // cannot write) — the meter's own "one count, from the call that
         // produced the record" rule, applied to a sentence.
         const memo =
-            typeof composed === 'string'
-                ? composed
-                : composed !== undefined && 'hex' in composed
-                  ? composed.hex
+            typeof encoded === 'string'
+                ? encoded
+                : encoded !== undefined && 'hex' in encoded
+                  ? encoded.hex
                   : undefined;
         const refusal =
-            typeof composed === 'string' || composed === undefined || 'hex' in composed
+            typeof encoded === 'string' || encoded === undefined || 'hex' in encoded
                 ? undefined
-                : composed.why;
+                : encoded.why;
         const bip21 = sats === undefined ? undefined : payBip21(address, sats, memo);
         const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats, memo);
         const pay = sats === undefined ? undefined : payECashPayUrl(address, sats, memo);
@@ -5977,14 +6314,17 @@ function paySeveralSheet(
         web.hidden = !linked;
         app.hidden = !linked;
         web.textContent =
-            movedUnder === undefined &&
-            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && movedLine !== undefined)) &&
+            (movedUnder !== undefined ||
+                outcome === 'moved' ||
+                outcome === 'disagree' ||
+                (outcome === undefined && movedLine !== undefined)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = movedUnder === undefined && outcome === undefined && movedLine === undefined;
+        const underLine = movedUnder === undefined ? undefined : copy.payItemsChanged(movedNames(movedUnder));
+        valve.hidden = lostAll || (underLine === undefined && outcome === undefined && movedLine === undefined);
         valve.textContent =
-            movedUnder ?? (outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? ''));
+            underLine ?? (outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? ''));
         if (linked) {
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
@@ -6002,16 +6342,12 @@ function paySeveralSheet(
          * below the one density a phone has read here — while the count says
          * twenty-six either way (`qrScansInBox`, `CLAUDE.md` §9). The stale
          * sentence is about the rate and must not answer for size: that was
-         * the branch a too-long link fell into before this shipped.
+         * the branch a too-long link fell into before this shipped. A
+         * record that moved under the sheet is recomposed into the code
+         * (`recompose`), so what a phone reads is the choice as it stands.
          */
         const scans = bip21 !== undefined && qrScansInBox(bip21, PAY_QR_NARROWEST_PX);
-        if (bip21 !== undefined && movedUnder !== undefined) {
-            // The single sheet's rule: a code over records that moved is
-            // taken away in place, XEC or not.
-            const line = el('p', 'fine', movedUnder);
-            line.setAttribute('data-role', 'pay-qr-why');
-            qrBody.replaceChildren(line);
-        } else if (bip21 !== undefined && !aged && scans) {
+        if (bip21 !== undefined && !aged && scans) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
             box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
@@ -6038,8 +6374,10 @@ function paySeveralSheet(
                 return;
             }
             // The records first, the single sheet's rule: a chosen item's
-            // record that moved sends nothing and paints the sheet again.
-            if (recheck()) {
+            // record that moved sends nothing and hands the sheet back, and
+            // so does the first press after a re-read recomposed it in place.
+            if (recheck() || absorb) {
+                absorb = false;
                 handlers.onPayRecordMoved?.();
                 return;
             }
@@ -6048,6 +6386,7 @@ function paySeveralSheet(
                 return;
             }
             const before = selectionSats(selection, prices, rate.rate);
+            const at = composedAt;
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
                 // A sheet a repaint replaced while the feeds were asked marks
@@ -6056,7 +6395,8 @@ function paySeveralSheet(
                 if (!wrap.isConnected) {
                     return;
                 }
-                if (recheck()) {
+                if (recheck() || composedAt !== at) {
+                    absorb = false;
                     handlers.onPayRecordMoved?.();
                     return;
                 }
@@ -6078,9 +6418,11 @@ function paySeveralSheet(
     armValve(app, () => appUrl);
     refreshRate.addEventListener('click', () => {
         if (recheck()) {
+            absorb = false;
             handlers.onPayRecordMoved?.();
             return;
         }
+        const at = composedAt;
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
             // A sheet a repaint replaced while the feeds were asked marks
@@ -6089,7 +6431,8 @@ function paySeveralSheet(
             if (!wrap.isConnected) {
                 return;
             }
-            if (recheck()) {
+            if (recheck() || composedAt !== at) {
+                absorb = false;
                 handlers.onPayRecordMoved?.();
                 return;
             }

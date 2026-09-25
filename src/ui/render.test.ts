@@ -146,6 +146,7 @@ import {
 import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { broadcastCards, broadcastFigure, broadcastRail, broadcastTurns } from './broadcast';
 import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
+import { selectionSats as selectionSatsOf } from '../domain/selection';
 import { payLandingUrl, stallPath } from '../domain/route';
 import { EMBED_HEIGHT, EMBED_WIDTH, embedImagePath, embedSnippet } from '../domain/embed';
 import {
@@ -9183,10 +9184,14 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
         expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
         expect(open).not.toHaveBeenCalled();
+        // The sheet is recomposed in place from the record as it stands, at
+        // the rate it already held — never at the answer the ask brought
+        // back, which was read against the figure the press measured.
+        expect(figure).toBe(formatXec(satsForQuote(QUOTE_USD, 1n, stale.rate)!));
         expect(
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
-            'the answer was not composed over the old record',
-        ).toBe(figure);
+            'the answer was not composed',
+        ).toBe(formatXec(satsForQuote({ ...QUOTE_USD, amount: 700n }, 1n, stale.rate)!));
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_MOVED);
         open.mockRestore();
     });
@@ -9263,49 +9268,311 @@ describe('a-moved-quote-is-said-in-the-owners-words', () => {
         const pruned = several({ selection: new Map() });
         expect(pruned.querySelector('[data-role="pay-several"]')?.textContent, 'no press, no claim about one').toContain(copy.SELECTION_EMPTY);
     });
+
+    it('says the owner’s second round of sentences verbatim (CRITIC-CARRYOVER-2, item 2)', () => {
+        expect(copy.PAY_SEVERAL_GONE).toBe('None of the items you chose is still quoted as it was \u2014 no wallet was opened');
+        expect(copy.selectionDroppedItems('Roasted Beans', 1)).toBe(
+            'Roasted Beans changed or left the stall, so it was taken out of your list',
+        );
+        expect(copy.selectionDroppedItems('Roasted Beans and Green Tea', 2)).toBe(
+            'Roasted Beans and Green Tea changed or left the stall, so they were taken out of your list',
+        );
+        // The first clause of the owner's CHANGED sentences, for a paint no
+        // press asked for — the window's wording.
+        expect(copy.PAY_QUOTE_CHANGED_UNPRESSED).toBe('This quote changed while this sheet was open \u2014 check the figure');
+        expect(copy.PAY_QUOTE_CHANGED.startsWith(copy.PAY_QUOTE_CHANGED_UNPRESSED)).toBe(true);
+        expect(copy.payItemsChangedUnpressed('Roasted Beans')).toBe('Roasted Beans changed while this sheet was open \u2014 check the total');
+        expect(copy.payItemsChanged('Roasted Beans').startsWith(copy.payItemsChangedUnpressed('Roasted Beans'))).toBe(true);
+    });
+
+    it('says a choice is gone only when it is really empty, never over an item this page could not read', () => {
+        // The critic, 2026-09-25, item 2: a chosen item this page holds a
+        // record for and never read the genesis of is not a row, and "none
+        // of the items you chose is still quoted" over it would call our gap
+        // the seller's change.
+        const view = payView({
+            tokens: new Map([[TOKEN_ID, BEANS]]),
+            prices: new Map([[OTHER, { code: 'xec', exponent: 2, amount: 700_000n }]]),
+            overlay: { kind: 'pay-several' },
+            selectionOpen: true,
+            selection: new Map([[OTHER, 1n]]),
+            payRecordMoved: [TOKEN_ID],
+        });
+        const text = paint(view).root.querySelector('[data-role="pay-several"]')?.textContent ?? '';
+        expect(text).not.toContain(copy.PAY_SEVERAL_GONE);
+        expect(text).toContain(copy.selectionUnread(1));
+    });
+
+    it('names on the valve only the moved items still chosen, and asks for no second press after no press (items 6 and 7)', () => {
+        const several = (over: Partial<StallView>) =>
+            paint(
+                payView({
+                    tokens,
+                    prices: new Map([[OTHER, { code: 'xec', exponent: 2, amount: 700_000n }]]),
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[OTHER, 1n]]),
+                    ...over,
+                }),
+            ).root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent;
+        // Roasted Beans moved and left the choice: the dropped line names it.
+        expect(several({ payRecordMoved: [TOKEN_ID, OTHER] })).toBe(copy.payItemsChanged('Green Tea'));
+        expect(several({ payRecordMoved: [TOKEN_ID] }) ?? '', 'nothing moved is still chosen').toBe('');
+        expect(several({ payRecordMoved: [OTHER], payRecordMovedUnpressed: true })).toBe(copy.payItemsChangedUnpressed('Green Tea'));
+        const single = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: PAY_RATE, payRecordMoved: [TOKEN_ID], payRecordMovedUnpressed: true }),
+        ).root;
+        expect(single.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+    });
 });
 
-describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
+describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
     /**
-     * The sheet's half of the critic's item 2 (the app's is in
-     * app.live.test.ts): `recheckPaySheet` answers per root, in place. A
-     * record that moved takes the code away and sets the line on the SAME
-     * sheet node; a paint of another root does not unhook it.
+     * The owner, 2026-09-25 (CRITIC-CARRYOVER-2, item 1), at the sheet; the
+     * app's half is in app.live.test.ts. A re-read that moves what the buyer
+     * pays under an open sheet (`recheckPaySheet`, per root) recomposes the
+     * SAME sheet node from the record as it stands: the figure,
+     * `seller-price`, the surcharge, the rate row, both links, the code and
+     * the restated figure, the buyer's quantity kept — one bigint for all of
+     * them — and the line says so; the next press is absorbed once and
+     * hands the sheet back, and the press after it opens. A record gone says
+     * `PAY_QUOTE_GONE`, one in a unit this page does not paint
+     * `PAY_QUOTE_UNSHOWN`, once each, with no figure, code or Pay. A record
+     * back to what the sheet was opened on clears the line and the absorb.
      */
-    const records = (price: { code: string; exponent: number; amount: bigint }) => ({
-        prices: new Map([[TOKEN_ID, price]]),
+    const OTHER = '7e'.repeat(32);
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
         known: true,
         complete: true,
         decided: new Set<string>(),
     });
+    const pathOf = (node: Element | null | undefined): string | null | undefined =>
+        node?.querySelector('[data-role="pay-qr"] path')?.getAttribute('d');
+    const codeFor = (sats: bigint, memo: string | undefined): string | null =>
+        qrSvg(payBip21(ADDR, sats, memo)!, '').querySelector('path')!.getAttribute('d');
+    const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;
 
-    it('takes the code away in place, and another root’s paint does not unhook the sheet', () => {
-        const xec = { code: 'xec', exponent: 2, amount: 500_000n };
-        let now = records(xec);
+    const units = [
+        {
+            unit: 'XEC',
+            before: { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice,
+            // A new figure and a surcharge: the figure, the quote as written
+            // and the surcharge line all move.
+            after: { code: 'xec', exponent: 2, amount: 900_000n, surchargePct: 5 } as TokenPrice,
+            rate: undefined,
+        },
+        {
+            unit: 'USD',
+            before: { code: 'usd', exponent: 2, amount: 500n } as TokenPrice,
+            after: { code: 'usd', exponent: 2, amount: 700n, surchargePct: 5 } as TokenPrice,
+            rate: PAY_RATE,
+        },
+    ] as const;
+
+    for (const u of units) {
+        it(`the single sheet, ${u.unit}: recomposed in place, quantity kept, the press absorbed once`, () => {
+            let now = records(new Map([[TOKEN_ID, u.before]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    prices: new Map([[TOKEN_ID, u.before]]),
+                    overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                    payQuantity: 2n,
+                    ...(u.rate === undefined ? {} : { payRate: { ...u.rate } }),
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="pay"]')!;
+            const memo = encodePaymentMemoHex(TOKEN_ID, 2n)!;
+            const was = satsWithSurcharge(satsForQuote(u.before, 2n, u.rate?.rate), u.before.surchargePct)!;
+            expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(was));
+
+            // Another root paints between the sheet and the re-read: the
+            // check is per root, so it does not unhook this sheet.
+            renderStall(document.createElement('div'), payView(), handlers());
+            now = records(new Map([[TOKEN_ID, u.after]]));
+            recheckPaySheet(root);
+
+            const sats = satsWithSurcharge(satsForQuote(u.after, 2n, u.rate?.rate), u.after.surchargePct)!;
+            expect(sats, 'the record moved what the buyer pays').not.toBe(was);
+            expect(root.querySelector('[data-role="pay"]'), 'not rebuilt under the buyer').toBe(sheet);
+            expect(sheet.querySelector('[data-role="price"]')?.textContent, 'the new figure, for two').toBe(formatXec(sats));
+            expect(sheet.querySelector('[data-role="seller-price"]')?.textContent).toBe(
+                copy.payQuoteAsWritten(quoteFigure(u.after)),
+            );
+            expect(sheet.querySelector('[data-role="pay-surcharge"]')?.textContent).toContain('5%');
+            expect(sheet.querySelector('[data-role="pay-surcharge"]')?.hasAttribute('hidden')).toBe(false);
+            if (u.rate === undefined) {
+                expect(sheet.querySelector('[data-role="rate"]'), 'an XEC sheet mounts no rate row').toBeNull();
+            } else {
+                expect(sheet.querySelector('[data-role="rate"]')?.textContent).toContain('1 XEC = $0.00002');
+            }
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
+            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the restated figure').toBe(
+                copy.payFigure(formatXec(sats)),
+            );
+            expect(pathOf(sheet), 'the code is the new figure').toBe(codeFor(sats, memo));
+            expect(h.onPayRecordMoved, 'the re-read repaints nothing').not.toHaveBeenCalled();
+
+            expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith(TOKEN_ID);
+            // The mock hands nothing back, so the same sheet takes the next
+            // press — once absorbed, never twice — and the link is the figure.
+            expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, memo));
+            expect(pressForUrl(root, 'pay-wallet')).toBe(payECashPayUrl(ADDR, sats, memo));
+        });
+
+        it(`Pay several, ${u.unit}: recomposed in place, the line names the item, the press absorbed once`, () => {
+            const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+            const choice = new Map([[TOKEN_ID, 2n], [OTHER, 1n]]);
+            let now = records(new Map([[TOKEN_ID, u.before], [OTHER, u.before]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: new Map([[TOKEN_ID, u.before], [OTHER, u.before]]),
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: choice,
+                    ...(u.rate === undefined ? {} : { payRate: { ...u.rate } }),
+                }),
+                h,
+            );
+            const sheet = root.querySelector('[data-role="pay-several"]')!;
+            const memo = encodeMultiPaymentMemoHex([...choice].map(([tokenId, quantity]) => ({ tokenId, quantity })));
+            const memoHex = typeof memo === 'string' ? memo : memo !== undefined && 'hex' in memo ? memo.hex : undefined;
+            const was = selectionSatsOf(choice, new Map([[TOKEN_ID, u.before], [OTHER, u.before]]), u.rate?.rate)!;
+            expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(was));
+
+            now = records(new Map([[TOKEN_ID, u.after], [OTHER, u.before]]));
+            recheckPaySheet(root);
+
+            const sats = selectionSatsOf(choice, new Map([[TOKEN_ID, u.after], [OTHER, u.before]]), u.rate?.rate)!;
+            expect(root.querySelector('[data-role="pay-several"]'), 'not rebuilt under the buyer').toBe(sheet);
+            expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
+            expect(sheet.querySelector('[data-role="pay-lines"]')?.textContent, 'the line is the new quote').toContain(
+                quoteFigure({ ...u.after, amount: u.after.amount * 2n }),
+            );
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.payItemsChanged('Roasted Beans'));
+            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(copy.payFigure(formatXec(sats)));
+            expect(pathOf(sheet), 'the code is the new total').toBe(codeFor(sats, memoHex));
+
+            expect(pressForUrl(root, 'pay-cashtab'), 'the next press is absorbed').toBeUndefined();
+            expect(h.onPayRecordMoved).toHaveBeenCalledWith();
+            expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, memoHex));
+        });
+    }
+
+    it('a record gone or in a unit this page does not paint: once, and no figure, code or Pay', () => {
+        const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+        for (const c of [
+            { name: 'gone', now: new Map<string, TokenPrice>(), line: copy.PAY_QUOTE_GONE },
+            { name: 'unshown', now: new Map([[TOKEN_ID, { ...xec, code: 'zzz' }]]), line: copy.PAY_QUOTE_UNSHOWN },
+        ]) {
+            let now = records(new Map([[TOKEN_ID, xec]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(root, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h);
+            const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
+            now = records(c.now);
+            recheckPaySheet(root);
+            expect(root.querySelector('[data-role="pay"]'), c.name).toBe(sheet);
+            expect(sheet.querySelector('[data-role="pay-lost"]')?.textContent, c.name).toBe(c.line);
+            expect(occurrences(sheet.textContent ?? '', c.line), `${c.name}: said once`).toBe(1);
+            expect(sheet.querySelector('[data-role="pay-cashtab"]'), `${c.name}: no Pay`).toBeNull();
+            expect(sheet.querySelector('[data-role="pay-wallet"]'), `${c.name}: no Pay`).toBeNull();
+            expect(sheet.querySelector('[data-role="pay-qr"]'), `${c.name}: no code`).toBeNull();
+            expect(sheet.querySelector('[data-role="price"]')?.closest('[hidden]'), `${c.name}: no figure`).not.toBeNull();
+            if (c.name === 'unshown') {
+                expect(sheet.textContent, 'the record is there: never said to be gone').not.toContain(copy.PAY_QUOTE_GONE);
+            }
+        }
+        // The rebuilt sheet says it once too (the window, 2026-09-25).
+        for (const [over, line] of [
+            [{ prices: new Map(), payRecordMoved: [TOKEN_ID] }, copy.PAY_QUOTE_GONE],
+            [{ prices: new Map([[TOKEN_ID, { ...xec, code: 'zzz' }]]), payRecordMoved: [TOKEN_ID] }, copy.PAY_QUOTE_UNSHOWN],
+        ] as const) {
+            const text = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, ...over })).root.querySelector('[data-role="pay"]')?.textContent ?? '';
+            expect(occurrences(text, line), line).toBe(1);
+        }
+    });
+
+    it('Pay several: every chosen item gone says the owner’s sentence once, names who left, and composes nothing', () => {
+        const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+        const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+        let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
         const root = document.createElement('div');
         const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
-        renderStall(root, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h);
-        const sheet = root.querySelector('[data-role="pay"]')!;
-        expect(sheet.querySelector('[data-role="pay-qr"]')).not.toBeNull();
-
-        // Another root paints between the sheet and the re-read.
-        renderStall(document.createElement('div'), payView(), handlers());
-        now = records({ ...xec, amount: 900_000n });
+        renderStall(
+            root,
+            payView({
+                tokens,
+                prices: new Map([[TOKEN_ID, xec], [OTHER, xec]]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+            }),
+            h,
+        );
+        const sheet = root.querySelector('[data-role="pay-several"]') as HTMLElement;
+        // One leaves: it is named on the dropped line, never on the valve.
+        now = records(new Map([[OTHER, xec]]));
         recheckPaySheet(root);
-        expect(root.querySelector('[data-role="pay"]'), 'not rebuilt').toBe(sheet);
+        expect(sheet.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(
+            copy.selectionDroppedItems('Roasted Beans', 1),
+        );
+        expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', 'a moved item that left is not named twice').toBe('');
+        expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(satsForQuote(xec, 1n, undefined)!));
+        // Both leave.
+        now = records(new Map());
+        recheckPaySheet(root);
+        expect(root.querySelector('[data-role="pay-several"]')).toBe(sheet);
+        expect(sheet.querySelector('[data-role="pay-lost"]')?.textContent).toBe(copy.PAY_SEVERAL_GONE);
+        expect(occurrences(sheet.textContent ?? '', copy.PAY_SEVERAL_GONE), 'said once').toBe(1);
+        expect(sheet.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(
+            copy.selectionDroppedItems('Roasted Beans and Green Tea', 2),
+        );
+        expect(sheet.querySelector('[data-role="pay-cashtab"]')).toBeNull();
         expect(sheet.querySelector('[data-role="pay-qr"]')).toBeNull();
-        expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
-        expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
-        expect(h.onPayRecordMoved, 'the re-read repaints nothing; the press will').not.toHaveBeenCalled();
+    });
 
-        // A paint of the same root unhooks the sheet it replaced.
-        const again = document.createElement('div');
-        const h2 = { ...handlers(), onPayRecords: () => records({ ...xec, amount: 900_000n }), onPayRecordMoved: vi.fn() };
-        renderStall(again, payView({ prices: new Map([[TOKEN_ID, xec]]), overlay: { kind: 'pay', tokenId: TOKEN_ID } }), h2);
-        const first = again.querySelector('[data-role="pay"]')!;
-        renderStall(again, payView(), h2);
-        recheckPaySheet(again);
-        expect(first.querySelector('[data-role="pay-qr"]'), 'a detached sheet is not answered').not.toBeNull();
+    it('a record back to what the sheet was opened on clears the line and the absorbed press', () => {
+        for (const kind of ['pay', 'pay-several'] as const) {
+            const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+            const moved = { ...xec, amount: 900_000n };
+            let now = records(new Map([[TOKEN_ID, xec]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    prices: new Map([[TOKEN_ID, xec]]),
+                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n]]),
+                }),
+                h,
+            );
+            const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+            for (const back of [moved, undefined]) {
+                now = records(back === undefined ? new Map() : new Map([[TOKEN_ID, back]]));
+                recheckPaySheet(root);
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent || sheet.querySelector('[data-role="pay-lost"]')?.textContent, kind).not.toBe('');
+                now = records(new Map([[TOKEN_ID, xec]]));
+                recheckPaySheet(root);
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', `${kind}: the line clears`).toBe('');
+                expect(sheet.querySelector('[data-role="pay-lost"]'), `${kind}: nothing left to say`).toBeNull();
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, `${kind}: nothing restated`).toBe(copy.PAY_CASHTAB);
+                expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe('5,000');
+            }
+            expect(pressForUrl(root, 'pay-cashtab'), `${kind}: the press opens at once`).toContain('amount=5000.00');
+            expect(h.onPayRecordMoved).not.toHaveBeenCalled();
+        }
     });
 });
 
@@ -9325,6 +9592,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
             name: 'the single sheet',
             view: () => payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map([[TOKEN_ID, usd]]), payRate: { ...PAY_RATE } }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd]])),
+            at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)!,
             handedBack: [TOKEN_ID],
         },
         {
@@ -9339,6 +9607,7 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
                     payRate: { ...PAY_RATE },
                 }),
             now: (m: boolean) => records(new Map([[TOKEN_ID, m ? moved : usd], [OTHER, usd]])),
+            at: (m: boolean, rate: bigint) => satsForQuote(m ? moved : usd, 1n, rate)! + satsForQuote(usd, 1n, rate)!,
             handedBack: [],
         },
     ] as const;
@@ -9371,7 +9640,12 @@ describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(h.onPayRate).toHaveBeenCalledTimes(1);
             expect(h.onPayRecordMoved).toHaveBeenCalledWith(...sheet.handedBack);
-            expect(root.querySelector('[data-role="price"]')?.textContent, 'the answer was not composed').toBe(figure);
+            // Recomposed in place from the moved record at the rate the sheet
+            // held, never at the answer the ask brought back.
+            expect(figure).toBe(formatXec(sheet.at(false, PAY_RATE.rate)));
+            expect(root.querySelector('[data-role="price"]')?.textContent, 'the answer was not composed').toBe(
+                formatXec(sheet.at(true, PAY_RATE.rate)),
+            );
             expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_REFRESHED);
         });
     }
@@ -9423,7 +9697,13 @@ describe('pay-several-asks-the-record-after-the-valve', () => {
         expect(open, 'nothing opens').not.toHaveBeenCalled();
         open.mockRestore();
         expect(h.onPayRecordMoved).toHaveBeenCalledWith();
-        expect(root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent).toBe(figure);
+        // Recomposed in place from the moved record at the rate the sheet
+        // held (0.00002), never at the answer the ask brought back (0.00001).
+        const held = scaleRate(0.00002)!;
+        expect(figure).toBe(formatXec(satsForQuote(usd, 1n, held)! * 2n));
+        expect(root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent).toBe(
+            formatXec(satsForQuote({ ...usd, amount: 700n }, 1n, held)! + satsForQuote(usd, 1n, held)!),
+        );
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').not.toBe(copy.PAY_RATE_MOVED);
     });
 });

@@ -567,6 +567,12 @@ export function boot(
     let payRecordMovedFor: string | undefined;
     let payRecordMovedItems: readonly string[] = [];
     /**
+     * Whether the paint that says so followed a press. An ask's tail that
+     * found the records moved (`sheetOutOfStep`) is no press, and its line
+     * asks for none (`payRecordMovedUnpressed`).
+     */
+    let payRecordMovedPressed = true;
+    /**
      * The records the open pay sheet was last painted from — the ones its
      * figure is composed of (`paint`). What a press found moved is judged
      * against these, so the line names what the buyer was shown and not
@@ -1348,7 +1354,10 @@ export function boot(
             ...(payRecordMovedFor !== undefined &&
             payRecordMovedFor === payOverlayKey(state.view.overlay) &&
             payRecordMovedItems.length > 0
-                ? { payRecordMoved: payRecordMovedItems }
+                ? {
+                      payRecordMoved: payRecordMovedItems,
+                      ...(payRecordMovedPressed ? {} : { payRecordMovedUnpressed: true as const }),
+                  }
                 : {}),
             selection: new Map(selection),
             /*
@@ -1770,7 +1779,7 @@ export function boot(
         if (holdsLivePaint(settled())) {
             // A pay sheet answers the re-read in place, without a rebuild:
             // its scan code is a road no press guards, so a record that moved
-            // under it takes the code away now (`recheckPaySheet`).
+            // under it is recomposed into the sheet now (`recheckPaySheet`).
             if (payOverlayKey(state.view.overlay) !== undefined) {
                 recheckPaySheet(root);
             }
@@ -2277,7 +2286,7 @@ export function boot(
                 return;
             }
             if (sheetOutOfStep()) {
-                onPayRecordMoved(tokenId);
+                onPayRecordMoved(tokenId, false);
                 return;
             }
             paint();
@@ -2371,7 +2380,7 @@ export function boot(
                 return;
             }
             if (sheetOutOfStep()) {
-                onPayRecordMoved();
+                onPayRecordMoved(undefined, false);
                 return;
             }
             paint();
@@ -2380,16 +2389,21 @@ export function boot(
 
     /**
      * A Pay press found the seller's record moved under its open sheet (the
-     * critic's final merge, item 11). A sheet holds the live paint, so the
-     * re-read that moved it is in `state.view` and not on screen: paint the
-     * sheet again from the records as they stand — "Pay several"'s choice
-     * pruned as every paint prunes it — saying so, and the next press is the
-     * one that opens a wallet, the moved-rate valve's shape. The press sent
-     * nothing. A record now in a unit the held rate was not read for asks
-     * for its own rate, as an open does; until it answers the paint above
-     * carries no rate (`payRateUnit`), so no figure is composed across units.
+     * critic's final merge, item 11), or was the first press after a re-read
+     * recomposed the sheet in place (the owner, 2026-09-25: absorbed once).
+     * A sheet holds the live paint, so the re-read that moved it is in
+     * `state.view` and not in the app's paint: paint the sheet again from
+     * the records as they stand — "Pay several"'s choice pruned as every
+     * paint prunes it — saying so, and the next press is the one that opens
+     * a wallet, the moved-rate valve's shape. The press sent nothing. A
+     * record now in a unit the held rate was not read for asks for its own
+     * rate, as an open does; until it answers the paint above carries no
+     * rate (`payRateUnit`), so no figure is composed across units.
+     *
+     * `pressed` is false for an ask's tail (`sheetOutOfStep`): no press was
+     * made, so the line asks for none (`payRecordMovedUnpressed`).
      */
-    const onPayRecordMoved = (tokenId?: string): void => {
+    const onPayRecordMoved = (tokenId?: string, pressed = true): void => {
         const key = payOverlayKey(state.view.overlay);
         if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
             return;
@@ -2400,6 +2414,7 @@ export function boot(
         if (moved.length > 0) {
             payRecordMovedFor = key;
             payRecordMovedItems = moved;
+            payRecordMovedPressed = pressed;
         }
         paint();
         const over = state.view.overlay;
@@ -2429,8 +2444,8 @@ export function boot(
                 return;
             }
             if (sheetOutOfStep()) {
-                // Moved again while its own rate was asked for.
-                onPayRecordMoved(tokenId);
+                // Moved again while its own rate was asked for: a tail, no press.
+                onPayRecordMoved(tokenId, false);
                 return;
             }
             paint();
@@ -2831,7 +2846,7 @@ export function boot(
                             return;
                         }
                         if (sheetOutOfStep()) {
-                            onPayRecordMoved(tokenId);
+                            onPayRecordMoved(tokenId, false);
                             return;
                         }
                         paint();

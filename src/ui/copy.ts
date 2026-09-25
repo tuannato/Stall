@@ -1786,21 +1786,35 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
- * The press found the seller's record moved since the sheet was painted —
- * what the buyer pays changed: the figure, the unit or the surcharge — so it
- * opened nothing and the sheet was painted again from the record as it
- * stands. The valve's shape: the figure above is already the new one, and
- * the control restates it. The owner's wording (2026-09-25). A change to the
- * tolerance or the words is not a move: the sheet takes it in place.
+ * The seller's record moved while the sheet was open — what the buyer pays
+ * changed: the figure, the unit or the surcharge — and the sheet was
+ * recomposed from the record as it stands: a re-read landing under it, in
+ * place, or a press that found it moved, which opened nothing. The valve's
+ * shape: the figure above is already the new one, the control restates it,
+ * and the next press after an in-place recompose is still absorbed. The
+ * owner's wording (2026-09-25). A change to the tolerance or the words is
+ * not a move: the sheet takes it in place.
  */
 export const PAY_QUOTE_CHANGED =
     'This quote changed while this sheet was open \u2014 check the figure and press Pay again';
 /**
- * The same, on "Pay several", naming the items whose records moved
+ * The same fact after a paint nobody pressed for — an ask's tail (the open,
+ * a `?pay=` landing, a moved unit's own rate) found the records moved and
+ * painted the sheet again from them — so the next press is the one that
+ * opens, and "press Pay again" would ask for a second press after none.
+ * The owner's sentence is for after a press; this is its first clause, the
+ * window's wording (2026-09-25).
+ */
+export const PAY_QUOTE_CHANGED_UNPRESSED = 'This quote changed while this sheet was open \u2014 check the figure';
+/**
+ * The same, on "Pay several", naming the chosen items whose records moved
  * (`itemNames`): the owner's per-item form (2026-09-25).
  */
 export const payItemsChanged = (names: string): string =>
     `${names} changed while this sheet was open \u2014 check the total and press Pay again`;
+/** The per-item form after a paint nobody pressed for: its first clause (`PAY_QUOTE_CHANGED_UNPRESSED`). */
+export const payItemsChangedUnpressed = (names: string): string =>
+    `${names} changed while this sheet was open \u2014 check the total`;
 /**
  * The press found the item's record gone — the seller took it off — so there
  * is nothing left to compose, and the press opened nothing. The owner's
@@ -1816,12 +1830,13 @@ export const PAY_QUOTE_GONE = 'This quote is no longer on the stall \u2014 no wa
  */
 export const PAY_QUOTE_UNSHOWN = 'This page can no longer show this quote \u2014 no wallet was opened';
 /**
- * "Pay several" when the press found every chosen item's record moved away
- * — removed, or in another unit — so the paint that followed emptied the
- * choice: nothing is left to compose, and nothing opened.
+ * "Pay several" when every chosen item's record moved away — removed, or in
+ * another unit — so the choice is really empty (`selection.size === 0`,
+ * never a choice whose items only failed to read): nothing is left to
+ * compose, and nothing opened. The owner's wording (2026-09-25).
  */
 export const PAY_SEVERAL_GONE =
-    'Nothing you chose is quoted as you chose it any more \u2014 no wallet was opened';
+    'None of the items you chose is still quoted as it was \u2014 no wallet was opened';
 /** Item names in a sentence: "A", "A and B", "A, B and C". */
 export const itemNames = (names: readonly string[]): string =>
     names.length <= 1
@@ -2014,13 +2029,13 @@ export const SELECTION_DROPPED =
 /**
  * The same, naming the items a re-read took out (`itemNames`), on the phone
  * strip and the "Pay several" sheet: the critic, 2026-09-25, item 4 — a
- * buyer whose choice shrank is told which item left. The wall keeps
- * `SELECTION_DROPPED`.
+ * buyer whose choice shrank is told which item left. The owner's wording
+ * (2026-09-25), and its plural. The wall keeps `SELECTION_DROPPED`.
  */
 export const selectionDroppedItems = (names: string, n: number): string =>
     n === 1
-        ? `${names} is no longer quoted as it was and was taken out.`
-        : `${names} are no longer quoted as they were and were taken out.`;
+        ? `${names} changed or left the stall, so it was taken out of your list`
+        : `${names} changed or left the stall, so they were taken out of your list`;
 /**
  * A chosen item this page's own read did not reach — a walk that threw, or a
  * genesis that never arrived. In place of the strip's total and Pay: our

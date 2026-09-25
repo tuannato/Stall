@@ -822,6 +822,15 @@ export type StallView = WindowState & {
      */
     payRecordMoved?: readonly string[];
     /**
+     * The paint after the move was not a press: an ask's tail — the open, a
+     * `?pay=` landing, a moved unit's own rate — found the records moved
+     * (`sheetOutOfStep`) and painted the sheet again from them. The next
+     * press is then the one that opens, so the line asks for no second
+     * press (`PAY_QUOTE_CHANGED_UNPRESSED`): the owner's sentence is for
+     * after a press. Present only beside `payRecordMoved`.
+     */
+    payRecordMovedUnpressed?: true;
+    /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never
      * against the chain.

@@ -3,7 +3,7 @@ import { DUST_SATS, formatXec } from './domain/money';
 import { encodeCashAddress } from 'ecashaddrjs';
 import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { STL1_HEX, encodeManifestHex } from './domain/manifest';
 import { STLD_HEX, encodeDescriptionHex, encodeRemovalHex } from './domain/description';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from './domain/theme';
@@ -42,6 +42,7 @@ import {
     RATE_SOURCE_CHECK,
     RATE_SOURCE_PRIMARY,
     PAY_QUOTE_CHANGED,
+    PAY_QUOTE_CHANGED_UNPRESSED,
     PAY_QUOTE_GONE,
     PAY_QUOTE_UNSHOWN,
     PAY_CASHTAB,
@@ -368,7 +369,7 @@ const { boot } = await import('./app');
  * test that says nothing was taken out reads both surfaces
  * (`the-taken-out-words-are-in-every-taken-out-sentence`).
  */
-const DROPPED_WORDS = 'no longer quoted as';
+const DROPPED_WORDS = 'taken out';
 type State = import('./app').AppState;
 
 /** Let the queued promise chains run. Several helpers await in sequence. */
@@ -5509,7 +5510,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
     const figureOf = (root: HTMLElement, scope: string): string | undefined =>
         root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
 
-    it('a new figure: the press sends nothing, the sheet shows the new one and says so, and the next press pays it', async () => {
+    it('a new figure: the sheet shows the new one in place and says so, the press after it sends nothing, and the next press pays it', async () => {
         const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
@@ -5517,9 +5518,12 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(figureOf(root, 'pay')).toBe('5,000');
 
         await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
-        expect(figureOf(root, 'pay'), 'the sheet holds the live paint').toBe('5,000');
+        // The sheet holds the live paint and answers the re-read in place
+        // (the owner, 2026-09-25): the new figure, said.
+        expect(figureOf(root, 'pay'), 'recomposed in place').toBe('9,000');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
 
-        expect(press(root, 'pay'), 'a figure the seller no longer quotes is never handed over').toBeUndefined();
+        expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
         expect(figureOf(root, 'pay')).toBe('9,000');
         expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
         expect(
@@ -5531,7 +5535,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(url, 'the second press pays the record as it stands').toContain('amount=9000.00');
     });
 
-    it('a removal: the press sends nothing and the sheet says the quote is gone', async () => {
+    it('a removal: the sheet says the quote is gone and offers nothing to press', async () => {
         // B stays quoted here; the stall's only quote removed is the next
         // case.
         const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
@@ -5544,13 +5548,13 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             ['7d'.repeat(32), encodeRemovalHex(A)],
         ]);
 
-        expect(press(root, 'pay')).toBeUndefined();
         const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.querySelector('[data-role="pay-qr"]'), 'no code').toBeNull();
         expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
         expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
     });
 
-    it('a removal of the stall’s only quote: the press sends nothing and the sheet says the quote is gone', async () => {
+    it('a removal of the stall’s only quote: the sheet says the quote is gone and offers nothing to press', async () => {
         // The critic, 2026-09-25, item 1: a finished walk that read the bare
         // tombstone of the last quote answers with every map empty and the
         // token in `decided`; that is a removal, not our silence.
@@ -5562,7 +5566,6 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         await republish([['7d'.repeat(32), encodeRemovalHex(A)]]);
         await until(() => root.querySelector('[data-role="pay"] [data-role="pay-qr"]') === null);
 
-        expect(press(root, 'pay')).toBeUndefined();
         const sheet = root.querySelector('[data-role="pay"]');
         expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
         expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
@@ -5590,6 +5593,10 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
         const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
         const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+        // On the page, as the app's root is: the sheet's own ask answers in
+        // place only while it is connected (`wrap.isConnected`).
+        document.body.append(root);
+        onTestFinished(() => root.remove());
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
@@ -5597,9 +5604,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         asked.length = 0;
 
         await republish([['7f'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
-        expect(press(root, 'pay')).toBeUndefined();
         await flush();
 
+        // Recomposed in place: the sheet asked the new unit's own rate.
         expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
         const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
         expect(figureOf(root, 'pay')).toBe(eur);
@@ -5607,6 +5614,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             formatXec(satsForQuote(EUR_QUOTE, 1n, USD_RATE)!),
         );
         expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe(eur);
         expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
     });
 
@@ -5643,11 +5653,13 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
         const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
         expect(figureOf(root, 'pay')).toBe(eur);
-        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        // Painted by the open's own tail, which no press asked for: the
+        // line asks for no second press, and the next press opens.
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
         expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
     });
 
-    it('Pay several: a chosen item’s new figure sends nothing, the total is the new one, and the next press pays it', async () => {
+    it('Pay several: a chosen item’s new figure is the new total in place, the press after it sends nothing, and the next press pays it', async () => {
         const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
         await flush();
         (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
@@ -5664,9 +5676,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             ['8b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
             ['8a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })],
         ]);
-        expect(figureOf(root, 'pay-several'), 'the sheet holds the live paint').toBe('12,000');
+        expect(figureOf(root, 'pay-several'), 'recomposed in place').toBe('16,000');
 
-        expect(press(root, 'pay-several')).toBeUndefined();
+        expect(press(root, 'pay-several'), 'the press after the move is absorbed').toBeUndefined();
         expect(figureOf(root, 'pay-several')).toBe('16,000');
         expect(root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
             payItemsChanged('Plum Jam'),
@@ -5674,7 +5686,7 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(press(root, 'pay-several')).toContain('amount=16000.00');
     });
 
-    it('a unit this page does not paint: the press sends nothing and says the page can no longer show it', async () => {
+    it('a unit this page does not paint: the sheet says the page can no longer show it and offers nothing to press', async () => {
         // The critic, 2026-09-25, item 3: the record is still the seller's,
         // in a unit this page does not write — our gap, never "no longer on
         // the stall".
@@ -5684,8 +5696,8 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         await flush();
         await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
 
-        expect(press(root, 'pay')).toBeUndefined();
         const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.querySelector('[data-role="pay-qr"]'), 'no code').toBeNull();
         expect(sheet?.textContent).toContain(PAY_QUOTE_UNSHOWN);
         expect(sheet?.textContent).not.toContain(PAY_QUOTE_GONE);
         expect(sheet?.querySelector('[data-role="pay-cashtab"]')).toBeNull();
@@ -5760,7 +5772,11 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             release();
             await until(() => figureOf(root, 'pay') !== undefined && figureOf(root, 'pay') !== '');
             expect(figureOf(root, 'pay')).toBe(at({ ...USD_QUOTE, amount: 700n }, USD_RATE));
-            expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent, 'the buyer is told').toBe(PAY_QUOTE_CHANGED);
+            // Told — in the first clause alone: the open's tail painted it,
+            // and no press was made to ask for again (item 7).
+            expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent, 'the buyer is told').toBe(
+                PAY_QUOTE_CHANGED_UNPRESSED,
+            );
         });
 
         describe('a-pay-hint-sheet-never-composes-across-units', () => {
@@ -5781,26 +5797,31 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 await until(() => figureOf(root, 'pay') === at(EUR_QUOTE, EUR_RATE));
                 expect(asked, 'the new unit’s own rate').toContain('eur');
                 expect(figureOf(root, 'pay'), 'never the euro quote at the dollar’s rate').toBe(at(EUR_QUOTE, EUR_RATE));
-                expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
             });
         });
 
         it('a record that moves again while the move’s own rate is asked for composes at the last unit', async () => {
             priceControl.fetch = async (code) => rates[code];
             const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+            // On the page: the sheet's own ask answers only while connected.
+            document.body.append(root);
+            onTestFinished(() => root.remove());
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
             await flush();
-            await republish([['4c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
             const { asked, release } = holdNextAsk();
-            expect(press(root, 'pay'), 'the press is absorbed').toBeUndefined();
-            await flush();
+            // Recomposed in place, and the euro's own rate asked for — held
+            // (the dollar's first, which judges the feed, then the euro's).
+            await republish([['4c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
             expect(asked).toEqual(['usd', 'eur']);
             await republish([['4d'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: GBP_QUOTE })]]);
             release();
             await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
             expect(figureOf(root, 'pay'), 'never the pound quote at the euro’s rate').toBe(at(GBP_QUOTE, GBP_RATE));
             expect(asked).toContain('gbp');
+            expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+            await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
             expect(press(root, 'pay')).toContain(`amount=${at(GBP_QUOTE, GBP_RATE).replace(/,/g, '')}`);
         });
 
@@ -5826,19 +5847,24 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             await until(() => figureOf(root, 'pay-several') === at(USD_B, USD_RATE));
             expect(figureOf(root, 'pay-several'), 'Rye Flour alone, at the dollar’s rate').toBe(at(USD_B, USD_RATE));
             const sheet = root.querySelector('[data-role="pay-several"]');
-            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+            // Plum Jam left the choice: named once, on the dropped line, and
+            // never on the valve beside it (item 6).
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
             expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
         });
     });
 
-    describe('a-pay-code-is-taken-away-when-the-record-moves-under-it', () => {
+    describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
         /**
-         * The critic, 2026-09-25, item 2. The scan code is the one road off
-         * a pay sheet that no press guards, and an XEC code never ages. A
-         * re-read that moves what the buyer pays while the sheet is open now
-         * takes the code away IN PLACE — the sheet is not rebuilt under the
-         * buyer — and sets the valve's line; the press on that same sheet is
-         * still absorbed and repaints it from the record as it stands.
+         * The owner, 2026-09-25 (CRITIC-CARRYOVER-2, item 1), through the
+         * real app. A re-read that moves what the buyer pays while a sheet
+         * is open recomposes the SAME sheet node in place from the record as
+         * it stands — the figure, the code, both links, the restated figure,
+         * the buyer's quantity kept — and says so; the press after it is
+         * absorbed and paints the sheet again from the same records; the
+         * press after that pays the new figure. A record back to what the
+         * sheet was opened on clears the line and the absorb. Replaces the
+         * round-2 test that pinned "nothing on it is recomposed".
          */
         const RATE = 20_000_000n;
         const USD_A = { code: 'usd', exponent: 2, amount: 500n };
@@ -5856,12 +5882,12 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             await flush();
         };
         const cases = [
-            { unit: 'XEC', prices: new Map([[A, XEC_OLD], [B, XEC_B]]), moved: XEC_NEW },
-            { unit: 'USD', prices: new Map([[A, USD_A], [B, USD_B]]), moved: USD_A2 },
+            { unit: 'XEC', prices: new Map([[A, XEC_OLD], [B, XEC_B]]), moved: XEC_NEW, rate: undefined },
+            { unit: 'USD', prices: new Map([[A, USD_A], [B, USD_B]]), moved: USD_A2, rate: RATE },
         ] as const;
 
         for (const c of cases) {
-            it(`${c.unit === 'XEC' ? 'an' : 'a'} ${c.unit} quote on the single sheet`, async () => {
+            it(`${c.unit === 'XEC' ? 'an' : 'a'} ${c.unit} quote on the single sheet, the buyer’s quantity kept`, async () => {
                 priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
                 const { root } = bootStall(phone(new Map(c.prices)));
                 await flush();
@@ -5870,26 +5896,30 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 // the sheet that holds the code, not the one asking.
                 await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
                 const sheet = scope(root, 'pay')!;
+                (sheet.querySelector('[data-role="pay-quantity-edit"]') as HTMLButtonElement).click();
+                const field = sheet.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+                field.value = '2';
+                field.dispatchEvent(new Event('input'));
                 const figure = figureOf(root, 'pay');
-                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is drawn').not.toBeNull();
+                expect(figure).toBe(formatXec(satsForQuote(c.prices.get(A)!, 2n, c.rate)!));
 
                 await republish([['6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })]]);
                 // The burst is a real timer (`until`'s own reason).
-                await until(() => sheet.querySelector('[data-role="pay-qr"]') === null);
+                const moved = formatXec(satsForQuote(c.moved, 2n, c.rate)!);
+                await until(() => figureOf(root, 'pay') === moved);
                 expect(scope(root, 'pay'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
-                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is taken away').toBeNull();
-                expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                expect(figureOf(root, 'pay'), 'the new figure, for the two the buyer asked').toBe(moved);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'a code for the record as it stands').not.toBeNull();
                 expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
-                expect(figureOf(root, 'pay'), 'nothing on it is recomposed').toBe(figure);
-                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'no stale figure restated').toBe(PAY_CASHTAB);
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(payFigure(moved));
 
-                expect(press(root, 'pay'), 'the press is still absorbed').toBeUndefined();
+                expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
                 const again = scope(root, 'pay')!;
-                expect(again).not.toBe(sheet);
-                expect(figureOf(root, 'pay')).not.toBe(figure);
-                expect(again.querySelector('[data-role="pay-qr"]'), 'a code for the record as it stands').not.toBeNull();
+                expect(again, 'painted again from the same records').not.toBe(sheet);
+                expect(figureOf(root, 'pay')).toBe(moved);
+                expect(again.querySelector('[data-role="pay-qr"]')).not.toBeNull();
                 expect(again.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
-                expect(press(root, 'pay')).toContain(`amount=${figureOf(root, 'pay')!.replace(/,/g, '')}`);
+                expect(press(root, 'pay')).toContain(`amount=${moved.replace(/,/g, '')}`);
             });
 
             it(`${c.unit} quotes on Pay several`, async () => {
@@ -5900,26 +5930,70 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 await until(() => scope(root, 'pay-several')?.querySelector('[data-role="pay-qr"]') != null);
                 const sheet = scope(root, 'pay-several')!;
                 const figure = figureOf(root, 'pay-several');
-                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is drawn').not.toBeNull();
 
                 await republish([
                     ['6b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: c.prices.get(B)! })],
                     ['6c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })],
                 ]);
-                await until(() => sheet.querySelector('[data-role="pay-qr"]') === null);
+                const moved = formatXec(satsForQuote(c.moved, 1n, c.rate)! + satsForQuote(c.prices.get(B)!, 1n, c.rate)!);
+                await until(() => figureOf(root, 'pay-several') === moved);
+                expect(moved).not.toBe(figure);
                 expect(scope(root, 'pay-several'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
-                expect(sheet.querySelector('[data-role="pay-qr"]'), 'the code is taken away').toBeNull();
-                expect(sheet.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+                expect(figureOf(root, 'pay-several')).toBe(moved);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'a code for the choice as it stands').not.toBeNull();
                 expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
-                expect(figureOf(root, 'pay-several')).toBe(figure);
 
-                expect(press(root, 'pay-several'), 'the press is still absorbed').toBeUndefined();
+                expect(press(root, 'pay-several'), 'the press after the move is absorbed').toBeUndefined();
                 expect(scope(root, 'pay-several')).not.toBe(sheet);
-                expect(figureOf(root, 'pay-several')).not.toBe(figure);
-                expect(scope(root, 'pay-several')!.querySelector('[data-role="pay-qr"]')).not.toBeNull();
-                expect(press(root, 'pay-several')).toContain(`amount=${figureOf(root, 'pay-several')!.replace(/,/g, '')}`);
+                expect(figureOf(root, 'pay-several')).toBe(moved);
+                expect(press(root, 'pay-several')).toContain(`amount=${moved.replace(/,/g, '')}`);
             });
         }
+
+        it('a record gone or in a unit this page does not paint leaves no figure, code or Pay, said once', async () => {
+            for (const [txid, hex, line] of [
+                ['6e'.repeat(32), encodeRemovalHex(A), PAY_QUOTE_GONE],
+                ['6f'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } }), PAY_QUOTE_UNSHOWN],
+            ] as const) {
+                const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+                await flush();
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay')!;
+                await republish([
+                    ['6d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                    [txid, hex],
+                ]);
+                await until(() => sheet.querySelector('[data-role="pay-lost"]') !== null);
+                expect(scope(root, 'pay'), line).toBe(sheet);
+                expect(sheet.querySelector('[data-role="pay-lost"]')?.textContent).toBe(line);
+                expect((sheet.textContent ?? '').split(line).length - 1, 'said once').toBe(1);
+                expect(sheet.querySelector('[data-role="pay-qr"]')).toBeNull();
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+            }
+        });
+
+        it('a record back to what the sheet was opened on clears the line, and the press opens at once', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+            const sheet = scope(root, 'pay')!;
+            await republish([['5e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+            // Republished at the first figure, in a later block.
+            const hex = encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD });
+            const txid = publish(signedTx({ txid: '5f'.repeat(32), outputs: [`6a${hex!}`], height: 8 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([txid]);
+            }
+            await until(() => figureOf(root, 'pay') === '5,000');
+            expect(scope(root, 'pay')).toBe(sheet);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', 'the line clears').toBe('');
+            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'nothing restated').toBe(PAY_CASHTAB);
+            expect(press(root, 'pay'), 'no press is absorbed').toContain('amount=5000.00');
+        });
 
         it('a new margin and new words under the open sheet are taken in place, and the code stays', async () => {
             priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
@@ -5992,12 +6066,17 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
                 ['5d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
                 ['5c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
             ]);
-            await until(() => root.querySelector('[data-role="pay-several"] [data-role="pay-qr"]') === null);
+            // In place: Plum Jam leaves the choice, named on the dropped line.
+            await until(() => figureOf(root, 'pay-several') === '7,000');
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent).toBe(
+                selectionDroppedItems('Plum Jam', 1),
+            );
 
             expect(press(root, 'pay-several'), 'the press is absorbed').toBeUndefined();
             const sheet = root.querySelector('[data-role="pay-several"]');
             expect(figureOf(root, 'pay-several'), 'Rye Flour alone, still in XEC').toBe('7,000');
-            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+            // Named once, on the dropped line, and never on the valve (item 6).
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
             expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
             expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Plum Jam');
             expect(press(root, 'pay-several')).toContain('amount=7000.00');
