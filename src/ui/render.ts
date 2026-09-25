@@ -4682,6 +4682,22 @@ function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
     return changedAtMs !== undefined && pressedAt(event) - changedAtMs <= PAY_RECOMPOSE_GRACE_MS;
 }
 
+/**
+ * The valve's line for an outcome, in the form that fits what the buyer can
+ * press (CRITIC-CARRYOVER-6 item 5): when neither a Pay control nor the
+ * refresh control is on the sheet — a read with no answer leaves no figure
+ * and no rate row — a line that asks for a press asks for one nobody can
+ * make, and it is said without the ask.
+ */
+function valveLine(outcome: PayRateOutcome, pressable: boolean): string {
+    return (pressable ? undefined : copy.PAY_VALVE_TEXT_NOTHING_TO_PRESS[outcome]) ?? copy.PAY_VALVE_TEXT[outcome];
+}
+
+/** Whether a control is on the sheet: inside it, and under nothing hidden. */
+function onSheet(wrap: HTMLElement, control: HTMLElement): boolean {
+    return wrap.contains(control) && control.closest('[hidden]') === null;
+}
+
 /** The later of two change stamps, either of which may be absent: the grace that runs longest. */
 function laterStamp(a: number | undefined, b: number | undefined): number | undefined {
     return a === undefined ? b : b === undefined ? a : Math.max(a, b);
@@ -5658,10 +5674,16 @@ function paySheet(
         // control stands to press again (CRITIC-CARRYOVER-4 item 4).
         const recordLine =
             pressedLine && linked ? copy.PAY_QUOTE_CHANGED : copy.PAY_QUOTE_CHANGED_UNPRESSED;
-        // The newer of the two lines (`lineFrom`).
+        // The newer of the two lines (`lineFrom`), asking for a press only
+        // where one can be made (`valveLine`).
         const standing = rateLineStands() ? outcome : undefined;
+        const pressable = linked || onSheet(wrap, refreshRate);
         valve.textContent =
-            standing !== undefined ? copy.PAY_VALVE_TEXT[standing] : recordLineStands() ? recordLine : '';
+            standing !== undefined
+                ? valveLine(standing, pressable)
+                : recordLineStands()
+                  ? recordLine
+                  : '';
         if (gone) {
             valve.hidden = true;
         }
@@ -6771,7 +6793,9 @@ function paySeveralSheet(
                 : pressedLine && linked
                   ? copy.payItemsChanged(movedNames(changedNames))
                   : copy.payItemsChangedUnpressed(movedNames(changedNames));
-        const outcomeLine = outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : undefined;
+        // Asking for a press only where one can be made (`valveLine`).
+        const outcomeLine =
+            outcome !== undefined ? valveLine(outcome, linked || onSheet(wrap, refreshRate)) : undefined;
         const line = lineFrom === 'record' ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
         valve.hidden = lostAll || line === undefined;
         valve.textContent = line ?? '';

@@ -1786,6 +1786,17 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
+ * The same two facts when the answer left nothing on the sheet to press
+ * (CRITIC-CARRYOVER-6 item 5): no rate means no figure, so no Pay, and no
+ * rate row, so no refresh control — "press again" asked for a press there
+ * was no control for, and focus moves onto this line. The first clause
+ * alone, the rule the owner set for a line nobody can act on by pressing
+ * (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the card says why there
+ * is no figure.
+ */
+export const PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS = 'No fresh price';
+export const PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS = 'No usable price';
+/**
  * The seller's record moved while the sheet was open — what the buyer pays
  * changed: the figure, the unit or the surcharge — and the sheet was
  * recomposed from the record as it stands: a re-read landing under it, in
@@ -1870,6 +1881,15 @@ export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
     moved: PAY_RATE_MOVED,
     refreshed: PAY_RATE_REFRESHED,
     disagree: PAY_RATE_DISAGREE,
+};
+/**
+ * The valve's line when neither Pay nor the refresh control is on the sheet
+ * (`PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS`): only the two outcomes that
+ * leave no figure have a form of their own; any other outcome keeps its line.
+ */
+export const PAY_VALVE_TEXT_NOTHING_TO_PRESS: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    unavailable: PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
+    implausible: PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
 };
 export const PAY_QR_FOLD = 'Scan with a phone wallet';
 export const PAY_QR_ALT = 'QR code of the payment';

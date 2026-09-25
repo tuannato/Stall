@@ -10242,7 +10242,9 @@ describe('a-rate-answer-that-hides-the-focused-control-keeps-focus-in-the-sheet'
                 expect(active !== null && sheet.contains(active), 'focus is inside the sheet').toBe(true);
                 expect(active?.closest('[hidden]') ?? null, 'and on nothing hidden').toBeNull();
                 const valve = sheet.querySelector('[data-role="pay-valve"]');
-                expect(valve?.textContent).toBe(copy.PAY_RATE_UNAVAILABLE);
+                // Nothing is left to press: the line asks for no press
+                // (`a-read-with-no-answer-and-nothing-to-press-asks-for-no-press`).
+                expect(valve?.textContent).toBe(copy.PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS);
                 expect(active, 'on the line that says what happened').toBe(valve);
             });
         }
@@ -10262,6 +10264,97 @@ describe('a-rate-answer-that-hides-the-focused-control-keeps-focus-in-the-sheet'
         refresh.click();
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(document.activeElement).toBe(refresh);
+    });
+});
+
+describe('a-read-with-no-answer-and-nothing-to-press-asks-for-no-press', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 5 (the critic's N1). After the valve's read or
+     * the refresh control's came back with no rate — no answer, or one this
+     * page refuses — the sheet has no figure, so no Pay, and no rate row, so
+     * no refresh control: the only controls left close the sheet, edit the
+     * quantity or open the fine print. The line said "No fresh price — press
+     * again", and since a99461e focus lands on it. With nothing to press it
+     * asks for no press now, and focus lands on it; the two facts keep two
+     * sentences. Where a Pay control does stand (a fixture's staged outcome
+     * over a rate), the line that asks for the press is kept: what decides
+     * is what is on the sheet, not the outcome alone.
+     */
+    const records = {
+        prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    };
+    const fresh = { rate: scaleRate(0.00002)!, atMs: Date.now() };
+    const aged = { rate: fresh.rate, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['valve', 'refresh'] as const) {
+            for (const why of ['no-answer', 'implausible'] as const) {
+                it(`${kind}, the ${road}, ${why}: nothing to press, and the line asks for none`, async () => {
+                    const root = mountedRoot();
+                    const h = {
+                        ...handlers(),
+                        onPayRecords: () => records,
+                        onPayRecordMoved: vi.fn(),
+                        onPayRate: vi.fn(async () => ({ why })),
+                    };
+                    renderStall(
+                        root,
+                        payView({
+                            overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                            selectionOpen: true,
+                            selection: new Map([[TOKEN_ID, 1n]]),
+                            payRate: road === 'valve' ? aged : fresh,
+                        }),
+                        h,
+                    );
+                    const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                    const control = sheet.querySelector(
+                        road === 'valve' ? '[data-role="pay-cashtab"]' : '[data-role="pay-refresh"]',
+                    ) as HTMLElement;
+                    await Promise.resolve();
+                    control.focus();
+                    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+                    control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    expect(open, 'nothing opened').not.toHaveBeenCalled();
+                    open.mockRestore();
+
+                    const visible = (role: string): boolean => {
+                        const node = sheet.querySelector(`[data-role="${role}"]`);
+                        return node !== null && node.closest('[hidden]') === null;
+                    };
+                    expect(visible('pay-cashtab') || visible('pay-wallet'), 'no Pay on the sheet').toBe(false);
+                    expect(visible('pay-refresh'), 'no refresh control on the sheet').toBe(false);
+                    const valve = sheet.querySelector('[data-role="pay-valve"]') as HTMLElement;
+                    expect(valve.closest('[hidden]'), 'the line is shown').toBeNull();
+                    expect(valve.textContent).toBe(
+                        why === 'no-answer'
+                            ? copy.PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS
+                            : copy.PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
+                    );
+                    expect(valve.textContent ?? '', 'it asks for no press').not.toMatch(/press/i);
+                    expect(document.activeElement, 'focus lands on it').toBe(valve);
+                });
+            }
+        }
+    }
+
+    it('where a Pay control stands, the line that asks for the press is kept', () => {
+        const root = mountedRoot();
+        renderStall(
+            root,
+            payView({
+                overlay: { kind: 'pay', tokenId: TOKEN_ID },
+                payRate: fresh,
+                payRateOutcome: 'unavailable',
+            }),
+            { ...handlers(), onPayRecords: () => records },
+        );
+        expect(root.querySelector('[data-role="pay-cashtab"]')?.closest('[hidden]')).toBeNull();
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_RATE_UNAVAILABLE);
     });
 });
 
@@ -11276,8 +11369,9 @@ describe('a-stale-rate-is-refetched-on-pay-and-a-jump-needs-a-second-press', () 
             new MouseEvent('click', { bubbles: true, cancelable: true }),
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
+        // No figure, so no Pay and no refresh control: the line asks for no press.
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
-            copy.PAY_RATE_UNAVAILABLE,
+            copy.PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
         );
         expect(root.querySelector('[data-role="pay-cashtab"]')).toBeNull();
     });
@@ -14286,11 +14380,13 @@ describe('an-implausible-rate-is-said-and-never-called-no-answer', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(open).not.toHaveBeenCalled();
         expect(h.onPayRate).toHaveBeenCalledTimes(1);
+        // No figure, so nothing to press: the refused answer's own line,
+        // asking for no press — still never the no-answer one.
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(
-            copy.PAY_RATE_IMPLAUSIBLE,
+            copy.PAY_RATE_IMPLAUSIBLE_NOTHING_TO_PRESS,
         );
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).not.toBe(
-            copy.PAY_RATE_UNAVAILABLE,
+            copy.PAY_RATE_UNAVAILABLE_NOTHING_TO_PRESS,
         );
         const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
         expect(sheet.textContent).toContain(copy.PAY_RATE_IMPLAUSIBLE_WHY);
