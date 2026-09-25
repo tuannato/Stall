@@ -5349,6 +5349,56 @@ describe('a-listing-arriving-does-not-turn-the-stream-off-its-quote-card', () =>
     });
 });
 
+describe('a-finished-walk-that-read-the-last-removal-takes-the-quote-off', () => {
+    /**
+     * The critic, 2026-09-25, item 1. `applyDescriptions` refused a finished
+     * walk's answer whose three maps were empty, over records on screen,
+     * because it cannot be told from a walk that found nothing. But a walk
+     * that read the bare tombstone of the stall's LAST quote names the token
+     * in `decided`: the seller took the quote off, and refusing it kept the
+     * item on the rail, where Pay and Pay several composed it. Only an answer
+     * that resolved nothing is held back.
+     */
+    const A = 'a5'.repeat(32);
+    const QUOTE = { code: 'xec', exponent: 2, amount: 500_000n };
+    const shop = (): State =>
+        stallEmpty({
+            tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+            prices: new Map([[A, QUOTE]]),
+            shopTab: 'quotes',
+        });
+    const wake = async (txids: string[]): Promise<void> => {
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.(txids);
+        }
+        await flush();
+    };
+
+    it('takes the only quote off the rail', async () => {
+        const { root } = bootStall(shop());
+        await flush();
+        expect(root.querySelector('[data-role="pay-open"]'), 'the quote is on the rail').not.toBeNull();
+        const removal = publish(signedTx({ txid: '5d'.repeat(32), outputs: [`6a${encodeRemovalHex(A)}`], height: 7 }));
+        await wake([removal]);
+        await until(() => root.querySelector('[data-role="pay-open"]') === null);
+        expect(root.querySelector('[data-role="pay-open"]'), 'the seller took it off').toBeNull();
+        expect(painted.view?.prices?.has(A) ?? false).toBe(false);
+    });
+
+    it('still holds the records on screen over a finished walk that resolved nothing', async () => {
+        const { root } = bootStall(shop());
+        await flush();
+        // An unclassifiable burst asks everything, and the chain carries no
+        // record of the seller's at all: the walk finishes and resolves nothing.
+        const walked = chain.calls.stld;
+        await wake([UNKNOWN_TXID]);
+        await until(() => chain.calls.stld > walked);
+        await flush(20);
+        expect(chain.calls.stld, 'the records were walked').toBeGreaterThan(walked);
+        expect(root.querySelector('[data-role="pay-open"]'), 'our silence is not a removal').not.toBeNull();
+    });
+});
+
 describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', () => {
     /**
      * The critic's final merge, item 11. A pay sheet holds the live paint, so
@@ -5434,9 +5484,8 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
     });
 
     it('a removal: the press sends nothing and the sheet says the quote is gone', async () => {
-        // B stays quoted: a walk whose whole answer is empty is refused over
-        // records on screen (`applyDescriptions`), so the page would still
-        // hold A — this is the removal the page does read.
+        // B stays quoted here; the stall's only quote removed is the next
+        // case.
         const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
@@ -5446,6 +5495,24 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             ['7b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
             ['7d'.repeat(32), encodeRemovalHex(A)],
         ]);
+
+        expect(press(root, 'pay')).toBeUndefined();
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
+    });
+
+    it('a removal of the stall’s only quote: the press sends nothing and the sheet says the quote is gone', async () => {
+        // The critic, 2026-09-25, item 1: a finished walk that read the bare
+        // tombstone of the last quote answers with every map empty and the
+        // token in `decided`; that is a removal, not our silence.
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+        await republish([['7d'.repeat(32), encodeRemovalHex(A)]]);
+        await until(() => root.querySelector('[data-role="pay"] [data-role="pay-qr"]') === null);
 
         expect(press(root, 'pay')).toBeUndefined();
         const sheet = root.querySelector('[data-role="pay"]');

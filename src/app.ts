@@ -3607,13 +3607,15 @@ export function boot(
      * and over a full one it is merged per token (`overKept`, the critic's
      * eighth pass, item 3): refusing it whole, as this road did until
      * 2026-09-25, left a figure the walk had read past on a phone that has no
-     * heartbeat to correct it, and Pay composed it. An empty answer from a
-     * walk that finished is held
-     * back for a different reason and only where there is something to lose:
-     * `loadDescriptions` cannot see the difference between a seller who
-     * removed their words and a walk that found none of them, so a removed
-     * description survives until the next full load — the retry control and
-     * any reload both are one.
+     * heartbeat to correct it, and Pay composed it. An answer from a walk
+     * that finished and resolved NOTHING is held back for a different reason
+     * and only where there is something to lose: it cannot be told from a
+     * walk that found none of the seller's records, so what is on screen
+     * stands until the next full load — the retry control and any reload
+     * both are one. A walk that read a removal resolved that token
+     * (`decided`), even when the removal was the stall's last record and
+     * every map came back empty, and it is applied: the quote leaves the
+     * rail (the critic, 2026-09-25, item 1).
      */
     const applyDescriptions = (lookup: DescriptionLookup, keptRead?: NonNullable<typeof lastGoodRecords>): void => {
         // The shelves and the prices ride the same records, so the same guard
@@ -3622,10 +3624,17 @@ export function boot(
         // this rule — a stall whose seller published prices and no words had
         // nothing on either counted side, so our own failed walk wiped every
         // figure and the guard saw nothing to protect.
+        // …and nothing resolved at all: a walk that finished and read the
+        // bare tombstone of the stall's last quote names that token in
+        // `decided` with every map empty, and refusing it kept the removed
+        // quote on the rail, where Pay composed it (the critic, 2026-09-25,
+        // item 1). Only an answer that resolved nothing is the one this
+        // guard cannot tell from our own silence.
         const gotNothing =
             lookup.descriptions.size === 0 &&
             lookup.shelves.size === 0 &&
-            lookup.prices.size === 0;
+            lookup.prices.size === 0 &&
+            lookup.decided.size === 0;
         const hadSomething =
             (state.view.descriptions?.size ?? 0) > 0 ||
             (state.view.shelves?.size ?? 0) > 0 ||
