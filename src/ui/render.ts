@@ -4792,6 +4792,15 @@ function paySheet(
      * place without a line (`samePayment`).
      */
     let price = item.price;
+    /**
+     * The record as the sheet last SAW it (the critic, CARRYOVER-3 item 1):
+     * `price` while it composes, `undefined` once the record left, and the
+     * record as it stands while this page cannot show it. A re-read is judged
+     * against this and never against `price` alone, which a record that left
+     * does not move — so a record that comes back, at any figure, is composed
+     * again rather than left saying it is gone.
+     */
+    let seen: TokenPrice | undefined = item.price;
     /** An XEC quote reads no rate; a record that moved unit changes this. */
     let usesRate = price.code !== XEC_PRICE_CODE;
 
@@ -5232,10 +5241,11 @@ function paySheet(
      * (`payRecordChecks`), at every press, and after every await that
      * precedes a figure.
      *
-     * True when what the buyer pays moved since the sheet last composed —
-     * the figure, the unit or the surcharge, or the record gone
-     * (`movedRecords`) — and the sheet was recomposed in place from the
-     * record as it stands (`recompose`). A record that asks the same payment
+     * True when what the buyer pays moved since the sheet last saw the
+     * record (`seen`) — the figure, the unit or the surcharge, the record
+     * gone, or a record gone that came back (`movedRecords`) — and the sheet
+     * was recomposed in place from the record as it stands (`recompose`).
+     * A record that asks the same payment
      * but changed its tolerance, its words or its clock is taken in place
      * with no line and no stop (the owner, 2026-09-25); the valve then
      * measures against the margin the record states now. A record that came
@@ -5283,15 +5293,17 @@ function paySheet(
                 age = ageNow;
             }
         }
-        if (movedRecords(new Map([[tokenId, price]]), now).length > 0) {
+        if (movedRecords(new Map([[tokenId, seen]]), now).length > 0) {
+            seen = current;
             recompose(now, current);
             return true;
         }
-        if (current === undefined) {
+        if (current === undefined || lost()) {
             return false;
         }
         let redraw = false;
         if (!samePrice(price, current)) {
+            seen = current;
             price = current;
             takeMargins();
             redraw = true;
@@ -6123,6 +6135,18 @@ function paySeveralSheet(
     /** What the sheet was opened on; a re-read that brings every record back to it clears the line and the absorbed press. */
     const opened: ReadonlyMap<string, TokenPrice> = new Map(composed);
     /**
+     * Every chosen item's record as the sheet last SAW it (the critic,
+     * CARRYOVER-3 item 1), for every item of the choice as it was opened —
+     * `undefined` for one it saw leave. A re-read is judged against this and
+     * never against `composed` alone, which holds nothing for an item a
+     * re-read took out — so an item that comes back, at any figure, is
+     * chosen again and composed, rather than left "taken out" while the code
+     * paid the rest.
+     */
+    const seen = new Map<string, TokenPrice | undefined>(
+        [...openedChoice.keys()].map((tokenId) => [tokenId, prices?.get(tokenId)]),
+    );
+    /**
      * A re-read moved what the buyer pays for chosen items while this sheet
      * was open, and the sheet was recomposed in place (`recompose`): the
      * chosen items whose records moved and are still chosen, for the valve's
@@ -6175,7 +6199,8 @@ function paySeveralSheet(
     /**
      * The single sheet's `recheck`, over every chosen item: true when a
      * chosen item's record moved what the buyer pays since the sheet last
-     * composed (`movedRecords`) and the sheet was recomposed in place; a
+     * saw it (`seen`: a record gone that came back included,
+     * `movedRecords`) and the sheet was recomposed in place; a
      * record that changed only its margin is taken in place, and the valve
      * measures against it; every record back to what the sheet was opened
      * on clears the line and the absorbed press.
@@ -6185,7 +6210,11 @@ function paySeveralSheet(
         if (now === undefined) {
             return false;
         }
-        if (movedRecords(composed, now).length > 0) {
+        const movedSince = movedRecords(seen, now);
+        if (movedSince.length > 0) {
+            for (const tokenId of movedSince) {
+                seen.set(tokenId, now.prices?.get(tokenId));
+            }
             recompose(now);
             return true;
         }

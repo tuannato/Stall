@@ -235,10 +235,12 @@ export function samePayment(a: TokenPrice | undefined, b: TokenPrice | undefined
 
 /**
  * The tokens among `composed` — the records a payment on screen was composed
- * from — whose record now asks a buyer for another payment (`samePayment`:
- * the figure, the unit, the surcharge, or the record gone). A record that
- * changed only its tolerance or its words is not among them; a sheet takes
- * that in place and the press goes on.
+ * from, or the records a sheet last SAW (the critic, CARRYOVER-3 item 1),
+ * where a record the sheet saw gone is `undefined` — whose record now asks a
+ * buyer for another payment (`samePayment`: the figure, the unit, the
+ * surcharge, the record gone, or a record gone that came back). A record
+ * that changed only its tolerance or its words is not among them; a sheet
+ * takes that in place and the press goes on.
  *
  * Over a definite read only (`RecordsNow.known`): a read that has not
  * answered, or a failure screen's floor (`descriptionsFailed`), cannot say a
@@ -253,7 +255,7 @@ export function samePayment(a: TokenPrice | undefined, b: TokenPrice | undefined
  * holds the live paint, so without it a press handed a wallet a figure the
  * page no longer held as the seller's quote, and said nothing.
  */
-export function movedRecords(composed: ReadonlyMap<string, TokenPrice>, now: RecordsNow): string[] {
+export function movedRecords(composed: ReadonlyMap<string, TokenPrice | undefined>, now: RecordsNow): string[] {
     if (!now.known || now.prices === undefined) {
         return [];
     }

@@ -45,6 +45,7 @@ import {
     PAY_QUOTE_CHANGED_UNPRESSED,
     PAY_QUOTE_GONE,
     PAY_QUOTE_UNSHOWN,
+    PAY_SEVERAL_GONE,
     PAY_CASHTAB,
     payFigure,
     payItemsChanged,
@@ -52,6 +53,7 @@ import {
 } from './ui/copy';
 import { satsForQuote, scaleRate } from './domain/fiat';
 import {
+    qrSvg,
     PAY_CHECK_TIMEOUT_MS,
     FIAT_GLANCE_TIMEOUT_MS,
 } from './ui/render';
@@ -6132,6 +6134,142 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(sheet.querySelector('[data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
             expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
             expect(press(root, 'pay'), 'one press').toContain('amount=');
+        });
+    });
+
+    describe('a-record-that-comes-back-under-an-open-sheet-is-composed-again', () => {
+        /**
+         * The critic, CARRYOVER-3 item 1. A sheet judged each re-read against
+         * the record it last COMPOSED, which a record that left never moves:
+         * the single sheet kept its last figure as `price`, and Pay several
+         * held nothing at all for an item a re-read took out. So a record
+         * that came back — at the figure it left at, which is exactly the
+         * trap — read as "no change" and the sheet went on saying it was
+         * gone, or "taken out" while its code paid the rest alone. Judged
+         * against the last record SEEN now (`seen`), every sequence below
+         * ends composed from the records as they stand: one bigint on the
+         * figure, the code and the link, and none of the sentences the
+         * earlier re-reads left behind.
+         */
+        const XEC_MID = { code: 'xec', exponent: 2, amount: 700_000n };
+        const sheetOf = (root: HTMLElement, name: string) => root.querySelector(`[data-role="${name}"]`) as HTMLElement | null;
+        const codeOf = (sheet: HTMLElement | null): string | null | undefined =>
+            sheet?.querySelector('[data-role="pay-qr"] path')?.getAttribute('d');
+        /** The figure on screen, its code, and the link a press opens: one bigint. */
+        const oneFigure = (root: HTMLElement, name: string, figure: string): void => {
+            const sheet = sheetOf(root, name);
+            expect(figureOf(root, name), 'the figure').toBe(figure);
+            const code = codeOf(sheet);
+            expect(code, 'a code for the records as they stand').toBeTruthy();
+            let url = press(root, name);
+            if (url === undefined) {
+                // The press after an in-place recompose is absorbed once.
+                url = press(root, name);
+            }
+            expect(url, 'the link').toContain(`amount=${figure.replace(/,/g, '')}.00`);
+            const bip21 = url!.split('#/send?bip21=')[1]!;
+            expect(qrSvg(bip21, '').querySelector('path')?.getAttribute('d'), 'the code is the link').toBe(code);
+        };
+        const choose = async (root: HTMLElement): Promise<void> => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+        };
+        const stale = [PAY_QUOTE_GONE, PAY_QUOTE_UNSHOWN, PAY_SEVERAL_GONE];
+
+        it('the single sheet: moved, removed, then republished at the figure it left at', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await flush();
+            const sheet = sheetOf(root, 'pay');
+            expect(figureOf(root, 'pay')).toBe('5,000');
+            await republish([['c1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            await republish([['c2'.repeat(32), encodeRemovalHex(A)]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_QUOTE_GONE);
+
+            await republish([['c3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay'), 'the same sheet, not rebuilt').toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent, 'moved from what it was opened on').toBe(PAY_QUOTE_CHANGED);
+            oneFigure(root, 'pay', '9,000');
+        });
+
+        it('the single sheet: moved, then in a unit this page does not paint, then back', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            await flush();
+            const sheet = sheetOf(root, 'pay');
+            await republish([['c4'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            await republish([['c5'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_QUOTE_UNSHOWN);
+
+            await republish([['c6'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay')).toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+            oneFigure(root, 'pay', '9,000');
+        });
+
+        it('Pay several: every chosen item removed, then one back', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            await choose(root);
+            const sheet = sheetOf(root, 'pay-several');
+            expect(figureOf(root, 'pay-several')).toBe('12,000');
+            await republish([
+                ['d1'.repeat(32), encodeRemovalHex(A)],
+                ['d2'.repeat(32), encodeRemovalHex(B)],
+            ]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_SEVERAL_GONE);
+
+            await republish([['d3'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay-several')).toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '', 'Rye Flour is back').toContain('Rye Flour');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '', 'Plum Jam is still out').toContain('Plum Jam');
+            oneFigure(root, 'pay-several', '7,000');
+        });
+
+        it('Pay several: one chosen item taken out, then back at a new figure', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            await choose(root);
+            const sheet = sheetOf(root, 'pay-several');
+            await republish([
+                ['e1'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['e2'.repeat(32), encodeRemovalHex(A)],
+            ]);
+            await until(() => figureOf(root, 'pay-several') === '7,000');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '').toContain('Plum Jam');
+
+            await republish([['e3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_MID })]]);
+            await until(() => figureOf(root, 'pay-several') === '14,000');
+            expect(sheetOf(root, 'pay-several')).toBe(sheet);
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]'), 'nothing is taken out now').toBeNull();
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').toContain('Plum Jam');
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+            oneFigure(root, 'pay-several', '14,000');
         });
     });
 
