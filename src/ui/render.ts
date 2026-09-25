@@ -2906,7 +2906,7 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     if (
         items.length > 0 ||
         (view.selection?.size ?? 0) > 0 ||
-        (view.selectionOpen === true && view.selectionDropped === true)
+        (view.selectionOpen === true && view.selectionDropped !== undefined)
     ) {
         section.append(selectionStrip(view, handlers));
     }
@@ -5460,6 +5460,22 @@ function selectionLineNode(
 }
 
 /**
+ * The sentence naming the chosen items a re-read took out
+ * (`view.selectionDropped`), or nothing: the strip and the sheet say which
+ * item left (the critic, 2026-09-25, item 4).
+ */
+function selectionDroppedLine(view: StallView): string | undefined {
+    const dropped = view.selectionDropped;
+    if (dropped === undefined || dropped.length === 0) {
+        return undefined;
+    }
+    return copy.selectionDroppedItems(
+        copy.itemNames(dropped.map((tokenId) => tokenName(view.tokens, tokenId))),
+        dropped.length,
+    );
+}
+
+/**
  * The "Pay several" strip: the tabs' own dress (`.seg`), in flow under the
  * rail tabs and never sticky. Closed, it is the control and a hint; open,
  * the tray unfolds under it (phone) or beside it (desk) with the chosen
@@ -5493,8 +5509,9 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
     const trayIn = el('div', 'sel-tray-in');
     tray.append(trayIn);
     if (open) {
-        if (view.selectionDropped === true) {
-            const dropped = el('p', 'fine sel-dropped', copy.SELECTION_DROPPED);
+        const droppedLine = selectionDroppedLine(view);
+        if (droppedLine !== undefined) {
+            const dropped = el('p', 'fine sel-dropped', droppedLine);
             dropped.setAttribute('data-role', 'selection-dropped');
             trayIn.append(dropped);
         }
@@ -5665,6 +5682,12 @@ function paySeveralSheet(
         const empty = view.payRecordMoved !== undefined ? copy.PAY_SEVERAL_GONE : copy.SELECTION_EMPTY;
         wrap.append(sheetHead(copy.paySeveralTitle(0), empty, handlers));
         wrap.append(el('p', 'ctx', empty));
+        const droppedLine = selectionDroppedLine(view);
+        if (droppedLine !== undefined) {
+            const dropped = el('p', 'fine', droppedLine);
+            dropped.setAttribute('data-role', 'pay-several-dropped');
+            wrap.append(dropped);
+        }
         wrap.append(payFoot(handlers));
         return wrap;
     }
@@ -5721,6 +5744,14 @@ function paySeveralSheet(
         lines.append(line);
     }
     card.append(lines);
+    // Which chosen item a re-read took out, under the lines it left: the
+    // total below is over what stayed.
+    const droppedLine = selectionDroppedLine(view);
+    if (droppedLine !== undefined) {
+        const dropped = el('p', 'fine', droppedLine);
+        dropped.setAttribute('data-role', 'pay-several-dropped');
+        card.append(dropped);
+    }
     const glance = selectionGlance(selection, prices);
     const total = el('div', 'pay-total', '');
     total.setAttribute('data-role', 'pay-total');

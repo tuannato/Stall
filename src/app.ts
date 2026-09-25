@@ -584,14 +584,24 @@ export function boot(
     let selectionAsk: SelectionAsk | undefined;
     let selectionEntered = false;
     let selectionBumped: string | undefined;
-    let selectionDropped = false;
+    /** The chosen items a re-read took out, named until the selection next changes. */
+    let selectionDropped: string[] = [];
+    /**
+     * The unit the selection was chosen in: its first item's, when it was
+     * pressed into an empty selection, and kept while anything is chosen.
+     * The prune judges every item against it (`pruneSelection`), so a
+     * republish that moves the first chosen item to another unit takes THAT
+     * item out, and the rest stay (the critic, 2026-09-25, item 4).
+     */
+    let selectionChosenUnit: string | undefined;
     const resetSelection = (): void => {
         selection = new Map();
         selectionOpen = false;
         selectionAsk = undefined;
         selectionEntered = false;
         selectionBumped = undefined;
-        selectionDropped = false;
+        selectionDropped = [];
+        selectionChosenUnit = undefined;
     };
     /**
      * A `?pay=` link is answered once per page load. The URL is deliberately
@@ -1145,10 +1155,13 @@ export function boot(
         // removal it reached before our cap or a throw is the seller's.
         const decided = decidedOf({ ...state.view, decided: state.view.descriptionsDecided });
         if (recordsKnown(state.view) && state.view.prices !== undefined) {
-            const pruned = pruneSelection(selection, state.view.prices, complete, decided);
-            if (pruned.dropped) {
+            const pruned = pruneSelection(selection, state.view.prices, complete, decided, selectionChosenUnit);
+            if (pruned.dropped.length > 0) {
                 selection = pruned.selection;
-                selectionDropped = true;
+                selectionDropped = [...selectionDropped, ...pruned.dropped.filter((t) => !selectionDropped.includes(t))];
+                if (selection.size === 0) {
+                    selectionChosenUnit = undefined;
+                }
                 // A chosen item moved or left: the wall's plate is a frozen
                 // figure over records that no longer stand, so the slot goes
                 // back to the shop's code rather than showing a payment
@@ -1353,7 +1366,7 @@ export function boot(
             ...(selectionAsk === undefined ? {} : { selectionAsk }),
             ...(entered ? { selectionEntered: true as const } : {}),
             ...(bumped === undefined ? {} : { selectionBumped: bumped }),
-            ...(selectionDropped ? { selectionDropped: true as const } : {}),
+            ...(selectionDropped.length > 0 ? { selectionDropped: [...selectionDropped] } : {}),
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
             ...(wallParams() === undefined
@@ -1470,7 +1483,7 @@ export function boot(
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 // The entrance is the press's, never a repaint's: consumed by
                 // the one paint that follows.
                 selectionEntered = selectionOpen;
@@ -1486,12 +1499,19 @@ export function boot(
                 if (count <= 0n) {
                     selection.delete(tokenId);
                 } else if (selection.has(tokenId) || selection.size < MAX_SELECTION_ENTRIES) {
+                    if (selection.size === 0) {
+                        // The first press names the unit the choice is in.
+                        selectionChosenUnit = state.view.prices?.get(tokenId)?.code;
+                    }
                     selection.set(tokenId, count);
                 } else {
                     return;
                 }
+                if (selection.size === 0) {
+                    selectionChosenUnit = undefined;
+                }
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 selectionBumped = count > 0n ? tokenId : undefined;
                 paint();
             },
@@ -1502,8 +1522,9 @@ export function boot(
             onSelectionClear: () => {
                 cancelWallPayment();
                 selection = new Map();
+                selectionChosenUnit = undefined;
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 paint();
             },
             onOpenPaySeveral: () => {
@@ -1659,7 +1680,7 @@ export function boot(
                 shopTab = tab;
                 shopTabSettled = true;
                 // The dropped-item sentence lives until the tab switches (D8).
-                selectionDropped = false;
+                selectionDropped = [];
                 paint();
             },
             onChangeFilter: (text) => {
@@ -2290,8 +2311,9 @@ export function boot(
     const quoteUnitOnScreen = (): string => {
         const over = state.view.overlay;
         if (over.kind === 'pay-several') {
-            // The selection's own unit — one per selection, its first item's.
-            const code = selectionUnit(selection, state.view.prices);
+            // The selection's own unit — the one it was chosen in, even while
+            // a sheet holds a re-read that moved the first item elsewhere.
+            const code = selectionChosenUnit ?? selectionUnit(selection, state.view.prices);
             return code !== undefined && isQuoteUnit(code) ? code : DEFAULT_FIAT_CODE;
         }
         if (over.kind !== 'pay') {

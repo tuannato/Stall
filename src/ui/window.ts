@@ -513,7 +513,7 @@ function selectionBar(
     const names = el('div', 'sw-sel-names');
     if (selection.size === 0) {
         names.append(el('span', 'sw-sel-empty', copy.WINDOW_TOUCH_EMPTY));
-        if (view.selectionDropped === true) {
+        if (view.selectionDropped !== undefined) {
             const said = el('span', 'sw-sel-drop', copy.SELECTION_DROPPED);
             said.setAttribute('data-role', 'selection-dropped');
             names.append(said);
@@ -559,7 +559,7 @@ function selectionBar(
         said.setAttribute('data-role', 'window-pay-why');
         names.append(said);
     }
-    if (view.selectionDropped === true) {
+    if (view.selectionDropped !== undefined) {
         const said = el('span', 'sw-sel-drop', copy.SELECTION_DROPPED);
         said.setAttribute('data-role', 'selection-dropped');
         names.append(said);

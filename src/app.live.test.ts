@@ -16,6 +16,7 @@ import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
     SELECTION_DROPPED,
+    selectionDroppedItems,
     QUOTE_MINTED_CHIP,
     WINDOW_QUOTES_AS_LAST_READ,
     WINDOW_SOME_QUOTES_AS_LAST_READ,
@@ -354,6 +355,14 @@ vi.mock('./ui', async (importOriginal) => {
 });
 
 const { boot } = await import('./app');
+
+/**
+ * The words every "taken out" sentence shares — the wall's
+ * `SELECTION_DROPPED` and the phone's named `selectionDroppedItems` — so a
+ * test that says nothing was taken out reads both surfaces
+ * (`the-taken-out-words-are-in-every-taken-out-sentence`).
+ */
+const DROPPED_WORDS = 'no longer quoted as';
 type State = import('./app').AppState;
 
 /** Let the queued promise chains run. Several helpers await in sequence. */
@@ -614,7 +623,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'the choice stands').toContain('Plum Jam');
         expect(root.querySelector('.sw-sel-drop'), 'and nobody is told the seller took it').toBeNull();
         expect(root.querySelector('[data-role="window-paying"]'), 'the payment stands').not.toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
         // The last good records stand on the wall: the floor the throw left
         // would have taken the chosen item's own row off the list.
         expect(root.querySelector('.sw-strip')?.textContent, 'the chosen row stays on the wall').toContain('Plum Jam');
@@ -622,7 +631,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
         expect(wallCount(root, 'Plum Jam')).toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 
     it("a failed walk's load names only the tokens of its floor, and the wall keeps the kept ids' names and attributions", async () => {
@@ -656,7 +665,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
             await flush();
             expect(wallCount(root, 'Plum Jam'), `${pass}: the choice stands`).toBe('1');
             expect(root.querySelector('[data-role="window-paying"]'), `${pass}: the payment stands`).not.toBeNull();
-            expect(root.textContent, pass).not.toContain(SELECTION_DROPPED);
+            expect(root.textContent, pass).not.toContain(DROPPED_WORDS);
             expect(wallRow(root, 'Plum Jam')?.textContent, `${pass}: the kept row keeps its attribution`).toContain(
                 QUOTE_MINTED_CHIP,
             );
@@ -705,7 +714,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
 
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
 
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
@@ -714,7 +723,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'with the choice on it').toContain('Plum Jam');
         expect(wallCount(root, 'Plum Jam'), 'the choice stands over a failed book and walk').toBe('1');
         expect(root.querySelector('[data-role="window-paying"]'), 'and the payment code').not.toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 
     it('a phone retry on the quotes rail over a walk that failed keeps the choice', async () => {
@@ -739,7 +748,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         (root.querySelector('.pay-sec [data-role="retry"]') as HTMLButtonElement).click();
         await flush();
         expect(phoneCount(root, A), 'the choice stands after the retry').toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 });
 
@@ -856,7 +865,7 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         expect(selectionUnread(2)).toContain('2 items you chose');
         expect(strip?.querySelector('[data-role="selection-total"]'), 'no total over part of a choice').toBeNull();
         expect(strip?.querySelector('[data-role="pay-several-open"]'), 'and no Pay').toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
         // The Pay a slow repaint left under a finger is refused too.
         stalePay!.click();
         await flush();
@@ -901,7 +910,7 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         await flush();
         const bar = root.querySelector('[data-role="window-selection"]');
         expect(bar?.textContent, 'the choice stands, named').toContain('Plum Jam ×1');
-        expect(root.textContent, 'never "no longer quoted"').not.toContain(SELECTION_DROPPED);
+        expect(root.textContent, 'never "no longer quoted"').not.toContain(DROPPED_WORDS);
         // Past our own page cap: the heartbeat's next read stops in the same
         // place, so the sentence offers no remedy (the critic's sixth pass).
         expect(bar?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(windowSelectionCapped(1));
@@ -1299,7 +1308,7 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             await liveWalkThatThrows([newerA(), removeB()]);
 
             expect(painted.view?.selection?.has(B), 'the removed item leaves the choice').toBe(false);
-            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Rye Flour', 1));
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
             await flush();
             const sheet = root.querySelector('[data-role="pay-several"]');
@@ -4775,8 +4784,8 @@ describe('pay-several-at-the-app-level', () => {
         await flush();
         expect(painted.view?.selection?.has(TOKEN_B)).toBe(false);
         expect(painted.view?.selection?.get(TOKEN)).toBe(1n);
-        expect(painted.view?.selectionDropped).toBe(true);
-        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+        expect(painted.view?.selectionDropped).toEqual([TOKEN_B]);
+        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Green Tea', 1));
         // Said until the selection next changes.
         choose(root, TOKEN, 1);
         expect(painted.view?.selectionDropped).toBeUndefined();
@@ -5769,5 +5778,77 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
             expect(press(root, 'pay'), 'one press').toContain('amount=');
         });
+    });
+
+    describe('a-unit-change-on-the-first-chosen-item-drops-that-item-not-the-rest', () => {
+        /**
+         * The critic, 2026-09-25, item 4. Chosen in XEC, first Plum Jam and
+         * then Rye Flour; the seller republishes Plum Jam in USD. The prune
+         * judged the first kept item's CURRENT unit, so Rye Flour went and
+         * Plum Jam — the item that moved — stayed. Now the choice keeps the
+         * unit it was chosen in: Plum Jam leaves, Rye Flour stays, and the
+         * strip and the sheet say which item left.
+         */
+        const pick = (root: HTMLElement): void => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+        };
+        const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+
+        it('on the strip', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            pick(root);
+            await republish([
+                ['5b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            await until(() => painted.view?.selection?.has(A) === false);
+            expect([...(painted.view?.selection?.keys() ?? [])], 'the item that moved leaves, the rest stay').toEqual([B]);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'the rest, in the unit they were chosen in').toContain('7,000');
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent).toBe(
+                selectionDroppedItems('Plum Jam', 1),
+            );
+            expect(press(root, 'pay-several')).toContain('amount=7000.00');
+        });
+
+        it('under the open sheet: the press says which item left and composes the rest', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            pick(root);
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(figureOf(root, 'pay-several')).toBe('12,000');
+            await republish([
+                ['5d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            await until(() => root.querySelector('[data-role="pay-several"] [data-role="pay-qr"]') === null);
+
+            expect(press(root, 'pay-several'), 'the press is absorbed').toBeUndefined();
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(figureOf(root, 'pay-several'), 'Rye Flour alone, still in XEC').toBe('7,000');
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChanged('Plum Jam'));
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Plum Jam');
+            expect(press(root, 'pay-several')).toContain('amount=7000.00');
+        });
+    });
+});
+
+describe('the-taken-out-words-are-in-every-taken-out-sentence', () => {
+    it('reads both surfaces', () => {
+        expect(SELECTION_DROPPED).toContain(DROPPED_WORDS);
+        expect(selectionDroppedItems('Plum Jam', 1)).toContain(DROPPED_WORDS);
+        expect(selectionDroppedItems('Plum Jam and Rye Flour', 2)).toContain(DROPPED_WORDS);
     });
 });

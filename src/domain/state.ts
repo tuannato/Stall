@@ -751,15 +751,17 @@ export type StallView = WindowState & {
      * changes. `selectionEntered` and `selectionBumped` are one-shots: the
      * paint right after the press is the only one that animates the
      * entrance or the count's bump — an animation on mount would replay on a
-     * stranger's dust. `selectionDropped` says once that a re-read took a
-     * chosen quote off the rail (D8).
+     * stranger's dust. `selectionDropped` names, in the order they were
+     * chosen, the quotes a re-read took out of the choice (D8) — off the
+     * rail, or into another unit than the one it was chosen in — until the
+     * selection next changes; never empty when present.
      */
     selection?: ReadonlyMap<string, bigint>;
     selectionOpen?: boolean;
     selectionAsk?: SelectionAsk;
     selectionEntered?: true;
     selectionBumped?: string;
-    selectionDropped?: true;
+    selectionDropped?: readonly string[];
     /**
      * Quoted tokens whose genesis the load is still reading, named by the
      * loader. The pay sheet asks for its own answer only for one of these —

@@ -2012,6 +2012,16 @@ export const selectionApart = (unit: string): string =>
 export const SELECTION_DROPPED =
     'Something you chose is no longer quoted as it was and was taken out.';
 /**
+ * The same, naming the items a re-read took out (`itemNames`), on the phone
+ * strip and the "Pay several" sheet: the critic, 2026-09-25, item 4 — a
+ * buyer whose choice shrank is told which item left. The wall keeps
+ * `SELECTION_DROPPED`.
+ */
+export const selectionDroppedItems = (names: string, n: number): string =>
+    n === 1
+        ? `${names} is no longer quoted as it was and was taken out.`
+        : `${names} are no longer quoted as they were and were taken out.`;
+/**
  * A chosen item this page's own read did not reach — a walk that threw, or a
  * genesis that never arrived. In place of the strip's total and Pay: our
  * failure, never "no longer quoted" (the owner, "Nói rõ", 2026-09-24). A

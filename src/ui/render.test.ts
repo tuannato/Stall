@@ -16093,11 +16093,15 @@ describe('the-pay-several-strip-sits-under-the-tabs-and-opens-a-tray', () => {
         expect(strip.querySelector('[data-role="seller-price"]')).toBeNull();
     });
 
-    it('says once that a re-read took a chosen item out — even when it was the last quote', () => {
-        const { root } = paint(payView({ selectionOpen: true, selection: new Map(), selectionDropped: true }));
-        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(copy.SELECTION_DROPPED);
-        const last = paint(payView({ prices: new Map(), selectionOpen: true, selection: new Map(), selectionDropped: true })).root;
-        expect(last.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(copy.SELECTION_DROPPED);
+    it('says once, by name, that a re-read took a chosen item out — even when it was the last quote', () => {
+        const { root } = paint(payView({ selectionOpen: true, selection: new Map(), selectionDropped: [TOKEN_ID] }));
+        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(
+            copy.selectionDroppedItems('Roasted Beans', 1),
+        );
+        const last = paint(payView({ prices: new Map(), selectionOpen: true, selection: new Map(), selectionDropped: [TOKEN_ID] })).root;
+        expect(last.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(
+            copy.selectionDroppedItems('Roasted Beans', 1),
+        );
         const quiet = paint(payView({ selectionOpen: true, selection: new Map() })).root;
         expect(quiet.querySelector('[data-role="selection-dropped"]')).toBeNull();
     });
