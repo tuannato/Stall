@@ -320,8 +320,11 @@ export default defineConfig({
         include: ['src/**/*.test.ts', 'layout/**/*.test.ts'],
         // No test reaches the network: happy-dom's fetch interceptor refuses
         // every request a document makes (a link's navigation included), and
-        // Node's sockets refuse every host that is not loopback. A test that
-        // tried fails, naming the URL. Test: `no-test-reaches-the-network`.
+        // Node's sockets, DNS and UDP refuse every host that is not loopback,
+        // in the worker and in every worker thread and Node child process a
+        // test starts (the setup file's Node half). A test that tried
+        // fails, naming the URL and the test that started it. Test:
+        // `no-test-reaches-the-network`.
         setupFiles: ['./src/test-no-network.ts'],
         environment: 'node',
         reporters: ['default'],

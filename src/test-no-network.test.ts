@@ -24,7 +24,7 @@ const guard = (): NoNetwork => {
     }
     return found;
 };
-const drain = (): string[] => guard().reached.splice(0).map((r) => `${r.road} ${r.to}`);
+const drain = (): string[] => guard().drain();
 const settle = async (): Promise<void> => {
     for (let i = 0; i < 20; i++) {
         await new Promise((resolve) => setTimeout(resolve, 0));
