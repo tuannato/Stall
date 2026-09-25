@@ -1654,6 +1654,96 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
     });
 });
 
+describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
+    /**
+     * The owner, CRITIC-CARRYOVER-4 item 9 ("remember the older records"),
+     * through the real app on both roads (the pure half is in
+     * records.test.ts under the same name). A walk reads the seller's fresh
+     * record, finalized and unmined, above the older one it also read: the
+     * fresh figure is on screen, and the read remembers the older record as
+     * below it. A lagging replica that never saw the fresh one then answers
+     * the older record, mined, first seen 0 (it never saw it in its mempool
+     * either) — a walk that finishes, or one that throws after its first
+     * page. The ladder's no-height rule crowned that answer and the older
+     * figure came back; it is older by construction now, and the screen
+     * keeps the fresh one.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c7'.repeat(32);
+    const B = 'c8'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_FRESH = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const OLDER = '6d'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's fresh record: finalized by avalanche, not yet mined. */
+    const fresh = () => tx('9d'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_FRESH }), { isFinal: true }, 1_756_400_600);
+    /** The record it superseded, mined at 6, as a node that saw it arrive reads it. */
+    const older = (seen: number) => tx(OLDER, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    const recB = () => tx('8d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B }), { height: 5, isFinal: true }, 1_756_399_000);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const onScreen = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[A, fungible(A, 'Plum Jam')], [B, fungible(B, 'Rye Flour')]]),
+                genesis: new Map([[A, 'attributed' as const], [B, 'attributed' as const]]),
+                shopTab: 'quotes',
+            }),
+        );
+        await flush();
+        await walk([[fresh(), older(1_756_400_000), recB()]]);
+        await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_FRESH.amount);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh record is on screen').toEqual(XEC_FRESH);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'finalized, unmined').toBeUndefined();
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(OLDER), 'the read remembers what it ranked below').toBe(true);
+        return root;
+    };
+
+    it('a walk that finished: the lagging replica’s older record does not come back', async () => {
+        const root = await onScreen();
+        const calls = chain.historyPageCalls.length;
+        await walk([[older(0), recB()]]);
+        await until(() => chain.historyPageCalls.length > calls);
+        await flush(20);
+        expect(viewOf(root)?.descriptionsFailed, 'it finished').not.toBe(true);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh figure stands').toEqual(XEC_FRESH);
+    });
+
+    it('a walk that threw: the lagging replica’s older record does not come back', async () => {
+        const root = await onScreen();
+        const calls = chain.historyPageCalls.length;
+        chain.historyPageThrows = new Set([1]);
+        await walk([[older(0)], [recB()]]);
+        await until(() => chain.historyPageCalls.slice(calls).includes(1));
+        await flush(20);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh figure stands').toEqual(XEC_FRESH);
+        expect(viewOf(root)?.prices?.get(B), 'what the walk never reached is kept too').toEqual(XEC_B);
+    });
+});
+
 describe('a-removed-item-never-comes-back-into-pay-several', () => {
     /**
      * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the

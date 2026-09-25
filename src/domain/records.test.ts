@@ -177,6 +177,52 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
     });
 });
 
+describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
+    /**
+     * The owner, CRITIC-CARRYOVER-4 item 9 ("remember the older records"),
+     * the pure half; the app's half, through both roads, is in
+     * app.live.test.ts under the same name. On screen: the seller's fresh
+     * record, finalized and unmined, which the read that crowned it ranked
+     * above the older record it also read. A lagging replica that never saw
+     * the fresh one answers the older record, mined, with first-seen 0: the
+     * ladder's no-height rule crowned it, and the older figure came back.
+     * The read remembered that record as below its winner, so the answer is
+     * older by construction and never beats the screen — on a walk that
+     * threw and on a walk that finished alike.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const OLDER = '6'.repeat(64);
+    const screenRank = { height: undefined, isFinal: true, txid: '9'.repeat(64), firstSeen: 1756400600, older: new Set([OLDER]) };
+    const lagging = { height: 900, isFinal: true, txid: OLDER, firstSeen: 0 };
+    const screen = { prices: new Map([[A, price(900_000n)]]), descriptions: new Map([[A, 'fresh words']]), ranks: new Map([[A, screenRank]]) };
+    const answer = { prices: new Map([[A, price(500_000n)]]), descriptions: new Map([[A, 'old words']]), ranks: new Map([[A, lagging]]) };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: the older record it answers never beats the fresh one on screen`, () => {
+            const out = merge(answer, new Set([A]), screen);
+            expect(out.prices.get(A), 'the screen keeps the fresh figure').toEqual(price(900_000n));
+            expect(out.descriptions.get(A)).toBe('fresh words');
+            expect(out.ranks.get(A), 'and its rank, older records with it').toEqual(screenRank);
+        });
+    }
+
+    it('without the older records the ladder alone crowned the lagging answer (the case this closes)', () => {
+        const blind = { ...screen, ranks: new Map([[A, { ...screenRank, older: undefined }]]) };
+        expect(mergeFailedRead(answer, new Set([A]), blind).prices.get(A)).toEqual(price(500_000n));
+    });
+
+    it('decides nothing the read never saw: a record it did not rank still goes to the ladder', () => {
+        const unseen = { ...answer, ranks: new Map([[A, { ...lagging, txid: '7'.repeat(64) }]]) };
+        expect(mergeFinishedRead(unseen, new Set([A]), screen).prices.get(A), 'the no-height rule decides it').toEqual(
+            price(500_000n),
+        );
+    });
+});
+
 describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
     /**
      * The critic, CARRYOVER-2 item 4, at the merge. A walk that FINISHED was
@@ -247,10 +293,10 @@ describe('a-replica-that-never-saw-the-record-does-not-remove-it', () => {
      * The owner, CRITIC-CARRYOVER-3 item 3. A walk that read to the end
      * removed every token on screen it never met, as if absence were the
      * seller's answer. It is not: a finished walk decides every token it
-     * read a winning record for, a tombstone included (`collate`), so a
-     * removal the seller signed is always decided — and a token the walk
-     * never met is a record the replica that answered has not seen. Only
-     * what the walk decided leaves.
+     * read a winning record for, a tombstone included (`collate`) — a
+     * removal it reached, settled and accepted — and a token the walk never
+     * met is a record the replica that answered has not seen. Only what the
+     * walk decided leaves.
      */
     const A = 'a'.repeat(64);
     const B = 'b'.repeat(64);

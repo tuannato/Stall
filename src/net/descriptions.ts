@@ -6,6 +6,7 @@ import {
 } from '../domain/description';
 import type { GenesisAttribution } from '../domain/genesis';
 import { pickManifestWinner, type ManifestRank } from '../domain/manifest';
+import type { RecordRank } from '../domain/records';
 import { chainTimeOf } from './classify';
 import { attributionFromGenesisTx } from './genesis';
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGES, type ChainTx, type HistoryPage } from './chain';
@@ -108,7 +109,7 @@ export type DescriptionLookup = {
      * only for a lookup no walk built (`NO_RECORDS`, a test's fixture): a
      * missing rank is compared with nothing.
      */
-    readonly ranks?: ReadonlyMap<string, ManifestRank>;
+    readonly ranks?: ReadonlyMap<string, RecordRank>;
     /**
      * Tokens whose record we could not read. Distinct from absent: absent means
      * the seller wrote none, this means we failed. A caller must not print the
@@ -232,7 +233,7 @@ function collate(
     const prices = new Map<string, TokenPrice>();
     const quoteTimes = new Map<string, number>();
     const decided = new Set<string>();
-    const ranks = new Map<string, ManifestRank>();
+    const ranks = new Map<string, RecordRank>();
     for (const [tokenId, records] of found) {
         // A record we could not read does **not** remove one we could. It is
         // our failure, and letting it delete what a seller published is §4's
@@ -249,12 +250,22 @@ function collate(
         }
         decided.add(tokenId);
         // The winner's rank alone, never the record: what a caller merging
-        // this walk over an older one compares (`mergeFailedRead`).
+        // this walk over an older one compares (`mergeFailedRead`) — with
+        // the records this walk ranked below it, which a later answer
+        // crowning one of them cannot beat (`RecordRank.older`; the owner,
+        // CRITIC-CARRYOVER-4 item 9). Settled records only: an unmined,
+        // unfinalized one was never ranked, and may yet win.
+        const older = new Set(
+            records
+                .filter((record) => record.txid !== winner.txid && (record.height !== undefined || record.isFinal))
+                .map((record) => record.txid),
+        );
         ranks.set(tokenId, {
             height: winner.height,
             isFinal: winner.isFinal,
             txid: winner.txid,
             ...(winner.firstSeen === undefined ? {} : { firstSeen: winner.firstSeen }),
+            ...(older.size === 0 ? {} : { older }),
         });
         // The winner's own clock, and only the winner's: a losing record's
         // stamp would date a document nobody is reading. A tombstone carries

@@ -31,6 +31,15 @@
  * rank with one (the owner, 2026-09-25): the kept record may since have
  * been mined anywhere, and the walk read what is mined now.
  *
+ * **Except a record the kept read already ranked below its own.** That
+ * rule handed the screen back to a lagging replica that answered the
+ * OLDER record, mined, with first-seen 0, over a fresh record finalized
+ * and unmined on screen. So a read remembers, per token, the records it
+ * ranked below its winner (`RecordRank.older`), and a later answer whose
+ * winner is one of them is older by construction and never beats the
+ * screen (the owner, CRITIC-CARRYOVER-4 item 9) — on a walk that threw
+ * and on a walk that finished alike, since both merge here.
+ *
  * So the two are merged per token: the failed walk's decided tokens win,
  * absence included, unless the kept read's winner for that token outranks
  * it on that ladder; the kept records fill the tokens the walk never
@@ -38,6 +47,16 @@
  */
 import type { TokenPrice } from './description';
 import { compareManifestRank, knownSeen, type ManifestRank } from './manifest';
+
+/**
+ * The rank of the record that won a token (`ManifestRank`), and the records
+ * the SAME read ranked below it — their txids, every settled record for that
+ * token the walk read that lost to the winner (the owner, CRITIC-CARRYOVER-4
+ * item 9: "remember the older records"). Bounded by what the walk read.
+ * Unsettled records (unmined and unfinalized) are not ranked and are not in
+ * it: one of those may yet win.
+ */
+export type RecordRank = ManifestRank & { readonly older?: ReadonlySet<string> };
 
 /** The four record maps a view carries, as one read left them. */
 export type RecordMaps = {
@@ -47,10 +66,11 @@ export type RecordMaps = {
     readonly quoteTimes?: ReadonlyMap<string, number>;
     /**
      * tokenId → the rank of the record that won that token, for every token
-     * the read decided, a removal included (`DescriptionLookup.ranks`).
+     * the read decided, a removal included (`DescriptionLookup.ranks`),
+     * with the records that read ranked below it (`RecordRank.older`).
      * Absent where the read carried none: then nothing is compared.
      */
-    readonly ranks?: ReadonlyMap<string, ManifestRank>;
+    readonly ranks?: ReadonlyMap<string, RecordRank>;
 };
 
 /** The merged maps, and the tokens whose records came from the kept read. */
@@ -59,8 +79,8 @@ export type MergedRecords = {
     readonly shelves: ReadonlyMap<string, string>;
     readonly prices: ReadonlyMap<string, TokenPrice>;
     readonly quoteTimes: ReadonlyMap<string, number>;
-    /** The rank of whichever record each merged token was taken from. */
-    readonly ranks: ReadonlyMap<string, ManifestRank>;
+    /** The rank of whichever record each merged token was taken from, its older records with it. */
+    readonly ranks: ReadonlyMap<string, RecordRank>;
     /**
      * Every token shown from the kept read: in one of its maps, and either
      * never decided by the walk that threw or decided by it at a record the
@@ -90,12 +110,29 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
 }
 
 /**
- * Whether the kept read's winner for a token outranks the walk's, on §5's
- * ladder (`compareManifestRank`: known, differing first-seen stamps; then
- * heights; then txid) — except that a kept rank read before its record was
- * mined (no height) never beats a walk rank that has one.
+ * Whether the kept read's winner for a token outranks the walk's.
+ *
+ * **First, by construction** (the owner, CRITIC-CARRYOVER-4 item 9): a walk
+ * whose winner is one of the records the kept read ranked BELOW its own
+ * (`RecordRank.older`) answered an older record — a lagging replica that
+ * has not seen the seller's newest one — and never beats the record on
+ * screen, whatever the two ranks say. That is the case the ladder gets
+ * wrong: a fresh record finalized and unmined on screen, and the older one
+ * answered mined with first-seen 0 by a node that never saw it in its
+ * mempool, which the no-height rule below would crown.
+ *
+ * Then on §5's ladder (`compareManifestRank`: known, differing first-seen
+ * stamps; then heights; then txid) — except that a kept rank read before
+ * its record was mined (no height) never beats a walk rank that has one.
+ * **That exception now decides only what the older set cannot see**: a walk
+ * winner the kept read never read at all (a newer record, mined since, or
+ * an older one past the kept read's own page cap). No read this page makes
+ * carries the tip height, so nothing finer is built.
  */
-function keptOutranks(kept: ManifestRank, walk: ManifestRank): boolean {
+function keptOutranks(kept: RecordRank, walk: ManifestRank): boolean {
+    if (kept.older?.has(walk.txid) === true) {
+        return true;
+    }
     const keptSeen = knownSeen(kept.firstSeen);
     const walkSeen = knownSeen(walk.firstSeen);
     if (keptSeen !== undefined && walkSeen !== undefined && keptSeen !== walkSeen) {
@@ -175,10 +212,11 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
  *
  * **It removes only what it decided** (the owner, CRITIC-CARRYOVER-3 item
  * 3). A walk that finished decides every token it read a winning record
- * for, a tombstone included (`collate`), so a removal the seller signed is
- * always among `decided`; a token on screen the walk never met is a record
- * this replica has not seen — our gap, never the seller's — and the
- * screen's record for it stands. That holds whether the walk read to the
+ * for, a tombstone included (`collate`) — a removal it reached, settled and
+ * accepted, never one past our cap, one still unfinalized and unmined (the
+ * older record wins in its place) or one `collectTx` refused; a token on
+ * screen the walk never met is a record this replica has not seen — our
+ * gap, never the seller's — and the screen's record for it stands. That holds whether the walk read to the
  * end or stopped at our page cap, which is why a finished walk now merges
  * exactly as a walk that threw does (`mergeFailedRead`).
  */

@@ -2,7 +2,7 @@ import type { RateCheck } from './fiat';
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
 import type { GenesisAttribution } from './genesis';
-import type { ManifestRank } from './manifest';
+import type { RecordRank } from './records';
 import type { PaymentMemo } from './payment';
 import type { DecodedTheme } from './theme';
 
@@ -968,13 +968,16 @@ export type StallView = WindowState & {
     descriptionsDecided?: ReadonlySet<string>;
     /**
      * tokenId → the rank of the record each decided token was taken from
-     * (`DescriptionLookup.ranks`), a removal included. Carried so the next
-     * walk that throws can be merged over these records per token by rank
-     * (`mergeFailedRead`): a walk that stopped before the page holding a
-     * newer edit mined a block early decided that token at an older record.
-     * Absent on a view no walk built.
+     * (`DescriptionLookup.ranks`), a removal included, with the records the
+     * read that crowned it ranked below it (`RecordRank.older`). Carried so
+     * the next walk — one that throws or one that finishes — can be merged
+     * over these records per token by rank (`mergeFailedRead`): a walk that
+     * stopped before the page holding a newer edit mined a block early
+     * decided that token at an older record, and a lagging replica answers
+     * a record this read already ranked below the screen's. Absent on a
+     * view no walk built.
      */
-    descriptionRanks?: ReadonlyMap<string, ManifestRank>;
+    descriptionRanks?: ReadonlyMap<string, RecordRank>;
     /**
      * Some of the records on the view are the last good read, kept because
      * this read's own walk threw before it reached them (a wall re-reading

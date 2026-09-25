@@ -453,6 +453,32 @@ describe('description-winner-follows-the-manifest-rule', () => {
     });
 });
 
+describe('a-walk-remembers-the-records-it-ranked-below-each-winner', () => {
+    /**
+     * The owner, CRITIC-CARRYOVER-4 item 9: a read remembers, per token, the
+     * records it ranked below its winner (`RecordRank.older`), so a later
+     * answer crowning one of them is older by construction
+     * (`a-lagging-replicas-older-record-never-beats-the-screen`). Settled
+     * records only: an unmined, unfinalized record was never ranked, and may
+     * yet win, so it is never called older. Bounded by what the walk read.
+     */
+    it('names every settled loser and no unsettled record, per token', async () => {
+        const out = await load(
+            chronikWith({
+                lokadTxs: [
+                    tx({ txid: '1a'.repeat(32), height: 9, outputs: [stld(TOKEN_A, 'winner')] }),
+                    tx({ txid: '1b'.repeat(32), height: 5, outputs: [stld(TOKEN_A, 'mined, older')] }),
+                    tx({ txid: '1c'.repeat(32), outputs: [stld(TOKEN_A, 'not yet settled')] }),
+                    tx({ txid: '1d'.repeat(32), height: 7, outputs: [stld(TOKEN_B, 'alone')] }),
+                ],
+            }),
+        );
+        expect(out.descriptions.get(TOKEN_A)).toBe('winner');
+        expect([...(out.ranks?.get(TOKEN_A)?.older ?? [])]).toEqual(['1b'.repeat(32)]);
+        expect(out.ranks?.get(TOKEN_B)?.older, 'a token with one record has none below it').toBeUndefined();
+    });
+});
+
 describe('truncated-description-walk-is-not-a-seller-who-wrote-none', () => {
     it('says the walk stopped short', () => {
         const many = page([], 40);
