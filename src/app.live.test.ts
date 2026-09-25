@@ -41,9 +41,11 @@ import {
     RATE_SOURCE_CHECK,
     RATE_SOURCE_PRIMARY,
     PAY_QUOTE_CHANGED,
-    PAY_QUOTES_CHANGED,
     PAY_QUOTE_GONE,
+    PAY_QUOTE_UNSHOWN,
     payFigure,
+    payItemsChanged,
+    payTolerance,
 } from './ui/copy';
 import { satsForQuote, scaleRate } from './domain/fiat';
 import {
@@ -4893,10 +4895,16 @@ describe('overlapping-bursts-do-not-overlap-their-walks', () => {
         chain.gate = undefined;
         open();
         await until(() => painted.view?.events?.some((e) => e.txid === late) === true, 8_000);
+        // Read when the row lands, not after the flush below: `painted` is
+        // the last view ANY app painted, an app an earlier test booted is
+        // never torn down, and on a loaded box its late timers painted that
+        // stranger's stall into the flush (red under `pnpm test` at c633e60,
+        // green alone).
+        const landed = painted.view?.events?.some((e) => e.txid === late) === true;
         await flush();
         expect(chain.walksInFlight, 'every walk finished').toBe(0);
         expect(chain.walksInFlightMax, 'the deferred read ran after, not beside').toBe(1);
-        expect(painted.view?.events?.some((e) => e.txid === late), 'the deferred burst’s row reached the ring').toBe(true);
+        expect(landed, 'the deferred burst’s row reached the ring').toBe(true);
         expect(root.querySelector('[data-role="tab-activity"]')).not.toBeNull();
     });
 });
@@ -5535,8 +5543,45 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         expect(press(root, 'pay-several')).toBeUndefined();
         expect(figureOf(root, 'pay-several')).toBe('16,000');
         expect(root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
-            PAY_QUOTES_CHANGED,
+            payItemsChanged('Plum Jam'),
         );
         expect(press(root, 'pay-several')).toContain('amount=16000.00');
+    });
+
+    it('a unit this page does not paint: the press sends nothing and says the page can no longer show it', async () => {
+        // The critic, 2026-09-25, item 3: the record is still the seller's,
+        // in a unit this page does not write — our gap, never "no longer on
+        // the stall".
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
+
+        expect(press(root, 'pay')).toBeUndefined();
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.textContent).toContain(PAY_QUOTE_UNSHOWN);
+        expect(sheet?.textContent).not.toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+    });
+
+    it('a new margin and new words: the press opens at once, and the sheet takes both in place', async () => {
+        // The owner, 2026-09-25: "moved" is what the buyer pays changing.
+        const RATE = 20_000_000n;
+        priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        const figure = figureOf(root, 'pay');
+        expect(figure).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, RATE)!));
+
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Now in a jar', { price: { ...USD_QUOTE, tolerancePct: 5 } })]]);
+        const url = press(root, 'pay');
+        expect(url, 'no stop and no second press').toContain(`amount=${figure!.replace(/,/g, '')}.00`);
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent ?? '').toBe('');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-words"]')?.textContent).toBe('Now in a jar');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
     });
 });

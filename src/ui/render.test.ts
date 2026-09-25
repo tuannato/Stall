@@ -9162,15 +9162,187 @@ describe('a-pay-press-asks-the-record-before-and-after-the-valve', () => {
         open.mockRestore();
     });
 
-    it('a sheet painted after a move says so, restates the figure, and a gone quote says nothing was sent', () => {
-        const { root } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...stale, atMs: Date.now() }, payRecordMoved: true }));
+    it('a sheet painted after a move says so, restates the figure, and a gone quote says no wallet was opened', () => {
+        const { root } = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...stale, atMs: Date.now() }, payRecordMoved: [TOKEN_ID] }));
         const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent ?? '';
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
         expect(root.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(copy.payFigure(figure));
-        const gone = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map(), payRecordMoved: true }));
+        const gone = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map(), payRecordMoved: [TOKEN_ID] }));
         expect(gone.root.querySelector('[data-role="pay"]')?.textContent).toContain(copy.PAY_QUOTE_GONE);
         const unknown = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map() }));
         expect(unknown.root.querySelector('[data-role="pay"]')?.textContent, 'a link that named nothing is not a quote that left').toContain(copy.PAY_HINT_UNKNOWN);
+    });
+});
+
+describe('a-moved-quote-is-said-in-the-owners-words', () => {
+    /**
+     * The owner's wording (2026-09-25), and the critic's item 3: a record the
+     * press found gone says so, and a record still there in a form this page
+     * does not paint as a quote is our gap, never "no longer on the stall".
+     * "Pay several" names the items whose records moved, and a choice the
+     * paint emptied says no wallet was opened.
+     */
+    const OTHER = '78'.repeat(32);
+    const tokens = new Map([
+        [TOKEN_ID, BEANS],
+        [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }],
+    ]);
+
+    it('says the owner’s sentences on the single sheet, and tells a unit this page does not paint from a quote taken off', () => {
+        expect(copy.PAY_QUOTE_CHANGED).toBe('This quote changed while this sheet was open \u2014 check the figure and press Pay again');
+        expect(copy.PAY_QUOTE_GONE).toBe('This quote is no longer on the stall \u2014 no wallet was opened');
+        expect(copy.PAY_QUOTE_UNSHOWN).toBe('This page can no longer show this quote \u2014 no wallet was opened');
+        const unshown = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map([[TOKEN_ID, { ...QUOTE_USD, code: 'zzz' }]]), payRecordMoved: [TOKEN_ID] }),
+        ).root.querySelector('[data-role="pay"]')?.textContent;
+        expect(unshown).toContain(copy.PAY_QUOTE_UNSHOWN);
+        expect(unshown, 'the record is there: never said to be gone').not.toContain(copy.PAY_QUOTE_GONE);
+        const gone = paint(payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map(), payRecordMoved: [TOKEN_ID] })).root.querySelector('[data-role="pay"]')?.textContent;
+        expect(gone).toContain(copy.PAY_QUOTE_GONE);
+        expect(gone).not.toContain(copy.PAY_QUOTE_UNSHOWN);
+    });
+
+    it('names the items that changed on Pay several, and a choice the paint emptied says no wallet was opened', () => {
+        expect(copy.payItemsChanged('Roasted Beans')).toBe(
+            'Roasted Beans changed while this sheet was open \u2014 check the total and press Pay again',
+        );
+        const several = (over: Partial<StallView>) =>
+            paint(
+                payView({
+                    tokens,
+                    prices: new Map([
+                        [TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }],
+                        [OTHER, { code: 'xec', exponent: 2, amount: 700_000n }],
+                    ]),
+                    overlay: { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                    ...over,
+                }),
+            ).root;
+        const one = several({ payRecordMoved: [OTHER] });
+        expect(one.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(copy.payItemsChanged('Green Tea'));
+        const two = several({ payRecordMoved: [TOKEN_ID, OTHER] });
+        expect(two.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
+            copy.payItemsChanged('Roasted Beans and Green Tea'),
+        );
+        expect(copy.itemNames(['A', 'B', 'C'])).toBe('A, B and C');
+        expect(several({}).querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe('');
+        const emptied = several({ selection: new Map(), payRecordMoved: [TOKEN_ID] });
+        expect(emptied.querySelector('[data-role="pay-several"]')?.textContent).toContain(copy.PAY_SEVERAL_GONE);
+        expect(emptied.querySelector('[data-role="pay-several"]')?.textContent).not.toContain(copy.SELECTION_EMPTY);
+        const pruned = several({ selection: new Map() });
+        expect(pruned.querySelector('[data-role="pay-several"]')?.textContent, 'no press, no claim about one').toContain(copy.SELECTION_EMPTY);
+    });
+});
+
+describe('a-margin-or-words-change-is-taken-in-place-and-the-press-opens', () => {
+    /**
+     * The owner (2026-09-25): "moved" is what the buyer pays changing — the
+     * figure, the unit or the surcharge. A record that changed only its
+     * tolerance or its words is taken in place at the press: no stop, no
+     * second press, and the valve measures against the margin it states now.
+     */
+    const records = (price: { code: string; exponent: number; amount: bigint; tolerancePct?: number }, words?: string) => ({
+        prices: new Map([[TOKEN_ID, price]]),
+        ...(words === undefined ? {} : { descriptions: new Map([[TOKEN_ID, words]]) }),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    const press = (root: HTMLElement) => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        (root.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return open;
+    };
+
+    it('a new margin and new words: the press opens at once, and the sheet shows both', () => {
+        const root = document.createElement('div');
+        const h = {
+            ...handlers(),
+            onPayRecords: () => records({ ...QUOTE_USD, tolerancePct: 7 }, 'Now with a lid'),
+            onPayRecordMoved: vi.fn(),
+        };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...PAY_RATE, atMs: Date.now() } }), h);
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent;
+        expect(root.querySelector('[data-role="pay-words"]')).toBeNull();
+        const open = press(root);
+        expect(open, 'no stop and no second press').toHaveBeenCalledTimes(1);
+        open.mockRestore();
+        expect(h.onPayRecordMoved).not.toHaveBeenCalled();
+        expect(root.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
+        expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent, 'the same figure').toBe(figure);
+        expect(root.querySelector('[data-role="pay-words"]')?.textContent).toBe('Now with a lid');
+        expect(root.querySelector('[data-role="pay"] .sheet-head')?.textContent).not.toContain(copy.QUOTE_NO_WORDS_LINE);
+        expect(root.querySelector('[data-role="pay-tolerance"]')?.textContent).toBe(copy.payTolerance(7));
+    });
+
+    it('the same figure at another exponent is the same payment and opens at once', () => {
+        const root = document.createElement('div');
+        const h = { ...handlers(), onPayRecords: () => records({ code: 'usd', exponent: 3, amount: 5000n }), onPayRecordMoved: vi.fn() };
+        renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: { ...PAY_RATE, atMs: Date.now() } }), h);
+        const open = press(root);
+        expect(open).toHaveBeenCalledTimes(1);
+        open.mockRestore();
+        expect(h.onPayRecordMoved).not.toHaveBeenCalled();
+    });
+
+    it('the valve measures a moved rate against the margin the record states at the press', async () => {
+        // The painted record states no margin (the valve's default, 2%); the
+        // record now states 10%, and the fresh rate moves the figure ~5%.
+        const stale = { rate: scaleRate(0.00002)!, atMs: Date.now() - 300_000 };
+        const valveAfter = async (now: ReturnType<typeof records>): Promise<string> => {
+            const root = document.createElement('div');
+            const h = {
+                ...handlers(),
+                onPayRate: vi.fn(async () => ({ rate: scaleRate(0.000019)!, atMs: Date.now() })),
+                onPayRecords: () => now,
+                onPayRecordMoved: vi.fn(),
+            };
+            renderStall(root, payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, payRate: stale }), h);
+            const open = press(root);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(open, 'a stale rate never opens on the first press').not.toHaveBeenCalled();
+            open.mockRestore();
+            expect(h.onPayRecordMoved).not.toHaveBeenCalled();
+            return root.querySelector('[data-role="pay-valve"]')?.textContent ?? '';
+        };
+        expect(await valveAfter(records(QUOTE_USD))).toBe(copy.PAY_RATE_MOVED);
+        expect(await valveAfter(records({ ...QUOTE_USD, tolerancePct: 10 }))).toBe(copy.PAY_RATE_REFRESHED);
+    });
+
+    it('Pay several: a chosen item’s new margin opens at once', () => {
+        const OTHER = '79'.repeat(32);
+        const root = document.createElement('div');
+        const both = new Map<string, TokenPrice>([
+            [TOKEN_ID, { code: 'xec', exponent: 2, amount: 500_000n }],
+            [OTHER, { code: 'xec', exponent: 2, amount: 700_000n }],
+        ]);
+        const h = {
+            ...handlers(),
+            onPayRecords: () => ({
+                prices: new Map([...both, [OTHER, { ...both.get(OTHER)!, tolerancePct: 4 }]]),
+                known: true,
+                complete: true,
+                decided: new Set<string>(),
+            }),
+            onPayRecordMoved: vi.fn(),
+        };
+        renderStall(
+            root,
+            payView({
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                prices: both,
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+            }),
+            h,
+        );
+        const open = press(root);
+        expect(open).toHaveBeenCalledTimes(1);
+        open.mockRestore();
+        expect(h.onPayRecordMoved).not.toHaveBeenCalled();
     });
 });
 

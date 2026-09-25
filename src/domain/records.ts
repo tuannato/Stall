@@ -36,7 +36,7 @@
  * seen later; the kept records fill the tokens the walk never reached. Pure:
  * no network, no DOM.
  */
-import { samePrice, type TokenPrice } from './description';
+import type { TokenPrice } from './description';
 import { knownSeen, type ManifestRank } from './manifest';
 
 /** The four record maps a view carries, as one read left them. */
@@ -153,6 +153,13 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
  */
 export type RecordsNow = {
     readonly prices?: ReadonlyMap<string, TokenPrice>;
+    /**
+     * The seller's words and each record's clock, beside the prices: what
+     * an open sheet takes in place when a record changed in a way that does
+     * not move what the buyer pays (`samePayment`).
+     */
+    readonly descriptions?: ReadonlyMap<string, string>;
+    readonly quoteTimes?: ReadonlyMap<string, number>;
     /** A definite read: the records were read and the walk did not throw. */
     readonly known: boolean;
     /** The walk read to the end, rather than stopping at our page cap. */
@@ -162,18 +169,44 @@ export type RecordsNow = {
 };
 
 /**
+ * Whether two records ask a buyer for the same payment: the same unit, the
+ * same figure and the same surcharge (the owner, 2026-09-25: "moved" is what
+ * the buyer pays changing). The figure is compared as a value, so a record
+ * restating it at another exponent asks the same satoshis (`satsForQuote`
+ * divides by the exponent exactly). The tolerance is not in it — a margin
+ * on the seller's side of a payment, not a part of it — and neither are the
+ * words, which a record carries beside its price. Absent on both sides is
+ * the same; absent on one is a record that came or went.
+ */
+export function samePayment(a: TokenPrice | undefined, b: TokenPrice | undefined): boolean {
+    if (a === undefined || b === undefined) {
+        return a === b;
+    }
+    return (
+        a.code === b.code &&
+        a.surchargePct === b.surchargePct &&
+        a.amount * 10n ** BigInt(b.exponent) === b.amount * 10n ** BigInt(a.exponent)
+    );
+}
+
+/**
  * The tokens among `composed` — the records a payment on screen was composed
- * from — whose record the app now holds otherwise (`samePrice`: the figure,
- * the unit, the tolerance, the surcharge, or the record gone).
+ * from — whose record now asks a buyer for another payment (`samePayment`:
+ * the figure, the unit, the surcharge, or the record gone). A record that
+ * changed only its tolerance or its words is not among them; a sheet takes
+ * that in place and the press goes on.
  *
- * Over a definite read only: a read that has not answered, or a walk that
- * threw, cannot say a record moved, and saying so would stop a payment on
- * our own failure. A token a walk that stopped at our page cap did not
- * reach has not moved; one it resolved, a removal included, is judged. The
- * touch wall's plate closes on the same answer, and both pay sheets ask it
- * at the press (the critic's final merge, item 11): a sheet holds the live
- * paint, so without it a press handed a wallet a figure the page no longer
- * held as the seller's quote, and said nothing.
+ * Over a definite read only (`RecordsNow.known`): a read that has not
+ * answered, or a failure screen's floor (`descriptionsFailed`), cannot say a
+ * record moved, and saying so would stop a payment on our own failure. On
+ * the live road a walk that threw is not such a floor: it is merged per
+ * token over the records on screen (`mergeFailedRead`, the app's
+ * `applyDescriptions`) and what the merge holds is judged like any read. A
+ * token a walk that stopped at our page cap did not reach has not moved;
+ * one it resolved, a removal included, is judged. The touch wall's plate
+ * closes on the same answer, and both pay sheets ask it at every press: a
+ * sheet holds the live paint, so without it a press handed a wallet a figure
+ * the page no longer held as the seller's quote, and said nothing.
  */
 export function movedRecords(composed: ReadonlyMap<string, TokenPrice>, now: RecordsNow): string[] {
     if (!now.known || now.prices === undefined) {
@@ -185,7 +218,7 @@ export function movedRecords(composed: ReadonlyMap<string, TokenPrice>, now: Rec
         if (current === undefined && !now.complete && !now.decided.has(tokenId)) {
             continue;
         }
-        if (!samePrice(price, current)) {
+        if (!samePayment(price, current)) {
             moved.push(tokenId);
         }
     }

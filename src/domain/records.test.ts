@@ -182,6 +182,14 @@ describe('a-pay-press-judges-the-records-it-composed-from', () => {
         expect(movedRecords(composed, now(new Map<string, TokenPrice>([[A, xec(500_000n)]]))), 'a removal read to the end').toEqual([B]);
     });
 
+    it('counts what the buyer pays, never the margin or how the figure is written', () => {
+        // The owner, 2026-09-25: "moved" is the figure, the unit or the
+        // surcharge changing. A new tolerance is taken in place.
+        expect(movedRecords(composed, now(new Map<string, TokenPrice>([[A, { ...xec(500_000n), tolerancePct: 5 }], [B, xec(700_000n)]])))).toEqual([]);
+        expect(movedRecords(composed, now(new Map<string, TokenPrice>([[A, { code: 'xec', exponent: 3, amount: 5_000_000n }], [B, xec(700_000n)]])))).toEqual([]);
+        expect(movedRecords(composed, now(new Map<string, TokenPrice>([[A, { code: 'xec', exponent: 3, amount: 5_000_001n }], [B, xec(700_000n)]])))).toEqual([A]);
+    });
+
     it('judges nothing over a read that is not definite, and nothing a capped walk did not reach', () => {
         const moved = new Map<string, TokenPrice>([[A, xec(900_000n)]]);
         expect(movedRecords(composed, now(moved, { known: false }))).toEqual([]);

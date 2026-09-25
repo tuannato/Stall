@@ -1786,21 +1786,47 @@ export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
 /**
- * The press found the seller's record moved since the sheet was painted (a
- * new figure, unit, tolerance or surcharge), so it sent nothing and the
- * sheet was painted again from the record as it stands (the critic's final
- * merge, item 11). The valve's shape: the figure above is already the new
- * one, and the control restates it.
+ * The press found the seller's record moved since the sheet was painted —
+ * what the buyer pays changed: the figure, the unit or the surcharge — so it
+ * opened nothing and the sheet was painted again from the record as it
+ * stands. The valve's shape: the figure above is already the new one, and
+ * the control restates it. The owner's wording (2026-09-25). A change to the
+ * tolerance or the words is not a move: the sheet takes it in place.
  */
-export const PAY_QUOTE_CHANGED = 'The seller changed this quote \u2014 review and pay again';
-/** The same, on "Pay several": one or more chosen items' records moved. */
-export const PAY_QUOTES_CHANGED = 'The seller changed a quote here \u2014 review and pay again';
+export const PAY_QUOTE_CHANGED =
+    'This quote changed while this sheet was open \u2014 check the figure and press Pay again';
 /**
- * The press found the item's record gone — taken off, or moved to a unit
- * this page does not paint — so there is nothing left to compose, and the
- * press sent nothing.
+ * The same, on "Pay several", naming the items whose records moved
+ * (`itemNames`): the owner's per-item form (2026-09-25).
  */
-export const PAY_QUOTE_GONE = 'This quote is no longer on the stall \u2014 nothing was sent';
+export const payItemsChanged = (names: string): string =>
+    `${names} changed while this sheet was open \u2014 check the total and press Pay again`;
+/**
+ * The press found the item's record gone — the seller took it off — so there
+ * is nothing left to compose, and the press opened nothing. The owner's
+ * wording (2026-09-25).
+ */
+export const PAY_QUOTE_GONE = 'This quote is no longer on the stall \u2014 no wallet was opened';
+/**
+ * The press found the item's record still there, in a form this page does
+ * not paint as a quote — a unit it does not write, a genesis it could not
+ * read, a token it withholds — so "no longer on the stall" would be our gap
+ * said as the seller's absence (the critic, 2026-09-25, item 3). The owner's
+ * wording (2026-09-25).
+ */
+export const PAY_QUOTE_UNSHOWN = 'This page can no longer show this quote \u2014 no wallet was opened';
+/**
+ * "Pay several" when the press found every chosen item's record moved away
+ * — removed, or in another unit — so the paint that followed emptied the
+ * choice: nothing is left to compose, and nothing opened.
+ */
+export const PAY_SEVERAL_GONE =
+    'Nothing you chose is quoted as you chose it any more \u2014 no wallet was opened';
+/** Item names in a sentence: "A", "A and B", "A, B and C". */
+export const itemNames = (names: readonly string[]): string =>
+    names.length <= 1
+        ? (names[0] ?? '')
+        : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
 /**
  * The second feed disagrees with the first past `RATE_DISAGREE_PCT`. Said,
  * never refused: the figure stands (it is the first feed's), the control

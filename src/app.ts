@@ -559,11 +559,19 @@ export function boot(
     let payRateUnit: string | undefined;
     /**
      * The open pay sheet whose press found the seller's record moved
-     * (`payOverlayKey`), so the paint that follows says so. Cleared when a
-     * pay sheet opens or closes; a key that is not the open sheet's says
-     * nothing.
+     * (`payOverlayKey`), so the paint that follows says so, and the tokens
+     * whose records moved, for the line to name. Cleared when a pay sheet
+     * opens or closes; a key that is not the open sheet's says nothing.
      */
     let payRecordMovedFor: string | undefined;
+    let payRecordMovedItems: readonly string[] = [];
+    /**
+     * The records the open pay sheet was last painted from — the ones its
+     * figure is composed of (`paint`). What a press found moved is judged
+     * against these, so the line names what the buyer was shown and not
+     * what a rate happened to be read for.
+     */
+    let payPainted = new Map<string, TokenPrice>();
     /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
@@ -714,6 +722,8 @@ export function boot(
      */
     const recordsNow = (): RecordsNow => ({
         ...(state.view.prices === undefined ? {} : { prices: state.view.prices }),
+        ...(state.view.descriptions === undefined ? {} : { descriptions: state.view.descriptions }),
+        ...(state.view.quoteTimes === undefined ? {} : { quoteTimes: state.view.quoteTimes }),
         known: recordsKnown(state.view),
         complete: state.view.descriptionsTruncated !== true,
         decided: decidedOf({ ...state.view, decided: state.view.descriptionsDecided }),
@@ -1321,8 +1331,10 @@ export function boot(
             payRateWhy,
             payRateAsking,
             payQuantity,
-            ...(payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)
-                ? { payRecordMoved: true }
+            ...(payRecordMovedFor !== undefined &&
+            payRecordMovedFor === payOverlayKey(state.view.overlay) &&
+            payRecordMovedItems.length > 0
+                ? { payRecordMoved: payRecordMovedItems }
                 : {}),
             selection: new Map(selection),
             /*
@@ -1357,6 +1369,24 @@ export function boot(
             // it in, so a refresh cannot lose it and a shared link cannot gain it.
             pasted: (history.state as { pasted?: boolean } | null)?.pasted === true,
         };
+        // The records the open pay sheet composes from, exactly as this paint
+        // hands them to it: the single sheet's item when it is a quoted row,
+        // every chosen item's on "Pay several" (`payPainted`).
+        payPainted = new Map();
+        if (view.overlay.kind === 'pay') {
+            const tokenId = view.overlay.tokenId;
+            const item = quotedItems(view).find((row) => row.tokenId === tokenId);
+            if (item !== undefined) {
+                payPainted.set(tokenId, item.price);
+            }
+        } else if (view.overlay.kind === 'pay-several') {
+            for (const tokenId of view.selection?.keys() ?? []) {
+                const painted = view.prices?.get(tokenId);
+                if (painted !== undefined) {
+                    payPainted.set(tokenId, painted);
+                }
+            }
+        }
         renderStall(root, view, {
             onChangeFiat: (code: string): void => {
                 fiatCode = code;
@@ -1507,6 +1537,7 @@ export function boot(
                     dropPayParam();
                 }
                 payRecordMovedFor = undefined;
+                payRecordMovedItems = [];
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -2186,6 +2217,7 @@ export function boot(
         payRateWhy = undefined;
         payQuantity = undefined;
         payRecordMovedFor = undefined;
+        payRecordMovedItems = [];
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2279,6 +2311,7 @@ export function boot(
         payRateWhy = undefined;
         payQuantity = undefined;
         payRecordMovedFor = undefined;
+        payRecordMovedItems = [];
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -2321,7 +2354,13 @@ export function boot(
         if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
             return;
         }
-        payRecordMovedFor = key;
+        // Judged against the records the sheet was painted from: the line
+        // says what the buyer was shown moved, and names it on "Pay several".
+        const moved = movedRecords(payPainted, recordsNow());
+        if (moved.length > 0) {
+            payRecordMovedFor = key;
+            payRecordMovedItems = moved;
+        }
         paint();
         const over = state.view.overlay;
         const composes =
@@ -2760,6 +2799,7 @@ export function boot(
                 }
             });
             payRecordMovedFor = undefined;
+            payRecordMovedItems = [];
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },

@@ -47,6 +47,7 @@ import {
     formatPriceFigure,
     parsePriceFigure,
     parseSurchargePct,
+    samePrice,
     surchargedQuote,
     type TokenPrice,
 } from '../domain/description';
@@ -4684,8 +4685,16 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // quote. Say that rather than painting a sheet with no figure on it —
         // and keep the sheet's own title, because there is no item to name
         // here and a bare token id in a head is not one. A press that found
-        // the record gone says that instead, and that nothing was sent.
-        const gone = view.payRecordMoved === true ? copy.PAY_QUOTE_GONE : copy.PAY_HINT_UNKNOWN;
+        // the record gone says that instead, and that no wallet was opened —
+        // and a record still there in a form this page does not paint as a
+        // quote (a unit it does not write, a genesis it never read) is our
+        // gap, never "no longer on the stall" (the critic, 2026-09-25).
+        const gone =
+            view.payRecordMoved === undefined
+                ? copy.PAY_HINT_UNKNOWN
+                : view.prices?.has(tokenId) === true
+                  ? copy.PAY_QUOTE_UNSHOWN
+                  : copy.PAY_QUOTE_GONE;
         wrap.append(sheetHead(copy.PAY_TITLE, gone, handlers));
         wrap.append(el('p', 'ctx', gone));
         wrap.append(payFoot(handlers));
@@ -4695,8 +4704,15 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // under their own label below the figure, so the head's second line
     // carries only the fact that they wrote none.
     const named = quoteNaming(view, tokenId);
-    wrap.append(sheetHead(named.title, named.note ?? '', handlers));
-    const price = item.price;
+    const head = sheetHead(named.title, named.note ?? '', handlers);
+    wrap.append(head);
+    /**
+     * The record the figure is composed from. Replaced in place only by one
+     * that asks the buyer for the same payment (`recheck`): a new tolerance,
+     * or the figure restated at another exponent — the satoshis are the same
+     * by construction (`samePayment`).
+     */
+    let price = item.price;
     const usesRate = price.code !== XEC_PRICE_CODE;
 
     /** The buyer's own quantity: whole items, at least one. */
@@ -4794,13 +4810,20 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * cut of it as a title; this is the sheet where "describe the item so they
      * know what they pay for" pays off, so nothing here is shortened.
      */
-    const words = view.descriptions?.get(tokenId);
-    if (words !== undefined && words !== '') {
-        const said = el('dl', 'row pay-words');
-        said.append(el('dt', undefined, copy.PAY_WORDS_LABEL));
+    const wordsNode = (words: string | undefined): HTMLElement | null => {
+        if (words === undefined || words === '') {
+            return null;
+        }
+        const node = el('dl', 'row pay-words');
+        node.append(el('dt', undefined, copy.PAY_WORDS_LABEL));
         const value = el('dd', undefined, words);
         value.setAttribute('data-role', 'pay-words');
-        said.append(value);
+        node.append(value);
+        return node;
+    };
+    let wordsShown = view.descriptions?.get(tokenId);
+    let said = wordsNode(wordsShown);
+    if (said !== null) {
         wrap.append(said);
     }
 
@@ -4871,30 +4894,33 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // goes under one closed summary after the control: mechanism, read by
     // whoever wants it, never standing between the figure and Pay.
     const how = el('div');
-    how.append(el('p', 'fine', copy.PAY_FINE_MEMO));
-    how.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
+    const someWallets = el('p', 'fine', copy.PAY_FINE_SOME_WALLETS);
+    how.append(el('p', 'fine', copy.PAY_FINE_MEMO), someWallets);
     /*
      * The seller's own margin, and the two honest ways of not having one. Only
      * a quote that needs a rate can drift, and a value past what this app's
      * own presets can say is named as wider rather than printed as a figure
-     * whose meaning nothing here can vouch for.
+     * whose meaning nothing here can vouch for. Rewritten in place when the
+     * record's margin changes under the open sheet (`recheck`).
      */
-    const tolerance = toleranceLine(price);
-    if (tolerance !== null) {
-        how.append(tolerance);
-    }
-    // Only under a tolerance line that is on the sheet: an XEC quote
-    // mounts none (§5), whatever byte the record carries.
-    // Both bytes on the record AND a tolerance line on the sheet: an XEC
-    // quote mounts none (§5), and "not stated" is a line about no margin.
-    if (tolerance !== null && price.tolerancePct !== undefined && price.surchargePct !== undefined) {
-        how.append(el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE));
-    }
+    const marginLines = (record: TokenPrice): HTMLElement[] => {
+        const tolerance = toleranceLine(record);
+        if (tolerance === null) {
+            return [];
+        }
+        // Both bytes on the record AND a tolerance line on the sheet: an XEC
+        // quote mounts none (§5), and "not stated" is a line about no margin.
+        return record.tolerancePct !== undefined && record.surchargePct !== undefined
+            ? [tolerance, el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE)]
+            : [tolerance];
+    };
+    let margins = marginLines(price);
+    someWallets.after(...margins);
     how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
     if (decimalsOf(view.tokens, tokenId) > 0) {
         how.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
     }
-    const age = quoteAgeNode(view, tokenId, 'p', 'fine');
+    let age = quoteAgeNode(view, tokenId, 'p', 'fine');
     if (age !== null) {
         how.append(age);
     }
@@ -4959,16 +4985,74 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * again from it: said on the valve's line until a valve outcome of its
      * own replaces it, with the figure restated on the control.
      */
-    const recordMoved = view.payRecordMoved === true;
+    const recordMoved = view.payRecordMoved !== undefined;
     /**
-     * Whether the record this sheet composed from is still the seller's
-     * (`movedRecords`). Asked at every press and after every await that
+     * The seller's record as the app holds it now, against the one this
+     * sheet composed from. Asked at every press and after every await that
      * precedes a figure: the sheet holds the live paint, so a re-read that
      * landed while it was open is in the app's records and not on screen.
+     *
+     * True when what the buyer pays moved — the figure, the unit or the
+     * surcharge, or the record gone (`movedRecords`) — which the caller
+     * answers by opening nothing. A record that asks the same payment but
+     * changed its tolerance, its words or its clock is taken in place here,
+     * and the press goes on: no stop, no second press (the owner,
+     * 2026-09-25). The valve then measures against the margin the record
+     * states now.
      */
-    const composedMoved = (): boolean => {
+    const recheck = (): boolean => {
         const now = handlers.onPayRecords?.();
-        return now !== undefined && movedRecords(new Map([[tokenId, price]]), now).length > 0;
+        if (now === undefined) {
+            return false;
+        }
+        if (movedRecords(new Map([[tokenId, price]]), now).length > 0) {
+            return true;
+        }
+        const current = now.known ? now.prices?.get(tokenId) : undefined;
+        if (current === undefined) {
+            // Not reached by a read that stopped at our cap, or no definite
+            // read at all: nothing to take, and nothing moved.
+            return false;
+        }
+        const words = now.descriptions?.get(tokenId);
+        if (words !== wordsShown) {
+            wordsShown = words;
+            const next = wordsNode(words);
+            if (said !== null && next !== null) {
+                said.replaceWith(next);
+            } else if (said !== null) {
+                said.remove();
+            } else if (next !== null) {
+                valve.before(next);
+            }
+            said = next;
+            const note = head.querySelector('.sheet-head-t > .fine');
+            if (note !== null) {
+                note.textContent = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
+            }
+        }
+        const ageNow = quoteAgeNode({ ...view, quoteTimes: now.quoteTimes }, tokenId, 'p', 'fine');
+        if (ageNow?.textContent !== age?.textContent) {
+            if (age !== null && ageNow !== null) {
+                age.replaceWith(ageNow);
+            } else if (age !== null) {
+                age.remove();
+            } else if (ageNow !== null) {
+                minted.before(ageNow);
+            }
+            age = ageNow;
+        }
+        if (!samePrice(price, current)) {
+            price = current;
+            const next = marginLines(price);
+            for (const line of margins) {
+                line.remove();
+            }
+            someWallets.after(...next);
+            margins = next;
+            refresh();
+        }
+        return false;
     };
 
     const refresh = (): void => {
@@ -5113,11 +5197,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 return;
             }
             // The seller's record first (the critic's final merge, item 11):
-            // a figure the page no longer holds as their quote is never
-            // handed to a wallet. The sheet is painted again from the record
-            // as it stands, says so, and the next press is the one that
-            // opens — the moved-rate valve's shape, for the other input.
-            if (composedMoved()) {
+            // a figure the page no longer holds as their quote is not opened
+            // from this press. The sheet is painted again from the record as
+            // it stands, says so, and the next press is the one that opens —
+            // the moved-rate valve's shape, for the other input. A record
+            // that changed only its margin or its words is taken in place
+            // (`recheck`) and the press goes on.
+            if (recheck()) {
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
             }
@@ -5137,7 +5223,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 // A record that moved during the ask: the fresh rate is read
                 // for the unit the app holds now, which may not be this
                 // sheet's, so nothing is composed from it here.
-                if (composedMoved()) {
+                if (recheck()) {
                     handlers.onPayRecordMoved?.(tokenId);
                     return;
                 }
@@ -5159,13 +5245,13 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     armValve(app, () => appUrl);
 
     refreshRate.addEventListener('click', () => {
-        if (composedMoved()) {
+        if (recheck()) {
             handlers.onPayRecordMoved?.(tokenId);
             return;
         }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            if (composedMoved()) {
+            if (recheck()) {
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
             }
@@ -5488,16 +5574,24 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     const selection = view.selection ?? new Map<string, bigint>();
-    const prices = view.prices;
+    /**
+     * The records the sheet composes from. Replaced in place only by records
+     * that ask the buyer for the same payment (`recheck`): a margin the
+     * valve then measures against, never a figure.
+     */
+    let prices = view.prices;
     const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
     const address = view.address ?? '';
     const count = Number(selectionCount(selection));
     wrap.setAttribute('aria-label', copy.paySeveralTitle(count));
     if (items.length === 0) {
         // A live prune emptied the selection under the sheet: say so, with
-        // the sheet's own way out, rather than composing nothing in silence.
-        wrap.append(sheetHead(copy.paySeveralTitle(0), copy.SELECTION_EMPTY, handlers));
-        wrap.append(el('p', 'ctx', copy.SELECTION_EMPTY));
+        // the sheet's own way out, rather than composing nothing in silence
+        // — and when a press found the records moved and the paint that
+        // followed emptied it, that no wallet was opened.
+        const empty = view.payRecordMoved !== undefined ? copy.PAY_SEVERAL_GONE : copy.SELECTION_EMPTY;
+        wrap.append(sheetHead(copy.paySeveralTitle(0), empty, handlers));
+        wrap.append(el('p', 'ctx', empty));
         wrap.append(payFoot(handlers));
         return wrap;
     }
@@ -5620,8 +5714,15 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
 
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
-    /** A press found a chosen item's record moved and this sheet was painted again from the records (the single sheet's rule). */
-    const recordMoved = view.payRecordMoved === true;
+    /**
+     * A press found chosen items' records moved and this sheet was painted
+     * again from the records (the single sheet's rule): the line names them,
+     * by the owner's per-item form.
+     */
+    const movedLine =
+        view.payRecordMoved === undefined
+            ? undefined
+            : copy.payItemsChanged(copy.itemNames(view.payRecordMoved.map((tokenId) => tokenName(view.tokens, tokenId))));
     /** The records this sheet composes from: every chosen item's, as painted. */
     const composed = new Map<string, TokenPrice>();
     for (const tokenId of selection.keys()) {
@@ -5630,10 +5731,36 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             composed.set(tokenId, painted);
         }
     }
-    /** Whether any of them is no longer the seller's (`movedRecords`), asked at the press and after its awaits. */
-    const composedMoved = (): boolean => {
+    /**
+     * The single sheet's `recheck`, over every chosen item: true when what
+     * the buyer pays moved for any of them (`movedRecords`); a record that
+     * changed only its margin is taken in place, and the valve measures
+     * against it.
+     */
+    const recheck = (): boolean => {
         const now = handlers.onPayRecords?.();
-        return now !== undefined && movedRecords(composed, now).length > 0;
+        if (now === undefined) {
+            return false;
+        }
+        if (movedRecords(composed, now).length > 0) {
+            return true;
+        }
+        if (!now.known) {
+            return false;
+        }
+        let changed = false;
+        for (const [tokenId, painted] of composed) {
+            const current = now.prices?.get(tokenId);
+            if (current !== undefined && !samePrice(painted, current)) {
+                composed.set(tokenId, current);
+                changed = true;
+            }
+        }
+        if (changed) {
+            prices = new Map([...(prices ?? []), ...composed]);
+            refresh();
+        }
+        return false;
     };
 
     const refresh = (): void => {
@@ -5716,13 +5843,12 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         web.hidden = !linked;
         app.hidden = !linked;
         web.textContent =
-            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && recordMoved)) &&
+            (outcome === 'moved' || outcome === 'disagree' || (outcome === undefined && movedLine !== undefined)) &&
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined && !recordMoved;
-        valve.textContent =
-            outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : recordMoved ? copy.PAY_QUOTES_CHANGED : '';
+        valve.hidden = outcome === undefined && movedLine === undefined;
+        valve.textContent = outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? '');
         if (linked) {
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
@@ -5771,7 +5897,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             }
             // The records first, the single sheet's rule: a chosen item's
             // record that moved sends nothing and paints the sheet again.
-            if (composedMoved()) {
+            if (recheck()) {
                 handlers.onPayRecordMoved?.();
                 return;
             }
@@ -5782,7 +5908,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             const before = selectionSats(selection, prices, rate.rate);
             void (async () => {
                 const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-                if (composedMoved()) {
+                if (recheck()) {
                     handlers.onPayRecordMoved?.();
                     return;
                 }
@@ -5803,13 +5929,13 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     armValve(web, () => webUrl);
     armValve(app, () => appUrl);
     refreshRate.addEventListener('click', () => {
-        if (composedMoved()) {
+        if (recheck()) {
             handlers.onPayRecordMoved?.();
             return;
         }
         void (async () => {
             const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            if (composedMoved()) {
+            if (recheck()) {
                 handlers.onPayRecordMoved?.();
                 return;
             }
