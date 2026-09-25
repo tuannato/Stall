@@ -486,8 +486,21 @@ function publish(tx: ChainTx): string {
     return tx.txid;
 }
 
+/**
+ * The roots `bootStall` put on the page, taken off after each test (the
+ * critic, CARRYOVER-3 item 8). On the page, as the app's own root is: a
+ * sheet's async tails answer only while it is connected
+ * (`wrap.isConnected`), and a detached root made every such tail return
+ * early — so a test through `bootStall` never saw what they do. The app a
+ * test booted keeps its listeners (`boot` removes none), so a later test's
+ * `popstate` still repaints it: off the page, where it touches nothing.
+ */
+const onPage: HTMLElement[] = [];
+
 function bootStall(state: State): { root: HTMLElement; loads: number } {
     const root = document.createElement('div');
+    document.body.append(root);
+    onPage.push(root);
     const counter = { root, loads: 0 };
     boot(root, async () => {
         counter.loads += 1;
@@ -495,6 +508,12 @@ function bootStall(state: State): { root: HTMLElement; loads: number } {
     });
     return counter;
 }
+
+afterEach(() => {
+    for (const root of onPage.splice(0)) {
+        root.remove();
+    }
+});
 
 beforeEach(() => {
     window.history.replaceState(null, '', stallPath(PK));
@@ -2696,7 +2715,19 @@ describe('event-ring-is-capped-and-newest-first', () => {
     });
 
     it('starts a new ring when the visitor opens another stall', async () => {
-        const { root } = bootStall(stallEmpty());
+        // The loader answers the stall the location names, as
+        // `a new stall is a new list` does: one that answered this stall
+        // for every route never opened another stall at all, and the ring
+        // it "reset" was the same stall's (the critic, CARRYOVER-3 item 5).
+        const PK_B_BYTES = Uint8Array.from([0x02, ...new Array<number>(32).fill(0xbb)]);
+        const PK_B = toHex(PK_B_BYTES);
+        const ADDR_B = encodeCashAddress('ecash', 'p2pkh', toHex(shaRmd160(PK_B_BYTES)));
+        const stateB: State = {
+            ...stallEmpty({ route: { kind: 'pubkey', pubkeyHex: PK_B, address: ADDR_B }, address: ADDR_B }),
+            pubkeyHex: PK_B,
+        };
+        const root = document.createElement('div');
+        boot(root, async () => (location.pathname === stallPath(PK_B) ? stateB : stallEmpty()));
         await flush();
         const first = paymentTxid(1);
         chain.txs.set(first, payment(first));
@@ -2712,9 +2743,11 @@ describe('event-ring-is-capped-and-newest-first', () => {
         // These are transactions at one address. Carrying them to the next
         // stall would attribute one seller's traffic to another.
         const before = watches.length;
-        window.history.pushState(null, '', stallPath('02' + 'bb'.repeat(32)));
+        window.history.pushState(null, '', stallPath(PK_B));
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush(20);
+        const route = viewOf(root)?.route;
+        expect(route?.kind === 'pubkey' ? route.pubkeyHex : undefined, 'the other stall is on screen').toBe(PK_B);
 
         // **Every watch the navigation opened, not one of them.** `boot`
         // never removes its `popstate` listener, so every instance booted
@@ -4546,9 +4579,8 @@ describe('a-pay-sheet-opened-cold-learns-its-attribution-in-place', () => {
                 [COLD],
             ),
         );
-        // On the page, as the app's root is: the sheet paints its answer in
-        // place only while it is connected (`wrap.isConnected`).
-        document.body.append(root);
+        // On the page (`bootStall`): the sheet paints its answer in place
+        // only while it is connected (`wrap.isConnected`).
         try {
             await flush();
             const sheet = root.querySelector('[data-role="pay"]');
@@ -5249,9 +5281,17 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
         // Leave for B while it runs.
         window.history.pushState(null, '', stallPath(PK_B));
         window.dispatchEvent(new PopStateEvent('popstate'));
-        await until(() => watches.some((w) => w.stall.pubkeyHex === PK_B), 3_000);
-        const watchB = watches.find((w) => w.stall.pubkeyHex === PK_B);
-        expect(watchB, 'B is watched').toBeDefined();
+        await until(() => {
+            const route = viewOf(root)?.route;
+            return route?.kind === 'pubkey' && route.pubkeyHex === PK_B && watches.some((w) => w.stall.pubkeyHex === PK_B && !w.closed);
+        }, 3_000);
+        await flush();
+        // Every open watch on B, not the first: another app this file booted
+        // may open B on the same navigation (the ring test's does, since it
+        // opens another stall for real), and a burst sent to its watch alone
+        // never reaches this root — as a real chain wakes every tab.
+        const watchesB = watches.filter((w) => w.stall.pubkeyHex === PK_B && !w.closed);
+        expect(watchesB.length, 'B is watched').toBeGreaterThan(0);
 
         // B's own description record, signed by B and paying B the dust.
         const txB: ChainTx = {
@@ -5263,7 +5303,9 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
             ],
         };
         chain.txs.set(txB.txid, txB);
-        watchB!.hooks.onBurst?.([txB.txid]);
+        for (const watch of watchesB) {
+            watch.hooks.onBurst?.([txB.txid]);
+        }
         await flush();
 
         // Release A's walk; the queued batch drains after it.
@@ -5742,11 +5784,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         };
         const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
         const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        // On the page (`bootStall`): the sheet's own ask answers in place
+        // only while it is connected (`wrap.isConnected`).
         const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
-        // On the page, as the app's root is: the sheet's own ask answers in
-        // place only while it is connected (`wrap.isConnected`).
-        document.body.append(root);
-        onTestFinished(() => root.remove());
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
@@ -5953,10 +5993,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
 
         it('a record that moves again while the move’s own rate is asked for composes at the last unit', async () => {
             priceControl.fetch = async (code) => rates[code];
+            // On the page (`bootStall`): the sheet's own ask answers only
+            // while connected.
             const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
-            // On the page: the sheet's own ask answers only while connected.
-            document.body.append(root);
-            onTestFinished(() => root.remove());
             await flush();
             (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
             await flush();

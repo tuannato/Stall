@@ -9686,6 +9686,103 @@ describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
     }
 });
 
+describe('an-in-place-recompose-is-spoken-and-keeps-focus-in-the-sheet', () => {
+    /**
+     * The critic, CARRYOVER-3 items 6 and 7. A sheet recomposed in place is
+     * rebuilt for nobody, so a screen reader heard nothing: the line that
+     * now says what moved is spoken through the one live region
+     * (`announce`, `#sr-live`). A recompose that hides the control the
+     * buyer was on would drop focus out of the dialog: it lands on that
+     * line. And a sheet whose record (or whole choice) left has one head on
+     * both roads — `PAY_TITLE` over no second line — where the in-place
+     * sheet kept the token's name over "wrote nothing" on the single sheet
+     * and "0 items · one payment" over the stall's line on Pay several.
+     */
+    const OTHER = '7c'.repeat(32);
+    const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    const spoken = (): string => (document.getElementById('sr-live')?.textContent ?? '').trim();
+    const headOf = (sheet: Element) => ({
+        title: sheet.querySelector('.sheet-head-t > .item-n')?.textContent,
+        sub: sheet.querySelector('.sheet-head-t > .fine')?.textContent ?? '',
+    });
+    const sheetFor = (kind: 'pay' | 'pay-several', h: ReturnType<typeof handlers>) => {
+        const root = mountedRoot();
+        renderStall(
+            root,
+            payView({
+                tokens: new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]),
+                prices: new Map([[TOKEN_ID, xec], [OTHER, xec]]),
+                descriptions: new Map(),
+                overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n], [OTHER, 1n]]),
+                stallName: 'Fittings',
+            }),
+            h,
+        );
+        return { root, sheet: root.querySelector(`[data-role="${kind}"]`) as HTMLElement };
+    };
+
+    it('the single sheet: a new figure is spoken; a record gone is spoken, takes the focus off the hidden Pay, and wears the one lost head', () => {
+        let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        const { root, sheet } = sheetFor('pay', h);
+        expect(headOf(sheet).title, 'the token names the head while it composes').toBe('Roasted Beans');
+
+        now = records(new Map([[TOKEN_ID, { ...xec, amount: 900_000n }], [OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(spoken()).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
+
+        (sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement).focus();
+        expect(document.activeElement?.getAttribute('data-role')).toBe('pay-cashtab');
+        now = records(new Map([[OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(spoken()).toBe(copy.PAY_QUOTE_GONE);
+        expect(document.activeElement, 'focus stays in the dialog, on the line').toBe(sheet.querySelector('[data-role="pay-lost"]'));
+        expect(headOf(sheet), 'one lost head').toEqual({ title: copy.PAY_TITLE, sub: '' });
+        // The rebuilt lost sheet wears the same head.
+        const rebuilt = paint(
+            payView({ overlay: { kind: 'pay', tokenId: TOKEN_ID }, prices: new Map(), payRecordMoved: [TOKEN_ID] }),
+        ).root.querySelector('[data-role="pay"]')!;
+        expect(headOf(rebuilt)).toEqual({ title: copy.PAY_TITLE, sub: '' });
+
+        // Back: the token names the head again, over its note.
+        now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(headOf(sheet)).toEqual({ title: 'Roasted Beans', sub: copy.QUOTE_NO_WORDS_LINE });
+    });
+
+    it('Pay several: a drop is spoken; every item gone is spoken, takes the focus off the hidden Pay, and wears the one lost head', () => {
+        let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+        const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+        const { root, sheet } = sheetFor('pay-several', h);
+        expect(headOf(sheet)).toEqual({ title: copy.paySeveralTitle(2), sub: copy.paySeveralSub('Fittings') });
+
+        now = records(new Map([[OTHER, xec]]));
+        recheckPaySheet(root);
+        expect(spoken()).toBe(copy.selectionDroppedCheck('Roasted Beans', 1));
+
+        (sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement).focus();
+        now = records(new Map());
+        recheckPaySheet(root);
+        expect(spoken()).toBe(copy.PAY_SEVERAL_GONE);
+        expect(document.activeElement, 'focus stays in the dialog, on the line').toBe(sheet.querySelector('[data-role="pay-lost"]'));
+        expect(headOf(sheet), 'one lost head').toEqual({ title: copy.PAY_TITLE, sub: '' });
+        expect(sheet.getAttribute('aria-label')).toBe(copy.PAY_TITLE);
+        const rebuilt = paint(
+            payView({ overlay: { kind: 'pay-several' }, selectionOpen: true, selection: new Map(), payRecordMoved: [TOKEN_ID] }),
+        ).root.querySelector('[data-role="pay-several"]')!;
+        expect(headOf(rebuilt)).toEqual({ title: copy.PAY_TITLE, sub: '' });
+        expect(rebuilt.getAttribute('aria-label')).toBe(copy.PAY_TITLE);
+    });
+});
+
 describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
     /**
      * The critic, 2026-09-25, item 6: the refresh control's two record checks

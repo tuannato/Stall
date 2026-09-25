@@ -4790,6 +4790,14 @@ function paySheet(
     const head = sheetHead(named.title, named.note ?? '', handlers);
     wrap.append(head);
     /**
+     * The head's second line as the record now asks for it — the note that
+     * the seller wrote no words, or nothing. Painted only while the sheet
+     * composes: a sheet whose record left has one head on both roads, the
+     * sheet's own title over no second line (`lostHead`; the critic,
+     * CARRYOVER-3 item 6), the one the rebuilt sheet paints.
+     */
+    let headNote = named.note ?? '';
+    /**
      * The record the sheet was opened on — what the buyer was first shown.
      * A re-read that brings the record back to it clears the line and the
      * absorbed press (`recheck`).
@@ -5252,6 +5260,7 @@ function paySheet(
             absorb = false;
         }
         refresh();
+        speakRecompose(wrap, lost() ? lostBox : valve);
     };
 
     /**
@@ -5295,10 +5304,8 @@ function paySheet(
                 if (said !== null) {
                     said.hidden = lost();
                 }
-                const note = head.querySelector('.sheet-head-t > .fine');
-                if (note !== null) {
-                    note.textContent = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
-                }
+                headNote = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
+                paintHead(head, lost() ? undefined : { title: named.title, sub: headNote });
             }
             const ageNow = quoteAgeNode({ ...view, quoteTimes: now.quoteTimes }, tokenId, 'p', 'fine');
             if (ageNow?.textContent !== age?.textContent) {
@@ -5367,6 +5374,7 @@ function paySheet(
         }
         lostBox.textContent =
             movedUnder === 'unshown' ? copy.PAY_QUOTE_UNSHOWN : movedUnder === 'gone' ? copy.PAY_QUOTE_GONE : '';
+        paintHead(head, gone ? undefined : { title: named.title, sub: headNote });
         card.hidden = gone;
         qtyRow.hidden = gone;
         acts.hidden = gone;
@@ -5983,7 +5991,12 @@ function paySeveralSheet(
                 : ours !== ''
                   ? ours
                   : copy.SELECTION_EMPTY;
-        wrap.append(sheetHead(copy.paySeveralTitle(0), '', handlers));
+        // The lost sheet's one head, the single sheet's (the critic,
+        // CARRYOVER-3 item 6): "0 items · one payment" over a choice that
+        // may still hold an item this page could not read said nothing
+        // true.
+        wrap.setAttribute('aria-label', copy.PAY_TITLE);
+        wrap.append(sheetHead(copy.PAY_TITLE, '', handlers));
         const said = el('p', 'ctx', empty);
         said.setAttribute('data-role', 'pay-lost');
         wrap.append(said);
@@ -6005,11 +6018,8 @@ function paySeveralSheet(
     // The seller's own name when they set one; never the address in a
     // sentence, which `displayName` would fall back to.
     const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
-    const head = sheetHead(
-        copy.paySeveralTitle(count),
-        stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName),
-        handlers,
-    );
+    const severalSub = stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName);
+    const head = sheetHead(copy.paySeveralTitle(count), severalSub, handlers);
     wrap.append(head);
 
     const card = el('div', 'pay-amt');
@@ -6250,6 +6260,7 @@ function paySeveralSheet(
         }
         paintLines();
         refresh();
+        speakRecompose(wrap, lostAll ? lostBox : movedUnder !== undefined ? valve : dropped);
     };
 
     /**
@@ -6318,11 +6329,8 @@ function paySeveralSheet(
         const sats = lostAll ? undefined : selectionSats(selection, prices, rate?.rate);
         const subDust = sats !== undefined && sats < DUST_SATS;
         const n = Number(selectionCount(selection));
-        wrap.setAttribute('aria-label', copy.paySeveralTitle(n));
-        const title = head.querySelector('.item-n');
-        if (title !== null) {
-            title.textContent = copy.paySeveralTitle(n);
-        }
+        wrap.setAttribute('aria-label', lostAll ? copy.PAY_TITLE : copy.paySeveralTitle(n));
+        paintHead(head, lostAll ? undefined : { title: copy.paySeveralTitle(n), sub: severalSub });
         // Every chosen item left: the head, one sentence, who left, the way
         // out — the shape the rebuilt sheet has.
         if (lostAll && lostBox.parentNode === null) {
@@ -6624,6 +6632,45 @@ function payFoot(handlers: StallHandlers): HTMLElement {
  * absolutely placed control would land in the probe's decoration sweep for
  * nothing.
  */
+/**
+ * What an in-place recompose says beyond the page (the critic, CARRYOVER-3
+ * item 7). The sheet is rebuilt for nobody, so a screen reader heard
+ * nothing: the line that now says what moved is spoken through the one
+ * live region (`announce`). And a recompose that hides the control the
+ * buyer was on — the Pay controls leave with a record that left, or with a
+ * unit whose rate is not in yet — would drop focus out of the dialog, onto
+ * the page behind it: focus moves to that line instead, which takes it.
+ */
+function speakRecompose(wrap: HTMLElement, line: HTMLElement): void {
+    const said = line.isConnected && !line.hidden ? (line.textContent ?? '') : '';
+    if (said !== '') {
+        announce(wrap.ownerDocument, said);
+    }
+    const active = wrap.ownerDocument.activeElement;
+    const hiddenBy = active instanceof HTMLElement && wrap.contains(active) ? active.closest('[hidden]') : null;
+    if (hiddenBy !== null && wrap.contains(hiddenBy) && said !== '') {
+        line.setAttribute('tabindex', '-1');
+        line.focus();
+    }
+}
+
+/**
+ * A pay sheet's head, written in place: its title over its second line, or
+ * — `undefined`, a sheet whose record (or whole choice) left under it — the
+ * lost sheet's one head, `PAY_TITLE` over no second line, the head the
+ * rebuilt lost sheet paints (the critic, CARRYOVER-3 item 6).
+ */
+function paintHead(head: HTMLElement, words: { readonly title: string; readonly sub: string } | undefined): void {
+    const title = head.querySelector('.sheet-head-t > .item-n');
+    const sub = head.querySelector('.sheet-head-t > .fine');
+    if (title !== null) {
+        title.textContent = words === undefined ? copy.PAY_TITLE : words.title;
+    }
+    if (sub !== null) {
+        sub.textContent = words === undefined ? '' : words.sub;
+    }
+}
+
 function sheetHead(title: string, sub: string, handlers: StallHandlers): HTMLElement {
     const head = el('div', 'sheet-head');
     const words = el('div', 'sheet-head-t');
