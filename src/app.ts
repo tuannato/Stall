@@ -74,6 +74,7 @@ import type {
     WindowParams,
     TokenMeta,
     Overlay,
+    PayRateOutcome,
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
 import {
@@ -609,6 +610,15 @@ export function boot(
      */
     let payOpenedAt: number | undefined;
     let payOpenedFor: string | undefined;
+    /**
+     * The valve's outcome a sheet handed itself back with, its line the one
+     * standing (`PayShown.outcome`; CRITIC-CARRYOVER-6 item 4), and the
+     * sheet it belongs to: painted as `payRateOutcome`, so the sheet the app
+     * paints next says the line the buyer was reading. Dropped by a record
+     * change this app or the sheet finds after it — that line is the newer —
+     * and whenever a pay sheet opens or closes.
+     */
+    let payOutcomeCarried: { readonly key: string; readonly outcome: PayRateOutcome } | undefined;
     /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
@@ -1389,6 +1399,9 @@ export function boot(
             payRateAsking,
             payQuantity,
             ...(payOpenedAt === undefined ? {} : { payOpenedAt }),
+            ...(payOutcomeCarried !== undefined && payOutcomeCarried.key === payOverlayKey(state.view.overlay)
+                ? { payRateOutcome: payOutcomeCarried.outcome }
+                : {}),
             ...(payRecordMovedFor !== undefined &&
             payRecordMovedFor === payOverlayKey(state.view.overlay) &&
             payRecordMovedItems.length > 0
@@ -1541,6 +1554,8 @@ export function boot(
                 payRecordMovedItems = [...known, ...tokenIds.filter((tokenId) => !known.includes(tokenId))];
                 payRecordMovedPressed = false;
                 payChangedAt = atMs;
+                // A change in place is newer than any valve line carried.
+                payOutcomeCarried = undefined;
             },
             onPayWalletOpened: () => {
                 if (payRecordMovedFor === payOverlayKey(state.view.overlay)) {
@@ -1628,6 +1643,7 @@ export function boot(
                 payRecordMovedFor = undefined;
                 payRecordMovedItems = [];
                 payChangedAt = undefined;
+                payOutcomeCarried = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -2315,6 +2331,7 @@ export function boot(
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
         payChangedAt = undefined;
+        payOutcomeCarried = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2444,6 +2461,7 @@ export function boot(
         payRecordMovedFor = undefined;
         payRecordMovedItems = [];
         payChangedAt = undefined;
+        payOutcomeCarried = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -2512,6 +2530,11 @@ export function boot(
         const moved = movedRecords(payPainted, recordsNow());
         const known = payRecordMovedFor === key ? payRecordMovedItems : [];
         const fresh = moved.filter((tokenId) => !known.includes(tokenId));
+        // The valve's line the sheet handed back with stands on the paint
+        // that replaces it, unless a record change it never painted is the
+        // newer fact (CRITIC-CARRYOVER-6 item 4).
+        payOutcomeCarried =
+            fresh.length === 0 && shown?.outcome !== undefined ? { key, outcome: shown.outcome } : undefined;
         if (known.length + fresh.length > 0) {
             payRecordMovedFor = key;
             payRecordMovedItems = [...known, ...fresh];
@@ -2975,6 +2998,7 @@ export function boot(
             payRecordMovedFor = undefined;
             payRecordMovedItems = [];
             payChangedAt = undefined;
+            payOutcomeCarried = undefined;
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },

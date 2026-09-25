@@ -9959,6 +9959,131 @@ describe('a-double-tap-over-a-valve-or-refresh-answer-opens-nothing', () => {
     });
 });
 
+describe('a-rate-answer-after-a-change-in-place-says-its-own-line', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 4, at the sheet (the critic's N2); the app's
+     * half — the line riding the paint that replaces the sheet — is in
+     * app.live.test.ts under the same name. After a change in place
+     * ("This quote changed … — check the figure"), a later valve answer
+     * that moved the figure was still said in that stale record line, and a
+     * press inside its grace re-spoke it: two Pay presses absorbed and no
+     * line asking for another. The newer of the two lines stands now: a
+     * rate answer after a change says its own line, a change after an
+     * answer says the record's, and an absorbed press repeats whichever
+     * stands — in place (the rate's grace) or on its way back to the app
+     * (the record's), when the rate's line rides the hand-back.
+     */
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+    const answer = scaleRate(0.000025)!;
+    const at = (amount: bigint) => ({
+        prices: new Map([[TOKEN_ID, { ...QUOTE_USD, amount } as TokenPrice]]),
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+    const setUp = (kind: 'pay' | 'pay-several', road: 'valve' | 'refresh') => {
+        vi.useFakeTimers({ toFake: ['performance'] });
+        const root = mountedRoot();
+        let now = at(500n);
+        const h = {
+            ...handlers(),
+            onPayRecords: () => now,
+            onPayRecordMoved: vi.fn(),
+            onPayFigureChanged: vi.fn(),
+            onPayRate: vi.fn(async () => ({ rate: answer, atMs: Date.now() })),
+        };
+        renderStall(
+            root,
+            payView({
+                overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n]]),
+                payRate: road === 'valve' ? aged : { rate: aged.rate, atMs: Date.now() },
+            }),
+            h,
+        );
+        const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+        return {
+            root,
+            h,
+            sheet,
+            move: (amount: bigint) => {
+                now = at(amount);
+                recheckPaySheet(root);
+            },
+            line: (): string | undefined => sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? undefined,
+            spoken: (): string | undefined => document.getElementById('sr-live')?.textContent?.trim(),
+            ask: async (): Promise<void> => {
+                if (road === 'valve') {
+                    expect(pressForUrl(root, 'pay-cashtab'), 'the valve asks').toBeUndefined();
+                } else {
+                    (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+                }
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            },
+            recordLine: kind === 'pay' ? copy.PAY_QUOTE_CHANGED_UNPRESSED : copy.payItemsChangedUnpressed('Roasted Beans'),
+            pressedRecordLine: kind === 'pay' ? copy.PAY_QUOTE_CHANGED : copy.payItemsChanged('Roasted Beans'),
+            rateLine: road === 'valve' ? copy.PAY_RATE_MOVED : copy.PAY_RATE_REFRESHED,
+            outcome: road === 'valve' ? 'moved' : 'refreshed',
+        };
+    };
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['valve', 'refresh'] as const) {
+            it(`${kind}, the ${road}: after a change in place its own line stands, a press in its grace repeats it, and a change after it says the record's`, async () => {
+                const s = setUp(kind, road);
+                s.move(600n);
+                expect(s.line(), 'the change in place').toBe(s.recordLine);
+                vi.advanceTimersByTime(5_000);
+                await s.ask();
+                expect(s.line(), 'the answer moved the figure: its own line, not the stale one').toBe(s.rateLine);
+
+                vi.advanceTimersByTime(150);
+                expect(pressForUrl(s.root, 'pay-cashtab'), 'a press inside its grace').toBeUndefined();
+                expect(s.line()).toBe(s.rateLine);
+                expect(s.spoken(), 'repeats the line that stands').toBe(s.rateLine);
+                expect(s.h.onPayRecordMoved, 'absorbed in place').not.toHaveBeenCalled();
+
+                // A change after the answer: the record's line is the newer.
+                vi.advanceTimersByTime(5_000);
+                s.move(700n);
+                expect(s.line()).toBe(s.recordLine);
+                vi.advanceTimersByTime(150);
+                expect(pressForUrl(s.root, 'pay-cashtab'), 'inside the record grace').toBeUndefined();
+                expect(s.line(), 'the owner’s whole sentence after an absorbed Pay press').toBe(s.pressedRecordLine);
+                expect(s.spoken()).toBe(s.pressedRecordLine);
+                expect(s.h.onPayRecordMoved, 'handed back with no valve line riding it').toHaveBeenCalledWith(
+                    kind === 'pay' ? TOKEN_ID : undefined,
+                    true,
+                    expect.not.objectContaining({ outcome: expect.anything() }),
+                );
+            });
+        }
+        // Only the refresh control can answer inside a record's grace: a
+        // valve press there is itself absorbed, and a change during the
+        // valve's ask hands the sheet back before any answer is taken.
+        it(`${kind}, the refresh: a press in the record's grace, after an answer newer than the change, repeats the answer's line and hands it back`, async () => {
+            const s = setUp(kind, 'refresh');
+            s.move(600n);
+            vi.advanceTimersByTime(50);
+            await s.ask();
+            expect(s.line(), 'the answer is newer than the change').toBe(s.rateLine);
+            vi.advanceTimersByTime(700);
+            expect(pressForUrl(s.root, 'pay-cashtab'), 'inside the record grace').toBeUndefined();
+            expect(s.line(), 'the line that stood stands').toBe(s.rateLine);
+            expect(s.spoken(), 'and is repeated').toBe(s.rateLine);
+            expect(s.h.onPayRecordMoved).toHaveBeenCalledWith(
+                kind === 'pay' ? TOKEN_ID : undefined,
+                true,
+                expect.objectContaining({ outcome: s.outcome }),
+            );
+        });
+    }
+});
+
 describe('a-recompose-that-changes-nothing-does-not-cancel-a-rate-answer', () => {
     /**
      * CRITIC-CARRYOVER-5 item 6, the critic's sequence V3. `composedAt` was

@@ -164,6 +164,14 @@ import './broadcast.css';
 export type PayShown = {
     readonly rate: bigint | undefined;
     readonly changedAtMs: number | undefined;
+    /**
+     * The valve's outcome, when its line is the one standing — newer than
+     * any change of the record under the sheet (CRITIC-CARRYOVER-6 item 4)
+     * — so the paint that replaces the sheet says the line the buyer was
+     * reading, and an absorbed press repeats it. Absent when the record's
+     * line stands.
+     */
+    readonly outcome?: PayRateOutcome;
 };
 
 export type StallHandlers = {
@@ -5215,6 +5223,19 @@ function paySheet(
      */
     const recordMoved = view.payRecordMoved !== undefined || view.payChangedAt !== undefined;
     /**
+     * Which of the valve's two lines is the newer, and so the one that
+     * stands (CRITIC-CARRYOVER-6 item 4): a change of the record under the
+     * sheet (`recompose`) or a rate answer's outcome (the valve's, the
+     * refresh control's). A valve answer after a change in place says the
+     * valve's own line — "check the figure" would be stale over a figure the
+     * answer moved — and a change after an answer says the record's. At the
+     * paint the valve's outcome leads, as it always did, and a line the
+     * sheet handed back with rides the paint that replaces it
+     * (`PayShown.outcome`), so an absorbed press repeats the line that
+     * stood.
+     */
+    let lineFrom: 'record' | 'rate' = 'rate';
+    /**
      * The line asks for the press again (the owner's whole sentence,
      * `PAY_QUOTE_CHANGED`) only after a PAY press this sheet absorbed, and
      * only while a Pay control stands (`refresh`): set by that press, or by
@@ -5292,12 +5313,14 @@ function paySheet(
      * (`PayShown`; CRITIC-CARRYOVER-6 item 1): the rate its figure was
      * composed at — never an answer this hand-back is instead of — and the
      * later of its two stamps, so a rate grace still running is not dropped
-     * by the paint that replaces this sheet.
+     * by the paint that replaces this sheet; and the valve's outcome when
+     * its line is the one standing (item 4).
      */
     const handBack = (pressed: boolean): void => {
         handlers.onPayRecordMoved?.(tokenId, pressed, {
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+            ...(rateLineStands() && outcome !== undefined ? { outcome } : {}),
         });
     };
     /**
@@ -5425,8 +5448,10 @@ function paySheet(
             return false;
         }
         composedAt += 1;
-        // In place, no press was made: the line asks for none.
+        // In place, no press was made: the line asks for none. The record's
+        // line is the newer one now.
         pressedLine = false;
+        lineFrom = 'record';
         refresh();
         stamp();
         speakRecompose(wrap, [lost() ? lostBox : valve], focused, head);
@@ -5508,6 +5533,11 @@ function paySheet(
     at.registerCheck((): void => {
         recheck();
     });
+
+    /** A change of the record stands on the valve's line: one in place, or on the sheet this one replaced. */
+    const recordLineStands = (): boolean => movedUnder === 'changed' || recordMoved;
+    /** The valve's own outcome stands on the line: newer than any record change (`lineFrom`), or alone. */
+    const rateLineStands = (): boolean => outcome !== undefined && (lineFrom === 'rate' || !recordLineStands());
 
     const refresh = (): void => {
         at.clearQrTimer();
@@ -5628,14 +5658,10 @@ function paySheet(
         // control stands to press again (CRITIC-CARRYOVER-4 item 4).
         const recordLine =
             pressedLine && linked ? copy.PAY_QUOTE_CHANGED : copy.PAY_QUOTE_CHANGED_UNPRESSED;
+        // The newer of the two lines (`lineFrom`).
+        const standing = rateLineStands() ? outcome : undefined;
         valve.textContent =
-            movedUnder === 'changed'
-                ? recordLine
-                : outcome !== undefined
-                  ? copy.PAY_VALVE_TEXT[outcome]
-                  : recordMoved
-                    ? recordLine
-                    : '';
+            standing !== undefined ? copy.PAY_VALVE_TEXT[standing] : recordLineStands() ? recordLine : '';
         if (gone) {
             valve.hidden = true;
         }
@@ -5803,6 +5829,8 @@ function paySheet(
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
+                // Newer than any change in place: its line stands.
+                lineFrom = 'rate';
                 // The answer's figure is a change on screen: the grace
                 // starts when it is painted (`rateChangedAtMs`).
                 refreshAfterRate();
@@ -5843,6 +5871,7 @@ function paySheet(
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
+            lineFrom = 'rate';
             refreshAfterRate();
         })();
     });
@@ -6431,11 +6460,13 @@ function paySeveralSheet(
         [...openedChoice.keys()].map((tokenId) => [tokenId, prices?.get(tokenId)]),
     );
     /**
-     * A re-read recomposed this sheet in place: its line (the chosen items
-     * that changed) leads the valve, where on a paint the valve's own
-     * outcome does (the single sheet's `movedUnder === 'changed'`).
+     * Which of the valve's two lines is the newer, the single sheet's
+     * `lineFrom` (CRITIC-CARRYOVER-6 item 4): a re-read that recomposed this
+     * sheet in place leads with the chosen items that changed; a valve or
+     * refresh answer after it leads with its own outcome; on a paint the
+     * valve's outcome leads, as it always did.
      */
-    let recomposedHere = false;
+    let lineFrom: 'record' | 'rate' = 'rate';
     /** Every chosen item left under the sheet: nothing to compose, no figure, no code, no Pay. */
     let lostAll = false;
     /**
@@ -6472,11 +6503,13 @@ function paySeveralSheet(
         }
         keepFocusIn(wrap, [valve, why], focused, head);
     };
-    /** The single sheet's `handBack`, over the choice. */
+    /** The single sheet's `handBack`, over the choice: the outcome rides it while its line stands. */
     const handBack = (pressed: boolean): void => {
+        const standing = lineFrom === 'rate' || chosenChanged().length === 0 ? outcome : undefined;
         handlers.onPayRecordMoved?.(undefined, pressed, {
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+            ...(standing === undefined ? {} : { outcome: standing }),
         });
     };
     let composedAt = 0;
@@ -6538,7 +6571,7 @@ function paySeveralSheet(
         for (const tokenId of movedSince) {
             changedItems.add(tokenId);
         }
-        recomposedHere = true;
+        lineFrom = 'record';
         // In place, no press was made: the line asks for none.
         pressedLine = false;
         paintLines();
@@ -6739,7 +6772,7 @@ function paySeveralSheet(
                   ? copy.payItemsChanged(movedNames(changedNames))
                   : copy.payItemsChangedUnpressed(movedNames(changedNames));
         const outcomeLine = outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : undefined;
-        const line = recomposedHere ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
+        const line = lineFrom === 'record' ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
         valve.hidden = lostAll || line === undefined;
         valve.textContent = line ?? '';
         if (linked) {
@@ -6859,6 +6892,8 @@ function paySeveralSheet(
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
+                // Newer than any change in place: its line stands.
+                lineFrom = 'rate';
                 // The answer's figure is a change on screen: the grace
                 // starts when it is painted (`rateChangedAtMs`).
                 refreshAfterRate();
@@ -6893,6 +6928,7 @@ function paySeveralSheet(
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
+            lineFrom = 'rate';
             refreshAfterRate();
         })();
     });

@@ -807,7 +807,10 @@ export type StallView = WindowState & {
     /**
      * What the press-time valve found, so a fixture can stage what only a
      * press produces: the rate row's line and a Pay control that restates
-     * the figure it will open. The sheet seeds its own state from this.
+     * the figure it will open. The sheet seeds its own state from this. The
+     * app writes it only when a sheet handed itself back with the valve's
+     * line standing (`PayShown.outcome`; CRITIC-CARRYOVER-6 item 4), so the
+     * paint that replaces the sheet says the line the buyer was reading.
      */
     payRateOutcome?: PayRateOutcome;
     /**
