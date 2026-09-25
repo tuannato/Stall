@@ -223,6 +223,56 @@ describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
     });
 });
 
+describe('the-older-records-survive-a-read-that-crowns-the-same-winner', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 3, the pure half; the app's half is in
+     * app.live.test.ts under the same name. On screen: the seller's fresh
+     * record R2, finalized and unmined, which the read that crowned it
+     * ranked above the older R1. A later read crowns R2 again without
+     * reading R1 — a walk that threw after its first page, or one capped
+     * before R1's page — and at equal rank its rank replaced the screen's,
+     * older set and all: the set was gone, and a lagging replica answering
+     * R1 (mined, first-seen 0) then beat R2 on the ladder's no-height rule.
+     * Both reads crowned the same record, so what either ranked below it is
+     * older than it: the merged rank keeps the union.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R0 = '0'.repeat(64);
+    const R1 = '1'.repeat(64);
+    const R2 = '2'.repeat(64);
+    const fresh = { height: undefined, isFinal: true, txid: R2, firstSeen: 1756400600 };
+    const screen = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, { ...fresh, older: new Set([R1]) }]]) };
+    const again = { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, fresh]]) };
+    const lagging = { prices: new Map([[A, price(500_000n)]]), ranks: new Map([[A, { height: 6, isFinal: true, txid: R1, firstSeen: 0 }]]) };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: the re-crowned rank keeps what the screen ranked below it, and the lagging answer never beats it`, () => {
+            const mid = merge(again, new Set([A]), screen);
+            expect(mid.prices.get(A)).toEqual(price(900_000n));
+            expect(mid.ranks.get(A)?.older, 'the screen’s older set survives').toEqual(new Set([R1]));
+            const out = mergeFinishedRead(lagging, new Set([A]), mid);
+            expect(out.prices.get(A), 'the lagging replica’s older figure does not come back').toEqual(price(900_000n));
+        });
+    }
+
+    it('takes the union when both reads ranked records below the same winner', () => {
+        const other = { ...again, ranks: new Map([[A, { ...fresh, older: new Set([R0]) }]]) };
+        expect(mergeFailedRead(other, new Set([A]), screen).ranks.get(A)?.older).toEqual(new Set([R0, R1]));
+        expect(mergeFinishedRead(other, new Set([A]), screen).ranks.get(A)?.older).toEqual(new Set([R0, R1]));
+    });
+
+    it('never lends a set across two different winners', () => {
+        const newer = { prices: new Map([[A, price(1_000_000n)]]), ranks: new Map([[A, { height: undefined, isFinal: true, txid: '3'.repeat(64), firstSeen: 1756400900 }]]) };
+        const out = mergeFinishedRead(newer, new Set([A]), screen);
+        expect(out.prices.get(A)).toEqual(price(1_000_000n));
+        expect(out.ranks.get(A)?.older, 'R3 ranked nothing below it').toBeUndefined();
+    });
+});
+
 describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
     /**
      * The critic, CARRYOVER-2 item 4, at the merge. A walk that FINISHED was

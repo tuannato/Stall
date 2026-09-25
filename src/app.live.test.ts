@@ -1744,6 +1744,93 @@ describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
     });
 });
 
+describe('the-older-records-survive-a-read-that-crowns-the-same-winner', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 3, through the real app (the pure half is in
+     * records.test.ts under the same name). A walk reads the seller's fresh
+     * record, finalized and unmined, above the older one: the fresh figure
+     * is on screen and its rank remembers the older record below it. A
+     * later walk crowns the same fresh record without reading the older one
+     * — it threw after its first page, or stopped at our page cap first —
+     * and at equal rank its rank replaced the screen's, older set and all.
+     * A lagging replica then answered the older record (mined, first seen
+     * 0) and beat the fresh one on the ladder: the older figure came back.
+     * The merged rank keeps the union of both reads' sets now.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'ca'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_FRESH = { code: 'xec', exponent: 2, amount: 900_000n };
+    const OLDER = '6f'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's fresh record: finalized by avalanche, not yet mined. */
+    const fresh = () => tx('9a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_FRESH }), { isFinal: true }, 1_756_400_600);
+    /** The record it superseded, mined at 6. */
+    const older = (seen: number) => tx(OLDER, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const olderOnScreen = (root: HTMLElement): boolean | undefined => viewOf(root)?.descriptionRanks?.get(A)?.older?.has(OLDER);
+
+    for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
+        it(`a re-crown that ${road}, then a lagging replica: the fresh figure stands`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk([[fresh(), older(1_756_400_000)]]);
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_FRESH.amount);
+            expect(olderOnScreen(root), 'the read remembers what it ranked below').toBe(true);
+
+            let calls = chain.historyPageCalls.length;
+            if (road === 'threw after its first page') {
+                chain.historyPageThrows = new Set([1]);
+                await walk([[fresh()], [older(1_756_400_000)]]);
+                await until(() => chain.historyPageCalls.slice(calls).includes(1));
+            } else {
+                await walk([[fresh()], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [older(1_756_400_000)]]);
+                await until(() => viewOf(root)?.descriptionsTruncated === true);
+            }
+            await flush(20);
+            expect(viewOf(root)?.prices?.get(A), 'the same winner, re-crowned').toEqual(XEC_FRESH);
+            expect(olderOnScreen(root), 'the re-crowned rank keeps what the screen ranked below it').toBe(true);
+
+            chain.historyPageThrows = new Set();
+            calls = chain.historyPageCalls.length;
+            await walk([[older(0)]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+            expect(viewOf(root)?.prices?.get(A), 'the older figure does not come back').toEqual(XEC_FRESH);
+        });
+    }
+});
+
 describe('a-removed-last-quote-never-comes-back-from-a-lagging-replica', () => {
     /**
      * CRITIC-CARRYOVER-5 item 2, through the real app on both roads. The

@@ -189,6 +189,25 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         }
         return out;
     };
+    const ranks = merge(read.ranks, kept.ranks, false);
+    // Both reads crowned the same record: whatever either ranked below it is
+    // older than it, so the merged rank keeps the union of the two sets
+    // (CRITIC-CARRYOVER-5 item 3). Taking one side's set alone — the walk's,
+    // at equal rank — dropped the other's whenever a later read re-crowned
+    // the winner without reading the older records again (a walk that threw
+    // after page 0, or a capped one), and a lagging replica's older record
+    // then beat the screen on the ladder.
+    for (const [tokenId, rank] of ranks) {
+        const mine = read.ranks?.get(tokenId);
+        const theirs = kept.ranks?.get(tokenId);
+        if (mine === undefined || theirs === undefined || mine.txid !== theirs.txid) {
+            continue;
+        }
+        const older = new Set([...(mine.older ?? []), ...(theirs.older ?? [])]);
+        if (older.size > 0) {
+            ranks.set(tokenId, { ...rank, older });
+        }
+    }
     return {
         descriptions: merge(read.descriptions, kept.descriptions, true),
         shelves: merge(read.shelves, kept.shelves, true),
@@ -196,7 +215,7 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         // A record's clock is not a record: a kept time beside nothing else
         // kept shows nothing, so it does not make the screen stale.
         quoteTimes: merge(read.quoteTimes, kept.quoteTimes, false),
-        ranks: merge(read.ranks, kept.ranks, false),
+        ranks,
         keptShown,
     };
 }
