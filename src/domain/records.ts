@@ -112,26 +112,36 @@ export function decidedOf(read: RecordMaps & { readonly decided?: ReadonlySet<st
 /**
  * Whether the kept read's winner for a token outranks the walk's.
  *
- * **First, by construction** (the owner, CRITIC-CARRYOVER-4 item 9): a walk
- * whose winner is one of the records the kept read ranked BELOW its own
+ * **First, by the older sets, read both ways** (the owner, CRITIC-CARRYOVER-4
+ * item 9; both directions, CRITIC-CARRYOVER-5 item 4). A walk whose winner
+ * is one of the records the kept read ranked BELOW its own
  * (`RecordRank.older`) answered an older record — a lagging replica that
  * has not seen the seller's newest one — and never beats the record on
- * screen, whatever the two ranks say. That is the case the ladder gets
- * wrong: a fresh record finalized and unmined on screen, and the older one
- * answered mined with first-seen 0 by a node that never saw it in its
- * mempool, which the no-height rule below would crown.
+ * screen: the case the ladder gets wrong, a fresh record finalized and
+ * unmined on screen and the older one answered mined with first-seen 0 by a
+ * node that never saw it in its mempool, which the no-height rule below
+ * would crown. And the other way: a walk whose own older set holds the
+ * screen's winner read that record and ranked its own above it, so it is
+ * the newer. **Only when exactly one side's set holds the other's winner**:
+ * each set is one node's ladder, built on that node's stamps and heights,
+ * so when both claim to be newer the two nodes disagree — one missed a
+ * sighting and ranked by height, the other saw both — and a set taken
+ * alone would make one node's missing stamp stick for the session. Then,
+ * and when neither set holds the other's winner, §5's ladder decides.
  *
- * Then on §5's ladder (`compareManifestRank`: known, differing first-seen
- * stamps; then heights; then txid) — except that a kept rank read before
- * its record was mined (no height) never beats a walk rank that has one.
- * **That exception now decides only what the older set cannot see**: a walk
- * winner the kept read never read at all (a newer record, mined since, or
- * an older one past the kept read's own page cap). No read this page makes
- * carries the tip height, so nothing finer is built.
+ * The ladder (`compareManifestRank`: known, differing first-seen stamps;
+ * then heights; then txid) — except that a kept rank read before its record
+ * was mined (no height) never beats a walk rank that has one. **That
+ * exception decides only what the older sets cannot see**: a walk winner the
+ * kept read never read at all (a newer record, mined since, or an older one
+ * past the kept read's own page cap). No read this page makes carries the
+ * tip height, so nothing finer is built.
  */
-function keptOutranks(kept: RecordRank, walk: ManifestRank): boolean {
-    if (kept.older?.has(walk.txid) === true) {
-        return true;
+function keptOutranks(kept: RecordRank, walk: RecordRank): boolean {
+    const keptRankedWalkBelow = kept.older?.has(walk.txid) === true;
+    const walkRankedKeptBelow = walk.older?.has(kept.txid) === true;
+    if (keptRankedWalkBelow !== walkRankedKeptBelow) {
+        return keptRankedWalkBelow;
     }
     const keptSeen = knownSeen(kept.firstSeen);
     const walkSeen = knownSeen(walk.firstSeen);

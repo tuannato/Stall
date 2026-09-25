@@ -273,6 +273,62 @@ describe('the-older-records-survive-a-read-that-crowns-the-same-winner', () => {
     });
 });
 
+describe('the-older-records-are-read-both-ways', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 4. An older set is one node's ladder, built on
+     * that node's stamps and heights, and it outranked the whole ladder in
+     * one direction only: the screen's set holding the walk's winner kept
+     * the screen, while a walk whose own set held the screen's winner — it
+     * read that record and ranked its own above it — was never believed.
+     * Both ways now, and only when exactly one side's set holds the other's
+     * winner; when both do (two nodes disagree) or neither does, §5's
+     * ladder decides.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R1 = '1'.repeat(64);
+    const R2 = '2'.repeat(64);
+    const one = (txid: string, amount: bigint, rank: { height?: number; firstSeen: number; older?: ReadonlySet<string> }) => ({
+        prices: new Map([[A, price(amount)]]),
+        ranks: new Map([[A, { height: rank.height, isFinal: true, txid, firstSeen: rank.firstSeen, ...(rank.older === undefined ? {} : { older: rank.older }) }]]),
+    });
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: the screen's set holds the walk's winner and not the other way — the screen stands, though the ladder would crown the walk`, () => {
+            // A fresh record, finalized and unmined, over an older one a
+            // lagging replica answers mined with first-seen 0.
+            const screen = one(R2, 900_000n, { height: undefined, firstSeen: 1756400600, older: new Set([R1]) });
+            const walk = one(R1, 500_000n, { height: 6, firstSeen: 0 });
+            expect(merge(walk, new Set([A]), screen).prices.get(A)).toEqual(price(900_000n));
+        });
+
+        it(`${road}: the walk's set holds the screen's winner and not the other way — the walk is newer, though the ladder would keep the screen`, () => {
+            // The screen's read came from a node whose clock put R1 later;
+            // the walk read R1 and ranked R2 above it.
+            const screen = one(R1, 500_000n, { height: 900, firstSeen: 2000 });
+            const walk = one(R2, 900_000n, { height: 800, firstSeen: 1000, older: new Set([R1]) });
+            expect(merge(walk, new Set([A]), screen).prices.get(A)).toEqual(price(900_000n));
+        });
+
+        it(`${road}: both sets hold the other's winner — two nodes disagree — and the ladder decides (the critic's sequence, where one node's missing stamp stuck)`, () => {
+            // Node A missed R2's sighting (first-seen 0) and ranked by
+            // height: R1 at 900 above R2 at 800. Node B saw both, R2 later.
+            const screen = one(R1, 500_000n, { height: 900, firstSeen: 1000, older: new Set([R2]) });
+            const walk = one(R2, 900_000n, { height: 800, firstSeen: 2000, older: new Set([R1]) });
+            expect(merge(walk, new Set([A]), screen).prices.get(A), 'the stamps decide: R2').toEqual(price(900_000n));
+            // Neither set holds the other's winner: the ladder too.
+            const blind = one(R1, 500_000n, { height: 900, firstSeen: 1000 });
+            const blindWalk = one(R2, 900_000n, { height: 800, firstSeen: 2000 });
+            expect(merge(blindWalk, new Set([A]), blind).prices.get(A)).toEqual(price(900_000n));
+            const later = one(R1, 500_000n, { height: 900, firstSeen: 3000, older: new Set([R2]) });
+            expect(merge(walk, new Set([A]), later).prices.get(A), 'and the ladder may keep the screen').toEqual(price(500_000n));
+        });
+    }
+});
+
 describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
     /**
      * The critic, CARRYOVER-2 item 4, at the merge. A walk that FINISHED was
