@@ -1488,7 +1488,8 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
      * cap after resolving only a removal took every quote it never reached
      * off with it. Per token now (`mergeFinishedRead`): an answer below the
      * rank on screen (`descriptionRanks`) is refused for that token, and a
-     * capped walk leaves the tokens it never reached as the screen has them.
+     * walk — capped or read to the end — removes only the tokens it decided
+     * (CRITIC-CARRYOVER-3 item 3).
      */
     const fungible = (tokenId: string, name: string) => ({
         tokenId,
@@ -1589,6 +1590,18 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
         expect(viewOf(root)?.prices?.get(A), 'the quote past the cap stays').toEqual(XEC_A_NEWER);
         expect(root.textContent).not.toContain('Rye Flour');
         expect(await payFigureOf(root, 'Plum Jam')).toBe('9,000');
+    });
+
+    it('a-replica-that-never-saw-the-record-does-not-remove-it: a walk that read to the end and never met a quote leaves it', async () => {
+        // The owner, CRITIC-CARRYOVER-3 item 3: a replica that has Rye
+        // Flour's record and never saw Plum Jam's answers a finished walk
+        // that decided Rye Flour alone. Absence is our gap.
+        const root = await onScreen();
+        await walk([[recB()]]);
+        expect(chain.historyPageCalls, 'the walk ran').toContain(0);
+        expect(viewOf(root)?.descriptionsTruncated, 'it read to the end').not.toBe(true);
+        expect(viewOf(root)?.prices?.get(A), 'the quote stays').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam'), 'and Pay composes it').toBe('9,000');
     });
 
     it('a finished walk at or above the rank on screen is applied, a removal included', async () => {
@@ -3998,12 +4011,20 @@ describe('a-pay-cursor-is-clamped-when-the-quotes-shrink', () => {
         await flush();
         expect(viewOf(root)?.broadcastCursor).toBe(1);
 
-        // One record on chain, so the walk answers with one quote.
+        // The seller takes the second quote off: the walk reads the
+        // removal, so the quote set shrinks to one. (A walk that merely
+        // never met it would leave it — our gap, never the seller's;
+        // CRITIC-CARRYOVER-3 item 3.)
         const txid = pricedRecord('0d'.repeat(32), TOKEN, USD(500n));
-        watches[0]!.hooks.onBurst?.([txid]);
+        const removal = encodeRemovalHex(TOKEN_B);
+        if (removal === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const gone = publish(signedTx({ txid: '0c'.repeat(32), outputs: [`6a${removal}`], height: 5 }));
+        watches[0]!.hooks.onBurst?.([txid, gone]);
         await flush();
 
-        expect(viewOf(root)?.prices?.size, 'the walk found one quote').toBe(1);
+        expect(viewOf(root)?.prices?.size, 'one quote left').toBe(1);
         expect(viewOf(root)?.broadcastCursor, '1 mod 1 is 0').toBe(0);
     });
 });

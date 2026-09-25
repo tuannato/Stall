@@ -3803,10 +3803,12 @@ export function boot(
          * screen (the critic, CARRYOVER-2 item 4): an answer below the rank
          * the screen holds for a token is refused for that token — a lagging
          * replica's older figure, or its old tombstone, used to take the
-         * seller's newer quote off the rail — and a walk that stopped at our
-         * own page cap leaves the tokens it never reached as the screen has
-         * them, where it used to empty them (`mergeFinishedRead`). Over a
-         * screen with nothing on it there is nothing to merge.
+         * seller's newer quote off the rail — and it removes only the tokens
+         * it decided: a token on screen it never met is a record this
+         * replica has not seen, and stays as the screen has it, whether the
+         * walk read to the end or stopped at our own page cap
+         * (`mergeFinishedRead`; the owner, CRITIC-CARRYOVER-3 item 3). Over
+         * a screen with nothing on it there is nothing to merge.
          */
         const merged = hadSomething
             ? mergeFinishedRead(
@@ -3818,7 +3820,6 @@ export function boot(
                       ...(lookup.ranks === undefined ? {} : { ranks: lookup.ranks }),
                   },
                   lookup.decided,
-                  lookup.truncated,
                   {
                       ...(state.view.descriptions === undefined ? {} : { descriptions: state.view.descriptions }),
                       ...(state.view.shelves === undefined ? {} : { shelves: state.view.shelves }),

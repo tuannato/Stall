@@ -203,33 +203,31 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
         const older = mergeFinishedRead(
             { prices: new Map([[A, price(500_000n)], [B, price(700_000n)]]), ranks: new Map([[A, at(7, '7', 1756400000)], [B, at(8, '8', 1756400500)]]) },
             new Set([A, B]),
-            false,
             screen,
         );
         expect(older.prices.get(A), 'the newer figure on screen stands').toEqual(price(900_000n));
         expect(older.descriptions.get(A)).toBe('new words');
         expect(older.ranks.get(A)).toEqual(at(9, '9', 1756400600));
-        const tombstone = mergeFinishedRead({ ranks: new Map([[A, at(6, '6', 1756399000)]]) }, new Set([A]), false, screen);
+        const tombstone = mergeFinishedRead({ ranks: new Map([[A, at(6, '6', 1756399000)]]) }, new Set([A]), screen);
         expect(tombstone.prices.get(A), 'an old removal does not empty the rail').toEqual(price(900_000n));
-        // A complete walk that never met B resolved it as absent, as before.
-        expect(tombstone.prices.has(B)).toBe(false);
+        // A walk that never met B did not decide it: it stays (the owner,
+        // CRITIC-CARRYOVER-3 item 3).
+        expect(tombstone.prices.get(B)).toEqual(price(700_000n));
     });
 
     it('a walk at or above the rank on screen is applied, a removal included', () => {
         const newer = mergeFinishedRead(
             { prices: new Map([[A, price(1_000_000n)]]), ranks: new Map([[A, at(10, 'a', 1756400900)]]) },
             new Set([A]),
-            false,
             screen,
         );
         expect(newer.prices.get(A)).toEqual(price(1_000_000n));
-        const removal = mergeFinishedRead({ ranks: new Map([[A, at(10, 'a', 1756400900)]]) }, new Set([A]), false, screen);
+        const removal = mergeFinishedRead({ ranks: new Map([[A, at(10, 'a', 1756400900)]]) }, new Set([A]), screen);
         expect(removal.prices.has(A), 'the seller’s newer removal takes it off').toBe(false);
         // The same record read again, now mined: never refused as "below" itself.
         const same = mergeFinishedRead(
             { prices: new Map([[A, price(900_000n)]]), ranks: new Map([[A, at(9, '9', 1756400600)]]) },
             new Set([A]),
-            false,
             { ...screen, ranks: new Map([[A, { height: undefined, isFinal: true, txid: '9'.repeat(64), firstSeen: 1756400600 }]]) },
         );
         expect(same.ranks.get(A)?.height).toBe(9);
@@ -237,12 +235,58 @@ describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
 
     it('a capped walk fills the tokens it never reached from the screen', () => {
         // It read B's removal before our page cap and never reached A.
-        const capped = mergeFinishedRead({ ranks: new Map([[B, at(10, 'b', 1756400900)]]) }, new Set([B]), true, screen);
+        const capped = mergeFinishedRead({ ranks: new Map([[B, at(10, 'b', 1756400900)]]) }, new Set([B]), screen);
         expect(capped.prices.get(A), 'a quote past the cap stays').toEqual(price(900_000n));
         expect(capped.descriptions.get(A)).toBe('new words');
         expect(capped.prices.has(B), 'the removal it read is applied').toBe(false);
-        // The same walk read to the end: A was never met, so it is absent.
-        expect(mergeFinishedRead({ ranks: new Map([[B, at(10, 'b', 1756400900)]]) }, new Set([B]), false, screen).prices.has(A)).toBe(false);
+    });
+});
+
+describe('a-replica-that-never-saw-the-record-does-not-remove-it', () => {
+    /**
+     * The owner, CRITIC-CARRYOVER-3 item 3. A walk that read to the end
+     * removed every token on screen it never met, as if absence were the
+     * seller's answer. It is not: a finished walk decides every token it
+     * read a winning record for, a tombstone included (`collate`), so a
+     * removal the seller signed is always decided — and a token the walk
+     * never met is a record the replica that answered has not seen. Only
+     * what the walk decided leaves.
+     */
+    const A = 'a'.repeat(64);
+    const B = 'b'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const at = (height: number, txid: string) => ({ height, isFinal: true, txid: txid.repeat(64), firstSeen: 0 });
+    const screen = {
+        descriptions: new Map([[A, 'plum'], [B, 'rye']]),
+        shelves: new Map([[A, 'Jams']]),
+        prices: new Map([[A, price(900_000n)], [B, price(700_000n)]]),
+        quoteTimes: new Map([[A, 2], [B, 1]]),
+        ranks: new Map([[A, at(9, '9')], [B, at(8, '8')]]),
+    };
+
+    it('keeps every map of a token the walk never met, and applies what it did decide', () => {
+        // A replica that has B's record and never saw A's.
+        const merged = mergeFinishedRead(
+            { prices: new Map([[B, price(800_000n)]]), descriptions: new Map([[B, 'rye, new']]), ranks: new Map([[B, at(10, 'c')]]) },
+            new Set([B]),
+            screen,
+        );
+        expect(merged.prices.get(A), 'the quote stays').toEqual(price(900_000n));
+        expect(merged.descriptions.get(A)).toBe('plum');
+        expect(merged.shelves.get(A)).toBe('Jams');
+        expect(merged.quoteTimes.get(A)).toBe(2);
+        expect(merged.ranks.get(A)).toEqual(at(9, '9'));
+        expect(merged.prices.get(B), 'what it decided is applied').toEqual(price(800_000n));
+        expect(merged.descriptions.get(B)).toBe('rye, new');
+    });
+
+    it('still removes a token it decided at a removal, the last one included', () => {
+        const removed = mergeFinishedRead({ ranks: new Map([[A, at(10, 'd')]]) }, new Set([A]), screen);
+        expect(removed.prices.has(A), 'the seller signed it').toBe(false);
+        expect(removed.descriptions.has(A)).toBe(false);
+        expect(removed.prices.get(B), 'never met: stays').toEqual(price(700_000n));
+        // A walk that decided nothing removes nothing.
+        expect(mergeFinishedRead({}, new Set(), screen).prices).toEqual(screen.prices);
     });
 });
 

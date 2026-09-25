@@ -171,24 +171,19 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
  * a record that outranks the walk's on §5's ladder (`keptOutranks`) — a
  * lagging replica that has not seen the seller's newest record answers an
  * older one, and applied whole it took the newer figure off the rail, or
- * emptied it with an old tombstone. And on a walk that stopped at our own
- * page cap (`truncated`), the screen's records fill the tokens it never
- * reached, as `mergeFailedRead` fills them: a capped walk that resolved only
- * a removal used to be applied whole, and every quote past the cap left the
- * rail with it. A walk that read to the end and never met a token on
- * screen resolved it as absent, as before.
+ * emptied it with an old tombstone.
+ *
+ * **It removes only what it decided** (the owner, CRITIC-CARRYOVER-3 item
+ * 3). A walk that finished decides every token it read a winning record
+ * for, a tombstone included (`collate`), so a removal the seller signed is
+ * always among `decided`; a token on screen the walk never met is a record
+ * this replica has not seen — our gap, never the seller's — and the
+ * screen's record for it stands. That holds whether the walk read to the
+ * end or stopped at our page cap, which is why a finished walk now merges
+ * exactly as a walk that threw does (`mergeFailedRead`).
  */
-export function mergeFinishedRead(
-    read: RecordMaps,
-    decided: ReadonlySet<string>,
-    truncated: boolean,
-    screen: RecordMaps,
-): MergedRecords {
-    return mergeFailedRead(
-        read,
-        truncated ? decided : new Set([...decided, ...decidedOf({ ...screen, decided: undefined })]),
-        screen,
-    );
+export function mergeFinishedRead(read: RecordMaps, decided: ReadonlySet<string>, screen: RecordMaps): MergedRecords {
+    return mergeFailedRead(read, decided, screen);
 }
 
 /**
