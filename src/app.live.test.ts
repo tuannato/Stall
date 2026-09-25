@@ -1744,6 +1744,114 @@ describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
     });
 });
 
+describe('a-removed-last-quote-never-comes-back-from-a-lagging-replica', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 2, through the real app on both roads. The
+     * seller removes their LAST quote: a walk reads the tombstone,
+     * finalized and unmined, above the quote it supersedes, and the screen
+     * then holds no map at all — only the removal's rank, which remembers
+     * the quote as below it. A lagging replica that never saw the removal
+     * answers the old quote, mined, first seen 0 — a walk that finishes, or
+     * one that throws after its first page. `applyDescriptions` counted the
+     * three maps alone as "something on screen", so the finished road
+     * replaced the screen with the replica's answer and the thrown road
+     * painted it as the floor: the removed quote was a row again, and Pay
+     * opened it at its old figure. The rank counts now, both roads merge
+     * over it, and its older set keeps the removal.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c9'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const QUOTE = '6e'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's quote, mined at 6, as a node that saw it arrive reads it (or one that did not: `seen` 0). */
+    const quote = (seen: number) => tx(QUOTE, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    /** The removal of it: finalized by avalanche, not yet mined. */
+    const tomb = () => tx('9f'.repeat(32), encodeRemovalHex(A), { isFinal: true }, 1_756_400_600);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const removed = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                genesis: new Map([[A, 'attributed' as const]]),
+                shopTab: 'quotes',
+            }),
+        );
+        await flush();
+        await walk([[quote(1_756_400_000)]]);
+        await until(() => viewOf(root)?.prices?.get(A) !== undefined);
+        expect(viewOf(root)?.prices?.get(A), 'the quote is on screen').toEqual(XEC_OLD);
+        const calls = chain.historyPageCalls.length;
+        await walk([[tomb(), quote(1_756_400_000)]]);
+        await until(() => chain.historyPageCalls.length > calls && viewOf(root)?.prices?.has(A) === false);
+        await flush(20);
+        expect(viewOf(root)?.prices?.size, 'the seller’s last quote is gone').toBe(0);
+        expect(viewOf(root)?.descriptions?.size ?? 0, 'no map holds anything').toBe(0);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(QUOTE), 'the removal remembers the quote below it').toBe(
+            true,
+        );
+        return root;
+    };
+    const afterReplica = async (root: HTMLElement): Promise<void> => {
+        expect(viewOf(root)?.prices?.has(A), 'the removed quote does not come back').toBe(false);
+        expect(viewOf(root)?.descriptionsDecided?.has(A), 'and stays decided').toBe(true);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(QUOTE), 'the removal’s rank stands').toBe(true);
+        (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+        await flush();
+        expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLButtonElement | null)?.click();
+            expect(open, 'and no press opens it').not.toHaveBeenCalled();
+        } finally {
+            open.mockRestore();
+        }
+    };
+
+    it('a walk that finished: the lagging replica’s quote does not come back', async () => {
+        const root = await removed();
+        const calls = chain.historyPageCalls.length;
+        await walk([[quote(0)]]);
+        await until(() => chain.historyPageCalls.length > calls);
+        await flush(20);
+        expect(viewOf(root)?.descriptionsFailed, 'it finished').not.toBe(true);
+        await afterReplica(root);
+    });
+
+    it('a walk that threw: the lagging replica’s quote does not come back', async () => {
+        const root = await removed();
+        const calls = chain.historyPageCalls.length;
+        chain.historyPageThrows = new Set([1]);
+        await walk([[quote(0)], []]);
+        await until(() => chain.historyPageCalls.slice(calls).includes(1));
+        await flush(20);
+        await afterReplica(root);
+    });
+});
+
 describe('a-removed-item-never-comes-back-into-pay-several', () => {
     /**
      * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the

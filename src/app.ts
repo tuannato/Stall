@@ -3747,10 +3747,20 @@ export function boot(
             lookup.shelves.size === 0 &&
             lookup.prices.size === 0 &&
             lookup.decided.size === 0;
+        // …and a rank is something too: a screen whose only record is the
+        // tombstone of the seller's last quote shows no map at all, but it
+        // holds that removal's rank and the older records it read below it.
+        // Counted as nothing, a lagging replica's answer replaced the screen
+        // whole on a walk that finished, and was painted as the floor on
+        // one that threw: the removed quote came back at its old figure and
+        // Pay composed it (CRITIC-CARRYOVER-5 item 2). Counted, both roads
+        // merge per token over it, and the rank's older set keeps the
+        // removal (`mergeFailedRead`, `mergeFinishedRead`).
         const hadSomething =
             (state.view.descriptions?.size ?? 0) > 0 ||
             (state.view.shelves?.size ?? 0) > 0 ||
-            (state.view.prices?.size ?? 0) > 0;
+            (state.view.prices?.size ?? 0) > 0 ||
+            (state.view.descriptionRanks?.size ?? 0) > 0;
         /*
          * A walk that threw, merged per token over records it may not simply
          * replace (`overKept`): what it resolved wins, a removal included,
