@@ -818,8 +818,8 @@ export type StallView = WindowState & {
      * (`payRateOutcome`) was set, and no Pay press was absorbed since: the
      * line is said without its ask (`PAY_VALVE_TEXT_AFTER_OPEN`;
      * CRITIC-CARRYOVER-7 item 2). Carried with the line across a hand-back
-     * (`PayShown.opened`) and set by the open (`onPayWalletOpened`).
-     * Present only beside `payRateOutcome`.
+     * (`PayShown.opened`, which only "Pay several" sends). Present only
+     * beside `payRateOutcome`.
      */
     payWalletOpened?: true;
     /**

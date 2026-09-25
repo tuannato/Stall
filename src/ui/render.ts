@@ -176,7 +176,10 @@ export type PayShown = {
      * A press on the sheet opened a wallet after it last absorbed a Pay
      * press, so that line is said without its ask on the paint that
      * replaces the sheet too (`PAY_VALVE_TEXT_AFTER_OPEN`;
-     * CRITIC-CARRYOVER-7 item 2). Meaningful beside `outcome` alone.
+     * CRITIC-CARRYOVER-7 item 2). Meaningful beside `outcome` alone, and
+     * sent by "Pay several" alone: the one sheet that hands its valve line
+     * back to a sheet that composes again (a chosen item taken out, the rest
+     * standing).
      */
     readonly opened?: boolean;
 };
@@ -5388,7 +5391,11 @@ function paySheet(
         handlers.onPayRecordMoved?.(tokenId, pressed, {
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
-            ...(rateLineStands() && outcome !== undefined ? { outcome, ...(opened ? { opened } : {}) } : {}),
+            // No `opened` beside it: the single sheet carries its valve line
+            // back only to a sheet whose record left, whose one sentence is
+            // not the valve's (CRITIC-CARRYOVER-8 item 6: the flag no road
+            // reached is gone; "Pay several" keeps its own).
+            ...(rateLineStands() && outcome !== undefined ? { outcome } : {}),
         });
     };
     /**

@@ -621,10 +621,11 @@ export function boot(
      * sheet it belongs to: painted as `payRateOutcome`, so the sheet the app
      * paints next says the line the buyer was reading. Dropped by a record
      * change this app or the sheet finds after it — that line is the newer —
-     * and whenever a pay sheet opens or closes. `opened`: a press on the
-     * sheet has opened a wallet since it last absorbed a Pay press, so the
-     * line is painted without its ask (`payWalletOpened`; CRITIC-CARRYOVER-7
-     * item 2).
+     * and whenever a pay sheet opens or closes. `opened`: the sheet handed
+     * itself back saying a press on it had opened a wallet since it last
+     * absorbed a Pay press (`PayShown.opened`, which only "Pay several"
+     * reaches), so the line is painted without its ask (`payWalletOpened`;
+     * CRITIC-CARRYOVER-7 item 2).
      */
     let payOutcomeCarried:
         | { readonly key: string; readonly outcome: PayRateOutcome; readonly opened?: true }
@@ -1591,11 +1592,12 @@ export function boot(
                 if (payRecordMovedFor === key) {
                     payRecordMovedPressed = false;
                 }
-                // The valve's carried line too: no ask after a wallet opened
-                // (CRITIC-CARRYOVER-7 item 2).
-                if (payOutcomeCarried !== undefined && payOutcomeCarried.key === key) {
-                    payOutcomeCarried = { ...payOutcomeCarried, opened: true };
-                }
+                // Nothing marks the valve's carried line here: after an open
+                // the app paints this sheet again only when it hands itself
+                // back, which says whether a wallet opened
+                // (`PayShown.opened`), and on a close, which drops the line
+                // (CRITIC-CARRYOVER-8 item 6: the mark no road reached is
+                // gone).
             },
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;

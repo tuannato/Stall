@@ -11389,8 +11389,10 @@ describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
      * back to its first clause, as the record line does, and stays so until
      * a Pay press opens nothing: the refresh control is no Pay press, so its
      * answer after an open asks for none; an absorbed Pay press may ask
-     * again. The flag rides a hand-back (`PayShown.opened`) and a paint
-     * (`payWalletOpened`). The clock is held (`toFake: ['performance']`).
+     * again. The flag rides a paint (`payWalletOpened`), and "Pay
+     * several"'s hand-back (`PayShown.opened`), the one hand-back that
+     * carries its line to a sheet that composes again. The clock is held
+     * (`toFake: ['performance']`).
      */
     const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
     const answer = scaleRate(0.000025)!;
