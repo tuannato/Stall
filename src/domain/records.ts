@@ -42,7 +42,9 @@
  * and only when exactly one side's set holds the other's winner: each set
  * is one node's ladder, and two nodes that disagree are left to the ladder
  * (CRITIC-CARRYOVER-5 item 4). Two reads that crowned the same record keep
- * the union of their sets (item 3).
+ * the union of their sets (item 3), and a read whose winner replaced the
+ * screen's keeps the one it replaced and that one's set as well
+ * (CRITIC-CARRYOVER-6 item 3).
  *
  * So the two are merged per token: the failed walk's decided tokens win,
  * absence included, unless the kept read's winner for that token outranks
@@ -54,9 +56,12 @@ import { compareManifestRank, knownSeen, type ManifestRank } from './manifest';
 
 /**
  * The rank of the record that won a token (`ManifestRank`), and the records
- * the SAME read ranked below it — their txids, every settled record for that
- * token the walk read that lost to the winner (the owner, CRITIC-CARRYOVER-4
- * item 9: "remember the older records"). Bounded by what the walk read.
+ * ranked below it — their txids: every settled record for that token the
+ * walk read that lost to the winner (the owner, CRITIC-CARRYOVER-4 item 9:
+ * "remember the older records"), and, once merged (`mergeFailedRead`), what
+ * every read that crowned the same record ranked below it, and the winner
+ * it replaced on screen with that one's own set. Bounded by the seller's own
+ * records for the token: every txid in it is one `collectTx` accepted.
  * Unsettled records (unmined and unfinalized) are not ranked and are not in
  * it: one of those may yet win.
  */
@@ -204,20 +209,41 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         return out;
     };
     const ranks = merge(read.ranks, kept.ranks, false);
-    // Both reads crowned the same record: whatever either ranked below it is
-    // older than it, so the merged rank keeps the union of the two sets
-    // (CRITIC-CARRYOVER-5 item 3). Taking one side's set alone — the walk's,
-    // at equal rank — dropped the other's whenever a later read re-crowned
-    // the winner without reading the older records again (a walk that threw
-    // after page 0, or a capped one), and a lagging replica's older record
-    // then beat the screen on the ladder.
     for (const [tokenId, rank] of ranks) {
         const mine = read.ranks?.get(tokenId);
         const theirs = kept.ranks?.get(tokenId);
-        if (mine === undefined || theirs === undefined || mine.txid !== theirs.txid) {
+        if (mine === undefined || theirs === undefined) {
             continue;
         }
-        const older = new Set([...(mine.older ?? []), ...(theirs.older ?? [])]);
+        // Both reads crowned the same record: whatever either ranked below
+        // it is older than it, so the merged rank keeps the union of the two
+        // sets (CRITIC-CARRYOVER-5 item 3). Taking one side's set alone —
+        // the walk's, at equal rank — dropped the other's whenever a later
+        // read re-crowned the winner without reading the older records again
+        // (a walk that threw after page 0, or a capped one), and a lagging
+        // replica's older record then beat the screen on the ladder.
+        //
+        // And the walk's winner REPLACED the screen's (CRITIC-CARRYOVER-6
+        // item 3): the record it replaced, and everything that record
+        // ranked below itself, are older than the new winner — this merge
+        // just decided so — whether or not the walk read them. A walk that
+        // threw after page 0, or stopped at our cap, crowned a newer record
+        // without reaching the one on screen, its own set lacked it, and a
+        // lagging replica answering that record (or, over a removal, the
+        // last quote) beat the new winner on the ladder: the old figure, or
+        // the removed quote, came back.
+        const replaced = mine.txid !== theirs.txid && !keptWins.has(tokenId);
+        if (mine.txid !== theirs.txid && !replaced) {
+            continue;
+        }
+        const older = new Set([
+            ...(mine.older ?? []),
+            ...(replaced ? [theirs.txid] : []),
+            ...(theirs.older ?? []),
+        ]);
+        // A winner is never below itself: the screen's set may hold the new
+        // winner when two nodes disagreed (`keptOutranks`).
+        older.delete(rank.txid);
         if (older.size > 0) {
             ranks.set(tokenId, { ...rank, older });
         }

@@ -1944,6 +1944,112 @@ describe('a-removed-last-quote-never-comes-back-from-a-lagging-replica', () => {
     });
 });
 
+describe('a-new-winner-remembers-the-record-it-replaced', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 3, through the real app (the pure half is in
+     * records.test.ts under the same name). A full read puts R1 on screen
+     * (mined at 6, above R0). The seller edits — R2, finalized and unmined
+     * — or removes their last quote — the tombstone T. A walk reads its
+     * first page and throws, or stops at our page cap, before R1's page:
+     * its winner replaces the screen's without reading R1. A lagging
+     * replica that never saw the edit then answers R1, mined, first seen 0.
+     * The new winner remembered nothing older, so the ladder's no-height
+     * rule crowned R1: the old figure came back, or the removed quote was a
+     * row again with Pay on it. Now the new winner's set gains R1 and R0.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'cb'.repeat(32);
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R0 = { code: 'xec', exponent: 2, amount: 400_000n };
+    const XEC_R2 = { code: 'xec', exponent: 2, amount: 600_000n };
+    const R0 = '5a'.repeat(32);
+    const R1 = '5b'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    const r0 = () => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 5, isFinal: true }, 1_756_399_000);
+    const r1 = (seen: number) => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { height: 6, isFinal: true }, seen);
+    /** The seller's edit, finalized by avalanche, not yet mined. */
+    const edit = () => tx('5c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R2 }), { isFinal: true }, 1_756_400_600);
+    /** The removal of the stall's last quote, finalized and unmined. */
+    const tomb = () => tx('5d'.repeat(32), encodeRemovalHex(A), { isFinal: true }, 1_756_400_600);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const change of ['a price change', 'the last quote removed'] as const) {
+        for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
+            it(`${change}, read by a walk that ${road}, then a lagging replica: ${change === 'a price change' ? 'the new figure stands' : 'the quote stays off'}`, async () => {
+                const { root } = bootStall(
+                    stallEmpty({
+                        tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                        genesis: new Map([[A, 'attributed' as const]]),
+                        shopTab: 'quotes',
+                    }),
+                );
+                await flush();
+                await walk([[r1(1_756_400_000), r0()]]);
+                await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+                expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0), 'R1’s read ranked R0 below it').toBe(true);
+
+                const next = change === 'a price change' ? edit() : tomb();
+                let calls = chain.historyPageCalls.length;
+                if (road === 'threw after its first page') {
+                    chain.historyPageThrows = new Set([1]);
+                    await walk([[next], [r1(1_756_400_000), r0()]]);
+                    await until(() => chain.historyPageCalls.slice(calls).includes(1));
+                } else {
+                    await walk([[next], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [r1(1_756_400_000), r0()]]);
+                    await until(() => viewOf(root)?.descriptionsTruncated === true);
+                }
+                await flush(20);
+                if (change === 'a price change') {
+                    expect(viewOf(root)?.prices?.get(A), 'the edit is on screen').toEqual(XEC_R2);
+                } else {
+                    expect(viewOf(root)?.prices?.has(A), 'the removal is on screen').toBe(false);
+                }
+                const older = viewOf(root)?.descriptionRanks?.get(A)?.older;
+                expect(older?.has(R1), 'the new winner remembers the record it replaced').toBe(true);
+                expect(older?.has(R0), 'and what that one ranked below it').toBe(true);
+
+                chain.historyPageThrows = new Set();
+                calls = chain.historyPageCalls.length;
+                await walk([[r1(0)]]);
+                await until(() => chain.historyPageCalls.length > calls);
+                await flush(20);
+                expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+                (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+                await flush();
+                if (change === 'a price change') {
+                    expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R2);
+                } else {
+                    expect(viewOf(root)?.prices?.has(A), 'the removed quote does not come back').toBe(false);
+                    expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+                }
+            });
+        }
+    }
+});
+
 describe('a-removed-item-never-comes-back-into-pay-several', () => {
     /**
      * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the

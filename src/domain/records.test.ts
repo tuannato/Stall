@@ -132,7 +132,9 @@ describe('a-kept-rank-read-before-its-record-was-mined-does-not-outrank-the-walk
         const out = mergeFailedRead(read, new Set([A]), kept);
         expect(out.prices.get(A), 'the figure the walk read, not the one it read past').toEqual(price(900_000n));
         expect(out.descriptions.get(A)).toBe('new words');
-        expect(out.ranks.get(A)).toEqual(walkRank);
+        // The walk's rank, remembering the record it replaced
+        // (`a-new-winner-remembers-the-record-it-replaced`).
+        expect(out.ranks.get(A)).toEqual({ ...walkRank, older: new Set([keptRank.txid]) });
         expect(out.keptShown.has(A), 'nothing on screen came from the kept read').toBe(false);
     });
 
@@ -265,11 +267,15 @@ describe('the-older-records-survive-a-read-that-crowns-the-same-winner', () => {
         expect(mergeFinishedRead(other, new Set([A]), screen).ranks.get(A)?.older).toEqual(new Set([R0, R1]));
     });
 
-    it('never lends a set across two different winners', () => {
-        const newer = { prices: new Map([[A, price(1_000_000n)]]), ranks: new Map([[A, { height: undefined, isFinal: true, txid: '3'.repeat(64), firstSeen: 1756400900 }]]) };
-        const out = mergeFinishedRead(newer, new Set([A]), screen);
-        expect(out.prices.get(A)).toEqual(price(1_000_000n));
-        expect(out.ranks.get(A)?.older, 'R3 ranked nothing below it').toBeUndefined();
+    it('a winner that stands keeps its own set: nothing of the walk it outranked is lent to it', () => {
+        // The walk answers R1, which the screen ranked below R2: the screen
+        // stands, and R1's own set (R0) is not the screen's to take. A walk
+        // whose winner REPLACES the screen's is the other case, and
+        // `a-new-winner-remembers-the-record-it-replaced` asserts it.
+        const behind = { prices: new Map([[A, price(500_000n)]]), ranks: new Map([[A, { height: 6, isFinal: true, txid: R1, firstSeen: 0, older: new Set([R0]) }]]) };
+        const out = mergeFinishedRead(behind, new Set([A]), screen);
+        expect(out.prices.get(A)).toEqual(price(900_000n));
+        expect(out.ranks.get(A)?.older).toEqual(new Set([R1]));
     });
 });
 
@@ -486,5 +492,85 @@ describe('a-pay-press-judges-the-records-it-composed-from', () => {
         expect(movedRecords(composed, { known: true, complete: true, decided: new Set() })).toEqual([]);
         expect(movedRecords(composed, now(moved, { complete: false })), 'B was never reached').toEqual([A]);
         expect(movedRecords(composed, now(moved, { complete: false, decided: new Set([B]) })), 'B was, and is gone').toEqual([A, B]);
+    });
+});
+
+describe('a-new-winner-remembers-the-record-it-replaced', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 3, the pure half; the app's half is in
+     * app.live.test.ts under the same name. On screen: R1, which a full read
+     * ranked above R0. The seller edits — R2, finalized and unmined — or
+     * removes their last quote — the tombstone T. A walk reads page 0 (R2 or
+     * T) and throws, or stops at our page cap, before R1's page: its winner
+     * replaced the screen's, but its own set lacked R1, and the merged rank
+     * kept only that set. A lagging replica that never saw R2 or T then
+     * answered R1, mined, first seen 0 — and the ladder's no-height rule
+     * crowned it: the old figure came back, or the removed quote was payable
+     * again. A new winner's set now gains the winner it replaced and that
+     * one's set.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R0 = '0'.repeat(64);
+    const R1 = '1'.repeat(64);
+    const R2 = '2'.repeat(64);
+    const T = 'e'.repeat(64);
+    const screen = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: 6, isFinal: true, firstSeen: 1_000, older: new Set([R0]) }]]),
+    };
+    const lagging = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: 6, isFinal: true, firstSeen: 0 }]]),
+    };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished (capped)', mergeFinishedRead],
+    ] as const) {
+        it(`${road}, a price change: the new winner remembers R1 and R0, and a lagging replica's R1 does not come back`, () => {
+            const walk = {
+                prices: new Map([[A, price(600_000n)]]),
+                ranks: new Map([[A, { txid: R2, height: undefined, isFinal: true, firstSeen: 2_000 }]]),
+            };
+            const mid = merge(walk, new Set([A]), screen);
+            expect(mid.prices.get(A)).toEqual(price(600_000n));
+            expect(mid.ranks.get(A)?.txid).toBe(R2);
+            expect(mid.ranks.get(A)?.older, 'the replaced winner and its own set').toEqual(new Set([R1, R0]));
+            const out = mergeFinishedRead(lagging, new Set([A]), mid);
+            expect(out.prices.get(A), 'the old figure does not come back').toEqual(price(600_000n));
+            expect(out.ranks.get(A)?.txid).toBe(R2);
+        });
+
+        it(`${road}, the last quote removed: the removal remembers R1, and a lagging replica's R1 is not payable again`, () => {
+            const walk = {
+                prices: new Map<string, TokenPrice>(),
+                ranks: new Map([[A, { txid: T, height: undefined, isFinal: true, firstSeen: 2_000 }]]),
+            };
+            const mid = merge(walk, new Set([A]), screen);
+            expect(mid.prices.has(A), 'removed').toBe(false);
+            expect(mid.ranks.get(A)?.older).toEqual(new Set([R1, R0]));
+            const out = mergeFinishedRead(lagging, new Set([A]), mid);
+            expect(out.prices.has(A), 'the removed quote does not come back').toBe(false);
+            expect(out.ranks.get(A)?.txid).toBe(T);
+        });
+    }
+
+    it('keeps the walk’s own set beside it, and never lists the winner below itself', () => {
+        // Two nodes that disagreed: the screen's set holds the walk's winner
+        // and the walk's holds the screen's, so the ladder decided (R2, by
+        // its later stamp) — and the screen's set, which names R2, is merged
+        // in without R2.
+        const disagreeing = {
+            prices: new Map([[A, price(500_000n)]]),
+            ranks: new Map([[A, { txid: R1, height: 6, isFinal: true, firstSeen: 1_000, older: new Set([R2, R0]) }]]),
+        };
+        const walk = {
+            prices: new Map([[A, price(600_000n)]]),
+            ranks: new Map([[A, { txid: R2, height: 5, isFinal: true, firstSeen: 2_000, older: new Set([R1]) }]]),
+        };
+        const out = mergeFailedRead(walk, new Set([A]), disagreeing);
+        expect(out.prices.get(A)).toEqual(price(600_000n));
+        expect(out.ranks.get(A)?.older).toEqual(new Set([R1, R0]));
     });
 });
