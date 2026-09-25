@@ -1803,7 +1803,10 @@ export const PAY_RATE_IMPLAUSIBLE_NO_PAY = 'No usable price';
  * has opened a wallet (CRITIC-CARRYOVER-7 item 2): the first clause alone,
  * the record line's rule (`PAY_QUOTE_CHANGED_UNPRESSED`; the owner's
  * CRITIC-CARRYOVER-4 item 4) — after a wallet opened there is no "again"
- * to ask for, and a buyer asked for one may pay twice.
+ * to ask for, and a buyer asked for one may pay twice. The same first
+ * clauses wherever no Pay control is on the sheet (`PAY_VALVE_TEXT_NO_PAY`;
+ * CRITIC-CARRYOVER-9 item 3): an answer that takes the figure under the
+ * dust floor leaves no Pay to press again.
  */
 export const PAY_RATE_MOVED_OPENED = 'Price updated';
 export const PAY_RATE_REFRESHED_OPENED = 'Rate refreshed';
@@ -1906,12 +1909,19 @@ export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
 };
 /**
  * The valve's line when no Pay control is on the sheet
- * (`PAY_RATE_UNAVAILABLE_NO_PAY`): only the two outcomes that leave no
- * figure have a form of their own; any other outcome keeps its line.
+ * (`PAY_RATE_UNAVAILABLE_NO_PAY`): every line that asks for the Pay press,
+ * without the ask. The two outcomes that leave no figure, and — since an
+ * answer can leave a figure under the dust floor, which composes no link
+ * and so no Pay (CRITIC-CARRYOVER-9 item 3) — the two that moved or
+ * refreshed it: "review and pay again" and "press Pay again" named a press
+ * the buyer could not make. The disagreement line asks for none and keeps
+ * its words.
  */
 export const PAY_VALVE_TEXT_NO_PAY: Readonly<Partial<Record<PayRateOutcome, string>>> = {
     unavailable: PAY_RATE_UNAVAILABLE_NO_PAY,
     implausible: PAY_RATE_IMPLAUSIBLE_NO_PAY,
+    moved: PAY_RATE_MOVED_OPENED,
+    refreshed: PAY_RATE_REFRESHED_OPENED,
 };
 /**
  * The valve's line once a press on the sheet has opened a wallet, until a

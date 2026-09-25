@@ -4698,7 +4698,9 @@ function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
  * where no Pay control is on the sheet (`payStands` false) a line that asks
  * for it is said without the ask — the refresh control that stays with no
  * rate names itself, and "again" would name a press the buyer cannot repeat
- * (the window's copy call, CRITIC-CARRYOVER-8 item 4). And once a press on
+ * (the window's copy call, CRITIC-CARRYOVER-8 item 4) — a moved or
+ * refreshed figure under the dust floor included, which composes no link
+ * and so no Pay (CRITIC-CARRYOVER-9 item 3). And once a press on
  * the sheet has opened a wallet (`opened`), no line asks for a press, until
  * a Pay press is absorbed again (CRITIC-CARRYOVER-7 item 2): the record
  * line's rule.

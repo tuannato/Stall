@@ -134,7 +134,7 @@ import {
     setMarqueeMeasure,
 } from './marquee';
 import { satsForQuote, satsWithSurcharge } from '../domain/fiat';
-import { formatXec,
+import { DUST_SATS, formatXec,
     formatXecUngrouped,
 } from '../domain/money';
 import {
@@ -10489,6 +10489,72 @@ describe('the-valve-asks-for-the-pay-press-only-where-pay-stands', () => {
             expect(root.querySelector('[data-role="pay-cashtab"]')?.closest('[hidden]')).toBeNull();
             expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_RATE_UNAVAILABLE);
         });
+
+        /*
+         * CRITIC-CARRYOVER-9 item 3 (the critic's `r9b`). An answer that takes
+         * the figure under the dust floor composes no link, so Pay leaves with
+         * it — and the line still read "Price updated — review and pay again"
+         * or "Rate refreshed — press Pay again", naming a press the buyer
+         * cannot make. Wherever Pay is not on the sheet, those two say their
+         * first clause alone too. Three roads, both sheets: the valve's move past
+         * the margin (6 → 4.80 XEC), the valve's answer inside it (5.50 → 5.45
+         * XEC), and the refresh control's answer (a refresh is never a move).
+         */
+        const tiny = { code: 'usd', exponent: 8, amount: 12_000n } as TokenPrice;
+        const edge = { code: 'usd', exponent: 8, amount: 11_000n } as TokenPrice;
+        for (const [road, quote, answer, outcome] of [
+            ['the valve, a move past the margin', tiny, scaleRate(0.000025)!, 'moved'],
+            ['the valve, a move inside the margin', edge, scaleRate(0.0000202)!, 'refreshed'],
+            ['the refresh control', tiny, scaleRate(0.000025)!, 'refreshed'],
+        ] as const) {
+            it(`${kind}, ${road}, lands under the dust floor: no Pay, so no "again"`, async () => {
+                const root = mountedRoot();
+                const prices = new Map([[TOKEN_ID, quote]]);
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => ({ ...records, prices }),
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayRate: vi.fn(async () => ({ rate: answer, atMs: Date.now() })),
+                };
+                const valve = road !== 'the refresh control';
+                renderStall(
+                    root,
+                    payView({
+                        prices,
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        payRate: valve ? aged : { rate: aged.rate, atMs: Date.now() },
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                const before = satsForQuote(quote, 1n, aged.rate)!;
+                expect(before >= DUST_SATS, 'the figure before stands above the floor').toBe(true);
+                expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(before));
+                if (valve) {
+                    expect(pressForUrl(root, 'pay-cashtab'), 'over an aged rate: the valve asks').toBeUndefined();
+                } else {
+                    (sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement).click();
+                }
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                const after = satsForQuote(quote, 1n, answer)!;
+                expect(after < DUST_SATS, 'the answer takes it under the floor').toBe(true);
+                expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(after));
+                const shown = [...sheet.querySelectorAll('button')].filter((b) => b.closest('[hidden]') === null);
+                expect(shown.some((b) => b.getAttribute('data-role') === 'pay-cashtab'), 'no Pay on the sheet').toBe(false);
+                expect(sheet.textContent, 'the line under the card says why').toContain(
+                    kind === 'pay' ? copy.PAY_SUB_DUST : copy.PAY_SUB_DUST_SEVERAL,
+                );
+                const line = sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '';
+                expect(line).toBe(outcome === 'moved' ? copy.PAY_RATE_MOVED_OPENED : copy.PAY_RATE_REFRESHED_OPENED);
+                expect(line).toBe(copy.PAY_VALVE_TEXT_NO_PAY[outcome]);
+                expect(line).not.toMatch(/again/i);
+                expect(copy.PAY_VALVE_TEXT[outcome].startsWith(`${line} — `), 'the first clause').toBe(true);
+            });
+        }
     }
 });
 
