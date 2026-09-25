@@ -2037,6 +2037,22 @@ export const selectionDroppedItems = (names: string, n: number): string =>
         ? `${names} changed or left the stall, so it was taken out of your list`
         : `${names} changed or left the stall, so they were taken out of your list`;
 /**
+ * The same on "Pay several" when taking the items out is the whole of what a
+ * re-read under the open sheet did to its total — no chosen item that stayed
+ * moved, so no other line asks the buyer to look (the owner, 2026-09-25,
+ * CRITIC-CARRYOVER-3 item 2; the window's words). In place, no press was
+ * made: "check the total".
+ */
+export const selectionDroppedCheck = (names: string, n: number): string =>
+    `${selectionDroppedItems(names, n)} \u2014 check the total`;
+/**
+ * The same after a Pay press found it within the grace and opened nothing:
+ * the pressed form, in the shape of the owner's `payItemsChanged` — the
+ * absorbed press changes what the sheet says, and the next press opens.
+ */
+export const selectionDroppedCheckPressed = (names: string, n: number): string =>
+    `${selectionDroppedItems(names, n)} \u2014 check the total and press Pay again`;
+/**
  * A chosen item this page's own read did not reach — a walk that threw, or a
  * genesis that never arrived. In place of the strip's total and Pay: our
  * failure, never "no longer quoted" (the owner, "Nói rõ", 2026-09-24). A

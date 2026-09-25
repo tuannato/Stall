@@ -4578,6 +4578,17 @@ export const PAY_RATE_MAX_AGE_MS = 120_000;
 
 /** A refetch that has not answered by here is "no fresh price", not a wait. */
 export const PAY_RATE_TIMEOUT_MS = 8_000;
+
+/**
+ * How long after an in-place recompose a Pay press is still absorbed (the
+ * owner, 2026-09-25, CRITIC-CARRYOVER-3 item 2). A re-read that lands under
+ * a buyer about to press must not let that press open a figure they never
+ * saw; a press after this span was made over the new figure, which has
+ * stood on screen with its line, and opens it. Measured on the sheet's own
+ * clock, `Date.now()` — the one its rate's age is measured on — so a test
+ * drives it by setting the date.
+ */
+export const PAY_RECOMPOSE_GRACE_MS = 1_500;
 /**
  * The boot-time glance fetch's ceiling. It ran with none, and a request
  * started while the document is still loading holds WebKit's progress bar
@@ -5123,12 +5134,19 @@ function paySheet(
     let movedUnder: 'changed' | 'gone' | 'unshown' | undefined;
     const lost = (): boolean => movedUnder === 'gone' || movedUnder === 'unshown';
     /**
-     * The next Pay press after an in-place recompose opens nothing, once: a
-     * buyer about to press as the re-read landed must not open a figure they
-     * never saw. That press hands the sheet back (`onPayRecordMoved`), which
-     * paints it again from the same records, and the press after it opens.
+     * A Pay press inside `PAY_RECOMPOSE_GRACE_MS` of an in-place recompose
+     * opens nothing, once: a buyer about to press as the re-read landed must
+     * not open a figure they never saw. That press hands the sheet back
+     * (`onPayRecordMoved`), which paints it again from the same records and
+     * says a press is needed again, and the press after it opens. A press
+     * after the grace opens the new figure (the owner, 2026-09-25,
+     * CRITIC-CARRYOVER-3 item 2): it was made over the figure and its line.
      */
     let absorb = false;
+    /** When the last in-place recompose landed, on the sheet's own clock (`absorbs`). */
+    let recomposedAtMs = 0;
+    /** Whether a press now is one to absorb: a recompose landed under the sheet within the grace. */
+    const absorbs = (): boolean => absorb && Date.now() - recomposedAtMs <= PAY_RECOMPOSE_GRACE_MS;
     /** Bumped by every recompose, so an ask's tail knows the figure it measured is no longer the one on screen. */
     let composedAt = 0;
 
@@ -5227,6 +5245,7 @@ function paySheet(
             }
         }
         absorb = true;
+        recomposedAtMs = Date.now();
         if (movedRecords(opened, now).length === 0) {
             // Back to what the sheet was opened on: nothing to say, nothing to absorb.
             movedUnder = undefined;
@@ -5429,9 +5448,12 @@ function paySheet(
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
         valve.hidden = movedUnder !== 'changed' && outcome === undefined && !recordMoved;
+        // In place, no press was made: the first clause alone (the owner,
+        // 2026-09-25, CRITIC-CARRYOVER-3 item 2). A press absorbed inside
+        // the grace paints the sheet again with the owner's whole sentence.
         valve.textContent =
             movedUnder === 'changed'
-                ? copy.PAY_QUOTE_CHANGED
+                ? copy.PAY_QUOTE_CHANGED_UNPRESSED
                 : outcome !== undefined
                   ? copy.PAY_VALVE_TEXT[outcome]
                   : recordMoved
@@ -5500,19 +5522,21 @@ function paySheet(
             // The seller's record first (the critic's final merge, item 11):
             // a figure the page no longer holds as their quote is not opened
             // from this press, and neither is one a re-read recomposed under
-            // the sheet since the last press (`absorb`). The sheet is handed
-            // back, painted again from the record as it stands, says so, and
-            // the next press is the one that opens — the moved-rate valve's
-            // shape, for the other input. A record that changed only its
+            // the sheet within the grace before it (`absorbs`). The sheet is
+            // handed back, painted again from the record as it stands, says
+            // so, and the next press is the one that opens — the moved-rate
+            // valve's shape, for the other input. A press after the grace
+            // opens the recomposed figure. A record that changed only its
             // margin or its words is taken in place (`recheck`) and the press
             // goes on. The scan code is no press: a re-read recomposes it in
             // place the moment the record moves (`payRecordChecks`), so what
             // a phone can read is the record as the page holds it.
-            if (recheck() || absorb) {
+            if (recheck() || absorbs()) {
                 absorb = false;
                 handlers.onPayRecordMoved?.(tokenId);
                 return;
             }
+            absorb = false;
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 // Synchronously, inside the buyer's own press — the one open a
                 // browser treats as theirs. `noreferrer` on top of `noopener`;
@@ -6038,11 +6062,40 @@ function paySeveralSheet(
     dropped.setAttribute('data-role', 'pay-several-dropped');
     /** The items a re-read took out of the choice while the sheet was open (`recompose`). */
     let droppedHere: readonly string[] = [];
+    /**
+     * The dropped line. When taking items out is the whole of what a re-read
+     * did to the total while this sheet was open — no chosen item that
+     * stayed moved, so no valve line asks the buyer to look — it asks them
+     * to check the total (the owner, 2026-09-25, CRITIC-CARRYOVER-3 item 2):
+     * in place with no press, and after a press found it and opened nothing
+     * (this paint's `payRecordMoved` naming an item this paint's prune took
+     * out), asking for the press again unless no press was made.
+     */
     const droppedNow = (): string | undefined => {
         const names = [...(view.selectionDropped ?? []), ...droppedHere.filter((t) => !(view.selectionDropped ?? []).includes(t))];
-        return names.length === 0
-            ? undefined
-            : copy.selectionDroppedItems(copy.itemNames(names.map((tokenId) => tokenName(view.tokens, tokenId))), names.length);
+        if (names.length === 0) {
+            return undefined;
+        }
+        const said = copy.itemNames(names.map((tokenId) => tokenName(view.tokens, tokenId)));
+        // With every chosen item gone there is no total to check: the lost
+        // box says what is left to say.
+        if (lostAll) {
+            return copy.selectionDroppedItems(said, names.length);
+        }
+        if (movedUnder === undefined && droppedHere.length > 0) {
+            return copy.selectionDroppedCheck(said, names.length);
+        }
+        const pressedDrop =
+            movedUnder === undefined &&
+            droppedHere.length === 0 &&
+            movedLine === undefined &&
+            (view.payRecordMoved ?? []).some((tokenId) => (view.selectionDropped ?? []).includes(tokenId));
+        if (pressedDrop) {
+            return view.payRecordMovedUnpressed === true
+                ? copy.selectionDroppedCheck(said, names.length)
+                : copy.selectionDroppedCheckPressed(said, names.length);
+        }
+        return copy.selectionDroppedItems(said, names.length);
     };
     const total = el('div', 'pay-total', '');
     total.setAttribute('data-role', 'pay-total');
@@ -6155,8 +6208,10 @@ function paySeveralSheet(
     let movedUnder: readonly string[] | undefined;
     /** Every chosen item left under the sheet: nothing to compose, no figure, no code, no Pay. */
     let lostAll = false;
-    /** The single sheet's: the next Pay press after an in-place recompose opens nothing, once. */
+    /** The single sheet's: a Pay press inside the grace of an in-place recompose opens nothing, once (`absorbs`). */
     let absorb = false;
+    let recomposedAtMs = 0;
+    const absorbs = (): boolean => absorb && Date.now() - recomposedAtMs <= PAY_RECOMPOSE_GRACE_MS;
     let composedAt = 0;
 
     /**
@@ -6186,6 +6241,7 @@ function paySeveralSheet(
         movedUnder = moved.length > 0 ? moved : undefined;
         lostAll = selection.size === 0;
         absorb = true;
+        recomposedAtMs = Date.now();
         if (movedRecords(opened, now).length === 0) {
             movedUnder = undefined;
             droppedHere = [];
@@ -6383,7 +6439,9 @@ function paySeveralSheet(
             sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        const underLine = movedUnder === undefined ? undefined : copy.payItemsChanged(movedNames(movedUnder));
+        // In place, no press was made: the first clause alone, the single
+        // sheet's rule (the owner, 2026-09-25, CRITIC-CARRYOVER-3 item 2).
+        const underLine = movedUnder === undefined ? undefined : copy.payItemsChangedUnpressed(movedNames(movedUnder));
         valve.hidden = lostAll || (underLine === undefined && outcome === undefined && movedLine === undefined);
         valve.textContent =
             underLine ?? (outcome !== undefined ? copy.PAY_VALVE_TEXT[outcome] : (movedLine ?? ''));
@@ -6437,12 +6495,14 @@ function paySeveralSheet(
             }
             // The records first, the single sheet's rule: a chosen item's
             // record that moved sends nothing and hands the sheet back, and
-            // so does the first press after a re-read recomposed it in place.
-            if (recheck() || absorb) {
+            // so does a press inside the grace of a re-read that recomposed
+            // it in place (`absorbs`); a press after the grace opens.
+            if (recheck() || absorbs()) {
                 absorb = false;
                 handlers.onPayRecordMoved?.();
                 return;
             }
+            absorb = false;
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 window.open(url, '_blank', 'noopener,noreferrer');
                 return;

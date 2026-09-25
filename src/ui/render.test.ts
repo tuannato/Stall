@@ -101,6 +101,7 @@ import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { ADDR_COPIED_MS,
     PAY_RATE_MAX_AGE_MS,
+    PAY_RECOMPOSE_GRACE_MS,
     priceTier,
     recheckPaySheet,
     renderStall,
@@ -9285,6 +9286,23 @@ describe('a-moved-quote-is-said-in-the-owners-words', () => {
         expect(copy.payItemsChanged('Roasted Beans').startsWith(copy.payItemsChangedUnpressed('Roasted Beans'))).toBe(true);
     });
 
+    it('says the third round of sentences verbatim (CRITIC-CARRYOVER-3, item 2)', () => {
+        // In place nobody pressed: the first clause alone, on both sheets.
+        expect(copy.PAY_QUOTE_CHANGED_UNPRESSED).toBe('This quote changed while this sheet was open \u2014 check the figure');
+        // The window's words for Pay several when an item taken out is the
+        // whole of the change; after an absorbed press, the owner's pressed
+        // shape (`payItemsChanged`).
+        expect(copy.selectionDroppedCheck('Roasted Beans', 1)).toBe(
+            'Roasted Beans changed or left the stall, so it was taken out of your list \u2014 check the total',
+        );
+        expect(copy.selectionDroppedCheck('Roasted Beans and Green Tea', 2)).toBe(
+            'Roasted Beans and Green Tea changed or left the stall, so they were taken out of your list \u2014 check the total',
+        );
+        expect(copy.selectionDroppedCheckPressed('Roasted Beans', 1)).toBe(
+            'Roasted Beans changed or left the stall, so it was taken out of your list \u2014 check the total and press Pay again',
+        );
+    });
+
     it('says a choice is gone only when it is really empty, never over an item this page could not read', () => {
         // The critic, 2026-09-25, item 2: a chosen item this page holds a
         // record for and never read the genesis of is not a row, and "none
@@ -9422,7 +9440,7 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             } else {
                 expect(sheet.querySelector('[data-role="rate"]')?.textContent).toContain('1 XEC = $0.00002');
             }
-            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.PAY_QUOTE_CHANGED_UNPRESSED);
             expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the restated figure').toBe(
                 copy.payFigure(formatXec(sats)),
             );
@@ -9470,7 +9488,7 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(sheet.querySelector('[data-role="pay-lines"]')?.textContent, 'the line is the new quote').toContain(
                 quoteFigure({ ...u.after, amount: u.after.amount * 2n }),
             );
-            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.payItemsChanged('Roasted Beans'));
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(copy.payItemsChangedUnpressed('Roasted Beans'));
             expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(copy.payFigure(formatXec(sats)));
             expect(pathOf(sheet), 'the code is the new total').toBe(codeFor(sats, memoHex));
 
@@ -9532,11 +9550,13 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             h,
         );
         const sheet = root.querySelector('[data-role="pay-several"]') as HTMLElement;
-        // One leaves: it is named on the dropped line, never on the valve.
+        // One leaves: it is named on the dropped line, never on the valve,
+        // and — the whole of what the re-read did to the total — the line
+        // asks the buyer to check it (CRITIC-CARRYOVER-3 item 2).
         now = records(new Map([[OTHER, xec]]));
         recheckPaySheet(root);
         expect(sheet.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(
-            copy.selectionDroppedItems('Roasted Beans', 1),
+            copy.selectionDroppedCheck('Roasted Beans', 1),
         );
         expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '', 'a moved item that left is not named twice').toBe('');
         expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(satsForQuote(xec, 1n, undefined)!));
@@ -9589,6 +9609,81 @@ describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
             expect(h.onPayRecordMoved).not.toHaveBeenCalled();
         }
     });
+});
+
+describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
+    /**
+     * The owner, 2026-09-25 (CRITIC-CARRYOVER-3 item 2), at the sheet; the
+     * app's half — the absorbed press saying so — is in app.live.test.ts.
+     * The press after an in-place recompose was absorbed however long after
+     * it came: a buyer who read the new figure and its line and pressed a
+     * minute later got a dead press. Now only a press within
+     * `PAY_RECOMPOSE_GRACE_MS` of the recompose is absorbed, measured on the
+     * sheet's own clock (`Date.now()`, faked here); a press after it opens
+     * the new figure. The in-place line asks for no press: its first clause.
+     */
+    const OTHER = '7d'.repeat(32);
+    const xec = { code: 'xec', exponent: 2, amount: 500_000n } as TokenPrice;
+    const moved = { ...xec, amount: 900_000n };
+    const again = { ...xec, amount: 700_000n };
+    const records = (prices: ReadonlyMap<string, TokenPrice>) => ({
+        prices,
+        known: true,
+        complete: true,
+        decided: new Set<string>(),
+    });
+    const T = Date.UTC(2026, 8, 25, 12);
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('pins the grace by value', () => {
+        expect(PAY_RECOMPOSE_GRACE_MS).toBe(1500);
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: a press at the grace's last millisecond is absorbed, and one past it opens the new figure`, () => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(T);
+            const tokens = new Map([[TOKEN_ID, BEANS], [OTHER, { ...BEANS, tokenId: OTHER, name: 'Green Tea' }]]);
+            let now = records(new Map([[TOKEN_ID, xec], [OTHER, xec]]));
+            const root = document.createElement('div');
+            const h = { ...handlers(), onPayRecords: () => now, onPayRecordMoved: vi.fn() };
+            renderStall(
+                root,
+                payView({
+                    tokens,
+                    prices: new Map([[TOKEN_ID, xec], [OTHER, xec]]),
+                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n]]),
+                }),
+                h,
+            );
+            const sheet = root.querySelector(`[data-role="${kind}"]`)!;
+            const memo = encodePaymentMemoHex(TOKEN_ID, 1n)!;
+            const line = kind === 'pay' ? copy.PAY_QUOTE_CHANGED_UNPRESSED : copy.payItemsChangedUnpressed('Roasted Beans');
+
+            now = records(new Map([[TOKEN_ID, moved], [OTHER, xec]]));
+            recheckPaySheet(root);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'in place, no press was made').toBe(line);
+            vi.setSystemTime(T + PAY_RECOMPOSE_GRACE_MS);
+            expect(pressForUrl(root, 'pay-cashtab'), 'inside the grace: absorbed').toBeUndefined();
+            expect(h.onPayRecordMoved, 'handed back to be said again').toHaveBeenCalledTimes(1);
+
+            // Another re-read under the same sheet; the buyer presses after
+            // the grace, over the figure and its line.
+            const T2 = T + 60_000;
+            vi.setSystemTime(T2);
+            now = records(new Map([[TOKEN_ID, again], [OTHER, xec]]));
+            recheckPaySheet(root);
+            const sats = satsForQuote(again, 1n, undefined)!;
+            expect(sheet.querySelector('[data-role="price"]')?.textContent).toBe(formatXec(sats));
+            vi.setSystemTime(T2 + PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(pressForUrl(root, 'pay-cashtab'), 'after the grace: the new figure opens').toBe(cashtabPayUrl(ADDR, sats, memo));
+            expect(h.onPayRecordMoved, 'nothing handed back').toHaveBeenCalledTimes(1);
+        });
+    }
 });
 
 describe('the-refresh-control-asks-the-record-before-and-after-its-ask', () => {
