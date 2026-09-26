@@ -3360,6 +3360,32 @@ type ContrastTarget = {
     /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
     money: boolean;
     /**
+     * The rotation of this node's frame, radians: the sum of every
+     * `transform` and `rotate` from the node up to the root (step 5b). A
+     * money box inside a turned ancestor is read over its own rotated box
+     * rather than its axis-aligned bounds less a fixed 8px pad
+     * (`legacyPad`), which dropped a Rural price figure outright.
+     */
+    angle: number;
+    /**
+     * The node's own box before its frame turned — centre, width, height —
+     * when `angle` is not zero: a money box inside a turned ancestor is read
+     * at the lattice points inside it (step 5b).
+     */
+    frame?: { cx: number; cy: number; w: number; h: number };
+    /** The pad the sampler used before step 5b, kept for the legacy read the bucketing compares against. */
+    legacyPad: number;
+    /** The whole-box read had no box to read (a sliver after the clamp): its legacy value is none. */
+    legacyDropped: boolean;
+    /**
+     * Every other target's sample (D7, step 5b): its own text's line
+     * rects — or, for a control whose only mark is a drawn glyph, that
+     * glyph's box — each clipped like the text is, each with the ink its
+     * own element paints in. `undefined` for a money box and an outlined
+     * line, which are read whole and in the ring.
+     */
+    rects?: LineRect[];
+    /**
      * The outline this line wears where a decoration falls behind it
      * (`--rain-outline-1` / `--rain-outline-2`, round 8): its width in CSS
      * px, 0 for none, read from the computed `text-shadow` (`outlineOf`).
@@ -3383,6 +3409,20 @@ type ContrastTarget = {
 };
 
 type Hole = { x: number; y: number; w: number; h: number };
+
+/**
+ * One line of a target's own text, as the line-rect sampler reads it: the
+ * rect `Range.getClientRects()` gives for a text node's fragment on one line
+ * (the font's content area, axis-aligned), clipped by the target's own
+ * overflow and every clipping ancestor's (`x`…`h`); where the text's frame
+ * is turned, the line box itself — centred on the unclipped rect's centre
+ * (`cx`, `cy`), `rw` by `rh` before the turn, at `angle` — so only pixels
+ * inside the turned line are read. `ink` is the colour this line's own
+ * element paints its glyphs in, which is how a muted name inside an ink
+ * control is read against its own ink. `glyph` marks a drawn icon's box,
+ * read for a control that carries no text.
+ */
+type LineRect = Hole & { cx: number; cy: number; rw: number; rh: number; angle: number; ink: string; glyph?: true };
 
 /**
  * One line of an outlined target: a text node's glyphs on one line box —
@@ -3461,6 +3501,8 @@ type ContrastLive = {
     vw: number;
     vh: number;
     boxes: (ContrastTarget & { i: number })[];
+    /** The prepared nodes that gave no box, counted by the reason `targetFor` gave. */
+    skips: Record<string, number>;
 };
 
 declare global {
@@ -3561,7 +3603,7 @@ let preparedNodes: HTMLElement[] = [];
 let preparedNonce: string | undefined;
 
 /** One node's sample box and static fields, or nothing worth sampling. */
-function targetFor(node: HTMLElement): ContrastTarget | undefined {
+function targetFor(node: HTMLElement): ContrastTarget | string {
     if (node.querySelector('img') !== null) {
         // A tile wearing its token's picture has no letters to measure: the
         // pixels in its box are the image's own, and sampling them against
@@ -3569,7 +3611,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         // description-row tile at 1.18–2.64:1 on Rural and Neo (2026-09-15,
         // the day `.event-sum .event-ic` joined the list). The letters
         // tiles and the empty tiles beside it measured 5.7–17:1.
-        return undefined;
+        return 'picture';
     }
     if (drawsNothing(node)) {
         // A box with no letters, no glyph and no generated text has no ink
@@ -3578,7 +3620,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         // sampled as "text" against its own transparent ground, which read
         // 2.66:1 the day the rain's ground came off from under it (round 6,
         // 2026-09-24). The picture tile above is the same rule's first case.
-        return undefined;
+        return 'draws-nothing';
     }
     const full = node.getBoundingClientRect();
     let box: { x: number; y: number; width: number; height: number } = full;
@@ -3604,6 +3646,11 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         clipper = clipper.parentElement;
     }
     const clip = clipper?.getBoundingClientRect();
+    // A box the clamp cut to a sliver, or to nothing, is a box the whole-box
+    // read cannot use. It decides a money box and an outlined line, as it
+    // always did; every other target is read over its line rects, which are
+    // clipped on their own and decide for themselves (step 5b).
+    let sliver = false;
     if (clip !== undefined) {
         const x = Math.max(box.x, clip.x);
         const y = Math.max(box.y, clip.y);
@@ -3621,31 +3668,23 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             (box.height < 16 && box.height < full.height - 1) ||
             (box.width < 16 && box.width < full.width - 1)
         ) {
-            return undefined;
+            sliver = true;
         }
     }
     if (box.width < 2 || box.height < 2) {
-        return undefined;
+        sliver = true;
     }
-    // A heading's own in-flow marker is chrome, not its ground: Neo's
-    // section and shelf wedge is an inline-block `::before` at the start of
-    // the line, inside the heading's box, and the glyphs never cross it. Read
-    // as ground it put the heading at 1.2:1 against its own wedge on every
-    // Neo screen, bare or worn (2026-09-24). The band starts after it.
-    const mark = getComputedStyle(node, '::before');
-    if (mark.content !== 'none' && mark.content !== 'normal' && mark.display === 'inline-block') {
-        const lead =
-            (Number.parseFloat(mark.marginLeft) || 0) +
-            (Number.parseFloat(mark.width) || 0) +
-            (Number.parseFloat(mark.marginRight) || 0);
-        if (lead > 0 && lead < box.width / 2) {
-            box = { x: box.x + lead, y: box.y, width: box.width - lead, height: box.height };
-        }
-    }
+    // The heading step-past (Neo's inline-block wedge read as the heading's
+    // ground at 1.2:1, 2026-09-24) is gone with step 5b: a marker the text
+    // does not cross lies outside every line rect by construction, and no
+    // money box carries one.
     const style = getComputedStyle(node);
+    const money = node.matches(MONEY);
     // The element's OWN clip, narrowing the band to paint (see `clipBand`).
     // Resolved against `full`, which is the box a polygon's coordinates are
     // relative to, then intersected with whatever the scroll clamp left.
+    // The line rects take the same band (`ownBand`).
+    let ownBand: { x0: number; x1: number } | undefined;
     const ownClip = style.clipPath;
     if (ownClip.startsWith('polygon(')) {
         const poly = parsePolygon(ownClip, full.width, full.height);
@@ -3655,11 +3694,12 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         const band = clipBand(poly, full.height);
         if (band === undefined) {
             // Non-convex, or nothing left: refused rather than guessed at.
-            return undefined;
+            return 'unreadable-clip';
         }
+        ownBand = { x0: full.x + band.x0, x1: full.x + band.x1 };
         const x = Math.max(box.x, full.x + band.x0);
         const right = Math.min(box.x + box.width, full.x + band.x1);
-        if (right - x < 2) return undefined;
+        if (right - x < 2) return 'clipped-away';
         box = { x, y: box.y, width: right - x, height: box.height };
     }
     // The colour the glyphs would paint in: read from the blanking backup,
@@ -3668,6 +3708,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
     node.dataset['probeInk'] = ink;
     const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
     const ring = Math.max(0, outlineOf(node));
+    const lined = !money && ring === 0;
+    if (!lined && sliver) {
+        return 'sliver';
+    }
+    const angle = angleOf(node);
+    const read = lined ? lineRectsOf(node, ink, ownBand) : undefined;
+    if (read !== undefined && read.rects.length === 0) {
+        return read.why;
+    }
     const ringBox = (() => {
         const wide = { x: box.x - ring, y: box.y - ring, right: box.x + box.width + ring, bottom: box.y + box.height + ring };
         const x = Math.max(wide.x, clip?.x ?? 0, 0);
@@ -3703,10 +3752,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             Number.parseFloat(style.borderBottomWidth) || 0,
             Number.parseFloat(style.borderLeftWidth) || 0,
         ),
-        pad: insideTransform(node) ? 8 : 0,
+        pad: 0,
+        legacyPad: insideTransform(node) ? 8 : 0,
+        angle,
+        ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
         holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
-        money: node.matches(MONEY),
+        money,
+        rects: read?.rects,
+        legacyDropped: sliver,
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
         icons:
@@ -3719,6 +3773,140 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         ringBox,
         offsets: ring === 1 ? OUTLINE_1 : ring === 2 ? OUTLINE_2 : [],
     };
+}
+
+/**
+ * The turn of `el`'s frame, in radians: every `transform` and `rotate` from
+ * `el` up to the root, summed. Two-dimensional turns only — a skew or a
+ * perspective is not a turn this sampler can undo, and none is shipped on a
+ * text frame.
+ */
+function angleOf(el: Element | null): number {
+    let angle = 0;
+    for (let at = el; at !== null && at !== document.documentElement; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        if (cs.transform !== 'none') {
+            const m = new DOMMatrixReadOnly(cs.transform);
+            angle += Math.atan2(m.b, m.a);
+        }
+        const turn = /^(-?[\d.]+)deg$/.exec(cs.rotate.trim());
+        if (turn !== null) {
+            angle += (Number(turn[1]) * Math.PI) / 180;
+        }
+    }
+    return angle;
+}
+
+/**
+ * A turned box before its turn: `getBoundingClientRect()` and
+ * `Range.getClientRects()` answer a turned box's axis-aligned bounds, W×H,
+ * and for a turn θ those are w·c + h·s by w·s + h·c — solved here for w and
+ * h, about the same centre.
+ */
+function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } {
+    const c = Math.abs(Math.cos(angle));
+    const sn = Math.abs(Math.sin(angle));
+    const det = c * c - sn * sn;
+    const w = angle === 0 ? r.width : (r.width * c - r.height * sn) / det;
+    const h = angle === 0 ? r.height : (r.height * c - r.width * sn) / det;
+    if (!(det > 0 && w > 0 && h > 0)) {
+        throw new Error(`a box turned ${((angle * 180) / Math.PI).toFixed(2)}° at ${Math.round(r.x)},${Math.round(r.y)} gives no box before its turn`);
+    }
+    return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w, h };
+}
+
+/**
+ * The box `el`'s overflow clips its content to, per axis — its padding box
+ * on an axis whose `overflow` is not `visible` — or nothing. An inline box
+ * clips nothing, whatever it says.
+ */
+function clipOf(el: Element): { x0: number; x1: number; y0: number; y1: number } | undefined {
+    const cs = getComputedStyle(el);
+    const cutsX = cs.overflowX !== 'visible';
+    const cutsY = cs.overflowY !== 'visible';
+    if ((!cutsX && !cutsY) || cs.display === 'inline' || cs.display === 'contents') {
+        return undefined;
+    }
+    const r = el.getBoundingClientRect();
+    const x0 = r.left + el.clientLeft;
+    const y0 = r.top + el.clientTop;
+    return {
+        x0: cutsX ? x0 : -Infinity,
+        x1: cutsX ? x0 + el.clientWidth : Infinity,
+        y0: cutsY ? y0 : -Infinity,
+        y1: cutsY ? y0 + el.clientHeight : Infinity,
+    };
+}
+
+/**
+ * A target's own text as the line-rect sampler reads it (D7, step 5b;
+ * `PROBE-RULES.md`, "The sampler reads text"): every non-blank text node
+ * whose nearest contrast target is this one — a nested target is read as
+ * itself — and every fragment of it on a line (`Range.getClientRects()`),
+ * each clipped like its text is: by the target's own overflow and every
+ * clipping ancestor's, and by the target's own convex `clip-path` band.
+ * No radius or border inset: a line rect holds no border and no arc. A
+ * control whose only mark is a drawn glyph (`.step`, the sheet close) is
+ * read over that glyph's box instead. When nothing is left, the reason
+ * says why — `clipped-away` (every fragment outside a clip: not on screen)
+ * or `not-rendered` (no fragment at all, as a `display: none` span) — and
+ * the runner counts every reason.
+ */
+function lineRectsOf(
+    node: HTMLElement,
+    ink: string,
+    ownBand: { x0: number; x1: number } | undefined,
+): { rects: LineRect[]; why: string } {
+    const rects: LineRect[] = [];
+    let fragments = 0;
+    const clipped = (owner: Element, r: DOMRect): Hole | undefined => {
+        let x0 = r.left;
+        let y0 = r.top;
+        let x1 = r.right;
+        let y1 = r.bottom;
+        for (let at: Element | null = owner; at !== null && at !== document.documentElement; at = at.parentElement) {
+            const c = clipOf(at);
+            if (c === undefined) continue;
+            x0 = Math.max(x0, c.x0);
+            x1 = Math.min(x1, c.x1);
+            y0 = Math.max(y0, c.y0);
+            y1 = Math.min(y1, c.y1);
+        }
+        if (ownBand !== undefined) {
+            x0 = Math.max(x0, ownBand.x0);
+            x1 = Math.min(x1, ownBand.x1);
+        }
+        return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : undefined;
+    };
+    const push = (owner: Element, r: DOMRect, lineInk: string, glyph: boolean): void => {
+        if (r.width <= 0 || r.height <= 0) return;
+        fragments += 1;
+        const cut = clipped(owner, r);
+        if (cut === undefined) return;
+        const angle = angleOf(owner);
+        const line = turnedBox(r, angle);
+        rects.push({ ...cut, cx: line.cx, cy: line.cy, rw: line.w, rh: line.h, angle, ink: lineInk, ...(glyph ? { glyph: true as const } : {}) });
+    };
+    const range = document.createRange();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || owner.closest('svg') !== null || (text.textContent ?? '').trim() === '') continue;
+        if (owner.closest(CONTRAST_TEXT) !== node) continue;
+        const cs = getComputedStyle(owner);
+        if (cs.visibility !== 'visible') continue;
+        const lineInk = owner === node ? ink : owner instanceof HTMLElement && owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) push(owner, r, lineInk, false);
+    }
+    if (fragments === 0) {
+        // No text on a line: a control drawn with a glyph alone.
+        for (const svg of node.querySelectorAll('svg')) {
+            if (svg.closest(CONTRAST_TEXT) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
+            push(svg, svg.getBoundingClientRect(), ink, true);
+        }
+    }
+    return { rects, why: fragments === 0 ? 'not-rendered' : 'clipped-away' };
 }
 
 /** No text, no drawn glyph, no generated content: nothing in the box has an ink. */
@@ -3831,20 +4019,23 @@ window.__contrastGlyphs = async (show: boolean) => {
  * the neighbouring selected tab's ground — 1.20:1 reported on a dock whose
  * DOM held nothing but cream at those coordinates.
  */
-window.__contrastBoxes = () => ({
-    nonce: preparedNonce,
-    vw: window.innerWidth,
-    vh: window.innerHeight,
-    boxes: preparedNodes
-        // Each box carries its node's index among the prepared nodes: stable
-        // DOM order, so a box the page drops does not renumber the rest in
-        // the runner's per-box dump (`scripts/contrast-dump.mjs`).
-        .map((node, i) => {
-            const target = targetFor(node);
-            return target === undefined ? undefined : { ...target, i };
-        })
-        .filter((t): t is ContrastTarget & { i: number } => t !== undefined),
-});
+window.__contrastBoxes = () => {
+    const skips: Record<string, number> = {};
+    const boxes: (ContrastTarget & { i: number })[] = [];
+    // Each box carries its node's index among the prepared nodes: stable
+    // DOM order, so a box the page drops does not renumber the rest in the
+    // runner's per-box dump (`scripts/contrast-dump.mjs`). A node that gives
+    // no box says why, and every reason is counted (step 5b: no silent drop).
+    preparedNodes.forEach((node, i) => {
+        const target = targetFor(node);
+        if (typeof target === 'string') {
+            skips[target] = (skips[target] ?? 0) + 1;
+        } else {
+            boxes.push({ ...target, i });
+        }
+    });
+    return { nonce: preparedNonce, vw: window.innerWidth, vh: window.innerHeight, boxes, skips };
+};
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -4252,7 +4443,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     const targets: ContrastTarget[] = [];
     for (const node of preparedNodes) {
         const target = targetFor(node);
-        if (target !== undefined) {
+        if (typeof target !== 'string') {
             targets.push(target);
         }
     }

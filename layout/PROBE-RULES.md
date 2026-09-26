@@ -1600,6 +1600,68 @@ each end: it must not reach any line of the strip's own text, a device
 pixel in. Phone and desk passes owe a row swept where Rural is measured.
 Proved red by `.t-rural .att-bunting { margin-top: -34px }`: 123 failures.
 
+## The sampler reads text (step 5b, D7, 2026-09-26)
+
+The pass read the worst pixel inside a target's border box, so anything the
+look painted in the box that the glyphs never cross counted as ground —
+Modern's accent underline under a heading, Rural's bunting row in `.orn`,
+a card's dashed edge — and two workarounds grew for the same mistake (the
+heading's in-flow-marker step-past, the rain scoping). Now **every contrast
+target outside the money set (`layout/moneySet.ts`) that wears no outline is
+read over its own text's line rects** (`lineRectsOf` in the probe,
+`lineRead` in the runner):
+
+- the rects `Range.getClientRects()` gives for every non-blank text node
+  whose nearest contrast target is this one (a nested target is read as
+  itself), **each against its own element's ink** — a muted name inside an
+  ink control is read against the muted;
+- clipped like the text: by the target's own overflow and every clipping
+  ancestor's, per axis, and by its own convex `clip-path` band;
+- **every pixel wholly inside a rect** — no lattice, no radius or border
+  inset (a line rect holds neither);
+- where the frame is turned (Rural's swaying tag, the swinging board), the
+  line box before its turn, from the actual angle (`angleOf`), and only the
+  pixels inside it — the fixed 8px pad is gone. A money box inside a turned
+  frame is read at the lattice points inside its own turned box, and a
+  Rural price figure the old pad erased is read now (11.37 bare, 5.31 worn);
+- a control whose only mark is a drawn glyph (`.step`, the sheet close) is
+  read over its `svg.ic`'s box;
+- **no silent drop**: a line target that yields a rect and no pixel fails
+  the job ("a target with text and no sample"), a whole-box read that finds
+  no pixel fails too, and every node that gave no box is counted by reason
+  on the pass's line (`nodes that gave no box: clipped-away, draws-nothing,
+  not-rendered, sliver`) and per job in the dump (`skips`).
+
+The heading step-past is deleted: a marker the text does not cross lies
+outside every rect. Money boxes keep the whole-box read (and outlined lines
+the ring), "a money box is never read by a weaker verdict".
+
+**What moved, on the same capture** (`LAYOUT_LEGACY=1` reads each line
+target the old way too and writes `legacy`, `at`, `bucket` into the dump;
+`private/design/workshop-2026-09-23/step5b-shots/d7-falls.txt` lists every
+fall past 0.1): 4,744 targets read over line rects; 288 rose, 3,818 stayed,
+476 fell, **none across 3:1** once the wall's card fit and the vacant line
+was lifted (before those two fixes this read is what found them, at 1.96
+and 2.73–2.95:1). The falls, bucketed by where the new worst pixel lies:
+
+| Bucket | Falls | Past 0.1 | What it is |
+|---|---|---|---|
+| lattice | 418 | 238 | inside the old band: a pixel the old 12×8 lattice stepped over |
+| ink | 28 | 28 | a nested line read against its own ink (the Shop tab's muted name, 13.09 → 5.48) |
+| inset | 27 | 16 | inside the box, in the old radius, border or 8px pad |
+| content area | 3 | 3 | past the box's top or bottom: a font's content area over a tight line box |
+| spill / clipped / dropped | 0 | 0 | — |
+
+162 line targets the old read dropped in silence are read now (the letter
+tiles' initials 132, the sheet close 20, Rural's unbuyable label 4, two
+more). Against the previous commit's dump: 6,411 identical, 929 moved; the
+money boxes that moved are the five inside a turned frame (the Rural figure
+above, 11.37 / 5.31 from none; Rural's surcharge on the wall 12.90 → 13.52
+and 12.20 → 13.52; the ticker's Rural figure 6.06 → 6.04); one old box is
+gone (a Browse tile whose letters are scrolled out of the strip, which the
+old clamp sampled as a 16px sliver of the tile's ground) and one appears
+(a chip on the 35-item plate the old sliver rule skipped).
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

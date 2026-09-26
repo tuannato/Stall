@@ -304,6 +304,13 @@ const PIXEL_CONTRAST_FLOOR = 3;
  */
 const LOOK_PSEUDO_LEVELS = 2;
 /**
+ * `LAYOUT_LEGACY=1` reads every line-read target the pre-5b way too, on the
+ * same capture, and writes the old value and — for a fall — its bucket into
+ * the dump (`legacy`, `at`, `bucket`): the measurement step 5b's commit body
+ * carries, and the way to ask it again.
+ */
+const LEGACY = process.env.LAYOUT_LEGACY === '1';
+/**
  * The contrast jobs that must have had Neo's rain at its brightest drop
  * (`a-line-on-the-ground-reads-wherever-a-drop-falls`): Neo worn, at the
  * phone and the desk, on the screens whose lines stand on the stall's own
@@ -518,7 +525,7 @@ function ringRead(blank, shown, target) {
  * included, which is the whole point: `legibleOn` proves the flat palette
  * roles, and nothing else proves what is actually painted behind a figure.
  */
-function worstContrastInBox(img, target, textColor) {
+function worstContrastInBox(img, target, textColor, { legacy = false } = {}) {
     // Browsers serialize a color-mix() result as color(srgb r g b) with
     // 0-1 floats; plain colours stay rgb(). Read both.
     let cr;
@@ -546,7 +553,22 @@ function worstContrastInBox(img, target, textColor) {
     const r = target.r ?? 0;
     // The border's own pixels are chrome, never the text's ground: a dashed
     // pill edge blended to 2.2:1 against its ink is not a reading surface.
-    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.pad ?? 0);
+    // The pad for a box inside a turned frame was a fixed 8px until step 5b
+    // (`legacyPad`, kept for the legacy read the bucketing compares
+    // against); a turned money box is now read at the lattice points inside
+    // its own turned box (`frame`, below), and dropped a Rural price figure
+    // at 17px tall no more.
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (legacy ? (target.legacyPad ?? 0) : (target.pad ?? 0));
+    const frame = legacy ? undefined : target.frame;
+    const cos = Math.cos(target.angle ?? 0);
+    const sin = Math.sin(target.angle ?? 0);
+    const inset = (target.bw ?? 0) + (target.bw ? 1 : 0) + 1;
+    const inFrame = (x, y) => {
+        if (frame === undefined) return true;
+        const dx = x + 0.5 - frame.cx;
+        const dy = y + 0.5 - frame.cy;
+        return Math.abs(dx * cos + dy * sin) <= frame.w / 2 - r - inset && Math.abs(-dx * sin + dy * cos) <= frame.h / 2 - inset;
+    };
     /*
      * Both far edges use `floor`, not `ceil` (2026-09-22). A box rarely
      * lands on whole pixels: at `y + h = 340.5` the last row Chrome paints
@@ -578,7 +600,7 @@ function worstContrastInBox(img, target, textColor) {
     const holes = target.holes ?? [];
     for (let y = y0; y <= y1; y += stepY) {
         for (let x = x0; x <= x1; x += stepX) {
-            if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h)) {
+            if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h) || !inFrame(x, y)) {
                 continue;
             }
             const i = (y * img.width + x) * img.bpp;
@@ -599,7 +621,95 @@ function worstContrastInBox(img, target, textColor) {
             }
         }
     }
-    return worst;
+    // A turned frame whose every lattice point fell outside it read nothing.
+    return worst === Infinity && frame !== undefined ? undefined : worst;
+}
+
+/**
+ * The band `worstContrastInBox` walks for a target read the way it was read
+ * before step 5b — the box less its radius, its border and its fixed
+ * transform pad — for the bucketing to ask whether a line read's worst
+ * pixel was one the old read could have seen.
+ */
+function legacyBand(img, target) {
+    const r = target.r ?? 0;
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.legacyPad ?? 0);
+    return {
+        x0: Math.max(0, Math.floor(target.x + r + bw) + 1),
+        y0: Math.max(0, Math.floor(target.y + bw) + 1),
+        x1: Math.min(img.width - 1, Math.floor(target.x + target.w - r - bw) - 1),
+        y1: Math.min(img.height - 1, Math.floor(target.y + target.h - bw) - 1),
+    };
+}
+
+/**
+ * **The line read** (D7, step 5b; `PROBE-RULES.md`, "The sampler reads
+ * text"). Every target outside the money set that wears no outline is read
+ * over its own text's line rects (`lineRectsOf` in the probe), never over
+ * its box: every pixel wholly inside a rect — no lattice, no radius or
+ * border inset, since a line rect holds no border and no arc — and, where
+ * the line's frame is turned, only the pixels inside the turned line box.
+ * Each rect is read against its own ink, so a muted name inside an ink
+ * control is read against the muted ink. Chrome on the box (`holes`) is
+ * stepped around as before. Returns the worst contrast, the pixels read,
+ * and where the worst one was.
+ */
+function lineRead(img, target) {
+    let worst = Infinity;
+    let px = 0;
+    let at;
+    const holes = target.holes ?? [];
+    for (const rect of target.rects) {
+        const [ir, ig, ib] = rgbaOf(rect.ink);
+        const inkLum = luminance(ir, ig, ib);
+        const x0 = Math.max(0, Math.ceil(rect.x));
+        const y0 = Math.max(0, Math.ceil(rect.y));
+        const x1 = Math.min(img.width - 1, Math.floor(rect.x + rect.w) - 1);
+        const y1 = Math.min(img.height - 1, Math.floor(rect.y + rect.h) - 1);
+        const turned = Math.abs(rect.angle) > 1e-9;
+        const cos = Math.cos(rect.angle);
+        const sin = Math.sin(rect.angle);
+        for (let y = y0; y <= y1; y += 1) {
+            for (let x = x0; x <= x1; x += 1) {
+                if (turned) {
+                    const dx = x + 0.5 - rect.cx;
+                    const dy = y + 0.5 - rect.cy;
+                    if (Math.abs(dx * cos + dy * sin) > rect.rw / 2 - 0.5 || Math.abs(-dx * sin + dy * cos) > rect.rh / 2 - 0.5) continue;
+                }
+                if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h)) continue;
+                const i = (y * img.width + x) * img.bpp;
+                px += 1;
+                const c = contrast(inkLum, luminance(img.data[i], img.data[i + 1], img.data[i + 2]));
+                if (c < worst) {
+                    worst = c;
+                    at = { x, y, ink: rect.ink, glyph: rect.glyph === true, ground: [img.data[i], img.data[i + 1], img.data[i + 2]] };
+                }
+            }
+        }
+    }
+    return { worst, px, at };
+}
+
+/**
+ * Where a line read's worst pixel was, against the read before step 5b on
+ * the same capture (`LAYOUT_LEGACY=1`): only asked of a fall. `ink` when the
+ * worst pixel's line wears another ink than the target's own (a nested
+ * element's colour, which the box read never compared); `lattice` when it
+ * lies inside the old band, where only the old lattice's spacing missed it;
+ * `spill` when it lies past the box's side, `content-area` past its top or
+ * bottom (a font's content area is taller than a tight line box); `inset`
+ * inside the box and outside the band — the radius, the border, the old
+ * 8px transform pad. A line cut by a clip only ever shrinks the read, so a
+ * clip causes no fall.
+ */
+function bucketOf(img, target, at) {
+    if (at === undefined) return 'dropped';
+    if (at.ink !== target.color) return 'ink';
+    const band = legacyBand(img, target);
+    if (at.x >= band.x0 && at.x <= band.x1 && at.y >= band.y0 && at.y <= band.y1) return 'lattice';
+    if (at.x < target.x || at.x >= target.x + target.w) return 'spill';
+    if (at.y < target.y || at.y >= target.y + target.h) return 'content-area';
+    return 'inset';
 }
 
 /**
@@ -1414,6 +1524,8 @@ try {
     // The least ring read per kind of outlined line (`ringRead`), printed
     // whatever the verdict.
     const ringKindsOut = new Map();
+    // The prepared nodes that gave no box, summed by reason (step 5b).
+    const skipTotals = new Map();
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1436,6 +1548,7 @@ try {
         // Jobs with the aurora worn alone and its tide held at an end
         // (`the-aurora-is-read-at-both-ends-of-its-tide`, `TIDE_SCREENS`).
         let tideJobs = 0;
+        let lineTargets = 0;
         const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1649,6 +1762,11 @@ try {
                         continue;
                     }
                     let targets = firstRead.live.boxes;
+                    // Every prepared node that gave no box, by the reason the
+                    // page gave (step 5b: no silent drop) — per job in the
+                    // dump, summed on the pass's line.
+                    record.skips = firstRead.live.skips ?? {};
+                    for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
                     // A failing box is re-shot once before it is believed:
                     // capture right after an emulated resize can raster a
                     // stale frame — measured: the live DOM held transparent
@@ -1672,18 +1790,41 @@ try {
                     const sampleStart = performance.now();
                     let retryMs = 0;
                     let retryWhy = [];
+                    /*
+                     * One target's read: a money box or a box with no line
+                     * rects whole (`worstContrastInBox`), every other target
+                     * over its line rects (`lineRead`, D7). `undefined` when
+                     * the read found no pixel — never a silent drop (step
+                     * 5b): the target is named below and the job fails.
+                     */
+                    const readOne = (image, t) => {
+                        if (t.rects === undefined) {
+                            return { worst: worstContrastInBox(image, t, t.color), px: undefined, at: undefined };
+                        }
+                        const r = lineRead(image, t);
+                        return { worst: r.px > 0 ? r.worst : undefined, px: r.px, at: r.at };
+                    };
                     for (let ti = 0; ti < targets.length; ti += 1) {
                         let t = targets[ti];
                         // An outlined line is read in its ring, below.
                         if (t.ring > 0) continue;
-                        let worst = worstContrastInBox(img, t, t.color);
+                        let read = readOne(img, t);
+                        let worst = read.worst;
+                        const kind = t.rects === undefined ? 'box' : 'line';
                         if (worst === undefined) {
                             dropped += 1;
-                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null });
+                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null, read: kind });
+                            dim.push(
+                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                    (kind === 'line'
+                                        ? `has ${t.rects.length} line rect(s) on screen and no pixel wholly inside one — a target with text and no sample`
+                                        : `is ${t.money ? 'money' : 'a box'} the whole-box read found no pixel of — a target with no sample`),
+                            );
                             continue;
                         }
                         boxes += 1;
                         sampled += 1;
+                        if (kind === 'line') lineTargets += 1;
                         let firstWorst;
                         if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
                             const retryStart = performance.now();
@@ -1699,10 +1840,11 @@ try {
                                 t = targets[ti];
                             }
                             retried = true;
-                            worst = worstContrastInBox(img, t, t.color);
+                            read = readOne(img, t);
+                            worst = read.worst;
                             retryMs += performance.now() - retryStart;
                         }
-                        dumpBoxes.push({
+                        const entry = {
                             key: boxKey(job, t),
                             job: record.key,
                             i: t.i,
@@ -1713,13 +1855,33 @@ try {
                             h: t.h,
                             color: t.color,
                             worst: dumpValue(worst),
+                            read: kind,
                             ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
-                        });
+                        };
+                        if (kind === 'line') {
+                            entry.rects = t.rects.length;
+                            entry.px = read.px;
+                            if (LEGACY) {
+                                // The read before step 5b on this same
+                                // capture, and — for a fall — where the new
+                                // read's worst pixel lies against it.
+                                const legacy = t.legacyDropped ? undefined : worstContrastInBox(img, t, t.color, { legacy: true });
+                                entry.legacy = dumpValue(legacy);
+                                entry.at = read.at === undefined ? null : [read.at.x, read.at.y];
+                                if (legacy !== undefined && worst !== undefined && worst < legacy) {
+                                    entry.bucket = bucketOf(img, t, read.at);
+                                }
+                            }
+                        }
+                        dumpBoxes.push(entry);
                         if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                             dim.push(
                                 `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
                                     `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
-                                    (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
+                                    (kind === 'line' && read.at !== undefined
+                                        ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
+                                        : '') +
+                                    (process.env.LAYOUT_WHY && kind === 'box' ? `\n        ${globalThis.__why ?? ''}` : ''),
                             );
                         }
                     }
@@ -2045,6 +2207,7 @@ try {
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
                         `${lookPseudoJobs} job(s) with look pseudos hidden and compared (${lookPseudoPixels} protected pixels), ` +
                         `the aurora's tide held at an end on ${tideJobs}, ` +
+                        `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );
@@ -2080,6 +2243,19 @@ try {
                             ` (${k.ring}px, ${k.n})`,
                     )
                     .join('; '),
+        );
+    }
+    // Every prepared node that gave no box, by the page's reason, whatever
+    // the verdict (step 5b: no silent drop): a picture tile, a box that
+    // draws nothing, a whole-box read cut to a sliver, text scrolled wholly
+    // behind a clip, text not rendered at this width.
+    if (skipTotals.size > 0) {
+        console.log(
+            `  nodes that gave no box: ` +
+                [...skipTotals]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([why, n]) => `${why} ${n}`)
+                    .join(', '),
         );
     }
     // Printed whatever the verdict, a pass that threw included: a slow red
