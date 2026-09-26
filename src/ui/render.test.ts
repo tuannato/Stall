@@ -17826,6 +17826,48 @@ describe('the-yard-is-as-wide-as-the-board', () => {
     });
 });
 
+/*
+ * Grid horizon v6, 2026-09-26. The owner approved the moon on one condition:
+ * it stays clear of the seller's name at phone width. It is a background
+ * layer, not a box, so no probe rule can compare it with the name; what keeps
+ * it clear is that it stands in the gutter `has-pin` reserves on both sides of
+ * the name, and is not drawn where no pin reserves one. Measured before this
+ * was written: with the mock's `left 4%` a long name ran through the moon on
+ * every failure screen at 390 and on the wall at 1280. Read statically, like
+ * the yard's width above: three numbers in one sheet that must agree.
+ */
+describe('the-moon-stands-in-the-pins-gutter', () => {
+    it('ends before the name can begin, and is not drawn without a pin', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const decl = (selector: string, prop: string): string | undefined => {
+            let found: string | undefined;
+            for (const match of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+                const selectors = match[1].split(',').map((one) => one.trim().replace(/\s+/g, ' '));
+                if (!selectors.includes(selector)) continue;
+                const hit = new RegExp(`(?:^|;)\\s*${prop}:\\s*([^;]+)`).exec(match[2]);
+                if (hit?.[1] !== undefined) found = hit[1].trim();
+            }
+            return found;
+        };
+        // Lengths written as `calc(Npx * var(--s-decor-scale, 1))`: a pin is
+        // offered only where the scale is 1 (the wall, at 2, has none).
+        const px = (value: string | undefined): number => {
+            const n = /^calc\(\s*([\d.]+)px \* var\(--s-decor-scale, 1\)\s*\)$/.exec(value ?? '')?.[1];
+            expect(n, `"${value}" is a length this test can read`).toBeDefined();
+            return Number(n);
+        };
+        const sign = '.stall.att-horizon .stall-sign';
+        const gutter = decl('.stall-sign.has-pin .stall-name', 'padding-inline');
+        expect(gutter).toBe('40px');
+        const reach = px(decl(sign, '--att-moon-x')) + px(decl(sign, '--att-moon'));
+        expect(reach, 'the moon ends inside the gutter').toBeLessThanOrEqual(40);
+        // The layer is placed by that offset, not by a percentage of the sign.
+        expect(decl(sign, 'background-position')).toContain('left var(--att-moon-x) top');
+        // And where no pin reserves the gutter, it is not drawn at all.
+        expect(decl('.stall.att-horizon .stall-sign:not(.has-pin)', '--att-moon')).toBe('0px');
+    });
+});
+
 describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
     /**
      * Q8 of the 2026-09-20 board: the deck is painted by the real renderer —

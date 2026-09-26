@@ -104,6 +104,19 @@
 
 .stall.shop-window .att-beetle {
     grid-row: 2;
+    /*
+     * The yard is the one decoration this screen does not double. It is a
+     * row of the wall's grid, so its height comes out of the list's: at
+     * `--s-decor-scale: 2` the strip is 152px, and the probe measured the
+     * cost (2026-09-26, Yard beetle v3) — at 1920x1080 a quote's figure on
+     * the 35-item payment's list cut to 37 of its 56px and the shop's code
+     * to 283 of its 360px, at 768x1024 the payment's Back to 3 of its 64px.
+     * At one pixel of the yard to one CSS pixel the strip is the 76px it is
+     * everywhere else and every wall pass is green, so `--att-yu` is pinned
+     * here and the art stays drawn in it: the beetle lands on the same
+     * petal at either size.
+     */
+    --att-yu: 1px;
 }
 
 .stall.shop-window .stall-body {
