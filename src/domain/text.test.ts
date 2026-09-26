@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { isLegibleText } from './text';
+import { isLegibleText, shortTokenId } from './text';
 
 describe('a-stored-description-holds-no-newline', () => {
     it('needs no newline clause, because no stored description can hold one', () => {
@@ -80,5 +80,27 @@ describe('spacing-marks-are-language-and-never-refused', () => {
         expect(isLegibleText('বাংলা')).toBe(true);
         expect(isLegibleText('Cà phê rang xay')).toBe(true);
         expect(isLegibleText('ि'.repeat(8))).toBe(true);
+    });
+});
+
+describe('short-token-id-is-six-and-four', () => {
+    const id = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345wxyz'.replace('wxyz', '9e7d');
+
+    it('is the first six and the last four hex characters around an ellipsis', () => {
+        expect(id).toHaveLength(64);
+        expect(shortTokenId(id)).toBe('abcdef…9e7d');
+        expect([...shortTokenId(id)]).toHaveLength(11);
+    });
+
+    it('tells apart two ids that share a head or a tail', () => {
+        const sameHead = `${id.slice(0, 60)}0000`;
+        const sameTail = `000000${id.slice(6)}`;
+        expect(shortTokenId(sameHead)).not.toBe(shortTokenId(id));
+        expect(shortTokenId(sameTail)).not.toBe(shortTokenId(id));
+    });
+
+    it('shows a string no longer than the glance whole', () => {
+        expect(shortTokenId('abcdef')).toBe('abcdef');
+        expect(shortTokenId('abcdef01234567')).toBe('abcdef01234567');
     });
 });

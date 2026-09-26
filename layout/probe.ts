@@ -2165,6 +2165,12 @@ const CONTRAST_TEXT = [
     '.tool-t',
     '.tool-lede',
     '.tstate',
+    // The row's glance at its token under the name (2026-09-26): the ticker
+    // and the short id, muted, on the same card ground as `.tstate`. Its one
+    // screen, `studio-items`, is geometry only until step 5b (see
+    // `GEOMETRY_ONLY_SCREENS`), so this reads nothing on a shipped run
+    // today; a trial run with the screen sampled read 5.58:1 at the least.
+    '.tid',
     '.wchip',
     /*
      * The shop tile's own letters (2026-09-20). `.event-sum .event-ic` was

@@ -4430,6 +4430,26 @@ textarea.share-embed {
     gap: 2px;
 }
 
+/*
+ * The row's glance at its token (owner, 2026-09-25): the ticker, then the id's
+ * first six and last four characters in the mono face, muted, so two tokens of
+ * one name or one ticker read apart. At 12px — over the 11px floor.
+ */
+.tid {
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--s-muted);
+    overflow-wrap: anywhere;
+}
+
+.tid-hex {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* An isolate, left to right: a right-to-left ticker before ` · ` must not
+       pull the id's leading digits over to its side (the critic, 2026-09-26). */
+    unicode-bidi: isolate;
+    direction: ltr;
+}
+
 .tstate {
     display: flex;
     flex-wrap: wrap;

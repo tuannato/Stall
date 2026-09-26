@@ -2888,6 +2888,13 @@ door's rounded border arc the glyphs never touch. Pictures:
 because 5b has its own critic-reviewed plan with clipping and silent-drop
 rules, and a hurried partial version inside this batch would be a weaker
 guard.
+The `studio-items` fixture landed on 2026-09-26 with the Studio row's
+token glance (`.tid`, the ticker and the short id), in
+`GEOMETRY_ONLY_SCREENS` for the link alone: sampled in a trial run, only
+the guide link went red (1.00–1.08:1 at 1280 on Modern, Rural and the
+skeleton, where it wraps), the `.tid` lines read 5.58:1 at the least, and
+Rural worn's `.tool-lede` read 5.66:1 after the 2026-09-26 radius cap. 5b
+takes the screen off that list.
 Under the rain the first-stall link inherits its line's outline and is
 read in its ring, and the muted lift it wore for one round is gone.
 
