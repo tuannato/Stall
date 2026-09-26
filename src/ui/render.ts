@@ -68,7 +68,7 @@ import { shortAddress,
     payLandingUrl,
     stallPath,
 } from '../domain/route';
-import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints,} from '../domain/text';
+import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints, shortTokenId } from '../domain/text';
 import { glyph, glyphLabel, SVG_NS } from './glyphs';
 import { armDoorTyping } from './doorTyping';
 import { isWithheldToken } from '../domain/withheld';
@@ -3622,7 +3622,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         }
         // Screened like every other genesis string: this label is a minter's
         // free text in a control the seller reads before signing.
-        const option = el('option', '', tokenName(known, id));
+        const option = el('option', '', pickerLabel(known, id));
         option.value = id;
         picker.append(option);
     };
@@ -4097,7 +4097,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * must not be rebuilt under them.
          */
         for (const option of picker.options) {
-            const label = tokenName(known, option.value);
+            const label = pickerLabel(known, option.value);
             if (option.textContent !== label) {
                 option.textContent = label;
             }
@@ -9499,6 +9499,10 @@ function paintStudio(
         row.append(itemIcon(id, title, undefined, undefined, !isWithheldToken(id, view.tokens.get(id))));
         const words = el('div', 'tbody');
         words.append(el('div', 'nm', title));
+        const glance = tokenIdLine(view.tokens, id);
+        if (glance !== undefined) {
+            words.append(glance);
+        }
         words.append(itemState(view, id));
         row.append(words);
         const acts = el('div', 'acts2');
@@ -11058,6 +11062,46 @@ export function tokenTicker(tokens: StallView['tokens'], tokenId: string): strin
         return undefined;
     }
     return cut;
+}
+
+/**
+ * The Studio item row's second line (owner, 2026-09-25): the screened ticker
+ * and a glance at the id, so two tokens that share a name or a ticker can be
+ * told apart. The id alone when there is no ticker; nothing at all when the
+ * name already fell back to the id, which is then the title. The full id is
+ * the line's `title` — a citation, never a destination; nothing here is a
+ * control, and every control on the row keeps carrying the full id.
+ */
+function tokenIdLine(tokens: StallView['tokens'], tokenId: string): HTMLElement | undefined {
+    if (tokenName(tokens, tokenId) === tokenId) {
+        return undefined;
+    }
+    const line = el('div', 'tid');
+    line.setAttribute('data-role', 'studio-item-id');
+    line.setAttribute('title', tokenId);
+    const ticker = tokenTicker(tokens, tokenId);
+    if (ticker !== undefined) {
+        line.append(ticker, ' · ');
+    }
+    const hex = el('span', 'tid-hex', shortTokenId(tokenId));
+    hex.setAttribute('translate', 'no');
+    line.append(hex);
+    return line;
+}
+
+/**
+ * A describe picker option's label: `Name (TICKER) · abcdef…wxyz`, or
+ * `Name · abcdef…wxyz` with no ticker — both screened through `tokenName` and
+ * `tokenTicker`. A name that fell back to the id keeps the id alone. The
+ * option's value stays the full id.
+ */
+function pickerLabel(tokens: StallView['tokens'], tokenId: string): string {
+    const name = tokenName(tokens, tokenId);
+    if (name === tokenId) {
+        return name;
+    }
+    const ticker = tokenTicker(tokens, tokenId);
+    return `${name}${ticker !== undefined ? ` (${ticker})` : ''} · ${shortTokenId(tokenId)}`;
 }
 
 function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {

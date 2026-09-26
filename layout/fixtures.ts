@@ -35,6 +35,11 @@ export const GROUP = 'aa'.repeat(32);
 /** The long-figure rows: one tier-2 card, one tier-3 card (see priceTier). */
 export const LONG = '33'.repeat(32);
 export const LONGER = '44'.repeat(32);
+/** The Studio items card's glance line: two tokens of one name and ticker, one with none, one unread. */
+export const STUDIO_TWIN_A = `${'a7'.repeat(30)}01b2`;
+export const STUDIO_TWIN_B = `${'a7'.repeat(30)}9c4e`;
+export const STUDIO_NO_TICKER = '77'.repeat(32);
+export const STUDIO_NO_GENESIS = '88'.repeat(32);
 /**
  * A token the seller **quoted** and never listed. The pay rail is not gated on
  * a listing, so a fixture whose every quote also has an offer would measure
@@ -615,6 +620,31 @@ export const SCREENS: Record<string, StallView> = {
     }),
     /* The other two panels of the shell. One panel in the DOM at a time. */
     studio: base({ fetch: { kind: 'empty' }, panel: 'studio' }),
+    /*
+     * The items card with a row of every shape the glance line takes (owner,
+     * 2026-09-25): two tokens of one name and one ticker told apart by their
+     * short ids, one with no ticker (the short id alone), an NFT, and one
+     * whose genesis this page never read (no id line — the title is the id).
+     * The rows' second line is measured for spills, covers and cuts at every
+     * width; the card's hint and its guide link paint only here.
+     */
+    'studio-items': base({
+        fetch: { kind: 'empty' },
+        panel: 'studio',
+        tokens: new Map([
+            ...tokens,
+            [STUDIO_TWIN_A, { ...meta(STUDIO_TWIN_A, 'Honey jar', 'SLP_TOKEN_TYPE_FUNGIBLE'), ticker: 'HONEY' }],
+            [STUDIO_TWIN_B, { ...meta(STUDIO_TWIN_B, 'Honey jar', 'SLP_TOKEN_TYPE_FUNGIBLE'), ticker: 'HONEY' }],
+            [STUDIO_NO_TICKER, { ...meta(STUDIO_NO_TICKER, 'Beeswax candle', 'SLP_TOKEN_TYPE_FUNGIBLE'), ticker: '' }],
+        ]),
+        descriptions: new Map([
+            [STUDIO_TWIN_A, 'A jar from the spring flowers'],
+            [STUDIO_TWIN_B, 'A jar from the summer lime trees'],
+            [STUDIO_NO_TICKER, 'Hand-dipped, one hour of burning'],
+            [NFT, 'One of one'],
+            [STUDIO_NO_GENESIS, 'Words on a token this page never read'],
+        ]),
+    }),
     /*
      * Both lists at once, because they are two different surfaces: the ring on
      * the page clock and the walk on the chain's, each with a row whose detail
@@ -1401,6 +1431,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // panels paint no offer cards, and the name-stress screens exist for the
     // sign and the bar, not for decoration interactions.
     'studio',
+    'studio-items',
     'activity',
     'hostile-name',
     // A row name wider than the row: the marquee's name path, geometry only.
@@ -1533,6 +1564,18 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // row, the face, its fold, the wall's Browse, the overlay card and the
     // ticker — `[data-role="unbuyable"]` in `CONTRAST_TEXT`.
     'shop-window-cycle-unbuyable',
+    /*
+     * The Studio items card with its glance lines (2026-09-26). Measured
+     * before it was listed: every `.tid` line read 5.58:1 or better on
+     * every look, bare and worn, at 390 and 1280 — but the card's hint
+     * paints its guide link here and nowhere else sampled, and at 1280 on
+     * Modern, Rural and the skeleton that link wraps onto a second line, and
+     * a wrapped inline target is read as one box (1.00–1.08:1 over its union,
+     * PROBE-RULES "a wrapped inline target"; step 5b's fix). Not this
+     * feature's defect, and no fixture is bent around it: geometry only
+     * until 5b reads a wrapped target line by line.
+     */
+    'studio-items',
 ]);
 
 /**

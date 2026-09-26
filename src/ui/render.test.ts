@@ -146,7 +146,7 @@ import {
     payECashPublishUrl,
     publishBip21,
 } from '../domain/cashtab';
-import { TOKEN_NAME_MAX_CHARS } from '../domain/text';
+import { shortTokenId, TOKEN_NAME_MAX_CHARS } from '../domain/text';
 import { broadcastCards, broadcastFigure, broadcastRail, broadcastTurns } from './broadcast';
 import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import { selectionSats as selectionSatsOf } from '../domain/selection';
@@ -1036,6 +1036,117 @@ describe('the-studio-is-three-cards-and-a-preference', () => {
     });
 });
 
+describe('a-studio-item-names-its-ticker-and-short-id', () => {
+    /*
+     * The owner, 2026-09-25: a list of names alone cannot tell apart two
+     * tokens that share a name or a ticker. Under the name, one line: the
+     * screened ticker and a glance at the id — the id alone with no ticker,
+     * and no line at all where the name already fell back to the id.
+     */
+    const TWIN_A = 'a1'.repeat(30) + 'aaaa';
+    const TWIN_B = 'b2'.repeat(30) + 'bbbb';
+    const PLAIN = 'c3'.repeat(32);
+    const NFT = 'd4'.repeat(32);
+    const BARE = 'e5'.repeat(32);
+    const twin = (tokenId: string): TokenMeta => ({ tokenId, name: 'Honey', ticker: 'HNY', decimals: 0 });
+    const tokens = new Map<string, TokenMeta>([
+        [TWIN_A, twin(TWIN_A)],
+        [TWIN_B, twin(TWIN_B)],
+        [PLAIN, { tokenId: PLAIN, name: 'Candle', ticker: '', decimals: 0 }],
+        [NFT, {
+            tokenId: NFT,
+            name: 'Card no. 7',
+            ticker: 'CARD',
+            decimals: 0,
+            tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_NFT1_CHILD' },
+        }],
+    ]);
+    const rowOf = (root: HTMLElement, id: string) =>
+        root.querySelector(`[data-role="studio-item"][data-token-id="${id}"]`) as HTMLElement;
+    const idLine = (root: HTMLElement, id: string) =>
+        rowOf(root, id).querySelector('[data-role="studio-item-id"]');
+
+    it('tells two tokens of one name and one ticker apart by their short ids', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                descriptions: new Map([TWIN_A, TWIN_B, PLAIN, NFT, BARE].map((id) => [id, 'Words'])),
+                tokens,
+                panel: 'studio',
+            }),
+        );
+        const a = idLine(root, TWIN_A);
+        const b = idLine(root, TWIN_B);
+        expect(a?.textContent).toBe(`HNY · ${shortTokenId(TWIN_A)}`);
+        expect(b?.textContent).toBe(`HNY · ${shortTokenId(TWIN_B)}`);
+        expect(a?.textContent).not.toBe(b?.textContent);
+        expect(a?.classList.contains('tid')).toBe(true);
+        // The short id is its own span, never translated; the full id is a
+        // citation in its title, not a destination.
+        const hex = a?.querySelector('[translate="no"]');
+        expect(hex?.textContent).toBe(shortTokenId(TWIN_A));
+        expect(a?.getAttribute('title')).toBe(TWIN_A);
+        expect(a?.querySelector('a, button')).toBeNull();
+        // It sits under the name, inside the row's words.
+        expect(a?.previousElementSibling?.classList.contains('nm')).toBe(true);
+        // NFTs count too.
+        expect(idLine(root, NFT)?.textContent).toBe(`CARD · ${shortTokenId(NFT)}`);
+    });
+
+    it('shows the short id alone for a token with no ticker', () => {
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, descriptions: new Map([[PLAIN, 'Words']]), tokens, panel: 'studio' }),
+        );
+        expect(idLine(root, PLAIN)?.textContent).toBe(shortTokenId(PLAIN));
+    });
+
+    it('prints no id line for a token whose genesis this page never read', () => {
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, descriptions: new Map([[BARE, 'Words']]), tokens, panel: 'studio' }),
+        );
+        expect(rowOf(root, BARE).querySelector('.nm')?.textContent).toBe(BARE);
+        expect(idLine(root, BARE)).toBeNull();
+    });
+
+    it('never paints a ticker the screen refuses', () => {
+        const hostile = new Map(tokens);
+        hostile.set(PLAIN, { tokenId: PLAIN, name: 'Candle', ticker: 'X\u202eY', decimals: 0 });
+        const { root } = paint(
+            idlePubkey({ fetch: { kind: 'empty' }, descriptions: new Map([[PLAIN, 'Words']]), tokens: hostile, panel: 'studio' }),
+        );
+        expect(idLine(root, PLAIN)?.textContent).toBe(shortTokenId(PLAIN));
+    });
+});
+
+describe('the-describe-picker-labels-carry-ticker-and-short-id', () => {
+    const TWIN_A = 'a1'.repeat(30) + 'aaaa';
+    const TWIN_B = 'b2'.repeat(30) + 'bbbb';
+    const PLAIN = 'c3'.repeat(32);
+    const BARE = 'e5'.repeat(32);
+    it('labels each option Name (TICKER) · short id, keeps the full id as the value', () => {
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                overlay: { kind: 'describe' },
+                descriptions: new Map([TWIN_A, TWIN_B, PLAIN, BARE].map((id) => [id, 'Words'])),
+                tokens: new Map<string, TokenMeta>([
+                    [TWIN_A, { tokenId: TWIN_A, name: 'Honey', ticker: 'HNY', decimals: 0 }],
+                    [TWIN_B, { tokenId: TWIN_B, name: 'Honey', ticker: 'HNY', decimals: 0 }],
+                    [PLAIN, { tokenId: PLAIN, name: 'Candle', ticker: '', decimals: 0 }],
+                ]),
+            }),
+        );
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        const label = (id: string) => [...picker.options].find((o) => o.value === id)?.textContent;
+        expect(label(TWIN_A)).toBe(`Honey (HNY) · ${shortTokenId(TWIN_A)}`);
+        expect(label(TWIN_B)).toBe(`Honey (HNY) · ${shortTokenId(TWIN_B)}`);
+        expect(label(PLAIN)).toBe(`Candle · ${shortTokenId(PLAIN)}`);
+        // A name that fell back to the id keeps its current label.
+        expect(label(BARE)).toBe(BARE);
+        expect([...picker.options].map((o) => o.value).sort()).toEqual([BARE, PLAIN, TWIN_A, TWIN_B].sort());
+    });
+});
+
 describe('the-items-card-lists-the-describe-pickers-set', () => {
     const QUOTED_TOKEN = '33'.repeat(32);
     /**
@@ -1132,7 +1243,11 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         );
         const card = root.querySelector('[data-role="studio-card-items"]') as HTMLElement;
         expect([...card.querySelectorAll('[data-role="studio-item"]')]).toHaveLength(1);
-        expect(card.textContent).not.toMatch(/\d/);
+        // The row's short token id is hex and names no count; everything
+        // else on the card carries no digit.
+        const counted = card.cloneNode(true) as HTMLElement;
+        counted.querySelectorAll('[data-role="studio-item-id"]').forEach((line) => line.remove());
+        expect(counted.textContent).not.toMatch(/\d/);
         expect(card.querySelector('[data-role="studio-items-hint"]')?.textContent).toContain(copy.STUDIO_ITEMS_HINT);
     });
 
@@ -12959,7 +13074,7 @@ describe('a-pasted-token-id-joins-the-picker', () => {
         expect([...picker.options].map((o) => o.value)).toContain(PASTED);
         expect(picker.value).toBe(PASTED);
         expect([...picker.options].find((o) => o.value === PASTED)?.textContent).toBe(
-            'Sticker pack',
+            `Sticker pack (STK) · ${shortTokenId(PASTED)}`,
         );
     });
 
@@ -13026,7 +13141,7 @@ describe('a-picker-option-takes-the-name-the-sheet-learned', () => {
 
         expect(h.onLookupToken).toHaveBeenCalledWith(DESCRIBED);
         expect(option()?.textContent, 'the name the lookup answered with').toBe(
-            'Beeswax Wrap',
+            `Beeswax Wrap (BWX) · ${shortTokenId(DESCRIBED)}`,
         );
         // The same answer's other half, which was never the broken one.
         expect(describeField(root, 'describe-price-why').textContent).toBe(

@@ -69,3 +69,15 @@ export const TOKEN_NAME_MAX_CHARS = 64;
 export function cutAtCodePoints(text: string, max: number): string {
     return [...text].slice(0, max).join('');
 }
+
+/**
+ * A token id at glance length: the first six and the last four hex
+ * characters around an ellipsis, the shape `shortStallToken` gives a route
+ * token. It tells apart two tokens that share a name or a ticker (owner,
+ * 2026-09-25). Display only — every control keeps carrying the full id, and
+ * nothing routes on, compares or looks up by this string. A string no longer
+ * than the glance is shown whole.
+ */
+export function shortTokenId(tokenId: string): string {
+    return tokenId.length <= 14 ? tokenId : `${tokenId.slice(0, 6)}…${tokenId.slice(-4)}`;
+}
