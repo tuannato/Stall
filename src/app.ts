@@ -548,6 +548,15 @@ export function boot(
     /** The feeds are being asked for the open sheet; painted as "asking", never as no answer. */
     let payRateAsking = false;
     /**
+     * The session of a sheet's own ask — the valve's or the refresh
+     * control's — that was still out when that sheet handed itself back
+     * (`PayShown.asking`): `payRateAsking` stands for it on the sheet this
+     * app paints in its place, so that sheet sends no second ask while it is
+     * out, and its answer is painted here when it lands, since the sheet
+     * that asked is gone (`sheetAskLanded`; CRITIC-CARRYOVER-10 item 5).
+     */
+    let payAskCarried: number | undefined;
+    /**
      * Which open of the pay sheet an in-flight rate read belongs to (since
      * 2026-09-09). `readPayRate` wrote the view before any guard, so a sheet
      * closed and reopened within the feeds' deadline had two reads in flight
@@ -1579,7 +1588,15 @@ export function boot(
             onOpenPay: (tokenId) => {
                 onOpenPay(tokenId);
             },
-            onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onPayRate: (timeoutMs) => {
+                // The session it is asked in, so an answer whose sheet
+                // handed itself back while it was out is painted here
+                // (`sheetAskLanded`).
+                const session = paySession;
+                return readPayRate(timeoutMs).finally(() => {
+                    sheetAskLanded(session);
+                });
+            },
             onPayRecords: () => recordsNow(),
             onPayRecordMoved: (tokenId, pressed, shown) => {
                 onPayRecordMoved(tokenId, pressed, shown);
@@ -2617,6 +2634,13 @@ export function boot(
         if (shown?.changedAtMs !== undefined && (payChangedAt === undefined || shown.changedAtMs > payChangedAt)) {
             payChangedAt = shown.changedAtMs;
         }
+        // The sheet's own ask still out: the sheet painted in its place says
+        // "asking" and sends no second one; its answer is painted here
+        // (`sheetAskLanded`; CRITIC-CARRYOVER-10 item 5).
+        if (shown?.asking === true) {
+            payRateAsking = true;
+            payAskCarried = paySession;
+        }
         // The rate this paint composes at (the view's own rule: never one
         // read for another unit), against the rate the sheet showed.
         const painting = rateForAnotherUnit() ? undefined : payRate?.rate;
@@ -2665,6 +2689,43 @@ export function boot(
             }
             paint();
         })();
+    };
+
+    /**
+     * A sheet's own ask landed (`onPayRate`). When that sheet had handed
+     * itself back while the ask was out (`payAskCarried`), the sheet on
+     * screen is this app's and was painted saying "asking": the flag comes
+     * off and the answer — `readPayRate` has written it — is painted the way
+     * the open's own tail paints one, a records move since the last paint
+     * handed back instead (`sheetOutOfStep`). A figure it puts on screen at
+     * another rate than the one painted is a change with its own grace. An
+     * ask a later one of this app's superseded owns nothing: that one's
+     * tail clears the flag (CRITIC-CARRYOVER-10 item 5).
+     */
+    const sheetAskLanded = (session: number): void => {
+        if (payAskCarried === undefined || payAskCarried !== session) {
+            return;
+        }
+        payAskCarried = undefined;
+        if (session !== paySession) {
+            return;
+        }
+        payRateAsking = false;
+        const over = state.view.overlay;
+        const key = payOverlayKey(over);
+        if (stopped || key === undefined) {
+            return;
+        }
+        payRateLanded();
+        if (sheetOutOfStep()) {
+            onPayRecordMoved(over.kind === 'pay' ? over.tokenId : undefined, false);
+            return;
+        }
+        if ((rateForAnotherUnit() ? undefined : payRate?.rate) !== payPaintedRate) {
+            payChangedAt = performance.now();
+            payChangedFor = key;
+        }
+        paint();
     };
 
     /**

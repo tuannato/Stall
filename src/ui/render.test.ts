@@ -118,6 +118,7 @@ import { ADDR_COPIED_MS,
     PAY_PILL_CHARS,
     PAY_APART_PILL_CHARS,
     PAY_QR_NARROWEST_PX,
+    type PayShown,
 } from './render';
 import {
     MARQUEE_HOLD_MS,
@@ -11535,6 +11536,144 @@ describe('the-valves-own-ask-counts-as-asking', () => {
                 );
                 open.mockRestore();
                 expect(h.onPayRecordMoved, 'all in place').not.toHaveBeenCalled();
+            });
+        }
+    }
+});
+
+describe('one-ask-at-a-time-holds-across-a-hand-back', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 5 (the critic's `r10`); the app's half is in
+     * app.live.test.ts under the same name. One ask at a time held per
+     * sheet: a Pay press over an aged rate sent the valve's ask, the next
+     * press found the seller's record moved and handed the sheet back, and
+     * the sheet painted in its place showed the refresh control — a press on
+     * it sent a second ask while the first was out. Now the hand-back says
+     * the sheet's own ask is out (`PayShown.asking`), and a sheet painted
+     * with the app's "asking" (`payRateAsking`) hides that control and sends
+     * nothing from either press. The fake app here paints the sheet again as
+     * the real one does: from the records as they stand, "asking" when the
+     * hand-back said so.
+     */
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+    const USD_600 = { code: 'usd', exponent: 2, amount: 600n } as TokenPrice;
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: the sheet painted after the hand-back sends no second ask while the valve's is out`, () => {
+            const root = mountedRoot();
+            const records = {
+                prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+                known: true,
+                complete: true,
+                decided: new Set<string>([TOKEN_ID]),
+            };
+            const view = payView({
+                overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n]]),
+                payRate: aged,
+            });
+            const onPayRecordMoved = vi.fn((_tokenId: string | undefined, _pressed: boolean, shown?: PayShown) => {
+                renderStall(
+                    root,
+                    { ...view, prices: records.prices, payRateAsking: shown?.asking === true },
+                    h,
+                );
+            });
+            const h = {
+                ...handlers(),
+                onPayRecords: () => records,
+                onPayRecordMoved,
+                onPayFigureChanged: vi.fn(),
+                onPayWalletOpened: vi.fn(),
+                // The valve's ask stays out for the whole test.
+                onPayRate: vi.fn(() => new Promise<undefined>(() => undefined)),
+            };
+            renderStall(root, view, h);
+            const press = (role: string): void => {
+                (root.querySelector(`[data-role="${kind}"] [data-role="${role}"]`) as HTMLElement).dispatchEvent(
+                    new MouseEvent('click', { bubbles: true, cancelable: true }),
+                );
+            };
+            const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+            press('pay-cashtab');
+            expect(h.onPayRate, 'the valve asks').toHaveBeenCalledTimes(1);
+            // The seller's record moves; the next press finds it and hands the sheet back.
+            records.prices = new Map([[TOKEN_ID, USD_600]]);
+            press('pay-cashtab');
+            expect(onPayRecordMoved, 'handed back').toHaveBeenCalledTimes(1);
+            expect(onPayRecordMoved.mock.calls[0]![2], 'saying its ask is out').toEqual(
+                expect.objectContaining({ asking: true }),
+            );
+            const refreshControl = root.querySelector(`[data-role="${kind}"] [data-role="pay-refresh"]`) as HTMLElement;
+            expect(refreshControl.closest('[hidden]'), 'the refresh control is hidden on the new sheet').not.toBeNull();
+            press('pay-refresh');
+            press('pay-cashtab');
+            expect(h.onPayRate, 'one ask, whichever sheet is on screen').toHaveBeenCalledTimes(1);
+            expect(open, 'nothing opened over the aged rate').not.toHaveBeenCalled();
+            open.mockRestore();
+        });
+    }
+});
+
+describe('an-ask-that-rejects-clears-its-flag', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 6. The valve's and the refresh control's flags
+     * came off after the `await`, so an `onPayRate` that rejected left the
+     * sheet asking for good: the refresh control hidden, every Pay press
+     * over the aged rate sending nothing, and nothing said. Now each flag
+     * comes off in a `finally`, and a rejection is a feed that did not
+     * answer: the sheet says so, the refresh control is back, and the next
+     * press asks again. `readPayRate` does not reject today.
+     */
+    const aged = { rate: scaleRate(0.00002)!, atMs: Date.now() - PAY_RATE_MAX_AGE_MS - 10_000 };
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        for (const road of ['valve', 'refresh'] as const) {
+            it(`${kind}, the ${road}: a rejected ask is no answer, and the next press asks again`, async () => {
+                const root = mountedRoot();
+                const records = {
+                    prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+                    known: true,
+                    complete: true,
+                    decided: new Set<string>([TOKEN_ID]),
+                };
+                const h = {
+                    ...handlers(),
+                    onPayRecords: () => records,
+                    onPayRecordMoved: vi.fn(),
+                    onPayFigureChanged: vi.fn(),
+                    onPayWalletOpened: vi.fn(),
+                    onPayRate: vi.fn(() => Promise.reject(new Error('the feed threw'))),
+                };
+                renderStall(
+                    root,
+                    payView({
+                        overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                        selectionOpen: true,
+                        selection: new Map([[TOKEN_ID, 1n]]),
+                        payRate: aged,
+                    }),
+                    h,
+                );
+                const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+                const control = sheet.querySelector(`[data-role="${road === 'valve' ? 'pay-cashtab' : 'pay-refresh'}"]`) as HTMLElement;
+                const refreshControl = sheet.querySelector('[data-role="pay-refresh"]') as HTMLElement;
+                const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+                control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                expect(h.onPayRate).toHaveBeenCalledTimes(1);
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(refreshControl.closest('[hidden]'), 'the refresh control is back').toBeNull();
+                expect(sheet.textContent, 'no answer, said on the card').toContain(copy.PAY_RATE_WHY_TEXT['no-answer']);
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'and on the valve').toBe(
+                    copy.PAY_RATE_UNAVAILABLE_NO_PAY,
+                );
+                expect(sheet.querySelector('[data-role="pay-cashtab"]'), 'no Pay without a figure').toBeNull();
+                refreshControl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                expect(h.onPayRate, 'the next press asks again').toHaveBeenCalledTimes(2);
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(open, 'nothing opened').not.toHaveBeenCalled();
+                open.mockRestore();
             });
         }
     }

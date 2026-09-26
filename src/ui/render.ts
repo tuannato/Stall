@@ -182,6 +182,15 @@ export type PayShown = {
      * standing).
      */
     readonly opened?: boolean;
+    /**
+     * An ask this sheet made — the valve's or the refresh control's — was
+     * still out as it handed itself back: the app says so on the sheet it
+     * paints in its place (`payRateAsking`), so that sheet sends no second
+     * ask while the first is out, and paints the answer when it lands, the
+     * sheet that asked being gone (CRITIC-CARRYOVER-10 item 5: one ask at a
+     * time held per sheet, not across a hand-back).
+     */
+    readonly asking?: true;
 };
 
 export type StallHandlers = {
@@ -5406,6 +5415,8 @@ function paySheet(
             // not the valve's (CRITIC-CARRYOVER-8 item 6: the flag no road
             // reached is gone; "Pay several" keeps its own).
             ...(rateLineStands() && outcome !== undefined ? { outcome } : {}),
+            // Its own ask still out: the sheet painted in its place asks none.
+            ...(valveAsking || refreshAsking ? { asking: true as const } : {}),
         });
     };
     /**
@@ -5937,8 +5948,9 @@ function paySheet(
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
             const at = composedAt;
             void (async () => {
-                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-                valveAsking = false;
+                const fresh = await askForRate(handlers, () => {
+                    valveAsking = false;
+                });
                 // A sheet a repaint replaced while the feeds were asked marks
                 // nothing and composes nothing: a fresh sheet on the same item
                 // is not this one (the critic, 2026-09-25, item 7).
@@ -6011,8 +6023,9 @@ function paySheet(
         keepFocusIn(wrap, [why], focused, head);
         const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
-            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            refreshAsking = false;
+            const fresh = await askForRate(handlers, () => {
+                refreshAsking = false;
+            });
             // A sheet a repaint replaced while the feeds were asked marks
             // nothing and composes nothing: a fresh sheet on the same item
             // is not this one (the critic, 2026-09-25, item 7).
@@ -6322,6 +6335,25 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
  * selection's tightest, the app's default counted for an item that states
  * none.
  */
+/**
+ * A sheet's own rate ask — the valve's or the refresh control's — with its
+ * flag cleared however the ask ends (CRITIC-CARRYOVER-10 item 6): in a
+ * `finally`, so an ask that rejects cannot leave the sheet asking for good,
+ * its refresh control hidden and every Pay press over an aged rate sending
+ * nothing. A rejection is a feed that did not answer — `undefined`, which
+ * the tail then says as such — and never an unhandled one. `readPayRate`
+ * does not reject today: this is the belt, not a road.
+ */
+async function askForRate(handlers: StallHandlers, done: () => void): Promise<PayRateAnswer | undefined> {
+    try {
+        return await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+    } catch {
+        return undefined;
+    } finally {
+        done();
+    }
+}
+
 function settleValve(
     fresh: PayRateAnswer | undefined,
     before: bigint | undefined,
@@ -6688,6 +6720,7 @@ function paySeveralSheet(
             rate: rate?.rate,
             changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
             ...(standing === undefined ? {} : { outcome: standing, ...(opened ? { opened } : {}) }),
+            ...(valveAsking || refreshAsking ? { asking: true as const } : {}),
         });
     };
     let composedAt = 0;
@@ -7083,8 +7116,9 @@ function paySeveralSheet(
             const before = selectionSats(selection, prices, rate.rate);
             const at = composedAt;
             void (async () => {
-                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-                valveAsking = false;
+                const fresh = await askForRate(handlers, () => {
+                    valveAsking = false;
+                });
                 // A sheet a repaint replaced while the feeds were asked marks
                 // nothing and composes nothing: a fresh sheet on the same item
                 // is not this one (the critic, 2026-09-25, item 7).
@@ -7142,8 +7176,9 @@ function paySeveralSheet(
         keepFocusIn(wrap, [why], focused, head);
         const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
-            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
-            refreshAsking = false;
+            const fresh = await askForRate(handlers, () => {
+                refreshAsking = false;
+            });
             // A sheet a repaint replaced while the feeds were asked marks
             // nothing and composes nothing: a fresh sheet on the same item
             // is not this one (the critic, 2026-09-25, item 7).
