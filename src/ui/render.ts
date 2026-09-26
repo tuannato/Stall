@@ -5950,6 +5950,18 @@ function paySheet(
                 // `before` was measured in, so nothing is composed from it
                 // here and the sheet is handed back — a Pay press did it.
                 if (recheck() || composedAt !== at) {
+                    // Unless a later press opened a wallet over the figure
+                    // the move put on screen (`opened`, which this ask's own
+                    // press took off): there is no "again" left to ask for,
+                    // and this press came before that open, so it takes
+                    // nothing off. The line stands as the open left it, and
+                    // the sheet is handed back as no Pay press would hand it
+                    // (CRITIC-CARRYOVER-10 item 1).
+                    if (opened) {
+                        refresh();
+                        handBack(false);
+                        return;
+                    }
                     absorbPress();
                     return;
                 }
@@ -7080,6 +7092,14 @@ function paySeveralSheet(
                     return;
                 }
                 if (recheck() || composedAt !== at) {
+                    // A later press opened a wallet: the single sheet's rule
+                    // (CRITIC-CARRYOVER-10 item 1) — no "again", `opened`
+                    // kept, handed back as no Pay press would hand it.
+                    if (opened) {
+                        refresh();
+                        handBack(false);
+                        return;
+                    }
                     absorbPress();
                     return;
                 }

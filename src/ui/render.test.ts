@@ -11700,6 +11700,123 @@ describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
     });
 });
 
+describe('a-valve-answer-after-a-later-open-asks-for-no-press', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 1 (the critic's `r10c`); the app's half is in
+     * app.live.test.ts under the same name. A Pay press over an aged rate
+     * sends the valve's ask; the seller's record moves under the sheet while
+     * it is out and the sheet is recomposed in place; a press after the
+     * grace opens a wallet at the figure on screen; then the valve's answer
+     * lands. Its tail found the figure recomposed and absorbed a press that
+     * had come BEFORE the open: the line asked the buyer who had just
+     * opened a wallet to "press Pay again", and the sheet was handed back as
+     * a Pay press. Now that tail, after a later open, keeps the line as the
+     * open left it and hands the sheet back as no Pay press would.
+     *
+     * On the single sheet the road is the seller's republish in XEC: the
+     * sheet needs no rate then, so the press after the grace opens. "Pay
+     * several" composes in one unit and holds its aged rate for the whole
+     * ask, so a press can open there only if the wall clock steps back
+     * (the rate's age is read on `Date.now()`): staged as that. The page's
+     * monotonic clock is held (`toFake: ['performance']`).
+     */
+    const XEC_QUOTE = { code: 'xec', exponent: 2, amount: 1_000_000n } as TokenPrice;
+    const USD_600 = { code: 'usd', exponent: 2, amount: 600n } as TokenPrice;
+    const rate = scaleRate(0.00002)!;
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    for (const kind of ['pay', 'pay-several'] as const) {
+        it(`${kind}: the valve's answer after a later open keeps the line's first clause and hands back no press`, async () => {
+            vi.useFakeTimers({ toFake: ['performance'] });
+            const root = mountedRoot();
+            const records = {
+                prices: new Map([[TOKEN_ID, QUOTE_USD as TokenPrice]]),
+                known: true,
+                complete: true,
+                decided: new Set<string>([TOKEN_ID]),
+            };
+            let settle: (value: { rate: bigint; atMs: number }) => void = () => undefined;
+            const h = {
+                ...handlers(),
+                onPayRecords: () => records,
+                onPayRecordMoved: vi.fn(),
+                onPayFigureChanged: vi.fn(),
+                onPayWalletOpened: vi.fn(),
+                onPayRate: vi.fn(
+                    () =>
+                        new Promise<{ rate: bigint; atMs: number }>((resolve) => {
+                            settle = resolve;
+                        }),
+                ),
+            };
+            // Fresh on the single sheet's own road too: its valve is reached
+            // the same way, over a rate read as aged at the press.
+            const opened = Date.now();
+            renderStall(
+                root,
+                payView({
+                    overlay: kind === 'pay' ? { kind: 'pay', tokenId: TOKEN_ID } : { kind: 'pay-several' },
+                    selectionOpen: true,
+                    selection: new Map([[TOKEN_ID, 1n]]),
+                    payRate: { rate, atMs: opened },
+                }),
+                h,
+            );
+            const sheet = root.querySelector(`[data-role="${kind}"]`) as HTMLElement;
+            const valve = (): string => sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '';
+            const figure = (): string => sheet.querySelector('[data-role="price"]')?.textContent ?? '';
+
+            // The valve: a press over a rate the page reads as aged asks.
+            const aged = vi.spyOn(Date, 'now').mockImplementation(() => opened + PAY_RATE_MAX_AGE_MS + 10_000);
+            expect(pressForUrl(root, 'pay-cashtab'), 'over an aged rate: the valve asks').toBeUndefined();
+            expect(h.onPayRate).toHaveBeenCalledTimes(1);
+            if (kind === 'pay') {
+                aged.mockRestore();
+            }
+
+            // The seller's record moves while the ask is out: recomposed in place.
+            records.prices = new Map([[TOKEN_ID, kind === 'pay' ? XEC_QUOTE : USD_600]]);
+            recheckPaySheet(root);
+            const inPlace = kind === 'pay' ? copy.PAY_QUOTE_CHANGED_UNPRESSED : copy.payItemsChangedUnpressed('Roasted Beans');
+            expect(valve(), 'in place: the first clause').toBe(inPlace);
+            const shown = figure();
+            expect(shown, 'the move is on the card').toBe(kind === 'pay' ? '10,000' : '300,000');
+
+            // On "Pay several" the wall clock steps back: the rate reads fresh.
+            if (kind === 'pay-several') {
+                aged.mockRestore();
+            }
+            vi.advanceTimersByTime(PAY_RECOMPOSE_GRACE_MS + 1);
+            const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+            (sheet.querySelector('[data-role="pay-cashtab"]') as HTMLElement).dispatchEvent(
+                new MouseEvent('click', { bubbles: true, cancelable: true }),
+            );
+            expect(open, 'after the grace, a wallet opens').toHaveBeenCalledTimes(1);
+            expect(String(open.mock.calls[0]![0]), 'at the figure on screen').toContain(
+                `amount=${shown.replace(/,/g, '')}.00`,
+            );
+            expect(h.onPayWalletOpened).toHaveBeenCalledTimes(1);
+
+            // The valve's answer lands after the open.
+            settle({ rate: scaleRate(0.000021)!, atMs: Date.now() });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(valve(), 'no "again" after a wallet opened').toBe(inPlace);
+            expect(valve()).not.toMatch(/again/i);
+            expect(h.onPayRecordMoved, 'handed back once').toHaveBeenCalledTimes(1);
+            expect(h.onPayRecordMoved, 'as no Pay press').toHaveBeenCalledWith(
+                kind === 'pay' ? TOKEN_ID : undefined,
+                false,
+                HANDED_BACK,
+            );
+            expect(figure(), 'the figure the wallet opened at still stands').toBe(shown);
+            expect(open, 'and nothing else opened').toHaveBeenCalledTimes(1);
+            open.mockRestore();
+        });
+    }
+});
+
 describe('a-lost-sheet-never-says-no-wallet-opened-after-one-did', () => {
     /**
      * CRITIC-CARRYOVER-8 item 2 (the critic's `r1`); the hand-back half is in

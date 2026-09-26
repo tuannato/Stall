@@ -7716,6 +7716,143 @@ describe('a-rate-answer-handed-back-to-the-app-starts-its-own-grace', () => {
     }
 });
 
+describe('a-valve-answer-after-a-later-open-asks-for-no-press', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 1 (the critic's `r10c`), through the real
+     * app; the sheet's half is in render.test.ts under the same name. A Pay
+     * press over an aged rate sends the valve's ask; the seller republishes
+     * while it is out and the sheet is recomposed in place; a press after
+     * the grace opens a wallet at the figure on screen; then the valve
+     * answers. The tail absorbed a press that came before the open and
+     * handed the sheet back as a Pay press, so the app painted it asking the
+     * buyer who had just opened a wallet to "press Pay again". Now the paint
+     * after that answer says the first clause alone.
+     *
+     * The single sheet's road is a republish in XEC (the press after the
+     * grace needs no rate). "Pay several" holds its aged rate for the whole
+     * ask, so a press opens there only if the wall clock steps back — staged
+     * as that. The page's monotonic clock is held (`holdClock`).
+     */
+    const A = 'ac'.repeat(32);
+    const B = 'bc'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const republish = async (txid: string, price: { code: string; exponent: number; amount: bigint }): Promise<void> => {
+        const hex = encodeDescriptionHex(A, 'Words', { price });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const id = publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([id]);
+        }
+        await flush();
+    };
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const valveOf = (root: HTMLElement, scope: string): string =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? '';
+    const CASES = {
+        pay: {
+            moved: { code: 'xec', exponent: 2, amount: 1_000_000n },
+            inPlace: '10,000',
+            line: PAY_QUOTE_CHANGED_UNPRESSED,
+            pressed: PAY_QUOTE_CHANGED,
+        },
+        'pay-several': {
+            moved: USD(600n),
+            inPlace: '450,000',
+            line: payItemsChangedUnpressed('Plum Jam'),
+            pressed: payItemsChanged('Plum Jam'),
+        },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the paint after the valve's late answer asks for no press`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            later(2_000);
+            // The rate has aged, so the press is the valve's ask.
+            const realNow = Date.now.bind(Date);
+            const aged = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 200_000);
+            expect(press(root, scope), 'the valve opens nothing').toBeUndefined();
+            await flush();
+            if (scope === 'pay') {
+                aged.mockRestore();
+            }
+            await republish(scope === 'pay' ? 'ad'.repeat(32) : 'ae'.repeat(32), CASES[scope].moved);
+            await until(() => figureOf(root, scope) === CASES[scope].inPlace);
+            expect(valveOf(root, scope), 'in place: the first clause').toBe(CASES[scope].line);
+            if (scope === 'pay-several') {
+                // The wall clock steps back: the rate reads fresh again.
+                aged.mockRestore();
+            }
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            const url = press(root, scope);
+            expect(url, 'after the grace, a wallet opens at the figure on screen').toContain(
+                `amount=${CASES[scope].inPlace.replace(/,/g, '')}.00`,
+            );
+
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            answer(R2);
+            // The tail hands the sheet back and the app paints it again.
+            await until(() => {
+                const now = root.querySelector(`[data-role="${scope}"]`);
+                return now !== null && now !== before;
+            });
+            expect(valveOf(root, scope), 'the paint after the answer asks for no press').toBe(CASES[scope].line);
+            expect(valveOf(root, scope)).not.toBe(CASES[scope].pressed);
+            expect(valveOf(root, scope)).not.toMatch(/again/i);
+        });
+    }
+});
+
 describe('a-hand-back-keeps-a-later-rate-grace', () => {
     /**
      * CRITIC-CARRYOVER-6 item 1, the critic's H3, on both sheets. t=0 a
