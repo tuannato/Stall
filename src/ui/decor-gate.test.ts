@@ -919,7 +919,8 @@ describe('a-decoration-lays-no-ground-under-text', () => {
  * (`layout/outline.ts`) — and nothing else in a ground's colour ever sits
  * under a glyph. The colour is `var(--s-bg)` on the plain ground and, on a
  * tinted surface, that surface's own paint over the ground (option (b), the
- * owner, 2026-09-25), always through `var(--rain-outline-ground)`, whose
+ * owner, 2026-09-25, re-confirmed after `visible-batch-shots/15-outline-b/`),
+ * always through `var(--rain-outline-ground)`, whose
  * every value is declared in `OUTLINE_GROUNDS` with the surface it matches.
  * ---------------------------------------------------------------------------
  */
@@ -994,12 +995,48 @@ type OutlineGround = {
     /** Where the surface is painted: the rule, and whether its paint is one fill or a two-stop wash read at its midpoint. */
     paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' };
     reason: string;
+    /**
+     * Each state — `:hover`, `:focus`, `:focus-visible`, `:focus-within`,
+     * `:active`, as written after the surface — in which the surface's own
+     * sheet paints another fill: the rule that paints it, and the outline's
+     * colour in that state, declared in `stall.css` on the surface with the
+     * state on it. Found by `statesWithoutOutline`.
+     */
+    states?: Readonly<Record<string, { colour: string; rule: string }>>;
 };
+
+/** One colour `stall.css` gives `--rain-outline-ground`: a listed surface at rest, or in one of its states. */
+type GroundRow = {
+    surface: string;
+    /** '' at rest. */
+    state: string;
+    /** The one selector the colour is declared under. */
+    selector: string;
+    colour: string;
+    paint: OutlineGround['paint'];
+};
+
+/** Every colour a table lists, one row a surface and one row each state of it. */
+function groundRows(table: Readonly<Record<string, OutlineGround>>): GroundRow[] {
+    return Object.entries(table).flatMap(([surface, ground]) => [
+        { surface, state: '', selector: `${RAIN_SCOPE} ${surface}`, colour: ground.colour, paint: ground.paint },
+        ...Object.entries(ground.states ?? {}).map(([state, painted]) => ({
+            surface,
+            state,
+            selector: `${RAIN_SCOPE} ${surface}${state}`,
+            colour: painted.colour,
+            paint: { sheet: ground.paint.sheet, rule: painted.rule, read: 'fill' as const },
+        })),
+    ]);
+}
 
 /**
  * Every colour the rain's outline takes other than the plain ground's
- * `var(--s-bg)` (option (b), the owner, 2026-09-25, after the pictures in
- * `visible-batch-shots/13-outline-options/`): keyed by the tinted surface as
+ * `var(--s-bg)` (option (b): the owner's choice, 2026-09-25, re-confirmed
+ * that morning after the corrected pictures in
+ * `visible-batch-shots/15-outline-b/` — the at-rest frames of
+ * `13-outline-options/`, where it was first chosen, came from a script with
+ * a bug): keyed by the tinted surface as
  * the outline rules name it, each the surface's own paint composited over
  * the ground, written as a `color-mix` of the look's tokens — so at rest,
  * with no drop behind a line, the outline is the ground it stands on
@@ -1024,6 +1061,14 @@ const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
         colour: 'color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg))',
         paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .notice-invite', read: 'fill' },
         reason: 'the notice invite’s wash: Neo’s second accent at 4%, under its words and its ghost chip',
+        // The critic's final merge, item 2: at 4% under a 9% wash, the
+        // outline showed about 13 levels off the invite under a pointer.
+        states: {
+            ':hover': {
+                colour: 'color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg))',
+                rule: '.t-neo .notice-invite:hover',
+            },
+        },
     },
     '.notice:not(.stall-sign .notice)': {
         colour: 'color-mix(in srgb, color-mix(in srgb, var(--s-accent-2) 16%, var(--s-bg)), color-mix(in srgb, #8b7bff 10%, var(--s-bg)))',
@@ -1039,7 +1084,7 @@ const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
     },
 };
 
-const LISTED_GROUNDS: ReadonlySet<string> = new Set(Object.values(OUTLINE_GROUNDS).map((g) => squash(g.colour)));
+const LISTED_GROUNDS: ReadonlySet<string> = new Set(groundRows(OUTLINE_GROUNDS).map((row) => squash(row.colour)));
 
 type Paint = { rgb: Rgb3; alpha: number };
 
@@ -1103,17 +1148,18 @@ function outlineGroundOffences(
         for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === '--rain-outline-ground')) {
             const value = squash(d.value.replace(/\s*!important\s*$/i, ''));
             const at = `${selectors.join(', ')} { --rain-outline-ground: ${value.slice(0, 80)} }`;
-            const listed = Object.entries(table).find(([surface]) => selectors.length === 1 && selectors[0] === `${RAIN_SCOPE} ${surface}`);
+            const listed = groundRows(table).find((row) => selectors.length === 1 && selectors[0] === row.selector);
             if (selectors.length === 1 && selectors[0] === RAIN_ROOT) {
                 if (value !== 'var(--s-bg)') out.push(`${at}: the plain ground’s outline is var(--s-bg)`);
             } else if (listed === undefined) {
                 out.push(`${at}: an outline colour on a surface OUTLINE_GROUNDS does not list`);
-            } else if (value !== squash(listed[1].colour)) {
-                out.push(`${at}: not the colour OUTLINE_GROUNDS lists for ${listed[0]}`);
+            } else if (value !== squash(listed.colour)) {
+                out.push(`${at}: not the colour OUTLINE_GROUNDS lists for ${listed.surface}${listed.state}`);
             }
         }
     }
-    for (const [surface, ground] of Object.entries(table)) {
+    for (const ground of groundRows(table)) {
+        const surface = `${ground.surface}${ground.state}`;
         const colour = squash(ground.colour);
         if (!colour.startsWith('color-mix(')) out.push(`${surface}: its outline colour is not a color-mix of the look’s tokens`);
         for (const call of varCalls(colour)) {
@@ -1146,7 +1192,7 @@ const RAIN_LOOKS: readonly number[] = [
 ];
 
 /** The background a listed surface's paint rule declares, or `undefined` when the sheet has not exactly one such rule. */
-function paintRuleOf(ground: OutlineGround, sheetOf: (path: string) => string): string | undefined {
+function paintRuleOf(ground: { paint: OutlineGround['paint'] }, sheetOf: (path: string) => string): string | undefined {
     const css = sheetOf(ground.paint.sheet).replace(/\/\*[\s\S]*?\*\//g, '');
     const values = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
         .filter((m) => topLevel(m[1]!).map(squash).includes(ground.paint.rule))
@@ -1168,7 +1214,8 @@ function outlineGroundMismatches(
     for (const id of RAIN_LOOKS) {
         const vars = themeVars(decodeTheme(id));
         const ground = paintOf('var(--s-bg)', vars);
-        for (const [surface, entry] of Object.entries(table)) {
+        for (const entry of groundRows(table)) {
+            const surface = `${entry.surface}${entry.state}`;
             const listed = paintOf(entry.colour, vars);
             const rule = paintRuleOf(entry, sheetOf);
             let painted: Rgb3 | undefined;
@@ -1471,7 +1518,7 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         const declared = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
             .filter((m) => declarationsOf(m[2]!).some((d) => d.prop === '--rain-outline-ground'))
             .map((m) => squash(m[1]!));
-        expect(declared.sort()).toEqual([RAIN_ROOT, ...Object.keys(OUTLINE_GROUNDS).map((key) => `${RAIN_SCOPE} ${key}`)].sort());
+        expect(declared.sort()).toEqual([RAIN_ROOT, ...groundRows(OUTLINE_GROUNDS).map((row) => row.selector)].sort());
         for (const planted of [
             // A literal, even the right one.
             `${RAIN_SCOPE} [data-role='list-first'] { --rain-outline-ground: rgb(11, 42, 47); }`,
@@ -1553,5 +1600,278 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         expect(outlineOffences('.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
         // A shadow in another colour is the look's own and not this test's.
         expect(outlineOffences('.t-neo .x { text-shadow: 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
+    });
+});
+
+/** The states a pointer or a keyboard puts a surface in, as pseudo-classes. */
+const STATE_WORD = ':(?:hover|focus-visible|focus-within|focus|active)(?![\\w-])';
+
+/** A selector split at its last top-level combinator: everything before, and its last compound. */
+function lastCompound(selector: string): { head: string; last: string } {
+    let depth = 0;
+    let cut = -1;
+    for (let i = 0; i < selector.length; i += 1) {
+        const c = selector[i]!;
+        if (c === '(') depth += 1;
+        if (c === ')') depth -= 1;
+        if (depth === 0 && /[\s>+~]/.test(c)) cut = i;
+    }
+    return { head: selector.slice(0, cut + 1), last: selector.slice(cut + 1) };
+}
+
+/** Every `:has(…)` in a compound, balanced, as written. */
+function hasClauses(compound: string): string[] {
+    const out: string[] = [];
+    for (let at = compound.indexOf(':has('); at >= 0; at = compound.indexOf(':has(', at + 1)) {
+        let depth = 0;
+        for (let i = at + ':has'.length; i < compound.length; i += 1) {
+            if (compound[i] === '(') depth += 1;
+            if (compound[i] === ')') depth -= 1;
+            if (depth === 0) {
+                out.push(compound.slice(at, i + 1));
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * A selector's last compound with its states taken out — each bare state
+ * pseudo-class, and an `:is()` or `:where()` holding nothing else — and the
+ * states as written, whitespace dropped. **A state anywhere else is a state
+ * too** (the critic, 2026-09-25, item 9): on an ancestor
+ * (`.stall-foot:hover .notice-invite`) it repaints the surface when a
+ * pointer is over the ancestor, and inside a `:has()`
+ * (`.notice-invite:has(:focus-visible)`) when a descendant is focused. Both
+ * are taken out of `base` and `last` so the surface is still recognised,
+ * and named in `elsewhere`, because the outline's colour is declared on the
+ * surface with the state after it and neither shape can be listed so.
+ */
+function withoutStates(selector: string): { base: string; last: string; state: string; elsewhere: string } {
+    const { head, last } = lastCompound(squash(selector));
+    const hasState = new RegExp(STATE_WORD);
+    let elsewhere = '';
+    let within = last;
+    for (const clause of hasClauses(last)) {
+        if (hasState.test(clause)) {
+            elsewhere += clause.replace(/\s+/g, '');
+            within = within.replace(clause, '');
+        }
+    }
+    let ancestors = head;
+    if (hasState.test(head)) {
+        elsewhere += head.replace(/\s+/g, '');
+        ancestors = head.replace(new RegExp(STATE_WORD, 'g'), '');
+    }
+    let state = '';
+    const take = (whole: string): string => {
+        state += whole.replace(/\s+/g, '');
+        return '';
+    };
+    const bare = within
+        .replace(new RegExp(`:(?:is|where)\\(\\s*${STATE_WORD}(?:\\s*,\\s*${STATE_WORD})*\\s*\\)`, 'g'), take)
+        .replace(new RegExp(STATE_WORD, 'g'), take);
+    return { base: squash(`${ancestors}${bare}`), last: bare, state, elsewhere };
+}
+
+/**
+ * A compound's simple selectors that name WHAT it matches — its classes,
+ * ids and attribute tests, quotes normalised — with everything inside a
+ * `:not(…)` left out, since that names what it does not match.
+ */
+function simpleSet(compound: string): Set<string> {
+    let bare = compound;
+    for (let at = bare.indexOf(':not('); at >= 0; at = bare.indexOf(':not(')) {
+        let depth = 0;
+        let end = at + ':not'.length;
+        for (; end < bare.length; end += 1) {
+            if (bare[end] === '(') depth += 1;
+            if (bare[end] === ')') depth -= 1;
+            if (depth === 0) break;
+        }
+        bare = bare.slice(0, at) + bare.slice(end + 1);
+    }
+    return new Set([...bare.matchAll(/[.#][\w-]+|\[[^\]]+\]/g)].map((m) => m[0].replace(/\s+/g, '').replace(/"/g, "'")));
+}
+
+/**
+ * Whether a rule's last compound is the surface a key names, **by set, not
+ * by string** (CARRYOVER-2 item 11): every class, id and attribute test the
+ * key's own compound carries is on the rule's compound, in any order and
+ * beside any others — `.ghost.notice-invite` is `.notice-invite`, and
+ * `[data-role="list-first"]` is `[data-role='list-first']`. A rule matching
+ * the exact string alone let a surface repainted under an extra class, or
+ * with its quotes written the other way, through unlisted.
+ */
+function coversSurface(last: string, surface: string): boolean {
+    const want = simpleSet(lastCompound(squash(surface)).last);
+    if (want.size === 0) return false;
+    const have = simpleSet(last);
+    return [...want].every((part) => have.has(part));
+}
+
+/** The look classes of the looks that wear the rain; a rule scoped to any other look's class never paints under it. */
+const RAIN_LOOK_CLASSES: ReadonlySet<string> = new Set(RAIN_LOOKS.map((id) => decodeTheme(id).sheetClass));
+
+/**
+ * Every rule in `sheets` that repaints a surface `table` lists in a state —
+ * a `background` or its colour or image, under a selector whose last
+ * compound carries `:hover`, `:focus`, `:focus-visible`, `:focus-within` or
+ * `:active` and is, with those taken out, the surface's paint rule or the
+ * surface as the outline rules name it — with the state as written. A rule
+ * scoped to a look that does not wear the rain is not one.
+ */
+function statesOfListedSurfaces(
+    sheets: readonly { path: string; css: string }[],
+    table: Readonly<Record<string, OutlineGround>> = OUTLINE_GROUNDS,
+): { path: string; selector: string; surface: string; state: string; elsewhere: string }[] {
+    const out: { path: string; selector: string; surface: string; state: string; elsewhere: string }[] = [];
+    for (const { path, css } of sheets) {
+        for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            if (!declarationsOf(m[2]!).some((d) => /^background(?:-color|-image)?$/.test(d.prop))) continue;
+            for (const selector of topLevel(m[1]!).map(squash)) {
+                const looks = [...selector.matchAll(/\.(t-[a-z0-9]+)(?![\w-])/g)].map((l) => l[1]!);
+                if (looks.some((cls) => !RAIN_LOOK_CLASSES.has(cls))) continue;
+                const { base, last, state, elsewhere } = withoutStates(selector);
+                if (state === '' && elsewhere === '') continue;
+                for (const [surface, entry] of Object.entries(table)) {
+                    if (base === entry.paint.rule || coversSurface(last, surface) || coversSurface(last, entry.paint.rule)) {
+                        out.push({ path, selector, surface, state, elsewhere });
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Every state that repaints a listed surface (`statesOfListedSurfaces`)
+ * whose outline colour is not declared: the table must list that state for
+ * the surface, painted by that very rule, and `stall` must give
+ * `--rain-outline-ground` the listed colour under the surface with the
+ * state on it — or the outline stays the resting wash's colour on a
+ * different wash, and shows.
+ */
+function statesWithoutOutline(
+    sheets: readonly { path: string; css: string }[],
+    stall: string,
+    table: Readonly<Record<string, OutlineGround>> = OUTLINE_GROUNDS,
+): string[] {
+    const declared = new Map<string, string[]>();
+    for (const m of stall.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === '--rain-outline-ground')) {
+            for (const selector of topLevel(m[1]!).map(squash)) {
+                declared.set(selector, [...(declared.get(selector) ?? []), squash(d.value)]);
+            }
+        }
+    }
+    const out: string[] = [];
+    for (const { path, selector, surface, state, elsewhere } of statesOfListedSurfaces(sheets, table)) {
+        const at = `${path}: ${selector} repaints ${surface}`;
+        if (elsewhere !== '') {
+            // The outline's colour is declared on the surface with its state
+            // after it; a state on an ancestor or inside `:has()` cannot be
+            // listed so, and is refused rather than let through unlisted.
+            out.push(`${at} in a state on an ancestor or inside :has() (${elsewhere}); put the state on the surface, where its outline colour can be listed`);
+            continue;
+        }
+        const listed = table[surface]?.states?.[state];
+        if (listed === undefined) {
+            out.push(`${at}, and OUTLINE_GROUNDS lists no outline colour for ${surface}${state}`);
+            continue;
+        }
+        if (squash(listed.rule) !== selector) out.push(`${at}, and OUTLINE_GROUNDS holds ${surface}${state} to ${listed.rule}`);
+        const values = declared.get(`${RAIN_SCOPE} ${surface}${state}`) ?? [];
+        if (values.length === 0) out.push(`${at}, and stall.css declares no outline colour for ${surface}${state}`);
+        if (values.some((value) => value !== squash(listed.colour))) {
+            out.push(`${at}, and stall.css declares ${surface}${state}'s outline other than the listed ${listed.colour}`);
+        }
+    }
+    return out;
+}
+
+describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
+    /**
+     * The critic's final merge, item 2. A surface the outline lists wears
+     * its own resting paint as the outline's colour (option (b)); where a
+     * pointer or a keyboard repaints that surface, the outline must follow,
+     * or it shows as a ring of the resting wash on the new one — the notice
+     * invite's 4% under its 9% hover was about 13 levels off. The probe reads
+     * surfaces at rest only (`an-outline-that-shows-at-rest`), so the states
+     * are held here, from source: every `:hover`, `:focus`,
+     * `:focus-visible`, `:focus-within` or `:active` rule in a served sheet
+     * that changes a listed surface's background carries a listed outline
+     * colour, declared in `stall.css` on that surface in that state, and
+     * held to that rule's paint (`outlineGroundMismatches`). A state on an
+     * ancestor or inside `:has()` is a state too, and is refused: the
+     * outline's colour cannot be listed on such a selector.
+     */
+    const sheets = SERVED_SHEETS.map((sheet) => ({ path: sheet.path, css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8') }));
+    const stall = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+
+    it('finds every state that repaints a listed surface, and each carries its listed colour', () => {
+        expect(statesWithoutOutline(sheets, stall)).toEqual([]);
+        // It reads something: the invite's hover is found, and the other
+        // looks' hovers on the same surface are not the rain's.
+        expect(statesOfListedSurfaces(sheets).map((s) => `${s.path} ${s.selector}`)).toEqual([
+            'src/ui/theme-neo.css .t-neo .notice-invite:hover',
+        ]);
+    });
+
+    it('goes red without the declaration, without the listing, and on a state nobody listed', () => {
+        const without = stall.replace(/\.stall\.att-rainfall:not\(\.deck-stall\) \.notice-invite:hover \{[^}]*\}/, '');
+        expect(without).not.toBe(stall);
+        expect(statesWithoutOutline(sheets, without)).not.toEqual([]);
+        const wrong = stall.replace(
+            'color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg))',
+            'color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg))',
+        );
+        expect(wrong).not.toBe(stall);
+        expect(statesWithoutOutline(sheets, wrong)).not.toEqual([]);
+        const { states: _unlisted, ...bare } = OUTLINE_GROUNDS['.notice-invite']!;
+        expect(statesWithoutOutline(sheets, stall, { ...OUTLINE_GROUNDS, '.notice-invite': bare })).not.toEqual([]);
+        for (const planted of [
+            '.t-neo .cta:focus-visible { background: rgba(44, 233, 224, 0.3); }',
+            '.event-txid:is(:hover, :focus-visible) { background-color: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice-invite:active { background: rgba(255, 77, 122, 0.2); }',
+            '.t-neo .studio-browser:focus-within { background-image: linear-gradient(red, blue); }',
+            // A state on an ancestor repaints the surface as surely as its
+            // own, and so does one inside `:has()` (the critic, 2026-09-25,
+            // item 9): this test pinned the first as silent, and read the
+            // second as `:has()` with nothing in it.
+            '.t-neo .stall-foot:hover .notice-invite { background: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice-invite:has(:focus-visible) { background: rgba(255, 77, 122, 0.2); }',
+            '.t-neo .stall-foot:has(:hover) .notice-invite { background-color: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice:is(:hover, :focus-within) .notice-invite { background: rgba(0, 0, 0, 0.2); }',
+            // The surface by its class set, not its string (CARRYOVER-2 item
+            // 11): an extra class, another order, the other quotes.
+            '.t-neo .ghost.notice-invite:hover { background: rgba(0, 0, 0, 0.2); }',
+            '.t-neo .notice-invite.is-open:focus-visible { background-color: rgba(255, 77, 122, 0.2); }',
+            '.t-neo [data-role="list-first"]:hover { background: rgba(44, 233, 224, 0.3); }',
+            '.t-neo .cta.wide:active { background: rgba(44, 233, 224, 0.3); }',
+        ]) {
+            expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).not.toEqual([]);
+        }
+        // Not a background, not a listed surface, or a look that does not
+        // wear the rain: nothing to answer.
+        for (const planted of [
+            '.t-neo .cta:hover { box-shadow: 0 0 16px rgba(44, 233, 224, 0.35); }',
+            '.t-modern .notice-invite:hover { background: #eee; }',
+            '.t-neo .item:hover { background: rgba(0, 0, 0, 0.2); }',
+            '.t-modern .stall-foot:hover .notice-invite { background: #eee; }',
+            '.t-neo .notice-invite:has(.chip) { background: rgba(255, 77, 122, 0.04); }',
+            // A look-alike class is not the surface.
+            '.t-neo .notice-invite-x:hover { background: rgba(0, 0, 0, 0.2); }',
+        ]) {
+            expect(statesWithoutOutline([...sheets, { path: 'planted', css: planted }], stall), planted).toEqual([]);
+        }
+        // The colour a state lists is held to the paint it names, like a resting one's.
+        const neo = (path: string): string => readFileSync(join(UI_DIR, '..', '..', path), 'utf8');
+        const planted = (path: string): string =>
+            path === 'src/ui/theme-neo.css' ? neo(path).replace('background: rgba(255, 77, 122, 0.09);', 'background: rgba(255, 77, 122, 0.14);') : neo(path);
+        expect(neo('src/ui/theme-neo.css')).toContain('background: rgba(255, 77, 122, 0.09);');
+        expect(outlineGroundMismatches(OUTLINE_GROUNDS, planted)).not.toEqual([]);
     });
 });

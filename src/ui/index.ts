@@ -5,6 +5,7 @@ export {
     quotedItems,
     unreadChosen,
     renderStall,
+    recheckPaySheet,
     overlayMounts,
     holdsLivePaint,
     shopWindowPaints,

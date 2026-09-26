@@ -30,6 +30,7 @@ import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { encodeMultiPaymentMemoHex, encodePaymentMemoHex } from '../domain/payment';
 import {
     MAX_SELECTION_ENTRIES,
+    pruneSelection,
     selectionCount,
     selectionGlance,
     selectionHasSurcharge,
@@ -47,9 +48,11 @@ import {
     formatPriceFigure,
     parsePriceFigure,
     parseSurchargePct,
+    samePrice,
     surchargedQuote,
     type TokenPrice,
 } from '../domain/description';
+import { movedRecords, samePayment, type RecordsNow } from '../domain/records';
 import {
     compareOffers,
     DUST_SATS,
@@ -147,6 +150,49 @@ import './theme-neo.css';
 import './theme-rural.css';
 import './broadcast.css';
 
+/**
+ * What an open pay sheet had on screen as it handed itself back to the app
+ * (`onPayRecordMoved`; CRITIC-CARRYOVER-6 item 1): the rate its figure was
+ * composed at — a rate it took in place (the valve's answer, the refresh
+ * control's, its own ask for a moved unit) is one the app never painted —
+ * and the later of its two change stamps, on the page's monotonic clock: a
+ * record's, which the app already holds (`onPayFigureChanged`), and a rate
+ * answer's, which is sheet-local until now. The app's paint then carries a
+ * grace still running, and a figure composed at another rate than this one
+ * is a change on screen that starts its own.
+ */
+export type PayShown = {
+    readonly rate: bigint | undefined;
+    readonly changedAtMs: number | undefined;
+    /**
+     * The valve's outcome, when its line is the one standing — newer than
+     * any change of the record under the sheet (CRITIC-CARRYOVER-6 item 4)
+     * — so the paint that replaces the sheet says the line the buyer was
+     * reading, and an absorbed press repeats it. Absent when the record's
+     * line stands.
+     */
+    readonly outcome?: PayRateOutcome;
+    /**
+     * A press on the sheet opened a wallet after it last absorbed a Pay
+     * press, so that line is said without its ask on the paint that
+     * replaces the sheet too (`PAY_VALVE_TEXT_AFTER_OPEN`;
+     * CRITIC-CARRYOVER-7 item 2). Meaningful beside `outcome` alone, and
+     * sent by "Pay several" alone: the one sheet that hands its valve line
+     * back to a sheet that composes again (a chosen item taken out, the rest
+     * standing).
+     */
+    readonly opened?: boolean;
+    /**
+     * An ask this sheet made — the valve's or the refresh control's — was
+     * still out as it handed itself back: the app says so on the sheet it
+     * paints in its place (`payRateAsking`), so that sheet sends no second
+     * ask while the first is out, and paints the answer when it lands, the
+     * sheet that asked being gone (CRITIC-CARRYOVER-10 item 5: one ask at a
+     * time held per sheet, not across a hand-back).
+     */
+    readonly asking?: true;
+};
+
 export type StallHandlers = {
     /**
      * Open the shop window's options. The Studio's own control; the window
@@ -240,6 +286,35 @@ export type StallHandlers = {
      * `undefined` is tolerated and read as no answer.
      */
     onPayRate?: (timeoutMs?: number) => Promise<PayRateAnswer | undefined>;
+    /**
+     * The seller's records as the app holds them now, for a Pay press to
+     * judge the records its sheet composed from against (`movedRecords`): a
+     * sheet holds the live paint, so what it painted may be older than this.
+     */
+    onPayRecords?: () => RecordsNow;
+    /**
+     * A press on the open sheet opened nothing because the figure changed
+     * under it — a record the press found moved, or a Pay press inside the
+     * grace of a change (`PAY_RECOMPOSE_GRACE_MS`): paint the sheet again
+     * from the records as they stand, saying so. `tokenId` names the single
+     * sheet's item and is absent for "Pay several"; a sheet no longer open is
+     * left alone. `pressed` says whether a PAY press did it — never the
+     * refresh control, and never an ask's tail — because only then may the
+     * line ask for the press again (CRITIC-CARRYOVER-4 item 4). `shown` is
+     * what the sheet had on screen as it handed itself back (`PayShown`),
+     * absent when the app's own tail does it.
+     */
+    onPayRecordMoved?: (tokenId: string | undefined, pressed: boolean, shown?: PayShown) => void;
+    /**
+     * The figure on the open sheet changed under the buyer, in place (a
+     * re-read recomposed it, or a rate the sheet asked for itself moved it):
+     * when, on the page's monotonic clock (`performance.now()`), and which
+     * items changed — so the app carries the grace and the line across the
+     * next paint (`payChangedAt`, `payRecordMoved`).
+     */
+    onPayFigureChanged?: (atMs: number, tokenIds: readonly string[]) => void;
+    /** A press on the open sheet opened a wallet: the line stops asking for another. */
+    onPayWalletOpened?: () => void;
     /**
      * One token, on the seller's own ask: its genesis facts, and whether this
      * stall's own wallet minted it.
@@ -485,8 +560,10 @@ export function renderStall(
     const serial = ++paintSerial;
     paintedIconCells.clear();
     // A timer from the paint before this one would fire against a tree that
-    // no longer exists; the sheet that wants one arms it again below.
-    clearPayQrTimer();
+    // no longer exists; the sheet that wants one arms it again below. The
+    // record check likewise: only the sheet this paint builds answers it.
+    clearPayQrTimer(root);
+    payRecordChecks.delete(root);
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     // Snapshot the opener on the idle→open edge only: a live repaint while
     // the sheet is up finds focus *inside* the sheet, and overwriting the
@@ -785,10 +862,18 @@ export function renderStall(
             stall.append(sheetOverlay(describeSheet(view, handlers), 'describe-sheet', handlers));
         } else if (view.overlay.kind === 'pay') {
             stall.classList.add('has-sheet');
-            stall.append(sheetOverlay(paySheet(view, handlers), 'pay-sheet', handlers));
+            stall.append(
+                sheetOverlay(paySheet(view, handlers, paySheetRoot(root)), 'pay-sheet', handlers),
+            );
         } else if (view.overlay.kind === 'pay-several') {
             stall.classList.add('has-sheet');
-            stall.append(sheetOverlay(paySeveralSheet(view, handlers), 'pay-several-sheet', handlers));
+            stall.append(
+                sheetOverlay(
+                    paySeveralSheet(view, handlers, paySheetRoot(root)),
+                    'pay-several-sheet',
+                    handlers,
+                ),
+            );
         } else if (view.overlay.kind === 'poster') {
             stall.classList.add('has-sheet');
             stall.append(posterSheet(view, shareUrl(), stall, handlers));
@@ -2881,7 +2966,7 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     if (
         items.length > 0 ||
         (view.selection?.size ?? 0) > 0 ||
-        (view.selectionOpen === true && view.selectionDropped === true)
+        (view.selectionOpen === true && view.selectionDropped !== undefined)
     ) {
         section.append(selectionStrip(view, handlers));
     }
@@ -4552,6 +4637,100 @@ export const PAY_RATE_MAX_AGE_MS = 120_000;
 
 /** A refetch that has not answered by here is "no fresh price", not a wait. */
 export const PAY_RATE_TIMEOUT_MS = 8_000;
+
+/**
+ * How long after the figure on an open pay sheet changes under the buyer a
+ * Pay press is still absorbed (the owner, 2026-09-25, CRITIC-CARRYOVER-3
+ * item 2; a window, CRITIC-CARRYOVER-4 items 1, 2 and 6). A change that
+ * lands under a buyer about to press must not let that press open a figure
+ * they never saw — nor the second tap of a double tap: EVERY Pay press
+ * inside the window opens nothing, across the repaint the first one asks
+ * for. A change is any in-place recompose (a return to the record the
+ * sheet was opened on, and a record that left and came back, included)
+ * and a rate answer that moves the figure. A press after this span was
+ * made over the new figure, which has stood on screen with its line, and
+ * opens it.
+ *
+ * Measured on the page's monotonic clock: the change is stamped with
+ * `performance.now()` when the new figure is painted, and a press is timed
+ * by its own `event.timeStamp` — the same clock — so a click queued behind
+ * a long task counts from when it was pressed, and a wall clock that jumps
+ * shortens nothing.
+ */
+export const PAY_RECOMPOSE_GRACE_MS = 1_500;
+
+/**
+ * How long after a pay sheet first appears a Pay press on it is ignored
+ * (the owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2). The sheet paints
+ * synchronously under the press that opened it and has no entrance, so the
+ * second tap of a double tap on a row's Pay pill, the Pay several strip or
+ * the item face lands on whichever control is now under the finger — and a
+ * sheet's Pay spans the sheet near where a row's pill sat. That tap is not
+ * a press anyone meant, so it is ignored SILENTLY: no line, no
+ * announcement, nothing handed back. A press after it opens as usual.
+ *
+ * **A sheet's first figure is guarded by this, not by the change grace**
+ * (`PAY_RECOMPOSE_GRACE_MS`): the rate a USD sheet opens with lands a moment
+ * after the sheet appears, and inside this span a tap on it is ignored
+ * however fast the feed answered; after it, the first figure is no change
+ * and a press opens it. Measured from the paint that mounted the sheet
+ * (`payOpenedAt`), whichever road opened it, on the page's monotonic clock,
+ * against the press's own `event.timeStamp` (`pressedAt`), as the grace is.
+ */
+export const PAY_OPEN_GUARD_MS = 500;
+
+/** Whether a press made at `event` is the second tap of the double tap that opened its sheet. */
+function insideOpenGuard(event: Event, openedAtMs: number | undefined): boolean {
+    return openedAtMs !== undefined && pressedAt(event) - openedAtMs <= PAY_OPEN_GUARD_MS;
+}
+
+/**
+ * When a press was made, on the clock the grace is stamped on: the event's
+ * own `timeStamp` (monotonic, the time origin `performance.now()` counts
+ * from), or now where an event carries none this page can read. A stamp
+ * later than now is on another clock and is not believed.
+ */
+function pressedAt(event: Event): number {
+    const now = performance.now();
+    const at = event.timeStamp;
+    return typeof at === 'number' && Number.isFinite(at) && at >= 0 && at <= now ? at : now;
+}
+
+/** Whether a press made at `event` falls inside the grace of a change stamped `changedAtMs`. */
+function insideGrace(event: Event, changedAtMs: number | undefined): boolean {
+    return changedAtMs !== undefined && pressedAt(event) - changedAtMs <= PAY_RECOMPOSE_GRACE_MS;
+}
+
+/**
+ * The valve's line for an outcome, in the form that fits what the buyer can
+ * press (CRITIC-CARRYOVER-6 item 5): "press again" names the Pay press, so
+ * where no Pay control is on the sheet (`payStands` false) a line that asks
+ * for it is said without the ask — the refresh control that stays with no
+ * rate names itself, and "again" would name a press the buyer cannot repeat
+ * (the window's copy call, CRITIC-CARRYOVER-8 item 4) — a moved or
+ * refreshed figure under the dust floor included, which composes no link
+ * and so no Pay (CRITIC-CARRYOVER-9 item 3). And once a press on
+ * the sheet has opened a wallet (`opened`), no line asks for a press, until
+ * a Pay press is absorbed again (CRITIC-CARRYOVER-7 item 2): the record
+ * line's rule.
+ */
+function valveLine(outcome: PayRateOutcome, payStands: boolean, opened: boolean): string {
+    return (
+        (opened ? copy.PAY_VALVE_TEXT_AFTER_OPEN[outcome] : undefined) ??
+        (payStands ? undefined : copy.PAY_VALVE_TEXT_NO_PAY[outcome]) ??
+        copy.PAY_VALVE_TEXT[outcome]
+    );
+}
+
+/** Whether a control is on the sheet: inside it, and under nothing hidden. */
+function onSheet(wrap: HTMLElement, control: HTMLElement): boolean {
+    return wrap.contains(control) && control.closest('[hidden]') === null;
+}
+
+/** The later of two change stamps, either of which may be absent: the grace that runs longest. */
+function laterStamp(a: number | undefined, b: number | undefined): number | undefined {
+    return a === undefined ? b : b === undefined ? a : Math.max(a, b);
+}
 /**
  * The boot-time glance fetch's ceiling. It ran with none, and a request
  * started while the document is still loading holds WebKit's progress bar
@@ -4599,12 +4778,42 @@ const MAX_PAY_QUANTITY = (1n << 64n) - 1n;
 const PAY_QR_OPEN_QUERY = '(min-width: 680px)';
 
 /**
- * The open sheet's own timer, in module state because `renderStall` throws the
- * tree away on every paint and a timer left armed would fire against a sheet
- * that is no longer there. Cleared at the top of every paint, re-armed by the
- * sheet that wants it.
+ * The open sheet's own code timer, in module state because `renderStall`
+ * throws the tree away on every paint and a timer left armed would fire
+ * against a sheet that is no longer there. Cleared at the top of every paint
+ * of its root, re-armed by the sheet that wants it. **One slot per root**
+ * (the critic, CARRYOVER-2 item 10), for `payRecordChecks`' own reason: a
+ * module-wide slot was cleared by any other root's paint, and taken by any
+ * other root's sheet, and the sheet it belonged to then kept a code past its
+ * rate's lifetime.
  */
-let payQrTimer: ReturnType<typeof setTimeout> | undefined;
+const payQrTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+/**
+ * The open pay sheet's own record check, per root, beside its timer and for
+ * the same reason: a sheet holds the live paint (`holdsLivePaint`), so a
+ * re-read that moves the seller's record while it is open lands in the
+ * app's records and not on screen. The app calls `recheckPaySheet` whenever
+ * it holds a paint back for a pay sheet, and the sheet answers in place,
+ * without being rebuilt under the buyer: a record that moved what the buyer
+ * pays recomposes the sheet from the record as it stands — the figure, the
+ * quote, the surcharge, the rate row, both links, the code and the restated
+ * figure, the quantity kept — says so on the valve's line, and absorbs every
+ * Pay press inside the grace of the change (the owner, 2026-09-25;
+ * `PAY_RECOMPOSE_GRACE_MS`); a record gone, or no longer
+ * painted as a quote, leaves no figure, code or Pay; one that changed only
+ * its margin or its words is taken in place. Cleared at the top of every
+ * paint of that root; set by the sheet that paint builds. Keyed by root
+ * rather than one module slot: any `renderStall` clearing another root's
+ * check would leave that sheet composing a record the page no longer holds,
+ * which is the one thing the check is for.
+ */
+const payRecordChecks = new WeakMap<HTMLElement, () => void>();
+
+/** A re-read landed while a pay sheet holds the paint on `root`: let the sheet answer it in place. */
+export function recheckPaySheet(root: HTMLElement): void {
+    payRecordChecks.get(root)?.();
+}
 
 /**
  * The seller's tolerance as the rail says it: only for a quote that involves
@@ -4632,11 +4841,34 @@ export function toleranceLine(price: TokenPrice): HTMLElement | null {
     return line;
 }
 
-function clearPayQrTimer(): void {
-    if (payQrTimer !== undefined) {
-        clearTimeout(payQrTimer);
-        payQrTimer = undefined;
+function clearPayQrTimer(root: HTMLElement): void {
+    const timer = payQrTimers.get(root);
+    if (timer !== undefined) {
+        clearTimeout(timer);
+        payQrTimers.delete(root);
     }
+}
+
+/**
+ * What a pay sheet is handed of the root it is painted on: the record check
+ * it registers (`payRecordChecks`) and its code timer (`payQrTimers`), both
+ * keyed by that root.
+ */
+type PaySheetRoot = {
+    readonly registerCheck: (check: () => void) => void;
+    readonly armQrTimer: (run: () => void, ms: number) => void;
+    readonly clearQrTimer: () => void;
+};
+
+function paySheetRoot(root: HTMLElement): PaySheetRoot {
+    return {
+        registerCheck: (check) => payRecordChecks.set(root, check),
+        armQrTimer: (run, ms) => {
+            clearPayQrTimer(root);
+            payQrTimers.set(root, setTimeout(run, ms));
+        },
+        clearQrTimer: () => clearPayQrTimer(root),
+    };
 }
 
 /**
@@ -4655,7 +4887,11 @@ function clearPayQrTimer(): void {
  * Every update this sheet makes itself — the refresh control, the press-time
  * valve, the code ageing out — is its own `refresh()`, in place.
  */
-function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
+function paySheet(
+    view: StallView,
+    handlers: StallHandlers,
+    at: PaySheetRoot,
+): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay');
     wrap.setAttribute('role', 'dialog');
@@ -4669,9 +4905,32 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // A scanned link, or a re-read, can name a token this stall does not
         // quote. Say that rather than painting a sheet with no figure on it —
         // and keep the sheet's own title, because there is no item to name
-        // here and a bare token id in a head is not one.
-        wrap.append(sheetHead(copy.PAY_TITLE, copy.PAY_HINT_UNKNOWN, handlers));
-        wrap.append(el('p', 'ctx', copy.PAY_HINT_UNKNOWN));
+        // here and a bare token id in a head is not one. A press that found
+        // the record gone says that instead, and that no wallet was opened —
+        // and a record still there in a form this page does not paint as a
+        // quote (a unit it does not write, a genesis it never read) is our
+        // gap, never "no longer on the stall" (the critic, 2026-09-25).
+        //
+        // Said once, in the box: the head carries the sheet's title and no
+        // second copy of the sentence under it (the window, 2026-09-25).
+        // Once a press on this sheet opened a wallet, never "no wallet was
+        // opened": the first clause alone (`payWalletWasOpened`;
+        // CRITIC-CARRYOVER-8 item 2).
+        const walletWasOpened = view.payWalletWasOpened === true;
+        const gone =
+            view.payRecordMoved === undefined
+                ? copy.PAY_HINT_UNKNOWN
+                : view.prices?.has(tokenId) === true
+                  ? walletWasOpened
+                      ? copy.PAY_QUOTE_UNSHOWN_OPENED
+                      : copy.PAY_QUOTE_UNSHOWN
+                  : walletWasOpened
+                    ? copy.PAY_QUOTE_GONE_OPENED
+                    : copy.PAY_QUOTE_GONE;
+        wrap.append(sheetHead(copy.PAY_TITLE, '', handlers));
+        const said = el('p', 'ctx', gone);
+        said.setAttribute('data-role', 'pay-lost');
+        wrap.append(said);
         wrap.append(payFoot(handlers));
         return wrap;
     }
@@ -4679,18 +4938,67 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // under their own label below the figure, so the head's second line
     // carries only the fact that they wrote none.
     const named = quoteNaming(view, tokenId);
-    wrap.append(sheetHead(named.title, named.note ?? '', handlers));
-    const price = item.price;
-    const usesRate = price.code !== XEC_PRICE_CODE;
+    const head = sheetHead(named.title, named.note ?? '', handlers);
+    wrap.append(head);
+    /**
+     * The head's second line as the record now asks for it — the note that
+     * the seller wrote no words, or nothing. Painted only while the sheet
+     * composes: a sheet whose record left has one head on both roads, the
+     * sheet's own title over no second line (`lostHead`; the critic,
+     * CARRYOVER-3 item 6), the one the rebuilt sheet paints.
+     */
+    let headNote = named.note ?? '';
+    /**
+     * The record the figure is composed from. A re-read that moves what the
+     * buyer pays recomposes the sheet in place from the record as it stands
+     * (the owner, 2026-09-25); one that asks the same payment — a new
+     * tolerance, or the figure restated at another exponent — is taken in
+     * place without a line (`samePayment`).
+     */
+    let price = item.price;
+    /**
+     * The record as the sheet last SAW it (the critic, CARRYOVER-3 item 1):
+     * `price` while it composes, `undefined` once the record left, and the
+     * record as it stands while this page cannot show it. A re-read is judged
+     * against this and never against `price` alone, which a record that left
+     * does not move — so a record that comes back, at any figure, is composed
+     * again rather than left saying it is gone.
+     */
+    let seen: TokenPrice | undefined = item.price;
+    /** An XEC quote reads no rate; a record that moved unit changes this. */
+    let usesRate = price.code !== XEC_PRICE_CODE;
 
     /** The buyer's own quantity: whole items, at least one. */
     let quantity = view.payQuantity ?? 1n;
     /** The rate this sheet froze, and when. Never `view.fiatRate`. */
     let rate = usesRate ? view.payRate : undefined;
+    /**
+     * The unit `rate` was read for: the painted record's, because the app
+     * never hands a sheet a rate read for another unit (`payRateUnit`). A
+     * record recomposed in another unit drops it — a figure composed in one
+     * currency from another's rate is the one mistake this rail exists to
+     * make impossible.
+     */
+    let rateUnit: string | undefined = usesRate ? price.code : undefined;
     /** Why there is none, for the sentence: the feed did not answer, or was refused. */
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
     /** The feeds are still being asked: say that, never "did not answer". */
     let asking = usesRate && view.payRateAsking === true;
+    /**
+     * The refresh control's own ask is out (CRITIC-CARRYOVER-8 item 3): an
+     * ask like the open's, so while it is out the control is hidden, a press
+     * that reaches it anyway sends nothing, and a card with no figure says
+     * the feeds are being asked — never that they did not answer.
+     */
+    let refreshAsking = false;
+    /**
+     * The valve's own refetch is out (CRITIC-CARRYOVER-9 item 2): a Pay
+     * press over an aged rate asks the feeds, and that ask counts as asking
+     * like the refresh control's — the refresh control is hidden while it is
+     * out, and a press on either control sends no second ask. One ask at a
+     * time, whichever control made it.
+     */
+    let valveAsking = false;
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -4725,6 +5033,19 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const why = el('p', 'fine', '');
     why.hidden = true;
     card.append(why);
+    /**
+     * The rate row is mounted only for a quote that reads a rate — an XEC
+     * sheet carries no rate node at all — so a record recomposed into
+     * another unit mounts it, or takes it off, in its own place above the
+     * card's sentence.
+     */
+    const mountRateRow = (): void => {
+        if (usesRate && rateRow.parentNode === null) {
+            why.before(rateRow);
+        } else if (!usesRate) {
+            rateRow.remove();
+        }
+    };
     // The rail's own limits, under the figure and inside the card: this is
     // where a buyer is looking when they decide, and a note further down the
     // sheet is a note read after the decision.
@@ -4763,7 +5084,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         void handlers
             .onLookupToken(tokenId)
             .then((answer) => {
-                if (wrap.parentNode !== null) {
+                // `isConnected`, not a parent: a repaint detaches the stall
+                // around the sheet, and the sheet keeps its scrim as a parent.
+                if (wrap.isConnected) {
                     paintProvenance(answer.attribution);
                 }
             })
@@ -4778,13 +5101,20 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * cut of it as a title; this is the sheet where "describe the item so they
      * know what they pay for" pays off, so nothing here is shortened.
      */
-    const words = view.descriptions?.get(tokenId);
-    if (words !== undefined && words !== '') {
-        const said = el('dl', 'row pay-words');
-        said.append(el('dt', undefined, copy.PAY_WORDS_LABEL));
+    const wordsNode = (words: string | undefined): HTMLElement | null => {
+        if (words === undefined || words === '') {
+            return null;
+        }
+        const node = el('dl', 'row pay-words');
+        node.append(el('dt', undefined, copy.PAY_WORDS_LABEL));
         const value = el('dd', undefined, words);
         value.setAttribute('data-role', 'pay-words');
-        said.append(value);
+        node.append(value);
+        return node;
+    };
+    let wordsShown = view.descriptions?.get(tokenId);
+    let said = wordsNode(wordsShown);
+    if (said !== null) {
         wrap.append(said);
     }
 
@@ -4855,30 +5185,33 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // goes under one closed summary after the control: mechanism, read by
     // whoever wants it, never standing between the figure and Pay.
     const how = el('div');
-    how.append(el('p', 'fine', copy.PAY_FINE_MEMO));
-    how.append(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS));
+    const someWallets = el('p', 'fine', copy.PAY_FINE_SOME_WALLETS);
+    how.append(el('p', 'fine', copy.PAY_FINE_MEMO), someWallets);
     /*
      * The seller's own margin, and the two honest ways of not having one. Only
      * a quote that needs a rate can drift, and a value past what this app's
      * own presets can say is named as wider rather than printed as a figure
-     * whose meaning nothing here can vouch for.
+     * whose meaning nothing here can vouch for. Rewritten in place when the
+     * record's margin changes under the open sheet (`recheck`).
      */
-    const tolerance = toleranceLine(price);
-    if (tolerance !== null) {
-        how.append(tolerance);
-    }
-    // Only under a tolerance line that is on the sheet: an XEC quote
-    // mounts none (§5), whatever byte the record carries.
-    // Both bytes on the record AND a tolerance line on the sheet: an XEC
-    // quote mounts none (§5), and "not stated" is a line about no margin.
-    if (tolerance !== null && price.tolerancePct !== undefined && price.surchargePct !== undefined) {
-        how.append(el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE));
-    }
+    const marginLines = (record: TokenPrice): HTMLElement[] => {
+        const tolerance = toleranceLine(record);
+        if (tolerance === null) {
+            return [];
+        }
+        // Both bytes on the record AND a tolerance line on the sheet: an XEC
+        // quote mounts none (§5), and "not stated" is a line about no margin.
+        return record.tolerancePct !== undefined && record.surchargePct !== undefined
+            ? [tolerance, el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE)]
+            : [tolerance];
+    };
+    let margins = marginLines(price);
+    someWallets.after(...margins);
     how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
     if (decimalsOf(view.tokens, tokenId) > 0) {
         how.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
     }
-    const age = quoteAgeNode(view, tokenId, 'p', 'fine');
+    let age = quoteAgeNode(view, tokenId, 'p', 'fine');
     if (age !== null) {
         how.append(age);
     }
@@ -4923,8 +5256,17 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
     (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
     wrap.append(final);
     wrap.append(qrFold);
-    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
+    const howFold = sheetFold('pay-how', copy.PAY_HOW_FOLD, how);
+    wrap.append(howFold);
     wrap.append(payFoot(handlers));
+    /**
+     * The sentence a record that left says, in the box the rebuilt sheet
+     * says it in (the `item === undefined` branch): mounted under the head
+     * only while the sheet has nothing to compose, so the fence before Pay
+     * never meets it.
+     */
+    const lostBox = el('p', 'ctx', '');
+    lostBox.setAttribute('data-role', 'pay-lost');
 
     /**
      * Everything the figure touches, recomposed from one `satsForQuote`
@@ -4938,22 +5280,405 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      */
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
+    /**
+     * The seller's record moved under this sheet before this paint — found
+     * by a press, by an ask's tail, or in place on the sheet this one
+     * replaced (`payRecordMoved`): said on the valve's line until a valve
+     * outcome of its own replaces it, and the control restates the figure
+     * it will open, whatever the valve says after (the owner's rule,
+     * CRITIC-CARRYOVER-4: never the plain "Pay with Cashtab" once the
+     * figure has changed). A grace carried with no move on file
+     * (`payChangedAt` alone: a hand-back that carried only a rate answer's
+     * stamp, or the app's stamp for a rate it paints) holds presses and
+     * restates the figure (`changedAtMs`), and says no record changed
+     * (CRITIC-CARRYOVER-7 item 4).
+     */
+    const recordMoved = view.payRecordMoved !== undefined;
+    /**
+     * Which of the valve's two lines is the newer, and so the one that
+     * stands (CRITIC-CARRYOVER-6 item 4): a change of the record under the
+     * sheet (`recompose`) or a rate answer's outcome (the valve's, the
+     * refresh control's). A valve answer after a change in place says the
+     * valve's own line — "check the figure" would be stale over a figure the
+     * answer moved — and a change after an answer says the record's. At the
+     * paint the valve's outcome leads, as it always did, and a line the
+     * sheet handed back with rides the paint that replaces it
+     * (`PayShown.outcome`), so an absorbed press repeats the line that
+     * stood.
+     */
+    let lineFrom: 'record' | 'rate' = 'rate';
+    /**
+     * The line asks for the press again (the owner's whole sentence,
+     * `PAY_QUOTE_CHANGED`) only after a PAY press this sheet absorbed, and
+     * only while a Pay control stands (`refresh`): set by that press, or by
+     * the paint it asked for (`payRecordMovedUnpressed` absent); taken off
+     * by a change in place, which no press made, and by a press that opened
+     * a wallet, after which there is no "again" to ask for
+     * (CRITIC-CARRYOVER-4 item 4).
+     */
+    let pressedLine = view.payRecordMoved !== undefined && view.payRecordMovedUnpressed !== true;
+    /**
+     * A press on this sheet has opened a wallet since it last absorbed a Pay
+     * press — seeded from the paint (`payWalletOpened`, beside the valve's
+     * carried line) — so the valve's line asks for no press
+     * (`PAY_VALVE_TEXT_AFTER_OPEN`; CRITIC-CARRYOVER-7 item 2): set by the
+     * press that opened, taken off by a Pay press that opened nothing,
+     * whose line may ask again. The refresh control is no Pay press: its
+     * answer after an open asks for none.
+     */
+    let opened = view.payWalletOpened === true;
+    /**
+     * A press on this sheet has opened a wallet since it opened — seeded from
+     * the paint (`payWalletWasOpened`, kept by the app across every
+     * hand-back) and set by the press that opened, never taken off: a sheet
+     * whose record left then says its sentence without "no wallet was
+     * opened" (`PAY_QUOTE_GONE_OPENED`; CRITIC-CARRYOVER-8 item 2).
+     */
+    let walletWasOpened = view.payWalletWasOpened === true;
+    /**
+     * What a re-read did to the record under the open sheet (the owner,
+     * 2026-09-25): `changed` — still quoted, and the sheet recomposed in
+     * place from it, the buyer's quantity kept — a return to the record the
+     * sheet was opened on included, which is a change of the figure on
+     * screen like any other (CRITIC-CARRYOVER-4 item 2); `gone` — taken off;
+     * `unshown` — still there in a form this page does not paint as a quote
+     * (a unit it does not write, a genesis it never read). The last two
+     * compose nothing: no figure, no code, no Pay.
+     */
+    let movedUnder: 'changed' | 'gone' | 'unshown' | undefined;
+    const lost = (): boolean => movedUnder === 'gone' || movedUnder === 'unshown';
+    /**
+     * When the figure on screen last changed under the buyer, on the page's
+     * monotonic clock (`PAY_RECOMPOSE_GRACE_MS`), seeded from the paint so
+     * the grace spans the repaint an absorbed press asks for
+     * (`payChangedAt`). Every Pay press within the grace of it opens
+     * nothing — a double tap included — and a press after it opens the
+     * figure it was made over.
+     */
+    let changedAtMs: number | undefined = view.payChangedAt;
+    /** The figure the last `refresh()` painted: a rate answer that moves it is a change (`askRate`). */
+    let shownSats: bigint | undefined;
+    /** The figure on screen changed under the buyer, now: stamped, and handed to the app for the next paint. */
+    const stamp = (): void => {
+        changedAtMs = performance.now();
+        handlers.onPayFigureChanged?.(changedAtMs, [tokenId]);
+    };
+    /**
+     * When the valve's answer or the refresh control's last moved the
+     * figure on screen, on the same monotonic clock (CRITIC-CARRYOVER-5
+     * item 1): the owner's standing rule counts such an answer as a change,
+     * so every Pay press within `PAY_RECOMPOSE_GRACE_MS` of it opens
+     * nothing — the second tap of a double tap over the valve included.
+     * Sheet-local and never `stamp()`: the record did not move, so nothing
+     * is handed to the app, and a press inside it is absorbed IN PLACE
+     * (`absorbRatePress`) — the valve's line and the buyer's quantity stay,
+     * which a repaint from the app would drop. When the sheet hands itself
+     * back for another reason, the stamp rides the hand-back (`handBack`),
+     * or the app's paint would drop a grace still running
+     * (CRITIC-CARRYOVER-6 item 1).
+     */
+    let rateChangedAtMs: number | undefined;
+    /**
+     * `refresh()` after the valve's or the refresh control's answer,
+     * stamping the rate grace when the figure on screen changed — a figure
+     * where none stood included — and keeping focus in the dialog when the
+     * answer hid the control it was on (`keepFocusIn`, CRITIC-CARRYOVER-5
+     * item 7). A figure where none stood is a change HERE because it is not
+     * this sheet's first: that one came with the open, and is guarded by
+     * `PAY_OPEN_GUARD_MS` rather than the change grace (the app's
+     * `payRateLanded`; the owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2).
+     */
+    const refreshAfterRate = (): void => {
+        const focused = focusedIn(wrap);
+        const before = shownSats;
+        refresh();
+        if (shownSats !== undefined && shownSats !== before) {
+            rateChangedAtMs = performance.now();
+        }
+        keepFocusIn(wrap, [valve, why], focused, head);
+    };
+    /**
+     * The sheet hands itself back to be painted again from the records as
+     * they stand (`onPayRecordMoved`), with what it had on screen
+     * (`PayShown`; CRITIC-CARRYOVER-6 item 1): the rate its figure was
+     * composed at — never an answer this hand-back is instead of — and the
+     * later of its two stamps, so a rate grace still running is not dropped
+     * by the paint that replaces this sheet; and the valve's outcome when
+     * its line is the one standing (item 4).
+     */
+    const handBack = (pressed: boolean): void => {
+        handlers.onPayRecordMoved?.(tokenId, pressed, {
+            rate: rate?.rate,
+            changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+            // No `opened` beside it: the single sheet carries its valve line
+            // back only to a sheet whose record left, whose one sentence is
+            // not the valve's (CRITIC-CARRYOVER-8 item 6: the flag no road
+            // reached is gone; "Pay several" keeps its own).
+            ...(rateLineStands() && outcome !== undefined ? { outcome } : {}),
+            // Its own ask still out: the sheet painted in its place asks none.
+            ...(valveAsking || refreshAsking ? { asking: true as const } : {}),
+        });
+    };
+    /**
+     * Bumped by every recompose that changed something on screen, so an
+     * ask's tail knows the figure it measured is no longer the one there. A
+     * recompose that changed nothing — a record this page cannot show
+     * replaced by another it cannot show — bumps nothing: it cancelled an
+     * in-flight valve or refresh answer that nothing had made stale
+     * (CRITIC-CARRYOVER-5 item 6).
+     */
+    let composedAt = 0;
+
+    /** The record's margin lines, taken in place (`marginLines`). */
+    const takeMargins = (): void => {
+        const next = marginLines(price);
+        for (const line of margins) {
+            line.remove();
+        }
+        someWallets.after(...next);
+        margins = next;
+    };
+
+    /**
+     * The unit an ask for this sheet's rate is out for: the open's own (the
+     * app's, answered by a paint of its own) or one this sheet made in place
+     * (`askRate`). A recompose asks only when none is out; an ask whose
+     * unit the record has since left asks again for the one it stands in.
+     */
+    let askingUnit: string | undefined = asking ? price.code : undefined;
+    /**
+     * A rate for the unit a recompose moved the sheet into, asked in place.
+     * The app answers for the unit its records hold now, which is this
+     * sheet's; an answer landing after the record moved again is written
+     * nowhere, and one landing on a sheet a repaint replaced is dropped.
+     */
+    const askRate = (): void => {
+        if (handlers.onPayRate === undefined) {
+            return;
+        }
+        const unit = price.code;
+        askingUnit = unit;
+        asking = true;
+        payWhy = undefined;
+        void handlers.onPayRate(PAY_RATE_TIMEOUT_MS).then((fresh) => {
+            if (!wrap.isConnected || askingUnit !== unit) {
+                return;
+            }
+            askingUnit = undefined;
+            if (price.code !== unit) {
+                // Moved again while this unit was asked for: never composed
+                // across units — the unit it stands in now is asked for.
+                if (usesRate && rate === undefined) {
+                    askRate();
+                } else {
+                    asking = false;
+                    refresh();
+                }
+                return;
+            }
+            asking = false;
+            if (fresh !== undefined && fresh.rate !== undefined) {
+                rate = fresh;
+                rateUnit = unit;
+                payWhy = undefined;
+            } else {
+                payWhy = fresh?.why ?? 'no-answer';
+            }
+            const focused = focusedIn(wrap);
+            const before = shownSats;
+            refresh();
+            // The figure this answer puts on screen is a change like a
+            // re-read's (CRITIC-CARRYOVER-4 item 6): the grace starts when
+            // it is painted, not at the recompose that asked for it.
+            if (shownSats !== undefined && shownSats !== before) {
+                stamp();
+            }
+            keepFocusIn(wrap, [valve, why], focused, head);
+        });
+    };
+
+    /**
+     * The sheet recomposed in place from the record as it stands, after a
+     * move in what the buyer pays: the figure, the quote, the surcharge, the
+     * rate row, both links, the code and the restated figure — one bigint,
+     * as ever (`refresh`) — or, for a record gone or no longer painted as a
+     * quote, nothing composed at all. A return to the record the sheet was
+     * opened on is recomposed the same way and keeps its line: the figure
+     * on screen changed (CRITIC-CARRYOVER-4 item 2). Every such change is
+     * stamped (`stamp`), spoken, and opens the grace; a re-read that moved
+     * nothing on screen — a record this page cannot show replaced by
+     * another it cannot show — changes nothing, says nothing and answers
+     * false, so a press over it goes on.
+     */
+    const recompose = (now: RecordsNow, current: TokenPrice | undefined): boolean => {
+        const focused = focusedIn(wrap);
+        const was = movedUnder;
+        const wasLost = lost();
+        const quoted =
+            current !== undefined &&
+            quotedItems({ ...view, prices: now.prices }).some((row) => row.tokenId === tokenId);
+        if (current === undefined || !quoted) {
+            movedUnder = current === undefined ? 'gone' : 'unshown';
+        } else {
+            price = current;
+            usesRate = price.code !== XEC_PRICE_CODE;
+            const unitMoved = usesRate && rateUnit !== price.code;
+            if (rateUnit !== price.code) {
+                // A rate read for another unit composes nothing here.
+                rate = undefined;
+                rateUnit = undefined;
+                payWhy = undefined;
+                outcome = undefined;
+            }
+            mountRateRow();
+            takeMargins();
+            movedUnder = 'changed';
+            // Only a unit the sheet holds no rate for is asked, and only
+            // when no ask is already out: a feed that did not answer for
+            // the same unit is the refresh control's to ask again.
+            if (unitMoved && askingUnit === undefined) {
+                askRate();
+            }
+        }
+        if (wasLost && lost() && was === movedUnder) {
+            return false;
+        }
+        composedAt += 1;
+        // In place, no press was made: the line asks for none. The record's
+        // line is the newer one now.
+        pressedLine = false;
+        lineFrom = 'record';
+        refresh();
+        stamp();
+        speakRecompose(wrap, [lost() ? lostBox : valve], focused, head);
+        return true;
+    };
+
+    /**
+     * The seller's record as the app holds it now, taken onto the sheet.
+     * Asked whenever a re-read lands while the sheet holds the paint
+     * (`payRecordChecks`), at every press, and after every await that
+     * precedes a figure.
+     *
+     * True when what the buyer pays moved since the sheet last saw the
+     * record (`seen`) — the figure, the unit or the surcharge, the record
+     * gone, or a record gone that came back (`movedRecords`) — and the sheet
+     * was recomposed in place from the record as it stands (`recompose`),
+     * a change on screen. A record that asks the same payment but changed
+     * its tolerance, its words or its clock is taken in place with no line
+     * and no stop (the owner, 2026-09-25); the valve then measures against
+     * the margin the record states now. A record that came back to what the
+     * sheet was opened on is a change like any other (CRITIC-CARRYOVER-4
+     * item 2). A read that stopped at our cap before this token has not
+     * moved it (`movedRecords`), so a record the sheet saw leave stays gone.
+     */
+    const recheck = (): boolean => {
+        const now = handlers.onPayRecords?.();
+        if (now === undefined) {
+            return false;
+        }
+        // Not reached by a read that stopped at our cap, or no definite read
+        // at all: nothing to take.
+        const current = now.known ? now.prices?.get(tokenId) : undefined;
+        if (current !== undefined) {
+            const words = now.descriptions?.get(tokenId);
+            if (words !== wordsShown) {
+                wordsShown = words;
+                const next = wordsNode(words);
+                if (said !== null && next !== null) {
+                    said.replaceWith(next);
+                } else if (said !== null) {
+                    said.remove();
+                } else if (next !== null) {
+                    valve.before(next);
+                }
+                said = next;
+                if (said !== null) {
+                    said.hidden = lost();
+                }
+                headNote = words === undefined || words === '' ? copy.QUOTE_NO_WORDS_LINE : '';
+                paintHead(head, lost() ? undefined : { title: named.title, sub: headNote });
+            }
+            const ageNow = quoteAgeNode({ ...view, quoteTimes: now.quoteTimes }, tokenId, 'p', 'fine');
+            if (ageNow?.textContent !== age?.textContent) {
+                if (age !== null && ageNow !== null) {
+                    age.replaceWith(ageNow);
+                } else if (age !== null) {
+                    age.remove();
+                } else if (ageNow !== null) {
+                    minted.before(ageNow);
+                }
+                age = ageNow;
+            }
+        }
+        if (movedRecords(new Map([[tokenId, seen]]), now).length > 0) {
+            seen = current;
+            return recompose(now, current);
+        }
+        if (current === undefined || lost()) {
+            return false;
+        }
+        if (!samePrice(price, current)) {
+            seen = current;
+            price = current;
+            takeMargins();
+            refresh();
+        }
+        return false;
+    };
+    at.registerCheck((): void => {
+        recheck();
+    });
+
+    /** A change of the record stands on the valve's line: one in place, or on the sheet this one replaced. */
+    const recordLineStands = (): boolean => movedUnder === 'changed' || recordMoved;
+    /** The valve's own outcome stands on the line: newer than any record change (`lineFrom`), or alone. */
+    const rateLineStands = (): boolean => outcome !== undefined && (lineFrom === 'rate' || !recordLineStands());
 
     const refresh = (): void => {
-        clearPayQrTimer();
+        at.clearQrTimer();
+        const gone = lost();
         // One bigint: the quote converted, then the seller's surcharge on top
         // (rounded up, both steps), and that same number feeds the figure,
-        // both links and the code below.
-        const sats = satsWithSurcharge(
-            satsForQuote(price, quantity, rate?.rate),
-            price.surchargePct,
-        );
+        // both links and the code below. Nothing at all over a record that
+        // left.
+        const sats = gone
+            ? undefined
+            : satsWithSurcharge(satsForQuote(price, quantity, rate?.rate), price.surchargePct);
         const memoHex = encodePaymentMemoHex(tokenId, quantity);
         const subDust = sats !== undefined && sats < DUST_SATS;
         const composable = sats !== undefined && memoHex !== undefined;
         const bip21 = composable ? payBip21(address, sats, memoHex) : undefined;
         const cashtab = composable ? cashtabPayUrl(address, sats, memoHex) : undefined;
         const pay = composable ? payECashPayUrl(address, sats, memoHex) : undefined;
+        shownSats = sats;
+
+        // A record gone or no longer painted as a quote: the head, one
+        // sentence, the way out — the shape the rebuilt sheet has.
+        if (gone && lostBox.parentNode === null) {
+            head.after(lostBox);
+        } else if (!gone) {
+            lostBox.remove();
+        }
+        lostBox.textContent =
+            movedUnder === 'unshown'
+                ? walletWasOpened
+                    ? copy.PAY_QUOTE_UNSHOWN_OPENED
+                    : copy.PAY_QUOTE_UNSHOWN
+                : movedUnder === 'gone'
+                  ? walletWasOpened
+                      ? copy.PAY_QUOTE_GONE_OPENED
+                      : copy.PAY_QUOTE_GONE
+                  : '';
+        paintHead(head, gone ? undefined : { title: named.title, sub: headNote });
+        card.hidden = gone;
+        qtyRow.hidden = gone;
+        acts.hidden = gone;
+        final.hidden = gone;
+        howFold.hidden = gone;
+        if (said !== null) {
+            said.hidden = gone;
+        }
 
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
@@ -4987,9 +5712,18 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         surcharge.textContent =
             added === undefined ? '' : copy.paySurchargeLine(added, quoteFigure(surchargedQuote(price)));
 
+        // Any ask out — the open's, one this sheet made for a moved unit,
+        // the refresh control's own (CRITIC-CARRYOVER-8 item 3) or the
+        // valve's (CRITIC-CARRYOVER-9 item 2).
+        const askingNow = asking || refreshAsking || valveAsking;
         if (usesRate) {
             const glance = formatXecRate(rate?.rate, price.code);
-            rateRow.hidden = glance === undefined;
+            // No rate and no ask out: the row stays for its refresh control,
+            // the way on the sentence under it promises ("until a price
+            // arrives"; CRITIC-CARRYOVER-7 item 3), its label empty. While an
+            // ask is out the control is hidden, whatever the row shows.
+            rateRow.hidden = glance === undefined && (rate !== undefined || askingNow);
+            refreshRate.hidden = askingNow;
             rateLabel.textContent =
                 glance === undefined || rate === undefined
                     ? ''
@@ -5005,7 +5739,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         why.textContent = subDust
             ? copy.PAY_SUB_DUST
             : sats === undefined
-              ? asking
+              ? askingNow
                   ? copy.PAY_RATE_ASKING
                   : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
@@ -5016,13 +5750,39 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
         web.hidden = !linked;
         app.hidden = !linked;
         // After the price moved the control restates the figure it will open,
-        // composed from the same satoshis as the figure and both URLs.
+        // composed from the same satoshis as the figure and both URLs — the
+        // rate after a valve, the record after a re-read or a press — and
+        // once the figure has changed under the sheet it never goes back to
+        // the plain control, whatever the valve says after
+        // (CRITIC-CARRYOVER-4 item 2).
         web.textContent =
-            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+            (movedUnder === 'changed' ||
+                recordMoved ||
+                changedAtMs !== undefined ||
+                outcome === 'moved' ||
+                outcome === 'disagree') &&
+            sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined;
-        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
+        valve.hidden = movedUnder !== 'changed' && outcome === undefined && !recordMoved;
+        // In place, no press was made: the first clause alone (the owner,
+        // 2026-09-25, CRITIC-CARRYOVER-3 item 2). After a PAY press this
+        // sheet absorbed, the owner's whole sentence — only while a Pay
+        // control stands to press again (CRITIC-CARRYOVER-4 item 4).
+        const recordLine =
+            pressedLine && linked ? copy.PAY_QUOTE_CHANGED : copy.PAY_QUOTE_CHANGED_UNPRESSED;
+        // The newer of the two lines (`lineFrom`), asking for the Pay press
+        // only where a Pay control stands (`valveLine`).
+        const standing = rateLineStands() ? outcome : undefined;
+        valve.textContent =
+            standing !== undefined
+                ? valveLine(standing, linked, opened)
+                : recordLineStands()
+                  ? recordLine
+                  : '';
+        if (gone) {
+            valve.hidden = true;
+        }
         // A control with no destination is not a control: the role comes off
         // with the destination, so nothing on screen offers a press that does
         // nothing.
@@ -5039,7 +5799,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
          * after it was painted, and the amount inside it came from a rate that
          * has moved since — so it is taken away rather than left scannable,
          * and a timer does that without anyone touching the page. An XEC quote
-         * never ages: no rate is involved in it at all.
+         * never ages: no rate is involved in it at all. A record that moved
+         * under the sheet is recomposed into it (`recompose`), so what a
+         * phone reads is the record as the page holds it now.
          */
         const aged =
             usesRate && rate !== undefined && Date.now() - rate.atMs >= PAY_RATE_MAX_AGE_MS;
@@ -5051,7 +5813,7 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
-                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+                at.armQrTimer(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
             qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
@@ -5072,8 +5834,78 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * pressing a control that appears to do nothing. The change lands on the
      * press and never under the cursor.
      */
+    /**
+     * A Pay press that opened nothing because the figure changed under it:
+     * the line says so in the owner's whole sentence (a Pay control stands
+     * to press again), it is spoken, and the sheet is handed back to be
+     * painted again from the records as they stand — carrying the later of
+     * its two graces (`handBack`), so the second tap of a double tap is
+     * absorbed too, and a rate answer's grace outlives the repaint
+     * (CRITIC-CARRYOVER-6 item 1).
+     */
+    const absorbPress = (): void => {
+        pressedLine = true;
+        opened = false;
+        refresh();
+        speakRecompose(wrap, [lost() ? lostBox : valve], undefined, head);
+        handBack(true);
+    };
+    /**
+     * A Pay press inside the grace of a rate answer that moved the figure
+     * (`rateChangedAtMs`): it opens nothing, and it is absorbed here, in
+     * place — the valve's line, which already asks for the press again, is
+     * spoken once more, and nothing is handed to the app (CRITIC-CARRYOVER-5
+     * item 1). The app does not carry the valve's outcome, so a repaint
+     * from it would drop the line the buyer is reading.
+     */
+    const absorbRatePress = (): void => {
+        // A Pay press that opened nothing: after an open, its line may ask
+        // for the press again.
+        if (opened) {
+            opened = false;
+            refresh();
+        }
+        speakRecompose(wrap, [valve], undefined, head);
+    };
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
-        control.addEventListener('click', () => {
+        control.addEventListener('click', (event) => {
+            if (control.hidden) {
+                return;
+            }
+            // The second tap of the double tap that opened this sheet
+            // (`PAY_OPEN_GUARD_MS`): ignored silently — no line, no
+            // announcement, nothing asked, nothing handed back.
+            if (insideOpenGuard(event, view.payOpenedAt)) {
+                return;
+            }
+            // The seller's record first (the critic's final merge, item 11):
+            // a figure the page no longer holds as their quote is not opened
+            // from this press, and neither is one that changed under the
+            // sheet within the grace before the press was made
+            // (`insideGrace`, on the press's own time) — a double tap
+            // included. The sheet is handed back, painted again from the
+            // record as it stands, says so, and a press after the grace is
+            // the one that opens — the moved-rate valve's shape, for the
+            // other input. A record that changed only its margin or its words
+            // is taken in place (`recheck`) and the press goes on. The scan
+            // code is no press: a re-read recomposes it in place the moment
+            // the record moves (`payRecordChecks`), so what a phone can read
+            // is the record as the page holds it.
+            if (recheck() || insideGrace(event, changedAtMs)) {
+                absorbPress();
+                return;
+            }
+            // And inside the grace of a rate answer that moved the figure —
+            // the valve's own, or the refresh control's: a double tap over
+            // the valve is two presses, and the second was made over a
+            // figure painted a moment before (CRITIC-CARRYOVER-5 item 1).
+            if (insideGrace(event, rateChangedAtMs)) {
+                absorbRatePress();
+                return;
+            }
+            // The link is read AFTER the record check (CRITIC-CARRYOVER-4
+            // item 7): whatever `recheck()` put on screen, the press opens
+            // that, never a link composed before it.
             const url = destination();
             if (url === undefined) {
                 return;
@@ -5084,13 +5916,67 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 // the origin's `Referrer-Policy: no-referrer` header is the belt
                 // behind it.
                 window.open(url, '_blank', 'noopener,noreferrer');
+                // A wallet opened: there is no "again" left to ask for, on
+                // the record's line or the valve's (CRITIC-CARRYOVER-7 item 2).
+                const asked = pressedLine || (outcome !== undefined && !opened);
+                pressedLine = false;
+                opened = true;
+                walletWasOpened = true;
+                if (asked) {
+                    refresh();
+                }
+                handlers.onPayWalletOpened?.();
                 return;
             }
+            // One ask at a time (CRITIC-CARRYOVER-9 item 2): while any ask is
+            // out — the open's, a moved unit's, the refresh control's or this
+            // valve's own — a Pay press over an aged rate sends nothing, and
+            // the answer lands with a line that asks for the press again.
+            if (asking || refreshAsking || valveAsking) {
+                return;
+            }
+            // The valve's refetch counts as asking: the refresh control
+            // leaves until the answer. Painted before `opened` drops, so the
+            // line on screen does not change while the feeds are asked.
+            valveAsking = true;
+            refresh();
+            // A Pay press that opens nothing: the valve's answer below may
+            // ask for the press again.
+            opened = false;
             // Measured on the figure this sheet composes — surcharge included —
             // through the verdict both pay sheets share (`settleValve`).
             const before = satsWithSurcharge(satsForQuote(price, quantity, rate.rate), price.surchargePct);
+            const at = composedAt;
             void (async () => {
-                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                const fresh = await askForRate(handlers, () => {
+                    valveAsking = false;
+                });
+                // A sheet a repaint replaced while the feeds were asked marks
+                // nothing and composes nothing: a fresh sheet on the same item
+                // is not this one (the critic, 2026-09-25, item 7).
+                if (!wrap.isConnected) {
+                    return;
+                }
+                // A record that moved during the ask: the fresh rate is read
+                // for the unit the app holds now, which may not be the one
+                // `before` was measured in, so nothing is composed from it
+                // here and the sheet is handed back — a Pay press did it.
+                if (recheck() || composedAt !== at) {
+                    // Unless a later press opened a wallet over the figure
+                    // the move put on screen (`opened`, which this ask's own
+                    // press took off): there is no "again" left to ask for,
+                    // and this press came before that open, so it takes
+                    // nothing off. The line stands as the open left it, and
+                    // the sheet is handed back as no Pay press would hand it
+                    // (CRITIC-CARRYOVER-10 item 1).
+                    if (opened) {
+                        refresh();
+                        handBack(false);
+                        return;
+                    }
+                    absorbPress();
+                    return;
+                }
                 const settled = settleValve(
                     fresh,
                     before,
@@ -5101,16 +5987,57 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
-                refresh();
+                // Newer than any change in place: its line stands.
+                lineFrom = 'rate';
+                // The answer's figure is a change on screen: the grace
+                // starts when it is painted (`rateChangedAtMs`).
+                refreshAfterRate();
             })();
         });
     };
     armValve(web, () => webUrl);
     armValve(app, () => appUrl);
 
+    // No Pay press: a move it finds is handed back with a line that asks
+    // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
+        // One ask at a time (CRITIC-CARRYOVER-8 item 3): the control is
+        // hidden while any ask is out — the valve's included
+        // (CRITIC-CARRYOVER-9 item 2) — and a press that reaches it anyway
+        // sends nothing.
+        if (refreshAsking || asking || valveAsking) {
+            return;
+        }
+        if (recheck()) {
+            handBack(false);
+            return;
+        }
+        const at = composedAt;
+        // Asking, said before the await: the control leaves, a card with no
+        // figure says the feeds are being asked, and focus stays in the
+        // dialog (`keepFocusIn`) — parked, and given back to the control
+        // with the answer unless the buyer or the answer moved it since.
+        const focused = focusedIn(wrap);
+        refreshAsking = true;
+        refresh();
+        keepFocusIn(wrap, [why], focused, head);
+        const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
-            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            const fresh = await askForRate(handlers, () => {
+                refreshAsking = false;
+            });
+            // A sheet a repaint replaced while the feeds were asked marks
+            // nothing and composes nothing: a fresh sheet on the same item
+            // is not this one (the critic, 2026-09-25, item 7).
+            if (!wrap.isConnected) {
+                return;
+            }
+            if (recheck() || composedAt !== at) {
+                // The ask is no longer out, on the sheet handed back too.
+                refresh();
+                handBack(false);
+                return;
+            }
             const settled = settleValve(
                 fresh,
                 undefined,
@@ -5122,7 +6049,9 @@ function paySheet(view: StallView, handlers: StallHandlers): HTMLElement {
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
-            refresh();
+            lineFrom = 'rate';
+            refreshAfterRate();
+            giveFocusBack(wrap, refreshRate, parked);
         })();
     });
 
@@ -5247,6 +6176,22 @@ function selectionLineNode(
 }
 
 /**
+ * The sentence naming the chosen items a re-read took out
+ * (`view.selectionDropped`), or nothing: the strip and the sheet say which
+ * item left (the critic, 2026-09-25, item 4).
+ */
+function selectionDroppedLine(view: StallView): string | undefined {
+    const dropped = view.selectionDropped;
+    if (dropped === undefined || dropped.length === 0) {
+        return undefined;
+    }
+    return copy.selectionDroppedItems(
+        copy.itemNames(dropped.map((tokenId) => tokenName(view.tokens, tokenId))),
+        dropped.length,
+    );
+}
+
+/**
  * The "Pay several" strip: the tabs' own dress (`.seg`), in flow under the
  * rail tabs and never sticky. Closed, it is the control and a hint; open,
  * the tray unfolds under it (phone) or beside it (desk) with the chosen
@@ -5280,8 +6225,9 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
     const trayIn = el('div', 'sel-tray-in');
     tray.append(trayIn);
     if (open) {
-        if (view.selectionDropped === true) {
-            const dropped = el('p', 'fine sel-dropped', copy.SELECTION_DROPPED);
+        const droppedLine = selectionDroppedLine(view);
+        if (droppedLine !== undefined) {
+            const dropped = el('p', 'fine sel-dropped', droppedLine);
             dropped.setAttribute('data-role', 'selection-dropped');
             trayIn.append(dropped);
         }
@@ -5389,6 +6335,25 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
  * selection's tightest, the app's default counted for an item that states
  * none.
  */
+/**
+ * A sheet's own rate ask — the valve's or the refresh control's — with its
+ * flag cleared however the ask ends (CRITIC-CARRYOVER-10 item 6): in a
+ * `finally`, so an ask that rejects cannot leave the sheet asking for good,
+ * its refresh control hidden and every Pay press over an aged rate sending
+ * nothing. A rejection is a feed that did not answer — `undefined`, which
+ * the tail then says as such — and never an unhandled one. `readPayRate`
+ * does not reject today: this is the belt, not a road.
+ */
+async function askForRate(handlers: StallHandlers, done: () => void): Promise<PayRateAnswer | undefined> {
+    try {
+        return await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+    } catch {
+        return undefined;
+    } finally {
+        done();
+    }
+}
+
 function settleValve(
     fresh: PayRateAnswer | undefined,
     before: bigint | undefined,
@@ -5424,40 +6389,94 @@ function settleValve(
  * step 5), and the fine print says so. Tolerances are per item and shown
  * on each item's own sheet (D4); the valve measures against the tightest.
  */
-function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement {
+function paySeveralSheet(
+    view: StallView,
+    handlers: StallHandlers,
+    at: PaySheetRoot,
+): HTMLElement {
     const wrap = el('div', 'sheet');
     wrap.setAttribute('data-role', 'pay-several');
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
-    const selection = view.selection ?? new Map<string, bigint>();
-    const prices = view.prices;
-    const items = quotedItems(view).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    /** The choice as it was painted; a re-read that took an item out of it takes it out here too, in place (`recompose`). */
+    const openedChoice: ReadonlyMap<string, bigint> = view.selection ?? new Map<string, bigint>();
+    let selection: ReadonlyMap<string, bigint> = openedChoice;
+    /**
+     * The records the sheet composes from. A re-read that moves what the
+     * buyer pays for a chosen item recomposes the sheet in place from the
+     * records as they stand (the owner, 2026-09-25); one that asks the same
+     * payment is taken in place with no line: a margin the valve then
+     * measures against, never a figure.
+     */
+    let prices = view.prices;
+    const rows = (): QuotedItem[] =>
+        quotedItems({ ...view, prices }).filter((item) => (selection.get(item.tokenId) ?? 0n) > 0n);
+    const items = rows();
     const address = view.address ?? '';
     const count = Number(selectionCount(selection));
     wrap.setAttribute('aria-label', copy.paySeveralTitle(count));
     if (items.length === 0) {
-        // A live prune emptied the selection under the sheet: say so, with
-        // the sheet's own way out, rather than composing nothing in silence.
-        wrap.append(sheetHead(copy.paySeveralTitle(0), copy.SELECTION_EMPTY, handlers));
-        wrap.append(el('p', 'ctx', copy.SELECTION_EMPTY));
+        // No chosen item is a row. A choice the paint emptied after a press
+        // found the records moved is the seller's change, said so, with that
+        // no wallet was opened — but only a choice that is really empty
+        // (the critic, 2026-09-25, item 2): an item still chosen that this
+        // page could not read is our gap, said in the strip's own words, and
+        // a live prune that emptied the choice under no press is the empty
+        // choice's own line. Said once, in the box, never again under the
+        // head (the window, 2026-09-25).
+        const unread = unreadChosen(selection, view);
+        const failed = unread.filter((u) => u.why === 'unread').length;
+        const capped = unread.filter((u) => u.why === 'capped').length;
+        const ours = [
+            ...(failed > 0 ? [copy.selectionUnread(failed)] : []),
+            ...(capped > 0 ? [copy.selectionCapped(capped)] : []),
+        ].join(' ');
+        // Once a press on this sheet opened a wallet, never "no wallet was
+        // opened" (`payWalletWasOpened`; CRITIC-CARRYOVER-8 item 2).
+        const empty =
+            selection.size === 0
+                ? view.payRecordMoved !== undefined
+                    ? view.payWalletWasOpened === true
+                        ? copy.PAY_SEVERAL_GONE_OPENED
+                        : copy.PAY_SEVERAL_GONE
+                    : copy.SELECTION_EMPTY
+                : ours !== ''
+                  ? ours
+                  : copy.SELECTION_EMPTY;
+        // The lost sheet's one head, the single sheet's (the critic,
+        // CARRYOVER-3 item 6): "0 items · one payment" over a choice that
+        // may still hold an item this page could not read said nothing
+        // true.
+        wrap.setAttribute('aria-label', copy.PAY_TITLE);
+        wrap.append(sheetHead(copy.PAY_TITLE, '', handlers));
+        const said = el('p', 'ctx', empty);
+        said.setAttribute('data-role', 'pay-lost');
+        wrap.append(said);
+        const droppedLine = selectionDroppedLine(view);
+        if (droppedLine !== undefined) {
+            const dropped = el('p', 'fine', droppedLine);
+            dropped.setAttribute('data-role', 'pay-several-dropped');
+            wrap.append(dropped);
+        }
         wrap.append(payFoot(handlers));
         return wrap;
     }
+    /** The unit the choice was made in: a record that moved out of it leaves the choice, never the unit. */
     const unit = selectionUnit(selection, prices);
     const usesRate = unit !== XEC_PRICE_CODE;
     let rate = usesRate ? view.payRate : undefined;
     let payWhy: PayRateWhy | undefined = usesRate ? view.payRateWhy : undefined;
     let asking = usesRate && view.payRateAsking === true;
+    /** The single sheet's `refreshAsking`: the refresh control's own ask is out (CRITIC-CARRYOVER-8 item 3). */
+    let refreshAsking = false;
+    /** The single sheet's `valveAsking`: the valve's own refetch is out (CRITIC-CARRYOVER-9 item 2). */
+    let valveAsking = false;
     // The seller's own name when they set one; never the address in a
     // sentence, which `displayName` would fall back to.
     const stallName = view.stallName !== undefined && view.stallName !== '' ? view.stallName : undefined;
-    wrap.append(
-        sheetHead(
-            copy.paySeveralTitle(count),
-            stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName),
-            handlers,
-        ),
-    );
+    const severalSub = stallName === undefined ? copy.PAY_SEVERAL_SUB_NO_NAME : copy.paySeveralSub(stallName);
+    const head = sheetHead(copy.paySeveralTitle(count), severalSub, handlers);
+    wrap.append(head);
 
     const card = el('div', 'pay-amt');
     const cap = el('div', 'pay-cap', copy.PAY_CAP_SIGNS);
@@ -5469,42 +6488,82 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     card.append(figureRow);
     const lines = el('dl', 'pay-lines');
     lines.setAttribute('data-role', 'pay-lines');
-    for (const item of items) {
-        const n = selection.get(item.tokenId)!;
-        // One group per item: the name × count, the line's figure, then the
-        // record's own lines as further `dd`s (a `dt` may carry several).
-        // The sub-lines are NOT inside the figure's `dd`: a column sized by
-        // "+5% surcharge · the seller's record" left the name 90px on Neo's
-        // mono and "Roasted Beans × 2" broke onto three lines (measured at
-        // 390, 2026-09-21); as their own row they span the whole line.
-        const line = el('div', 'pay-line');
-        line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
-        const value = el('dd', 'pay-line-v');
-        value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
-        line.append(value);
-        const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
-        if (surcharge !== null) {
-            line.append(surcharge);
+    /** One group per chosen row, from the records the sheet composes now. */
+    const paintLines = (): void => {
+        const groups: HTMLElement[] = [];
+        for (const item of rows()) {
+            const n = selection.get(item.tokenId)!;
+            // One group per item: the name × count, the line's figure, then the
+            // record's own lines as further `dd`s (a `dt` may carry several).
+            // The sub-lines are NOT inside the figure's `dd`: a column sized by
+            // "+5% surcharge · the seller's record" left the name 90px on Neo's
+            // mono and "Roasted Beans × 2" broke onto three lines (measured at
+            // 390, 2026-09-21); as their own row they span the whole line.
+            const line = el('div', 'pay-line');
+            line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
+            const value = el('dd', 'pay-line-v');
+            value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
+            line.append(value);
+            const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
+            if (surcharge !== null) {
+                line.append(surcharge);
+            }
+            // The borrowed-id warning stays where a buyer decides, per item
+            // (the single sheet's own rule): the genesis is another wallet's.
+            if (view.genesis?.get(item.tokenId) === 'not-attributed') {
+                const borrowed = el('dd', 'pay-line-s warn', copy.QUOTE_NOT_MINTED_HERE);
+                borrowed.setAttribute('data-role', 'quote-not-minted');
+                line.append(borrowed);
+            }
+            groups.push(line);
         }
-        // The borrowed-id warning stays where a buyer decides, per item
-        // (the single sheet's own rule): the genesis is another wallet's.
-        if (view.genesis?.get(item.tokenId) === 'not-attributed') {
-            const borrowed = el('dd', 'pay-line-s warn', copy.QUOTE_NOT_MINTED_HERE);
-            borrowed.setAttribute('data-role', 'quote-not-minted');
-            line.append(borrowed);
-        }
-        lines.append(line);
-    }
+        lines.replaceChildren(...groups);
+    };
+    paintLines();
     card.append(lines);
-    const glance = selectionGlance(selection, prices);
+    // Which chosen item a re-read took out, under the lines it left: the
+    // total below is over what stayed. The items this paint's prune took out
+    // (`view.selectionDropped`), and any a re-read took out since, in place.
+    const dropped = el('p', 'fine', '');
+    dropped.setAttribute('data-role', 'pay-several-dropped');
+    /** The items a re-read took out of the choice while the sheet was open (`recompose`). */
+    let droppedHere: readonly string[] = [];
+    /**
+     * The dropped line. When taking items out is the whole of what changed
+     * the total while this sheet was open — in place, or found on the sheet
+     * this paint replaced (an item `payRecordMoved` names that this paint's
+     * prune took out), and no chosen item that stayed changed, so no valve
+     * line asks the buyer to look — it asks them to check the total (the
+     * owner, 2026-09-25, CRITIC-CARRYOVER-3 item 2). The owner's pressed
+     * form, "— check the total and press Pay again"
+     * (`selectionDroppedCheckPressed`, approved 2026-09-25), only after a
+     * PAY press this sheet absorbed, while a Pay control stands, and until
+     * a press opens a wallet (`pressedLine`; CRITIC-CARRYOVER-4 item 4):
+     * never over a remainder under the dust floor, never after the refresh
+     * control.
+     */
+    const droppedNow = (linked: boolean): string | undefined => {
+        const names = [...(view.selectionDropped ?? []), ...droppedHere.filter((t) => !(view.selectionDropped ?? []).includes(t))];
+        if (names.length === 0) {
+            return undefined;
+        }
+        const said = copy.itemNames(names.map((tokenId) => tokenName(view.tokens, tokenId)));
+        // With every chosen item gone there is no total to check: the lost
+        // box says what is left to say.
+        if (lostAll) {
+            return copy.selectionDroppedItems(said, names.length);
+        }
+        const tookOut =
+            droppedHere.length > 0 || [...changedItems].some((tokenId) => (view.selectionDropped ?? []).includes(tokenId));
+        if (tookOut && chosenChanged().length === 0) {
+            return pressedLine && linked
+                ? copy.selectionDroppedCheckPressed(said, names.length)
+                : copy.selectionDroppedCheck(said, names.length);
+        }
+        return copy.selectionDroppedItems(said, names.length);
+    };
     const total = el('div', 'pay-total', '');
     total.setAttribute('data-role', 'pay-total');
-    total.textContent =
-        glance === undefined
-            ? ''
-            : selectionHasSurcharge(selection, prices)
-              ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
-              : copy.paySeveralTotal(quoteFigure(glance));
     card.append(total);
     const rateRow = el('div', 'pay-rate-row');
     const rateLabel = el('span', 'pay-rate', '');
@@ -5557,16 +6616,262 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
     (qrFold as HTMLDetailsElement).open = payQrFoldOpens();
     wrap.append(final);
     wrap.append(qrFold);
-    wrap.append(sheetFold('pay-how', copy.PAY_HOW_FOLD, how));
+    const howFold = sheetFold('pay-how', copy.PAY_HOW_FOLD, how);
+    wrap.append(howFold);
     wrap.append(payFoot(handlers));
+    /** The sentence a choice that emptied under the sheet says, in the box the rebuilt sheet says it in. */
+    const lostBox = el('p', 'ctx', copy.PAY_SEVERAL_GONE);
+    lostBox.setAttribute('data-role', 'pay-lost');
 
     let outcome: StallView['payRateOutcome'] =
         view.payRateOutcome ?? (usesRate && rate?.check === 'disagree' ? 'disagree' : undefined);
+    /**
+     * Every item whose record changed while this sheet was open — a return
+     * to the record it was opened on included (CRITIC-CARRYOVER-4 item 2)
+     * — seeded from the paint (`payRecordMoved`: in place on the sheet this
+     * one replaced, or found by a press or an ask's tail). The valve's line
+     * names the ones still chosen, by the owner's per-item form (the critic,
+     * 2026-09-25, item 6): one taken out is said by the dropped line and
+     * never twice.
+     */
+    const changedItems = new Set<string>(view.payRecordMoved ?? []);
+    /** The chosen items among them, in the choice's order. */
+    const chosenChanged = (): string[] => [...selection.keys()].filter((tokenId) => changedItems.has(tokenId));
+    const movedNames = (tokens: readonly string[]): string =>
+        copy.itemNames(tokens.map((tokenId) => tokenName(view.tokens, tokenId)));
+    /**
+     * The line asks for the press again only after a PAY press this sheet
+     * absorbed, while a Pay control stands, and until a press opens a wallet
+     * (the single sheet's `pressedLine`; CRITIC-CARRYOVER-4 item 4).
+     */
+    let pressedLine = view.payRecordMoved !== undefined && view.payRecordMovedUnpressed !== true;
+    /** The single sheet's `opened`: a wallet opened, so the valve's line asks for no press. */
+    let opened = view.payWalletOpened === true;
+    /** The single sheet's `walletWasOpened`: never taken off, so a lost choice never says no wallet was opened. */
+    let walletWasOpened = view.payWalletWasOpened === true;
+    /** The records this sheet composes from: every chosen item's, as painted. */
+    const composed = new Map<string, TokenPrice>();
+    for (const tokenId of selection.keys()) {
+        const painted = prices?.get(tokenId);
+        if (painted !== undefined) {
+            composed.set(tokenId, painted);
+        }
+    }
+    /**
+     * Every chosen item's record as the sheet last SAW it (the critic,
+     * CARRYOVER-3 item 1), for every item of the choice as it was opened —
+     * `undefined` for one it saw leave. A re-read is judged against this and
+     * never against `composed` alone, which holds nothing for an item a
+     * re-read took out — so an item that comes back, at any figure, is
+     * chosen again and composed, rather than left "taken out" while the code
+     * paid the rest.
+     */
+    const seen = new Map<string, TokenPrice | undefined>(
+        [...openedChoice.keys()].map((tokenId) => [tokenId, prices?.get(tokenId)]),
+    );
+    /**
+     * Which of the valve's two lines is the newer, the single sheet's
+     * `lineFrom` (CRITIC-CARRYOVER-6 item 4): a re-read that recomposed this
+     * sheet in place leads with the chosen items that changed; a valve or
+     * refresh answer after it leads with its own outcome; on a paint the
+     * valve's outcome leads, as it always did.
+     */
+    let lineFrom: 'record' | 'rate' = 'rate';
+    /** Every chosen item left under the sheet: nothing to compose, no figure, no code, no Pay. */
+    let lostAll = false;
+    /**
+     * When the figure on screen last changed under the buyer (the single
+     * sheet's `changedAtMs`; `PAY_RECOMPOSE_GRACE_MS`), seeded from the paint.
+     */
+    let changedAtMs: number | undefined = view.payChangedAt;
+    /** The figure on screen changed under the buyer, now: stamped, and handed to the app for the next paint. */
+    const stamp = (tokenIds: readonly string[]): void => {
+        changedAtMs = performance.now();
+        handlers.onPayFigureChanged?.(changedAtMs, tokenIds);
+    };
+    /** The figure the last `refresh()` painted: a rate answer that moves it is a change. */
+    let shownSats: bigint | undefined;
+    /**
+     * The single sheet's `rateChangedAtMs` (CRITIC-CARRYOVER-5 item 1): when
+     * the valve's answer or the refresh control's last moved the figure on
+     * screen. Sheet-local, never `stamp()`, a Pay press inside its grace is
+     * absorbed in place (`absorbRatePress`), and it rides a hand-back
+     * (`handBack`).
+     */
+    let rateChangedAtMs: number | undefined;
+    /**
+     * The single sheet's `refreshAfterRate`, over the choice, focus kept in
+     * the dialog: a figure where none stood is a change here, the sheet's
+     * first having come with its open (`PAY_OPEN_GUARD_MS`).
+     */
+    const refreshAfterRate = (): void => {
+        const focused = focusedIn(wrap);
+        const before = shownSats;
+        refresh();
+        if (shownSats !== undefined && shownSats !== before) {
+            rateChangedAtMs = performance.now();
+        }
+        keepFocusIn(wrap, [valve, why], focused, head);
+    };
+    /** The single sheet's `handBack`, over the choice: the outcome rides it while its line stands. */
+    const handBack = (pressed: boolean): void => {
+        const standing = lineFrom === 'rate' || chosenChanged().length === 0 ? outcome : undefined;
+        handlers.onPayRecordMoved?.(undefined, pressed, {
+            rate: rate?.rate,
+            changedAtMs: laterStamp(changedAtMs, rateChangedAtMs),
+            ...(standing === undefined ? {} : { outcome: standing, ...(opened ? { opened } : {}) }),
+            ...(valveAsking || refreshAsking ? { asking: true as const } : {}),
+        });
+    };
+    let composedAt = 0;
+
+    /**
+     * The sheet recomposed in place from the records as they stand (the
+     * owner, 2026-09-25): the choice pruned as a paint prunes it
+     * (`pruneSelection`, in the unit it was chosen in) — an item removed or
+     * moved to another unit leaves it and is named on the dropped line —
+     * and the lines, the total, the figure, both links, the code and the
+     * restated figure composed from what stayed. An item that comes back —
+     * to its figure or the record the sheet was opened on — is chosen and
+     * composed again, and that is a change like any other
+     * (CRITIC-CARRYOVER-4 item 2). Every change is stamped, spoken and
+     * opens the grace (`PAY_RECOMPOSE_GRACE_MS`). A re-read that moved only
+     * an item already out of the choice changed nothing on screen: it
+     * starts no grace, says nothing and answers false, so a press over it
+     * goes on (CRITIC-CARRYOVER-4 item 4).
+     */
+    const recompose = (now: RecordsNow, movedSince: readonly string[]): boolean => {
+        const focused = focusedIn(wrap);
+        const before = { selection, composed: new Map(composed), lostAll, dropped: droppedHere };
+        const nowPrices = now.prices ?? new Map<string, TokenPrice>();
+        const pruned = pruneSelection(openedChoice, nowPrices, now.complete, now.decided, unit);
+        // An item the prune keeps with no record in this read is our gap —
+        // a walk that stopped at our page cap before it — and composes at the
+        // record the sheet last SAW (`seen`), never at the one it was opened
+        // on: that could be older than a move the sheet already took. An
+        // item the sheet SAW leave is never put back by a read that did not
+        // reach it (the critic, CRITIC-CARRYOVER-4 item 3): it stays out,
+        // named on the dropped line, until a read shows its record again.
+        const sawLeave = [...pruned.selection.keys()].filter(
+            (tokenId) => !nowPrices.has(tokenId) && seen.get(tokenId) === undefined,
+        );
+        selection = new Map([...pruned.selection].filter(([tokenId]) => !sawLeave.includes(tokenId)));
+        droppedHere = [...openedChoice.keys()].filter(
+            (tokenId) => pruned.dropped.includes(tokenId) || sawLeave.includes(tokenId),
+        );
+        composed.clear();
+        for (const tokenId of selection.keys()) {
+            const record = nowPrices.get(tokenId) ?? seen.get(tokenId);
+            if (record !== undefined) {
+                composed.set(tokenId, record);
+            }
+        }
+        prices = new Map([...(prices ?? []), ...composed]);
+        lostAll = selection.size === 0;
+        const unchanged =
+            lostAll === before.lostAll &&
+            selection.size === before.selection.size &&
+            [...selection].every(([tokenId, n]) => before.selection.get(tokenId) === n) &&
+            [...composed].every(([tokenId, record]) => samePayment(before.composed.get(tokenId), record));
+        if (unchanged) {
+            return false;
+        }
+        // Only a recompose that changed something on screen tells an ask's
+        // tail its answer is stale (the single sheet's `composedAt`).
+        composedAt += 1;
+        for (const tokenId of movedSince) {
+            changedItems.add(tokenId);
+        }
+        lineFrom = 'record';
+        // In place, no press was made: the line asks for none.
+        pressedLine = false;
+        paintLines();
+        refresh();
+        stamp(movedSince);
+        // What THIS change did, and nothing older standing beside it: the
+        // chosen items that changed (a return included), the items it took
+        // out, or the whole choice gone.
+        const tookOutNow = droppedHere.some((tokenId) => !before.dropped.includes(tokenId));
+        const changedChosenNow = movedSince.some((tokenId) => selection.has(tokenId));
+        speakRecompose(
+            wrap,
+            lostAll ? [lostBox] : [...(changedChosenNow ? [valve] : []), ...(tookOutNow ? [dropped] : [])],
+            focused,
+            head,
+        );
+        return true;
+    };
+
+    /**
+     * The single sheet's `recheck`, over every chosen item: true when a
+     * chosen item's record moved what the buyer pays since the sheet last
+     * saw it (`seen`: a record gone that came back included,
+     * `movedRecords`) and the sheet was recomposed in place, a change on
+     * screen (`recompose`); a record that changed only its margin is taken
+     * in place, and the valve measures against it. A read that stopped at
+     * our cap before an item has not moved it, so an item the sheet saw
+     * leave stays out.
+     */
+    const recheck = (): boolean => {
+        const now = handlers.onPayRecords?.();
+        if (now === undefined) {
+            return false;
+        }
+        const movedSince = movedRecords(seen, now);
+        if (movedSince.length > 0) {
+            for (const tokenId of movedSince) {
+                seen.set(tokenId, now.prices?.get(tokenId));
+            }
+            return recompose(now, movedSince);
+        }
+        if (!now.known) {
+            return false;
+        }
+        let redraw = false;
+        for (const [tokenId, painted] of composed) {
+            const current = now.prices?.get(tokenId);
+            if (current !== undefined && !samePrice(painted, current)) {
+                composed.set(tokenId, current);
+                redraw = true;
+            }
+        }
+        if (redraw) {
+            prices = new Map([...(prices ?? []), ...composed]);
+            refresh();
+        }
+        return false;
+    };
+    at.registerCheck((): void => {
+        recheck();
+    });
 
     const refresh = (): void => {
-        clearPayQrTimer();
-        const sats = selectionSats(selection, prices, rate?.rate);
+        at.clearQrTimer();
+        const sats = lostAll ? undefined : selectionSats(selection, prices, rate?.rate);
+        shownSats = sats;
         const subDust = sats !== undefined && sats < DUST_SATS;
+        const n = Number(selectionCount(selection));
+        wrap.setAttribute('aria-label', lostAll ? copy.PAY_TITLE : copy.paySeveralTitle(n));
+        paintHead(head, lostAll ? undefined : { title: copy.paySeveralTitle(n), sub: severalSub });
+        // Every chosen item left: the head, one sentence, who left, the way
+        // out — the shape the rebuilt sheet has.
+        if (lostAll && lostBox.parentNode === null) {
+            head.after(lostBox);
+        } else if (!lostAll) {
+            lostBox.remove();
+        }
+        lostBox.textContent = walletWasOpened ? copy.PAY_SEVERAL_GONE_OPENED : copy.PAY_SEVERAL_GONE;
+        card.hidden = lostAll;
+        acts.hidden = lostAll;
+        final.hidden = lostAll;
+        howFold.hidden = lostAll;
+        const glance = selectionGlance(selection, prices);
+        total.textContent =
+            glance === undefined
+                ? ''
+                : selectionHasSurcharge(selection, prices)
+                  ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
+                  : copy.paySeveralTotal(quoteFigure(glance));
         /*
          * The memo names the items this payment covers (`STLP`'s second
          * shape). **One item composes the shape that already exists**, which
@@ -5576,7 +6881,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
          * the code are composed without it and the fold says which happened.
          */
         const entries = [...selection].map(([tokenId, quantity]) => ({ tokenId, quantity }));
-        const composed =
+        const encoded =
             entries.length === 0
                 ? undefined
                 : entries.length === 1
@@ -5588,15 +6893,15 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         // cannot write) — the meter's own "one count, from the call that
         // produced the record" rule, applied to a sentence.
         const memo =
-            typeof composed === 'string'
-                ? composed
-                : composed !== undefined && 'hex' in composed
-                  ? composed.hex
+            typeof encoded === 'string'
+                ? encoded
+                : encoded !== undefined && 'hex' in encoded
+                  ? encoded.hex
                   : undefined;
         const refusal =
-            typeof composed === 'string' || composed === undefined || 'hex' in composed
+            typeof encoded === 'string' || encoded === undefined || 'hex' in encoded
                 ? undefined
-                : composed.why;
+                : encoded.why;
         const bip21 = sats === undefined ? undefined : payBip21(address, sats, memo);
         const cashtab = sats === undefined ? undefined : cashtabPayUrl(address, sats, memo);
         const pay = sats === undefined ? undefined : payECashPayUrl(address, sats, memo);
@@ -5617,9 +6922,15 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         figureRow.hidden = sats === undefined;
         figure.textContent = sats === undefined ? '' : formatXec(sats);
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
+        // Any ask out, the refresh control's own included: the single sheet's rule.
+        const askingNow = asking || refreshAsking || valveAsking;
         if (usesRate && unit !== undefined) {
             const glanceRate = formatXecRate(rate?.rate, unit);
-            rateRow.hidden = glanceRate === undefined;
+            // The single sheet's rule: no rate and no ask out keeps the
+            // refresh control (CRITIC-CARRYOVER-7 item 3), and while an ask
+            // is out the control is hidden (CRITIC-CARRYOVER-8 item 3).
+            rateRow.hidden = glanceRate === undefined && (rate !== undefined || askingNow);
+            refreshRate.hidden = askingNow;
             rateLabel.textContent =
                 glanceRate === undefined || rate === undefined
                     ? ''
@@ -5633,7 +6944,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         why.textContent = subDust
             ? copy.PAY_SUB_DUST_SEVERAL
             : sats === undefined
-              ? asking
+              ? askingNow
                   ? copy.PAY_RATE_ASKING
                   : copy.PAY_RATE_WHY_TEXT[payWhy ?? 'no-answer']
               : '';
@@ -5642,12 +6953,47 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         appUrl = pay;
         web.hidden = !linked;
         app.hidden = !linked;
+        const droppedText = droppedNow(linked);
+        dropped.textContent = droppedText ?? '';
+        if (droppedText === undefined) {
+            dropped.remove();
+        } else if (lostAll) {
+            lostBox.after(dropped);
+        } else {
+            lines.after(dropped);
+        }
+        // Restated whenever the figure is a recomposed one: the rate moved,
+        // two feeds disagree, or a chosen item changed or was taken out while
+        // the sheet was open — in place or on the sheet this paint replaced;
+        // an item that left changes the total as surely as one that moved,
+        // and is named on the dropped line alone. Once the figure has
+        // changed it never goes back to the plain control, whatever the
+        // valve says after (CRITIC-CARRYOVER-4 item 2).
         web.textContent =
-            (outcome === 'moved' || outcome === 'disagree') && sats !== undefined
+            (changedItems.size > 0 ||
+                droppedHere.length > 0 ||
+                changedAtMs !== undefined ||
+                outcome === 'moved' ||
+                outcome === 'disagree') &&
+            sats !== undefined
                 ? copy.payFigure(formatXec(sats))
                 : copy.PAY_CASHTAB;
-        valve.hidden = outcome === undefined;
-        valve.textContent = outcome === undefined ? '' : copy.PAY_VALVE_TEXT[outcome];
+        // In place, no press was made: the first clause alone, the single
+        // sheet's rule (the owner, 2026-09-25, CRITIC-CARRYOVER-3 item 2);
+        // the owner's whole sentence only after a PAY press this sheet
+        // absorbed, while a Pay control stands (CRITIC-CARRYOVER-4 item 4).
+        const changedNames = chosenChanged();
+        const changedLine =
+            changedNames.length === 0
+                ? undefined
+                : pressedLine && linked
+                  ? copy.payItemsChanged(movedNames(changedNames))
+                  : copy.payItemsChangedUnpressed(movedNames(changedNames));
+        // Asking for the Pay press only where a Pay control stands (`valveLine`).
+        const outcomeLine = outcome !== undefined ? valveLine(outcome, linked, opened) : undefined;
+        const line = lineFrom === 'record' ? (changedLine ?? outcomeLine) : (outcomeLine ?? changedLine);
+        valve.hidden = lostAll || line === undefined;
+        valve.textContent = line ?? '';
         if (linked) {
             web.setAttribute('data-role', 'pay-cashtab');
             app.setAttribute('data-role', 'pay-wallet');
@@ -5665,7 +7011,9 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
          * below the one density a phone has read here — while the count says
          * twenty-six either way (`qrScansInBox`, `CLAUDE.md` §9). The stale
          * sentence is about the rate and must not answer for size: that was
-         * the branch a too-long link fell into before this shipped.
+         * the branch a too-long link fell into before this shipped. A
+         * record that moved under the sheet is recomposed into the code
+         * (`recompose`), so what a phone reads is the choice as it stands.
          */
         const scans = bip21 !== undefined && qrScansInBox(bip21, PAY_QR_NARROWEST_PX);
         if (bip21 !== undefined && !aged && scans) {
@@ -5675,7 +7023,7 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
-                payQrTimer = setTimeout(refresh, Math.max(left, 0));
+                at.armQrTimer(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
             const line = el('p', 'fine', aged ? copy.PAY_QR_STALE : copy.PAY_QR_TOO_MANY);
@@ -5686,21 +7034,109 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
         }
     };
 
+    /** The single sheet's `absorbPress`, over the choice: said, spoken, handed back with the grace. */
+    const absorbPress = (): void => {
+        pressedLine = true;
+        opened = false;
+        refresh();
+        speakRecompose(wrap, lostAll ? [lostBox] : [valve, dropped], undefined, head);
+        handBack(true);
+    };
+    /** The single sheet's `absorbRatePress`: the valve's line spoken again, in place, nothing handed back. */
+    const absorbRatePress = (): void => {
+        // A Pay press that opened nothing: after an open, its line may ask
+        // for the press again.
+        if (opened) {
+            opened = false;
+            refresh();
+        }
+        speakRecompose(wrap, [valve], undefined, head);
+    };
     // The press-time valve, the single sheet's (its docblock says why a
     // second press is always required), over the selection's arithmetic.
     const armValve = (control: HTMLButtonElement, destination: () => string | undefined): void => {
-        control.addEventListener('click', () => {
+        control.addEventListener('click', (event) => {
+            if (control.hidden) {
+                return;
+            }
+            // The second tap of the double tap that opened this sheet, the
+            // single sheet's rule (`PAY_OPEN_GUARD_MS`): ignored silently.
+            if (insideOpenGuard(event, view.payOpenedAt)) {
+                return;
+            }
+            // The records first, the single sheet's rule: a chosen item's
+            // record that moved sends nothing and hands the sheet back, and
+            // so does every press inside the grace of a change on screen
+            // (`insideGrace`, on the press's own time), a double tap
+            // included; a press after the grace opens.
+            if (recheck() || insideGrace(event, changedAtMs)) {
+                absorbPress();
+                return;
+            }
+            // And inside the grace of a rate answer that moved the figure,
+            // the single sheet's rule (CRITIC-CARRYOVER-5 item 1).
+            if (insideGrace(event, rateChangedAtMs)) {
+                absorbRatePress();
+                return;
+            }
+            // Read AFTER the record check (CRITIC-CARRYOVER-4 item 7).
             const url = destination();
             if (url === undefined) {
                 return;
             }
             if (!usesRate || rate === undefined || Date.now() - rate.atMs <= PAY_RATE_MAX_AGE_MS) {
                 window.open(url, '_blank', 'noopener,noreferrer');
+                // A wallet opened: there is no "again" left to ask for, on
+                // the record's line or the valve's (CRITIC-CARRYOVER-7 item 2).
+                const asked = pressedLine || (outcome !== undefined && !opened);
+                pressedLine = false;
+                opened = true;
+                walletWasOpened = true;
+                if (asked) {
+                    refresh();
+                }
+                handlers.onPayWalletOpened?.();
                 return;
             }
+            // One ask at a time (CRITIC-CARRYOVER-9 item 2): while any ask is
+            // out — the open's, a moved unit's, the refresh control's or this
+            // valve's own — a Pay press over an aged rate sends nothing, and
+            // the answer lands with a line that asks for the press again.
+            if (asking || refreshAsking || valveAsking) {
+                return;
+            }
+            // The valve's refetch counts as asking: the refresh control
+            // leaves until the answer. Painted before `opened` drops, so the
+            // line on screen does not change while the feeds are asked.
+            valveAsking = true;
+            refresh();
+            // A Pay press that opens nothing: the valve's answer below may
+            // ask for the press again.
+            opened = false;
             const before = selectionSats(selection, prices, rate.rate);
+            const at = composedAt;
             void (async () => {
-                const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+                const fresh = await askForRate(handlers, () => {
+                    valveAsking = false;
+                });
+                // A sheet a repaint replaced while the feeds were asked marks
+                // nothing and composes nothing: a fresh sheet on the same item
+                // is not this one (the critic, 2026-09-25, item 7).
+                if (!wrap.isConnected) {
+                    return;
+                }
+                if (recheck() || composedAt !== at) {
+                    // A later press opened a wallet: the single sheet's rule
+                    // (CRITIC-CARRYOVER-10 item 1) — no "again", `opened`
+                    // kept, handed back as no Pay press would hand it.
+                    if (opened) {
+                        refresh();
+                        handBack(false);
+                        return;
+                    }
+                    absorbPress();
+                    return;
+                }
                 const settled = settleValve(
                     fresh,
                     before,
@@ -5711,22 +7147,59 @@ function paySeveralSheet(view: StallView, handlers: StallHandlers): HTMLElement 
                 asking = false;
                 payWhy = settled.payWhy;
                 outcome = settled.outcome;
-                refresh();
+                // Newer than any change in place: its line stands.
+                lineFrom = 'rate';
+                // The answer's figure is a change on screen: the grace
+                // starts when it is painted (`rateChangedAtMs`).
+                refreshAfterRate();
             })();
         });
     };
     armValve(web, () => webUrl);
     armValve(app, () => appUrl);
+    // No Pay press: a move it finds is handed back with a line that asks
+    // for no press (CRITIC-CARRYOVER-4 item 4).
     refreshRate.addEventListener('click', () => {
+        // One ask at a time, the single sheet's rule (CRITIC-CARRYOVER-8 item 3;
+        // the valve's ask included, CRITIC-CARRYOVER-9 item 2).
+        if (refreshAsking || asking || valveAsking) {
+            return;
+        }
+        if (recheck()) {
+            handBack(false);
+            return;
+        }
+        const at = composedAt;
+        const focused = focusedIn(wrap);
+        refreshAsking = true;
+        refresh();
+        keepFocusIn(wrap, [why], focused, head);
+        const parked = focused === refreshRate ? focusedIn(wrap) : undefined;
         void (async () => {
-            const fresh = await handlers.onPayRate?.(PAY_RATE_TIMEOUT_MS);
+            const fresh = await askForRate(handlers, () => {
+                refreshAsking = false;
+            });
+            // A sheet a repaint replaced while the feeds were asked marks
+            // nothing and composes nothing: a fresh sheet on the same item
+            // is not this one (the critic, 2026-09-25, item 7).
+            if (!wrap.isConnected) {
+                return;
+            }
+            if (recheck() || composedAt !== at) {
+                // The ask is no longer out, on the sheet handed back too.
+                refresh();
+                handBack(false);
+                return;
+            }
             const settled = settleValve(fresh, undefined, (r) => selectionSats(selection, prices, r), undefined);
             rate = settled.rate;
             asking = false;
             payWhy = settled.payWhy;
             // A refresh is never a "move": there was no figure to move from.
             outcome = settled.outcome === 'moved' ? 'refreshed' : settled.outcome;
-            refresh();
+            lineFrom = 'rate';
+            refreshAfterRate();
+            giveFocusBack(wrap, refreshRate, parked);
         })();
     });
 
@@ -5778,6 +7251,103 @@ function payFoot(handlers: StallHandlers): HTMLElement {
     }
     foot.append(close);
     return foot;
+}
+
+/**
+ * Focus given back to the refresh control when its answer brings it back
+ * (CRITIC-CARRYOVER-8 item 3): its own ask hid it, and focus was parked in
+ * the dialog (`parked`) meanwhile. Only while focus is still where it was
+ * parked — never over a place the buyer moved to, or the line an answer
+ * moved it to so it would be read.
+ */
+function giveFocusBack(wrap: HTMLElement, control: HTMLElement, parked: HTMLElement | undefined): void {
+    if (parked !== undefined && onSheet(wrap, control) && focusedIn(wrap) === parked) {
+        control.focus();
+    }
+}
+
+/** The element focus is on, when it is inside `wrap` — read before a recompose moves anything. */
+function focusedIn(wrap: HTMLElement): HTMLElement | undefined {
+    const active = wrap.ownerDocument.activeElement;
+    return active instanceof HTMLElement && wrap.contains(active) ? active : undefined;
+}
+
+/**
+ * What an in-place change says beyond the page (the critic, CARRYOVER-3
+ * item 7; CRITIC-CARRYOVER-4 item 5). The sheet is rebuilt for nobody, so a
+ * screen reader heard nothing: the lines that now say what changed are
+ * spoken through the one live region (`announce`) — those lines and no
+ * other, so a return never speaks an older sentence that still stands
+ * beside them. And a change that takes away the element the buyer was on
+ * — hidden (the Pay controls leave with a record that left, or with a unit
+ * whose rate is not in yet), removed (the rate row, when the quote moves to
+ * XEC), or a line focus was moved to that a return takes off — would drop
+ * focus out of the dialog, onto the page behind it: focus moves to the
+ * first line spoken, or to the sheet's head when none is.
+ */
+function speakRecompose(
+    wrap: HTMLElement,
+    lines: readonly HTMLElement[],
+    focused: HTMLElement | undefined,
+    head: HTMLElement,
+): void {
+    const said = shownLines(wrap, lines)
+        .map((line) => line.textContent ?? '')
+        .join(' ');
+    if (said !== '') {
+        announce(wrap.ownerDocument, said);
+    }
+    keepFocusIn(wrap, lines, focused, head);
+}
+
+/** The lines among `lines` that are on the sheet, shown, and say something. */
+function shownLines(wrap: HTMLElement, lines: readonly HTMLElement[]): HTMLElement[] {
+    return lines.filter(
+        (line) =>
+            line.isConnected && wrap.contains(line) && line.closest('[hidden]') === null && (line.textContent ?? '') !== '',
+    );
+}
+
+/**
+ * Focus kept inside a sheet whose change took away the element it was on
+ * (`focused`, read before the change): hidden, removed, or left under a
+ * hidden ancestor. It moves to the first of `lines` shown — the line that
+ * now says what happened — or to the sheet's head, never onto the page
+ * behind the dialog. Every change a sheet makes in place goes through it:
+ * a recompose (`speakRecompose`), and a rate answer that hid the control
+ * focus was on — a valve answer with no rate, which takes the Pay controls
+ * (CRITIC-CARRYOVER-5 item 7). A refresh the feed did not answer keeps its
+ * control since CRITIC-CARRYOVER-7 item 3, so focus stays on it.
+ */
+function keepFocusIn(
+    wrap: HTMLElement,
+    lines: readonly HTMLElement[],
+    focused: HTMLElement | undefined,
+    head: HTMLElement,
+): void {
+    if (focused === undefined || (wrap.contains(focused) && focused.closest('[hidden]') === null)) {
+        return;
+    }
+    const target = shownLines(wrap, lines)[0] ?? head.querySelector<HTMLElement>('.sheet-head-t > .item-n') ?? head;
+    target.setAttribute('tabindex', '-1');
+    target.focus();
+}
+
+/**
+ * A pay sheet's head, written in place: its title over its second line, or
+ * — `undefined`, a sheet whose record (or whole choice) left under it — the
+ * lost sheet's one head, `PAY_TITLE` over no second line, the head the
+ * rebuilt lost sheet paints (the critic, CARRYOVER-3 item 6).
+ */
+function paintHead(head: HTMLElement, words: { readonly title: string; readonly sub: string } | undefined): void {
+    const title = head.querySelector('.sheet-head-t > .item-n');
+    const sub = head.querySelector('.sheet-head-t > .fine');
+    if (title !== null) {
+        title.textContent = words === undefined ? copy.PAY_TITLE : words.title;
+    }
+    if (sub !== null) {
+        sub.textContent = words === undefined ? '' : words.sub;
+    }
 }
 
 /**

@@ -12,8 +12,10 @@ import { kitBaseline, kitBuildProblems, requireCleanKitBuild } from './workshop-
  *
  * The harness builds the kit's own config with its sheet import pointed at a
  * scratch sheet (a `resolveId` plugin here, never in the config) — which is
- * what a sheet that got past the lint is — and plants `/etc/hostname` in it,
- * with enough `../` to reach the root from wherever the scratch folder sits,
+ * what a sheet that got past the lint is — and plants `/etc/hosts` in it
+ * (Linux and macOS both have one; macOS has no `/etc/hostname`, which this
+ * test planted until the move to a Mac, 2026-09-26), with enough `../` to
+ * reach the root from wherever the scratch folder sits,
  * next to a real art file and an `?inline` of it. The check must name the
  * copied file and the `data:` URL, pass the art, and delete the build.
  *
@@ -72,13 +74,13 @@ async function plantedBuild(dir, outDir) {
 }
 
 describe('the-kit-build-emits-no-file-it-was-not-given', () => {
-    it('names /etc/hostname and an inlined file, passes the art, and deletes the build', async () => {
-        assert.ok(existsSync('/etc/hostname'), 'this test plants /etc/hostname and needs one to exist');
+    it('names /etc/hosts and an inlined file, passes the art, and deletes the build', async () => {
+        assert.ok(existsSync('/etc/hosts'), 'this test plants /etc/hosts and needs one to exist');
         const dir = kit(
             (at) =>
                 '.t-workshop .a { background: url(art/a.svg); }\n' +
                 // Enough `../` to reach the root from the sheet, whatever the depth.
-                `.t-workshop .b { background: url(${'../'.repeat(resolve(at).split(sep).length)}etc/hostname); }\n` +
+                `.t-workshop .b { background: url(${'../'.repeat(resolve(at).split(sep).length)}etc/hosts); }\n` +
                 '.t-workshop .c { background: url(art/a.svg?inline); }\n' +
                 REDUCE,
         );
@@ -89,7 +91,7 @@ describe('the-kit-build-emits-no-file-it-was-not-given', () => {
         const problems = kitBuildProblems({ outDir, artDir: join(dir, 'art'), baseline });
         assert.equal(problems.length, 2, problems.join('\n'));
         assert.ok(
-            problems.some((p) => /^assets\/hostname-[A-Za-z0-9_-]{8}\.?: neither a file/.test(p)),
+            problems.some((p) => /^assets\/hosts-[A-Za-z0-9_-]{8}\.?: neither a file/.test(p)),
             problems.join('\n'),
         );
         assert.ok(problems.some((p) => /\.css: carries 1 data: URL/.test(p)), problems.join('\n'));
@@ -97,7 +99,7 @@ describe('the-kit-build-emits-no-file-it-was-not-given', () => {
 
         await assert.rejects(
             requireCleanKitBuild({ configFile: CONFIG, outDir, artDir: join(dir, 'art'), baseline }),
-            /emitted 2 files it was not given[\s\S]*assets\/hostname-[\s\S]*has been deleted/,
+            /emitted 2 files it was not given[\s\S]*assets\/hosts-[\s\S]*has been deleted/,
         );
         assert.equal(existsSync(outDir), false, 'the refused build is deleted');
     });

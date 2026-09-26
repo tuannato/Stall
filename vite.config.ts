@@ -318,6 +318,14 @@ export default defineConfig({
         // The app's tests, and the layout harness's own unit tests (the
         // workshop kit's loader, resolver, shot plan and build checks).
         include: ['src/**/*.test.ts', 'layout/**/*.test.ts'],
+        // No test reaches the network: happy-dom's fetch interceptor refuses
+        // every request a document makes (a link's navigation included), and
+        // Node's sockets, DNS and UDP refuse every host that is not loopback,
+        // in the worker and in every worker thread and Node child process a
+        // test starts (the setup file's Node half). A test that tried
+        // fails, naming the URL and the test that started it. Test:
+        // `no-test-reaches-the-network`.
+        setupFiles: ['./src/test-no-network.ts'],
         environment: 'node',
         reporters: ['default'],
         // A slow test at vitest's 5 s default is a red that comes and goes

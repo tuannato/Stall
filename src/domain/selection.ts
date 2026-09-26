@@ -212,38 +212,44 @@ export function selectionTolerance(
  * records were merged by rank before they reach here (`mergeFailedRead`); a
  * walk that stopped at our cap is applied as read, and that gap is stated,
  * not closed.
+ *
+ * `unit` is the unit the selection was CHOSEN in, which the caller keeps
+ * from the first item's press (the critic, 2026-09-25, item 4): a record
+ * that moved to another unit leaves, whichever item it is. Judged against
+ * the first kept item's CURRENT unit instead, a republish that moved the
+ * first chosen item took every other item out and kept the one that moved.
+ * Without a unit (nothing named one), the first kept item's stands in.
+ * `dropped` names the items that left, in the order they were chosen, so a
+ * surface can say which.
  */
 export function pruneSelection(
     selection: Selection,
     prices: ReadonlyMap<string, TokenPrice>,
     complete: boolean,
     decided: ReadonlySet<string> = new Set(),
-): { selection: Map<string, bigint>; dropped: boolean } {
+    unit?: string,
+): { selection: Map<string, bigint>; dropped: string[] } {
     const kept = new Map<string, bigint>();
-    let dropped = false;
-    // The unit is the first KEPT item's that the read names: a re-read that
-    // took the first item out leaves the rest in their own unit; one that
-    // moved an item to another unit drops that item, or the selection would
-    // hold two units and every surface would go blank.
-    let unit: string | undefined;
+    const dropped: string[] = [];
+    let chosenIn = unit;
     for (const [tokenId, count] of selection) {
         const price = prices.get(tokenId);
         if (price === undefined) {
             if (complete || decided.has(tokenId)) {
-                dropped = true;
+                dropped.push(tokenId);
             } else {
                 kept.set(tokenId, count);
             }
             continue;
         }
         if (!isQuoteUnit(price.code)) {
-            dropped = true;
+            dropped.push(tokenId);
             continue;
         }
-        if (unit === undefined) {
-            unit = price.code;
-        } else if (price.code !== unit) {
-            dropped = true;
+        if (chosenIn === undefined) {
+            chosenIn = price.code;
+        } else if (price.code !== chosenIn) {
+            dropped.push(tokenId);
             continue;
         }
         kept.set(tokenId, count);

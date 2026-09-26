@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { DUST_SATS } from './domain/money';
+import { DUST_SATS, formatXec } from './domain/money';
 import { encodeCashAddress } from 'ecashaddrjs';
 import type { TokenMeta } from './domain/state';
 import { shaRmd160, toHex } from 'ecash-lib';
@@ -16,6 +16,7 @@ import { p2pkhOutputScript } from './net/script';
 import { stallPath } from './domain/route';
 import {
     SELECTION_DROPPED,
+    selectionDroppedItems,
     QUOTE_MINTED_CHIP,
     WINDOW_QUOTES_AS_LAST_READ,
     WINDOW_SOME_QUOTES_AS_LAST_READ,
@@ -40,11 +41,30 @@ import {
     PAY_RATE_IMPLAUSIBLE_WHY,
     RATE_SOURCE_CHECK,
     RATE_SOURCE_PRIMARY,
+    PAY_QUOTE_CHANGED,
+    PAY_QUOTE_CHANGED_UNPRESSED,
+    PAY_RATE_REFRESHED,
+    PAY_RATE_REFRESHED_OPENED,
+    PAY_QUOTE_GONE,
+    PAY_QUOTE_GONE_OPENED,
+    PAY_QUOTE_UNSHOWN,
+    PAY_SEVERAL_GONE,
+    PAY_SEVERAL_GONE_OPENED,
+    payItemsChangedUnpressed,
+    selectionDroppedCheck,
+    selectionDroppedCheckPressed,
+    payFigure,
+    payItemsChanged,
+    payTolerance,
 } from './ui/copy';
-import { scaleRate } from './domain/fiat';
+import { satsForQuote, scaleRate } from './domain/fiat';
 import {
+    qrSvg,
+    PAY_RECOMPOSE_GRACE_MS,
+    PAY_OPEN_GUARD_MS,
     PAY_CHECK_TIMEOUT_MS,
     FIAT_GLANCE_TIMEOUT_MS,
+    type StallHandlers,
 } from './ui/render';
 
 /**
@@ -326,27 +346,70 @@ vi.mock('./net/priceCheck', () => ({
 }));
 
 /**
- * The last view painted.
+ * The last view painted on each root.
  *
  * The event ring is state nothing renders yet, so there is no text on screen to
  * read it back from. The real `renderStall` still runs — every other test in
  * this file asserts on the DOM it produces — and the view it was handed is
- * captured on the way through.
+ * captured on the way through, **per root** (the critic, CARRYOVER-2 item 9):
+ * every app an earlier test booted keeps listening and painting — a
+ * `popstate`, a late burst timer — and one file-wide capture let any of them
+ * write the view a later test then read as its own (measured: seed 29 turned
+ * one test red). A test reads its own app's view, `viewOf(root)`.
  */
-const painted: { view?: StallView } = {};
+const paintedViews = new WeakMap<HTMLElement, StallView>();
+/** The last view this root was painted with: this test's own app, never another's late paint. */
+const viewOf = (root: HTMLElement): StallView | undefined => paintedViews.get(root);
+/**
+ * The handlers this root was last painted with: a test that must hand the
+ * app a call no sheet makes today (`a-hand-back-with-no-record-change-keeps-its-grace`)
+ * makes it through the app's own handler.
+ */
+const paintedHandlers = new WeakMap<HTMLElement, StallHandlers>();
+const handlersOf = (root: HTMLElement): StallHandlers | undefined => paintedHandlers.get(root);
 
 vi.mock('./ui', async (importOriginal) => {
     const real = await importOriginal<typeof import('./ui')>();
     return {
         ...real,
         renderStall: (root: HTMLElement, view: StallView, handlers: never) => {
-            painted.view = view;
+            paintedViews.set(root, view);
+            paintedHandlers.set(root, handlers);
             return real.renderStall(root, view, handlers);
         },
     };
 });
 
-const { boot } = await import('./app');
+const { boot: bootApp, WINDOW_BEAT_MS } = await import('./app');
+
+/**
+ * Every app a test booted, torn down after it (CRITIC-CARRYOVER-9 item 5).
+ * One document holds every test's app, and `boot` puts its listeners on the
+ * window and the document: an app no test tore down went on refreshing on
+ * every later `popstate`, and the two tests here that navigate between
+ * stalls spent nearly all their time in earlier tests' apps — 10 s and 8 s
+ * in this file alone, 16–20 s in `pnpm test`, against 0.3 s run by name. So
+ * `boot` here is the app's, keeping the teardown it returns, and each test's
+ * apps stop when it ends: their listeners off, their sockets closed, their
+ * timers cleared, and nothing of theirs painting again.
+ */
+const running: Array<() => void> = [];
+function boot(...args: Parameters<typeof bootApp>): void {
+    running.push(bootApp(...args));
+}
+afterEach(() => {
+    for (const stop of running.splice(0)) {
+        stop();
+    }
+});
+
+/**
+ * The words every "taken out" sentence shares — the wall's
+ * `SELECTION_DROPPED` and the phone's named `selectionDroppedItems` — so a
+ * test that says nothing was taken out reads both surfaces
+ * (`the-taken-out-words-are-in-every-taken-out-sentence`).
+ */
+const DROPPED_WORDS = 'taken out';
 type State = import('./app').AppState;
 
 /** Let the queued promise chains run. Several helpers await in sequence. */
@@ -371,6 +434,30 @@ async function until(cond: () => boolean, ms = 3_000): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 5));
     }
 }
+
+/**
+ * The page's monotonic clock, held still for the rest of one test (the
+ * critic, CRITIC-CARRYOVER-4 item 10): a pay sheet's grace is a change's
+ * `performance.now()` stamp against a press's `event.timeStamp`, which
+ * happy-dom takes from the same clock — so a pause under load between a
+ * change and a press moves neither, and only the test moves it on. Nothing
+ * else in the app reads this clock; `until` and the app's floors read
+ * `Date.now()`, which runs on.
+ */
+let heldClock: { mockRestore: () => void } | undefined;
+
+function holdClock(): (ms: number) => void {
+    let at = performance.now();
+    heldClock?.mockRestore();
+    heldClock = vi.spyOn(performance, 'now').mockImplementation(() => at);
+    return (ms) => {
+        at += ms;
+    };
+}
+afterEach(() => {
+    heldClock?.mockRestore();
+    heldClock = undefined;
+});
 
 function stallEmpty(over: Partial<State['view']> = {}): State {
     return {
@@ -457,8 +544,21 @@ function publish(tx: ChainTx): string {
     return tx.txid;
 }
 
+/**
+ * The roots `bootStall` put on the page, taken off after each test (the
+ * critic, CARRYOVER-3 item 8). On the page, as the app's own root is: a
+ * sheet's async tails answer only while it is connected
+ * (`wrap.isConnected`), and a detached root made every such tail return
+ * early — so a test through `bootStall` never saw what they do. The app a
+ * test booted is torn down after it (`running`), so a later test's
+ * `popstate` repaints nothing of it.
+ */
+const onPage: HTMLElement[] = [];
+
 function bootStall(state: State): { root: HTMLElement; loads: number } {
     const root = document.createElement('div');
+    document.body.append(root);
+    onPage.push(root);
     const counter = { root, loads: 0 };
     boot(root, async () => {
         counter.loads += 1;
@@ -467,11 +567,16 @@ function bootStall(state: State): { root: HTMLElement; loads: number } {
     return counter;
 }
 
+afterEach(() => {
+    for (const root of onPage.splice(0)) {
+        root.remove();
+    }
+});
+
 beforeEach(() => {
     window.history.replaceState(null, '', stallPath(PK));
     resetChain();
     watches.length = 0;
-    painted.view = undefined;
     localStorage.clear();
     priceControl.fetch = async () => undefined;
     priceControl.check = async () => undefined;
@@ -544,9 +649,9 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         return root;
     };
     /*
-     * Read off this test's own root, never `painted`: a `popstate` reaches
-     * every app an earlier test booted in this file, and each of them paints
-     * last into the shared capture.
+     * Read off this test's own root: a `popstate` reaches every app an
+     * earlier test booted in this file, and each of them repaints its own
+     * root (`viewOf` is per root for that reason).
      */
     const wallCount = (root: HTMLElement, name: string): string | undefined =>
         [...root.querySelectorAll('.sw-strip .sw-row, .sw-strip .item')]
@@ -607,7 +712,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'the choice stands').toContain('Plum Jam');
         expect(root.querySelector('.sw-sel-drop'), 'and nobody is told the seller took it').toBeNull();
         expect(root.querySelector('[data-role="window-paying"]'), 'the payment stands').not.toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
         // The last good records stand on the wall: the floor the throw left
         // would have taken the chosen item's own row off the list.
         expect(root.querySelector('.sw-strip')?.textContent, 'the chosen row stays on the wall').toContain('Plum Jam');
@@ -615,7 +720,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
         expect(wallCount(root, 'Plum Jam')).toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 
     it("a failed walk's load names only the tokens of its floor, and the wall keeps the kept ids' names and attributions", async () => {
@@ -649,7 +754,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
             await flush();
             expect(wallCount(root, 'Plum Jam'), `${pass}: the choice stands`).toBe('1');
             expect(root.querySelector('[data-role="window-paying"]'), `${pass}: the payment stands`).not.toBeNull();
-            expect(root.textContent, pass).not.toContain(SELECTION_DROPPED);
+            expect(root.textContent, pass).not.toContain(DROPPED_WORDS);
             expect(wallRow(root, 'Plum Jam')?.textContent, `${pass}: the kept row keeps its attribution`).toContain(
                 QUOTE_MINTED_CHIP,
             );
@@ -698,7 +803,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
 
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
 
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
@@ -707,7 +812,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         expect(root.querySelector('[data-role="window-selection"]')?.textContent, 'with the choice on it').toContain('Plum Jam');
         expect(wallCount(root, 'Plum Jam'), 'the choice stands over a failed book and walk').toBe('1');
         expect(root.querySelector('[data-role="window-paying"]'), 'and the payment code').not.toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 
     it('a phone retry on the quotes rail over a walk that failed keeps the choice', async () => {
@@ -732,7 +837,7 @@ describe('a-records-read-that-failed-never-empties-a-choice', () => {
         (root.querySelector('.pay-sec [data-role="retry"]') as HTMLButtonElement).click();
         await flush();
         expect(phoneCount(root, A), 'the choice stands after the retry').toBe('1');
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
     });
 });
 
@@ -849,7 +954,7 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         expect(selectionUnread(2)).toContain('2 items you chose');
         expect(strip?.querySelector('[data-role="selection-total"]'), 'no total over part of a choice').toBeNull();
         expect(strip?.querySelector('[data-role="pay-several-open"]'), 'and no Pay').toBeNull();
-        expect(root.textContent).not.toContain(SELECTION_DROPPED);
+        expect(root.textContent).not.toContain(DROPPED_WORDS);
         // The Pay a slow repaint left under a finger is refused too.
         stalePay!.click();
         await flush();
@@ -894,7 +999,7 @@ describe('a-choice-the-failed-read-did-not-reach-is-said-not-emptied', () => {
         await flush();
         const bar = root.querySelector('[data-role="window-selection"]');
         expect(bar?.textContent, 'the choice stands, named').toContain('Plum Jam ×1');
-        expect(root.textContent, 'never "no longer quoted"').not.toContain(SELECTION_DROPPED);
+        expect(root.textContent, 'never "no longer quoted"').not.toContain(DROPPED_WORDS);
         // Past our own page cap: the heartbeat's next read stops in the same
         // place, so the sentence offers no remedy (the critic's sixth pass).
         expect(bar?.querySelector('[data-role="selection-unread"]')?.textContent).toBe(windowSelectionCapped(1));
@@ -1118,7 +1223,7 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         await flush();
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
-        expect(painted.view?.recordsStale, 'a kept record is shown').toBe(true);
+        expect(viewOf(root)?.recordsStale, 'a kept record is shown').toBe(true);
         expect(wallRow(root, 'Rye Flour')).not.toBeUndefined();
         expect(fresh(root), 'but every quote on the rail was read now').toBe('Updated just now');
     });
@@ -1196,7 +1301,7 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush();
         expect(wallRow(root, 'Oat Milk'), 'the record the walk read is on the wall').not.toBeUndefined();
-        expect(painted.view?.genesis?.get(C), 'with the genesis it passed').toBe('attributed');
+        expect(viewOf(root)?.genesis?.get(C), 'with the genesis it passed').toBe('attributed');
         expect(wallRow(root, 'Oat Milk')?.textContent).toContain(QUOTE_MINTED_CHIP);
     });
 
@@ -1274,6 +1379,8 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             opens[0]!.click();
             await flush();
             expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('9,000');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
             const url = pressForUrl(root, 'pay');
             expect(url, 'the link carries the figure the walk read').toContain('amount=9000.00');
             expect(url, 'never the one it read past').not.toContain('amount=5000.00');
@@ -1288,27 +1395,29 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
                     .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
                     .click();
             }
-            expect(painted.view?.selection?.size).toBe(2);
+            expect(viewOf(root)?.selection?.size).toBe(2);
             await liveWalkThatThrows([newerA(), removeB()]);
 
-            expect(painted.view?.selection?.has(B), 'the removed item leaves the choice').toBe(false);
-            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+            expect(viewOf(root)?.selection?.has(B), 'the removed item leaves the choice').toBe(false);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Rye Flour', 1));
             (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
             await flush();
             const sheet = root.querySelector('[data-role="pay-several"]');
             expect(sheet?.querySelector('[data-role="price"]')?.textContent).toBe('9,000');
             expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Rye Flour');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
             const url = pressForUrl(root, 'pay-several');
             expect(url).toContain('amount=9000.00');
         });
 
         it('keeps what the walk never reached, and says it is as last read', async () => {
-            bootStall(phone());
+            const { root } = bootStall(phone());
             await flush();
             await liveWalkThatThrows([newerA()]);
-            expect(painted.view?.prices?.get(A)).toEqual(XEC_A_NEWER);
-            expect(painted.view?.prices?.get(B), 'B was never reached').toEqual(XEC_B);
-            expect(painted.view?.recordsStale).toBe(true);
+            expect(viewOf(root)?.prices?.get(A)).toEqual(XEC_A_NEWER);
+            expect(viewOf(root)?.prices?.get(B), 'B was never reached').toEqual(XEC_B);
+            expect(viewOf(root)?.recordsStale).toBe(true);
         });
     });
 
@@ -1331,7 +1440,7 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             record('5a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_NEWER }), 5, NEWER_SEEN);
 
         it('on the live road', async () => {
-            bootStall(stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A]]), shopTab: 'quotes' }));
+            const { root } = bootStall(stallEmpty({ tokens, genesis, prices: new Map([[A, XEC_A]]), shopTab: 'quotes' }));
             await flush();
             // A walk that finishes: both edits read, the newer wins.
             const older = olderAt6();
@@ -1341,14 +1450,14 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             chain.historyPages = [[older], [newer]];
             watches[0]!.hooks.onBurst?.([older.txid]);
             await flush();
-            expect(painted.view?.prices?.get(A), 'a finished walk shows the newer edit').toEqual(XEC_A_NEWER);
+            expect(viewOf(root)?.prices?.get(A), 'a finished walk shows the newer edit').toEqual(XEC_A_NEWER);
 
             // The same walk, and the page holding the newer edit throws.
             chain.historyPageThrows = new Set([1]);
             watches[0]!.hooks.onBurst?.([older.txid]);
             await flush();
             expect(chain.historyPageCalls.filter((p) => p === 1).length, 'the second walk reached page 1').toBe(2);
-            expect(painted.view?.prices?.get(A), 'the older edit the walk decided does not win').toEqual(XEC_A_NEWER);
+            expect(viewOf(root)?.prices?.get(A), 'the older edit the walk decided does not win').toEqual(XEC_A_NEWER);
         });
 
         it('through the real load, on a wall re-reading its stall', async () => {
@@ -1448,6 +1557,958 @@ describe('a-walk-that-threw-keeps-the-records-per-token', () => {
             expect(root.querySelector('[data-role="window-pay"]'), `${label}: and no Pay`).toBeNull();
         }
     });
+});
+
+describe('a-walk-behind-the-screen-does-not-erase-a-newer-quote', () => {
+    /**
+     * The critic, CARRYOVER-2 item 4, on a phone's live road. A walk that
+     * FINISHED was applied whole over the records on screen: a lagging
+     * replica that had not seen the seller's newest record answered an
+     * older one — a figure, or an old tombstone — and took the newer quote
+     * off the rail (or emptied it), and a walk that stopped at our own page
+     * cap after resolving only a removal took every quote it never reached
+     * off with it. Per token now (`mergeFinishedRead`): an answer below the
+     * rank on screen (`descriptionRanks`) is refused for that token, and a
+     * walk — capped or read to the end — removes only the tokens it decided
+     * (CRITIC-CARRYOVER-3 item 3).
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c1'.repeat(32);
+    const B = 'c2'.repeat(32);
+    const XEC_A_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_A_NEWER = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const tokens = new Map([
+        [A, fungible(A, 'Plum Jam')],
+        [B, fungible(B, 'Rye Flour')],
+    ]);
+    const genesis = new Map([
+        [A, 'attributed' as const],
+        [B, 'attributed' as const],
+    ]);
+    /** A record the stall signed, mined at `height` and first seen at `seen`. */
+    const record = (txid: string, hex: string | undefined, height: number, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], height }), timeFirstSeen: seen };
+    };
+    const newerA = () => record('9a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_NEWER }), 9, 1_756_400_600);
+    const recB = () => record('8b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B }), 8, 1_756_400_500);
+    /** A walk of `pages`, woken by the socket on every open watch. */
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const tx of page) {
+                chain.txs.set(tx.txid, tx);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    /** The rail after a finished walk read the seller's newest records: Plum Jam at 9,000, Rye Flour at 7,000. */
+    const onScreen = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(stallEmpty({ tokens, genesis, shopTab: 'quotes' }));
+        await flush();
+        await walk([[newerA(), recB()]]);
+        expect(viewOf(root)?.prices?.get(A), 'the newest record is on screen').toEqual(XEC_A_NEWER);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.height).toBe(9);
+        // The opening side was decided before anything was quoted: the
+        // reader turns to the quotes.
+        (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement).click();
+        await flush();
+        expect(root.querySelectorAll('[data-role="pay-open"]').length, 'both quotes are rows').toBe(2);
+        return root;
+    };
+    const payFigureOf = async (root: HTMLElement, name: string): Promise<string | undefined> => {
+        const row = [...root.querySelectorAll('.item')].find((r) => r.textContent?.includes(name));
+        const open = row?.querySelector<HTMLButtonElement>('[data-role="pay-open"]');
+        if (open === undefined || open === null) {
+            return undefined;
+        }
+        open.click();
+        await flush();
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent ?? undefined;
+        (root.querySelector('[data-role="publish-close"]') as HTMLButtonElement | null)?.click();
+        await flush();
+        return figure;
+    };
+
+    it('a lagging replica’s older figure does not take the newer one off the rail', async () => {
+        const root = await onScreen();
+        const olderA = record('6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_A_OLD }), 6, 1_756_400_000);
+        await walk([[olderA, recB()]]);
+        expect(chain.historyPageCalls, 'the walk ran').toContain(0);
+        expect(viewOf(root)?.prices?.get(A), 'the newer figure stands').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam'), 'and Pay composes it').toBe('9,000');
+    });
+
+    it('a lagging replica’s old tombstone does not empty the rail', async () => {
+        const root = await onScreen();
+        const tombA = record('6b'.repeat(32), encodeRemovalHex(A), 6, 1_756_400_000);
+        await walk([[tombA, recB()]]);
+        expect(viewOf(root)?.prices?.get(A), 'the quote stays on the rail').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam')).toBe('9,000');
+    });
+
+    it('a walk capped after a removal keeps every quote it never reached', async () => {
+        const root = await onScreen();
+        const removeB = record('ab'.repeat(32), encodeRemovalHex(B), 10, 1_756_400_900);
+        // Page 0 holds the removal; past our page cap, the walk never
+        // reaches the pages that hold A's record.
+        await walk([[removeB], ...Array.from({ length: 11 }, () => [] as ChainTx[])]);
+        expect(viewOf(root)?.descriptionsTruncated, 'the walk stopped at our cap').toBe(true);
+        expect(viewOf(root)?.prices?.has(B), 'the removal it read is applied').toBe(false);
+        expect(viewOf(root)?.prices?.get(A), 'the quote past the cap stays').toEqual(XEC_A_NEWER);
+        expect(root.textContent).not.toContain('Rye Flour');
+        expect(await payFigureOf(root, 'Plum Jam')).toBe('9,000');
+    });
+
+    it('a-replica-that-never-saw-the-record-does-not-remove-it: a walk that read to the end and never met a quote leaves it', async () => {
+        // The owner, CRITIC-CARRYOVER-3 item 3: a replica that has Rye
+        // Flour's record and never saw Plum Jam's answers a finished walk
+        // that decided Rye Flour alone. Absence is our gap.
+        const root = await onScreen();
+        await walk([[recB()]]);
+        expect(chain.historyPageCalls, 'the walk ran').toContain(0);
+        expect(viewOf(root)?.descriptionsTruncated, 'it read to the end').not.toBe(true);
+        expect(viewOf(root)?.prices?.get(A), 'the quote stays').toEqual(XEC_A_NEWER);
+        expect(await payFigureOf(root, 'Plum Jam'), 'and Pay composes it').toBe('9,000');
+    });
+
+    it('a finished walk at or above the rank on screen is applied, a removal included', async () => {
+        const root = await onScreen();
+        const tombA = record('ac'.repeat(32), encodeRemovalHex(A), 10, 1_756_400_900);
+        await walk([[tombA, recB()]]);
+        expect(viewOf(root)?.prices?.has(A), 'the seller’s newer removal takes it off').toBe(false);
+        expect(viewOf(root)?.prices?.get(B)).toEqual(XEC_B);
+    });
+});
+
+describe('a-lagging-replicas-older-record-never-beats-the-screen', () => {
+    /**
+     * The owner, CRITIC-CARRYOVER-4 item 9 ("remember the older records"),
+     * through the real app on both roads (the pure half is in
+     * records.test.ts under the same name). A walk reads the seller's fresh
+     * record, finalized and unmined, above the older one it also read: the
+     * fresh figure is on screen, and the read remembers the older record as
+     * below it. A lagging replica that never saw the fresh one then answers
+     * the older record, mined, first seen 0 (it never saw it in its mempool
+     * either) — a walk that finishes, or one that throws after its first
+     * page. The ladder's no-height rule crowned that answer and the older
+     * figure came back; it is older by construction now, and the screen
+     * keeps the fresh one.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c7'.repeat(32);
+    const B = 'c8'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_FRESH = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const OLDER = '6d'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's fresh record: finalized by avalanche, not yet mined. */
+    const fresh = () => tx('9d'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_FRESH }), { isFinal: true }, 1_756_400_600);
+    /** The record it superseded, mined at 6, as a node that saw it arrive reads it. */
+    const older = (seen: number) => tx(OLDER, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    const recB = () => tx('8d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B }), { height: 5, isFinal: true }, 1_756_399_000);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const onScreen = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[A, fungible(A, 'Plum Jam')], [B, fungible(B, 'Rye Flour')]]),
+                genesis: new Map([[A, 'attributed' as const], [B, 'attributed' as const]]),
+                shopTab: 'quotes',
+            }),
+        );
+        await flush();
+        await walk([[fresh(), older(1_756_400_000), recB()]]);
+        await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_FRESH.amount);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh record is on screen').toEqual(XEC_FRESH);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'finalized, unmined').toBeUndefined();
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(OLDER), 'the read remembers what it ranked below').toBe(true);
+        return root;
+    };
+
+    it('a walk that finished: the lagging replica’s older record does not come back', async () => {
+        const root = await onScreen();
+        const calls = chain.historyPageCalls.length;
+        await walk([[older(0), recB()]]);
+        await until(() => chain.historyPageCalls.length > calls);
+        await flush(20);
+        expect(viewOf(root)?.descriptionsFailed, 'it finished').not.toBe(true);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh figure stands').toEqual(XEC_FRESH);
+    });
+
+    it('a walk that threw: the lagging replica’s older record does not come back', async () => {
+        const root = await onScreen();
+        const calls = chain.historyPageCalls.length;
+        chain.historyPageThrows = new Set([1]);
+        await walk([[older(0)], [recB()]]);
+        await until(() => chain.historyPageCalls.slice(calls).includes(1));
+        await flush(20);
+        expect(viewOf(root)?.prices?.get(A), 'the fresh figure stands').toEqual(XEC_FRESH);
+        expect(viewOf(root)?.prices?.get(B), 'what the walk never reached is kept too').toEqual(XEC_B);
+    });
+});
+
+describe('the-older-records-survive-a-read-that-crowns-the-same-winner', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 3, through the real app (the pure half is in
+     * records.test.ts under the same name). A walk reads the seller's fresh
+     * record, finalized and unmined, above the older one: the fresh figure
+     * is on screen and its rank remembers the older record below it. A
+     * later walk crowns the same fresh record without reading the older one
+     * — it threw after its first page, or stopped at our page cap first —
+     * and at equal rank its rank replaced the screen's, older set and all.
+     * A lagging replica then answered the older record (mined, first seen
+     * 0) and beat the fresh one on the ladder: the older figure came back.
+     * The merged rank keeps the union of both reads' sets now.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'ca'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_FRESH = { code: 'xec', exponent: 2, amount: 900_000n };
+    const OLDER = '6f'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's fresh record: finalized by avalanche, not yet mined. */
+    const fresh = () => tx('9a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_FRESH }), { isFinal: true }, 1_756_400_600);
+    /** The record it superseded, mined at 6. */
+    const older = (seen: number) => tx(OLDER, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const olderOnScreen = (root: HTMLElement): boolean | undefined => viewOf(root)?.descriptionRanks?.get(A)?.older?.has(OLDER);
+
+    for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
+        it(`a re-crown that ${road}, then a lagging replica: the fresh figure stands`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk([[fresh(), older(1_756_400_000)]]);
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_FRESH.amount);
+            expect(olderOnScreen(root), 'the read remembers what it ranked below').toBe(true);
+
+            let calls = chain.historyPageCalls.length;
+            if (road === 'threw after its first page') {
+                chain.historyPageThrows = new Set([1]);
+                await walk([[fresh()], [older(1_756_400_000)]]);
+                await until(() => chain.historyPageCalls.slice(calls).includes(1));
+            } else {
+                await walk([[fresh()], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [older(1_756_400_000)]]);
+                await until(() => viewOf(root)?.descriptionsTruncated === true);
+            }
+            await flush(20);
+            expect(viewOf(root)?.prices?.get(A), 'the same winner, re-crowned').toEqual(XEC_FRESH);
+            expect(olderOnScreen(root), 'the re-crowned rank keeps what the screen ranked below it').toBe(true);
+
+            chain.historyPageThrows = new Set();
+            calls = chain.historyPageCalls.length;
+            await walk([[older(0)]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+            expect(viewOf(root)?.prices?.get(A), 'the older figure does not come back').toEqual(XEC_FRESH);
+        });
+    }
+});
+
+describe('a-removed-last-quote-never-comes-back-from-a-lagging-replica', () => {
+    /**
+     * CRITIC-CARRYOVER-5 item 2, through the real app on both roads. The
+     * seller removes their LAST quote: a walk reads the tombstone,
+     * finalized and unmined, above the quote it supersedes, and the screen
+     * then holds no map at all — only the removal's rank, which remembers
+     * the quote as below it. A lagging replica that never saw the removal
+     * answers the old quote, mined, first seen 0 — a walk that finishes, or
+     * one that throws after its first page. `applyDescriptions` counted the
+     * three maps alone as "something on screen", so the finished road
+     * replaced the screen with the replica's answer and the thrown road
+     * painted it as the floor: the removed quote was a row again, and Pay
+     * opened it at its old figure. The rank counts now, both roads merge
+     * over it, and its older set keeps the removal.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'c9'.repeat(32);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const QUOTE = '6e'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The seller's quote, mined at 6, as a node that saw it arrive reads it (or one that did not: `seen` 0). */
+    const quote = (seen: number) => tx(QUOTE, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD }), { height: 6, isFinal: true }, seen);
+    /** The removal of it: finalized by avalanche, not yet mined. */
+    const tomb = () => tx('9f'.repeat(32), encodeRemovalHex(A), { isFinal: true }, 1_756_400_600);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const removed = async (): Promise<HTMLElement> => {
+        const { root } = bootStall(
+            stallEmpty({
+                tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                genesis: new Map([[A, 'attributed' as const]]),
+                shopTab: 'quotes',
+            }),
+        );
+        await flush();
+        await walk([[quote(1_756_400_000)]]);
+        await until(() => viewOf(root)?.prices?.get(A) !== undefined);
+        expect(viewOf(root)?.prices?.get(A), 'the quote is on screen').toEqual(XEC_OLD);
+        const calls = chain.historyPageCalls.length;
+        await walk([[tomb(), quote(1_756_400_000)]]);
+        await until(() => chain.historyPageCalls.length > calls && viewOf(root)?.prices?.has(A) === false);
+        await flush(20);
+        expect(viewOf(root)?.prices?.size, 'the seller’s last quote is gone').toBe(0);
+        expect(viewOf(root)?.descriptions?.size ?? 0, 'no map holds anything').toBe(0);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(QUOTE), 'the removal remembers the quote below it').toBe(
+            true,
+        );
+        return root;
+    };
+    const afterReplica = async (root: HTMLElement): Promise<void> => {
+        expect(viewOf(root)?.prices?.has(A), 'the removed quote does not come back').toBe(false);
+        expect(viewOf(root)?.descriptionsDecided?.has(A), 'and stays decided').toBe(true);
+        expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(QUOTE), 'the removal’s rank stands').toBe(true);
+        (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+        await flush();
+        expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            (root.querySelector('[data-role="pay-cashtab"]') as HTMLButtonElement | null)?.click();
+            expect(open, 'and no press opens it').not.toHaveBeenCalled();
+        } finally {
+            open.mockRestore();
+        }
+    };
+
+    it('a walk that finished: the lagging replica’s quote does not come back', async () => {
+        const root = await removed();
+        const calls = chain.historyPageCalls.length;
+        await walk([[quote(0)]]);
+        await until(() => chain.historyPageCalls.length > calls);
+        await flush(20);
+        expect(viewOf(root)?.descriptionsFailed, 'it finished').not.toBe(true);
+        await afterReplica(root);
+    });
+
+    it('a walk that threw: the lagging replica’s quote does not come back', async () => {
+        const root = await removed();
+        const calls = chain.historyPageCalls.length;
+        chain.historyPageThrows = new Set([1]);
+        await walk([[quote(0)], []]);
+        await until(() => chain.historyPageCalls.slice(calls).includes(1));
+        await flush(20);
+        await afterReplica(root);
+    });
+});
+
+describe('a-new-winner-remembers-the-record-it-replaced', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 3, through the real app (the pure half is in
+     * records.test.ts under the same name). A full read puts R1 on screen
+     * (mined at 6, above R0). The seller edits — R2, finalized and unmined
+     * — or removes their last quote — the tombstone T. A walk reads its
+     * first page and throws, or stops at our page cap, before R1's page:
+     * its winner replaces the screen's without reading R1. A lagging
+     * replica that never saw the edit then answers R1, mined, first seen 0.
+     * The new winner remembered nothing older, so the ladder's no-height
+     * rule crowned R1: the old figure came back, or the removed quote was a
+     * row again with Pay on it. Now the new winner's set gains R1 and R0.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'cb'.repeat(32);
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R0 = { code: 'xec', exponent: 2, amount: 400_000n };
+    const XEC_R2 = { code: 'xec', exponent: 2, amount: 600_000n };
+    const R0 = '5a'.repeat(32);
+    const R1 = '5b'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    const r0 = () => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 5, isFinal: true }, 1_756_399_000);
+    const r1 = (seen: number) => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { height: 6, isFinal: true }, seen);
+    /** The seller's edit, finalized by avalanche, not yet mined. */
+    const edit = () => tx('5c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R2 }), { isFinal: true }, 1_756_400_600);
+    /** The removal of the stall's last quote, finalized and unmined. */
+    const tomb = () => tx('5d'.repeat(32), encodeRemovalHex(A), { isFinal: true }, 1_756_400_600);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const change of ['a price change', 'the last quote removed'] as const) {
+        for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
+            it(`${change}, read by a walk that ${road}, then a lagging replica: ${change === 'a price change' ? 'the new figure stands' : 'the quote stays off'}`, async () => {
+                const { root } = bootStall(
+                    stallEmpty({
+                        tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                        genesis: new Map([[A, 'attributed' as const]]),
+                        shopTab: 'quotes',
+                    }),
+                );
+                await flush();
+                await walk([[r1(1_756_400_000), r0()]]);
+                await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+                expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0), 'R1’s read ranked R0 below it').toBe(true);
+
+                const next = change === 'a price change' ? edit() : tomb();
+                let calls = chain.historyPageCalls.length;
+                if (road === 'threw after its first page') {
+                    chain.historyPageThrows = new Set([1]);
+                    await walk([[next], [r1(1_756_400_000), r0()]]);
+                    await until(() => chain.historyPageCalls.slice(calls).includes(1));
+                } else {
+                    await walk([[next], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [r1(1_756_400_000), r0()]]);
+                    await until(() => viewOf(root)?.descriptionsTruncated === true);
+                }
+                await flush(20);
+                if (change === 'a price change') {
+                    expect(viewOf(root)?.prices?.get(A), 'the edit is on screen').toEqual(XEC_R2);
+                } else {
+                    expect(viewOf(root)?.prices?.has(A), 'the removal is on screen').toBe(false);
+                }
+                const older = viewOf(root)?.descriptionRanks?.get(A)?.older;
+                expect(older?.has(R1), 'the new winner remembers the record it replaced').toBe(true);
+                expect(older?.has(R0), 'and what that one ranked below it').toBe(true);
+
+                chain.historyPageThrows = new Set();
+                calls = chain.historyPageCalls.length;
+                await walk([[r1(0)]]);
+                await until(() => chain.historyPageCalls.length > calls);
+                await flush(20);
+                expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+                (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+                await flush();
+                if (change === 'a price change') {
+                    expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R2);
+                } else {
+                    expect(viewOf(root)?.prices?.has(A), 'the removed quote does not come back').toBe(false);
+                    expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+                }
+            });
+        }
+    }
+});
+
+describe('a-lagging-replicas-older-mined-record-loses-to-the-height-seen', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 1 through the real app (the merge's half is in
+     * records.test.ts, the walk's in descriptions.test.ts, under the same
+     * name). A read stops at our page cap after the seller's fresh R1
+     * (600,000, finalized and unmined) and before R0 (500,000, mined at 6):
+     * R1's page also carries a payment mined at 7, the newest block that
+     * response shows, so R1's rank records 7 as the height seen. A lagging
+     * replica answers R0, first seen 0: mined at or below 7, it was in a
+     * block when R1's read saw the chain and put R1 on top, so R1 stands —
+     * the old figure never comes back — and the round-7 sequence (a correct
+     * read of R1 after it, again short of R0) ends at 600,000.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'cd'.repeat(32);
+    const XEC_R0 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 600_000n };
+    const R0 = '6a'.repeat(32);
+    const R1 = '6b'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The older record, mined at 6; a lagging replica never saw it in its mempool. */
+    const r0 = (seen: number) => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 6, isFinal: true }, seen);
+    /** The seller's fresh record, finalized by avalanche, not yet mined. */
+    const r1 = () => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { isFinal: true }, 1_756_400_600);
+    /** An ordinary payment to the stall, mined at 7: on R1's page, the newest block that response shows. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '6c'.repeat(32), outputs: [], height: 7, isFinal: true }), timeFirstSeen: 1_756_400_100 });
+    const capped = (first: ChainTx[]): ChainTx[][] => [
+        first,
+        ...Array.from({ length: 11 }, () => [] as ChainTx[]),
+        [r0(1_756_399_000)],
+    ];
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const road of ['threw after its first page', 'stopped at our page cap'] as const) {
+        it(`the lagging replica's R0 never beats R1, and a correct read that ${road} ends at 600,000`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk(capped([r1(), paid()]));
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0) ?? false, 'the capped read never reached R0').toBe(false);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight, 'the height R1’s page showed').toBe(7);
+
+            let calls = chain.historyPageCalls.length;
+            await walk([[r0(0)]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+
+            calls = chain.historyPageCalls.length;
+            if (road === 'threw after its first page') {
+                chain.historyPageThrows = new Set([1]);
+                await walk([[r1(), paid()], [r0(1_756_399_000)]]);
+                await until(() => chain.historyPageCalls.slice(calls).includes(1));
+            } else {
+                await walk(capped([r1(), paid()]));
+                // The cap is page MAX_HISTORY_PAGES - 1: the walk asked it and stopped.
+                await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            }
+            await flush(20);
+            chain.historyPageThrows = new Set();
+            expect(viewOf(root)?.prices?.get(A), '600,000, not 500,000').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+        });
+    }
+});
+
+describe('a-correct-exception-win-is-not-undone-by-a-lagging-replica', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 1, the mirror (the critic's `y8` and `y8b`),
+     * through the real app; the pure half is in records.test.ts under the
+     * same name. A read puts R1 (500,000) on screen, finalized and unmined,
+     * on a page whose newest block is 850. The seller edits — R2, 900,000 —
+     * or removes the quote — T2 — and both are mined at 900 by a node that
+     * never saw them in its mempool (first seen 0). A walk that stops at our
+     * page cap reads R2 or T2 and never reaches R1: mined above the height
+     * R1's read saw, the exception crowns it, which is right, and the win
+     * remembers R1. A replica behind R1's block then answers R1, finalized
+     * and unmined: it never undoes the win, so 900,000 stays, or the removed
+     * quote stays off.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'ce'.repeat(32);
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R2 = { code: 'xec', exponent: 2, amount: 900_000n };
+    const R1 = '7a'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** R1, finalized and not yet mined when it was read. */
+    const r1 = () => tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { isFinal: true }, 1_756_400_000);
+    /** An ordinary payment mined at 850, on R1's page. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '7c'.repeat(32), outputs: [], height: 850, isFinal: true }), timeFirstSeen: 1_756_399_000 });
+    const edit = () => tx('7b'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R2 }), { height: 900, isFinal: true }, 0);
+    const tomb = () => tx('7d'.repeat(32), encodeRemovalHex(A), { height: 900, isFinal: true }, 0);
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const change of ['a price change', 'the quote removed'] as const) {
+        it(`${change}, crowned by the exception over a walk that stopped at our cap, then a lagging R1: ${change === 'a price change' ? '900,000 stays' : 'the quote stays off'}`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk([[r1(), paid()]]);
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight).toBe(850);
+
+            let calls = chain.historyPageCalls.length;
+            await walk([[change === 'a price change' ? edit() : tomb()], ...Array.from({ length: 11 }, () => [] as ChainTx[]), [r1(), paid()]]);
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await flush(20);
+            if (change === 'a price change') {
+                expect(viewOf(root)?.prices?.get(A), 'the exception crowns the newer record').toEqual(XEC_R2);
+            } else {
+                expect(viewOf(root)?.prices?.has(A), 'the removal is on screen').toBe(false);
+            }
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R1), 'the win remembers what it replaced').toBe(true);
+
+            calls = chain.historyPageCalls.length;
+            await walk([[r1()]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'the lagging walk finished').not.toBe(true);
+            (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement | null)?.click();
+            await flush();
+            if (change === 'a price change') {
+                expect(viewOf(root)?.prices?.get(A), '900,000 stays').toEqual(XEC_R2);
+            } else {
+                expect(viewOf(root)?.prices?.has(A), 'the removed quote stays off').toBe(false);
+                expect(root.querySelectorAll('[data-role="pay-open"]').length, 'no row offers it').toBe(0);
+            }
+        });
+    }
+});
+
+describe('a-lagging-look-at-the-screens-record-keeps-its-height', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 1 through the real app (the critic's `y9`; the
+     * merge's half is in records.test.ts under the same name). A read that
+     * stops at our page cap puts R1 (600,000) on screen, mined at 900, and
+     * never reaches R0. Replica B, behind block 900 and behind R0's block,
+     * reads R1 finalized and unmined on a page whose newest block is 850 —
+     * the same record, a lagging look at it. Replica C then answers R0
+     * (500,000), mined at 870 and first seen 0, and never saw R1. Taken whole,
+     * B's look put R1 back above every height with 850 as its height seen,
+     * and C's R0 won and stayed. The known height is kept: 600,000 holds, and
+     * a fresh read of R1 after it ends at 600,000.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'cf'.repeat(32);
+    const XEC_R0 = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_R1 = { code: 'xec', exponent: 2, amount: 600_000n };
+    const R0 = '8a'.repeat(32);
+    const R1 = '8b'.repeat(32);
+    const tx = (txid: string, hex: string | undefined, block: { height?: number; isFinal?: boolean }, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], ...block }), timeFirstSeen: seen };
+    };
+    /** The older record, mined at 870; C never saw it in its mempool. */
+    const r0 = (seen: number) => tx(R0, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R0 }), { height: 870, isFinal: true }, seen);
+    /** The seller's newer record: mined at 900, or — to a replica behind that block — finalized and unmined. */
+    const r1 = (height: number | undefined) =>
+        tx(R1, encodeDescriptionHex(A, 'Plum Jam', { price: XEC_R1 }), { height, isFinal: true }, 1_756_400_600);
+    /** An ordinary payment mined at 850: on B's page, the newest block that response shows. */
+    const paid = (): ChainTx => ({ ...signedTx({ txid: '8c'.repeat(32), outputs: [], height: 850, isFinal: true }), timeFirstSeen: 1_756_400_100 });
+    const capped = (first: ChainTx[]): ChainTx[][] => [
+        first,
+        ...Array.from({ length: 11 }, () => [] as ChainTx[]),
+        [r0(1_756_399_000)],
+    ];
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const t of page) {
+                chain.txs.set(t.txid, t);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+
+    for (const road of ['finished', 'threw after its first page'] as const) {
+        it(`B's unmined look at R1, from a walk that ${road}, keeps R1's height, and C's R0 never beats it`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                    genesis: new Map([[A, 'attributed' as const]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            await walk(capped([r1(900)]));
+            await until(() => viewOf(root)?.prices?.get(A)?.amount === XEC_R1.amount);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'R1 read mined at 900').toBe(900);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.older?.has(R0) ?? false, 'the capped read never reached R0').toBe(false);
+
+            let calls = chain.historyPageCalls.length;
+            if (road === 'finished') {
+                await walk([[r1(undefined), paid()]]);
+                await until(() => chain.historyPageCalls.length > calls);
+            } else {
+                chain.historyPageThrows = new Set([1]);
+                await walk([[r1(undefined), paid()], []]);
+                await until(() => chain.historyPageCalls.slice(calls).includes(1));
+            }
+            await flush(20);
+            chain.historyPageThrows = new Set();
+            expect(viewOf(root)?.prices?.get(A)).toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.height, 'the known height, never the unmined look').toBe(900);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.seenHeight, 'nor its low height seen').toBeUndefined();
+
+            calls = chain.historyPageCalls.length;
+            await walk([[r0(0)]]);
+            await until(() => chain.historyPageCalls.length > calls);
+            await flush(20);
+            expect(viewOf(root)?.descriptionsFailed, 'C’s walk finished').not.toBe(true);
+            expect(viewOf(root)?.prices?.get(A), 'the old figure does not come back').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+
+            calls = chain.historyPageCalls.length;
+            await walk(capped([r1(900)]));
+            // The cap is page MAX_HISTORY_PAGES - 1: the walk asked it and stopped.
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await flush(20);
+            expect(viewOf(root)?.prices?.get(A), '600,000, not 500,000').toEqual(XEC_R1);
+            expect(viewOf(root)?.descriptionRanks?.get(A)?.txid).toBe(R1);
+        });
+    }
+});
+
+describe('a-removed-item-never-comes-back-into-pay-several', () => {
+    /**
+     * The critic, CRITIC-CARRYOVER-4 item 3, through the real app (the
+     * sheet's half — never composing an item it saw leave — is in
+     * render.test.ts under the same name). Pay several over Roasted Beans at
+     * 5,000 and Green Tea at 3,000; a walk read to the end decides Roasted
+     * Beans' removal; then a walk stops at our page cap before the page
+     * that holds it. The finished road's `descriptionsDecided` was this
+     * walk's decided set and the tokens kept from the screen's MAPS — never
+     * a removal, which no map shows — so Roasted Beans read as our gap: the
+     * prune kept it chosen, and the sheet the app painted next could not
+     * compose a choice holding an item with no record (the strip said this
+     * page "could not read" it). The screen holds its tombstone's rank, and
+     * that is a decision: it stays decided, and out.
+     */
+    const fungible = (tokenId: string, name: string) => ({
+        tokenId,
+        name,
+        ticker: name.slice(0, 4).toUpperCase(),
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    });
+    const A = 'd1'.repeat(32);
+    const B = 'd2'.repeat(32);
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 300_000n };
+    const XEC_B_MOVED = { code: 'xec', exponent: 2, amount: 350_000n };
+    const record = (txid: string, hex: string | undefined, height: number, seen: number): ChainTx => {
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        return { ...signedTx({ txid, outputs: [`6a${hex}`], height }), timeFirstSeen: seen };
+    };
+    /** A walk of `pages`, woken by the socket on every open watch. */
+    const walk = async (pages: ChainTx[][]): Promise<void> => {
+        for (const page of pages) {
+            for (const tx of page) {
+                chain.txs.set(tx.txid, tx);
+            }
+        }
+        chain.historyPages = pages;
+        const first = pages.flat()[0]!;
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([first.txid]);
+        }
+        await flush();
+    };
+    const figureOf = (root: HTMLElement): string | undefined =>
+        root.querySelector('[data-role="pay-several"] [data-role="price"]')?.textContent ?? undefined;
+    const press = (root: HTMLElement): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]') as HTMLElement | null;
+            expect(control, 'the sheet carries a Pay control').not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+
+    for (const road of ['unchanged', 'moved'] as const) {
+        it(`Green Tea ${road} on the capped read: in place, and on the sheet the app paints next, Roasted Beans stays out`, async () => {
+            const { root } = bootStall(
+                stallEmpty({
+                    tokens: new Map([[A, fungible(A, 'Roasted Beans')], [B, fungible(B, 'Green Tea')]]),
+                    prices: new Map([[A, XEC_A], [B, XEC_B]]),
+                    shopTab: 'quotes',
+                }),
+            );
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(figureOf(root)).toBe('8,000');
+
+            // A walk read to the end decides the removal.
+            await walk([[
+                record('e1'.repeat(32), encodeRemovalHex(A), 10, 1_756_400_900),
+                record('e2'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: XEC_B }), 8, 1_756_400_500),
+            ]]);
+            await until(() => figureOf(root) === '3,000');
+            expect(figureOf(root)).toBe('3,000');
+
+            // The next walk stops at our page cap before the page that holds it.
+            const b = road === 'unchanged' ? XEC_B : XEC_B_MOVED;
+            const want = road === 'unchanged' ? '3,000' : '3,500';
+            const calls = chain.historyPageCalls.length;
+            await walk([
+                [
+                    road === 'unchanged'
+                        ? record('e2'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: b }), 8, 1_756_400_500)
+                        : record('e3'.repeat(32), encodeDescriptionHex(B, 'Green Tea', { price: b }), 11, 1_756_401_000),
+                ],
+                ...Array.from({ length: 11 }, () => [] as ChainTx[]),
+            ]);
+            // Ten pages asked and the eleventh never: the walk stopped at our
+            // cap. (The sheet holds the paint, so the view is read after it
+            // closes.)
+            await until(() => chain.historyPageCalls.slice(calls).includes(9));
+            await until(() => figureOf(root) === want);
+            expect(chain.historyPageCalls.slice(calls)).not.toContain(10);
+            expect(figureOf(root), 'in place: the removed item is not composed again').toBe(want);
+
+            // The sheet the app paints next: closed and opened again, the
+            // choice pruned as every paint prunes it.
+            (root.querySelector('[data-role="pay-close"]') as HTMLButtonElement).click();
+            await flush();
+            expect(viewOf(root)?.descriptionsTruncated, 'the walk stopped at our cap').toBe(true);
+            expect(viewOf(root)?.descriptionsDecided?.has(A), 'the removal on screen stays decided').toBe(true);
+            expect(root.textContent, 'our cap is not claimed over a removal this page read').not.toContain(
+                selectionCapped(1),
+            );
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent ?? '').toContain(want);
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            await flush();
+            expect(figureOf(root)).toBe(want);
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-lines"]')?.textContent ?? '').not.toContain('Roasted Beans');
+            // The buyer reads the sheet before pressing (`PAY_OPEN_GUARD_MS`).
+            holdClock()(PAY_OPEN_GUARD_MS + 1);
+            expect(press(root), 'the press pays what stayed').toContain(`amount=${want.replace(',', '')}.00`);
+        });
+    }
 });
 
 describe('a-choice-is-not-called-unread-while-the-records-are-still-being-read', () => {
@@ -1731,9 +2792,9 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
             ],
         });
         watches[0]!.hooks.onBurst?.([txid]);
-        await until(() => painted.view?.events?.[0]?.txid === txid);
+        await until(() => viewOf(root)?.events?.[0]?.txid === txid);
 
-        const row = painted.view?.events?.[0];
+        const row = viewOf(root)?.events?.[0];
         expect(row?.kind).toBe('settings');
         expect(row?.recordAuthority).toBe('unsigned');
 
@@ -1763,9 +2824,9 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
             ],
         });
         watches[0]!.hooks.onBurst?.([txid]);
-        await until(() => painted.view?.events?.[0]?.txid === txid);
+        await until(() => viewOf(root)?.events?.[0]?.txid === txid);
 
-        const row = painted.view?.events?.[0];
+        const row = viewOf(root)?.events?.[0];
         expect(row?.kind).toBe('settings');
         expect(row?.recordAuthority).toBe('unaddressed');
         expect(chain.calls.stl1, 'no settings walk was woken').toBe(before);
@@ -1789,12 +2850,13 @@ describe('a-live-settings-row-from-a-stranger-says-so', () => {
             }),
         );
         watches[0]!.hooks.onBurst?.([txid]);
-        await until(() => painted.view?.events?.[0]?.txid === txid);
-        // The walk this publish starts must finish before the test ends, or a
-        // late paint writes `painted.view` under a later test.
+        await until(() => viewOf(root)?.events?.[0]?.txid === txid);
+        // The walk this publish starts must finish before the test ends: its
+        // late paint is this root's own, but its timers run under a later
+        // test.
         await until(() => (root.textContent ?? '').includes('Ripe Beans'));
 
-        const row = painted.view?.events?.[0];
+        const row = viewOf(root)?.events?.[0];
         expect(row?.kind).toBe('settings');
         expect(row?.recordAuthority).toBe('stalls');
 
@@ -2176,14 +3238,14 @@ describe('the-poster-survives-a-live-repaint', () => {
             still.querySelector('[data-role="poster-format-story"]')?.getAttribute('aria-pressed'),
         ).toBe('true');
         expect(
-            painted.view?.fetch?.kind,
+            viewOf(root)?.fetch?.kind,
             'the paint waited; the last frame is still the empty stall',
         ).toBe('empty');
 
         (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="poster"]')).toBeNull();
         expect(
-            painted.view?.fetch?.kind,
+            viewOf(root)?.fetch?.kind,
             'the deferred paint arrives with the close',
         ).toBe('offers');
         (root.querySelector('[data-role="tab-shop"]') as HTMLButtonElement).click();
@@ -2238,14 +3300,14 @@ describe('the-poster-survives-a-fiat-answer', () => {
             'the same sheet node is still mounted',
         ).toBe(sheet);
         expect(
-            painted.view?.fiatRate,
+            viewOf(root)?.fiatRate,
             'the paint waited; the last frame has no rate yet',
         ).toBeUndefined();
 
         (root.querySelector('[data-role="poster-close"]') as HTMLButtonElement).click();
         expect(root.querySelector('[data-role="poster"]')).toBeNull();
         expect(
-            painted.view?.fiatRate,
+            viewOf(root)?.fiatRate,
             'the deferred paint arrives with the close',
         ).toBe(30_000n);
     });
@@ -2453,7 +3515,7 @@ describe('event-ring-is-capped-and-newest-first', () => {
     const paymentTxid = (i: number): string => `${(i + 0x40).toString(16)}`.repeat(32);
 
     it('keeps the newest 50, one per txid, and names what each one was', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
 
         const overflow = MAX_STALL_EVENTS + 5;
@@ -2477,7 +3539,7 @@ describe('event-ring-is-capped-and-newest-first', () => {
         watches[0]!.hooks.onBurst?.(txids);
         await flush(20);
 
-        const events = painted.view?.events;
+        const events = viewOf(root)?.events;
         expect(events, 'the ring never reached the view').toBeDefined();
         expect(events, 'a busy address must not grow this without bound').toHaveLength(
             MAX_STALL_EVENTS,
@@ -2509,7 +3571,7 @@ describe('event-ring-is-capped-and-newest-first', () => {
     });
 
     it('counts one transaction once, however many times the socket names it', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
 
         const settingsTxid = publish(
@@ -2526,13 +3588,25 @@ describe('event-ring-is-capped-and-newest-first', () => {
         watches[0]!.hooks.onBurst?.([settingsTxid]);
         await flush(20);
 
-        const events = painted.view?.events ?? [];
+        const events = viewOf(root)?.events ?? [];
         expect(events.filter((event) => event.txid === settingsTxid)).toHaveLength(1);
         expect(events, 'a confirmation is not a second event').toHaveLength(1);
     });
 
     it('starts a new ring when the visitor opens another stall', async () => {
-        const { root } = bootStall(stallEmpty());
+        // The loader answers the stall the location names, as
+        // `a new stall is a new list` does: one that answered this stall
+        // for every route never opened another stall at all, and the ring
+        // it "reset" was the same stall's (the critic, CARRYOVER-3 item 5).
+        const PK_B_BYTES = Uint8Array.from([0x02, ...new Array<number>(32).fill(0xbb)]);
+        const PK_B = toHex(PK_B_BYTES);
+        const ADDR_B = encodeCashAddress('ecash', 'p2pkh', toHex(shaRmd160(PK_B_BYTES)));
+        const stateB: State = {
+            ...stallEmpty({ route: { kind: 'pubkey', pubkeyHex: PK_B, address: ADDR_B }, address: ADDR_B }),
+            pubkeyHex: PK_B,
+        };
+        const root = document.createElement('div');
+        boot(root, async () => (location.pathname === stallPath(PK_B) ? stateB : stallEmpty()));
         await flush();
         const first = paymentTxid(1);
         chain.txs.set(first, payment(first));
@@ -2543,21 +3617,23 @@ describe('event-ring-is-capped-and-newest-first', () => {
         root.querySelector<HTMLSelectElement>('select')?.dispatchEvent(
             new Event('change', { bubbles: true }),
         );
-        expect(painted.view?.events?.length ?? 0, 'the payment was recorded').toBe(1);
+        expect(viewOf(root)?.events?.length ?? 0, 'the payment was recorded').toBe(1);
 
         // These are transactions at one address. Carrying them to the next
         // stall would attribute one seller's traffic to another.
-        window.history.pushState(null, '', stallPath('02' + 'bb'.repeat(32)));
+        const before = watches.length;
+        window.history.pushState(null, '', stallPath(PK_B));
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush(20);
+        const route = viewOf(root)?.route;
+        expect(route?.kind === 'pubkey' ? route.pubkeyHex : undefined, 'the other stall is on screen').toBe(PK_B);
 
-        // **The last watch, not `watches[1]`.** `boot` never removes its
-        // `popstate` listener, so every instance booted earlier in this file
-        // refreshes on this event too and opens a watch of its own. Listeners
-        // fire in registration order and this test booted last, so the watch it
-        // owns is the one at the end — anything else asserts on another test's
-        // app, which is how this test passed while proving nothing.
-        const mine = watches.at(-1)!;
+        // **Every watch the navigation opened, not one of them.** Written
+        // when every app booted earlier in this file still refreshed on this
+        // event and opened a watch of its own; they are torn down after each
+        // test now (`running`), and waking every watch the navigation opened
+        // still wakes this app's, whatever else is listening.
+        const opened = watches.slice(before).filter((w) => !w.closed);
 
         // Asserted by recording on the *new* stall rather than by reading the
         // view straight after the route change: a fresh load carries no events
@@ -2570,10 +3646,12 @@ describe('event-ring-is-capped-and-newest-first', () => {
                 height: 800_005,
             }),
         );
-        mine.hooks.onBurst?.([second]);
+        for (const watch of opened) {
+            watch.hooks.onBurst?.([second]);
+        }
         await flush(20);
 
-        const events = painted.view?.events ?? [];
+        const events = viewOf(root)?.events ?? [];
         expect(events).toHaveLength(1);
         expect(events[0]?.txid).toBe(second);
         expect(
@@ -2600,7 +3678,7 @@ describe('a-panel-switch-does-not-reload-the-stall', () => {
         );
         watches[0]!.hooks.onBurst?.([txid]);
         await flush();
-        expect(painted.view?.events?.length).toBe(1);
+        expect(viewOf(counter.root)?.events?.length).toBe(1);
         const url = location.href;
 
         const toActivity = counter.root.querySelector(
@@ -2612,8 +3690,8 @@ describe('a-panel-switch-does-not-reload-the-stall', () => {
 
         expect(counter.loads, 'a tab is a paint, not a load').toBe(1);
         expect(location.href, 'no navigation').toBe(url);
-        expect(painted.view?.panel).toBe('activity');
-        expect(painted.view?.events?.length, 'the ring survives').toBe(1);
+        expect(viewOf(counter.root)?.panel).toBe('activity');
+        expect(viewOf(counter.root)?.events?.length, 'the ring survives').toBe(1);
         expect(watches[0]!.closed, 'the socket stays open').toBe(false);
 
         const toShop = counter.root.querySelector(
@@ -2621,7 +3699,7 @@ describe('a-panel-switch-does-not-reload-the-stall', () => {
         ) as HTMLButtonElement;
         toShop.click();
         await flush();
-        expect(painted.view?.panel).toBe('shop');
+        expect(viewOf(counter.root)?.panel).toBe('shop');
         expect(counter.loads).toBe(1);
     });
 
@@ -2644,15 +3722,15 @@ describe('a-reconnect-gap-is-said-not-hidden', () => {
      * the list may be missing pieces instead of letting it read as complete.
      */
     it('counts a reconnect and a txid it could not read as gaps', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         watches[0]!.hooks.onReestablished?.();
         await flush();
-        expect(painted.view?.activityGaps).toBe(1);
+        expect(viewOf(root)?.activityGaps).toBe(1);
         chain.txThrows = true;
         watches[0]!.hooks.onBurst?.(['0b'.repeat(32)]);
         await flush();
-        expect(painted.view?.activityGaps).toBe(2);
+        expect(viewOf(root)?.activityGaps).toBe(2);
     });
 });
 
@@ -2673,19 +3751,19 @@ describe('storefront-effects-are-gated-on-proof', () => {
     }
 
     it('an-effect-is-consumed-by-the-paint-that-shows-it', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         const proof = publish(consumedTx('1a'.repeat(32)));
         watches[0]!.hooks.onBurst?.([proof]);
         await flush();
         // The ring named it for what the entries prove — never a sale.
-        expect(painted.view?.events?.[0]?.book).toBe('consumed');
+        expect(viewOf(root)?.events?.[0]?.book).toBe('consumed');
 
         chain.book = { kind: 'offers', offers: [OFFER] };
         watches[0]!.hooks.onChanged?.('message');
         await flush();
         expect(
-            painted.view?.justChanged?.has(TOKEN),
+            viewOf(root)?.justChanged?.has(TOKEN),
             'a proven message re-read pulses the changed card',
         ).toBe(true);
 
@@ -2694,11 +3772,11 @@ describe('storefront-effects-are-gated-on-proof', () => {
             publish(signedTx({ txid: '1b'.repeat(32), outputs: [STRANGER_SCRIPT] })),
         ]);
         await flush();
-        expect(painted.view?.justChanged).toBeUndefined();
+        expect(viewOf(root)?.justChanged).toBeUndefined();
     });
 
     it('a-reconnect-read-does-not-animate-a-sale', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         watches[0]!.hooks.onBurst?.([publish(consumedTx('2a'.repeat(32)))]);
         await flush();
@@ -2707,12 +3785,12 @@ describe('storefront-effects-are-gated-on-proof', () => {
         // replica skew as often as news.
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
-        expect(painted.view?.fetch?.kind, 'the book itself is applied').toBe('offers');
-        expect(painted.view?.justChanged).toBeUndefined();
+        expect(viewOf(root)?.fetch?.kind, 'the book itself is applied').toBe('offers');
+        expect(viewOf(root)?.justChanged).toBeUndefined();
     });
 
     it('a-partial-refetch-that-lost-one-row-does-not-animate-a-clear', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         // No proof anywhere: the burst carried ordinary money.
         watches[0]!.hooks.onBurst?.([
@@ -2723,7 +3801,7 @@ describe('storefront-effects-are-gated-on-proof', () => {
         watches[0]!.hooks.onChanged?.('message');
         await flush();
         expect(
-            painted.view?.justChanged,
+            viewOf(root)?.justChanged,
             'a diff without proof is a replica question, not a sale',
         ).toBeUndefined();
     });
@@ -2812,7 +3890,7 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
         const root = document.createElement('div');
         boot(root);
         await flush();
-        expect(painted.view?.broadcast).toEqual({
+        expect(viewOf(root)?.broadcast).toEqual({
             preset: 'corner',
             mode: 'rail',
             transparent: true,
@@ -2832,17 +3910,17 @@ describe('a-broadcast-cursor-survives-a-live-repaint', () => {
      * `justChanged`; it must not reset the carousel to card 0.
      */
     it('keeps the cursor the book apply did not shrink', async () => {
-        bootOverlay(stallOffers([OFFER, OFFER_B], { broadcastCursor: 1 }));
+        const { root } = bootOverlay(stallOffers([OFFER, OFFER_B], { broadcastCursor: 1 }));
         await flush();
-        expect(painted.view?.broadcastCursor).toBe(1);
+        expect(viewOf(root)?.broadcastCursor).toBe(1);
 
         chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
-        expect(painted.view?.broadcastCursor, 'a same-size book leaves the cursor').toBe(
+        expect(viewOf(root)?.broadcastCursor, 'a same-size book leaves the cursor').toBe(
             1,
         );
-        expect(painted.view?.broadcast).toEqual(BROADCAST_FIXED);
+        expect(viewOf(root)?.broadcast).toEqual(BROADCAST_FIXED);
     });
 });
 
@@ -2858,14 +3936,14 @@ describe('a-broadcast-cursor-is-clamped-when-the-book-shrinks', () => {
             tokenId: 'cc'.repeat(32),
             outpoint: { txid: 'ab'.repeat(32), outIdx: 4 },
         };
-        bootOverlay(stallOffers([OFFER, OFFER_B, third], { broadcastCursor: 2 }));
+        const { root } = bootOverlay(stallOffers([OFFER, OFFER_B, third], { broadcastCursor: 2 }));
         await flush();
-        expect(painted.view?.broadcastCursor).toBe(2);
+        expect(viewOf(root)?.broadcastCursor).toBe(2);
 
         chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
-        expect(painted.view?.broadcastCursor, '2 mod 2 is 0').toBe(0);
+        expect(viewOf(root)?.broadcastCursor, '2 mod 2 is 0').toBe(0);
     });
 });
 
@@ -2886,10 +3964,10 @@ describe('a-sibling-fill-is-not-this-cards-price-change', () => {
         watches[0]!.hooks.onChanged?.('message');
         await flush();
         expect(
-            painted.view?.justChanged?.has(TOKEN),
+            viewOf(root)?.justChanged?.has(TOKEN),
             'the shop flourish still names the token',
         ).toBe(true);
-        expect(painted.view?.broadcastPulse, 'the overlay does not borrow it').toBeUndefined();
+        expect(viewOf(root)?.broadcastPulse, 'the overlay does not borrow it').toBeUndefined();
         expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
             false,
         );
@@ -2903,10 +3981,10 @@ describe('a-sibling-fill-is-not-this-cards-price-change', () => {
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
         expect(
-            painted.view?.justChanged,
+            viewOf(root)?.justChanged,
             'a recheck does not stage the shop flourish',
         ).toBeUndefined();
-        expect(painted.view?.broadcastPulse).toBe(true);
+        expect(viewOf(root)?.broadcastPulse).toBe(true);
         expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
             true,
         );
@@ -2921,7 +3999,7 @@ describe('a-sibling-fill-is-not-this-cards-price-change', () => {
         chain.book = { kind: 'offers', offers: [cheaper] };
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
-        expect(painted.view?.broadcastPulse, 'a drop is still this card\'s price').toBe(
+        expect(viewOf(root)?.broadcastPulse, 'a drop is still this card\'s price').toBe(
             true,
         );
         expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
@@ -2942,8 +4020,8 @@ describe('a-broadcast-param-on-the-door-is-dropped', () => {
         const root = document.createElement('div');
         boot(root);
         await flush();
-        expect(painted.view?.route.kind).toBe('home');
-        expect(painted.view?.broadcast, 'the door is not a stall').toBeUndefined();
+        expect(viewOf(root)?.route.kind).toBe('home');
+        expect(viewOf(root)?.broadcast, 'the door is not a stall').toBeUndefined();
         expect(root.querySelector('[data-role="broadcast"]')).toBeNull();
         expect(root.textContent).toContain(HOME_LEDE);
         expect(location.pathname).toBe('/');
@@ -3008,8 +4086,8 @@ describe('a-replaced-card-at-the-cursor-fades-and-does-not-pulse', () => {
         chain.book = { kind: 'offers', offers: [OFFER_B] };
         watches[0]!.hooks.onChanged?.('recheck');
         await flush();
-        expect(painted.view?.broadcastStepped, 'a new card fades').toBe(true);
-        expect(painted.view?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
+        expect(viewOf(root)?.broadcastStepped, 'a new card fades').toBe(true);
+        expect(viewOf(root)?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
         expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
         expect(root.querySelector('[data-role="price"]')?.classList.contains('pulse')).toBe(
             false,
@@ -3040,7 +4118,7 @@ describe('a-broadcast-failed-reread-is-stale-not-blank', () => {
 
     it('a live re-read that throws keeps the card, marks stale, and stops the carousel', async () => {
         const root = await bootLiveOverlay();
-        const cursor = painted.view?.broadcastCursor ?? 0;
+        const cursor = viewOf(root)?.broadcastCursor ?? 0;
         chain.bookThrows = true;
         watches[0]!.hooks.onChanged?.('recheck');
         await vi.advanceTimersByTimeAsync(0);
@@ -3054,14 +4132,14 @@ describe('a-broadcast-failed-reread-is-stale-not-blank', () => {
             root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
             'a carousel tick would have returned to live',
         ).toBe('stale');
-        expect(painted.view?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
+        expect(viewOf(root)?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
             cursor,
         );
     });
 
     it('a live re-read that answers unreachable keeps the card and marks stale', async () => {
         const root = await bootLiveOverlay();
-        const cursor = painted.view?.broadcastCursor ?? 0;
+        const cursor = viewOf(root)?.broadcastCursor ?? 0;
         chain.book = {
             kind: 'unreachable',
             triedAtMs: 0,
@@ -3079,7 +4157,7 @@ describe('a-broadcast-failed-reread-is-stale-not-blank', () => {
             root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
             'a carousel tick would have returned to live',
         ).toBe('stale');
-        expect(painted.view?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
+        expect(viewOf(root)?.broadcastCursor ?? 0, 'the carousel was cleared').toBe(
             cursor,
         );
     });
@@ -3108,7 +4186,7 @@ describe('a-broadcast-definite-apply-clears-stale', () => {
         chain.book = { kind: 'offers', offers: [OFFER, OFFER_B] };
         watches[0]!.hooks.onChanged?.('recheck');
         await vi.advanceTimersByTimeAsync(0);
-        expect(painted.view?.broadcastState, 'fixed mode returns to live').toBe('live');
+        expect(viewOf(root)?.broadcastState, 'fixed mode returns to live').toBe('live');
         expect(
             root.querySelector('[data-role="broadcast"]')?.getAttribute('data-state'),
         ).toBe('live');
@@ -3130,16 +4208,16 @@ describe('a-fiat-hint-is-read-and-ignored', () => {
     it('reads the tag, paints usd, and says nothing about it', async () => {
         const { root } = bootStall(stallEmpty({ fiatHint: 'vnd' }));
         await flush();
-        expect(painted.view?.fiatHint, 'the record still reads').toBe('vnd');
-        expect(painted.view?.fiatCode).toBe('usd');
+        expect(viewOf(root)?.fiatHint, 'the record still reads').toBe('vnd');
+        expect(viewOf(root)?.fiatCode).toBe('usd');
         expect(root.textContent).not.toContain('VND');
     });
 
     it('a stale saved code cannot pin a browser to another currency', async () => {
         localStorage.setItem('stall.fiat', 'eur');
-        bootStall(stallEmpty({ fiatHint: 'vnd' }));
+        const { root } = bootStall(stallEmpty({ fiatHint: 'vnd' }));
         await flush();
-        expect(painted.view?.fiatCode).toBe('usd');
+        expect(viewOf(root)?.fiatCode).toBe('usd');
         expect(localStorage.getItem('stall.fiat')).toBeNull();
     });
 });
@@ -3162,7 +4240,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
     const PRICE = { code: 'usd', exponent: 2, amount: 1250n } as const;
 
     it('keeps a priced stall’s figures when the walk throws', async () => {
-        bootStall(
+        const { root } = bootStall(
             stallEmpty({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN, TOKEN_META]]),
@@ -3170,7 +4248,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
             }),
         );
         await flush();
-        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+        expect(viewOf(root)?.prices?.get(TOKEN)).toEqual(PRICE);
 
         chain.historyThrows = true;
         chain.txThrows = true;
@@ -3179,7 +4257,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
 
         expect(chain.calls.stld, 'it did try').toBe(1);
         expect(
-            painted.view?.prices?.get(TOKEN),
+            viewOf(root)?.prices?.get(TOKEN),
             'our own failure is not a seller who unpriced their stock',
         ).toEqual(PRICE);
     });
@@ -3187,7 +4265,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
     it('an-empty-facts-answer-does-not-erase-a-price', async () => {
         // The walk answers, and finds nothing — indistinguishable on this path
         // from the walk that failed, so it is treated the same way.
-        bootStall(
+        const { root } = bootStall(
             stallEmpty({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN, TOKEN_META]]),
@@ -3200,7 +4278,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
         await flush();
 
         expect(chain.calls.stld, 'it did walk, and the index was empty').toBe(1);
-        expect(painted.view?.prices?.get(TOKEN)).toEqual(PRICE);
+        expect(viewOf(root)?.prices?.get(TOKEN)).toEqual(PRICE);
     });
 
     it('a-partial-answer-from-a-walk-that-threw-does-not-replace-the-map', async () => {
@@ -3218,7 +4296,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
          * and the token it never reached keeps the record on screen, said
          * to be as last read.
          */
-        bootStall(
+        const { root } = bootStall(
             stallEmpty({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN, TOKEN_META]]),
@@ -3241,18 +4319,18 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
         await flush();
 
         expect(chain.historyPageCalls, 'it did try the second page').toContain(1);
-        expect(painted.view?.prices?.get(TOKEN), 'the token it never reached keeps its record').toEqual(PRICE);
+        expect(viewOf(root)?.prices?.get(TOKEN), 'the token it never reached keeps its record').toEqual(PRICE);
         expect(
-            painted.view?.prices?.get(TOKEN_B),
+            viewOf(root)?.prices?.get(TOKEN_B),
             'the token it resolved shows what it read',
         ).toEqual({ code: 'xec', exponent: 2, amount: 900n });
-        expect(painted.view?.recordsStale, 'and the kept record is said to be as last read').toBe(true);
+        expect(viewOf(root)?.recordsStale, 'and the kept record is said to be as last read').toBe(true);
     });
 
     it('applies a walk that did find something', async () => {
         // The guard must not become "never replace anything": a real answer
         // still lands, which is what makes the empty case a decision.
-        bootStall(
+        const { root } = bootStall(
             stallEmpty({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN, TOKEN_META]]),
@@ -3271,7 +4349,7 @@ describe('a-failed-facts-walk-does-not-erase-a-price', () => {
         watches[0]!.hooks.onBurst?.(['0c'.repeat(32)]);
         await flush();
 
-        expect(painted.view?.prices?.get(TOKEN)).toEqual({
+        expect(viewOf(root)?.prices?.get(TOKEN)).toEqual({
             code: 'xec',
             exponent: 2,
             amount: 900n,
@@ -3298,7 +4376,7 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
     });
 
     it('keeps the row where it was and moves only its state', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         const first = '31'.repeat(32);
         const second = '32'.repeat(32);
@@ -3311,7 +4389,7 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
         );
         await flush(20);
 
-        let events = painted.view?.events ?? [];
+        let events = viewOf(root)?.events ?? [];
         expect(events.map((e) => e.txid), 'newest first').toEqual([second, first]);
         expect(
             events[1]?.status,
@@ -3332,7 +4410,7 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
         );
         await flush(20);
 
-        events = painted.view?.events ?? [];
+        events = viewOf(root)?.events ?? [];
         expect(events, 'a confirmation is not a second row').toHaveLength(2);
         expect(events.map((e) => e.txid), 'and it did not jump the queue').toEqual([
             second,
@@ -3340,12 +4418,12 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
         ]);
         expect(events[1]?.status).toEqual({ kind: 'finalized', avalanche: true });
         expect(events[1]?.seenAtMs, 'the first sighting is kept').toBe(
-            painted.view?.events?.[1]?.seenAtMs,
+            viewOf(root)?.events?.[1]?.seenAtMs,
         );
     });
 
     it('never walks a state backwards', async () => {
-        bootStall(stallEmpty());
+        const { root } = bootStall(stallEmpty());
         await flush();
         const txid = '33'.repeat(32);
         chain.txs.set(txid, payment(txid));
@@ -3354,7 +4432,7 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
             new Map([[txid, { msgType: 'TX_FINALIZED' }]]),
         );
         await flush(20);
-        expect(painted.view?.events?.[0]?.status).toEqual({
+        expect(viewOf(root)?.events?.[0]?.status).toEqual({
             kind: 'finalized',
             avalanche: false,
         });
@@ -3367,7 +4445,7 @@ describe('a-finalized-message-updates-the-row-in-place', () => {
             new Map([[txid, { msgType: 'TX_ADDED_TO_MEMPOOL' }]]),
         );
         await flush(20);
-        expect(painted.view?.events?.[0]?.status).toEqual({
+        expect(viewOf(root)?.events?.[0]?.status).toEqual({
             kind: 'finalized',
             avalanche: false,
         });
@@ -3418,7 +4496,7 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
             await readPage(root);
         }
 
-        const history = painted.view?.history;
+        const history = viewOf(root)?.history;
         expect(history?.rows).toHaveLength(MAX_ACTIVITY_PAGES);
         expect(history?.pagesRead).toBe(MAX_ACTIVITY_PAGES);
         expect(history?.capped, 'our own ceiling, said rather than hidden').toBe(true);
@@ -3434,7 +4512,7 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
             expect(row.status).toEqual({ kind: 'finalized', avalanche: false });
         }
         // Two lists: the ring is untouched by a walk.
-        expect(painted.view?.events ?? [], 'the walk is not the ring').toHaveLength(0);
+        expect(viewOf(root)?.events ?? [], 'the walk is not the ring').toHaveLength(0);
         expect(
             root.querySelector('[data-role="history-more"]'),
             'at the cap the control is gone',
@@ -3448,11 +4526,11 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
         openActivity(root);
         await flush();
         await readPage(root);
-        expect(painted.view?.history?.done).toBeFalsy();
+        expect(viewOf(root)?.history?.done).toBeFalsy();
         await readPage(root);
-        expect(painted.view?.history?.done).toBe(true);
-        expect(painted.view?.history?.capped).toBeFalsy();
-        expect(painted.view?.history?.rows).toHaveLength(2);
+        expect(viewOf(root)?.history?.done).toBe(true);
+        expect(viewOf(root)?.history?.capped).toBeFalsy();
+        expect(viewOf(root)?.history?.rows).toHaveLength(2);
     });
 
     it('carries the ring’s book shape onto the row the walk found again', async () => {
@@ -3474,8 +4552,8 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
             outputs: [{ outputScript: STALL_SCRIPT, sats: 5_460n }],
         });
         watches[0]!.hooks.onBurst?.([txid]);
-        await until(() => painted.view?.events?.[0]?.book === 'consumed');
-        expect(painted.view?.events?.[0]?.book).toBe('consumed');
+        await until(() => viewOf(root)?.events?.[0]?.book === 'consumed');
+        expect(viewOf(root)?.events?.[0]?.book).toBe('consumed');
 
         chain.historyPages = [
             [
@@ -3490,23 +4568,37 @@ describe('history-is-its-own-list-with-its-own-cap-and-clock', () => {
         openActivity(root);
         await flush();
         await readPage(root);
-        expect(painted.view?.history?.rows[0]?.book).toBe('consumed');
+        expect(viewOf(root)?.history?.rows[0]?.book).toBe('consumed');
     });
 
     it('a new stall is a new list', async () => {
-        const { root } = bootStall(stallEmpty());
+        // The loader answers the stall the location names. One that answered
+        // this stall for every route brought its history back from the memo
+        // on the "new" stall, and the test passed only while it read a
+        // file-wide capture another app had painted last (CARRYOVER-2 item 9).
+        const PK_C_BYTES = Uint8Array.from([0x02, ...new Array<number>(32).fill(0xcc)]);
+        const PK_C = toHex(PK_C_BYTES);
+        const ADDR_C = encodeCashAddress('ecash', 'p2pkh', toHex(shaRmd160(PK_C_BYTES)));
+        const stateC: State = {
+            ...stallEmpty({ route: { kind: 'pubkey', pubkeyHex: PK_C, address: ADDR_C }, address: ADDR_C }),
+            pubkeyHex: PK_C,
+        };
+        const root = document.createElement('div');
+        boot(root, async () => (location.pathname === stallPath(PK_C) ? stateC : stallEmpty()));
         await flush();
         chain.historyPages = [[walkedTx('5d'.repeat(32))]];
         openActivity(root);
         await flush();
         await readPage(root);
-        expect(painted.view?.history?.rows).toHaveLength(1);
+        expect(viewOf(root)?.history?.rows).toHaveLength(1);
 
-        window.history.pushState(null, '', stallPath('02' + 'cc'.repeat(32)));
+        window.history.pushState(null, '', stallPath(PK_C));
         window.dispatchEvent(new PopStateEvent('popstate'));
         await flush(20);
+        const route = viewOf(root)?.route;
+        expect(route?.kind === 'pubkey' ? route.pubkeyHex : undefined, 'the new stall is on screen').toBe(PK_C);
         expect(
-            painted.view?.history,
+            viewOf(root)?.history,
             'one seller’s history must not be attributed to another',
         ).toBeUndefined();
     });
@@ -3534,13 +4626,12 @@ describe('a-walked-history-memo-is-capped-like-every-other-buffer', () => {
         await flush();
         root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
         await flush(20);
-        expect(painted.view?.history?.rows).toHaveLength(1);
+        expect(viewOf(root)?.history?.rows).toHaveLength(1);
 
         // The same stall again, through the retry control, which is a full
-        // `refresh()`. Asserted on **this app's own DOM**, not the shared
-        // `painted` capture: `boot` never removes its popstate listener, so a
-        // navigation-driven refresh repaints every app booted earlier in this
-        // file too and the last view captured need not be ours.
+        // `refresh()`. Asserted on **this app's own DOM**: `boot` never
+        // removes its popstate listener, so a navigation-driven refresh
+        // repaints every app booted earlier in this file too.
         (root.querySelector('[data-role="tab-shop"]') as HTMLButtonElement).click();
         await flush();
         (root.querySelector('[data-role="retry"]') as HTMLButtonElement).click();
@@ -3597,12 +4688,12 @@ describe('the-first-scroll-reads-page-zero', () => {
         more().click();
         await flush(20);
         expect(chain.historyPageCalls).toEqual([0]);
-        expect(painted.view?.history?.rows.map((r) => r.txid)).toEqual(['60'.repeat(32)]);
+        expect(viewOf(root)?.history?.rows.map((r) => r.txid)).toEqual(['60'.repeat(32)]);
 
         more().click();
         await flush(20);
         expect(chain.historyPageCalls).toEqual([0, 1]);
-        expect(painted.view?.history?.rows).toHaveLength(2);
+        expect(viewOf(root)?.history?.rows).toHaveLength(2);
     });
 });
 
@@ -3627,26 +4718,26 @@ describe('a-failed-page-does-not-poison-the-list', () => {
         await flush();
         root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
         await flush(20);
-        expect(painted.view?.history?.rows).toHaveLength(1);
+        expect(viewOf(root)?.history?.rows).toHaveLength(1);
 
         chain.historyPageThrows = new Set([1]);
         root.querySelector<HTMLButtonElement>('[data-role="history-more"]')!.click();
         await flush(20);
-        expect(painted.view?.history?.failed).toBe(true);
-        expect(painted.view?.history?.rows, 'nothing already read was lost').toHaveLength(
+        expect(viewOf(root)?.history?.failed).toBe(true);
+        expect(viewOf(root)?.history?.rows, 'nothing already read was lost').toHaveLength(
             1,
         );
-        expect(painted.view?.history?.pagesRead, 'the failed page was not counted').toBe(
+        expect(viewOf(root)?.history?.pagesRead, 'the failed page was not counted').toBe(
             1,
         );
-        expect(painted.view?.history?.done, 'a failure is not an ending').toBeFalsy();
+        expect(viewOf(root)?.history?.done, 'a failure is not an ending').toBeFalsy();
 
         chain.historyPageThrows = new Set();
         root.querySelector<HTMLButtonElement>('[data-role="history-retry"]')!.click();
         await flush(20);
         expect(chain.historyPageCalls, 'the same page, asked again').toEqual([0, 1, 1]);
-        expect(painted.view?.history?.rows).toHaveLength(2);
-        expect(painted.view?.history?.failed).toBeFalsy();
+        expect(viewOf(root)?.history?.rows).toHaveLength(2);
+        expect(viewOf(root)?.history?.failed).toBeFalsy();
     });
 });
 
@@ -3684,7 +4775,7 @@ describe('a-live-update-does-not-change-the-figure-under-a-buyer', () => {
         const figure = root.querySelector('[data-role="pay"] [data-role="price"]')
             ?.textContent;
         expect(figure, 'the sheet composed a figure').toBe('250,000');
-        expect(painted.view?.payRate?.rate).toBe(FROZEN);
+        expect(viewOf(root)?.payRate?.rate).toBe(FROZEN);
 
         // The feed would answer differently now; nothing on the live path asks.
         priceControl.fetch = async () => 10_000_000n;
@@ -3693,7 +4784,7 @@ describe('a-live-update-does-not-change-the-figure-under-a-buyer', () => {
         watches[0]!.hooks.onBurst?.(['0d'.repeat(32)]);
         await flush();
 
-        expect(painted.view?.payRate?.rate, 'the frozen rate is untouched').toBe(FROZEN);
+        expect(viewOf(root)?.payRate?.rate, 'the frozen rate is untouched').toBe(FROZEN);
         expect(
             root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent,
             'and so is the figure on screen',
@@ -3712,29 +4803,32 @@ describe('the-door-and-a-broadcast-drop-the-pay-hint', () => {
     // this pass without either parameter being dropped by anything.
     it('carries no hint on the apex or under a broadcast', async () => {
         window.history.replaceState(null, '', `/?pay=${'cd'.repeat(6)}`);
-        boot(document.createElement('div'));
+        const root = document.createElement('div');
+        boot(root);
         await flush();
-        expect(painted.view?.route.kind).toBe('home');
-        expect(painted.view?.payHint).toBeUndefined();
-        expect(painted.view?.payHintNote).toBeUndefined();
+        expect(viewOf(root)?.route.kind).toBe('home');
+        expect(viewOf(root)?.payHint).toBeUndefined();
+        expect(viewOf(root)?.payHintNote).toBeUndefined();
 
         window.history.replaceState(
             null,
             '',
             `${stallPath(PK)}?view=broadcast&pay=${'cd'.repeat(6)}`,
         );
-        boot(document.createElement('div'));
+        const overlay = document.createElement('div');
+        boot(overlay);
         await flush();
-        expect(painted.view?.broadcast, 'the overlay is still the overlay').toBeDefined();
-        expect(painted.view?.payHint).toBeUndefined();
-        expect(painted.view?.overlay.kind).toBe('idle');
+        expect(viewOf(overlay)?.broadcast, 'the overlay is still the overlay').toBeDefined();
+        expect(viewOf(overlay)?.payHint).toBeUndefined();
+        expect(viewOf(overlay)?.overlay.kind).toBe('idle');
     });
 
     it('carries it on an ordinary stall URL', async () => {
         window.history.replaceState(null, '', `${stallPath(PK)}?pay=${'cd'.repeat(6)}`);
-        boot(document.createElement('div'));
+        const root = document.createElement('div');
+        boot(root);
         await flush();
-        expect(painted.view?.payHint).toBe('cd'.repeat(6));
+        expect(viewOf(root)?.payHint).toBe('cd'.repeat(6));
     });
 });
 
@@ -3814,7 +4908,7 @@ describe('a-pay-cursor-is-clamped-when-the-quotes-shrink', () => {
      * a shrunken quote set and show nothing at all.
      */
     it('stores the cursor modulo the new quote count', async () => {
-        bootQuotesOverlay(
+        const { root } = bootQuotesOverlay(
             quotesOverlay(
                 new Map([
                     [TOKEN, USD(500n)],
@@ -3824,15 +4918,23 @@ describe('a-pay-cursor-is-clamped-when-the-quotes-shrink', () => {
             ),
         );
         await flush();
-        expect(painted.view?.broadcastCursor).toBe(1);
+        expect(viewOf(root)?.broadcastCursor).toBe(1);
 
-        // One record on chain, so the walk answers with one quote.
+        // The seller takes the second quote off: the walk reads the
+        // removal, so the quote set shrinks to one. (A walk that merely
+        // never met it would leave it — our gap, never the seller's;
+        // CRITIC-CARRYOVER-3 item 3.)
         const txid = pricedRecord('0d'.repeat(32), TOKEN, USD(500n));
-        watches[0]!.hooks.onBurst?.([txid]);
+        const removal = encodeRemovalHex(TOKEN_B);
+        if (removal === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const gone = publish(signedTx({ txid: '0c'.repeat(32), outputs: [`6a${removal}`], height: 5 }));
+        watches[0]!.hooks.onBurst?.([txid, gone]);
         await flush();
 
-        expect(painted.view?.prices?.size, 'the walk found one quote').toBe(1);
-        expect(painted.view?.broadcastCursor, '1 mod 1 is 0').toBe(0);
+        expect(viewOf(root)?.prices?.size, 'one quote left').toBe(1);
+        expect(viewOf(root)?.broadcastCursor, '1 mod 1 is 0').toBe(0);
     });
 });
 
@@ -3851,8 +4953,8 @@ describe('a-quote-change-pulses-and-a-replaced-quote-fades', () => {
         watches[0]!.hooks.onBurst?.([txid]);
         await flush();
 
-        expect(painted.view?.broadcastPulse).toBe(true);
-        expect(painted.view?.broadcastStepped, 'the same card did not fade').toBeUndefined();
+        expect(viewOf(root)?.broadcastPulse).toBe(true);
+        expect(viewOf(root)?.broadcastStepped, 'the same card did not fade').toBeUndefined();
         expect(root.querySelector('[data-role="seller-price"]')?.textContent).toBe('$7.00');
         expect(
             root.querySelector('[data-role="seller-price"]')?.classList.contains('pulse'),
@@ -3867,8 +4969,8 @@ describe('a-quote-change-pulses-and-a-replaced-quote-fades', () => {
         watches[0]!.hooks.onBurst?.([txid]);
         await flush();
 
-        expect(painted.view?.broadcastStepped, 'a new card fades').toBe(true);
-        expect(painted.view?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
+        expect(viewOf(root)?.broadcastStepped, 'a new card fades').toBe(true);
+        expect(viewOf(root)?.broadcastPulse, 'a swap is not a price change').toBeUndefined();
         expect(root.querySelector('.bc-nm')?.textContent).toBe('Green Tea');
         expect(root.querySelector('.bc-ext')?.classList.contains('in')).toBe(true);
     });
@@ -3998,7 +5100,7 @@ describe('a-failed-book-paints-no-quote-count-it-cannot-explain', () => {
         boot(root);
         await flush();
 
-        expect(painted.view?.prices?.size, 'the walk did find the record').toBe(1);
+        expect(viewOf(root)?.prices?.size, 'the walk did find the record').toBe(1);
         expect(root.querySelector('[data-role="pay-unreadable"]')).toBeNull();
         expect(root.querySelector('[data-role="pay-section"]')).toBeNull();
         // The book failure this fixture stages is `plugin-missing`, whose
@@ -4116,7 +5218,7 @@ describe('a-live-listing-does-not-move-a-reader-off-the-quotes-tab', () => {
         watches[0]!.hooks.onChanged?.('message');
         await flush();
 
-        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(viewOf(root)?.fetch?.kind, 'the book was applied').toBe('offers');
         expect(listings(), 'and the label counted it').toContain('2');
         expect(pressed(), 'and the reader did not move').toBe('shop-tab-quotes');
         expect(root.querySelector('[data-role="pay-row"]')).not.toBeNull();
@@ -4353,12 +5455,22 @@ describe('a-pay-sheet-opened-cold-learns-its-attribution-in-place', () => {
                 [COLD],
             ),
         );
-        await flush();
-        const sheet = root.querySelector('[data-role="pay"]');
-        expect(sheet, 'the link opened the sheet').not.toBeNull();
-        expect(sheet!.querySelector('[data-role="quote-not-minted"]')?.textContent).toBe(
-            QUOTE_NOT_MINTED_HERE,
-        );
+        // On the page (`bootStall`): the sheet paints its answer in place
+        // only while it is connected (`wrap.isConnected`).
+        try {
+            await flush();
+            const sheet = root.querySelector('[data-role="pay"]');
+            expect(sheet, 'the link opened the sheet').not.toBeNull();
+            const line = sheet!.querySelector('[data-role="quote-not-minted"]') as HTMLElement | null;
+            expect(line?.textContent).toBe(QUOTE_NOT_MINTED_HERE);
+            // The line exists from the start, hidden: what the sheet learned
+            // is that it shows (this read `textContent` alone, which a hidden
+            // line carries too).
+            await until(() => line?.hidden === false);
+            expect(line?.hidden, 'the sheet learned its attribution in place').toBe(false);
+        } finally {
+            root.remove();
+        }
     });
 });
 
@@ -4479,8 +5591,8 @@ describe('a-described-token-is-named-by-its-genesis-like-a-quoted-one', () => {
         await flush();
         await flush();
 
-        expect(painted.view?.prices?.size, 'words only: nothing is quoted').toBe(0);
-        expect(painted.view?.tokens.get(DESCRIBED)?.name).toBe('Beeswax Wrap');
+        expect(viewOf(root)?.prices?.size, 'words only: nothing is quoted').toBe(0);
+        expect(viewOf(root)?.tokens.get(DESCRIBED)?.name).toBe('Beeswax Wrap');
 
         (root.querySelector('[data-role="tab-studio"]') as HTMLButtonElement).click();
         await flush();
@@ -4519,8 +5631,8 @@ describe('an-implausible-feed-answer-is-refused-and-said', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
-        expect(painted.view?.payRate).toBeUndefined();
-        expect(painted.view?.payRateWhy).toBe('implausible');
+        expect(viewOf(root)?.payRate).toBeUndefined();
+        expect(viewOf(root)?.payRateWhy).toBe('implausible');
         const sheet = root.querySelector('[data-role="pay"]') as HTMLElement;
         expect(sheet.textContent).toContain(PAY_RATE_IMPLAUSIBLE_WHY);
         expect(sheet.textContent).not.toContain(PAY_NO_RATE_WHY);
@@ -4538,8 +5650,8 @@ describe('an-implausible-feed-answer-is-refused-and-said', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
-        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
-        expect(painted.view?.payRateWhy).toBeUndefined();
+        expect(viewOf(root)?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        expect(viewOf(root)?.payRateWhy).toBeUndefined();
     });
 });
 
@@ -4582,10 +5694,10 @@ describe('the-pay-sheet-asks-one-feed-while-the-check-is-paused', () => {
         await flush();
         // The answer lands on its own chain; a fixed tick count reached it on
         // an idle box and missed it on a busy one (this file's `until`).
-        await until(() => painted.view?.payRate !== undefined);
+        await until(() => viewOf(root)?.payRate !== undefined);
         expect(fetch.mock.calls.length, 'the first feed was asked for the sheet').toBeGreaterThan(before);
         expect(check, 'the paused check is never asked').not.toHaveBeenCalled();
-        expect(painted.view?.payRate?.check).toBe('none');
+        expect(viewOf(root)?.payRate?.check).toBe('none');
         const rate = root.querySelector('[data-role="pay"] [data-role="rate"]')?.textContent ?? '';
         expect(rate).toContain(RATE_SOURCE_PRIMARY);
         expect(rate).not.toContain(RATE_SOURCE_CHECK);
@@ -4599,8 +5711,8 @@ describe('the-pay-sheet-asks-one-feed-while-the-check-is-paused', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
-        await until(() => painted.view?.payRate !== undefined);
-        expect(painted.view?.payRate?.rate).toBe(scaleRate(0.00003)!);
+        await until(() => viewOf(root)?.payRate !== undefined);
+        expect(viewOf(root)?.payRate?.rate).toBe(scaleRate(0.00003)!);
         expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
             '166,666.67',
         );
@@ -4614,10 +5726,10 @@ describe('the-pay-sheet-asks-one-feed-while-the-check-is-paused', () => {
         await flush();
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
-        await until(() => painted.view?.payRate !== undefined);
+        await until(() => viewOf(root)?.payRate !== undefined);
         expect(check).not.toHaveBeenCalled();
-        expect(painted.view?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
-        expect(painted.view?.payRate?.check).toBe('none');
+        expect(viewOf(root)?.payRate?.rate, 'the figure is the first feed\u2019s').toBe(scaleRate(0.00003)!);
+        expect(viewOf(root)?.payRate?.check).toBe('none');
         expect(root.querySelector('[data-role="pay-valve"]')?.textContent).toBe('');
         expect(root.textContent).not.toContain(PAY_RATE_DISAGREE);
         expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe(
@@ -4646,10 +5758,10 @@ describe('the-pay-sheet-asks-one-feed-while-the-check-is-paused', () => {
             // No clock moved: the figure landed at t=0, where an asked check
             // would have held it for its whole budget.
             expect(
-                painted.view?.payRate?.rate,
+                viewOf(root)?.payRate?.rate,
                 `landed without waiting out the check's ${PAY_CHECK_TIMEOUT_MS} ms`,
             ).toBe(scaleRate(0.00003)!);
-            expect(painted.view?.payRate?.check).toBe('none');
+            expect(viewOf(root)?.payRate?.check).toBe('none');
         } finally {
             vi.useRealTimers();
         }
@@ -4692,8 +5804,8 @@ describe('an-xec-quote-asks-no-price-feed', () => {
         expect(root.querySelector('[data-role="pay"] [data-role="price"]')?.textContent).toBe('9');
         expect(fetch.mock.calls.length, 'the first feed was not asked for the sheet').toBe(before);
         expect(check, 'nor the second').not.toHaveBeenCalled();
-        expect(painted.view?.payRate).toBeUndefined();
-        expect(painted.view?.payRateWhy).toBeUndefined();
+        expect(viewOf(root)?.payRate).toBeUndefined();
+        expect(viewOf(root)?.payRateWhy).toBeUndefined();
     });
 });
 
@@ -4735,13 +5847,13 @@ describe('pay-several-at-the-app-level', () => {
         expect(root.querySelector('[data-role="selection-total"]')?.textContent).toBe('$10.00');
         // The quotes rail's own retry runs a full refresh().
         // A failed walk paints the retry beside the rows; stage it and press it.
-        expect(painted.view?.selection?.get(TOKEN)).toBe(2n);
-        const before = painted.view;
+        expect(viewOf(root)?.selection?.get(TOKEN)).toBe(2n);
+        const before = viewOf(root);
         (root.querySelector('[data-role="shop-tab-listings"]') as HTMLButtonElement).click();
         (root.querySelector('[data-role="shop-tab-quotes"]') as HTMLButtonElement).click();
-        expect(painted.view?.selection?.get(TOKEN), 'a tab switch is a paint, not a prune').toBe(2n);
-        expect(painted.view?.selectionDropped).toBeUndefined();
-        expect(before).not.toBe(painted.view);
+        expect(viewOf(root)?.selection?.get(TOKEN), 'a tab switch is a paint, not a prune').toBe(2n);
+        expect(viewOf(root)?.selectionDropped).toBeUndefined();
+        expect(before).not.toBe(viewOf(root));
     });
 
     it('a live re-read that takes a chosen quote off the rail prunes it and says so', async () => {
@@ -4759,20 +5871,20 @@ describe('pay-several-at-the-app-level', () => {
         (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
         choose(root, TOKEN, 1);
         choose(root, TOKEN_B, 1);
-        expect(painted.view?.selection?.size).toBe(2);
+        expect(viewOf(root)?.selection?.size).toBe(2);
         // The seller republished B's record with no price, in a later block:
         // B leaves the rail, A stays.
         const hex = encodeDescriptionHex(TOKEN_B, 'Words only');
         const txid = publish(signedTx({ txid: '0d'.repeat(32), outputs: [`6a${hex}`], height: 6 }));
         watches[0]!.hooks.onBurst?.([txid]);
         await flush();
-        expect(painted.view?.selection?.has(TOKEN_B)).toBe(false);
-        expect(painted.view?.selection?.get(TOKEN)).toBe(1n);
-        expect(painted.view?.selectionDropped).toBe(true);
-        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+        expect(viewOf(root)?.selection?.has(TOKEN_B)).toBe(false);
+        expect(viewOf(root)?.selection?.get(TOKEN)).toBe(1n);
+        expect(viewOf(root)?.selectionDropped).toEqual([TOKEN_B]);
+        expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Green Tea', 1));
         // Said until the selection next changes.
         choose(root, TOKEN, 1);
-        expect(painted.view?.selectionDropped).toBeUndefined();
+        expect(viewOf(root)?.selectionDropped).toBeUndefined();
     });
 
     it('the several sheet asks the first feed for a USD selection, never the paused check, and neither for XEC', async () => {
@@ -4838,13 +5950,13 @@ describe('an-unanswered-feed-replaces-the-asking-line', () => {
         (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
         await flush();
         const sheet = () => root.querySelector('[data-role="pay"]') as HTMLElement;
-        expect(painted.view?.payRateAsking).toBe(true);
+        expect(viewOf(root)?.payRateAsking).toBe(true);
         expect(sheet().textContent).toContain(PAY_RATE_ASKING);
         expect(sheet().textContent).not.toContain(PAY_NO_RATE_WHY);
 
         answer(undefined);
         await flush();
-        expect(painted.view?.payRateAsking).toBe(false);
+        expect(viewOf(root)?.payRateAsking).toBe(false);
         expect(sheet().textContent).toContain(PAY_NO_RATE_WHY);
         expect(sheet().textContent).not.toContain(PAY_RATE_ASKING);
     });
@@ -4888,11 +6000,16 @@ describe('overlapping-bursts-do-not-overlap-their-walks', () => {
         // road, and its row lands. No fixed wait: the condition is the row.
         chain.gate = undefined;
         open();
-        await until(() => painted.view?.events?.some((e) => e.txid === late) === true, 8_000);
+        await until(() => viewOf(root)?.events?.some((e) => e.txid === late) === true, 8_000);
+        // Read when the row lands, not after the flush below: an app an
+        // earlier test booted is never torn down, and on a loaded box its
+        // late timers ran into the flush (red under `pnpm test` at c633e60,
+        // green alone, while the capture was one file-wide slot).
+        const landed = viewOf(root)?.events?.some((e) => e.txid === late) === true;
         await flush();
         expect(chain.walksInFlight, 'every walk finished').toBe(0);
         expect(chain.walksInFlightMax, 'the deferred read ran after, not beside').toBe(1);
-        expect(painted.view?.events?.some((e) => e.txid === late), 'the deferred burst’s row reached the ring').toBe(true);
+        expect(landed, 'the deferred burst’s row reached the ring').toBe(true);
         expect(root.querySelector('[data-role="tab-activity"]')).not.toBeNull();
     });
 });
@@ -5017,9 +6134,9 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
             }),
             pubkeyHex: PK_B,
         };
-        // Every instance booted earlier in this file still listens for
-        // `popstate`, so the watches and the last paint are shared: this
-        // test finds its own watch by the key it watches.
+        // The watches are shared with whatever else in this file is
+        // listening (earlier tests' apps are torn down, `running`): this test
+        // finds its own watch by the key it watches.
         const before = watches.length;
         boot(root, async () => (location.pathname === stallPath(PK_B) ? stateB : stateA));
         await flush();
@@ -5040,9 +6157,17 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
         // Leave for B while it runs.
         window.history.pushState(null, '', stallPath(PK_B));
         window.dispatchEvent(new PopStateEvent('popstate'));
-        await until(() => watches.some((w) => w.stall.pubkeyHex === PK_B), 3_000);
-        const watchB = watches.find((w) => w.stall.pubkeyHex === PK_B);
-        expect(watchB, 'B is watched').toBeDefined();
+        await until(() => {
+            const route = viewOf(root)?.route;
+            return route?.kind === 'pubkey' && route.pubkeyHex === PK_B && watches.some((w) => w.stall.pubkeyHex === PK_B && !w.closed);
+        }, 3_000);
+        await flush();
+        // Every open watch on B, not the first: another app this file booted
+        // may open B on the same navigation (the ring test's does, since it
+        // opens another stall for real), and a burst sent to its watch alone
+        // never reaches this root — as a real chain wakes every tab.
+        const watchesB = watches.filter((w) => w.stall.pubkeyHex === PK_B && !w.closed);
+        expect(watchesB.length, 'B is watched').toBeGreaterThan(0);
 
         // B's own description record, signed by B and paying B the dust.
         const txB: ChainTx = {
@@ -5054,14 +6179,16 @@ describe('a-burst-queued-behind-another-stalls-walk-runs-against-its-own-stall',
             ],
         };
         chain.txs.set(txB.txid, txB);
-        watchB!.hooks.onBurst?.([txB.txid]);
+        for (const watch of watchesB) {
+            watch.hooks.onBurst?.([txB.txid]);
+        }
         await flush();
 
         // Release A's walk; the queued batch drains after it.
         chain.gate = undefined;
         open();
-        await until(() => painted.view?.events?.some((e) => e.txid === txB.txid) === true, 8_000);
-        const row = painted.view?.events?.find((e) => e.txid === txB.txid);
+        await until(() => viewOf(root)?.events?.some((e) => e.txid === txB.txid) === true, 8_000);
+        const row = viewOf(root)?.events?.find((e) => e.txid === txB.txid);
         expect(row, 'the deferred burst’s row reached B’s ring').toBeDefined();
         expect(row?.kind).toBe('description');
         expect(row?.recordAuthority, 'B’s own record is B’s, not “from another wallet”').toBe('stalls');
@@ -5077,7 +6204,7 @@ describe('an-older-book-read-does-not-overwrite-a-newer-one', () => {
      * (audit 2026-09-09, N6). Only the newest read applies now.
      */
     it('drops a read that answers after a newer one already painted', async () => {
-        bootStall(stallEmpty({ fetch: { kind: 'offers', offers: [OFFER] } }));
+        const { root } = bootStall(stallEmpty({ fetch: { kind: 'offers', offers: [OFFER] } }));
         await flush();
         const older = { kind: 'offers' as const, offers: [{ ...OFFER, askedSats: 111_000n }] };
         const newer = { kind: 'offers' as const, offers: [{ ...OFFER, askedSats: 222_000n }] };
@@ -5089,8 +6216,10 @@ describe('an-older-book-read-does-not-overwrite-a-newer-one', () => {
         chain.book = newer;
         watches[0]!.hooks.onChanged?.('message');
         await flush();
-        const asked = () =>
-            painted.view?.fetch?.kind === 'offers' ? painted.view.fetch.offers[0]?.askedSats : undefined;
+        const asked = () => {
+            const fetch = viewOf(root)?.fetch;
+            return fetch?.kind === 'offers' ? fetch.offers[0]?.askedSats : undefined;
+        };
         expect(asked(), 'the newer read painted').toBe(222_000n);
         release();
         await flush();
@@ -5147,7 +6276,7 @@ describe('reopening-the-pay-sheet-does-not-let-the-first-ask-say-no-answer', () 
         expect(sheet, 'the reopened sheet is on screen').not.toBeNull();
         expect(sheet.textContent).toContain(PAY_RATE_ASKING);
         expect(sheet.textContent).not.toContain(PAY_NO_RATE_WHY);
-        expect(painted.view?.payRateAsking).toBe(true);
+        expect(viewOf(root)?.payRateAsking).toBe(true);
 
         // Its own ask lands: the figure.
         answers[1]!(10_000_000n);
@@ -5182,7 +6311,7 @@ describe('reopening-the-pay-sheet-does-not-let-the-first-ask-say-no-answer', () 
         expect(figure(), 'the superseded ask did not wipe it').not.toBeNull();
         expect(cashtab()?.hidden).toBe(false);
         expect(root.querySelector('[data-role="pay"]')?.textContent).not.toContain(PAY_NO_RATE_WHY);
-        expect(painted.view?.payRate).toBeDefined();
+        expect(viewOf(root)?.payRate).toBeDefined();
     });
 });
 
@@ -5201,7 +6330,7 @@ describe('a-new-card-under-an-armed-timer-gets-its-own-dwell', () => {
         const timeouts: number[] = [];
         const spy = vi.spyOn(globalThis, 'setTimeout');
         try {
-            bootStall(
+            const { root } = bootStall(
                 stallEmpty({
                     fetch: { kind: 'offers', offers: [A, B] },
                     broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings', side: 'right' as const, edge: 'bottom' as const },
@@ -5212,13 +6341,13 @@ describe('a-new-card-under-an-armed-timer-gets-its-own-dwell', () => {
                 spy.mock.calls.filter((call) => call[1] === 8_000).length;
             const before = armed();
             expect(before, 'the carousel is armed once on open').toBeGreaterThan(0);
-            const shown = painted.view?.broadcastCursor ?? 0;
+            const shown = viewOf(root)?.broadcastCursor ?? 0;
             // A book that drops the shown card: the cursor lands on a different token.
             chain.book = { kind: 'offers', offers: [B, C] };
             watches[0]!.hooks.onChanged?.('message');
             await flush();
-            expect(painted.view?.fetch?.kind).toBe('offers');
-            expect(painted.view?.broadcastStepped, 'the card at the cursor changed').toBe(true);
+            expect(viewOf(root)?.fetch?.kind).toBe('offers');
+            expect(viewOf(root)?.broadcastStepped, 'the card at the cursor changed').toBe(true);
             expect(armed(), 'the carousel was re-armed for the new card').toBe(before + 1);
             void timeouts;
             void shown;
@@ -5277,7 +6406,7 @@ describe('a-listing-arriving-does-not-turn-a-touch-wall-off-a-selection', () => 
         watches[0]!.hooks.onChanged?.('message');
         await flush();
 
-        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(viewOf(root)?.fetch?.kind, 'the book was applied').toBe('offers');
         expect(strip()?.querySelector('[data-role="seller-price"]'), 'still the quotes').not.toBeNull();
         expect(strip()?.querySelector('[data-role="price"]'), 'and no listing beside them').toBeNull();
         expect(root.querySelector('[data-role="window-selection"]'), 'the choice is still there').not.toBeNull();
@@ -5331,7 +6460,2444 @@ describe('a-listing-arriving-does-not-turn-the-stream-off-its-quote-card', () =>
         watches[0]!.hooks.onChanged?.('message');
         await flush();
 
-        expect(painted.view?.fetch?.kind, 'the book was applied').toBe('offers');
+        expect(viewOf(root)?.fetch?.kind, 'the book was applied').toBe('offers');
         expect(card(), 'and the card a viewer is reading stays').toBe('quote');
+    });
+});
+
+describe('a-finished-walk-that-read-the-last-removal-takes-the-quote-off', () => {
+    /**
+     * The critic, 2026-09-25, item 1. `applyDescriptions` refused a finished
+     * walk's answer whose three maps were empty, over records on screen,
+     * because it cannot be told from a walk that found nothing. But a walk
+     * that read the bare tombstone of the stall's LAST quote names the token
+     * in `decided`: the seller took the quote off, and refusing it kept the
+     * item on the rail, where Pay and Pay several composed it. Only an answer
+     * that resolved nothing is held back.
+     */
+    const A = 'a5'.repeat(32);
+    const QUOTE = { code: 'xec', exponent: 2, amount: 500_000n };
+    const shop = (): State =>
+        stallEmpty({
+            tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+            prices: new Map([[A, QUOTE]]),
+            shopTab: 'quotes',
+        });
+    const wake = async (txids: string[]): Promise<void> => {
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.(txids);
+        }
+        await flush();
+    };
+
+    it('takes the only quote off the rail', async () => {
+        const { root } = bootStall(shop());
+        await flush();
+        expect(root.querySelector('[data-role="pay-open"]'), 'the quote is on the rail').not.toBeNull();
+        const removal = publish(signedTx({ txid: '5d'.repeat(32), outputs: [`6a${encodeRemovalHex(A)}`], height: 7 }));
+        await wake([removal]);
+        await until(() => root.querySelector('[data-role="pay-open"]') === null);
+        expect(root.querySelector('[data-role="pay-open"]'), 'the seller took it off').toBeNull();
+        expect(root.textContent, 'nor its name on the rail').not.toContain('Plum Jam');
+    });
+
+    it('still holds the records on screen over a finished walk that resolved nothing', async () => {
+        const { root } = bootStall(shop());
+        await flush();
+        // An unclassifiable burst asks everything, and the chain carries no
+        // record of the seller's at all: the walk finishes and resolves nothing.
+        const walked = chain.calls.stld;
+        await wake([UNKNOWN_TXID]);
+        await until(() => chain.calls.stld > walked);
+        await flush(20);
+        expect(chain.calls.stld, 'the records were walked').toBeGreaterThan(walked);
+        expect(root.querySelector('[data-role="pay-open"]'), 'our silence is not a removal').not.toBeNull();
+    });
+});
+
+describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', () => {
+    /**
+     * The critic's final merge, item 11. A pay sheet holds the live paint, so
+     * a re-read that moves the seller's record while it is open lands in the
+     * app's state and not on screen. The press used to open the wallet on the
+     * sheet's own closure — the figure on screen, and one the page no longer
+     * held as the seller's quote — and say nothing. Now the press asks the
+     * records first: if the one it composed from moved, it sends nothing,
+     * the sheet is painted again from the record as it stands with one line
+     * saying so, and the next press is the one that opens.
+     */
+    const A = 'a4'.repeat(32);
+    const B = 'b4'.repeat(32);
+    /**
+     * Held still for every test here: every Pay press inside the grace of a
+     * change on screen is absorbed (`PAY_RECOMPOSE_GRACE_MS`), so the press
+     * that opens is made after `later` moves the clock past it.
+     */
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    /**
+     * Every test here is about a change under a sheet that is already open,
+     * never about the tap that opened it: the buyer reads the sheet before
+     * pressing, past the second tap of a double tap (`PAY_OPEN_GUARD_MS`,
+     * the owner's ruling, CRITIC-CARRYOVER-6 item 2 — which
+     * `a-double-tap-that-opens-the-sheet-opens-no-wallet` asserts).
+     */
+    const pastTheOpeningTap = (): void => later(PAY_OPEN_GUARD_MS + 1);
+    const XEC_OLD = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_NEW = { code: 'xec', exponent: 2, amount: 900_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 700_000n };
+    const phone = (prices: Map<string, { code: string; exponent: number; amount: bigint }>): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices,
+            shopTab: 'quotes',
+        });
+    /**
+     * The seller's own record, published and woken by the socket — on every
+     * open watch, as a real chain wakes every tab on the stall. An app an
+     * earlier test booted is never torn down, and a late refresh of one can
+     * open a watch before this test's app does, so `watches[0]` is not
+     * certainly this app's. Seen: a Pay several case red under `pnpm test`
+     * with its code never taken away, green alone; that this was the cause
+     * is inferred, not observed.
+     */
+    const republish = async (txids: readonly [string, string | undefined][]): Promise<void> => {
+        const ids = txids.map(([txid, hex]) => {
+            if (hex === undefined) {
+                throw new Error('fixture is not encodable');
+            }
+            return publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        });
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.(ids);
+        }
+        await flush();
+    };
+    /** One press on the open sheet's Cashtab control: the URL a wallet was handed, or undefined. */
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`) as HTMLElement | null;
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+
+    it('a new figure: the sheet shows the new one in place and says so, the press after it sends nothing, and the next press pays it', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+        // The sheet holds the live paint and answers the re-read in place
+        // (the owner, 2026-09-25): the new figure, said — the first clause
+        // alone, since nobody pressed (CRITIC-CARRYOVER-3 item 2).
+        expect(figureOf(root, 'pay'), 'recomposed in place').toBe('9,000');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+
+        expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+        expect(figureOf(root, 'pay')).toBe('9,000');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+        expect(
+            root.querySelector('[data-role="pay"] [data-role="pay-cashtab"]')?.textContent,
+            'the control restates the figure it will open',
+        ).toBe(payFigure('9,000'));
+
+        expect(press(root, 'pay'), 'a second press inside the grace is absorbed too').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
+        const url = press(root, 'pay');
+        expect(url, 'a press after the grace pays the record as it stands').toContain('amount=9000.00');
+    });
+
+    it('a removal: the sheet says the quote is gone and offers nothing to press', async () => {
+        // B stays quoted here; the stall's only quote removed is the next
+        // case.
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+        await republish([
+            ['7b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+            ['7d'.repeat(32), encodeRemovalHex(A)],
+        ]);
+
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.querySelector('[data-role="pay-qr"]'), 'no code').toBeNull();
+        expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
+    });
+
+    it('a removal of the stall’s only quote: the sheet says the quote is gone and offers nothing to press', async () => {
+        // The critic, 2026-09-25, item 1: a finished walk that read the bare
+        // tombstone of the last quote answers with every map empty and the
+        // token in `decided`; that is a removal, not our silence.
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe('5,000');
+        await republish([['7d'.repeat(32), encodeRemovalHex(A)]]);
+        await until(() => root.querySelector('[data-role="pay"] [data-role="pay-qr"]') === null);
+
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.textContent).toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]'), 'nothing left to pay').toBeNull();
+    });
+
+    it('the same record republished: the press opens at once', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        await republish([['7e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD })]]);
+
+        expect(press(root, 'pay')).toContain('amount=5000.00');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent ?? '').not.toBe(PAY_QUOTE_CHANGED);
+    });
+
+    it('a new unit: the rate held for the old one is never used, and the new one is asked for', async () => {
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        const asked: string[] = [];
+        priceControl.fetch = async (code) => {
+            asked.push(code);
+            return code === 'usd' ? USD_RATE : code === 'eur' ? EUR_RATE : undefined;
+        };
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        // On the page (`bootStall`): the sheet's own ask answers in place
+        // only while it is connected (`wrap.isConnected`).
+        const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, USD_RATE)!));
+        asked.length = 0;
+
+        await republish([['7f'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+        await flush();
+
+        // Recomposed in place: the sheet asked the new unit's own rate.
+        expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
+        const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
+        expect(figureOf(root, 'pay')).toBe(eur);
+        expect(figureOf(root, 'pay'), 'never the euro quote at the dollar’s rate').not.toBe(
+            formatXec(satsForQuote(EUR_QUOTE, 1n, USD_RATE)!),
+        );
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+        expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+        await flush();
+        expect(figureOf(root, 'pay')).toBe(eur);
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
+        expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
+    });
+
+    it('a new unit while the open’s own rate is asked for: never composed across units, and said', async () => {
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const asked: string[] = [];
+        priceControl.fetch = async (code) => {
+            asked.push(code);
+            if (asked.length === 1) {
+                // The open's own ask, held while the seller republishes.
+                await gate;
+            }
+            return code === 'usd' ? USD_RATE : code === 'eur' ? EUR_RATE : undefined;
+        };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        const { root } = bootStall(phone(new Map([[A, { code: 'usd', exponent: 2, amount: 500n }]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(asked).toEqual(['usd']);
+
+        await republish([['7a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+        // The feeds answer long after the move was painted: the figure
+        // that answer puts on screen is what the grace is measured from.
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
+        release();
+        await flush();
+
+        expect(figureOf(root, 'pay') ?? '', 'never the euro quote at the dollar’s rate').not.toBe(
+            formatXec(satsForQuote(EUR_QUOTE, 1n, USD_RATE)!),
+        );
+        expect(asked, 'the new unit’s own rate is asked for').toContain('eur');
+        const eur = formatXec(satsForQuote(EUR_QUOTE, 1n, EUR_RATE)!);
+        expect(figureOf(root, 'pay')).toBe(eur);
+        // Painted by the open's own tail, which no press asked for: the
+        // line asks for no second press. The figure that answer put on
+        // screen is a change of its own (CRITIC-CARRYOVER-4 item 6): a
+        // press inside its grace is absorbed, and one after it opens.
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+        expect(press(root, 'pay'), 'inside the grace of the figure the answer painted').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
+        expect(press(root, 'pay')).toContain(`amount=${eur.replace(/,/g, '')}`);
+    });
+
+    it('Pay several: a chosen item’s new figure is the new total in place, the press after it sends nothing, and the next press pays it', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+        await flush();
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        for (const tokenId of [A, B]) {
+            [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                .click();
+        }
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        expect(figureOf(root, 'pay-several')).toBe('12,000');
+
+        await republish([
+            ['8b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+            ['8a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })],
+        ]);
+        expect(figureOf(root, 'pay-several'), 'recomposed in place').toBe('16,000');
+
+        expect(press(root, 'pay-several'), 'the press after the move is absorbed').toBeUndefined();
+        expect(figureOf(root, 'pay-several')).toBe('16,000');
+        expect(root.querySelector('[data-role="pay-several"] [data-role="pay-valve"]')?.textContent).toBe(
+            payItemsChanged('Plum Jam'),
+        );
+        expect(press(root, 'pay-several'), 'a second press inside the grace is absorbed too').toBeUndefined();
+        later(PAY_RECOMPOSE_GRACE_MS + 1);
+        expect(press(root, 'pay-several')).toContain('amount=16000.00');
+    });
+
+    it('a unit this page does not paint: the sheet says the page can no longer show it and offers nothing to press', async () => {
+        // The critic, 2026-09-25, item 3: the record is still the seller's,
+        // in a unit this page does not write — our gap, never "no longer on
+        // the stall".
+        const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
+
+        const sheet = root.querySelector('[data-role="pay"]');
+        expect(sheet?.querySelector('[data-role="pay-qr"]'), 'no code').toBeNull();
+        expect(sheet?.textContent).toContain(PAY_QUOTE_UNSHOWN);
+        expect(sheet?.textContent).not.toContain(PAY_QUOTE_GONE);
+        expect(sheet?.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+    });
+
+    it('a new margin and new words: the press opens at once, and the sheet takes both in place', async () => {
+        // The owner, 2026-09-25: "moved" is what the buyer pays changing.
+        const RATE = 20_000_000n;
+        priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        pastTheOpeningTap();
+        await flush();
+        const figure = figureOf(root, 'pay');
+        expect(figure).toBe(formatXec(satsForQuote(USD_QUOTE, 1n, RATE)!));
+
+        await republish([['7c'.repeat(32), encodeDescriptionHex(A, 'Now in a jar', { price: { ...USD_QUOTE, tolerancePct: 5 } })]]);
+        const url = press(root, 'pay');
+        expect(url, 'no stop and no second press').toContain(`amount=${figure!.replace(/,/g, '')}.00`);
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent ?? '').toBe('');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-words"]')?.textContent).toBe('Now in a jar');
+        expect(root.querySelector('[data-role="pay"] [data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
+    });
+
+    describe('the-line-is-decided-against-the-record-the-sheet-was-opened-on', () => {
+        /**
+         * The critic, 2026-09-25, item 7, and item 6's untested tails. After
+         * an ask, a sheet is handed back to `onPayRecordMoved` when the
+         * records it was painted from moved — not only when the rate
+         * arrived for another unit — so a move in the SAME unit during the
+         * open's own ask is said, where it was painted in silence; and every
+         * road that asks (the open, the `?pay=` link, Pay several's open,
+         * the move's own ask) composes only at the unit the record now
+         * stands in.
+         */
+        const USD_RATE = 20_000_000n;
+        const EUR_RATE = 18_000_000n;
+        const GBP_RATE = 16_000_000n;
+        const rates: Record<string, bigint> = { usd: USD_RATE, eur: EUR_RATE, gbp: GBP_RATE };
+        const USD_QUOTE = { code: 'usd', exponent: 2, amount: 500n };
+        const EUR_QUOTE = { code: 'eur', exponent: 2, amount: 500n };
+        const GBP_QUOTE = { code: 'gbp', exponent: 2, amount: 500n };
+        /** The price feed, with the next ask held until `release`. */
+        const holdNextAsk = (): { asked: string[]; release: () => void } => {
+            const asked: string[] = [];
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            let held = false;
+            priceControl.fetch = async (code) => {
+                asked.push(code);
+                if (!held) {
+                    held = true;
+                    await gate;
+                }
+                return rates[code];
+            };
+            return { asked, release: () => release() };
+        };
+        const at = (quote: { code: string; exponent: number; amount: bigint }, rate: bigint): string =>
+            formatXec(satsForQuote(quote, 1n, rate)!);
+
+        it('a new figure in the same unit during the open’s own ask is said', async () => {
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+            await flush();
+            const { release } = holdNextAsk();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            await republish([['4a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { ...USD_QUOTE, amount: 700n } })]]);
+            release();
+            await until(() => figureOf(root, 'pay') !== undefined && figureOf(root, 'pay') !== '');
+            expect(figureOf(root, 'pay')).toBe(at({ ...USD_QUOTE, amount: 700n }, USD_RATE));
+            // Told — in the first clause alone: the open's tail painted it,
+            // and no press was made to ask for again (item 7).
+            expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent, 'the buyer is told').toBe(
+                PAY_QUOTE_CHANGED_UNPRESSED,
+            );
+        });
+
+        describe('a-pay-hint-sheet-never-composes-across-units', () => {
+            it('a `?pay=` sheet whose record moves to another unit during its ask asks that unit and says so', async () => {
+                const { root } = bootStall(
+                    stallEmpty({
+                        tokens: new Map([[A, fungible(A, 'Plum Jam')]]),
+                        prices: new Map([[A, USD_QUOTE]]),
+                        shopTab: 'quotes',
+                        payHint: A.slice(0, 12),
+                    }),
+                );
+                const { asked, release } = holdNextAsk();
+                await flush();
+                expect(root.querySelector('[data-role="pay"]'), 'the link opened the sheet').not.toBeNull();
+                await republish([['4b'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+                release();
+                await until(() => figureOf(root, 'pay') === at(EUR_QUOTE, EUR_RATE));
+                expect(asked, 'the new unit’s own rate').toContain('eur');
+                expect(figureOf(root, 'pay'), 'never the euro quote at the dollar’s rate').toBe(at(EUR_QUOTE, EUR_RATE));
+                expect(root.querySelector('[data-role="pay"] [data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            });
+        });
+
+        it('a record that moves again while the move’s own rate is asked for composes at the last unit', async () => {
+            priceControl.fetch = async (code) => rates[code];
+            // On the page (`bootStall`): the sheet's own ask answers only
+            // while connected.
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            const { asked, release } = holdNextAsk();
+            // Recomposed in place, and the euro's own rate asked for — held
+            // (the dollar's first, which judges the feed, then the euro's).
+            await republish([['4c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })]]);
+            expect(asked).toEqual(['usd', 'eur']);
+            await republish([['4d'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: GBP_QUOTE })]]);
+            release();
+            await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
+            expect(figureOf(root, 'pay'), 'never the pound quote at the euro’s rate').toBe(at(GBP_QUOTE, GBP_RATE));
+            expect(asked).toContain('gbp');
+            expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+            await until(() => figureOf(root, 'pay') === at(GBP_QUOTE, GBP_RATE));
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay')).toContain(`amount=${at(GBP_QUOTE, GBP_RATE).replace(/,/g, '')}`);
+        });
+
+        it('Pay several: a chosen item that moves unit during the open’s ask leaves, and the rest compose at the chosen unit', async () => {
+            priceControl.fetch = async (code) => rates[code];
+            const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+            const { root } = bootStall(phone(new Map([[A, USD_QUOTE], [B, USD_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            const { release } = holdNextAsk();
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            await republish([
+                ['4f'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: USD_B })],
+                ['4e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: EUR_QUOTE })],
+            ]);
+            release();
+            await until(() => figureOf(root, 'pay-several') === at(USD_B, USD_RATE));
+            expect(figureOf(root, 'pay-several'), 'Rye Flour alone, at the dollar’s rate').toBe(at(USD_B, USD_RATE));
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            // Plum Jam left the choice: named once, on the dropped line, and
+            // never on the valve beside it (item 6) — asking the buyer to
+            // check the total, since that is all the re-read did to it and
+            // no press was made (CRITIC-CARRYOVER-3 item 2).
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedCheck('Plum Jam', 1));
+        });
+    });
+
+    describe('a-sheet-over-a-moved-record-shows-the-new-figure', () => {
+        /**
+         * The owner, 2026-09-25 (CRITIC-CARRYOVER-2, item 1), through the
+         * real app. A re-read that moves what the buyer pays while a sheet
+         * is open recomposes the SAME sheet node in place from the record as
+         * it stands — the figure, the code, both links, the restated figure,
+         * the buyer's quantity kept — and says so; the press after it is
+         * absorbed and paints the sheet again from the same records; the
+         * press after that pays the new figure. A record back to what the
+         * sheet was opened on clears the line and the absorb. Replaces the
+         * round-2 test that pinned "nothing on it is recomposed".
+         */
+        const RATE = 20_000_000n;
+        const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+        const USD_A2 = { code: 'usd', exponent: 2, amount: 700n };
+        const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+        const scope = (root: HTMLElement, name: string) => root.querySelector(`[data-role="${name}"]`) as HTMLElement | null;
+        const choose = async (root: HTMLElement): Promise<void> => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+        };
+        const cases = [
+            { unit: 'XEC', prices: new Map([[A, XEC_OLD], [B, XEC_B]]), moved: XEC_NEW, rate: undefined },
+            { unit: 'USD', prices: new Map([[A, USD_A], [B, USD_B]]), moved: USD_A2, rate: RATE },
+        ] as const;
+
+        for (const c of cases) {
+            it(`${c.unit === 'XEC' ? 'an' : 'a'} ${c.unit} quote on the single sheet, the buyer’s quantity kept`, async () => {
+                priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+                const { root } = bootStall(phone(new Map(c.prices)));
+                await flush();
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                pastTheOpeningTap();
+                // A USD sheet is painted again when its rate lands: capture
+                // the sheet that holds the code, not the one asking.
+                await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay')!;
+                (sheet.querySelector('[data-role="pay-quantity-edit"]') as HTMLButtonElement).click();
+                const field = sheet.querySelector('[data-role="pay-quantity"]') as HTMLInputElement;
+                field.value = '2';
+                field.dispatchEvent(new Event('input'));
+                const figure = figureOf(root, 'pay');
+                expect(figure).toBe(formatXec(satsForQuote(c.prices.get(A)!, 2n, c.rate)!));
+
+                await republish([['6a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })]]);
+                // The burst is a real timer (`until`'s own reason).
+                const moved = formatXec(satsForQuote(c.moved, 2n, c.rate)!);
+                await until(() => figureOf(root, 'pay') === moved);
+                expect(scope(root, 'pay'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
+                expect(figureOf(root, 'pay'), 'the new figure, for the two the buyer asked').toBe(moved);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'a code for the record as it stands').not.toBeNull();
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent).toBe(payFigure(moved));
+
+                expect(press(root, 'pay'), 'the press after the move is absorbed').toBeUndefined();
+                const again = scope(root, 'pay')!;
+                expect(again, 'painted again from the same records').not.toBe(sheet);
+                expect(figureOf(root, 'pay')).toBe(moved);
+                expect(again.querySelector('[data-role="pay-qr"]')).not.toBeNull();
+                expect(again.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(press(root, 'pay')).toContain(`amount=${moved.replace(/,/g, '')}`);
+            });
+
+            it(`${c.unit} quotes on Pay several`, async () => {
+                priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+                const { root } = bootStall(phone(new Map(c.prices)));
+                await flush();
+                await choose(root);
+                await until(() => scope(root, 'pay-several')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay-several')!;
+                const figure = figureOf(root, 'pay-several');
+
+                await republish([
+                    ['6b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: c.prices.get(B)! })],
+                    ['6c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: c.moved })],
+                ]);
+                const moved = formatXec(satsForQuote(c.moved, 1n, c.rate)! + satsForQuote(c.prices.get(B)!, 1n, c.rate)!);
+                await until(() => figureOf(root, 'pay-several') === moved);
+                expect(moved).not.toBe(figure);
+                expect(scope(root, 'pay-several'), 'the sheet is not rebuilt under the buyer').toBe(sheet);
+                expect(figureOf(root, 'pay-several')).toBe(moved);
+                expect(sheet.querySelector('[data-role="pay-qr"]'), 'a code for the choice as it stands').not.toBeNull();
+                expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChangedUnpressed('Plum Jam'));
+
+                expect(press(root, 'pay-several'), 'the press after the move is absorbed').toBeUndefined();
+                expect(scope(root, 'pay-several')).not.toBe(sheet);
+                expect(figureOf(root, 'pay-several')).toBe(moved);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(press(root, 'pay-several')).toContain(`amount=${moved.replace(/,/g, '')}`);
+            });
+        }
+
+        it('a record gone or in a unit this page does not paint leaves no figure, code or Pay, said once', async () => {
+            for (const [txid, hex, line] of [
+                ['6e'.repeat(32), encodeRemovalHex(A), PAY_QUOTE_GONE],
+                ['6f'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } }), PAY_QUOTE_UNSHOWN],
+            ] as const) {
+                const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+                await flush();
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                pastTheOpeningTap();
+                await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+                const sheet = scope(root, 'pay')!;
+                await republish([
+                    ['6d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                    [txid, hex],
+                ]);
+                await until(() => sheet.querySelector('[data-role="pay-lost"]') !== null);
+                expect(scope(root, 'pay'), line).toBe(sheet);
+                expect(sheet.querySelector('[data-role="pay-lost"]')?.textContent).toBe(line);
+                expect((sheet.textContent ?? '').split(line).length - 1, 'said once').toBe(1);
+                expect(sheet.querySelector('[data-role="pay-qr"]')).toBeNull();
+                expect(sheet.querySelector('[data-role="pay-cashtab"]')).toBeNull();
+            }
+        });
+
+        it('a-return-to-the-opened-record-is-a-change-with-its-own-grace: the line stays, the figure is restated, a press inside its grace opens nothing', async () => {
+            // CRITIC-CARRYOVER-4 item 2, through the real app (the sheet's
+            // own half is in render.test.ts under the same name).
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+            const sheet = scope(root, 'pay')!;
+            await republish([['5e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            // Republished at the first figure, in a later block.
+            const hex = encodeDescriptionHex(A, 'Plum Jam', { price: XEC_OLD });
+            const txid = publish(signedTx({ txid: '5f'.repeat(32), outputs: [`6a${hex!}`], height: 8 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([txid]);
+            }
+            await until(() => figureOf(root, 'pay') === '5,000');
+            expect(scope(root, 'pay')).toBe(sheet);
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent, 'the line stays').toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            expect(sheet.querySelector('[data-role="pay-cashtab"]')?.textContent, 'the figure is restated').toBe(payFigure('5,000'));
+            expect(press(root, 'pay'), 'inside the return’s own grace').toBeUndefined();
+            const rebuilt = scope(root, 'pay')!;
+            expect(rebuilt, 'painted again').not.toBe(sheet);
+            expect(rebuilt.querySelector('[data-role="pay-valve"]')?.textContent, 'the absorbed press says so').toBe(PAY_QUOTE_CHANGED);
+            expect(rebuilt.querySelector('[data-role="pay-cashtab"]')?.textContent, 'never the plain control again').toBe(
+                payFigure('5,000'),
+            );
+            expect(press(root, 'pay'), 'a second tap on the sheet the app painted').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay'), 'after the grace').toContain('amount=5000.00');
+        });
+
+        it('a new margin and new words under the open sheet are taken in place, and the code stays', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+            const { root } = bootStall(phone(new Map([[A, USD_A]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await until(() => scope(root, 'pay')?.querySelector('[data-role="pay-qr"]') != null);
+            const sheet = scope(root, 'pay')!;
+            await republish([['6d'.repeat(32), encodeDescriptionHex(A, 'Now in a jar', { price: { ...USD_A, tolerancePct: 5 } })]]);
+            await until(() => sheet.querySelector('[data-role="pay-words"]') !== null);
+            expect(scope(root, 'pay')).toBe(sheet);
+            expect(sheet.querySelector('[data-role="pay-qr"]'), 'the payment did not move').not.toBeNull();
+            expect(sheet.querySelector('[data-role="pay-words"]')?.textContent).toBe('Now in a jar');
+            expect(sheet.querySelector('[data-role="pay-tolerance"]')?.textContent).toBe(payTolerance(5));
+            expect(sheet.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
+            expect(press(root, 'pay'), 'one press').toContain('amount=');
+        });
+    });
+
+    describe('a-record-that-comes-back-under-an-open-sheet-is-composed-again', () => {
+        /**
+         * The critic, CARRYOVER-3 item 1. A sheet judged each re-read against
+         * the record it last COMPOSED, which a record that left never moves:
+         * the single sheet kept its last figure as `price`, and Pay several
+         * held nothing at all for an item a re-read took out. So a record
+         * that came back — at the figure it left at, which is exactly the
+         * trap — read as "no change" and the sheet went on saying it was
+         * gone, or "taken out" while its code paid the rest alone. Judged
+         * against the last record SEEN now (`seen`), every sequence below
+         * ends composed from the records as they stand: one bigint on the
+         * figure, the code and the link, and none of the sentences the
+         * earlier re-reads left behind.
+         */
+        const XEC_MID = { code: 'xec', exponent: 2, amount: 700_000n };
+        const sheetOf = (root: HTMLElement, name: string) => root.querySelector(`[data-role="${name}"]`) as HTMLElement | null;
+        const codeOf = (sheet: HTMLElement | null): string | null | undefined =>
+            sheet?.querySelector('[data-role="pay-qr"] path')?.getAttribute('d');
+        /** The figure on screen, its code, and the link a press opens: one bigint. */
+        const oneFigure = (root: HTMLElement, name: string, figure: string): void => {
+            const sheet = sheetOf(root, name);
+            expect(figureOf(root, name), 'the figure').toBe(figure);
+            const code = codeOf(sheet);
+            expect(code, 'a code for the records as they stand').toBeTruthy();
+            let url = press(root, name);
+            if (url === undefined) {
+                // Every press inside the grace of a change is absorbed; a
+                // press after it opens.
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                url = press(root, name);
+            }
+            expect(url, 'the link').toContain(`amount=${figure.replace(/,/g, '')}.00`);
+            const bip21 = url!.split('#/send?bip21=')[1]!;
+            expect(qrSvg(bip21, '').querySelector('path')?.getAttribute('d'), 'the code is the link').toBe(code);
+        };
+        const choose = async (root: HTMLElement): Promise<void> => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+        };
+        const stale = [PAY_QUOTE_GONE, PAY_QUOTE_UNSHOWN, PAY_SEVERAL_GONE];
+
+        it('the single sheet: moved, removed, then republished at the figure it left at', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            const sheet = sheetOf(root, 'pay');
+            expect(figureOf(root, 'pay')).toBe('5,000');
+            await republish([['c1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            await republish([['c2'.repeat(32), encodeRemovalHex(A)]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_QUOTE_GONE);
+
+            await republish([['c3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay'), 'the same sheet, not rebuilt').toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent, 'moved from what it was opened on').toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            oneFigure(root, 'pay', '9,000');
+        });
+
+        it('the single sheet: moved, then in a unit this page does not paint, then back', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            const sheet = sheetOf(root, 'pay');
+            await republish([['c4'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            await republish([['c5'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: { code: 'zzz', exponent: 2, amount: 500n } })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_QUOTE_UNSHOWN);
+
+            await republish([['c6'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay')).toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            oneFigure(root, 'pay', '9,000');
+        });
+
+        it('Pay several: every chosen item removed, then one back', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            await choose(root);
+            const sheet = sheetOf(root, 'pay-several');
+            expect(figureOf(root, 'pay-several')).toBe('12,000');
+            await republish([
+                ['d1'.repeat(32), encodeRemovalHex(A)],
+                ['d2'.repeat(32), encodeRemovalHex(B)],
+            ]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') != null);
+            expect(sheet?.querySelector('[data-role="pay-lost"]')?.textContent).toBe(PAY_SEVERAL_GONE);
+
+            await republish([['d3'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })]]);
+            await until(() => sheet?.querySelector('[data-role="pay-lost"]') == null);
+            expect(sheetOf(root, 'pay-several')).toBe(sheet);
+            for (const line of stale) {
+                expect(sheet?.textContent ?? '', line).not.toContain(line);
+            }
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '', 'Rye Flour is back').toContain('Rye Flour');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '', 'Plum Jam is still out').toContain('Plum Jam');
+            oneFigure(root, 'pay-several', '7,000');
+        });
+
+        it('Pay several: one chosen item taken out, then back at a new figure', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            await choose(root);
+            const sheet = sheetOf(root, 'pay-several');
+            await republish([
+                ['e1'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['e2'.repeat(32), encodeRemovalHex(A)],
+            ]);
+            await until(() => figureOf(root, 'pay-several') === '7,000');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '').toContain('Plum Jam');
+
+            await republish([['e3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_MID })]]);
+            await until(() => figureOf(root, 'pay-several') === '14,000');
+            expect(sheetOf(root, 'pay-several')).toBe(sheet);
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]'), 'nothing is taken out now').toBeNull();
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').toContain('Plum Jam');
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent).toBe(payItemsChangedUnpressed('Plum Jam'));
+            oneFigure(root, 'pay-several', '14,000');
+        });
+    });
+
+    describe('a-press-inside-the-grace-is-absorbed-and-one-after-it-opens', () => {
+        /**
+         * The owner, 2026-09-25 (CRITIC-CARRYOVER-3 item 2), through the real
+         * app. A re-read that recomposes an open sheet in place says so with
+         * the first clause alone — nobody pressed. A press inside
+         * `PAY_RECOMPOSE_GRACE_MS` of it is absorbed and SAYS so: the sheet
+         * is painted again asking for the press again, and the press after
+         * it opens. A press after the grace opens the new figure at once.
+         * On Pay several, a re-read that only took an item out says so on
+         * the dropped line with "check the total". The grace is measured on
+         * the page's monotonic clock, held still for the whole test
+         * (`holdClock`, the describe's `later`; CRITIC-CARRYOVER-4 item 10):
+         * a pause under load between the change and the press cannot turn
+         * "inside" into "after".
+         */
+        const valveOf = (root: HTMLElement, name: string): string =>
+            root.querySelector(`[data-role="${name}"] [data-role="pay-valve"]`)?.textContent ?? '';
+        const droppedOf = (root: HTMLElement): string =>
+            root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent ?? '';
+        const choose = async (root: HTMLElement): Promise<void> => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+        };
+
+        it('the single sheet, inside the grace: absorbed, and the sheet asks for the press again', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            await republish([['f1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            expect(valveOf(root, 'pay')).toBe(PAY_QUOTE_CHANGED_UNPRESSED);
+            expect(press(root, 'pay'), 'inside the grace').toBeUndefined();
+            expect(valveOf(root, 'pay'), 'the absorbed press says so').toBe(PAY_QUOTE_CHANGED);
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay')).toContain('amount=9000.00');
+        });
+
+        it('the single sheet, after the grace: the press opens the new figure', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            const sheet = root.querySelector('[data-role="pay"]');
+            await republish([['f2'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay'), 'one press').toContain('amount=9000.00');
+            expect(root.querySelector('[data-role="pay"]'), 'nothing handed back').toBe(sheet);
+        });
+
+        it('Pay several, an item taken out: "check the total" in place; inside the grace absorbed and said, after it open', async () => {
+            for (const inside of [true, false]) {
+                const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+                await flush();
+                await choose(root);
+                await republish([
+                    [(inside ? 'f3' : 'f5').repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                    [(inside ? 'f4' : 'f6').repeat(32), encodeRemovalHex(A)],
+                ]);
+                await until(() => figureOf(root, 'pay-several') === '7,000');
+                expect(droppedOf(root)).toBe(selectionDroppedCheck('Plum Jam', 1));
+                expect(valveOf(root, 'pay-several'), 'said once, on the dropped line').toBe('');
+                if (inside) {
+                    expect(press(root, 'pay-several'), 'inside the grace').toBeUndefined();
+                    expect(droppedOf(root), 'the absorbed press says so').toBe(selectionDroppedCheckPressed('Plum Jam', 1));
+                }
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(press(root, 'pay-several')).toContain('amount=7000.00');
+                if (inside) {
+                    expect(droppedOf(root), 'a wallet opened: nothing left to press again').toBe(
+                        selectionDroppedCheck('Plum Jam', 1),
+                    );
+                }
+            }
+        });
+    });
+
+    describe('a-unit-change-on-the-first-chosen-item-drops-that-item-not-the-rest', () => {
+        /**
+         * The critic, 2026-09-25, item 4. Chosen in XEC, first Plum Jam and
+         * then Rye Flour; the seller republishes Plum Jam in USD. The prune
+         * judged the first kept item's CURRENT unit, so Rye Flour went and
+         * Plum Jam — the item that moved — stayed. Now the choice keeps the
+         * unit it was chosen in: Plum Jam leaves, Rye Flour stays, and the
+         * strip and the sheet say which item left.
+         */
+        const pick = (root: HTMLElement): void => {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+        };
+        const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+
+        it('on the strip', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            pick(root);
+            await republish([
+                ['5b'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5a'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            // Read off this app's own tree (see `overlapping-bursts-…`).
+            await until(() => root.querySelector('[data-role="selection-dropped"]') !== null);
+            expect(root.querySelector('[data-role="selection-names"]')?.textContent, 'the item that moved leaves, the rest stay').toBe('Rye Flour ×1');
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(selectionDroppedItems('Plum Jam', 1));
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'the rest, in the unit they were chosen in').toContain('7,000');
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent).toBe(
+                selectionDroppedItems('Plum Jam', 1),
+            );
+            expect(press(root, 'pay-several')).toContain('amount=7000.00');
+        });
+
+        it('under the open sheet: the press says which item left and composes the rest', async () => {
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            pick(root);
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            expect(figureOf(root, 'pay-several')).toBe('12,000');
+            await republish([
+                ['5d'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5c'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            // In place: Plum Jam leaves the choice, named on the dropped line,
+            // which asks the buyer to check the total (CRITIC-CARRYOVER-3
+            // item 2).
+            await until(() => figureOf(root, 'pay-several') === '7,000');
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent).toBe(
+                selectionDroppedCheck('Plum Jam', 1),
+            );
+
+            expect(press(root, 'pay-several'), 'the press is absorbed').toBeUndefined();
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(figureOf(root, 'pay-several'), 'Rye Flour alone, still in XEC').toBe('7,000');
+            // Named once, on the dropped line, and never on the valve (item 6);
+            // the absorbed press asks for the press again.
+            expect(sheet?.querySelector('[data-role="pay-valve"]')?.textContent ?? '').toBe('');
+            expect(sheet?.querySelector('[data-role="pay-several-dropped"]')?.textContent).toBe(selectionDroppedCheckPressed('Plum Jam', 1));
+            expect(sheet?.querySelector('[data-role="pay-lines"]')?.textContent ?? '').not.toContain('Plum Jam');
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            expect(press(root, 'pay-several')).toContain('amount=7000.00');
+        });
+
+        it('on a touch wall', async () => {
+            // The critic, CARRYOVER-2 item 5: the wall's prune was untested.
+            // The wall reads the same chosen unit (`selectionChosenUnit`) and
+            // says the generic `SELECTION_DROPPED`.
+            priceControl.fetch = async (code) => (code === 'usd' ? 20_000_000n : undefined);
+            const state = phone(new Map([[A, XEC_OLD], [B, XEC_B]]));
+            state.view = {
+                ...state.view,
+                window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+            };
+            const { root } = bootStall(state);
+            await flush();
+            for (const tokenId of [A, B]) {
+                const more = root.querySelector<HTMLButtonElement>(`[data-focus-key="window-step-more:${tokenId}"]`);
+                expect(more, `the wall offers + for ${tokenId === A ? 'Plum Jam' : 'Rye Flour'}`).not.toBeNull();
+                more!.click();
+                await flush();
+            }
+            const strip = (): Element | null => root.querySelector('[data-role="window-selection"]');
+            expect(strip()?.textContent).toContain('Plum Jam');
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'chosen in XEC').toContain('12,000');
+
+            await republish([
+                ['5f'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['5e'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: USD_A })],
+            ]);
+            await until(() => root.querySelector('[data-role="selection-dropped"]') !== null);
+            expect(root.querySelector('[data-role="selection-dropped"]')?.textContent).toBe(SELECTION_DROPPED);
+            expect(strip()?.querySelector('.sw-sel-n')?.textContent ?? '', 'the item that moved leaves').not.toContain('Plum Jam');
+            expect(strip()?.querySelector('.sw-sel-n')?.textContent, 'the rest stay').toContain('Rye Flour');
+            expect(root.querySelector('[data-role="selection-total"]')?.textContent, 'in the unit they were chosen in').toContain('7,000');
+            (root.querySelector('[data-role="window-pay"]') as HTMLButtonElement).click();
+            await flush();
+            expect(root.querySelector('[data-role="window-paying"]')?.getAttribute('data-pay-uri')).toContain('amount=7000.00');
+        });
+    });
+
+    describe('a-double-tap-inside-the-grace-opens-nothing', () => {
+        /**
+         * CRITIC-CARRYOVER-4 item 1, through the real app (the sheet's half
+         * is in render.test.ts under the same name). The first press of a
+         * double tap inside the grace was absorbed and asked the app to
+         * paint the sheet again — and the sheet it painted started with no
+         * grace, so the second tap opened the new figure a few hundred
+         * milliseconds after it appeared. The app carries the stamp across
+         * that paint (`payChangedAt`).
+         */
+        it('the single sheet: both taps absorbed, and a press after the grace opens', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD]])));
+            await flush();
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            await republish([['c1'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })]]);
+            await until(() => figureOf(root, 'pay') === '9,000');
+            const sheet = root.querySelector('[data-role="pay"]');
+            later(100);
+            expect(press(root, 'pay'), 'the first tap').toBeUndefined();
+            expect(root.querySelector('[data-role="pay"]'), 'the app painted the sheet again').not.toBe(sheet);
+            later(250);
+            expect(press(root, 'pay'), 'the second tap, on the sheet the app painted').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS);
+            expect(press(root, 'pay'), 'after the grace').toContain('amount=9000.00');
+        });
+
+        it('Pay several: both taps absorbed, and a press after the grace opens', async () => {
+            const { root } = bootStall(phone(new Map([[A, XEC_OLD], [B, XEC_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            await flush();
+            await republish([
+                ['c2'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: XEC_B })],
+                ['c3'.repeat(32), encodeDescriptionHex(A, 'Plum Jam', { price: XEC_NEW })],
+            ]);
+            await until(() => figureOf(root, 'pay-several') === '16,000');
+            later(100);
+            expect(press(root, 'pay-several'), 'the first tap').toBeUndefined();
+            later(250);
+            expect(press(root, 'pay-several'), 'the second tap').toBeUndefined();
+            later(PAY_RECOMPOSE_GRACE_MS);
+            expect(press(root, 'pay-several'), 'after the grace').toContain('amount=16000.00');
+        });
+    });
+
+    describe('the-press-again-line-shows-only-over-a-pay-press-that-was-absorbed', () => {
+        /**
+         * CRITIC-CARRYOVER-4 item 4, through the real app (the sheet's half
+         * is in render.test.ts under the same name). The refresh control's
+         * ask came back after a re-read had taken an item out under it: the
+         * sheet was handed back, and `onPayRecordMoved` defaulted to a Pay
+         * press — so the sheet the app painted asked for the press again
+         * although nobody had pressed Pay. The caller says now.
+         */
+        it('Pay several: the refresh control’s tail paints "check the total", never the press-again line', async () => {
+            const RATE = 20_000_000n;
+            const USD_A = { code: 'usd', exponent: 2, amount: 500n };
+            const USD_B = { code: 'usd', exponent: 2, amount: 300n };
+            priceControl.fetch = async (code) => (code === 'usd' ? RATE : undefined);
+            const { root } = bootStall(phone(new Map([[A, USD_A], [B, USD_B]])));
+            await flush();
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            pastTheOpeningTap();
+            // The open's own rate has landed: the sheet composes, and is the
+            // one the refresh control is pressed on.
+            await until(() => root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]') !== null);
+            const sheet = root.querySelector('[data-role="pay-several"]');
+            expect(root.querySelector('[data-role="pay-several"] [data-role="pay-cashtab"]'), 'composed').not.toBeNull();
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            priceControl.fetch = async (code) => {
+                await gate;
+                return code === 'usd' ? RATE : undefined;
+            };
+            (root.querySelector('[data-role="pay-several"] [data-role="pay-refresh"]') as HTMLButtonElement).click();
+            await republish([
+                ['c4'.repeat(32), encodeDescriptionHex(B, 'Rye Flour', { price: USD_B })],
+                ['c5'.repeat(32), encodeRemovalHex(A)],
+            ]);
+            await until(() => (root.querySelector('[data-role="pay-several-dropped"]')?.textContent ?? '').includes('Plum Jam'));
+            expect(root.querySelector('[data-role="pay-several"]'), 'recomposed in place').toBe(sheet);
+            release();
+            await until(() => root.querySelector('[data-role="pay-several"]') !== sheet);
+            const dropped = root.querySelector('[data-role="pay-several"] [data-role="pay-several-dropped"]')?.textContent;
+            expect(root.querySelector('[data-role="pay-several"]'), 'handed back and painted again').not.toBe(sheet);
+            expect(viewOf(root)?.payRecordMovedUnpressed, 'no Pay press did it').toBe(true);
+            expect(dropped).toBe(selectionDroppedCheck('Plum Jam', 1));
+        });
+    });
+});
+
+describe('a-rate-answer-handed-back-to-the-app-starts-its-own-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 1, through the real app — the critic's H1 (the
+     * refresh control) and H2 (the valve), and the same tails on Pay several,
+     * which the critic read and did not run. A re-read recomposes the open
+     * sheet in place while the ask is out; the answer lands, the ask has
+     * already written it to the app's rate, and the tail hands the sheet back
+     * instead of taking it — so the app's paint puts a figure on screen at a
+     * rate the sheet never showed. That figure is a change on screen: a press
+     * 100 ms after it opens nothing, and a press after its own grace opens
+     * exactly the figure on screen. The clock is held (`holdClock`).
+     */
+    const A = 'a7'.repeat(32);
+    const B = 'b7'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const republish = async (txid: string, tokenId: string, amount: bigint): Promise<void> => {
+        const hex = encodeDescriptionHex(tokenId, 'Words', { price: USD(amount) });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const id = publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([id]);
+        }
+        await flush();
+    };
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    /** Opens the sheet at R1 and answers every later ask only when the test says. */
+    const open = async (root: HTMLElement, scope: string): Promise<(rate: bigint | undefined) => void> => {
+        priceControl.fetch = async () => R1;
+        if (scope === 'pay') {
+            (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        } else {
+            (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+            for (const tokenId of [A, B]) {
+                [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                    .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                    .click();
+            }
+            (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        }
+        await until(() => (figureOf(root, scope) ?? '') !== '');
+        let answer: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () =>
+            new Promise<bigint | undefined>((resolve) => {
+                answer = resolve;
+            });
+        return (rate) => answer(rate);
+    };
+    /** The figure at the open, after the in-place move, and after the answer the app painted. */
+    const FIGURES = {
+        pay: { opened: '250,000', inPlace: '300,000', answered: '240,000' },
+        'pay-several': { opened: '400,000', inPlace: '450,000', answered: '360,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        for (const road of ['refresh', 'valve'] as const) {
+            it(`${scope}, the ${road === 'refresh' ? 'refresh control' : 'valve'}: the figure the app painted from the answer has its own grace`, async () => {
+                const { root } = bootStall(phone());
+                await flush();
+                const answer = await open(root, scope);
+                expect(figureOf(root, scope)).toBe(FIGURES[scope].opened);
+                // The buyer reads the sheet for a while before pressing.
+                later(2_000);
+                const realNow = Date.now.bind(Date);
+                const aged = vi.spyOn(Date, 'now');
+                if (road === 'refresh') {
+                    (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+                } else {
+                    // The rate has aged, so the press is the valve's ask.
+                    aged.mockImplementation(() => realNow() + 200_000);
+                    expect(press(root, scope), 'the valve opens nothing').toBeUndefined();
+                }
+                await flush();
+                // A re-read moves Plum Jam while the ask is out: recomposed in place.
+                await republish('a8'.repeat(32), A, 600n);
+                await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+                expect(figureOf(root, scope)).toBe(FIGURES[scope].inPlace);
+                later(3_000);
+                answer(R2);
+                await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+                aged.mockRestore();
+                expect(figureOf(root, scope), 'the app painted the answer the tail handed back').toBe(
+                    FIGURES[scope].answered,
+                );
+                later(100);
+                expect(press(root, scope), '100 ms after that figure appeared').toBeUndefined();
+                later(PAY_RECOMPOSE_GRACE_MS);
+                const url = press(root, scope);
+                expect(url, 'after its grace, the figure on screen').toContain(
+                    `amount=${FIGURES[scope].answered.replace(/,/g, '')}.00`,
+                );
+                expect(figureOf(root, scope)).toBe(FIGURES[scope].answered);
+            });
+        }
+    }
+});
+
+describe('a-valve-answer-after-a-later-open-asks-for-no-press', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 1 (the critic's `r10c`), through the real
+     * app; the sheet's half is in render.test.ts under the same name. A Pay
+     * press over an aged rate sends the valve's ask; the seller republishes
+     * while it is out and the sheet is recomposed in place; a press after
+     * the grace opens a wallet at the figure on screen; then the valve
+     * answers. The tail absorbed a press that came before the open and
+     * handed the sheet back as a Pay press, so the app painted it asking the
+     * buyer who had just opened a wallet to "press Pay again". Now the paint
+     * after that answer says the first clause alone.
+     *
+     * The single sheet's road is a republish in XEC (the press after the
+     * grace needs no rate). "Pay several" holds its aged rate for the whole
+     * ask, so a press opens there only if the wall clock steps back — staged
+     * as that. The page's monotonic clock is held (`holdClock`).
+     */
+    const A = 'ac'.repeat(32);
+    const B = 'bc'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const republish = async (txid: string, price: { code: string; exponent: number; amount: bigint }): Promise<void> => {
+        const hex = encodeDescriptionHex(A, 'Words', { price });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const id = publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([id]);
+        }
+        await flush();
+    };
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const valveOf = (root: HTMLElement, scope: string): string =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? '';
+    const CASES = {
+        pay: {
+            moved: { code: 'xec', exponent: 2, amount: 1_000_000n },
+            inPlace: '10,000',
+            line: PAY_QUOTE_CHANGED_UNPRESSED,
+            pressed: PAY_QUOTE_CHANGED,
+        },
+        'pay-several': {
+            moved: USD(600n),
+            inPlace: '450,000',
+            line: payItemsChangedUnpressed('Plum Jam'),
+            pressed: payItemsChanged('Plum Jam'),
+        },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the paint after the valve's late answer asks for no press`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            later(2_000);
+            // The rate has aged, so the press is the valve's ask.
+            const realNow = Date.now.bind(Date);
+            const aged = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 200_000);
+            expect(press(root, scope), 'the valve opens nothing').toBeUndefined();
+            await flush();
+            if (scope === 'pay') {
+                aged.mockRestore();
+            }
+            await republish(scope === 'pay' ? 'ad'.repeat(32) : 'ae'.repeat(32), CASES[scope].moved);
+            await until(() => figureOf(root, scope) === CASES[scope].inPlace);
+            expect(valveOf(root, scope), 'in place: the first clause').toBe(CASES[scope].line);
+            if (scope === 'pay-several') {
+                // The wall clock steps back: the rate reads fresh again.
+                aged.mockRestore();
+            }
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            const url = press(root, scope);
+            expect(url, 'after the grace, a wallet opens at the figure on screen').toContain(
+                `amount=${CASES[scope].inPlace.replace(/,/g, '')}.00`,
+            );
+
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            answer(R2);
+            // The tail hands the sheet back and the app paints it again.
+            await until(() => {
+                const now = root.querySelector(`[data-role="${scope}"]`);
+                return now !== null && now !== before;
+            });
+            expect(valveOf(root, scope), 'the paint after the answer asks for no press').toBe(CASES[scope].line);
+            expect(valveOf(root, scope)).not.toBe(CASES[scope].pressed);
+            expect(valveOf(root, scope)).not.toMatch(/again/i);
+        });
+    }
+});
+
+describe('one-ask-at-a-time-holds-across-a-hand-back', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 5 (the critic's `r10`), through the real app;
+     * the sheet's half is in render.test.ts under the same name. A Pay press
+     * over an aged rate sends the valve's ask; a re-read moves Plum Jam in
+     * place while it is out; a Pay press inside that change's grace is
+     * absorbed and hands the sheet back. The app painted the sheet again
+     * with the refresh control standing, and a press on it sent a second ask
+     * while the first was out. Now the hand-back carries the ask
+     * (`PayShown.asking` → `payRateAsking`): the sheet painted in its place
+     * says "asking", hides the control, and neither press asks; when the
+     * valve's answer lands the app paints it, and the press after its grace
+     * opens exactly the figure on screen. The clock is held (`holdClock`).
+     */
+    const A = 'af'.repeat(32);
+    const B = 'bf'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const republish = async (txid: string, amount: bigint): Promise<void> => {
+        const hex = encodeDescriptionHex(A, 'Words', { price: USD(amount) });
+        if (hex === undefined) {
+            throw new Error('fixture is not encodable');
+        }
+        const id = publish(signedTx({ txid, outputs: [`6a${hex}`], height: 7 }));
+        for (const watch of watches.filter((w) => !w.closed)) {
+            watch.hooks.onBurst?.([id]);
+        }
+        await flush();
+    };
+    const click = (root: HTMLElement, scope: string, role: string): void => {
+        root.querySelector(`[data-role="${scope}"] [data-role="${role}"]`)!.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const FIGURES = {
+        pay: { opened: '250,000', inPlace: '300,000', answered: '240,000' },
+        'pay-several': { opened: '400,000', inPlace: '450,000', answered: '360,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the sheet painted after the hand-back sends no second ask, and the answer is painted when it lands`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => figureOf(root, scope) === FIGURES[scope].opened);
+            let asks = 0;
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () => {
+                asks += 1;
+                return new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            };
+            later(2_000);
+            const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+            // The rate has aged, so the press is the valve's ask.
+            const realNow = Date.now.bind(Date);
+            const aged = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 200_000);
+            click(root, scope, 'pay-cashtab');
+            await flush();
+            expect(asks, 'the valve asks').toBe(1);
+            await republish('a0'.repeat(32), 600n);
+            await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+            // Inside the change's grace: absorbed, and the sheet handed back.
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            later(100);
+            click(root, scope, 'pay-cashtab');
+            await flush();
+            const rebuilt = root.querySelector(`[data-role="${scope}"]`) as HTMLElement;
+            expect(rebuilt, 'the app painted the sheet again').not.toBe(before);
+            const refreshControl = rebuilt.querySelector('[data-role="pay-refresh"]') as HTMLElement;
+            expect(refreshControl.closest('[hidden]'), 'asking: the refresh control is hidden').not.toBeNull();
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            click(root, scope, 'pay-refresh');
+            click(root, scope, 'pay-cashtab');
+            await flush();
+            expect(asks, 'one ask, whichever sheet is on screen').toBe(1);
+            expect(open, 'nothing opened over the aged rate').not.toHaveBeenCalled();
+
+            aged.mockRestore();
+            answer(R2);
+            await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+            expect(figureOf(root, scope), 'the app painted the answer').toBe(FIGURES[scope].answered);
+            const answered = root.querySelector(`[data-role="${scope}"]`) as HTMLElement;
+            expect(
+                answered.querySelector('[data-role="pay-refresh"]')?.closest('[hidden]'),
+                'the answer landed: the control is back',
+            ).toBeNull();
+            later(PAY_RECOMPOSE_GRACE_MS + 1);
+            click(root, scope, 'pay-cashtab');
+            expect(open, 'after its grace, the press opens').toHaveBeenCalledTimes(1);
+            expect(String(open.mock.calls[0]![0]), 'the figure on screen').toContain(
+                `amount=${FIGURES[scope].answered.replace(/,/g, '')}.00`,
+            );
+            expect(asks, 'and no ask after the answer').toBe(1);
+            open.mockRestore();
+        });
+    }
+});
+
+describe('a-hand-back-keeps-a-later-rate-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 1, the critic's H3, on both sheets. t=0 a
+     * re-read moves Plum Jam in place (a record grace to 1,500); t=50 the
+     * refresh control asks; t=300 its answer moves the figure in place (a
+     * rate grace to 1,800); t=1,000 a Pay press inside the record grace is
+     * absorbed and the sheet handed back. The app's paint carried the record
+     * stamp alone and dropped the rate's: a press at t=1,600, 1,300 ms after
+     * the figure appeared, opened it. Now the hand-back carries the later
+     * stamp — and only that: a press after the rate grace opens the figure
+     * on screen, so nothing longer was invented either.
+     */
+    const A = 'a9'.repeat(32);
+    const B = 'b9'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const FIGURES = {
+        pay: { inPlace: '300,000', answered: '240,000' },
+        'pay-several': { inPlace: '450,000', answered: '360,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: a press after the record grace and inside the rate grace opens nothing, and one after both opens the figure on screen`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            later(2_000);
+            // t=0: a re-read moves Plum Jam in place.
+            const hex = encodeDescriptionHex(A, 'Words', { price: USD(600n) });
+            const id = publish(signedTx({ txid: 'aa9'.padEnd(64, '0'), outputs: [`6a${hex!}`], height: 7 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([id]);
+            }
+            await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+            expect(figureOf(root, scope)).toBe(FIGURES[scope].inPlace);
+            // t=50: the refresh control; its answer lands at t=300 and moves the figure in place.
+            later(50);
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+            later(250);
+            answer(R2);
+            await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+            expect(figureOf(root, scope)).toBe(FIGURES[scope].answered);
+            // t=1,000: inside the record grace — absorbed, handed back.
+            later(700);
+            expect(press(root, scope), 't=1,000').toBeUndefined();
+            await flush();
+            // t=1,600: after the record grace, inside the rate grace.
+            later(600);
+            expect(press(root, scope), 't=1,600, 1,300 ms after the figure appeared').toBeUndefined();
+            await flush();
+            // t=1,801: after both.
+            later(201);
+            const url = press(root, scope);
+            expect(url, 't=1,801: the figure on screen').toContain(
+                `amount=${FIGURES[scope].answered.replace(/,/g, '')}.00`,
+            );
+            expect(figureOf(root, scope)).toBe(FIGURES[scope].answered);
+        });
+    }
+});
+
+describe('a-rate-answer-after-a-change-in-place-says-its-own-line', () => {
+    /**
+     * CRITIC-CARRYOVER-6 item 4, through the real app (the sheet's half is
+     * in render.test.ts under the same name). t=0 a re-read moves Plum Jam
+     * in place; t=50 the refresh control asks; t=300 its answer moves the
+     * figure — "Rate refreshed — press Pay again", the newer line. t=1,000 a
+     * Pay press inside the record's grace is absorbed and the sheet handed
+     * back: the app's paint said the record's line instead, the one the
+     * answer had replaced. The valve's line rides the hand-back now
+     * (`PayShown.outcome`), so the sheet the app paints says the line the
+     * buyer was reading, and the next absorbed press repeats it.
+     */
+    const A = 'ad'.repeat(32);
+    const B = 'bd'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const lineOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? undefined;
+    const spoken = (): string | undefined => document.getElementById('sr-live')?.textContent?.trim();
+    const FIGURES = {
+        pay: { inPlace: '300,000', answered: '240,000' },
+        'pay-several': { inPlace: '450,000', answered: '360,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the sheet the app paints after an absorbed press says the answer's line, and the next absorbed press repeats it`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            later(2_000);
+            const hex = encodeDescriptionHex(A, 'Words', { price: USD(600n) });
+            const id = publish(signedTx({ txid: 'ad1'.padEnd(64, '0'), outputs: [`6a${hex!}`], height: 7 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([id]);
+            }
+            await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+            expect(lineOf(root, scope)).toBe(
+                scope === 'pay' ? PAY_QUOTE_CHANGED_UNPRESSED : payItemsChangedUnpressed('Plum Jam'),
+            );
+            later(50);
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+            later(250);
+            answer(R2);
+            await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+            expect(lineOf(root, scope), 'the answer is the newer line').toBe(PAY_RATE_REFRESHED);
+
+            later(700);
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            expect(press(root, scope), 'inside the record grace').toBeUndefined();
+            await flush();
+            expect(root.querySelector(`[data-role="${scope}"]`), 'handed back: the app painted the sheet again').not.toBe(before);
+            expect(lineOf(root, scope), 'the line that stood rides the paint').toBe(PAY_RATE_REFRESHED);
+            expect(figureOf(root, scope)).toBe(FIGURES[scope].answered);
+
+            later(600);
+            expect(press(root, scope), 'inside the answer’s grace').toBeUndefined();
+            await flush();
+            expect(lineOf(root, scope)).toBe(PAY_RATE_REFRESHED);
+            expect(spoken(), 'the absorbed press repeats it').toBe(PAY_RATE_REFRESHED);
+        });
+    }
+});
+
+describe('a-line-never-asks-for-a-press-after-a-wallet-opened', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 2, through the real app (the sheet's half is
+     * in render.test.ts under the same name): the critic's H3. A re-read
+     * moves Plum Jam in place; the refresh control's answer moves the
+     * figure — "Rate refreshed \u2014 press Pay again"; a Pay press inside
+     * the record's grace is handed back, and the app paints the sheet again
+     * with that line carried. The press after the grace opens the wallet,
+     * and the line went on asking for another. Now it drops the ask; a
+     * refresh after it asks for none; an absorbed Pay press asks again.
+     */
+    const A = 'ae'.repeat(32);
+    const B = 'be'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    const R3 = scaleRate(0.00003)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const lineOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? undefined;
+    const FIGURES = {
+        pay: { inPlace: '300,000', answered: '240,000', again: '200,000' },
+        'pay-several': { inPlace: '450,000', answered: '360,000', again: '300,000' },
+    } as const;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the press that opens drops the carried line's ask, a refresh after it asks for none, and an absorbed Pay press asks again`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (figureOf(root, scope) ?? '') !== '');
+            later(2_000);
+            const hex = encodeDescriptionHex(A, 'Words', { price: USD(600n) });
+            const id = publish(signedTx({ txid: 'ae1'.padEnd(64, '0'), outputs: [`6a${hex!}`], height: 7 }));
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.([id]);
+            }
+            await until(() => figureOf(root, scope) === FIGURES[scope].inPlace);
+            later(50);
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+            later(250);
+            answer(R2);
+            await until(() => figureOf(root, scope) === FIGURES[scope].answered);
+            expect(lineOf(root, scope)).toBe(PAY_RATE_REFRESHED);
+
+            later(700);
+            const before = root.querySelector(`[data-role="${scope}"]`);
+            expect(press(root, scope), 'inside the record grace').toBeUndefined();
+            await flush();
+            expect(root.querySelector(`[data-role="${scope}"]`), 'handed back: the app painted the sheet').not.toBe(before);
+            expect(lineOf(root, scope), 'the carried line asks, before any open').toBe(PAY_RATE_REFRESHED);
+
+            later(801);
+            const url = press(root, scope);
+            expect(url, 'after the graces: the wallet opens').toBeDefined();
+            expect(lineOf(root, scope), 'the press that opened drops the ask').toBe(PAY_RATE_REFRESHED_OPENED);
+            expect(lineOf(root, scope)).not.toMatch(/again/i);
+
+            priceControl.fetch = async () => R3;
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await until(() => figureOf(root, scope) === FIGURES[scope].again);
+            expect(lineOf(root, scope), 'a refresh after the open asks for no press').toBe(PAY_RATE_REFRESHED_OPENED);
+
+            later(100);
+            expect(press(root, scope), 'inside that answer’s grace').toBeUndefined();
+            await flush();
+            expect(lineOf(root, scope), 'an absorbed Pay press asks again').toBe(PAY_RATE_REFRESHED);
+        });
+    }
+});
+
+describe('a-lost-sheet-never-says-no-wallet-opened-after-one-did', () => {
+    /**
+     * CRITIC-CARRYOVER-8 item 2, the hand-back road through the real app (the
+     * in-place cases are in render.test.ts under the same name). A Pay press
+     * opens the wallet; the buyer presses "Get a fresh price"; while that ask
+     * is out the seller takes the item off the rail, and the sheet goes lost
+     * in place. The ask's answer finds the sheet recomposed and hands it
+     * back, and the app paints the lost sheet again from the records — the
+     * branch that read only `payRecordMoved`, and said "\u2026 \u2014 no wallet
+     * was opened" to a buyer who had just opened one. The app keeps the open
+     * for the sheet (`payWalletWasOpened`), and both sheets say their first
+     * clause alone.
+     */
+    const A = 'af'.repeat(32);
+    const B = 'bf'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R2 = scaleRate(0.000025)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const lostOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-lost"]`)?.textContent ?? undefined;
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the record leaves under the refresh control's ask after a wallet opened, and the sheet the app paints says the first clause`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            priceControl.fetch = async () => R1;
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? '') !== '');
+            later(2_000);
+            expect(press(root, scope), 'a wallet opened').toBeDefined();
+
+            let answer: (rate: bigint | undefined) => void = () => undefined;
+            priceControl.fetch = () =>
+                new Promise<bigint | undefined>((resolve) => {
+                    answer = resolve;
+                });
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await flush();
+
+            const removals = (scope === 'pay' ? [A] : [A, B]).map((tokenId, i) =>
+                publish(signedTx({ txid: `af${i}`.padEnd(64, '0'), outputs: [`6a${encodeRemovalHex(tokenId)!}`], height: 7 })),
+            );
+            for (const watch of watches.filter((w) => !w.closed)) {
+                watch.hooks.onBurst?.(removals);
+            }
+            const inPlace = root.querySelector(`[data-role="${scope}"]`);
+            await until(() => lostOf(root, scope) !== undefined);
+            const first = scope === 'pay' ? PAY_QUOTE_GONE_OPENED : PAY_SEVERAL_GONE_OPENED;
+            expect(lostOf(root, scope), 'in place').toBe(first);
+
+            answer(R2);
+            await until(() => root.querySelector(`[data-role="${scope}"]`) !== inPlace);
+            await flush();
+            expect(lostOf(root, scope), 'the sheet the app painted after the hand-back').toBe(first);
+            expect(root.querySelector(`[data-role="${scope}"]`)?.textContent ?? '').not.toContain('no wallet was opened');
+            expect(viewOf(root)?.payWalletWasOpened).toBe(true);
+        });
+    }
+});
+
+describe('a-sheet-with-no-rate-offers-a-way-to-ask-again', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 3, through the real app (the sheet's half is
+     * in render.test.ts under the same name): the open's ask got no answer,
+     * the sheet said "no link and no code until a price arrives", and
+     * nothing on it would ever ask again — the refresh control hid with the
+     * rate row. It stays now, and one press asks once.
+     */
+    const A = 'af'.repeat(32);
+    const B = 'bf'.repeat(32);
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const shown = (root: HTMLElement, scope: string, role: string): boolean => {
+        const node = root.querySelector(`[data-role="${scope}"] [data-role="${role}"]`);
+        return node !== null && node.closest('[hidden]') === null;
+    };
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        it(`${scope}: the open's ask got no answer, the refresh control stays, and one press asks once`, async () => {
+            const { root } = bootStall(phone());
+            await flush();
+            let asks = 0;
+            priceControl.fetch = async () => {
+                asks += 1;
+                return undefined;
+            };
+            if (scope === 'pay') {
+                (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+            } else {
+                (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                for (const tokenId of [A, B]) {
+                    [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                        .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                        .click();
+                }
+                (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+            }
+            await until(() => (root.querySelector(`[data-role="${scope}"]`)?.textContent ?? '').includes(PAY_NO_RATE_WHY));
+            await flush(20);
+            const opened = asks;
+            expect(opened, 'the open asked').toBeGreaterThan(0);
+            expect(shown(root, scope, 'pay-cashtab'), 'no figure, so no Pay').toBe(false);
+            expect(shown(root, scope, 'pay-refresh'), 'the way to ask again').toBe(true);
+
+            priceControl.fetch = async () => {
+                asks += 1;
+                return scaleRate(0.00002)!;
+            };
+            (root.querySelector(`[data-role="${scope}"] [data-role="pay-refresh"]`) as HTMLButtonElement).click();
+            await until(() => shown(root, scope, 'pay-cashtab'));
+            await flush(20);
+            expect(asks - opened, 'one press, one ask').toBe(1);
+            expect(root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? '', 'the price arrived').not.toBe('');
+        });
+    }
+});
+
+describe('a-hand-back-with-no-record-change-keeps-its-grace', () => {
+    /**
+     * CRITIC-CARRYOVER-7 item 4. `onPayRecordMoved` carries a sheet's later
+     * stamp (`PayShown.changedAtMs`) and stamps now when the rate it paints
+     * differs from the one the sheet showed — but `paint()` put
+     * `payChangedAt` on the view only beside a record move on file, so a
+     * hand-back with no record change dropped the grace: the new figure
+     * could be opened by a press a moment after it appeared. No sheet makes
+     * such a hand-back today (every one follows a recompose), so the call is
+     * made through the app's own handler, as a sheet's `handBack` would.
+     * The grace is painted for its sheet on every paint now, and a grace
+     * with no move on file says no record changed.
+     */
+    const A = 'a9'.repeat(32);
+    const B = 'b9'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const R0 = scaleRate(0.000019)!;
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices: new Map([
+                [A, USD(500n)],
+                [B, USD(300n)],
+            ]),
+            shopTab: 'quotes',
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const lineOf = (root: HTMLElement, scope: string): string =>
+        root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.closest('[hidden]') === null
+            ? (root.querySelector(`[data-role="${scope}"] [data-role="pay-valve"]`)?.textContent ?? '')
+            : '';
+
+    for (const scope of ['pay', 'pay-several'] as const) {
+        for (const road of ["the sheet's own rate grace", 'a rate that differs from the one the sheet showed'] as const) {
+            it(`${scope}, ${road}: the paint carries the grace, and says no record changed`, async () => {
+                const { root } = bootStall(phone());
+                await flush();
+                priceControl.fetch = async () => R1;
+                if (scope === 'pay') {
+                    (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+                } else {
+                    (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+                    for (const tokenId of [A, B]) {
+                        [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                            .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                            .click();
+                    }
+                    (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+                }
+                await until(() => root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`)?.closest('[hidden]') === null);
+                later(2_000);
+                const before = root.querySelector(`[data-role="${scope}"]`);
+                handlersOf(root)!.onPayRecordMoved!(
+                    scope === 'pay' ? A : undefined,
+                    false,
+                    road === "the sheet's own rate grace"
+                        ? { rate: R1, changedAtMs: performance.now() }
+                        : { rate: R0, changedAtMs: undefined },
+                );
+                await flush();
+                expect(root.querySelector(`[data-role="${scope}"]`), 'the app painted the sheet again').not.toBe(before);
+                expect(viewOf(root)?.payRecordMoved, 'no record move on file').toBeUndefined();
+                expect(viewOf(root)?.payChangedAt, 'and the grace on the view all the same').toBeDefined();
+                expect(lineOf(root, scope), 'no record changed, and none is said to').toBe('');
+
+                later(100);
+                expect(press(root, scope), 'a press 100 ms after the hand-back opens nothing').toBeUndefined();
+                await flush();
+                expect(lineOf(root, scope), 'still no record said to have changed').not.toMatch(/changed/);
+                later(PAY_RECOMPOSE_GRACE_MS + 1);
+                expect(press(root, scope), 'after the grace, the figure on screen opens').toBeDefined();
+            });
+        }
+    }
+});
+
+describe('a-double-tap-that-opens-the-sheet-opens-no-wallet', () => {
+    /**
+     * The owner, 2026-09-25 (CRITIC-CARRYOVER-6 item 2), through the real
+     * app. The first tap on a row's Pay pill or the Pay several strip paints
+     * the sheet under the finger at once, and the second tap of the same
+     * double tap lands on the sheet's Pay — it opened the wallet (the
+     * critic's D1–D3). A Pay press within `PAY_OPEN_GUARD_MS` of the sheet
+     * appearing is ignored SILENTLY: nothing opens, no line, nothing spoken,
+     * nothing handed back — the same sheet stays, untouched. A press after
+     * the guard opens exactly the figure on screen. For a USD quote the rate
+     * lands 100 ms after the first tap, inside the interval, and the guard
+     * still holds: it runs from the sheet's first paint, not from its first
+     * figure. The clock is held (`holdClock`).
+     */
+    const A = 'ac'.repeat(32);
+    const B = 'bc'.repeat(32);
+    const R1 = scaleRate(0.00002)!;
+    const XEC_A = { code: 'xec', exponent: 2, amount: 500_000n };
+    const XEC_B = { code: 'xec', exponent: 2, amount: 300_000n };
+    const USD_A = USD(500n);
+    const USD_B = USD(300n);
+    let later: (ms: number) => void = () => undefined;
+    beforeEach(() => {
+        later = holdClock();
+    });
+    const phone = (prices: Map<string, { code: string; exponent: number; amount: bigint }>, over: Partial<State['view']> = {}): State =>
+        stallEmpty({
+            tokens: new Map([
+                [A, fungible(A, 'Plum Jam')],
+                [B, fungible(B, 'Rye Flour')],
+            ]),
+            prices,
+            shopTab: 'quotes',
+            ...over,
+        });
+    const press = (root: HTMLElement, scope: string): string | undefined => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const control = root.querySelector(`[data-role="${scope}"] [data-role="pay-cashtab"]`);
+            expect(control, `${scope} carries a Pay control`).not.toBeNull();
+            control!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            const call = open.mock.calls[0];
+            return call === undefined ? undefined : String(call[0]);
+        } finally {
+            open.mockRestore();
+        }
+    };
+    const figureOf = (root: HTMLElement, scope: string): string | undefined =>
+        root.querySelector(`[data-role="${scope}"] [data-role="price"]`)?.textContent ?? undefined;
+    const spoken = (): string => document.getElementById('sr-live')?.textContent ?? '';
+    /** The second tap, 150 ms after the first: nothing opens, nothing is said, nothing is handed back. */
+    const secondTap = (root: HTMLElement, scope: string): void => {
+        const sheet = root.querySelector(`[data-role="${scope}"]`);
+        const valve = sheet?.querySelector('[data-role="pay-valve"]') as HTMLElement | null;
+        const line = valve?.hidden === true ? '' : (valve?.textContent ?? '');
+        const said = spoken();
+        const before = viewOf(root);
+        expect(press(root, scope), 'the second tap of the double tap opens no wallet').toBeUndefined();
+        expect(root.querySelector(`[data-role="${scope}"]`), 'nothing handed back: the same sheet').toBe(sheet);
+        expect(viewOf(root), 'and no paint').toBe(before);
+        const after = sheet?.querySelector('[data-role="pay-valve"]') as HTMLElement | null;
+        expect(after?.hidden === true ? '' : (after?.textContent ?? ''), 'no line').toBe(line);
+        expect(spoken(), 'nothing spoken').toBe(said);
+        expect(viewOf(root)?.payRecordMoved).toBeUndefined();
+    };
+    /** After the guard, the press opens exactly the figure on screen. */
+    const thenAPressOpens = (root: HTMLElement, scope: string, figure: string): void => {
+        later(PAY_OPEN_GUARD_MS - 150 + 1);
+        expect(figureOf(root, scope)).toBe(figure);
+        expect(press(root, scope), 'a press after the guard opens the figure on screen').toContain(
+            `amount=${figure.replace(/,/g, '')}.00`,
+        );
+    };
+    const choose = (root: HTMLElement): void => {
+        (root.querySelector('[data-role="selection-toggle"]') as HTMLButtonElement).click();
+        for (const tokenId of [A, B]) {
+            [...root.querySelectorAll<HTMLButtonElement>('[data-role="selection-more"]')]
+                .find((b) => b.getAttribute('data-focus-key') === `selection-step:${tokenId}:more`)!
+                .click();
+        }
+    };
+
+    it('the row’s Pay pill, an XEC quote', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_A]])));
+        await flush();
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        expect(figureOf(root, 'pay'), 'the figure is there at once').toBe('5,000');
+        later(150);
+        secondTap(root, 'pay');
+        thenAPressOpens(root, 'pay', '5,000');
+    });
+
+    it('the row’s Pay pill, a USD quote whose rate lands inside the tap interval', async () => {
+        const { root } = bootStall(phone(new Map([[A, USD_A]])));
+        await flush();
+        let answer: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () =>
+            new Promise<bigint | undefined>((resolve) => {
+                answer = resolve;
+            });
+        (root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay') ?? '', 'asking: no figure yet').toBe('');
+        later(100);
+        answer(R1);
+        await until(() => figureOf(root, 'pay') === '250,000');
+        expect(figureOf(root, 'pay'), 'the rate landed 100 ms after the first tap').toBe('250,000');
+        later(50);
+        secondTap(root, 'pay');
+        thenAPressOpens(root, 'pay', '250,000');
+    });
+
+    it('the Pay several strip, XEC quotes', async () => {
+        const { root } = bootStall(phone(new Map([[A, XEC_A], [B, XEC_B]])));
+        await flush();
+        choose(root);
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        expect(figureOf(root, 'pay-several'), 'the figure is there at once').toBe('8,000');
+        later(150);
+        secondTap(root, 'pay-several');
+        thenAPressOpens(root, 'pay-several', '8,000');
+    });
+
+    it('the Pay several strip, USD quotes whose rate lands inside the tap interval', async () => {
+        const { root } = bootStall(phone(new Map([[A, USD_A], [B, USD_B]])));
+        await flush();
+        choose(root);
+        let answer: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () =>
+            new Promise<bigint | undefined>((resolve) => {
+                answer = resolve;
+            });
+        (root.querySelector('[data-role="pay-several-open"]') as HTMLButtonElement).click();
+        await flush();
+        expect(figureOf(root, 'pay-several') ?? '', 'asking: no figure yet').toBe('');
+        later(100);
+        answer(R1);
+        await until(() => figureOf(root, 'pay-several') === '400,000');
+        expect(figureOf(root, 'pay-several')).toBe('400,000');
+        later(50);
+        secondTap(root, 'pay-several');
+        thenAPressOpens(root, 'pay-several', '400,000');
+    });
+
+    it('whichever road opened it: the item face’s Pay, and a `?pay=` link', async () => {
+        const face = bootStall(phone(new Map([[A, XEC_A]])));
+        await flush();
+        (face.root.querySelector('[data-role="item-open"]') as HTMLButtonElement).click();
+        (face.root.querySelector('[data-role="pay-open"]') as HTMLButtonElement).click();
+        expect(figureOf(face.root, 'pay')).toBe('5,000');
+        later(150);
+        secondTap(face.root, 'pay');
+        thenAPressOpens(face.root, 'pay', '5,000');
+
+        later(PAY_OPEN_GUARD_MS * 4);
+        const link = bootStall(phone(new Map([[A, XEC_A]]), { payHint: A.slice(0, 12) }));
+        await flush();
+        expect(figureOf(link.root, 'pay'), 'the link opened the sheet').toBe('5,000');
+        later(150);
+        secondTap(link.root, 'pay');
+        thenAPressOpens(link.root, 'pay', '5,000');
+    });
+});
+
+describe('the-taken-out-words-are-in-every-taken-out-sentence', () => {
+    it('reads both surfaces', () => {
+        expect(SELECTION_DROPPED).toContain(DROPPED_WORDS);
+        expect(selectionDroppedItems('Plum Jam', 1)).toContain(DROPPED_WORDS);
+        expect(selectionDroppedItems('Plum Jam and Rye Flour', 2)).toContain(DROPPED_WORDS);
+    });
+});
+
+describe('boot-returns-a-teardown-that-stops-the-app', () => {
+    /**
+     * CRITIC-CARRYOVER-9 item 5. `boot` returns its teardown, and this file
+     * calls it after every test (`running`): an app nobody tore down went on
+     * refreshing on every later `popstate` in the document, and the two tests
+     * that navigate between stalls spent nearly all their time in earlier
+     * tests' apps. After the teardown a `popstate` loads nothing, the socket
+     * is closed, and a hook of the closed socket paints nothing.
+     */
+    it('after the teardown, a popstate loads nothing, the socket is closed, and nothing paints', async () => {
+        const root = document.createElement('div');
+        let loads = 0;
+        const stop = bootApp(root, async () => {
+            loads += 1;
+            return stallEmpty();
+        });
+        await flush();
+        expect(loads).toBe(1);
+        const mine = watches.filter((w) => !w.closed);
+        expect(mine.length, 'the app watches its stall').toBeGreaterThan(0);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(loads, 'a live app refreshes on popstate').toBe(2);
+
+        stop();
+        expect(watches.every((w) => w.closed), 'every socket it opened is closed').toBe(true);
+        const painted = root.firstElementChild;
+        expect(painted, 'it painted before').not.toBeNull();
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        const txid = publish(signedTx({ txid: '9d'.repeat(32), outputs: [stl1Output('After Hours')], height: 800_010 }));
+        for (const watch of watches) {
+            watch.hooks.onBurst?.([txid]);
+            watch.hooks.onReestablished?.();
+        }
+        await flush(20);
+        expect(loads, 'a popstate after the teardown loads nothing').toBe(2);
+        expect(root.firstElementChild, 'and nothing paints').toBe(painted);
+        stop();
+    });
+
+    /**
+     * CRITIC-CARRYOVER-10 item 8 (the critic's `t10`): the teardown cleared
+     * every timer standing, but a read in flight at it armed one more when
+     * it landed — the glance's re-read (five minutes, which then asked the
+     * feed again for an app that was gone) and the wall's heartbeat (its
+     * `finally`). Each is now refused after the teardown. The long timers
+     * are caught rather than run (a spy on `setTimeout` for delays of ten
+     * seconds and more), so what an app arms is read, not waited for.
+     */
+    const catchLongTimers = (): {
+        armed: Array<{ ms: number; run: () => void }>;
+        restore: () => void;
+    } => {
+        const armed: Array<{ ms: number; run: () => void }> = [];
+        const real = globalThis.setTimeout;
+        const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms?: number) => {
+            if ((ms ?? 0) >= 10_000) {
+                armed.push({ ms: ms ?? 0, run });
+                return 0 as unknown as ReturnType<typeof setTimeout>;
+            }
+            return real(run, ms);
+        }) as typeof setTimeout);
+        return { armed, restore: () => spy.mockRestore() };
+    };
+
+    it('a glance read in flight at the teardown arms no re-read when it lands', async () => {
+        let asks = 0;
+        let landing: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () => {
+            asks += 1;
+            return new Promise<bigint | undefined>((resolve) => {
+                landing = resolve;
+            });
+        };
+        const root = document.createElement('div');
+        document.body.append(root);
+        const stop = bootApp(root, async () => ({
+            ...stallEmpty({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN, TOKEN_META]]) }),
+            offers: [OFFER],
+        }));
+        try {
+            await flush();
+            openGlanceFold(root);
+            await flush();
+            expect(asks, 'the fold on screen asks for the glance').toBe(1);
+            stop();
+            const timers = catchLongTimers();
+            try {
+                landing(30_000n);
+                await flush();
+            } finally {
+                timers.restore();
+            }
+            expect(
+                timers.armed.map((timer) => timer.ms),
+                'nothing armed for the app that is gone',
+            ).toEqual([]);
+            expect(asks, 'and the feed is not asked again').toBe(1);
+        } finally {
+            stop();
+            root.remove();
+        }
+    });
+
+    it("a heartbeat in flight at the teardown arms no beat when its refresh ends", async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=listings&mode=cycle`);
+        const state: State = {
+            ...stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+            } as Partial<State['view']>),
+            offers: [OFFER],
+        };
+        let loads = 0;
+        let held: (next: State) => void = () => undefined;
+        const root = document.createElement('div');
+        document.body.append(root);
+        const timers = catchLongTimers();
+        let stop: () => void = () => undefined;
+        try {
+            stop = bootApp(root, () => {
+                loads += 1;
+                return loads === 1
+                    ? Promise.resolve(state)
+                    : new Promise<State>((resolve) => {
+                          held = resolve;
+                      });
+            });
+            await flush();
+            expect(root.querySelector('[data-role="shop-window"]'), 'a wall').not.toBeNull();
+            const beat = timers.armed.find((timer) => timer.ms === WINDOW_BEAT_MS);
+            expect(beat, 'the wall armed its heartbeat').toBeDefined();
+            timers.armed.length = 0;
+            // The beat: a full refresh, its load held past the teardown.
+            beat!.run();
+            await flush();
+            expect(loads).toBe(2);
+            stop();
+            held(state);
+            await flush();
+            expect(
+                timers.armed.map((timer) => timer.ms),
+                'no beat armed for the app that is gone',
+            ).toEqual([]);
+        } finally {
+            timers.restore();
+            stop();
+            root.remove();
+        }
     });
 });

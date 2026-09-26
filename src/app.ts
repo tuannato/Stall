@@ -34,7 +34,7 @@ import {
     selectionSats,
     selectionUnit,
 } from './domain/selection';
-import { decidedOf, mergeFailedRead } from './domain/records';
+import { decidedOf, mergeFailedRead, mergeFinishedRead, movedRecords, type RecordsNow } from './domain/records';
 import {
     clearSavedStall,
     forgetSurcharge,
@@ -74,6 +74,7 @@ import type {
     WindowParams,
     TokenMeta,
     Overlay,
+    PayRateOutcome,
 } from './domain/state';
 import type { DecodedTheme } from './domain/theme';
 import {
@@ -98,7 +99,7 @@ import {
     type GenesisDecision,
 } from './domain/genesis';
 import { loadGenesisAttribution, type GenesisChronik } from './net/genesis';
-import { XEC_PRICE_CODE, samePrice, type TokenPrice } from './domain/description';
+import { XEC_PRICE_CODE, type TokenPrice } from './domain/description';
 import {
     ALL_FACTS,
     NO_FACTS,
@@ -159,6 +160,7 @@ import {
     quotedItems,
     unreadChosen,
     renderStall,
+    recheckPaySheet,
     holdsLivePaint,
     shopWindowPaints,
     WINDOW_MIN_PX,
@@ -176,6 +178,7 @@ import {
     PAY_CHECK_TIMEOUT_MS,
     PAY_RATE_MAX_AGE_MS,
     PAY_RATE_TIMEOUT_MS,
+    type PayShown,
 } from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import { fetchXecPriceCheck } from './net/priceCheck';
@@ -385,10 +388,19 @@ export type AppState = {
     genesisPending?: { pubkeyHex: string; hash: string; tokenIds: readonly string[] };
 };
 
+/**
+ * Paints the app into `root` and keeps it live. Returns its teardown
+ * (CRITIC-CARRYOVER-9 item 5): the listeners `boot` put on the window and
+ * the document come off, the socket closes, every timer is cleared, a load
+ * or a tail still in flight is dropped, and nothing paints or refreshes
+ * again. The page never calls it — one app lives as long as the document —
+ * so it exists for a test file that boots many apps in one document, where
+ * each earlier app went on refreshing on every later `popstate`.
+ */
 export function boot(
     root: HTMLElement,
     load: () => Promise<AppState> = loadCurrent,
-): void {
+): () => void {
     /**
      * Every refresh claims a generation. A response that resolves after a newer
      * refresh started belongs to a page the visitor already left, so it is
@@ -396,6 +408,8 @@ export function boot(
      * A -> B -> A.
      */
     let generation = 0;
+    /** Set by the teardown `boot` returns: nothing paints or refreshes after it. */
+    let stopped = false;
     /** One socket per painted stall. Closed before the next one opens. */
     let live: LiveHandle | undefined;
     /**
@@ -534,6 +548,15 @@ export function boot(
     /** The feeds are being asked for the open sheet; painted as "asking", never as no answer. */
     let payRateAsking = false;
     /**
+     * The session of a sheet's own ask — the valve's or the refresh
+     * control's — that was still out when that sheet handed itself back
+     * (`PayShown.asking`): `payRateAsking` stands for it on the sheet this
+     * app paints in its place, so that sheet sends no second ask while it is
+     * out, and its answer is painted here when it lands, since the sheet
+     * that asked is gone (`sheetAskLanded`; CRITIC-CARRYOVER-10 item 5).
+     */
+    let payAskCarried: number | undefined;
+    /**
      * Which open of the pay sheet an in-flight rate read belongs to (since
      * 2026-09-09). `readPayRate` wrote the view before any guard, so a sheet
      * closed and reopened within the feeds' deadline had two reads in flight
@@ -550,6 +573,98 @@ export function boot(
     /** The buyer's quantity on the open pay sheet; reset with `payRate`. */
     let payQuantity: bigint | undefined;
     /**
+     * The unit `payRate` was read for. A sheet is painted again from the
+     * seller's record when a press finds it moved (`onPayRecordMoved`), and
+     * a record can move to another unit: a rate read for the old one is then
+     * never written onto the sheet, or it would compose a figure in one
+     * currency from another's rate.
+     */
+    let payRateUnit: string | undefined;
+    /**
+     * The open pay sheet whose press found the seller's record moved
+     * (`payOverlayKey`), so the paint that follows says so, and the tokens
+     * whose records moved, for the line to name. Cleared when a pay sheet
+     * opens or closes; a key that is not the open sheet's says nothing.
+     */
+    let payRecordMovedFor: string | undefined;
+    let payRecordMovedItems: readonly string[] = [];
+    /**
+     * Whether the latest word on it was an absorbed PAY press. A change in
+     * place, an ask's tail that found the records moved (`sheetOutOfStep`)
+     * and the refresh control are no Pay press, and a press that opened a
+     * wallet leaves no "again" to ask for: the line then asks for none
+     * (`payRecordMovedUnpressed`; CRITIC-CARRYOVER-4 item 4).
+     */
+    let payRecordMovedPressed = false;
+    /**
+     * When the figure on that sheet last changed under the buyer, on the
+     * page's monotonic clock — stamped by the sheet as it paints the change
+     * (`onPayFigureChanged`), or here when a paint of this app's puts a new
+     * figure on it — so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of it
+     * opens nothing, across the repaint the first such press asks for
+     * (CRITIC-CARRYOVER-4 items 1, 2 and 6). Cleared with `payRecordMovedFor`.
+     * Painted for the sheet it belongs to (`payChangedFor`) on every paint,
+     * a record move on file or not: a hand-back that carries only a rate
+     * answer's grace, or starts one because the rate it paints differs, is a
+     * figure put on screen like any other (CRITIC-CARRYOVER-7 item 4).
+     */
+    let payChangedAt: number | undefined;
+    let payChangedFor: string | undefined;
+    /**
+     * The records the open pay sheet was last painted from — the ones its
+     * figure is composed of (`paint`). What a press found moved is judged
+     * against these, so the line names what the buyer was shown and not
+     * what a rate happened to be read for.
+     */
+    let payPainted = new Map<string, TokenPrice>();
+    /**
+     * The rate the open pay sheet's figure was last painted at by this app
+     * (`paint`), beside `payPainted`. What a hand-back from the app's own
+     * tail is judged against; a sheet handing itself back says what it
+     * showed instead (`PayShown`), since it may have taken a rate in place.
+     */
+    let payPaintedRate: bigint | undefined;
+    /**
+     * When the open pay sheet was first painted, and which sheet that was
+     * (`payOverlayKey`): stamped by the paint that mounts it — every road
+     * that opens one (a row's Pay, the item face, the Pay several strip, a
+     * `?pay=` link) ends in `paint()` — and kept across every repaint of the
+     * same sheet, so a rate landing inside a double tap does not move it.
+     * A Pay press within `PAY_OPEN_GUARD_MS` of it is ignored silently (the
+     * owner, 2026-09-25, CRITIC-CARRYOVER-6 item 2).
+     */
+    let payOpenedAt: number | undefined;
+    let payOpenedFor: string | undefined;
+    /**
+     * The valve's outcome a sheet handed itself back with, its line the one
+     * standing (`PayShown.outcome`; CRITIC-CARRYOVER-6 item 4), and the
+     * sheet it belongs to: painted as `payRateOutcome`, so the sheet the app
+     * paints next says the line the buyer was reading. Dropped by a record
+     * change this app or the sheet finds after it — that line is the newer —
+     * and whenever a pay sheet opens or closes. `opened`: the sheet handed
+     * itself back saying a press on it had opened a wallet since it last
+     * absorbed a Pay press (`PayShown.opened`, which only "Pay several"
+     * reaches), so the line is painted without its ask (`payWalletOpened`;
+     * CRITIC-CARRYOVER-7 item 2).
+     */
+    let payOutcomeCarried:
+        | { readonly key: string; readonly outcome: PayRateOutcome; readonly opened?: true }
+        | undefined;
+    /**
+     * The open pay sheet a Pay press has opened a wallet from since it
+     * opened (`payOverlayKey`): painted as `payWalletWasOpened`, so the sheet
+     * the app paints after a hand-back — the record gone — never says "no
+     * wallet was opened" (CRITIC-CARRYOVER-8 item 2). Set by the open
+     * (`onPayWalletOpened`) and kept across every hand-back. Dropped by
+     * every road that opens a pay sheet (`onOpenPay`, `onOpenPaySeveral`,
+     * the `?pay=` road) and by the sheet's own close (`onClosePublish`),
+     * beside `payOutcomeCarried`; a `refresh()` or `popstate` that takes the
+     * sheet away leaves it, harmless, since it is painted only for the
+     * overlay it names and every road to a pay sheet drops it first
+     * (CRITIC-CARRYOVER-9 item 6, CRITIC-CARRYOVER-10 item 9).
+     */
+    let payWalletWasOpenedFor: string | undefined;
+    /**
      * "Pay several" (2026-09-21): the chosen quotes and counts, the strip's
      * open state and its one question, all closure state written onto the
      * view at paint time for `shopTab`'s reason; the two one-shots are
@@ -560,14 +675,24 @@ export function boot(
     let selectionAsk: SelectionAsk | undefined;
     let selectionEntered = false;
     let selectionBumped: string | undefined;
-    let selectionDropped = false;
+    /** The chosen items a re-read took out, named until the selection next changes. */
+    let selectionDropped: string[] = [];
+    /**
+     * The unit the selection was chosen in: its first item's, when it was
+     * pressed into an empty selection, and kept while anything is chosen.
+     * The prune judges every item against it (`pruneSelection`), so a
+     * republish that moves the first chosen item to another unit takes THAT
+     * item out, and the rest stay (the critic, 2026-09-25, item 4).
+     */
+    let selectionChosenUnit: string | undefined;
     const resetSelection = (): void => {
         selection = new Map();
         selectionOpen = false;
         selectionAsk = undefined;
         selectionEntered = false;
         selectionBumped = undefined;
-        selectionDropped = false;
+        selectionDropped = [];
+        selectionChosenUnit = undefined;
     };
     /**
      * A `?pay=` link is answered once per page load. The URL is deliberately
@@ -691,6 +816,23 @@ export function boot(
      */
     const recordsKnown = (view: StallView): boolean =>
         view.prices !== undefined && view.descriptionsFailed !== true;
+    /**
+     * The seller's records as this page holds them now, for a payment on
+     * screen to be judged against (`movedRecords`): the touch wall's plate
+     * at every paint, and a pay sheet at every press — a sheet holds the
+     * live paint, so what it painted can be older than `state.view`.
+     */
+    const recordsNow = (): RecordsNow => ({
+        ...(state.view.prices === undefined ? {} : { prices: state.view.prices }),
+        ...(state.view.descriptions === undefined ? {} : { descriptions: state.view.descriptions }),
+        ...(state.view.quoteTimes === undefined ? {} : { quoteTimes: state.view.quoteTimes }),
+        known: recordsKnown(state.view),
+        complete: state.view.descriptionsTruncated !== true,
+        decided: decidedOf({ ...state.view, decided: state.view.descriptionsDecided }),
+    });
+    /** The open pay sheet, as a key — its token, or "several" — and undefined when none is open. */
+    const payOverlayKey = (overlay: StallView['overlay']): string | undefined =>
+        overlay.kind === 'pay' ? `pay:${overlay.tokenId}` : overlay.kind === 'pay-several' ? 'pay-several' : undefined;
     /**
      * The wall's own params, settled, without building a view.
      *
@@ -932,6 +1074,12 @@ export function boot(
             clearTimeout(glanceTimer);
             glanceTimer = undefined;
         }
+        // Torn down: a glance read in flight at the teardown calls this when
+        // it lands, and would arm a re-read for an app that is gone
+        // (CRITIC-CARRYOVER-10 item 8).
+        if (stopped) {
+            return;
+        }
         if (!glanceOnScreen() || document.visibilityState === 'hidden') {
             return;
         }
@@ -1082,6 +1230,9 @@ export function boot(
     };
 
     const paint = (): void => {
+        if (stopped) {
+            return;
+        }
         // A quote that left the rail leaves the selection (D8), judged
         // against what this paint will show — never a count on an item the
         // seller no longer quotes.
@@ -1104,10 +1255,13 @@ export function boot(
         // removal it reached before our cap or a throw is the seller's.
         const decided = decidedOf({ ...state.view, decided: state.view.descriptionsDecided });
         if (recordsKnown(state.view) && state.view.prices !== undefined) {
-            const pruned = pruneSelection(selection, state.view.prices, complete, decided);
-            if (pruned.dropped) {
+            const pruned = pruneSelection(selection, state.view.prices, complete, decided, selectionChosenUnit);
+            if (pruned.dropped.length > 0) {
                 selection = pruned.selection;
-                selectionDropped = true;
+                selectionDropped = [...selectionDropped, ...pruned.dropped.filter((t) => !selectionDropped.includes(t))];
+                if (selection.size === 0) {
+                    selectionChosenUnit = undefined;
+                }
                 // A chosen item moved or left: the wall's plate is a frozen
                 // figure over records that no longer stand, so the slot goes
                 // back to the shop's code rather than showing a payment
@@ -1126,23 +1280,14 @@ export function boot(
          * the same two items, on the screen with nobody to ask (the critic's
          * P1-2). Any chosen item whose record moved closes the plate.
          */
-        if (windowPaying !== undefined && recordsKnown(state.view) && state.view.prices !== undefined) {
-            // Over a DEFINITE read only, the prune's own rule: `refresh()`
-            // paints `opening` with no prices before its load answers, and a
-            // comparison against that closed the plate every sixty seconds
-            // on a wall nobody had touched.
-            for (const [tokenId, price] of windowPaying.prices) {
-                const now = state.view.prices.get(tokenId);
-                // A record a capped walk did not reach has not moved; one it
-                // resolved, a removal included, is judged.
-                if (now === undefined && !complete && !decided.has(tokenId)) {
-                    continue;
-                }
-                if (!samePrice(price, now)) {
-                    cancelWallPayment();
-                    break;
-                }
-            }
+        // Over a DEFINITE read only, the prune's own rule: `refresh()` paints
+        // `opening` with no prices before its load answers, and a comparison
+        // against that closed the plate every sixty seconds on a wall nobody
+        // had touched. A record a capped walk did not reach has not moved;
+        // one it resolved, a removal included, is judged (`movedRecords`,
+        // the rule both pay sheets ask at the press).
+        if (windowPaying !== undefined && movedRecords(windowPaying.prices, recordsNow()).length > 0) {
+            cancelWallPayment();
         }
         /*
          * And whenever a chosen item cannot be read (the owner's (f),
@@ -1233,6 +1378,13 @@ export function boot(
                 broadcastRailAt = broadcastRail(withRail(state.view));
             }
         }
+        // The open edge of a pay sheet: the paint that mounts it, whichever
+        // road opened it. A repaint of the same sheet keeps the stamp.
+        const openKey = payOverlayKey(state.view.overlay);
+        if (openKey !== payOpenedFor) {
+            payOpenedFor = openKey;
+            payOpenedAt = openKey === undefined ? undefined : performance.now();
+        }
         // Read at paint time, not at load: the toggle changes it without a
         // refetch, and a stale flag would leave the control lying about itself.
         const view: StallView = {
@@ -1293,10 +1445,34 @@ export function boot(
             // that always works.
             ...(seenBlockOf(state.offers) === undefined ? {} : { tipHeight: seenBlockOf(state.offers) }),
             fiatRate,
-            payRate,
+            // Never a rate read for another unit than the open sheet composes
+            // in: a press that found the seller's record moved paints the
+            // sheet again from it, and the record may have changed unit.
+            payRate: payOverlayKey(state.view.overlay) !== undefined && rateForAnotherUnit() ? undefined : payRate,
             payRateWhy,
             payRateAsking,
             payQuantity,
+            ...(payOpenedAt === undefined ? {} : { payOpenedAt }),
+            ...(payWalletWasOpenedFor !== undefined && payWalletWasOpenedFor === payOverlayKey(state.view.overlay)
+                ? { payWalletWasOpened: true as const }
+                : {}),
+            ...(payOutcomeCarried !== undefined && payOutcomeCarried.key === payOverlayKey(state.view.overlay)
+                ? {
+                      payRateOutcome: payOutcomeCarried.outcome,
+                      ...(payOutcomeCarried.opened === true ? { payWalletOpened: true as const } : {}),
+                  }
+                : {}),
+            ...(payRecordMovedFor !== undefined &&
+            payRecordMovedFor === payOverlayKey(state.view.overlay) &&
+            payRecordMovedItems.length > 0
+                ? {
+                      payRecordMoved: payRecordMovedItems,
+                      ...(payRecordMovedPressed ? {} : { payRecordMovedUnpressed: true as const }),
+                  }
+                : {}),
+            ...(payChangedAt !== undefined && payChangedFor !== undefined && payChangedFor === payOverlayKey(state.view.overlay)
+                ? { payChangedAt }
+                : {}),
             selection: new Map(selection),
             /*
              * A chosen item this read did not reach is still named — the
@@ -1313,7 +1489,7 @@ export function boot(
             ...(selectionAsk === undefined ? {} : { selectionAsk }),
             ...(entered ? { selectionEntered: true as const } : {}),
             ...(bumped === undefined ? {} : { selectionBumped: bumped }),
-            ...(selectionDropped ? { selectionDropped: true as const } : {}),
+            ...(selectionDropped.length > 0 ? { selectionDropped: [...selectionDropped] } : {}),
             genesisPending: state.genesisPending?.tokenIds,
             shopTab,
             ...(wallParams() === undefined
@@ -1330,6 +1506,25 @@ export function boot(
             // it in, so a refresh cannot lose it and a shared link cannot gain it.
             pasted: (history.state as { pasted?: boolean } | null)?.pasted === true,
         };
+        // The records the open pay sheet composes from, exactly as this paint
+        // hands them to it: the single sheet's item when it is a quoted row,
+        // every chosen item's on "Pay several" (`payPainted`).
+        payPainted = new Map();
+        payPaintedRate = view.payRate?.rate;
+        if (view.overlay.kind === 'pay') {
+            const tokenId = view.overlay.tokenId;
+            const item = quotedItems(view).find((row) => row.tokenId === tokenId);
+            if (item !== undefined) {
+                payPainted.set(tokenId, item.price);
+            }
+        } else if (view.overlay.kind === 'pay-several') {
+            for (const tokenId of view.selection?.keys() ?? []) {
+                const painted = view.prices?.get(tokenId);
+                if (painted !== undefined) {
+                    payPainted.set(tokenId, painted);
+                }
+            }
+        }
         renderStall(root, view, {
             onChangeFiat: (code: string): void => {
                 fiatCode = code;
@@ -1404,11 +1599,55 @@ export function boot(
             onOpenPay: (tokenId) => {
                 onOpenPay(tokenId);
             },
-            onPayRate: (timeoutMs) => readPayRate(timeoutMs),
+            onPayRate: (timeoutMs) => {
+                // The session it is asked in, so an answer whose sheet
+                // handed itself back while it was out is painted here
+                // (`sheetAskLanded`).
+                const session = paySession;
+                return readPayRate(timeoutMs).finally(() => {
+                    sheetAskLanded(session);
+                });
+            },
+            onPayRecords: () => recordsNow(),
+            onPayRecordMoved: (tokenId, pressed, shown) => {
+                onPayRecordMoved(tokenId, pressed, shown);
+            },
+            onPayFigureChanged: (atMs, tokenIds) => {
+                // The sheet changed in place and said so with no press: the
+                // app keeps what changed and when, for the next paint.
+                const key = payOverlayKey(state.view.overlay);
+                if (key === undefined) {
+                    return;
+                }
+                const known = payRecordMovedFor === key ? payRecordMovedItems : [];
+                payRecordMovedFor = key;
+                payRecordMovedItems = [...known, ...tokenIds.filter((tokenId) => !known.includes(tokenId))];
+                payRecordMovedPressed = false;
+                payChangedAt = atMs;
+                payChangedFor = key;
+                // A change in place is newer than any valve line carried.
+                payOutcomeCarried = undefined;
+            },
+            onPayWalletOpened: () => {
+                const key = payOverlayKey(state.view.overlay);
+                payWalletWasOpenedFor = key;
+                if (payRecordMovedFor === key) {
+                    payRecordMovedPressed = false;
+                }
+                // Nothing marks the valve's carried line here: after an open
+                // the app paints this sheet again only when it hands itself
+                // back, and on a close, which drops the line
+                // (CRITIC-CARRYOVER-8 item 6: the mark no road reached is
+                // gone). "Pay several" says in its hand-back whether a
+                // wallet opened (`PayShown.opened`); the single sheet hands
+                // its valve line back only to a sheet whose record left,
+                // whose one sentence `payWalletWasOpened` decides
+                // (CRITIC-CARRYOVER-9 item 6).
+            },
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 // The entrance is the press's, never a repaint's: consumed by
                 // the one paint that follows.
                 selectionEntered = selectionOpen;
@@ -1424,12 +1663,19 @@ export function boot(
                 if (count <= 0n) {
                     selection.delete(tokenId);
                 } else if (selection.has(tokenId) || selection.size < MAX_SELECTION_ENTRIES) {
+                    if (selection.size === 0) {
+                        // The first press names the unit the choice is in.
+                        selectionChosenUnit = state.view.prices?.get(tokenId)?.code;
+                    }
                     selection.set(tokenId, count);
                 } else {
                     return;
                 }
+                if (selection.size === 0) {
+                    selectionChosenUnit = undefined;
+                }
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 selectionBumped = count > 0n ? tokenId : undefined;
                 paint();
             },
@@ -1440,8 +1686,9 @@ export function boot(
             onSelectionClear: () => {
                 cancelWallPayment();
                 selection = new Map();
+                selectionChosenUnit = undefined;
                 selectionAsk = undefined;
-                selectionDropped = false;
+                selectionDropped = [];
                 paint();
             },
             onOpenPaySeveral: () => {
@@ -1475,6 +1722,12 @@ export function boot(
                 if (state.view.overlay.kind === 'pay') {
                     dropPayParam();
                 }
+                payRecordMovedFor = undefined;
+                payRecordMovedItems = [];
+                payChangedAt = undefined;
+                payChangedFor = undefined;
+                payOutcomeCarried = undefined;
+                payWalletWasOpenedFor = undefined;
                 state = { ...state, view: { ...state.view, overlay: { kind: 'idle' } } };
                 paint();
             },
@@ -1595,7 +1848,7 @@ export function boot(
                 shopTab = tab;
                 shopTabSettled = true;
                 // The dropped-item sentence lives until the tab switches (D8).
-                selectionDropped = false;
+                selectionDropped = [];
                 paint();
             },
             onChangeFilter: (text) => {
@@ -1683,6 +1936,12 @@ export function boot(
      */
     const livePaint = (): void => {
         if (holdsLivePaint(settled())) {
+            // A pay sheet answers the re-read in place, without a rebuild:
+            // its scan code is a road no press guards, so a record that moved
+            // under it is recomposed into the sheet now (`recheckPaySheet`).
+            if (payOverlayKey(state.view.overlay) !== undefined) {
+                recheckPaySheet(root);
+            }
             return;
         }
         /*
@@ -1927,7 +2186,10 @@ export function boot(
                 // guard is what keeps the two paths from arming two timers:
                 // on the ordinary path `syncWindow` has already set it.
                 void refresh().finally(() => {
-                    if (wallParams() !== undefined && windowBeat === undefined) {
+                    // Never after the teardown: a beat in flight at it would
+                    // arm one more for an app that is gone (CRITIC-CARRYOVER-10
+                    // item 8).
+                    if (!stopped && wallParams() !== undefined && windowBeat === undefined) {
                         windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
                     }
                 });
@@ -2153,6 +2415,12 @@ export function boot(
         payRate = undefined;
         payRateWhy = undefined;
         payQuantity = undefined;
+        payRecordMovedFor = undefined;
+        payRecordMovedItems = [];
+        payChangedAt = undefined;
+        payChangedFor = undefined;
+        payOutcomeCarried = undefined;
+        payWalletWasOpenedFor = undefined;
         // An XEC quote is the figure itself: no rate is read anywhere on its
         // sheet, so neither feed is asked — two requests to two third parties
         // for a number nobody uses, and two parties told a payment is being
@@ -2183,8 +2451,56 @@ export function boot(
             ) {
                 return;
             }
+            payRateLanded();
+            if (sheetOutOfStep()) {
+                onPayRecordMoved(tokenId, false);
+                return;
+            }
             paint();
         })();
+    };
+
+    /**
+     * The held rate was read for another unit than the open sheet now
+     * composes in: the seller's record changed unit while the feeds were
+     * being asked. The paint would carry no rate (`payRateUnit`), and "did
+     * not answer" would be false, so the sheet is handled as a record that
+     * moved under it — said, and its own unit asked for.
+     */
+    const rateForAnotherUnit = (): boolean =>
+        payRate !== undefined && payRateUnit !== undefined && payRateUnit !== quoteUnitOnScreen();
+
+    /**
+     * After an ask, whether the open sheet is out of step with the app: the
+     * records it was painted from moved (`payPainted`, what the buyer was
+     * shown — the critic, 2026-09-25, item 7: a same-unit move during the
+     * open's own ask was painted in silence), or the rate arrived for another
+     * unit than it now composes in. Either is handed to `onPayRecordMoved`,
+     * which says the line only for the first.
+     */
+    const sheetOutOfStep = (): boolean =>
+        movedRecords(payPainted, recordsNow()).length > 0 || rateForAnotherUnit();
+
+    /**
+     * An ask's rate landed on a sheet whose figure had already changed under
+     * the buyer: the figure the paint that follows puts on screen is a
+     * change in its own right — it was not there while the feeds were asked
+     * — and its grace starts when it is painted, never at the change that
+     * made the sheet ask (CRITIC-CARRYOVER-4 item 6).
+     *
+     * **A fresh sheet's first figure is no change**, and the change grace
+     * does not guard it: `PAY_OPEN_GUARD_MS` does (the owner, 2026-09-25,
+     * CRITIC-CARRYOVER-6 item 2). A tap on the sheet within half a second
+     * of it appearing is ignored, however fast the feed answered, and a
+     * press after that opens the figure — it has stood on screen since it
+     * landed. The sheet's own rule for a figure that appears LATER, where
+     * none stood, is the other half of the same line (`refreshAfterRate`).
+     */
+    const payRateLanded = (): void => {
+        if (payRecordMovedFor !== undefined && payRecordMovedFor === payOverlayKey(state.view.overlay)) {
+            payChangedAt = performance.now();
+            payChangedFor = payRecordMovedFor;
+        }
     };
 
     /** True for a quote written in XEC: its sheet reads no rate, so no feed is asked. */
@@ -2204,8 +2520,9 @@ export function boot(
     const quoteUnitOnScreen = (): string => {
         const over = state.view.overlay;
         if (over.kind === 'pay-several') {
-            // The selection's own unit — one per selection, its first item's.
-            const code = selectionUnit(selection, state.view.prices);
+            // The selection's own unit — the one it was chosen in, even while
+            // a sheet holds a re-read that moved the first item elsewhere.
+            const code = selectionChosenUnit ?? selectionUnit(selection, state.view.prices);
             return code !== undefined && isQuoteUnit(code) ? code : DEFAULT_FIAT_CODE;
         }
         if (over.kind !== 'pay') {
@@ -2231,6 +2548,12 @@ export function boot(
         payRate = undefined;
         payRateWhy = undefined;
         payQuantity = undefined;
+        payRecordMovedFor = undefined;
+        payRecordMovedItems = [];
+        payChangedAt = undefined;
+        payChangedFor = undefined;
+        payOutcomeCarried = undefined;
+        payWalletWasOpenedFor = undefined;
         selectionAsk = undefined;
         const asks = !selectionNeedsNoRate(selection, state.view.prices);
         const session = ++paySession;
@@ -2249,8 +2572,174 @@ export function boot(
             if (claimed !== generation || state.view.overlay.kind !== 'pay-several') {
                 return;
             }
+            payRateLanded();
+            if (sheetOutOfStep()) {
+                onPayRecordMoved(undefined, false);
+                return;
+            }
             paint();
         })();
+    };
+
+    /**
+     * A press found the seller's record moved under its open sheet (the
+     * critic's final merge, item 11), or was a Pay press inside the grace
+     * of a change on screen (`PAY_RECOMPOSE_GRACE_MS`; the owner,
+     * 2026-09-25, a window since CRITIC-CARRYOVER-4). A sheet holds the
+     * live paint, so the re-read that moved it is in `state.view` and not
+     * in the app's paint: paint the sheet again from the records as they
+     * stand — "Pay several"'s choice pruned as every paint prunes it —
+     * saying so, carrying the grace (`payChangedAt`), and a press after the
+     * grace is the one that opens a wallet, the moved-rate valve's shape.
+     * The press sent nothing. A
+     * record now in a unit the held rate was not read for asks for its own
+     * rate, as an open does; until it answers the paint above carries no
+     * rate (`payRateUnit`), so no figure is composed across units.
+     *
+     * `pressed` says whether a PAY press did it, and only then does the line
+     * ask for the press again: never for an ask's tail (`sheetOutOfStep`),
+     * never for the refresh control (CRITIC-CARRYOVER-4 item 4). The caller
+     * says which; there is no default.
+     *
+     * **A figure this paint puts on screen is a change, whatever put it
+     * there** (CRITIC-CARRYOVER-6 item 1). A sheet handing itself back says
+     * what it showed (`shown`): the later of its stamps is carried, so a
+     * rate answer's grace outlives the repaint, and a paint composed at
+     * another rate than the one the sheet showed — the valve's or the
+     * refresh control's answer, which the ask wrote to `payRate` before its
+     * tail handed the sheet back instead of taking it — starts its own
+     * grace now. The app's own tails, with no sheet to ask, are judged
+     * against the rate this app last painted (`payPaintedRate`).
+     */
+    const onPayRecordMoved = (tokenId: string | undefined, pressed: boolean, shown?: PayShown): void => {
+        const key = payOverlayKey(state.view.overlay);
+        if (key === undefined || key !== (tokenId === undefined ? 'pay-several' : `pay:${tokenId}`)) {
+            return;
+        }
+        // Judged against the records the sheet was painted from: the line
+        // says what the buyer was shown moved, and names it on "Pay several"
+        // — beside whatever the sheet already said changed in place.
+        const moved = movedRecords(payPainted, recordsNow());
+        const known = payRecordMovedFor === key ? payRecordMovedItems : [];
+        const fresh = moved.filter((tokenId) => !known.includes(tokenId));
+        // A stamp another sheet left is not this one's.
+        if (payChangedFor !== key) {
+            payChangedAt = undefined;
+        }
+        // The valve's line the sheet handed back with stands on the paint
+        // that replaces it, unless a record change it never painted is the
+        // newer fact (CRITIC-CARRYOVER-6 item 4).
+        payOutcomeCarried =
+            fresh.length === 0 && shown?.outcome !== undefined
+                ? { key, outcome: shown.outcome, ...(shown.opened === true ? { opened: true as const } : {}) }
+                : undefined;
+        if (known.length + fresh.length > 0) {
+            payRecordMovedFor = key;
+            payRecordMovedItems = [...known, ...fresh];
+            payRecordMovedPressed = pressed;
+            // A move the sheet never painted is a new figure this paint puts
+            // on screen: its grace starts now.
+            if (fresh.length > 0) {
+                payChangedAt = performance.now();
+            }
+        }
+        // The sheet's own later stamp — a rate answer's is sheet-local until
+        // now — is carried, never shortened.
+        if (shown?.changedAtMs !== undefined && (payChangedAt === undefined || shown.changedAtMs > payChangedAt)) {
+            payChangedAt = shown.changedAtMs;
+        }
+        // The sheet's own ask still out: the sheet painted in its place says
+        // "asking" and sends no second one; its answer is painted here
+        // (`sheetAskLanded`; CRITIC-CARRYOVER-10 item 5).
+        if (shown?.asking === true) {
+            payRateAsking = true;
+            payAskCarried = paySession;
+        }
+        // The rate this paint composes at (the view's own rule: never one
+        // read for another unit), against the rate the sheet showed.
+        const painting = rateForAnotherUnit() ? undefined : payRate?.rate;
+        if (painting !== (shown === undefined ? payPaintedRate : shown.rate)) {
+            payChangedAt = performance.now();
+        }
+        // Painted for this sheet whether or not a record move is on file:
+        // the grace is the figure's, and a hand-back that carries only a
+        // rate answer's stamp, or starts one here, put a figure on screen
+        // all the same (CRITIC-CARRYOVER-7 item 4).
+        if (payChangedAt !== undefined) {
+            payChangedFor = key;
+        }
+        paint();
+        const over = state.view.overlay;
+        const composes =
+            over.kind === 'pay' ? state.view.prices?.get(over.tokenId) !== undefined : selection.size > 0;
+        const needs =
+            over.kind === 'pay'
+                ? !quoteNeedsNoRate(over.tokenId)
+                : !selectionNeedsNoRate(selection, state.view.prices);
+        const unit = quoteUnitOnScreen();
+        if (!composes || !needs || (payRate !== undefined && payRateUnit === unit)) {
+            return;
+        }
+        const claimed = generation;
+        const session = ++paySession;
+        payRate = undefined;
+        payRateWhy = undefined;
+        payRateAsking = true;
+        paint();
+        void (async () => {
+            await readPayRate(PAY_RATE_TIMEOUT_MS, session, unit);
+            if (session !== paySession) {
+                return;
+            }
+            payRateAsking = false;
+            if (claimed !== generation || payOverlayKey(state.view.overlay) !== key) {
+                return;
+            }
+            payRateLanded();
+            if (sheetOutOfStep()) {
+                // Moved again while its own rate was asked for: a tail, no press.
+                onPayRecordMoved(tokenId, false);
+                return;
+            }
+            paint();
+        })();
+    };
+
+    /**
+     * A sheet's own ask landed (`onPayRate`). When that sheet had handed
+     * itself back while the ask was out (`payAskCarried`), the sheet on
+     * screen is this app's and was painted saying "asking": the flag comes
+     * off and the answer — `readPayRate` has written it — is painted the way
+     * the open's own tail paints one, a records move since the last paint
+     * handed back instead (`sheetOutOfStep`). A figure it puts on screen at
+     * another rate than the one painted is a change with its own grace. An
+     * ask a later one of this app's superseded owns nothing: that one's
+     * tail clears the flag (CRITIC-CARRYOVER-10 item 5).
+     */
+    const sheetAskLanded = (session: number): void => {
+        if (payAskCarried === undefined || payAskCarried !== session) {
+            return;
+        }
+        payAskCarried = undefined;
+        if (session !== paySession) {
+            return;
+        }
+        payRateAsking = false;
+        const over = state.view.overlay;
+        const key = payOverlayKey(over);
+        if (stopped || key === undefined) {
+            return;
+        }
+        payRateLanded();
+        if (sheetOutOfStep()) {
+            onPayRecordMoved(over.kind === 'pay' ? over.tokenId : undefined, false);
+            return;
+        }
+        if ((rateForAnotherUnit() ? undefined : payRate?.rate) !== payPaintedRate) {
+            payChangedAt = performance.now();
+            payChangedFor = key;
+        }
+        paint();
     };
 
     /**
@@ -2473,6 +2962,7 @@ export function boot(
                 ? undefined
                 : { rate: answer.rate, atMs: answer.atMs, check: answer.check };
         payRateWhy = answer.rate === undefined ? answer.why : undefined;
+        payRateUnit = answer.rate === undefined ? undefined : code;
         state = { ...state, view: { ...state.view, payRate, payRateWhy } };
         return answer;
     };
@@ -2645,10 +3135,21 @@ export function boot(
                         ) {
                             return;
                         }
+                        payRateLanded();
+                        if (sheetOutOfStep()) {
+                            onPayRecordMoved(tokenId, false);
+                            return;
+                        }
                         paint();
                     })();
                 }
             });
+            payRecordMovedFor = undefined;
+            payRecordMovedItems = [];
+            payChangedAt = undefined;
+            payChangedFor = undefined;
+            payOutcomeCarried = undefined;
+            payWalletWasOpenedFor = undefined;
             return {
                 ...next,
                 view: { ...next.view, overlay: { kind: 'pay', tokenId } },
@@ -2737,6 +3238,9 @@ export function boot(
         view.payHint !== undefined || view.fetch?.kind !== 'empty' || recordsKnown(view);
 
     const refresh = async (): Promise<void> => {
+        if (stopped) {
+            return;
+        }
         const claimed = ++generation;
         live?.close();
         live = undefined;
@@ -3449,13 +3953,15 @@ export function boot(
      * and over a full one it is merged per token (`overKept`, the critic's
      * eighth pass, item 3): refusing it whole, as this road did until
      * 2026-09-25, left a figure the walk had read past on a phone that has no
-     * heartbeat to correct it, and Pay composed it. An empty answer from a
-     * walk that finished is held
-     * back for a different reason and only where there is something to lose:
-     * `loadDescriptions` cannot see the difference between a seller who
-     * removed their words and a walk that found none of them, so a removed
-     * description survives until the next full load — the retry control and
-     * any reload both are one.
+     * heartbeat to correct it, and Pay composed it. An answer from a walk
+     * that finished and resolved NOTHING is held back for a different reason
+     * and only where there is something to lose: it cannot be told from a
+     * walk that found none of the seller's records, so what is on screen
+     * stands until the next full load — the retry control and any reload
+     * both are one. A walk that read a removal resolved that token
+     * (`decided`), even when the removal was the stall's last record and
+     * every map came back empty, and it is applied: the quote leaves the
+     * rail (the critic, 2026-09-25, item 1).
      */
     const applyDescriptions = (lookup: DescriptionLookup, keptRead?: NonNullable<typeof lastGoodRecords>): void => {
         // The shelves and the prices ride the same records, so the same guard
@@ -3464,14 +3970,33 @@ export function boot(
         // this rule — a stall whose seller published prices and no words had
         // nothing on either counted side, so our own failed walk wiped every
         // figure and the guard saw nothing to protect.
+        // …and nothing resolved at all: a walk that finished and read the
+        // bare tombstone of the stall's last quote names that token in
+        // `decided` with every map empty, and refusing it kept the removed
+        // quote on the rail, where Pay composed it (the critic, 2026-09-25,
+        // item 1). Only an answer that resolved nothing is the one this
+        // guard cannot tell from our own silence.
         const gotNothing =
             lookup.descriptions.size === 0 &&
             lookup.shelves.size === 0 &&
-            lookup.prices.size === 0;
+            lookup.prices.size === 0 &&
+            lookup.decided.size === 0;
+        // …and a rank is something too: a screen whose only record is the
+        // tombstone of the seller's last quote shows no map at all, but it
+        // holds that removal's rank and the older records below it — the
+        // ones its read ranked there, and the quote it replaced on screen
+        // (`mergeFailedRead`; CRITIC-CARRYOVER-6 item 3).
+        // Counted as nothing, a lagging replica's answer replaced the screen
+        // whole on a walk that finished, and was painted as the floor on
+        // one that threw: the removed quote came back at its old figure and
+        // Pay composed it (CRITIC-CARRYOVER-5 item 2). Counted, both roads
+        // merge per token over it, and the rank's older set keeps the
+        // removal (`mergeFailedRead`, `mergeFinishedRead`).
         const hadSomething =
             (state.view.descriptions?.size ?? 0) > 0 ||
             (state.view.shelves?.size ?? 0) > 0 ||
-            (state.view.prices?.size ?? 0) > 0;
+            (state.view.prices?.size ?? 0) > 0 ||
+            (state.view.descriptionRanks?.size ?? 0) > 0;
         /*
          * A walk that threw, merged per token over records it may not simply
          * replace (`overKept`): what it resolved wins, a removal included,
@@ -3583,30 +4108,79 @@ export function boot(
                 rememberGenesis(pubkeyHex, tokenId, decisionOf(attribution, 'paid'));
             }
         }
+        /*
+         * A walk that finished is applied per token over the records on
+         * screen (the critic, CARRYOVER-2 item 4): an answer below the rank
+         * the screen holds for a token is refused for that token — a lagging
+         * replica's older figure, or its old tombstone, used to take the
+         * seller's newer quote off the rail — and it removes only the tokens
+         * it decided: a token on screen it never met is a record this
+         * replica has not seen, and stays as the screen has it, whether the
+         * walk read to the end or stopped at our own page cap
+         * (`mergeFinishedRead`; the owner, CRITIC-CARRYOVER-3 item 3). Over
+         * a screen with nothing on it there is nothing to merge.
+         */
+        const merged = hadSomething
+            ? mergeFinishedRead(
+                  {
+                      descriptions: lookup.descriptions,
+                      shelves: lookup.shelves,
+                      prices: lookup.prices,
+                      quoteTimes: lookup.quoteTimes,
+                      ...(lookup.ranks === undefined ? {} : { ranks: lookup.ranks }),
+                  },
+                  lookup.decided,
+                  {
+                      ...(state.view.descriptions === undefined ? {} : { descriptions: state.view.descriptions }),
+                      ...(state.view.shelves === undefined ? {} : { shelves: state.view.shelves }),
+                      ...(state.view.prices === undefined ? {} : { prices: state.view.prices }),
+                      ...(state.view.quoteTimes === undefined ? {} : { quoteTimes: state.view.quoteTimes }),
+                      ...(state.view.descriptionRanks === undefined ? {} : { ranks: state.view.descriptionRanks }),
+                  },
+              )
+            : undefined;
+        const prices = merged?.prices ?? lookup.prices;
+        const stillKept = new Set(
+            [...(merged?.keptShown ?? [])].filter((tokenId) => state.view.recordsKept?.has(tokenId) === true),
+        );
         const nextFacts: StallView = {
             ...state.view,
-            descriptions: lookup.descriptions,
-            shelves: lookup.shelves,
-            prices: lookup.prices,
+            descriptions: merged?.descriptions ?? lookup.descriptions,
+            shelves: merged?.shelves ?? lookup.shelves,
+            prices,
             // The winning record's own clock, replaced with the maps it came
             // from: a time held over from an earlier walk would date this
-            // walk's record from a record it never saw.
-            quoteTimes: lookup.quoteTimes,
+            // walk's record from a record it never saw — save a token kept
+            // from the screen, whose clock is its own record's.
+            quoteTimes: merged?.quoteTimes ?? lookup.quoteTimes,
             // Both are about this page and neither is about the seller, and a
             // screen that reads them (the `?pay=` note) must read the walk it
             // actually got rather than the one the load made.
             descriptionsTruncated: lookup.truncated,
             descriptionsFailed: lookup.failed,
-            descriptionsDecided: lookup.decided,
-            descriptionRanks: lookup.ranks,
+            // A token kept from the screen is resolved as of the read that
+            // put it there — and so is every token the screen holds a rank
+            // for, a removal included, which no map shows (the critic,
+            // CRITIC-CARRYOVER-4 item 3; the thrown road's `overKept` keeps
+            // the screen's set the same way). Without it, a walk capped
+            // before the page holding a removal the screen had applied
+            // left that token undecided, absent and our gap: the prune kept
+            // the removed item chosen and Pay several put it back into the
+            // payment at the figure it had before.
+            descriptionsDecided:
+                merged === undefined
+                    ? lookup.decided
+                    : new Set([...lookup.decided, ...merged.keptShown, ...merged.ranks.keys()]),
+            descriptionRanks: merged?.ranks ?? lookup.ranks,
             // This walk's own answer replaces any records kept over an
-            // earlier one that threw.
-            recordsStale: undefined,
-            recordsKept: undefined,
+            // earlier one that threw — save one it did not reach and the
+            // screen still shows, which stays as old as it was.
+            recordsStale: stillKept.size > 0 ? true : undefined,
+            recordsKept: stillKept.size > 0 ? stillKept : undefined,
             genesis:
                 pubkeyHex === undefined
                     ? state.view.genesis
-                    : genesisFor(pubkeyHex, lookup.prices.keys()),
+                    : genesisFor(pubkeyHex, prices.keys()),
         };
         // The quotes are a card list too, and the shelves reorder the
         // listings, so a facts apply moves the carousel exactly as a book
@@ -4018,9 +4592,10 @@ export function boot(
         void refresh();
     };
 
-    window.addEventListener('popstate', () => {
+    const onPopState = (): void => {
         void refresh();
-    });
+    };
+    window.addEventListener('popstate', onPopState);
 
     /**
      * A backgrounded tab does not need a socket, and holding one is how a
@@ -4049,41 +4624,37 @@ export function boot(
      * listener on the ribbon would be lost with it. Only the ribbon's own
      * keyframe counts: the pulse and the card fade fire the same event.
      */
-    document.addEventListener(
-        'animationiteration',
-        (event) => {
-            if ((event as AnimationEvent).animationName === 'tk-run') {
-                onTickerWrap();
-            }
-        },
-        { capture: true },
-    );
+    const onAnimationIteration = (event: Event): void => {
+        if ((event as AnimationEvent).animationName === 'tk-run') {
+            onTickerWrap();
+        }
+    };
+    document.addEventListener('animationiteration', onAnimationIteration, { capture: true });
     /*
      * A reduce toggle mid-pass cancels the ribbon's animation, so no wrap
      * ever arrives to release the hold; the preference is re-read here and
      * the ticker repainted at once — still and paging, or moving again.
      */
-    motionQuery()?.addEventListener?.('change', (event) => {
+    const motion = motionQuery();
+    const onMotionChange = (event: MediaQueryListEvent): void => {
         tickerStill = event.matches;
         if (state.view.broadcast?.preset === 'ticker') {
             tickerRunning = false;
             paint();
         }
-    });
+    };
+    motion?.addEventListener?.('change', onMotionChange);
 
+    const onWindowTouch = (): void => {
+        if (wallParams() !== undefined) {
+            windowTouchedAt = Date.now();
+        }
+    };
     for (const kind of WINDOW_TOUCHES) {
-        document.addEventListener(
-            kind,
-            () => {
-                if (wallParams() !== undefined) {
-                    windowTouchedAt = Date.now();
-                }
-            },
-            { passive: true, capture: true },
-        );
+        document.addEventListener(kind, onWindowTouch, { passive: true, capture: true });
     }
 
-    document.addEventListener('visibilitychange', () => {
+    const onVisibilityChange = (): void => {
         if (document.visibilityState === 'hidden') {
             live?.pause();
         } else {
@@ -4094,7 +4665,8 @@ export function boot(
         // This is the only road for a sleep: the timer does not run while
         // hidden, and a browser throttles it there anyway.
         syncGlance();
-    });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     // Cold start only. Someone who typed the bare domain gets the stall they
     // chose; `replaceState` rather than `pushState` so Back leaves the site
     // instead of bouncing between the door and the stall. In-app navigation to
@@ -4119,6 +4691,30 @@ export function boot(
         }
     }
     void refresh();
+
+    return (): void => {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
+        // A load, a walk or a tail still in flight belongs to an app that
+        // is gone: the generation it claimed is no longer current.
+        generation += 1;
+        live?.close();
+        live = undefined;
+        clearBroadcastTimers();
+        if (glanceTimer !== undefined) {
+            clearTimeout(glanceTimer);
+            glanceTimer = undefined;
+        }
+        window.removeEventListener('popstate', onPopState);
+        document.removeEventListener('animationiteration', onAnimationIteration, { capture: true });
+        motion?.removeEventListener?.('change', onMotionChange);
+        for (const kind of WINDOW_TOUCHES) {
+            document.removeEventListener(kind, onWindowTouch, { capture: true });
+        }
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
 }
 
 async function loadCurrent(): Promise<AppState> {

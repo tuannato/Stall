@@ -2549,11 +2549,16 @@ and two are this sampler's mistakes: Modern's section and shelf heads
 (2.56:1) read the heading's own 2px accent underline, inside the box and
 never reached by the glyphs, and Rural's strip (1.1:1) reads the bunting
 row its box also holds. Rural's Wearing links and back control (2.53:1,
-sun-faded worn) are real and open: they sit behind a rain-scoped selector
-(`.stall.att-rainfall:not(.deck-stall) …`), so no pass reads them on Rural
-today, and they are fixed in step 5b by the owner's (c) — Sun-faded's
-accent and muted darkened (`VISIBLE-BATCH-PLAN`, 2026-09-24) — with the
-targets unscoped there (round 9 note, the critic's eighth pass, item 11). Four geometry-only
+Sun-faded worn) were real. **Their ink half is fixed by 78f057d**, the
+owner's (c): Sun-faded's accent and muted went a step darker (accent
+#8b5334, muted #6c5f4d), and two pure tests hold every ink Rural paints at
+3:1 over the confetti and the sunburst
+(`every-confetti-scrap-clears-three-to-one-under-every-ground-ink`,
+`every-sunburst-ray-clears-three-to-one-under-every-ground-ink`). **What
+remains is step 5b**: taking the rain scoping off these targets. They still
+sit behind a rain-scoped selector (`.stall.att-rainfall:not(.deck-stall) …`),
+so no pass reads them on Rural today (round 9 note, the critic's eighth
+pass, item 11; the critic's final merge, item 7). Four geometry-only
 screens are sampled on Neo worn alone (`RAIN_JOBS`: `quotes-failed`,
 `nothing-quoted`, `quotes-truncated`, `first-stall`; `sparse-pasted` since
 round 5), at the phone and the desk: 449 jobs then, 451 now.
@@ -3036,7 +3041,8 @@ style is live, so the shorter list cycled the rain tiles' sizes onto Neo's
 backdrop, and its 480 px glow repeated down the page. That lifted and
 banded the ground in every "at rest" and "worst" frame there. The frames
 with drops crossing were correct. `flattenRain` reads every list first.
-The pictures in `15-outline-b/` come from the fixed script.
+The pictures in `15-outline-b/` come from the fixed script, and the owner
+re-confirmed (b) after them (2026-09-25, "Giữ (b)").
 
 **The static side** (`decor-gate.test.ts`, the outline tests):
 

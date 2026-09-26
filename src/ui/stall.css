@@ -629,8 +629,10 @@ body {
  * (`an-outline-is-the-only-mark-under-text-on-a-decoration`).
  *
  * **The outline is in the colour of the ground it stands on** (option (b),
- * the owner, 2026-09-25, after the pictures in
- * `visible-batch-shots/13-outline-options/`), so at rest, with no drop
+ * the owner's choice, 2026-09-25, re-confirmed that morning after the
+ * corrected pictures in `visible-batch-shots/15-outline-b/` — the at-rest
+ * frames of `13-outline-options/`, where it was first chosen, came from a
+ * script with a bug), so at rest, with no drop
  * behind it, it cannot be told from that ground: the two sets are written in
  * `--rain-outline-ground`, which is `var(--s-bg)` on the stall's plain
  * ground and, on each tinted surface a line stands on, that surface's own
@@ -687,6 +689,19 @@ body {
 /* The notice invite's wash: Neo's second accent at 4% (`.t-neo .notice-invite`). */
 .stall.att-rainfall:not(.deck-stall) .notice-invite {
     --rain-outline-ground: color-mix(in srgb, var(--s-accent-2) 4%, var(--s-bg));
+}
+
+/*
+ * And under a pointer, where Neo deepens that wash to 9%
+ * (`.t-neo .notice-invite:hover`): the sets declared on the invite read this
+ * colour in that state, so the outline stays the wash it stands on. The
+ * wash's own 0.2s transition runs past it once each way; the outline is
+ * the new colour at once. Every state that changes a listed surface's
+ * background carries its own colour
+ * (`every-state-of-a-listed-surface-has-its-outline-colour`).
+ */
+.stall.att-rainfall:not(.deck-stall) .notice-invite:hover {
+    --rain-outline-ground: color-mix(in srgb, var(--s-accent-2) 9%, var(--s-bg));
 }
 
 /*

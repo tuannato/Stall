@@ -438,7 +438,7 @@ export function compareManifestRank(a: ManifestRank, b: ManifestRank): number {
 }
 
 /** chronik's `timeFirstSeen: 0` means unknown, and unknown does not rank. */
-function knownSeen(seen: number | undefined): number | undefined {
+export function knownSeen(seen: number | undefined): number | undefined {
     return typeof seen === 'number' && Number.isFinite(seen) && seen > 0 ? seen : undefined;
 }
 

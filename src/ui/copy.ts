@@ -1778,13 +1778,109 @@ export const PAY_OTHER_WALLET = 'Pay with another wallet app';
  * The press-time valve. A rate older than `PAY_RATE_MAX_AGE_MS` is refetched
  * on the press, and the press never opens a wallet afterwards \u2014 so each of
  * these ends by asking for the press again, and the figure it refers to has
- * already been repainted above it.
+ * already been repainted above it. Once a press has opened a wallet, the
+ * line is said without the ask (`PAY_VALVE_TEXT_AFTER_OPEN`).
  */
 export const PAY_RATE_MOVED = 'Price updated \u2014 review and pay again';
 export const PAY_RATE_REFRESHED = 'Rate refreshed \u2014 press Pay again';
 export const PAY_RATE_UNAVAILABLE = 'No fresh price \u2014 press again';
 /** The press-time refetch answered, and the answer was refused — not the same fact as no answer. */
 export const PAY_RATE_IMPLAUSIBLE = 'No usable price \u2014 press again';
+/**
+ * The same two facts without the ask: wherever no Pay control is on the
+ * sheet (the window's copy call, CRITIC-CARRYOVER-8 item 4) — "again"
+ * names the Pay press, and with no figure there is none to repeat; the
+ * refresh control that stays (CRITIC-CARRYOVER-7 item 3) names itself —
+ * and once a press has opened a wallet (`PAY_VALVE_TEXT_AFTER_OPEN`). The
+ * first clause alone, the rule the owner set for a line nobody should act
+ * on by pressing (`PAY_QUOTE_CHANGED_UNPRESSED`); the line under the card
+ * says why there is no figure.
+ */
+export const PAY_RATE_UNAVAILABLE_NO_PAY = 'No fresh price';
+export const PAY_RATE_IMPLAUSIBLE_NO_PAY = 'No usable price';
+/**
+ * The two lines that ask for the Pay press again, once a press on the sheet
+ * has opened a wallet (CRITIC-CARRYOVER-7 item 2): the first clause alone,
+ * the record line's rule (`PAY_QUOTE_CHANGED_UNPRESSED`; the owner's
+ * CRITIC-CARRYOVER-4 item 4) — after a wallet opened there is no "again"
+ * to ask for, and a buyer asked for one may pay twice. The same first
+ * clauses wherever no Pay control is on the sheet (`PAY_VALVE_TEXT_NO_PAY`;
+ * CRITIC-CARRYOVER-9 item 3): an answer that takes the figure under the
+ * dust floor leaves no Pay to press again.
+ */
+export const PAY_RATE_MOVED_OPENED = 'Price updated';
+export const PAY_RATE_REFRESHED_OPENED = 'Rate refreshed';
+/**
+ * The seller's record moved while the sheet was open — what the buyer pays
+ * changed: the figure, the unit or the surcharge — and the sheet was
+ * recomposed from the record as it stands: a re-read landing under it, in
+ * place, or a press that found it moved, which opened nothing. The valve's
+ * shape: the figure above is already the new one, the control restates it,
+ * and every press inside the grace of the change opens nothing
+ * (`PAY_RECOMPOSE_GRACE_MS`). The owner's wording (2026-09-25), said only
+ * after a PAY press was absorbed, while a Pay control stands, and until a
+ * press opens a wallet — otherwise its first clause
+ * (`PAY_QUOTE_CHANGED_UNPRESSED`; CRITIC-CARRYOVER-4 item 4). A change to
+ * the tolerance or the words is not a move: the sheet takes it in place.
+ */
+export const PAY_QUOTE_CHANGED =
+    'This quote changed while this sheet was open \u2014 check the figure and press Pay again';
+/**
+ * The same fact after a paint nobody pressed for — an ask's tail (the open,
+ * a `?pay=` landing, a moved unit's own rate) found the records moved and
+ * painted the sheet again from them — so the next press is the one that
+ * opens, and "press Pay again" would ask for a second press after none.
+ * The owner's sentence is for after a press; this is its first clause, the
+ * window's wording (2026-09-25).
+ */
+export const PAY_QUOTE_CHANGED_UNPRESSED = 'This quote changed while this sheet was open \u2014 check the figure';
+/**
+ * The same, on "Pay several", naming the chosen items whose records moved
+ * (`itemNames`): the owner's per-item form (2026-09-25).
+ */
+export const payItemsChanged = (names: string): string =>
+    `${names} changed while this sheet was open \u2014 check the total and press Pay again`;
+/** The per-item form after a paint nobody pressed for: its first clause (`PAY_QUOTE_CHANGED_UNPRESSED`). */
+export const payItemsChangedUnpressed = (names: string): string =>
+    `${names} changed while this sheet was open \u2014 check the total`;
+/**
+ * The press found the item's record gone — the seller took it off — so there
+ * is nothing left to compose, and the press opened nothing. The owner's
+ * wording (2026-09-25).
+ */
+export const PAY_QUOTE_GONE = 'This quote is no longer on the stall \u2014 no wallet was opened';
+/**
+ * The press found the item's record still there, in a form this page does
+ * not paint as a quote — a unit it does not write, a genesis it could not
+ * read, a token it withholds — so "no longer on the stall" would be our gap
+ * said as the seller's absence (the critic, 2026-09-25, item 3). The owner's
+ * wording (2026-09-25).
+ */
+export const PAY_QUOTE_UNSHOWN = 'This page can no longer show this quote \u2014 no wallet was opened';
+/**
+ * "Pay several" when every chosen item's record moved away — removed, or in
+ * another unit — so the choice is really empty (`selection.size === 0`,
+ * never a choice whose items only failed to read): nothing is left to
+ * compose, and nothing opened. The owner's wording (2026-09-25).
+ */
+export const PAY_SEVERAL_GONE =
+    'None of the items you chose is still quoted as it was \u2014 no wallet was opened';
+/**
+ * The three sentences above, once a press on the sheet has opened a wallet
+ * (CRITIC-CARRYOVER-8 item 2): their first clause alone, on the sheet in
+ * place and on the one the app paints after a hand-back. "No wallet was
+ * opened" is then a false claim about this page, made to a buyer who may
+ * just have paid — the seller seeing the payment and taking a one-off item
+ * off the rail is the ordinary way this state is reached.
+ */
+export const PAY_QUOTE_GONE_OPENED = 'This quote is no longer on the stall';
+export const PAY_QUOTE_UNSHOWN_OPENED = 'This page can no longer show this quote';
+export const PAY_SEVERAL_GONE_OPENED = 'None of the items you chose is still quoted as it was';
+/** Item names in a sentence: "A", "A and B", "A, B and C". */
+export const itemNames = (names: readonly string[]): string =>
+    names.length <= 1
+        ? (names[0] ?? '')
+        : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
 /**
  * The second feed disagrees with the first past `RATE_DISAGREE_PCT`. Said,
  * never refused: the figure stands (it is the first feed's), the control
@@ -1810,6 +1906,34 @@ export const PAY_VALVE_TEXT: Readonly<Record<PayRateOutcome, string>> = {
     moved: PAY_RATE_MOVED,
     refreshed: PAY_RATE_REFRESHED,
     disagree: PAY_RATE_DISAGREE,
+};
+/**
+ * The valve's line when no Pay control is on the sheet
+ * (`PAY_RATE_UNAVAILABLE_NO_PAY`): every line that asks for the Pay press,
+ * without the ask. The two outcomes that leave no figure, and — since an
+ * answer can leave a figure under the dust floor, which composes no link
+ * and so no Pay (CRITIC-CARRYOVER-9 item 3) — the two that moved or
+ * refreshed it: "review and pay again" and "press Pay again" named a press
+ * the buyer could not make. The disagreement line asks for none and keeps
+ * its words.
+ */
+export const PAY_VALVE_TEXT_NO_PAY: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    unavailable: PAY_RATE_UNAVAILABLE_NO_PAY,
+    implausible: PAY_RATE_IMPLAUSIBLE_NO_PAY,
+    moved: PAY_RATE_MOVED_OPENED,
+    refreshed: PAY_RATE_REFRESHED_OPENED,
+};
+/**
+ * The valve's line once a press on the sheet has opened a wallet, until a
+ * Pay press is absorbed again (`PAY_RATE_MOVED_OPENED`): every line that
+ * asks for a press, without the ask. The disagreement line asks for none
+ * and keeps its words.
+ */
+export const PAY_VALVE_TEXT_AFTER_OPEN: Readonly<Partial<Record<PayRateOutcome, string>>> = {
+    moved: PAY_RATE_MOVED_OPENED,
+    refreshed: PAY_RATE_REFRESHED_OPENED,
+    unavailable: PAY_RATE_UNAVAILABLE_NO_PAY,
+    implausible: PAY_RATE_IMPLAUSIBLE_NO_PAY,
 };
 export const PAY_QR_FOLD = 'Scan with a phone wallet';
 export const PAY_QR_ALT = 'QR code of the payment';
@@ -1969,6 +2093,36 @@ export const selectionApart = (unit: string): string =>
     `Quoted in ${unit} \u2014 paid on its own`;
 export const SELECTION_DROPPED =
     'Something you chose is no longer quoted as it was and was taken out.';
+/**
+ * The same, naming the items a re-read took out (`itemNames`), on the phone
+ * strip and the "Pay several" sheet: the critic, 2026-09-25, item 4 — a
+ * buyer whose choice shrank is told which item left. The owner's wording
+ * (2026-09-25), and its plural. The wall keeps `SELECTION_DROPPED`.
+ */
+export const selectionDroppedItems = (names: string, n: number): string =>
+    n === 1
+        ? `${names} changed or left the stall, so it was taken out of your list`
+        : `${names} changed or left the stall, so they were taken out of your list`;
+/**
+ * The same on "Pay several" when taking the items out is the whole of what a
+ * re-read under the open sheet did to its total — no chosen item that stayed
+ * moved, so no other line asks the buyer to look (the owner, 2026-09-25,
+ * CRITIC-CARRYOVER-3 item 2; the window's words). In place, no press was
+ * made: "check the total".
+ */
+export const selectionDroppedCheck = (names: string, n: number): string =>
+    `${selectionDroppedItems(names, n)} \u2014 check the total`;
+/**
+ * The same after a Pay press found it within the grace and opened nothing:
+ * the pressed form, in the shape of the owner's `payItemsChanged`. The
+ * owner's approved wording (2026-09-25, CRITIC-CARRYOVER-4 item 4), on
+ * three conditions: only where the sheet has a Pay control (never over a
+ * remainder under the dust floor), only after a PAY press was absorbed
+ * (never after the refresh control), and only until a press opens a wallet
+ * — then the line is `selectionDroppedCheck` again.
+ */
+export const selectionDroppedCheckPressed = (names: string, n: number): string =>
+    `${selectionDroppedItems(names, n)} \u2014 check the total and press Pay again`;
 /**
  * A chosen item this page's own read did not reach — a walk that threw, or a
  * genesis that never arrived. In place of the strip's total and Pay: our

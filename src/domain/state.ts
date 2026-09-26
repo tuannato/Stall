@@ -2,7 +2,7 @@ import type { RateCheck } from './fiat';
 import type { ShippedAttachment } from './attachments';
 import type { TokenPrice } from './description';
 import type { GenesisAttribution } from './genesis';
-import type { ManifestRank } from './manifest';
+import type { RecordRank } from './records';
 import type { PaymentMemo } from './payment';
 import type { DecodedTheme } from './theme';
 
@@ -751,15 +751,17 @@ export type StallView = WindowState & {
      * changes. `selectionEntered` and `selectionBumped` are one-shots: the
      * paint right after the press is the only one that animates the
      * entrance or the count's bump — an animation on mount would replay on a
-     * stranger's dust. `selectionDropped` says once that a re-read took a
-     * chosen quote off the rail (D8).
+     * stranger's dust. `selectionDropped` names, in the order they were
+     * chosen, the quotes a re-read took out of the choice (D8) — off the
+     * rail, or into another unit than the one it was chosen in — until the
+     * selection next changes; never empty when present.
      */
     selection?: ReadonlyMap<string, bigint>;
     selectionOpen?: boolean;
     selectionAsk?: SelectionAsk;
     selectionEntered?: true;
     selectionBumped?: string;
-    selectionDropped?: true;
+    selectionDropped?: readonly string[];
     /**
      * Quoted tokens whose genesis the load is still reading, named by the
      * loader. The pay sheet asks for its own answer only for one of these —
@@ -805,9 +807,80 @@ export type StallView = WindowState & {
     /**
      * What the press-time valve found, so a fixture can stage what only a
      * press produces: the rate row's line and a Pay control that restates
-     * the figure it will open. The sheet seeds its own state from this.
+     * the figure it will open. The sheet seeds its own state from this. The
+     * app writes it only when a sheet handed itself back with the valve's
+     * line standing (`PayShown.outcome`; CRITIC-CARRYOVER-6 item 4), so the
+     * paint that replaces the sheet says the line the buyer was reading.
      */
     payRateOutcome?: PayRateOutcome;
+    /**
+     * A press on the open sheet opened a wallet after the valve's line
+     * (`payRateOutcome`) was set, and no Pay press was absorbed since: the
+     * line is said without its ask (`PAY_VALVE_TEXT_AFTER_OPEN`;
+     * CRITIC-CARRYOVER-7 item 2). Carried with the line across a hand-back
+     * (`PayShown.opened`, which only "Pay several" sends). Present only
+     * beside `payRateOutcome`.
+     */
+    payWalletOpened?: true;
+    /**
+     * A Pay press on the open sheet has opened a wallet since the sheet
+     * opened — whatever it absorbed since, unlike `payWalletOpened` — so a
+     * sheet whose record left says so without "no wallet was opened"
+     * (`PAY_QUOTE_GONE_OPENED`; CRITIC-CARRYOVER-8 item 2). Set by the open
+     * (`onPayWalletOpened`) and kept for that sheet across every hand-back.
+     * Dropped by every road that opens a pay sheet (`onOpenPay`,
+     * `onOpenPaySeveral`, the `?pay=` road) and by the sheet's own close
+     * (`onClosePublish`); a `refresh()` or `popstate` that takes the sheet
+     * away leaves it, harmless, since the app paints it only for the
+     * overlay it names and every road to a pay sheet drops it first
+     * (CRITIC-CARRYOVER-9 item 6, CRITIC-CARRYOVER-10 item 9).
+     */
+    payWalletWasOpened?: true;
+    /**
+     * The figure on the open pay sheet changed under the buyer while it was
+     * open — a re-read recomposed it in place (a return to the record it
+     * was opened on included), a press or an ask's tail found the seller's
+     * records moved since the sheet was painted (`movedRecords`: what the
+     * buyer pays changed) — and the sheet is painted from the records as
+     * they stand: every token whose record changed, so the valve's line can
+     * name the chosen ones on "Pay several"; the control restates the
+     * figure. Never empty when present. Closure state in `boot`, written
+     * onto the view at paint time and cleared when a pay sheet opens or
+     * closes.
+     */
+    payRecordMoved?: readonly string[];
+    /**
+     * The latest word on that change was not an absorbed PAY press: the
+     * sheet changed in place, an ask's tail or the refresh control found
+     * the records moved (`sheetOutOfStep`), or a press has since opened a
+     * wallet. The line then asks for no second press
+     * (`PAY_QUOTE_CHANGED_UNPRESSED`, `selectionDroppedCheck`): the owner's
+     * whole sentence is for after a Pay press that opened nothing
+     * (CRITIC-CARRYOVER-4 item 4). Present only beside `payRecordMoved`.
+     */
+    payRecordMovedUnpressed?: true;
+    /**
+     * When that change was last painted, on the page's monotonic clock
+     * (`performance.now()`): carried across the repaint an absorbed press
+     * asks for, so every Pay press inside `PAY_RECOMPOSE_GRACE_MS` of the
+     * change opens nothing — the second tap of a double tap included
+     * (CRITIC-CARRYOVER-4 items 1 and 6). Closure state in `boot`, painted
+     * for its sheet whether or not a record move is on file: a hand-back
+     * that carried only a rate answer's stamp, or the app's own stamp for a
+     * rate it paints, is a figure put on screen like a move
+     * (CRITIC-CARRYOVER-7 item 4). Alone it holds presses and says no record
+     * changed.
+     */
+    payChangedAt?: number;
+    /**
+     * When the open pay sheet was first painted — the paint that mounted
+     * it, whichever road opened it — on the page's monotonic clock: every
+     * Pay press within `PAY_OPEN_GUARD_MS` of it is the second tap of the
+     * double tap that opened the sheet, and is ignored silently (the owner,
+     * 2026-09-25, CRITIC-CARRYOVER-6 item 2). Closure state in `boot`, kept
+     * across every repaint of the same sheet.
+     */
+    payOpenedAt?: number;
     /**
      * The item a `?pay=` link named, as the parameter was written — a prefix
      * of a token id, resolved against this stall's own records and never
@@ -934,13 +1007,18 @@ export type StallView = WindowState & {
     descriptionsDecided?: ReadonlySet<string>;
     /**
      * tokenId → the rank of the record each decided token was taken from
-     * (`DescriptionLookup.ranks`), a removal included. Carried so the next
-     * walk that throws can be merged over these records per token by rank
-     * (`mergeFailedRead`): a walk that stopped before the page holding a
-     * newer edit mined a block early decided that token at an older record.
-     * Absent on a view no walk built.
+     * (`DescriptionLookup.ranks`), a removal included, with the records the
+     * read that crowned it ranked below it (`RecordRank.older`) and, for a
+     * winner read finalized and unmined, the height its page showed
+     * (`RecordRank.seenHeight`). Carried so
+     * the next walk — one that throws or one that finishes — can be merged
+     * over these records per token by rank (`mergeFailedRead`): a walk that
+     * stopped before the page holding a newer edit mined a block early
+     * decided that token at an older record, and a lagging replica answers
+     * a record this read already ranked below the screen's. Absent on a
+     * view no walk built.
      */
-    descriptionRanks?: ReadonlyMap<string, ManifestRank>;
+    descriptionRanks?: ReadonlyMap<string, RecordRank>;
     /**
      * Some of the records on the view are the last good read, kept because
      * this read's own walk threw before it reached them (a wall re-reading
