@@ -57,7 +57,8 @@ def rename(src: Path, dst: Path, style: str) -> None:
             name.setName(values[record.nameID], record.nameID, record.platformID,
                          record.platEncID, record.langID)
     for record in name.names:
-        if record.nameID in (1, 3, 4, 6, 16, 17) and 'Lora' in record.toUnicode():
+        # Every record but the copyright notice, which condition 2 keeps.
+        if record.nameID != 0 and 'lora' in record.toUnicode().lower():
             raise SystemExit(f'{src.name}: name ID {record.nameID} still says Lora')
     font.flavor = 'woff2'
     font.save(dst)

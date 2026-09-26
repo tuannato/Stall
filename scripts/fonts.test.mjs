@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
+import { SERVED_SHEETS } from './sheet-roles.mjs';
 
 /**
  * `stall-serif-carries-no-reserved-name`: Rural's serif is Lora, whose OFL
@@ -89,8 +90,6 @@ function nameRecords(file) {
     return out;
 }
 
-const PRIMARY = [1, 3, 4, 6, 16, 17];
-
 describe('stall-serif-carries-no-reserved-name', () => {
     const serif = readdirSync(FONTS).filter((f) => f.startsWith('stall-serif-') && f.endsWith('.woff2'));
 
@@ -110,9 +109,10 @@ describe('stall-serif-carries-no-reserved-name', () => {
     it('presents "Stall Serif" and keeps the Lora copyright notice', () => {
         for (const file of serif) {
             const records = nameRecords(join(FONTS, file));
-            const primary = records.filter((r) => PRIMARY.includes(r.id));
-            assert.ok(primary.length > 0, `${file}: no primary name`);
-            for (const r of primary) {
+            // Every record but the copyright notice (ID 0), which must keep
+            // it: the primary names, ID 25's variations prefix and the
+            // fvar/STAT instance names alike.
+            for (const r of records.filter((rec) => rec.id !== 0)) {
                 assert.ok(!/lora/i.test(r.text), `${file}: name ID ${r.id} says "${r.text}"`);
             }
             assert.ok(
@@ -127,8 +127,11 @@ describe('stall-serif-carries-no-reserved-name', () => {
     });
 
     it('names no family "Lora" in any served stylesheet or font stack', () => {
-        const css = readFileSync(join(ROOT, 'src', 'ui', 'stall.css'), 'utf8');
-        assert.doesNotMatch(css, /font-family:\s*['"]?Lora/);
+        for (const { path } of SERVED_SHEETS) {
+            const css = readFileSync(join(ROOT, path), 'utf8');
+            assert.doesNotMatch(css, /font-family:[^;]*\bLora\b/i, `${path} names Lora as a family`);
+            assert.doesNotMatch(css, /\bfont:[^;]*\bLora\b/i, `${path} names Lora in a font shorthand`);
+        }
         const theme = readFileSync(join(ROOT, 'src', 'domain', 'theme.ts'), 'utf8');
         const stacks = theme.slice(theme.indexOf('export const FONT_STACKS'), theme.indexOf('] as const;'));
         assert.doesNotMatch(stacks, /Lora/);
