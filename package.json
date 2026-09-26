@@ -13,7 +13,7 @@
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
     "test:layout": "node scripts/layout-check.mjs",
-    "test": "vitest run && node --experimental-strip-types --test worker-icons/src/index.test.ts scripts/pay-screens.test.mjs scripts/notices.test.mjs scripts/workshop-lint.test.mjs scripts/look-lint.test.mjs scripts/sheet-roles.test.mjs scripts/workshop-build-check.test.mjs scripts/looks-diff-lib.test.mjs scripts/probe-coverage.test.mjs scripts/contrast-dump.test.mjs scripts/browser.test.mjs",
+    "test": "vitest run && node --experimental-strip-types --test worker-icons/src/index.test.ts scripts/pay-screens.test.mjs scripts/notices.test.mjs scripts/workshop-lint.test.mjs scripts/look-lint.test.mjs scripts/sheet-roles.test.mjs scripts/workshop-build-check.test.mjs scripts/looks-diff-lib.test.mjs scripts/probe-coverage.test.mjs scripts/contrast-dump.test.mjs scripts/browser.test.mjs scripts/fonts.test.mjs",
     "workshop": "node scripts/workshop.mjs serve",
     "workshop:start": "node scripts/workshop.mjs start",
     "workshop:shots": "node scripts/workshop.mjs shots",

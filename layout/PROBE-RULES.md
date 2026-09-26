@@ -3097,3 +3097,29 @@ The test's own plants cover these as well:
   owns, or that carries a literal the paint lacks or a token carries;
 - a surface colour written into the shadow;
 - a set in two colours.
+
+## Every look's face is shipped (2026-09-26)
+
+The probe had only ever measured Rural and Neo in whatever the machine running
+it carried: `FONT_STACKS` named Iowan Old Style and SF Mono first, which a Mac
+has and the Linux box did not. Moved to a Mac, the run went red on 448 checks
+that main passed on Linux — the same 448 on main. Stall Serif (Lora, renamed) and JetBrains Mono are
+self-hosted now, so the pass measures one font on every OS.
+
+What the faces found, and what each fix is:
+
+- **Rural's wall figure left its tag's clip** (`text escapes its clip`, 2–11px
+  at 1280, 1920 and the portrait wall). The content area is taller than the
+  1.05 line by more than the 8px padding. The polygon reaches 20px past the
+  box above and below (the overhang is ~10px at 124px). `parsePolygon` now reads a signed `%` or `px` vertex;
+  before, the extended polygon read as `a clip-path this check cannot read`
+  and failed every wall screen on Rural. Three taller tags were measured and
+  refused: `line-height: normal` (card +27px, the code 7px past the 1080
+  edge), 1.2 in 8px (+17px, the card's shadow under "Showing listings" at
+  2.99:1), and no padding (a corner of the figure left the clip as the tag
+  sways: `asked amount is covered`).
+- **The tablet wall's tag spilled its card** (`text-spills`, 12px at
+  768x1024): figure 10cqw and words 20px in the short-portrait block.
+- **Neo's worn wall status line read 2.61:1 in the ring**: the text ink.
+- **Rural's studio doors**: the oval's curve crossed the lede (2.96:1); the
+  radius is capped at 22px.

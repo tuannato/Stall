@@ -70,6 +70,24 @@ export const FONTS = [
         },
         licence: 'src/ui/fonts/LICENSE-OFL.txt',
     },
+    {
+        name: 'Stall Serif (Lora, renamed as its Reserved Font Name requires)',
+        files: {
+            'src/ui/fonts/stall-serif-latin.woff2': 'Latin roman',
+            'src/ui/fonts/stall-serif-latin-italic.woff2': 'Latin italic',
+            'src/ui/fonts/stall-serif-vietnamese.woff2': 'Vietnamese roman',
+            'src/ui/fonts/stall-serif-vietnamese-italic.woff2': 'Vietnamese italic',
+        },
+        licence: 'src/ui/fonts/LICENSE-OFL-stall-serif.txt',
+    },
+    {
+        name: 'JetBrains Mono',
+        files: {
+            'src/ui/fonts/jetbrains-mono-latin.woff2': 'Latin',
+            'src/ui/fonts/jetbrains-mono-vietnamese.woff2': 'Vietnamese',
+        },
+        licence: 'src/ui/fonts/LICENSE-OFL-jetbrains-mono.txt',
+    },
 ];
 
 const FONT_FILE = /\.(woff2?|ttf|otf|eot)$/i;
