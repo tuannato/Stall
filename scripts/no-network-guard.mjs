@@ -25,9 +25,10 @@
  * - `dgram` (UDP): `send` and `connect` to a loopback literal, or to
  *   `localhost`, which is sent to the socket family's own loopback literal;
  *   every other address is refused. A multicast join (`addMembership`,
- *   `addSourceSpecificMembership`) sends a membership report on the
- *   interface it joins on, whatever the group, so it goes through only on a
- *   loopback interface named outright;
+ *   `addSourceSpecificMembership`) sends a membership report on an
+ *   interface, whatever the group, and an address does not reliably name
+ *   the interface it lands on (an IPv6 join "on ::1" does not), so every
+ *   join is refused;
  * - worker threads and Node child processes: this file is injected into
  *   each (`execArgv`, `NODE_OPTIONS`), with where to report and which test
  *   started it, and every spawn road re-injects it however its `env` was
@@ -328,26 +329,24 @@ function installDgram(s) {
             ? connect.call(this, port, target.address, callback)
             : connect.call(this, port, address, callback);
     };
-    // A join sends a membership report (IGMP, MLD) on the interface it joins
-    // on, whatever the group: through only on a loopback interface named
-    // outright, and never under `strict` (CRITIC-CARRYOVER-9 item 4). With no
-    // interface the system picks one, and that is the network.
+    // A join sends a membership report (IGMP, MLD) on an interface, whatever
+    // the group, and which interface an address names is not the guard's to
+    // know: an IPv6 join "on ::1" names an address, not the loopback
+    // interface, and measured in a network namespace it landed on the
+    // non-loopback device (CRITIC-CARRYOVER-10 item 7), while `::1%lo`, which
+    // does name it, read as no loopback literal. No test needs a join, so
+    // every one is refused, on any interface and under any mode.
     for (const [name, groupAt] of [
         ['addMembership', 0],
         ['addSourceSpecificMembership', 1],
     ]) {
-        const join = proto[name];
-        if (typeof join !== 'function') {
+        if (typeof proto[name] !== 'function') {
             continue;
         }
         proto[name] = function guardedJoin(...args) {
             const group = String(args[groupAt]);
             const on = args[groupAt + 1];
-            const loopback = typeof on === 'string' && net.isIP(on) !== 0 && isLoopbackAddress(on);
-            if (s.strict || !loopback) {
-                throw refuse('udp-join', typeof on === 'string' ? `${group} on ${on}` : group);
-            }
-            return join.apply(this, args);
+            throw refuse('udp-join', typeof on === 'string' ? `${group} on ${on}` : group);
         };
     }
 }

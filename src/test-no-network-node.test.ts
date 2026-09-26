@@ -184,11 +184,14 @@ describe('no-test-reaches-the-network', () => {
         expect(drain()).toEqual(['udp 0.0.0.0:9', 'udp 127.0.0.1:9', 'udp localhost:9', 'udp 0.0.0.0:9']);
     });
 
-    it('refuses a multicast join but on a loopback interface named outright, and that too under strict', () => {
+    it('refuses a multicast join, with no interface, on 0.0.0.0, and under strict on the loopback one', () => {
         // CRITIC-CARRYOVER-9 item 4: a join sends a membership report on
-        // the interface it joins on. Strict first, on the loopback
-        // interface: were the road open, that join is the one that stays on
-        // this machine, and the case stops there.
+        // an interface. Strict first, on the loopback interface: were the
+        // road open, that join is the one that stays on this machine, and
+        // the case stops there. Every join is refused under any mode since
+        // CRITIC-CARRYOVER-10 item 7; the joins on a loopback literal
+        // without strict are `refuses-an-ipv6-join-that-names-no-interface`'s,
+        // with the OS call stubbed beneath them.
         const socket = dgram.createSocket('udp4');
         try {
             strictly(() => {
@@ -306,6 +309,83 @@ describe('no-test-reaches-the-network', () => {
             "a request reached the network after this file's last hook: socket 0.0.0.0:9 (started by \"no-test-reaches-the-network > after the file’s last hook, a request fails the file through vitest’s own handler\", after it returned)",
         );
         drain();
+    });
+});
+
+describe('refuses-an-ipv6-join-that-names-no-interface', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 7 (the critic's `g10-join6`). The guard let a
+     * join through when its interface argument was a loopback literal, and
+     * for IPv6 that argument names an address, not an interface: a join on
+     * `('ff05::9', '::1')`, one on `::ffff:127.0.0.1` and a source-specific
+     * one on `::1` went through, while `::1%lo`, which does name the
+     * loopback interface, was refused — and measured in a network namespace
+     * holding `lo` and a dummy device, the `::1` join landed on the dummy.
+     * Now every join is refused, on any interface, strict or not.
+     *
+     * The OS call is stubbed beneath dgram, on each socket's own handle, so
+     * a join the guard lets through reaches the stub and never the kernel:
+     * the red proof ran against it, and a Node that moved the handle fails
+     * here before any join is tried.
+     */
+    type Handle = Record<string, unknown>;
+    const stubbed = (type: 'udp4' | 'udp6'): { socket: ReturnType<typeof dgram.createSocket>; reached: string[] } => {
+        const socket = dgram.createSocket(type);
+        const key = Object.getOwnPropertySymbols(socket).find((symbol) => symbol.description === 'state symbol');
+        const handle =
+            key === undefined ? undefined : (socket as unknown as Record<symbol, { handle?: Handle } | undefined>)[key]?.handle;
+        if (
+            handle === undefined ||
+            typeof handle.addMembership !== 'function' ||
+            typeof handle.addSourceSpecificMembership !== 'function'
+        ) {
+            socket.close();
+            throw new Error('the OS call is not where this test stubs it: no join is tried');
+        }
+        const reached: string[] = [];
+        handle.addMembership = (...args: unknown[]): number => {
+            reached.push(`join ${args.map(String).join(' on ')}`);
+            return 0;
+        };
+        handle.addSourceSpecificMembership = (...args: unknown[]): number => {
+            reached.push(`source-specific join ${args.map(String).join(' ')}`);
+            return 0;
+        };
+        return { socket, reached };
+    };
+
+    it('refuses a join on a loopback address, IPv6 and IPv4, before the OS is asked', () => {
+        const six = stubbed('udp6');
+        const four = stubbed('udp4');
+        try {
+            expect(() => six.socket.addMembership('ff05::9', '::1')).toThrow(
+                'a test reached the network: udp-join ff05::9 on ::1',
+            );
+            expect(() => six.socket.addMembership('ff05::9', '::ffff:127.0.0.1')).toThrow(
+                'a test reached the network: udp-join ff05::9 on ::ffff:127.0.0.1',
+            );
+            expect(() => six.socket.addSourceSpecificMembership('::1', 'ff35::9', '::1')).toThrow(
+                'a test reached the network: udp-join ff35::9 on ::1',
+            );
+            expect(() => six.socket.addMembership('ff05::9', '::1%lo')).toThrow(
+                'a test reached the network: udp-join ff05::9 on ::1%lo',
+            );
+            expect(() => four.socket.addMembership('239.255.0.9', '127.0.0.1')).toThrow(
+                'a test reached the network: udp-join 239.255.0.9 on 127.0.0.1',
+            );
+        } finally {
+            six.socket.close();
+            four.socket.close();
+        }
+        expect(six.reached, 'no IPv6 join reached the OS').toEqual([]);
+        expect(four.reached, 'no IPv4 join reached the OS').toEqual([]);
+        expect(drain()).toEqual([
+            'udp-join ff05::9 on ::1',
+            'udp-join ff05::9 on ::ffff:127.0.0.1',
+            'udp-join ff35::9 on ::1',
+            'udp-join ff05::9 on ::1%lo',
+            'udp-join 239.255.0.9 on 127.0.0.1',
+        ]);
     });
 });
 
