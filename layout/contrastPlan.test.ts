@@ -36,7 +36,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 221, desktop: 251, canvas: 29, total: 501 });
+        }).toEqual({ mobile: 228, desktop: 258, canvas: 29, total: 515 });
     });
 
     it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {

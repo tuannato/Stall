@@ -1568,6 +1568,28 @@ the first-stall numbers, the footer's lines and the invite's chip stay
 scoped to the rain: elsewhere they stand on a card or a ground every look
 was proved on, which is their own reason, not the sampler's.
 
+## What the line read retired and let in (step 5b, 2026-09-26)
+
+- **`studio-items` is sampled** (off `GEOMETRY_ONLY_SCREENS`). It was held
+  out for its wrapped guide link, which the box read put at 1.00–1.08:1
+  over its union (the hint's grey words inside it). Per line fragment it
+  reads 5.17:1 at the least on every look, bare and worn; the `.tid`
+  glance 5.58, Rural worn's `.tool-lede` 5.58. The plan grows by 7 jobs on
+  the phone and 7 on the desk, as the token-glance note measured:
+  `the-contrast-plan-is-every-job-the-pass-owes` is pinned at mobile 228,
+  desktop 258, canvas 29, total 515.
+- **`CHROME_ON_TEXT` is retired.** The face's expand cue was stepped
+  around because the box read took every pixel in the hero tile as the
+  letters' ground; the letters' own rects never reach the cue's corner, and
+  with the mechanism switched off every tile read the same (4.61:1 at the
+  least). The holes, the cap and `chromeOver` are gone.
+- **`.sw-switch-state` is a target.** The box read put the 17px pill at an
+  unexplained 1.00:1; its line reads 5.17:1 on every shipped look and
+  decoration and 4.61 on the skeleton.
+- **The insets stay for money only.** The radius, border and far-edge rules
+  of the whole-box read (above, "Rendered-pixel contrast") now apply to the
+  money set alone; a line rect holds no border and no arc.
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a
@@ -1664,6 +1686,10 @@ guard; a green that depends on a Worker answering in time is the false
 signal AGENTS §4 names.
 
 ## A cue on a text box is chrome, and the sampler steps around it
+
+**Retired in step 5b** ("What the line read retired and let in", above):
+the line read reads the letters' own rects and never reaches the cue. The
+incident is kept for its reason.
 
 The contrast pass blanks a target and its descendants and reads every pixel
 left in the box as the ground under the letters. The face's expand cue is a

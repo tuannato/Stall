@@ -2084,29 +2084,16 @@ const CONTRAST_TEXT = [
      */
     '.mini:not(.sw-switch)',
     '.sw-switch-label',
+    '.sw-switch-state',
     /*
-     * `.sw-switch-state` is deliberately NOT here, and the reason is the
-     * one the `r` clamp above already tells: a `border-radius: 999px` pill
-     * ~17px tall, whose sample band the insets cannot reliably land inside.
-     * It reported 1.00:1 on four of six look-and-decoration combinations —
-     * and 1.00:1 is not a colour this component can produce. Pressed it is
-     * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
-     * `--s-accent` over the button's `--s-surface`. **Measured across every
-     * shipped look and mood, the worst of those pairs is 5.17:1** (Modern;
-     * Rural under Sun-faded was 4.05 until its inks went darker on
-     * 2026-09-25 and is 5.65 now) against this pass's floor of 3 — not `legibleOn`,
-     * which arbitrates accent against `--s-bg` and never against
-     * `--s-surface`; the pair is held by the palettes' own numbers. Both
-     * sides are tokens declared in one rule, which
-     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` does
-     * read, and `window.css` is on that test's sheet list.
-     *
-     * **What produced 1.00 is unexplained**, and it is recorded as
-     * unexplained rather than as a theory: the first write-up blamed the
-     * sampler's insets, and the insets narrow horizontally only, by an
-     * amount that lands inside a pill this size. A false red is as useless
-     * as a false green — and a wrong reason for withdrawing a target is
-     * worse than both, because it is what stops the next person looking.
+     * `.sw-switch-state` joined in step 5b. It was left out because the box
+     * read put this ~17px `border-radius: 999px` pill at 1.00:1 on four of
+     * six combinations — unexplained, and recorded as unexplained. Read over
+     * its own line rect it reads 5.17:1 on every shipped look and every
+     * decoration and 4.61 on the skeleton (the unpressed accent over the
+     * skeleton's sheet surface, the one pair the palettes' own numbers did
+     * not list); the unexplained 1.00 was the box read, which no longer
+     * reads it.
      */
     '.tab',
     // The "Publishes:" line on both record sheets. It is the only sentence
@@ -3346,13 +3333,6 @@ type ContrastTarget = {
      * 1.12:1 until the segments took their own radius.
      */
     r: number;
-    /**
-     * Chrome laid over the box — a control's cue drawn on a text box's
-     * corner — as boxes the sampler steps around, the way it steps past the
-     * border. `CHROME_ON_TEXT` says which elements count and why; the cap
-     * in `chromeOver` keeps the mechanism from ever excusing a cover.
-     */
-    holes: Hole[];
     /** What was measured, for a failure a person can find. */
     sel: string;
     /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
@@ -3430,43 +3410,14 @@ type LineRect = Hole & { cx: number; cy: number; rw: number; rh: number; angle: 
  */
 type RingLine = Hole & { chars: number; glyphs: number; ink: string };
 
-/**
- * Elements that are chrome ON a measured text box, never its ground: the
- * face's expand cue, a 22px badge on the hero tile's corner (2026-09-20). The
- * pass blanks a target and its descendants and then reads every pixel left
- * as the ground under the letters — and the cue is a sibling, so its own
- * white stroke was read as the ground under Neo's cyan letters at 1.01:1,
- * and its near-black disc as the ground under Modern's night-dark letters
- * at 2.72:1. No paint can clear both: a pixel that contrasts 3:1 with a light
- * ink and with a dark one does not exist, and the badge must be one badge on
- * every look. The letters never touch it — two initials centred in the tile
- * end well short of its corner — so the border's own rule applies: chrome is
- * stepped around, not sampled. Extending this list needs the incident
- * written in `PROBE-RULES.md`; the cap below is what stops it from ever
- * hiding a real cover.
+/*
+ * `CHROME_ON_TEXT` is retired (step 5b): the face's expand cue on the hero
+ * tile's corner was stepped around because the box read took every pixel
+ * left in the tile as the letters' ground. The line read reads the letters'
+ * own rects, which end well short of the corner, and with the mechanism
+ * switched off every tile read the same (4.61:1 at the least, the letters'
+ * own ground). A cue that ever reaches a letter is read as its ground now.
  */
-const CHROME_ON_TEXT = '.face-ic-cue';
-
-/** No more than this share of a target's box may be stepped around. */
-const CHROME_HOLE_CAP = 0.25;
-
-function chromeOver(node: HTMLElement, box: Hole): Hole[] {
-    const holes: Hole[] = [];
-    let covered = 0;
-    for (const chrome of document.querySelectorAll<HTMLElement>(CHROME_ON_TEXT)) {
-        if (chrome === node || node.contains(chrome)) continue;
-        const c = chrome.getBoundingClientRect();
-        const x = Math.max(box.x, c.x);
-        const y = Math.max(box.y, c.y);
-        const w = Math.min(box.x + box.w, c.right) - x;
-        const h = Math.min(box.y + box.h, c.bottom) - y;
-        if (w <= 0 || h <= 0) continue;
-        holes.push({ x, y, w, h });
-        covered += w * h;
-    }
-    // Over the cap it is a cover, not a cue, and the pass reads it as such.
-    return covered > CHROME_HOLE_CAP * box.w * box.h ? [] : holes;
-}
 
 
 /**
@@ -3754,7 +3705,6 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         legacyPad: insideTransform(node) ? 8 : 0,
         angle,
         ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
-        holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
         money,
         rects: read?.rects,

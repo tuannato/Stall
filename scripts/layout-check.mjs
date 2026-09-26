@@ -595,12 +595,9 @@ function worstContrastInBox(img, target, textColor, { legacy = false } = {}) {
     let worst = Infinity;
     const stepX = Math.max(1, Math.floor((x1 - x0) / 12));
     const stepY = Math.max(1, Math.floor((y1 - y0) / 8));
-    // Chrome laid over the box (the face's cue on the hero tile's corner)
-    // is stepped around like the border: see CHROME_ON_TEXT in the probe.
-    const holes = target.holes ?? [];
     for (let y = y0; y <= y1; y += stepY) {
         for (let x = x0; x <= x1; x += stepX) {
-            if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h) || !inFrame(x, y)) {
+            if (!inFrame(x, y)) {
                 continue;
             }
             const i = (y * img.width + x) * img.bpp;
@@ -650,15 +647,13 @@ function legacyBand(img, target) {
  * border inset, since a line rect holds no border and no arc — and, where
  * the line's frame is turned, only the pixels inside the turned line box.
  * Each rect is read against its own ink, so a muted name inside an ink
- * control is read against the muted ink. Chrome on the box (`holes`) is
- * stepped around as before. Returns the worst contrast, the pixels read,
+ * control is read against the muted ink. Returns the worst contrast, the pixels read,
  * and where the worst one was.
  */
 function lineRead(img, target) {
     let worst = Infinity;
     let px = 0;
     let at;
-    const holes = target.holes ?? [];
     for (const rect of target.rects) {
         const [ir, ig, ib] = rgbaOf(rect.ink);
         const inkLum = luminance(ir, ig, ib);
@@ -676,7 +671,6 @@ function lineRead(img, target) {
                     const dy = y + 0.5 - rect.cy;
                     if (Math.abs(dx * cos + dy * sin) > rect.rw / 2 - 0.5 || Math.abs(-dx * sin + dy * cos) > rect.rh / 2 - 0.5) continue;
                 }
-                if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h)) continue;
                 const i = (y * img.width + x) * img.bpp;
                 px += 1;
                 const c = contrast(inkLum, luminance(img.data[i], img.data[i + 1], img.data[i + 2]));
