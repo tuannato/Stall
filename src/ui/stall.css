@@ -4185,8 +4185,10 @@ textarea.share-embed {
  * Put it somewhere (round 16): four doors in one dress. A `<button>` with
  * its name, one line, and the chevron; one column on a phone (the owner:
  * two columns wrapped the words one per line), two from 680px, four from
- * 1000px. The window's door is desk-only by width — composing a link for a
- * television is not a phone's job — and never a render gate.
+ * 1000px. The window's door paints at every width (the owner, 2026-09-26:
+ * a seller's phone is where they are, and a door hidden with no word said
+ * nothing); on a phone its sheet offers the link to copy and not the two
+ * ways to open it here, since a phone paints the ordinary stall.
  */
 .tools {
     display: grid;
@@ -4249,8 +4251,17 @@ textarea.share-embed {
     color: var(--s-accent);
 }
 
-.tool[data-tool='window'] {
-    display: none;
+/*
+ * The shop window's sheet on a phone: the wall is width-gated at 680px
+ * (`WINDOW_MIN_PX`), so "Open here" and "Open in a new tab" would open the
+ * ordinary stall. The link is for the screen's own computer, and Copy link
+ * is the one control left (the owner, 2026-09-26).
+ */
+@media (max-width: 679.98px) {
+    [data-role='shop-window-open-here'],
+    [data-role='shop-window-open-tab'] {
+        display: none;
+    }
 }
 
 /* A row's state under its name: listed, the quote, words, the shelf. */
@@ -6416,10 +6427,6 @@ textarea.share-embed {
 
     .tools {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tool[data-tool='window'] {
-        display: grid;
     }
 
     .embed-body {

@@ -1350,6 +1350,46 @@ describe('the-shop-window-sheet-groups-its-controls-and-copies-the-link', () => 
     });
 });
 
+describe('the-shop-window-door-paints-at-every-width-and-a-phone-only-copies', () => {
+    /**
+     * The owner, 2026-09-26: the door was desk-only by width and a seller on
+     * a phone — which is where they are — found no way to the shop window
+     * and nothing saying why. It paints at every width now; on a phone its
+     * sheet keeps the link and Copy link and hides "Open here" and "Open in a
+     * new tab", which would open the ordinary stall there (the wall starts at
+     * `WINDOW_MIN_PX`). happy-dom lays nothing out, so the rules are read
+     * from the sheet that carries them, like `the-phone-qr-is-a-desk-fold`.
+     */
+    const css = (): string =>
+        readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'stall.css'), 'utf8');
+
+    it('never hides the door by width', () => {
+        expect(css()).not.toMatch(/\.tool\[data-tool='window'\]\s*\{[^}]*display:\s*none/);
+    });
+
+    it('hides the two ways to open below the desk width and nothing else', () => {
+        const blocks = css().split('@media (max-width: 679.98px)').slice(1);
+        const phone = blocks.find((b) => b.includes('shop-window-open-here')) ?? '';
+        const rule = /([^{}]+)\{\s*display:\s*none;?\s*\}/.exec(phone);
+        expect(rule, 'a phone-only rule hides the open controls').not.toBeNull();
+        const selectors = rule![1]!.split(',').map((x) => x.trim());
+        expect(selectors.sort()).toEqual([
+            "[data-role='shop-window-open-here']",
+            "[data-role='shop-window-open-tab']",
+        ]);
+        expect(css()).not.toMatch(/shop-window-copy'\][^{]*\{[^}]*display:\s*none/);
+    });
+
+    it('still builds all three controls, so the desk keeps both ways to open', () => {
+        const view = windowView({ show: 'all', mode: 'cycle' });
+        const root = document.createElement('div');
+        renderStall(root, { ...view, window: undefined, overlay: { kind: 'shop-window' } } as StallView, handlers());
+        for (const role of ['shop-window-open-here', 'shop-window-open-tab', 'shop-window-copy']) {
+            expect(root.querySelector(`[data-role="${role}"]`), role).not.toBeNull();
+        }
+    });
+});
+
 describe('the-window-row-says-the-surcharge', () => {
     /**
      * The wall is one of the three unattended surfaces (paper, stream, wall)

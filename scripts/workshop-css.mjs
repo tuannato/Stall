@@ -448,7 +448,6 @@ export const STATE_ATTRIBUTES = Object.freeze({
     'data-side': Object.freeze(['left']),
     'data-state': Object.freeze(['stale']),
     'data-tier': Object.freeze(['1', '2', '3']),
-    'data-tool': Object.freeze(['window']),
     'data-touch': Object.freeze(['on']),
     'data-turn': Object.freeze(['ccw', 'cw']),
 });

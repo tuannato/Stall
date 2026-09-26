@@ -272,11 +272,12 @@ export type BroadcastParams = {
  * in a physical shop, which nobody touches. Parsed by `parseWindowParams`.
  *
  * A second render path over the same read, like the broadcast overlay, and
- * gated by the same `view` param so the two can never both be asked for. It is
- * **not** width-gated: the CONTROL that composes this link is desk-only, but a
- * link already composed paints at whatever width it is opened at, because a
- * shop screen hung in portrait is 1080 wide and a counter tablet is 768. A
- * width test here would refuse exactly the devices the feature is for.
+ * gated by the same `view` param so the two can never both be asked for. The
+ * params are not width-gated; the wall paints from `WINDOW_MIN_PX` (680),
+ * asked once in `boot`, so a shop screen hung in portrait (1080 wide) and a
+ * counter tablet (768) get it and a phone gets the ordinary stall. The
+ * CONTROL that composes the link paints at every width (2026-09-26); on a
+ * phone its sheet offers the link to copy and not the ways to open it here.
  */
 /**
  * A payment composed on a touch wall, frozen at the press (2026-09-21).
