@@ -1408,6 +1408,9 @@ try {
         let ringTargets = 0;
         let ringPixels = 0;
         let ringLeastPerChar = Infinity;
+        // Outlined money figures ring-read, each on a job whose rain was at
+        // its brightest (`an-outlined-money-figure-is-ring-read-at-its-worst`).
+        let moneyRingRead = 0;
         const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1745,6 +1748,26 @@ try {
                         sampled += results.length;
                         for (const { t, r } of results) {
                             ringTargets += 1;
+                            if (t.money) {
+                                /*
+                                 * A money box is never read by a weaker
+                                 * verdict (step 5b; PROPOSAL §12 as amended):
+                                 * a figure outlined on a decoration's bare
+                                 * ground is read in its ring — every solid
+                                 * ring pixel, no percentile — and only with
+                                 * the decoration at its worst. The outline
+                                 * is worn only where the rain is, and a job
+                                 * whose rain was not flattened is refused
+                                 * by its echo (`paintEcho`); this holds the
+                                 * money half to it by name.
+                                 */
+                                moneyRingRead += 1;
+                                if (!((prep.rain?.flattened ?? 0) > 0)) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
+                                    );
+                                }
+                            }
                             ringPixels += r.ringPx;
                             if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
                             const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
@@ -1874,6 +1897,12 @@ try {
             // no rain job samples paints it (`RAIN_JOBS`).
             verdicts.push(`an outline nobody reads — outlined on a screen the pass paints and never ring-read: ${unread.join(', ')}`);
         }
+        if (LOOKS === 'shipped' && moneyRingRead === 0) {
+            // The Activity fold's receipt amount is outlined on Neo worn: a
+            // shipped run that ring-read no money figure proved the rule over
+            // nothing.
+            verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
+        }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is
             // vacuous: the shipped rain outlines lines on every Neo worn
@@ -1889,7 +1918,7 @@ try {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
-                        `${ringTargets} outlined line(s) ring-read (${ringPixels} ring pixels, ` +
+                        `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );
             }

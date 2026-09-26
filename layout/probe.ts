@@ -26,6 +26,7 @@ import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } fro
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -2515,6 +2516,47 @@ function outlineFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **The money set is every protected contrast target** (step 5b; its static
+ * half is `layout/moneySet.test.ts`). On every screen, look and variant of
+ * every geometry pass: every painted node that is a contrast target AND a
+ * protected box must be money (`MONEY`), because the contrast pass reads a
+ * money box whole and everything else over its line rects, and a protected
+ * figure that fell to the line read would be read by a weaker verdict; and
+ * every node `MONEY` matches must be a contrast target standing in a
+ * protected box (`MONEY_OUTSIDE_PROTECTED` aside), or the set names
+ * something that is not money. The deck's minis are pictures and are not
+ * asked. `moneyChecks` counts the nodes asked; the runner requires some on
+ * the phone and desk passes (`probe-coverage.mjs`).
+ */
+const MONEY_CHECK = 'the-money-set-is-every-protected-contrast-target';
+let moneyChecks = 0;
+
+function moneySetFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const app = document.getElementById('app')!;
+    const fail = (node: Element, what: string): void => {
+        out.push({ screen, theme: label, check: MONEY_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
+    };
+    for (const node of app.querySelectorAll(CONTRAST_TEXT)) {
+        if (node.closest('.deck-stall') !== null || !node.matches(PROTECTED)) continue;
+        moneyChecks += 1;
+        if (!node.matches(MONEY)) {
+            fail(node, 'is a protected box and a contrast target, and is not in the money set');
+        }
+    }
+    for (const node of app.querySelectorAll(MONEY)) {
+        if (node.closest('.deck-stall') !== null) continue;
+        moneyChecks += 1;
+        if (!node.matches(CONTRAST_TEXT)) {
+            fail(node, 'is in the money set and no contrast target');
+        } else if (node.closest(PROTECTED) === null && !node.matches(MONEY_OUTSIDE_PROTECTED)) {
+            fail(node, 'is in the money set and stands in no protected box');
+        }
+    }
+    return out;
+}
+
+/*
  * **A tile shows its letters whole** (2026-09-24, the critic's item 10).
  * A token tile (`.item-ic`) paints the name's initials until a picture
  * lands, and it clips (`overflow: hidden`, a radius): the Activity row's
@@ -2692,6 +2734,7 @@ for (const screen of measured) {
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...outlineFaults(screen, label));
+            failures.push(...moneySetFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -2974,6 +3017,8 @@ type ContrastTarget = {
     holes: Hole[];
     /** What was measured, for a failure a person can find. */
     sel: string;
+    /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
+    money: boolean;
     /**
      * The outline this line wears where a decoration falls behind it
      * (`--rain-outline-1` / `--rain-outline-2`, round 8): its width in CSS
@@ -3310,6 +3355,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         pad: insideTransform(node) ? 8 : 0,
         holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
         sel: describe(node),
+        money: node.matches(MONEY),
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
         icons:
@@ -3877,6 +3923,7 @@ const verdict = {
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,
     outlineChecks,
+    moneyChecks,
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,

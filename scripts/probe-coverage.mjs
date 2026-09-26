@@ -27,6 +27,9 @@
  *   comparing a nonzero count.
  * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines Neo's
  *   rain outlines, on the phone and desk passes wherever Neo is measured.
+ * - **`the-money-set-is-every-protected-contrast-target`** asks every
+ *   protected contrast target and every money node, on the phone and desk
+ *   passes.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -95,6 +98,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
+    if (!((report.moneyChecks ?? 0) > 0)) {
+        gaps.push('the-money-set-is-every-protected-contrast-target asked no node');
+    }
     if (!((report.floorNamedChecks ?? 0) > 0)) {
         gaps.push('small-text-is-at-least-11px read no named small-text node');
     }
@@ -159,6 +165,7 @@ export function probeCoverageLine(pass, report) {
         ` · small text read: ${report.floorNamedChecks ?? 0}` +
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
+        ` · money nodes asked: ${report.moneyChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

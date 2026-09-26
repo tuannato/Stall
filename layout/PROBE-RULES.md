@@ -561,6 +561,59 @@ Sampling amendments, each measured:
   translucent Modern dock at 2.48:1 over Drifting light's orbs under After
   hours — mobile-only had certified pixels nobody paints at 1280.
 
+## The money set is every protected contrast target (step 5b, 2026-09-26)
+
+Step 5b reads every contrast target over its own text's line rects except
+the money boxes, which keep the whole-box read (below, "The sampler reads
+text"). So which targets are money has to be one closed list, and it is:
+`MONEY_SET` in `layout/moneySet.ts`, selector literals pinned by value —
+the price, the You-pay row (`.row.big dd`), every `.buy`, the address's
+two spans, both record hexes, the fiat glance and the rate, the receipt
+amount, the seller's price, both surcharge lines, the selection's total,
+the pay sheet's lines and total, and the two Pay controls by role
+(`pay-cashtab`, a `.buy`; `pay-wallet`, a `.mini`). PROPOSAL §12 named the
+set in words ("the Pay pills"), which is not a selector; CRITIC-STEP-5
+item 2 found five members the words missed.
+
+`the-money-set-is-every-protected-contrast-target` holds it from both
+sides:
+
+- **statically** (`moneySet.test.ts`): every selector that is in
+  `PROTECTED` and in `CONTRAST_TEXT` is in the set, every member is a
+  contrast target (the two Pay roles through the class each wears), and the
+  probe takes the set from that module;
+- **in the browser**, on every screen, look and variant of every geometry
+  pass: every painted node that is a contrast target and a protected box
+  matches the set, and every node the set matches is a contrast target
+  standing in a protected box — `pay-wallet` aside, money by what it hands
+  a wallet and in no protected box by its dress. The deck is not asked.
+  `moneyChecks` counts the nodes asked, and the phone and desk passes owe
+  some (`probe-coverage.mjs`): 4,804 and 5,212 on the day it landed.
+
+**Proved red** by taking `receipt-amount` out of the set: 35 failures on
+the phone and 35 on the desk, every one the Activity fold's amount ("is a
+protected box and a contrast target, and is not in the money set"), the
+static test red on both halves, and the rule below vacuous.
+
+### An outlined money figure is ring-read at its worst
+
+PROPOSAL §12 said "money boxes keep the whole-box sampler", and round 8 had
+already made that false: the Activity receipt amount is outlined on Neo's
+rain and read in the ring around its glyphs, because a whole-box read over
+the flattened drop fails it with nothing but a ground or a moved row to
+fix it (CRITIC-STEP-5 item 1). The amendment, the window's by
+recommendation: **a money box is never read by a weaker verdict** — the
+whole box, or, for a figure outlined on a decoration's bare ground, every
+solid ring pixel, no percentile, with the decoration at its worst.
+`an-outlined-money-figure-is-ring-read-at-its-worst` is the runner's: an
+outlined target that is money must have been ring-read on a job whose rain
+was flattened (the outline is scoped to the rain, and a job whose worn and
+flattened counts differ is refused by its echo — this names the money half
+of that), and a shipped run that ring-read no money figure fails as
+vacuous. It read 10 on the day it landed (the receipt amounts on
+`activity`, Neo worn, at the phone and the desk). Proved red by the same
+plant: "read no outlined money figure — vacuous green".
+
 ## The shop window hung the tall way (pass 2b, 2026-09-19)
 
 `window.css` carries **three** layouts for the cycle card, and the probe
