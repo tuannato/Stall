@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    boot,
+    boot as bootApp,
     type AppState,
     BROADCAST_AFTER_RUN_MS,
 } from './app';
@@ -12,11 +12,13 @@ import { resetMarqueesForTests, setMarqueeMeasure } from './ui/marquee';
 import { FIAT_GLANCE_MAX_AGE_MS } from './ui/render';
 
 /*
- * The price feed answers instantly and never touches the network: every
- * `boot` here keeps living after its test, and a real coingecko round
- * (observed rate-limited mid-suite) resolved late, repainted with a stale
- * view and rewrote the global document.title after the next test's
- * assertion — a cross-test flake that only showed under load.
+ * The price feed answers instantly and never touches the network: a real
+ * coingecko round (observed rate-limited mid-suite, while every `boot` here
+ * still lived on after its test) resolved late, repainted with a stale view
+ * and rewrote the global document.title after the next test's assertion —
+ * a cross-test flake that only showed under load. The apps are torn down
+ * after each test now (`running`, below); the feed stays stubbed, since no
+ * test here may reach it either way.
  */
 const { glanceFeed } = vi.hoisted(() => ({
     glanceFeed: vi.fn(async (): Promise<bigint | undefined> => undefined),
@@ -104,6 +106,28 @@ function stallUnnamedEmpty(): AppState {
 async function flush(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+/**
+ * Every app a test booted, torn down after it (CRITIC-CARRYOVER-10 item 2;
+ * app.live.test.ts's `running`, CRITIC-CARRYOVER-9 item 5). One document
+ * holds every test's app, and `boot` puts its listeners on the window and
+ * the document: an app no test tore down went on refreshing on every later
+ * `popstate`, so "keeps the typed address across a repaint of the door"
+ * took 0.75 s by name and 8–10 s in this file, and once passed vitest's
+ * 20 s in `pnpm test`. So `boot` here is the app's, keeping the teardown it
+ * returns, and each test's apps stop when it ends: their listeners off,
+ * their sockets closed, their timers cleared, and nothing of theirs
+ * painting again.
+ */
+const running: Array<() => void> = [];
+function boot(...args: Parameters<typeof bootApp>): void {
+    running.push(bootApp(...args));
+}
+afterEach(() => {
+    for (const stop of running.splice(0)) {
+        stop();
+    }
+});
 
 beforeEach(() => {
     window.history.replaceState(null, '', '/');
@@ -1534,10 +1558,10 @@ describe('the glance is asked for when it is on screen, and kept fresh while it 
 
     /**
      * Every `boot` adds its own `visibilitychange` listener to the one
-     * `document` this file shares, and they outlive the test that made them.
-     * A face left open in an earlier test would answer the next test's wake
-     * on the same spy — so each root is closed back to an idle overlay here,
-     * which is what takes its glance off screen.
+     * `document` this file shares. The file's teardown (`running`) takes it
+     * off, but after this `afterEach`, whose `setVisibility('visible')` is a
+     * wake every app still booted answers — so each root is closed back to
+     * an idle overlay first, which is what takes its glance off screen.
      */
     const roots: HTMLElement[] = [];
 

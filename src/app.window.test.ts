@@ -43,7 +43,26 @@ vi.mock('./net/live', async (importOriginal) => {
     };
 });
 
-const { boot } = await import('./app');
+const { boot: bootApp } = await import('./app');
+
+/**
+ * Every app a test booted, torn down after it (CRITIC-CARRYOVER-10 item 2;
+ * app.live.test.ts's `running`, CRITIC-CARRYOVER-9 item 5): `boot` puts its
+ * listeners on the one window and document this file shares, and an app no
+ * test tore down went on answering every later `popstate`, touch and
+ * visibility change. Each test's apps stop when it ends — after the
+ * describe's own `afterEach` has put the real timers back, so the clears
+ * of timers a fake clock armed do nothing, as that clock is gone.
+ */
+const running: Array<() => void> = [];
+function boot(...args: Parameters<typeof bootApp>): void {
+    running.push(bootApp(...args));
+}
+afterEach(() => {
+    for (const stop of running.splice(0)) {
+        stop();
+    }
+});
 const { PAY_RATE_MAX_AGE_MS } = await import('./ui/render');
 const { BROADCAST_FIXED_MS, WINDOW_BEAT_MS, WINDOW_CARD_MS, WINDOW_IDLE_MS, WINDOW_SCROLL_MS } =
     await import('./app');
