@@ -939,6 +939,12 @@ try {
             '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
             '--no-sandbox',
             '--hide-scrollbars',
+            // Every tile rastered whole (step 5b, D6): with partial raster on,
+            // a frame could carry a tile from before a style change, and the
+            // look-pseudo check compares two frames pixel for pixel —
+            // `looks-diff.mjs` measured the same flag's absence as a Neo
+            // pixel and a Rural card corner in one of two states per load.
+            '--disable-partial-raster',
             `--user-data-dir=${profile}`,
             `--remote-debugging-port=${DEVTOOLS_PORT}`,
             'about:blank',

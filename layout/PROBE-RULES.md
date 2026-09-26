@@ -1410,6 +1410,25 @@ row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
 
+## The door's deck is not a contrast target (step 5b, 2026-09-26)
+
+The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a
+`.deck-stall` before anything is read: the door's three minis are pictures
+(`aria-hidden`, zoomed, no control), and a line in one is read by nobody.
+It changed no reading on the day it landed — the nine deck nodes the door
+matched produced no target (the dump before and after: 6,618 boxes
+identical, the door's 26 renumbered, none moved) — and that is why it
+comes first: the line-rect sampler and the rain scoping coming off would
+otherwise start reading a mini's `.orn` over its look's unflattened rain,
+the critic's case (CRITIC-SAMPLER-STEP item 9). The other rules already
+skip the deck by name (the rain flattening, the outline rules, the class
+audit).
+
+The same commit gives the probe's Chrome `--disable-partial-raster`, which
+`looks-diff.mjs` already carried: the look-pseudo check (D6(i), below)
+compares two frames pixel for pixel. It moved no box either (6,650
+identical against two runs of `main`, which were themselves identical).
+
 ## A door mini paints as its own look (2026-09-24)
 
 The step-2 critic's item 8: the door root was `stall t-modern door`, and a

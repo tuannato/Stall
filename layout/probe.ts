@@ -3710,7 +3710,13 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             ...echo,
         };
     }
-    preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
+    // The door's deck minis are pictures (`aria-hidden`, zoomed, no control):
+    // no line of them is read by anyone, and a mini's `.orn` read over its
+    // look's unflattened rain was the critic's case for leaving them out of
+    // every contrast job, globally, before the rain scoping came off (step
+    // 5b, CRITIC-SAMPLER-STEP item 9; `PROBE-RULES.md`, "The door's deck is
+    // not a contrast target").
+    preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
     // 8 (2026-09-15) — had its colour set to transparent by the outer node's
