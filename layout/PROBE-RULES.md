@@ -3140,24 +3140,67 @@ colour and full-size gradient between the line and the root (the line's
 own box included), composited over it.
 
 - A gradient under the line (the notice's wash) is no single colour. The
-  outline is held to the colours the gradient paints: between its stops,
-  each composited over what lies under it, 4 levels either side. The
-  midpoint passes, and the look's ground fails.
-- A full-size `url()` layer under the line is a ground this rule cannot
+  outline is held to the colours the gradient paints **under the line
+  itself**: a linear gradient is evaluated across the line's own box (the
+  gradient line's share at each corner, the stops between and sixteen
+  steps, interpolated in premultiplied sRGB as CSS does), each colour
+  composited over what lies under it, 4 levels either side. The midpoint
+  passes, and the look's ground fails. (Until step 5b it was held to
+  anywhere between the gradient's stops — below.) A gradient this cannot
+  evaluate across a box (radial, conic, repeating) is held to its stops
+  and counted.
+- A `url()` layer of any size under the line is a ground this rule cannot
   read, so it fails.
-- The stall root's image layers are not read as the ground. These are the
-  stated exceptions, with the levels they leave at rest in the table below:
-  - the rain, which is what the outline is for;
-  - Neo's own backdrop (the cyan glow over the stall's top 480 px, and a
-    1 px scanline every 4 px) and the aurora's washes, which are gradients
-    across the whole stall that no single colour matches;
+- The stall root's image layers are read by what they are, never passed by
+  where they sit (below). These are the stated exceptions, each matched on
+  its own computed form and on the class that paints it
+  (`ROOT_LAYERS_SET_ASIDE`), with the levels they leave at rest in the
+  table below:
+  - the rain (`att-rainfall`), which is what the outline is for;
+  - Neo's own backdrop (`t-neo`: the cyan glow over the stall's top 480 px,
+    and a 1 px scanline every 4 px) and the aurora's washes and its tint
+    over the rain (`att-aurora`), which are gradients across the whole
+    stall that no single colour matches;
   - Neo's heading glow, which is a shadow under the heading's own outline,
     not a ground.
-- Not read, stated:
-  - a gradient sized smaller than its box (the vacant box's corner
-    brackets);
-  - a pseudo-element's ground, or a non-ancestor's;
-  - an ancestor's `opacity` or blend.
+  Any other root layer is read like a layer under the line: a colour or a
+  full-size gradient composited in, anything else a failure.
+- Set aside and counted by reason (`atRestSetAside`, on the pass's
+  `compared:` line): a gradient sized smaller than its box (the vacant
+  box's corner brackets, the sign's rules). Not read, stated: a
+  pseudo-element's ground, or a non-ancestor's; an ancestor's `opacity` or
+  blend.
+
+**Bounded, step 5b** (CRITIC-FINAL-MERGE item 3, the rule's exceptions were
+unbounded): every root image layer was passed by its position, so a new
+root decoration's layer was exempt the day it shipped; a gradient accepted
+any outline between its stops, so a wash from black to white accepted
+anything; a `url()` layer smaller than its box was passed silently; and
+nothing counted what was set aside. Now the root's layers are named
+(`a-new-root-layer-is-not-exempt-by-position`), the gradient is read under
+the line, every picture fails, and what is set aside is counted — on the
+day it landed, on the phone: the rain 1,653, the aurora's washes 972, its
+tint 486, Neo's scanlines and top glow 551 each (one per outlined line and
+layer), a gradient smaller than its box 169; the phone and desk passes owe
+the rain set aside wherever Neo is measured (`probe-coverage.mjs`). **Proved
+red**, and green on `main` with the same plants: a `url()` layer added to
+the rain-wearing Neo root → 201 lines "over a root layer this rule does not
+know … a-new-root-layer-is-not-exempt-by-position" (0 on `main`); the
+notice's outline set to its violet end over the ground, `rgb(18, 18, 37)`,
+inside the stops' range and not under the words → the four notice lines
+under every decoration fail "over a ground painted rgb(31, 17, 32) to
+rgb(40, 18, 34)" (0 on `main`).
+
+**Asked only where the rain is worn** (step 5b, CRITIC-FINAL-MERGE item 4).
+`an-outline-where-the-text-has-its-own-ground` and this rule read an
+element only inside a `.stall.att-rainfall`, where the outline is scoped in
+`stall.css`. Before, the probe read every opaque, unblurred `text-shadow`
+on every look as a would-be outline, so a look's own emboss failed as
+"neither outline set in one colour" — proved: `.t-rural .section-title {
+text-shadow: 0 1px 0 #fff }` read 206 such failures on `main` and none
+now. A look's own hard shadow is the look rules' business, and a
+decoration's is `an-outline-is-the-only-mark-under-text-on-a-decoration`'s
+(static, every served sheet).
 
 **Measured at rest** (`visible-batch-shots/15-outline-b/`, `levels.json`).
 Each figure is the largest level by which the outline changes a pixel with

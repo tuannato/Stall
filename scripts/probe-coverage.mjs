@@ -30,6 +30,9 @@
  * - **`the-money-set-is-every-protected-contrast-target`** asks every
  *   protected contrast target and every money node, on the phone and desk
  *   passes.
+ * - **`an-outline-that-shows-at-rest`** reads the rain-wearing root's
+ *   layers by what they are, on the phone and desk passes wherever Neo is
+ *   measured: the rain is set aside there by name, or no root was read.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -109,6 +112,12 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     if (shippedClasses.includes('t-neo') && !((report.outlineChecks ?? 0) > 0)) {
         gaps.push('an-outline-where-the-text-has-its-own-ground read no outlined line');
     }
+    // The at-rest rule reads the rain-wearing root's layers by what they
+    // are: a pass that measured Neo and set the rain aside nowhere read no
+    // root at all (`a-new-root-layer-is-not-exempt-by-position`).
+    if (shippedClasses.includes('t-neo') && !(((report.atRestSetAside ?? {})['the rain'] ?? 0) > 0)) {
+        gaps.push('an-outline-that-shows-at-rest read no rain-wearing root');
+    }
     const rows = new Set(report.rowSizeClasses ?? []);
     const minis = new Set(report.doorMiniClasses ?? []);
     for (const cls of shippedClasses) {
@@ -166,6 +175,7 @@ export function probeCoverageLine(pass, report) {
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
         ` · money nodes asked: ${report.moneyChecks ?? 0}` +
+        ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

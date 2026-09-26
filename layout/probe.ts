@@ -2344,6 +2344,12 @@ function outlineOf(node: HTMLElement): number {
  *
  * `outlineChecks` counts the outlined elements read, and the runner requires
  * some on the phone and desk passes (`probe-coverage.mjs`).
+ *
+ * **Asked only inside a stall wearing the rain** (step 5b, CRITIC-FINAL-MERGE
+ * item 4), where the outline is scoped in stall.css. Elsewhere an opaque,
+ * unblurred `text-shadow` is a look's own mark — an emboss, a letterpress —
+ * and not this rule's; the look rules and the static
+ * `an-outline-is-the-only-mark-under-text-on-a-decoration` govern it.
  */
 const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
 let outlineChecks = 0;
@@ -2358,26 +2364,40 @@ let outlineChecks = 0;
  * root — the line's own box included — composited over it in paint order.
  *
  * - **A gradient** laid under the line (the notice's wash) is no single
- *   colour, so the outline is held to the colours it paints — between its
- *   stops, each composited over what lies under it, `AT_REST_LEVELS` either
- *   side — and never to one: the notice's midpoint passes, the look's
- *   ground under it fails. How far it shows at the wash's ends is measured
- *   and stated in `PROBE-RULES.md`, not guarded.
- * - **The root's own image layers are not read as the ground**, and are
- *   the stated exceptions: the rain is what the outline is for; the
- *   aurora's washes and Neo's own backdrop (its cyan falloff and its
- *   scanlines) are gradients across the whole stall that no single colour
- *   can match, and the outline on the plain ground stays `var(--s-bg)`
- *   over them. Neo's heading glow is the third: a shadow the heading
- *   paints under its own outline, not a ground, so this rule cannot see it.
- *   Their levels at rest are measured and stated (`PROBE-RULES.md`,
- *   round 10).
- * - A picture laid under the line between it and the root (a full-size
- *   `url()` layer) is a ground this rule cannot read, and fails.
- * - Not read, stated: a gradient sized smaller than its box (the vacant
- *   box's corner brackets — an ornament, not the ground under a line), a
- *   ground painted by a pseudo-element or by a box that is not an ancestor,
- *   and an ancestor's `opacity` or blend.
+ *   colour, so the outline is held to the colours it paints **under the
+ *   line itself** — a linear gradient is evaluated across the line's own
+ *   box, every colour composited over what lies under it, `AT_REST_LEVELS`
+ *   either side — and never to one: the notice's midpoint passes, the
+ *   look's ground under it fails. It was held to anywhere between the
+ *   gradient's stops until step 5b (CRITIC-FINAL-MERGE item 3): a gradient
+ *   from black to white accepted any outline at all. A gradient this rule
+ *   cannot evaluate across a box (radial, conic, repeating) is still held
+ *   to its stops, and counted by name (`atRestSetAside`). How far the
+ *   outline shows at the wash's ends is measured and stated in
+ *   `PROBE-RULES.md`, not guarded.
+ * - **The root's own image layers are read by what they are**, never passed
+ *   by where they sit (`a-new-root-layer-is-not-exempt-by-position`, step
+ *   5b, the same item). Each layer of the stall root is one of the named
+ *   exceptions in `ROOT_LAYERS_SET_ASIDE`, matched on its own form and on
+ *   the class that paints it — the rain, what the outline is for; the
+ *   aurora's washes and its tint over the rain, and Neo's own backdrop (its
+ *   scanlines and its top glow), gradients across the whole stall that no
+ *   single colour can match, where the outline on the plain ground stays
+ *   `var(--s-bg)` — or it is read like any layer under the line: a colour
+ *   or a full-size gradient composited in, anything else a failure. Until
+ *   step 5b every root layer was passed by its position, so a new root
+ *   decoration's layer would have been exempt the day it shipped. Neo's
+ *   heading glow is the other stated exception: a shadow the heading paints
+ *   under its own outline, not a ground, so this rule cannot see it. Their
+ *   levels at rest are measured and stated (`PROBE-RULES.md`, round 10).
+ * - A picture laid under the line between it and the root — a `url()`
+ *   layer of any size — is a ground this rule cannot read, and fails (a
+ *   picture smaller than its box was passed silently until step 5b).
+ * - Set aside and counted by reason (`atRestSetAside`), never silently: a
+ *   gradient sized smaller than its box (the vacant box's corner brackets,
+ *   the sign's rules — an ornament, not the ground under a line). Not read,
+ *   stated: a ground painted by a pseudo-element or by a box that is not an
+ *   ancestor, and an ancestor's `opacity` or blend.
  */
 const AT_REST_CHECK = 'an-outline-that-shows-at-rest';
 const AT_REST_LEVELS = 4;
@@ -2390,22 +2410,148 @@ function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
 }
 
 /**
+ * The root's image layers this rule sets aside, each by its own form and
+ * the class that paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
+ * A root layer none of these names is read like any layer under a line.
+ */
+const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: RegExp }> = [
+    // What the outline is for.
+    { name: 'the rain', paints: 'att-rainfall', test: /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/ },
+    // Two washes across the whole stall, and their tint over the rain.
+    { name: 'the aurora’s washes', paints: 'att-aurora', test: /^radial-gradient\(farthest-side, / },
+    { name: 'the aurora’s tint over the rain', paints: 'att-aurora', test: /^linear-gradient\(140deg, / },
+    // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
+    { name: 'Neo’s scanlines', paints: 't-neo', test: /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/ },
+    { name: 'Neo’s top glow', paints: 't-neo', test: /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/ },
+];
+
+/** What the at-rest rule set aside, by reason, over the whole pass. */
+const atRestSetAside: Record<string, number> = {};
+const setAside = (why: string): void => {
+    atRestSetAside[why] = (atRestSetAside[why] ?? 0) + 1;
+};
+
+const FULL_SIZE = ['auto', 'auto auto', 'cover', '100% 100%', '100%'];
+
+/** The colour stops of a gradient's computed text, each with its position as a share of the gradient line, or `undefined`. */
+function gradientStops(args: string[], length: number): { c: { rgb: Rgb; alpha: number }; at: number }[] | undefined {
+    const stops: { c: { rgb: Rgb; alpha: number }; at: number | undefined }[] = [];
+    for (const arg of args) {
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\))(?:\s+(-?[\d.]+)(%|px))?(?:\s+(-?[\d.]+)(%|px))?$/.exec(arg);
+        if (m === null) return undefined;
+        const c = colourOf(m[1]!);
+        if (c === undefined) return undefined;
+        const pos = (v: string | undefined, u: string | undefined): number | undefined =>
+            v === undefined ? undefined : u === '%' ? Number(v) / 100 : Number(v) / length;
+        stops.push({ c, at: pos(m[2], m[3]) });
+        if (m[4] !== undefined) stops.push({ c, at: pos(m[4], m[5]) });
+    }
+    if (stops.length < 2) return undefined;
+    stops[0]!.at ??= 0;
+    stops[stops.length - 1]!.at ??= 1;
+    // A stop with no position sits evenly between its neighbours that have one.
+    for (let i = 1; i < stops.length - 1; i += 1) {
+        if (stops[i]!.at !== undefined) continue;
+        let j = i;
+        while (stops[j]!.at === undefined) j += 1;
+        const from = stops[i - 1]!.at!;
+        const to = stops[j]!.at!;
+        for (let k = i; k < j; k += 1) stops[k]!.at = from + ((to - from) * (k - i + 1)) / (j - i + 1);
+    }
+    // Positions never run backwards (CSS clamps a later stop to the one before it).
+    for (let i = 1; i < stops.length; i += 1) stops[i]!.at = Math.max(stops[i]!.at!, stops[i - 1]!.at!);
+    return stops as { c: { rgb: Rgb; alpha: number }; at: number }[];
+}
+
+/** A gradient's colour at `t` on its line, interpolated in premultiplied sRGB, as CSS does. */
+function colourAt(stops: { c: { rgb: Rgb; alpha: number }; at: number }[], t: number): { rgb: Rgb; alpha: number } {
+    if (t <= stops[0]!.at) return stops[0]!.c;
+    for (let i = 1; i < stops.length; i += 1) {
+        const a = stops[i - 1]!;
+        const b = stops[i]!;
+        if (t > b.at) continue;
+        const f = b.at === a.at ? 1 : (t - a.at) / (b.at - a.at);
+        const alpha = a.c.alpha + (b.c.alpha - a.c.alpha) * f;
+        const rgb = [0, 1, 2].map((k) => {
+            const pre = a.c.rgb[k]! * a.c.alpha + (b.c.rgb[k]! * b.c.alpha - a.c.rgb[k]! * a.c.alpha) * f;
+            return alpha === 0 ? 0 : pre / alpha;
+        }) as unknown as Rgb;
+        return { rgb, alpha };
+    }
+    return stops[stops.length - 1]!.c;
+}
+
+/**
+ * The colours a full-size `linear-gradient` on `el` paints under `line`
+ * (a box inside it): the gradient line's share at each corner of `line`,
+ * and the colours between them — the stops that fall inside and sixteen
+ * steps — or `undefined` for a gradient this cannot evaluate.
+ */
+function linearUnder(layer: string, el: HTMLElement, line: DOMRect): { rgb: Rgb; alpha: number }[] | undefined {
+    const m = /^linear-gradient\((.*)\)$/.exec(layer);
+    if (m === null) return undefined;
+    const args = splitLayers(m[1]!);
+    let angle = 180;
+    const head = args[0]!;
+    const deg = /^(-?[\d.]+)deg$/.exec(head);
+    const TO: Record<string, number> = { 'to top': 0, 'to right': 90, 'to bottom': 180, 'to left': 270 };
+    if (deg !== null) {
+        angle = Number(deg[1]);
+        args.shift();
+    } else if (TO[head] !== undefined) {
+        angle = TO[head]!;
+        args.shift();
+    } else if (/^to /.test(head)) {
+        return undefined;
+    }
+    const box = el.getBoundingClientRect();
+    const rad = (angle * Math.PI) / 180;
+    const dir = [Math.sin(rad), -Math.cos(rad)];
+    const length = Math.abs(box.width * dir[0]!) + Math.abs(box.height * dir[1]!);
+    const stops = length > 0 ? gradientStops(args, length) : undefined;
+    if (stops === undefined) return undefined;
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const ts = [
+        [line.left, line.top],
+        [line.right, line.top],
+        [line.left, line.bottom],
+        [line.right, line.bottom],
+    ].map(([x, y]) => 0.5 + ((x! - cx) * dir[0]! + (y! - cy) * dir[1]!) / length);
+    const t0 = Math.max(0, Math.min(...ts));
+    const t1 = Math.min(1, Math.max(...ts));
+    const at = [...Array.from({ length: 17 }, (_, k) => t0 + ((t1 - t0) * k) / 16), ...stops.map((s) => s.at).filter((t) => t > t0 && t < t1)];
+    return at.map((t) => colourAt(stops, t));
+}
+
+/** A layer's colours composited over the range `lo`…`hi`, widening it. */
+function composite(colours: { rgb: Rgb; alpha: number }[], lo: Rgb, hi: Rgb): { lo: Rgb; hi: Rgb } {
+    const painted = colours.flatMap((c) => [over(c, lo), over(c, hi)]);
+    return {
+        lo: [0, 1, 2].map((k) => Math.min(...painted.map((c) => c[k]!))) as unknown as Rgb,
+        hi: [0, 1, 2].map((k) => Math.max(...painted.map((c) => c[k]!))) as unknown as Rgb,
+    };
+}
+
+/**
  * The ground painted under `node` as its lowest and highest colour on each
  * channel (one colour, when nothing between it and its stall's root is a
- * gradient), or the box whose picture this rule cannot read.
+ * gradient), or the layer this rule cannot read — a picture, or a root layer
+ * it does not know.
  */
-function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Element } | undefined {
+function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Element; what: string } | undefined {
     const stall = node.closest<HTMLElement>('.stall');
     const base = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
     if (stall === null || base === undefined || base.alpha < 1) return undefined;
-    const chain: HTMLElement[] = [];
-    for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.unshift(at);
+    const line = node.getBoundingClientRect();
+    const chain: HTMLElement[] = [stall];
+    for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.splice(1, 0, at);
     let lo: Rgb = base.rgb;
     let hi: Rgb = base.rgb;
     for (const el of chain) {
         const cs = getComputedStyle(el);
         const fill = colourOf(cs.backgroundColor);
-        if (fill !== undefined && fill.alpha > 0) {
+        if (el !== stall && fill !== undefined && fill.alpha > 0) {
             lo = over(fill, lo);
             hi = over(fill, hi);
         }
@@ -2415,17 +2561,35 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
         // Bottom layer first: the first layer listed paints on top.
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const size = sizes[i % sizes.length]!;
-            if (!['auto', 'auto auto', 'cover', '100% 100%', '100%'].includes(size)) continue;
             const layer = layers[i]!;
-            if (/^url\(/.test(layer)) return { picture: el };
+            if (el === stall) {
+                const known = ROOT_LAYERS_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && k.test.test(layer));
+                if (known !== undefined) {
+                    setAside(known.name);
+                    continue;
+                }
+                if (!FULL_SIZE.includes(size) || !/gradient\(/.test(layer)) {
+                    return { picture: el, what: `a root layer this rule does not know (${layer.slice(0, 60)}…, ${size}) — a-new-root-layer-is-not-exempt-by-position` };
+                }
+            }
+            if (/^url\(/.test(layer)) return { picture: el, what: `a picture (${size}) this rule cannot read` };
             if (!/gradient\(/.test(layer)) continue;
+            if (!FULL_SIZE.includes(size)) {
+                setAside('a gradient smaller than its box');
+                continue;
+            }
+            const under = linearUnder(layer, el, line);
+            if (under !== undefined) {
+                ({ lo, hi } = composite(under, lo, hi));
+                continue;
+            }
+            // Held to its stops: a gradient this cannot evaluate across a box.
+            setAside('a gradient held to its stops');
             const stops = (layer.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? [])
                 .map((c) => colourOf(c))
                 .filter((c): c is NonNullable<typeof c> => c !== undefined);
             if (stops.length === 0) continue;
-            const painted = stops.flatMap((stop) => [over(stop, lo), over(stop, hi)]);
-            lo = [0, 1, 2].map((k) => Math.min(...painted.map((c) => c[k]!))) as unknown as Rgb;
-            hi = [0, 1, 2].map((k) => Math.max(...painted.map((c) => c[k]!))) as unknown as Rgb;
+            ({ lo, hi } = composite(stops, lo, hi));
         }
     }
     return { lo, hi };
@@ -2476,6 +2640,12 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
         }
         if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
+        // Only where the rain is worn (CRITIC-FINAL-MERGE item 4, step 5b):
+        // the outline is the rain's, scoped to `.stall.att-rainfall` in
+        // stall.css, and a hard shadow anywhere else is a look's own mark —
+        // a white emboss on Rural is not an outline, and was failed as one
+        // ("neither outline set") on every look until this line.
+        if (node.closest('.stall.att-rainfall') === null) continue;
         const { width, rgb } = outlineRead(node);
         if (width === 0) continue;
         outlineChecks += 1;
@@ -2499,7 +2669,7 @@ function outlineFaults(screen: string, label: string): Failure[] {
         if (rgb !== undefined && ground !== undefined) {
             const said = `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" wears its outline in ${rgbText(rgb)}`;
             if ('picture' in ground) {
-                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a picture on ${describe(ground.picture)} this rule cannot read — an outline that shows at rest` });
+                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over ${ground.what} on ${describe(ground.picture)} — an outline that shows at rest` });
             } else if (rgb.some((c, i) => c < ground.lo[i]! - AT_REST_LEVELS || c > ground.hi[i]! + AT_REST_LEVELS)) {
                 const painted = ground.lo.every((c, i) => Math.abs(c - ground.hi[i]!) < 0.5) ? rgbText(ground.lo) : `${rgbText(ground.lo)} to ${rgbText(ground.hi)}`;
                 out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a ground painted ${painted} — an outline that shows at rest` });
@@ -3924,6 +4094,7 @@ const verdict = {
     floorNamedChecks,
     outlineChecks,
     moneyChecks,
+    atRestSetAside,
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,
