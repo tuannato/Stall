@@ -867,8 +867,14 @@ body {
  * invite's pink words (`#b08ca3`) are not lifted: in the ring of their
  * outline at the rain's worst they read 5.77:1 at the phone and 6.28:1 at
  * the desk as they are (round 9, measured; lifted they read 6.79 and 7.27).
+ *
+ * **The aurora worn alone lifts it too** (step 5b, the owner, 2026-09-26):
+ * no line wears the outline without the rain, and over the aurora's washes
+ * at either end of its tide the unlifted line read 2.73–2.95:1 at the phone
+ * and the desk (`the-aurora-is-read-at-both-ends-of-its-tide`). The colour
+ * alone clears it; nothing is laid under the words.
  */
-.stall.att-rainfall:not(.deck-stall) .sparse-empty-s {
+.stall:is(.att-rainfall, .att-aurora):not(.deck-stall) .sparse-empty-s {
     color: var(--s-muted);
 }
 
