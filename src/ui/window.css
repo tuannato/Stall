@@ -683,6 +683,20 @@
     .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
         text-align: left;
     }
+
+    /* The price column here is what the icon leaves: 320px at 768x1024.
+       At the tall wall's 11.5cqw figure and 28px words a Rural tag in Lora
+       was 369px and spilled out of the card (2026-09-26, measured once the
+       face was self-hosted), and a longer figure did the same on every look.
+       The figure steps to 10cqw (77px at 768) and the words to 20px. */
+    .stall.shop-window[data-mode='cycle'] .item-x {
+        font-size: min(124px, 10cqw);
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-from,
+    .stall.shop-window[data-mode='cycle'] .item-u {
+        font-size: 20px;
+    }
 }
 
 /* ---------- touch: the customer's own half of a Browse wall ---------- */

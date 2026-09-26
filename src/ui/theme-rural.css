@@ -687,6 +687,29 @@
 }
 
 /*
+ * On the wall the figure is 77-124px, and its line (1.05) is shorter than
+ * Lora's content area (~1.33em, the room for a Vietnamese mark over a
+ * capital) by more than the tag's 8px padding, so the clip-path that cuts
+ * the tag's notch also cut the top of that room (2026-09-26, measured once
+ * Lora was self-hosted). The polygon is extended past the box above and
+ * below, with two extra vertices on the notch's edge, so inside the box it
+ * is the same shape, and nothing but that overhang paints outside it. A
+ * taller tag was measured and refused: the card grew 17-27px, pushed the
+ * code past the wall's edge or its shadow over the status line.
+ */
+.t-rural.shop-window .item-p {
+    clip-path: polygon(
+        13px 0,
+        13px -40px,
+        100% -40px,
+        100% calc(100% + 40px),
+        13px calc(100% + 40px),
+        13px 100%,
+        0 50%
+    );
+}
+
+/*
  * THIS BLOCK STAYS LAST IN THE FILE — same rule and same measured reason
  * as stall.css's own reduce block: it wins same-specificity fights by
  * order. Transitions are named alongside the animations; the probe's

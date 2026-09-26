@@ -386,8 +386,10 @@ function parsePolygon(clip: string, w: number, h: number): [number, number][] | 
             const px = Number.parseFloat(calc[3]!);
             return calc[2] === '-' ? pct - px : pct + px;
         }
-        if (/^[\d.]+%$/.test(t)) return (Number.parseFloat(t) / 100) * size;
-        if (/^[\d.]+px$/.test(t)) return Number.parseFloat(t);
+        // Signed: a polygon may reach past its box (Rural's wall tag, whose
+        // clip extends above and below for the face's overhang, 2026-09-26).
+        if (/^-?[\d.]+%$/.test(t)) return (Number.parseFloat(t) / 100) * size;
+        if (/^-?[\d.]+px$/.test(t)) return Number.parseFloat(t);
         if (t === '0') return 0;
         return undefined;
     };

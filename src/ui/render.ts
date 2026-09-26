@@ -126,7 +126,7 @@ import { armTicker, renderBroadcastView } from './broadcast';
 import { renderShopWindow, sayHiddenPayLines, shopWindowSheet, wallTouches } from './window';
 import { OBS_GUIDE_TITLE, paintObsGuide, OBS_GUIDE_LEDE } from './obsGuide';
 import {
-    drawPoster,
+    drawPosterWhenFontsLoad,
     posterSpec,
     savePng,
     type PosterItem,
@@ -10079,7 +10079,7 @@ function posterSheet(
     // PNG formats draw on every mount — the canvas is cheap. Print keeps
     // the page DOM and does not touch the canvas.
     if (format !== 'print') {
-        drawPoster(canvas, posterSpec(format, paint));
+        drawPosterWhenFontsLoad(canvas, posterSpec(format, paint));
     }
     const controls = el('div', 'poster-controls');
     const print = el('button', 'buy', copy.POSTER_PRINT);

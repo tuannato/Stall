@@ -44,7 +44,7 @@ export const TAG_SIZE = { width: 1080, height: 1350 } as const;
  * character by character off a printed sheet, and a proportional face makes
  * `1`, `l` and `I` one glyph. Matches `.poster-url` in stall.css.
  */
-const MONO_STACK = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
+const MONO_STACK = '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
 
 export type PosterKind = 'square' | 'story' | 'stream' | 'tag';
 
@@ -1088,6 +1088,32 @@ export function drawPoster(canvas: HTMLCanvasElement, spec: PosterSpec): void {
         return;
     }
     paintStory(ctx, spec);
+}
+
+/**
+ * Draw now, and once more when the faces the spec names have loaded.
+ *
+ * A canvas draws with whatever face is loaded at the moment it is asked, and
+ * every look's first face is self-hosted (`@font-face` in stall.css): a sheet
+ * opened before Lora or JetBrains Mono arrived painted its PNG in the
+ * fallback, which is a different poster on every OS. The second draw is the
+ * same spec, only while the canvas is still on the page; a runtime without
+ * `document.fonts` (happy-dom) draws once.
+ */
+export function drawPosterWhenFontsLoad(canvas: HTMLCanvasElement, spec: PosterSpec): void {
+    drawPoster(canvas, spec);
+    const fonts = typeof document === 'undefined' ? undefined : document.fonts;
+    if (fonts === undefined || typeof fonts.load !== 'function') {
+        return;
+    }
+    const weights = ['400', '700', '800', spec.nameWeight];
+    const asks = [...new Set(weights)].map((w) => fonts.load(`${w} 16px ${spec.font}`));
+    asks.push(fonts.load(`400 16px ${MONO_STACK}`));
+    void Promise.allSettled(asks).then(() => {
+        if (canvas.isConnected) {
+            drawPoster(canvas, spec);
+        }
+    });
 }
 
 const pngSaves = new WeakSet<HTMLCanvasElement>();

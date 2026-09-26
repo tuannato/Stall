@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
     BROADCAST_QUOTE_LINE,
     QUOTE_NOT_MINTED_HERE,
@@ -17,6 +17,7 @@ import {
     type PosterKind,
     type PosterPaint,
     drawPoster,
+    drawPosterWhenFontsLoad,
     paintQr,
     posterSpec,
     qrModuleRects,
@@ -591,5 +592,78 @@ describe('the-tag-keeps-the-surcharge-line-beside-the-figure', () => {
     it('paints nothing extra without one', () => {
         const rec = draw('tag', paint({ item: ITEM, url: TAG_LINK }));
         expect(rec.texts.some((t) => /surcharge/i.test(t.text))).toBe(false);
+    });
+});
+
+/**
+ * `a-poster-draws-again-once-its-faces-load`: every look's first face is
+ * self-hosted, and a canvas draws with whatever face is loaded when asked, so
+ * a sheet opened before Lora or JetBrains Mono arrived saved its PNG in the
+ * fallback. The sheet draws now and once more when the faces the spec names
+ * have loaded — only while the canvas is still on the page. happy-dom has no
+ * `document.fonts`; the test hands it one whose loads it settles itself.
+ */
+describe('a-poster-draws-again-once-its-faces-load', () => {
+    const had = Object.getOwnPropertyDescriptor(document, 'fonts');
+    afterEach(() => {
+        if (had === undefined) {
+            Reflect.deleteProperty(document, 'fonts');
+        } else {
+            Object.defineProperty(document, 'fonts', had);
+        }
+        document.body.replaceChildren();
+    });
+
+    function withFonts(): { asked: string[]; settle: () => void } {
+        const asked: string[] = [];
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        Object.defineProperty(document, 'fonts', {
+            configurable: true,
+            value: {
+                load: (font: string) => {
+                    asked.push(font);
+                    return gate.then(() => []);
+                },
+            },
+        });
+        return { asked, settle: () => release() };
+    }
+
+    function countingCanvas(): { canvas: HTMLCanvasElement; draws: () => number } {
+        const canvas = document.createElement('canvas');
+        let n = 0;
+        canvas.getContext = (() => {
+            n += 1;
+            return null;
+        }) as HTMLCanvasElement['getContext'];
+        return { canvas, draws: () => n };
+    }
+
+    it('draws once at once, and again when the faces land', async () => {
+        const fonts = withFonts();
+        const { canvas, draws } = countingCanvas();
+        document.body.append(canvas);
+        const spec = posterSpec('square', paint({ font: 'Lora, serif' }));
+        drawPosterWhenFontsLoad(canvas, spec);
+        expect(draws()).toBe(1);
+        expect(fonts.asked.some((f) => f.includes('Lora, serif'))).toBe(true);
+        expect(fonts.asked.some((f) => f.includes('JetBrains Mono'))).toBe(true);
+        fonts.settle();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(draws()).toBe(2);
+    });
+
+    it('does not draw on a canvas that left the page', async () => {
+        const fonts = withFonts();
+        const { canvas, draws } = countingCanvas();
+        document.body.append(canvas);
+        drawPosterWhenFontsLoad(canvas, posterSpec('square', paint({ font: 'Lora, serif' })));
+        canvas.remove();
+        fonts.settle();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(draws()).toBe(1);
     });
 });

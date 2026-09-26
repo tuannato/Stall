@@ -123,7 +123,9 @@ describe('nothing-is-served-as-a-data-url', () => {
         // The faces are actually in the output, so an empty CSS file cannot
         // read as a pass.
         const woff = parts.filter((p) => (p.fileName ?? '').endsWith('.woff2'));
-        expect(woff.length, 'the two Inter subsets are emitted as files').toBe(2);
+        // Inter's two subsets, Lora's four (roman and italic) and JetBrains
+        // Mono's two (2026-09-26).
+        expect(woff.length, 'every self-hosted subset is emitted as a file').toBe(8);
     }, 120_000);
 });
 
@@ -170,7 +172,11 @@ describe('served-weight-has-a-ceiling', () => {
     // render branch with five controls and a frozen payment. Raised to
     // 940,000, which is the same deliberate 4% headroom the last two
     // readings were given; the delta is the number, the ceiling the alarm.
-    const CEILING_BYTES = 940_000;
+    // 2026-09-26: Lora (Rural) and JetBrains Mono (Neo and every mono line)
+    // self-hosted, the owner's call, so every OS paints one font: six woff2
+    // files, 148,264 bytes, took it to 1,085,256. A visitor fetches only the
+    // subsets the look on screen uses. Raised to 1,130,000, the same 4%.
+    const CEILING_BYTES = 1_130_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
         const result = await build({ logLevel: 'silent', build: { write: false } });
