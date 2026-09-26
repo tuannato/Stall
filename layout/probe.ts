@@ -2880,6 +2880,119 @@ function buntingSwingFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A halo never reaches a neighbour's text** (step 5b; SAMPLER-STEP-PLAN
+ * v2 item 10, CRITIC-SAMPLER-STEP item 11). A `box-shadow` with a spread or
+ * an offset paints outside its element's box — the rain's old halos, the
+ * sticky sheet head's `0 -26px` slab, a card's drop — and nothing measured
+ * where. So on every screen, look and variant of the geometry passes, every
+ * halo — a non-inset shadow with no blur, at half opacity or more, with a
+ * spread or an offset: a ground laid outside a box — has its painted extent
+ * (the box moved by its offset, grown by its spread) held off every other
+ * element's text on the same surface: no line rect of a text node outside
+ * the shadowing element may meet it, a device pixel in. A soft shadow (a
+ * card's drop, a glow) is not a halo; measured as one, it met the next line
+ * on every look (1,700 failures a pass), a guard refusing a safe design. `haloChecks` counts the
+ * shadows asked; the phone and desk passes owe some.
+ */
+const HALO_CHECK = 'a-halo-never-reaches-a-neighbours-text';
+let haloChecks = 0;
+
+type BoxShadow = { alpha: number; x: number; y: number; blur: number; spread: number; inset: boolean };
+
+let haloCtx: CanvasRenderingContext2D | undefined;
+
+/** A computed `box-shadow` as its shadows, or `undefined` for a part that does not read. */
+function boxShadowsOf(value: string): BoxShadow[] | undefined {
+    if (value === 'none') return [];
+    const out: BoxShadow[] = [];
+    for (const part of splitLayers(value)) {
+        const m = /^((?:rgba?|color|oklab|oklch|lab|lch)\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px(?:\s+(-?[\d.]+)px)?(?:\s+(-?[\d.]+)px)?(\s+inset)?$/.exec(part);
+        if (m === null) return undefined;
+        // The browser resolves the colour (a 1×1 canvas, `paintedGrounds`'
+        // way): `oklab()` and `color-mix()` results read like any `rgb()`.
+        haloCtx ??= (() => {
+            const c = document.createElement('canvas');
+            c.width = 1;
+            c.height = 1;
+            return c.getContext('2d', { willReadFrequently: true })!;
+        })();
+        haloCtx.clearRect(0, 0, 1, 1);
+        haloCtx.fillStyle = 'transparent';
+        haloCtx.fillStyle = m[1]!;
+        haloCtx.fillRect(0, 0, 1, 1);
+        const alpha = haloCtx.getImageData(0, 0, 1, 1).data[3]! / 255;
+        out.push({ alpha, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4] ?? 0), spread: Number(m[5] ?? 0), inset: m[6] !== undefined });
+    }
+    return out;
+}
+
+function haloFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const app = document.getElementById('app')!;
+    // Every text rect on the page, once, with the element that owns it.
+    const lines: { owner: Element; r: DOMRect; text: string }[] = [];
+    const range = document.createRange();
+    const walker = document.createTreeWalker(app, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || (text.textContent ?? '').trim() === '' || owner.closest('.deck-stall, svg') !== null) continue;
+        if (getComputedStyle(owner).visibility !== 'visible') continue;
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) {
+            if (r.width > 0 && r.height > 0) lines.push({ owner, r, text: (text.textContent ?? '').trim().slice(0, 24) });
+        }
+    }
+    for (const el of app.querySelectorAll<HTMLElement>('*')) {
+        if (el.closest('.deck-stall') !== null) continue;
+        const cs = getComputedStyle(el);
+        if (cs.boxShadow === 'none') continue;
+        const shadows = boxShadowsOf(cs.boxShadow);
+        if (shadows === undefined) {
+            out.push({ screen, theme: label, check: HALO_CHECK, detail: `${describe(el)} wears a box-shadow this rule cannot read: ${cs.boxShadow.slice(0, 80)}` });
+            continue;
+        }
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        for (const sh of shadows) {
+            // A halo is a ground: a hard shadow (no blur) at half opacity or
+            // more, with a spread or an offset. A soft shadow — a card's
+            // drop, a glow — is light around a box, not a ground under text,
+            // and measured literally it met the next line on every look.
+            if (sh.inset || sh.blur > 0 || sh.alpha < OWN_GROUND_ALPHA || (sh.spread === 0 && sh.x === 0 && sh.y === 0)) continue;
+            haloChecks += 1;
+            const grow = Math.max(0, sh.spread);
+            const x0 = box.left + sh.x - grow;
+            const x1 = box.right + sh.x + grow;
+            const y0 = box.top + sh.y - grow;
+            const y1 = box.bottom + sh.y + grow;
+            // Only text on the same surface: behind an open sheet's scrim the
+            // stall is another layer, under the sheet and its slab.
+            const surface = el.closest('.sheet, [data-role="poster"]');
+            const hit = lines.find(
+                ({ owner, r }) =>
+                    owner.closest('.sheet, [data-role="poster"]') === surface &&
+                    !el.contains(owner) &&
+                    !owner.contains(el) &&
+                    // Outside the element's own box: a shadow never paints under
+                    // its own border box.
+                    !(r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom) &&
+                    r.right > x0 + 1 && r.left < x1 - 1 && r.bottom > y0 + 1 && r.top < y1 - 1,
+            );
+            if (hit !== undefined) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: HALO_CHECK,
+                    detail: `${describe(el)}'s shadow (${sh.x}px ${sh.y}px, blur ${sh.blur}, spread ${sh.spread}) reaches ${describe(hit.owner)} "${hit.text}" at ${Math.round(hit.r.left)},${Math.round(hit.r.top)}`,
+                });
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+/*
  * **A tile shows its letters whole** (2026-09-24, the critic's item 10).
  * A token tile (`.item-ic`) paints the name's initials until a picture
  * lands, and it clips (`overflow: hidden`, a radius): the Activity row's
@@ -3060,6 +3173,7 @@ for (const screen of measured) {
             failures.push(...outlineFaults(screen, label));
             failures.push(...moneySetFaults(screen, label));
             failures.push(...buntingSwingFaults(screen, label));
+            failures.push(...haloFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -3438,6 +3552,8 @@ type ContrastPrepared = {
     vh: number;
     /** The look pseudos generated in the job's scope (D6(i)): none means no second frame. */
     lookPseudos?: number;
+    /** The elements whose visible text no contrast target reads, described (a report, step 5b). */
+    uncovered?: string[];
     /** The stalls that wore Neo's rain, and how many had it at its brightest. */
     rain: { worn: number; flattened: number };
     /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
@@ -4285,6 +4401,32 @@ function markLookPseudos(scope: ParentNode): number {
     return n;
 }
 
+/*
+ * **Text no target reads** (step 5b; SAMPLER-STEP-PLAN v2 item 9): every
+ * visible, non-aria-hidden text node in the job's scope whose element is in
+ * no contrast target, described once per element kind. A report, printed
+ * on the pass's line whatever the verdict — the list the next target is
+ * chosen from, and the answer to "what did the pass not read" — never a
+ * failure: most of it is text on a card every look was proved on.
+ */
+function uncoveredText(scope: ParentNode): string[] {
+    const out = new Set<string>();
+    const root = scope === document ? document.getElementById('app')! : (scope as Element);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || (text.textContent ?? '').trim() === '') continue;
+        if (owner.closest('.deck-stall, svg, [aria-hidden="true"], #layout-result') !== null) continue;
+        if (owner.closest(CONTRAST_TEXT) !== null) continue;
+        if (getComputedStyle(owner).visibility !== 'visible') continue;
+        range.selectNodeContents(text);
+        if ([...range.getClientRects()].every((r) => r.width === 0 || r.height === 0)) continue;
+        out.add(describe(owner));
+    }
+    return [...out];
+}
+
 let lookPseudoSheetAdopted = false;
 
 window.__lookPseudosHidden = async (hide: boolean) => {
@@ -4383,6 +4525,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
     preparedScope = scope;
     const lookPseudos = markLookPseudos(scope);
+    const uncovered = uncoveredText(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
     // 8 (2026-09-15) — had its colour set to transparent by the outer node's
@@ -4460,6 +4603,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         rain,
         // The look pseudos in scope, marked for D6(i)'s second frame.
         lookPseudos,
+        // Visible text no target reads, reported (step 5b).
+        uncovered,
         // The stalls that wore the aurora, and how many had its tide held.
         tide: tideHeld,
         ...echo,
@@ -4544,6 +4689,7 @@ const verdict = {
     moneyChecks,
     atRestSetAside,
     buntingChecks,
+    haloChecks,
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,

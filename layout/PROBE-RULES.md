@@ -1590,6 +1590,30 @@ was proved on, which is their own reason, not the sampler's.
   of the whole-box read (above, "Rendered-pixel contrast") now apply to the
   money set alone; a line rect holds no border and no arc.
 
+## A halo never reaches a neighbour's text, and what no target reads is said (step 5b, 2026-09-26)
+
+**`a-halo-never-reaches-a-neighbours-text`** (probe, every screen, look and
+variant of the geometry passes; SAMPLER-STEP-PLAN v2 item 10). A halo is a
+ground laid outside a box: a non-inset `box-shadow` with no blur, at half
+opacity or more, with a spread or an offset — the rain's old halos, the
+sticky sheet head's `0 -26px` slab. Its painted extent (the box moved and
+grown) must not meet a line rect of any text outside the shadowing element
+on the same surface (behind an open sheet's scrim is another layer), a
+device pixel in. The colour's alpha is resolved by the browser, so an
+`oklab()` or `color-mix()` shadow reads. The phone and desk passes owe
+halos asked (264 on the phone on the day it landed). **A soft shadow is not
+a halo**, stated: measured literally, every card's drop and every glow met
+the next line on every look — 1,700 failures a pass over designs that read
+— and a guard refusing a safe design is a guard defect. Proved red by
+`.t-neo .notice { box-shadow: 0 0 0 30px var(--s-bg) }`: 54 failures, the
+notice's halo over the sign's tagline.
+
+**Text no target reads** is printed on the contrast pass's line, whatever
+the verdict (`uncoveredText`): every element kind whose visible,
+non-aria-hidden text stands in no contrast target, and on how many jobs.
+A report, never a failure — most of it is text on a card every look was
+proved on; it is the list the next target is chosen from.
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

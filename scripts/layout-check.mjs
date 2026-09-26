@@ -1520,6 +1520,8 @@ try {
     const ringKindsOut = new Map();
     // The prepared nodes that gave no box, summed by reason (step 5b).
     const skipTotals = new Map();
+    // Visible text no contrast target reads, by element kind, and on how many jobs.
+    const uncoveredKinds = new Map();
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1759,6 +1761,7 @@ try {
                     // Every prepared node that gave no box, by the reason the
                     // page gave (step 5b: no silent drop) — per job in the
                     // dump, summed on the pass's line.
+                    for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
                     record.skips = firstRead.live.skips ?? {};
                     for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
                     // A failing box is re-shot once before it is believed:
@@ -2249,6 +2252,17 @@ try {
                 [...skipTotals]
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([why, n]) => `${why} ${n}`)
+                    .join(', '),
+        );
+    }
+    // Visible text no target reads (a report, never a verdict): each element
+    // kind and on how many jobs it stood unread.
+    if (uncoveredKinds.size > 0) {
+        console.log(
+            `  text no target reads (${uncoveredKinds.size} kinds; jobs): ` +
+                [...uncoveredKinds]
+                    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                    .map(([kind, n]) => `${kind} ${n}`)
                     .join(', '),
         );
     }

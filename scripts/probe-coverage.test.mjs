@@ -23,6 +23,7 @@ const full = {
     floorNamedChecks: 900,
     outlineChecks: 400,
     moneyChecks: 300,
+    haloChecks: 30,
     atRestSetAside: { 'the rain': 120, 'Neo’s scanlines': 120 },
     buntingChecks: 40,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
@@ -45,6 +46,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 floorNamedChecks: 3,
                 outlineChecks: 5,
                 moneyChecks: 4,
+                haloChecks: 1,
                 atRestSetAside: { 'the rain': 1 },
                 buntingChecks: 2,
             },
@@ -124,17 +126,17 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     });
 
     it('asks a kit run for the labels, skips and small text alone: it measures no shipped look and no skeleton', () => {
-        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20 };
+        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20, haloChecks: 2 };
         assert.deepEqual(probeCoverageGaps('mobile', kit), []);
         assert.deepEqual(probeCoverageGaps('desktop', kit), []);
-        assert.equal(probeCoverageGaps('mobile', {}).length, 4);
+        assert.equal(probeCoverageGaps('mobile', {}).length, 5);
         assert.equal(probeCoverageGaps('canvas', {}).length, 10);
     });
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(

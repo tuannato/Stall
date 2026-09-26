@@ -37,6 +37,8 @@
  *   on the three wall passes.
  * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
  *   bunting on the phone and desk passes wherever Rural is measured.
+ * - **`a-halo-never-reaches-a-neighbours-text`** asks the hard shadows
+ *   (the sticky sheet head's slab among them) on the phone and desk passes.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -108,6 +110,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
+    if (!((report.haloChecks ?? 0) > 0)) {
+        gaps.push('a-halo-never-reaches-a-neighbours-text asked no halo');
+    }
     if (!((report.moneyChecks ?? 0) > 0)) {
         gaps.push('the-money-set-is-every-protected-contrast-target asked no node');
     }
@@ -187,6 +192,7 @@ export function probeCoverageLine(pass, report) {
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
         ` · money nodes asked: ${report.moneyChecks ?? 0}` +
+        ` · halos asked: ${report.haloChecks ?? 0}` +
         ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
         ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
