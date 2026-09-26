@@ -307,7 +307,9 @@ export const SHIPPED_ATTACHMENTS: readonly ShippedAttachment[] = [
          * within 46 channels of the old fade and the billboard pass rightly
          * called it a mood nobody can see. Paler and greyer now — 66
          * channels off the base — with the muted ink darkened to keep its
-         * 4.5:1 on the brighter sheet.
+         * 4.5:1 on the brighter sheet. (The billboard has measured in
+         * ΔE00 ≥ 5 since step 5a′, not in channels: this palette reads
+         * 6.86 against today's paper.)
          */
         /*
          * Accent and muted darkened 2026-09-25, the owner's (c) for Rural's

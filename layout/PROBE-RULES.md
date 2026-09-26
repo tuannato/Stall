@@ -908,8 +908,10 @@ clips today); no incident yet.
   (`styleSignature()` — eight properties on three elements; the review
   marked this the guard's weakest joint, to be generalised into a full
   computed-style diff by the catalogue plan).
-- A **mood** must move the canvas ≥60 channel-points — the first Sun-faded
-  moved it four and a buyer could not tell they were wearing it.
+- A **mood** must move the canvas by at least ΔE00 5 — the first Sun-faded
+  moved it four channel-points and a buyer could not tell they were wearing
+  it. Measured in CIEDE2000 since step 5a′; the heading below has why and
+  the numbers.
 - Worn **together**, no root row may erase another: each single row's
   signature is compared against the all-root dress, and equality means the
   cascade ate the rest (aurora once erased the rain's image and animation
@@ -932,6 +934,75 @@ clips today); no incident yet.
   legitimate designs. That judgement belongs to the eye, and the workshop
   framework's checklist now carries it: look at every row under every mood
   it can be worn with, at 390 and 1280.
+
+### A mood is measured in CIEDE2000 (step 5a′, D10, 2026-09-26)
+
+The mood rule was an RGB channel sum ≥ 60 over `bg` + `surface`. It refused
+青墨 (28 points), the mood the design board approved, while being a proxy
+for nothing a buyer sees. It is now `moodDistance(base, palette)`
+(`layout/moodVisible.ts`, pure): the larger CIEDE2000 difference of the two
+grounds a mood swaps, sRGB companded as `relLum` does, CIELAB against a D65
+white (0.95047, 1, 1.08883) — pinned, because CSS `lab()` is D50 and there
+the fixtures read 7.89 / 4.18 / 6.97. `MOOD_VISIBLE_MIN = 5`. The probe
+fails a mood row on either of two readings:
+
+- **The row**: the mood's `bg`/`surface` against the look's.
+- **The painted page**: the computed `background-color` of `.stall` and of
+  the first `.item` on `offers`, bare against worn (`paintedDistance`). Each
+  is resolved to sRGB by the browser itself — filled into a 1x1 canvas and
+  read back — so `color-mix()` (serialised `color(srgb …)`), `oklch()`,
+  `lab()` and fractional channels read like `rgb()`. A ground not opaque
+  both ways (alpha under 255, or transparent) is skipped; only when neither
+  is opaque both ways does the check fail, saying so. This half is what
+  catches a look sheet painting both grounds from literals.
+
+**Known limits, stated:** a literal root beside a token card passes on the
+card's move alone; an opaque `background-image` over a token
+`background-color` is not seen (only the colour is read).
+
+Why 5: the two moods it separates move differently, and CIEDE2000 counts
+the two moves differently near white. 青墨 is mostly a loss of chroma — b*
+9.13 → 1.25, ΔC* −6.14, ΔL* only −1.37 — and at chroma this low CIEDE2000
+counts a chroma move close to one for one: the a*b* part alone is 7.29 of
+its 7.34. Sun-faded v2 over today's paper is half a lightening, ΔL* +2.95
+at L* ≈ 97, where the lightness weight S_L ≈ 1.7 cuts it to 1.73, beside a
+chroma loss of 4.98 that counts 3.73: 4.11 in all. OKLab weights the
+lightening more and reads them the other way (青墨 2.57 below v2's 2.85).
+Only the first Sun-faded was ever judged by eye; the gap is narrow, and a
+mood landing in it is a call to make with the pictures.
+
+The fixtures (`a-mood-is-measured-in-ciede2000`, RGB literals, never names):
+
+| mood | against | ΔE00 | verdict |
+|---|---|---|---|
+| 青墨 #ece5d4 → #dde3df, bg only | its paper | 7.34 | visible |
+| Sun-faded v1 (`2dc16aa`) | Rural's paper of its day | 1.28 | refused |
+| Sun-faded v2 (`a450bc2`) | today's Rural paper | 4.11 | refused |
+| Sun-faded as shipped ((c) inks) | today's Rural paper | 6.86 | visible |
+| After hours | Modern | 88.6 | visible |
+
+Recorded, not pinned as a verdict: v2 against its own day's paper reads
+6.96 — it was refused on 2026-08-30 only because Rural's paper moved to meet
+it. The formula is held to all 34 of Sharma's published pairs to 4 decimals,
+in both orders (`ciede2000-matches-the-published-pairs`,
+`layout/ciede2000-sharma.ts`).
+
+**Proved**, on the shipped Rural look, every plant reverted:
+- Sun-faded's `bg` set back to v2's `rgb(255, 251, 241)`: red in all seven
+  passes, "Sun-faded moves its grounds by ΔE00 4.11" and "Sun-faded moves
+  the painted page by ΔE00 4.11".
+- `.stall.t-rural` and `.t-rural .item` given their bare grounds as
+  `!important` literals, the row untouched: "Sun-faded moves the painted
+  page by ΔE00 0.00" alone, all seven passes.
+- `.stall.t-rural` `transparent` and `.t-rural .item` at alpha 0.9: "neither
+  .stall nor the first .item paints an opaque background-color both bare
+  and worn, so the painted page could not be measured", all seven passes.
+- `.stall.t-rural` as `color-mix(in srgb, var(--s-bg) 99%, black)` and
+  `.t-rural .item` as `color-mix(in oklch, var(--s-surface) 99%, black)`:
+  **no billboard failure** (the transparent overlays fail for the plant's
+  opaque ground, as they should). The first build's regex read the same
+  plant as "`.stall` paints no opaque ground (color(srgb 0.99 0.986118
+  0.970588))" — the refusal of a safe design this fixed.
 
 ## Budget
 
