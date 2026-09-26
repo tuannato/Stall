@@ -2275,26 +2275,24 @@ const CONTRAST_TEXT = [
     // (`sparse-pasted`, the critic's fourth pass).
     '.notice-invite .invite-text',
     /*
-     * And the rest of what the rain exposed, sampled where it is worn: the
-     * brand strip, the footer's Wearing line, the section and shelf heads,
-     * the face's back control. Unscoped, three reads fall under 3:1 on other
-     * looks with every decoration worn, and two of them are this sampler's
-     * mistakes (the critic's fourth pass): Modern's section and shelf heads
-     * (2.56:1) read the heading's own 2px accent underline, inside the box
-     * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
-     * bunting row its box also holds. Rural's Wearing links and back control
-     * (2.53:1, sun-faded worn) are real and open. Scoped to the rain, where
-     * each wears the outline and is read in the ring around its own glyphs
-     * (round 8, `ringRead` in the runner), which never reaches an underline
-     * or a bunting row; elsewhere the box read would.
+     * The rest of what the rain exposed: the brand strip, the footer's
+     * Wearing line and its links, the section and shelf heads, the face's
+     * back control. Scoped to the rain until step 5b, because the box read
+     * failed three of them on other looks — two the sampler's own mistakes
+     * (Modern's heads read against their 2px accent underline, Rural's strip
+     * against the bunting row in its box) and one real (Rural's Wearing
+     * links under Sun-faded, 2.53:1, fixed since in the mood's inks). Read
+     * over their line rects (D7) they are read on every look, bare and worn;
+     * where the rain is worn they wear the outline and are read in its ring
+     * (SAMPLER-STEP-PLAN §2).
      */
-    '.stall.att-rainfall:not(.deck-stall) .orn',
-    '.stall.att-rainfall:not(.deck-stall) .wearing',
-    '.stall.att-rainfall:not(.deck-stall) .wearing-link',
-    '.stall.att-rainfall:not(.deck-stall) .section-title',
-    '.stall.att-rainfall:not(.deck-stall) .collection-name',
-    '.stall.att-rainfall:not(.deck-stall) .collection-count',
-    '.stall.att-rainfall:not(.deck-stall) .item-back',
+    '.orn',
+    '.wearing',
+    '.wearing-link',
+    '.section-title',
+    '.collection-name',
+    '.collection-count',
+    '.item-back',
     /*
      * The rest of the lines standing on the rain's ground, each outlined
      * there (round 8): the Activity rows, the first-stall steps' numbers,
@@ -3995,8 +3993,10 @@ function ringLines(node: HTMLElement, box: { x: number; y: number; width: number
 /**
  * The ring read's second capture: every prepared target that wears the
  * outline, and each descendant, has its glyphs shown again (the colour the
- * prepare blanked, put back) or blanked once more. Pseudo-elements stay
- * blanked in both: the mask is read inside the text nodes' own line boxes.
+ * prepare blanked, put back) or blanked once more. A pseudo-element with an
+ * ink of its own paints in both captures and one inheriting the line's
+ * follows it; the mask is read inside the text nodes' own line boxes either
+ * way (D6(ii), step 5b).
  */
 window.__contrastGlyphs = async (show: boolean) => {
     let n = 0;
@@ -4257,8 +4257,6 @@ function pageHeight(scope: ParentNode): number {
     return need;
 }
 
-/** Whether the sheet that blanks a target's pseudo-element glyphs is adopted (once per page). */
-let pseudoBlankAdopted = false;
 
 /*
  * **No look pseudo paints inside a protected box** (D6(i), step 5b;
@@ -4476,30 +4474,23 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // ground the ring read measures, so it stays in both captures;
             // any other shadow is the glyph's own paint and goes with it.
             // An element outside every outlined target wears none.
-            if (outlineOf(el) > 0) {
-                el.setAttribute('data-probe-outline', '');
-            } else {
+            if (outlineOf(el) <= 0) {
                 el.style.textShadow = 'none';
             }
-            // And its pseudo-elements' glyphs (2026-09-24): Neo's Wearing
-            // line opens with a `::before` "// " in its own cyan, which an
-            // inline colour cannot reach — its glyphs stayed and were read
-            // as the line's ground at 1.20:1. A pseudo's background is not
-            // touched: that is ground, or chrome the band steps past.
-            el.setAttribute('data-probe-blank', '');
         }
     }
-    // Through the CSSOM: the page's policy refuses an injected `<style>`
-    // (`style-src 'self'`), and a refused sheet blanks nothing, silently.
-    if (!pseudoBlankAdopted) {
-        const sheet = new CSSStyleSheet();
-        sheet.replaceSync(
-            '[data-probe-blank]::before,[data-probe-blank]::after{color:transparent!important;-webkit-text-fill-color:transparent!important}' +
-                '[data-probe-blank]:not([data-probe-outline])::before,[data-probe-blank]:not([data-probe-outline])::after{text-shadow:none!important}',
-        );
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-        pseudoBlankAdopted = true;
-    }
+    /*
+     * A pseudo-element's glyphs are no longer blanked (D6(ii), step 5b). The
+     * adopted sheet that turned every target's `::before`/`::after` ink
+     * transparent (2026-09-24: Neo's Wearing line's cyan "// " read as the
+     * line's ground at 1.20:1) is gone with the line-rect read: a pseudo
+     * beside the text lies outside every line rect, and one that paints
+     * over the text is ground and read as such — which the sheet used to
+     * hide. A pseudo inherits the inline transparent ink where it sets no
+     * colour of its own. A whole-box money read is safe from a pseudo's glyph
+     * only because no look pseudo may paint inside a protected box
+     * (`no-look-pseudo-paints-inside-a-protected-box`, D6(i)).
+     */
     // Anything the prepare itself started — a fold it opened — is frozen too.
     freezeAnimations();
     // The runner grows the emulated viewport to this and repaints before the
