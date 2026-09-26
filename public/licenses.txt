@@ -477,7 +477,7 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
-- Lora, the Latin roman, Latin italic, Vietnamese roman and Vietnamese italic subsets this site serves (lora-latin.woff2, lora-latin-italic.woff2, lora-vietnamese.woff2, lora-vietnamese-italic.woff2)
+- Stall Serif (Lora, renamed as its Reserved Font Name requires), the Latin roman, Latin italic, Vietnamese roman and Vietnamese italic subsets this site serves (stall-serif-latin.woff2, stall-serif-latin-italic.woff2, stall-serif-vietnamese.woff2, stall-serif-vietnamese-italic.woff2)
 
 Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora". Lora-Italic[wght].ttf: Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
 

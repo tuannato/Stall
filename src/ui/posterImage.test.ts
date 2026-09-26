@@ -598,7 +598,7 @@ describe('the-tag-keeps-the-surcharge-line-beside-the-figure', () => {
 /**
  * `a-poster-draws-again-once-its-faces-load`: every look's first face is
  * self-hosted, and a canvas draws with whatever face is loaded when asked, so
- * a sheet opened before Lora or JetBrains Mono arrived saved its PNG in the
+ * a sheet opened before Stall Serif or JetBrains Mono arrived saved its PNG in the
  * fallback. The sheet draws now and once more when the faces the spec names
  * have loaded — only while the canvas is still on the page. happy-dom has no
  * `document.fonts`; the test hands it one whose loads it settles itself.
@@ -646,10 +646,10 @@ describe('a-poster-draws-again-once-its-faces-load', () => {
         const fonts = withFonts();
         const { canvas, draws } = countingCanvas();
         document.body.append(canvas);
-        const spec = posterSpec('square', paint({ font: 'Lora, serif' }));
+        const spec = posterSpec('square', paint({ font: '"Stall Serif", serif' }));
         drawPosterWhenFontsLoad(canvas, spec);
         expect(draws()).toBe(1);
-        expect(fonts.asked.some((f) => f.includes('Lora, serif'))).toBe(true);
+        expect(fonts.asked.some((f) => f.includes('"Stall Serif", serif'))).toBe(true);
         expect(fonts.asked.some((f) => f.includes('JetBrains Mono'))).toBe(true);
         fonts.settle();
         await new Promise((r) => setTimeout(r, 0));
@@ -660,7 +660,7 @@ describe('a-poster-draws-again-once-its-faces-load', () => {
         const fonts = withFonts();
         const { canvas, draws } = countingCanvas();
         document.body.append(canvas);
-        drawPosterWhenFontsLoad(canvas, posterSpec('square', paint({ font: 'Lora, serif' })));
+        drawPosterWhenFontsLoad(canvas, posterSpec('square', paint({ font: '"Stall Serif", serif' })));
         canvas.remove();
         fonts.settle();
         await new Promise((r) => setTimeout(r, 0));

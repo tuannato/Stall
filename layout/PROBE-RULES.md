@@ -3103,15 +3103,15 @@ The test's own plants cover these as well:
 The probe had only ever measured Rural and Neo in whatever the machine running
 it carried: `FONT_STACKS` named Iowan Old Style and SF Mono first, which a Mac
 has and the Linux box did not. Moved to a Mac, the run went red on 448 checks
-that main passed on Linux — the same 448 on main. Lora and JetBrains Mono are
+that main passed on Linux — the same 448 on main. Stall Serif (Lora, renamed) and JetBrains Mono are
 self-hosted now, so the pass measures one font on every OS.
 
 What the faces found, and what each fix is:
 
 - **Rural's wall figure left its tag's clip** (`text escapes its clip`, 2–11px
   at 1280, 1920 and the portrait wall). The content area is taller than the
-  1.05 line by more than the 8px padding. The polygon reaches 40px past the
-  box above and below. `parsePolygon` now reads a signed `%` or `px` vertex;
+  1.05 line by more than the 8px padding. The polygon reaches 20px past the
+  box above and below (the overhang is ~10px at 124px). `parsePolygon` now reads a signed `%` or `px` vertex;
   before, the extended polygon read as `a clip-path this check cannot read`
   and failed every wall screen on Rural. Three taller tags were measured and
   refused: `line-height: normal` (card +27px, the code 7px past the 1080

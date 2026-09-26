@@ -292,13 +292,13 @@ export type DecodedTheme = {
 };
 
 export const FONT_STACKS = [
-    // Each stack's first face is self-hosted (Inter, JetBrains Mono, Lora:
+    // Each stack's first face is self-hosted (Inter, JetBrains Mono, Stall Serif:
     // the @font-face blocks in stall.css), so every OS paints one font;
     // everything after it is the fallback chain while it loads, and the
     // per-glyph net for characters outside the two vendored subsets.
     'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-    'Lora, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
+    '"Stall Serif", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
 ] as const;
 
 

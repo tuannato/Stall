@@ -1095,7 +1095,7 @@ export function drawPoster(canvas: HTMLCanvasElement, spec: PosterSpec): void {
  *
  * A canvas draws with whatever face is loaded at the moment it is asked, and
  * every look's first face is self-hosted (`@font-face` in stall.css): a sheet
- * opened before Lora or JetBrains Mono arrived painted its PNG in the
+ * opened before Stall Serif or JetBrains Mono arrived painted its PNG in the
  * fallback, which is a different poster on every OS. The second draw is the
  * same spec, only while the canvas is still on the page; a runtime without
  * `document.fonts` (happy-dom) draws once.
@@ -1106,9 +1106,20 @@ export function drawPosterWhenFontsLoad(canvas: HTMLCanvasElement, spec: PosterS
     if (fonts === undefined || typeof fonts.load !== 'function') {
         return;
     }
-    const weights = ['400', '700', '800', spec.nameWeight];
-    const asks = [...new Set(weights)].map((w) => fonts.load(`${w} 16px ${spec.font}`));
-    asks.push(fonts.load(`400 16px ${MONO_STACK}`));
+    // The spec's own words, so a subset past Latin (a Vietnamese stall name)
+    // is waited for too: `load` with no text asks only the faces covering U+0020.
+    const item = spec.item;
+    const words = [
+        spec.name,
+        spec.tagline ?? '',
+        spec.brand,
+        spec.caption,
+        item?.name ?? '',
+        item?.words ?? '',
+    ].join(' ');
+    const weights = ['400', '600', '700', '800', spec.nameWeight];
+    const asks = [...new Set(weights)].map((w) => fonts.load(`${w} 16px ${spec.font}`, words));
+    asks.push(fonts.load(`400 16px ${MONO_STACK}`, spec.url ?? ' '));
     void Promise.allSettled(asks).then(() => {
         if (canvas.isConnected) {
             drawPoster(canvas, spec);

@@ -102,10 +102,10 @@ a rule runs it for, Stall's own included, and refuses a scroll-driven
 animation, which no duration bounds.)* Motion outside the menu is not
 accepted. *(Stall at intake.)*
 
-**Type.** Pick one of three stacks for the look: Inter (the only face Stall
-serves, so it looks the same everywhere), a system monospace, or a system
-serif — the last two are whatever the reader's device has, so their widths
-differ between phones and computers; test at both widths. No new font files.
+**Type.** Pick one of three stacks for the look: a sans (Inter), a
+monospace (JetBrains Mono) or a serif (the face Rural wears). Stall serves
+all three itself, so a look reads the same on every phone and computer and
+the kit measures what visitors see. No new font files.
 Text a reader is given is never smaller than 11 px — Stall's small-text
 scale is 11 px for labels and 11.5 px for fine print — and every control
 keeps a 44 px touch target. *(The kit — `workshop:probe` fails any text

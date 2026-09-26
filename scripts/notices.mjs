@@ -71,14 +71,14 @@ export const FONTS = [
         licence: 'src/ui/fonts/LICENSE-OFL.txt',
     },
     {
-        name: 'Lora',
+        name: 'Stall Serif (Lora, renamed as its Reserved Font Name requires)',
         files: {
-            'src/ui/fonts/lora-latin.woff2': 'Latin roman',
-            'src/ui/fonts/lora-latin-italic.woff2': 'Latin italic',
-            'src/ui/fonts/lora-vietnamese.woff2': 'Vietnamese roman',
-            'src/ui/fonts/lora-vietnamese-italic.woff2': 'Vietnamese italic',
+            'src/ui/fonts/stall-serif-latin.woff2': 'Latin roman',
+            'src/ui/fonts/stall-serif-latin-italic.woff2': 'Latin italic',
+            'src/ui/fonts/stall-serif-vietnamese.woff2': 'Vietnamese roman',
+            'src/ui/fonts/stall-serif-vietnamese-italic.woff2': 'Vietnamese italic',
         },
-        licence: 'src/ui/fonts/LICENSE-OFL-lora.txt',
+        licence: 'src/ui/fonts/LICENSE-OFL-stall-serif.txt',
     },
     {
         name: 'JetBrains Mono',
