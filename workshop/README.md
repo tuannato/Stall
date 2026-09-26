@@ -136,8 +136,9 @@ a label or anything that carries a token or an address. *(The kit —
 
 A mood moves the palette and nothing else: background, surface, text,
 muted, accent, second accent, shade. It must move far enough for a buyer to
-see it — today, the background and surface together by at least 60 points of
-summed RGB difference. A mood adds no class to the page, so anything that
+see it: the background or the surface must move by at least 5 in CIEDE2000
+(ΔE00, sRGB under a D65 white), both in your `look.json` and on the page your
+stylesheet paints. A mood adds no class to the page, so anything that
 must change with it is written in the look's colour tokens (`var(--s-…)`).
 *(The kit.)*
 

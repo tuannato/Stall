@@ -21,6 +21,7 @@ import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import { brightestDrop, type Drop } from './rainDrop';
+import { MOOD_VISIBLE_MIN, moodIsVisible, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
@@ -2717,7 +2718,12 @@ failures.push(...doorMiniFaults());
  * **root** row must change the painted style signature of the page. A
  * **mood** must move the canvas itself further than a person can fail to
  * notice — the first Sun-faded moved the background four points and a buyer
- * could not tell they were wearing it.
+ * could not tell they were wearing it. Measured in CIEDE2000 since step 5a′
+ * (`moodVisible.ts`, where the threshold's reason is): the row's own `bg`
+ * and `surface`, AND the grounds the page actually painted — the stall's and
+ * the first card's computed `background-color`, bare against worn — because
+ * a look sheet that paints its ground from a literal would pass on the row
+ * alone while the page stood still.
  */
 /**
  * The FULL computed style of every element in the painted tree — not the
@@ -2757,6 +2763,31 @@ function paintSignature(): string {
     return parts.join('\n');
 }
 
+/**
+ * The two grounds the offers screen actually painted: the stall root's and
+ * the first card's computed `background-color`, opaque `rgb()` only. A
+ * ground the page paints translucent or through an image alone cannot be
+ * read as one colour, and says so rather than reading as unmoved.
+ */
+function paintedGrounds(): { bg: MoodRgb; surface: MoodRgb } | string {
+    const app = document.getElementById('app')!;
+    const read = (sel: string): MoodRgb | string => {
+        const node = app.querySelector(sel);
+        if (node === null) {
+            return `no ${sel} to read a ground from`;
+        }
+        const value = getComputedStyle(node).backgroundColor;
+        const m = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
+        return m === null ? `${sel} paints no opaque ground (${value})` : { r: +m[1]!, g: +m[2]!, b: +m[3]! };
+    };
+    const bg = read('.stall');
+    const surface = read('.item');
+    if (typeof bg === 'string') {
+        return bg;
+    }
+    return typeof surface === 'string' ? surface : { bg, surface };
+}
+
 // Every measured look — on a workshop page the kit's alone, judged against
 // its OWN row: a kit mood measured against `decodeTheme(0xff)` would be
 // measured against Modern's canvas (the workshop critic's P1).
@@ -2764,25 +2795,25 @@ for (const look of measuredLooks()) {
     const theme = look.theme;
     paint('offers', look, []);
     const bare = paintSignature();
+    const bareGrounds = paintedGrounds();
     for (const row of look.rows) {
         paint('offers', look, [row]);
         const bill = (check: string, detail: string): void => {
             failures.push({ screen: 'billboard', theme: theme.label, check, detail });
         };
         if (row.slot === 'mood') {
-            const base = theme;
-            const p = row.palette ?? {};
-            const bg = p.bg ?? base.bg;
-            const surface = p.surface ?? base.surface;
-            const dist =
-                Math.abs(bg.r - base.bg.r) +
-                Math.abs(bg.g - base.bg.g) +
-                Math.abs(bg.b - base.bg.b) +
-                Math.abs(surface.r - base.surface.r) +
-                Math.abs(surface.g - base.surface.g) +
-                Math.abs(surface.b - base.surface.b);
-            if (dist < 60) {
-                bill('a mood nobody can see', `${row.label} moves the canvas by ${dist}`);
+            const onRow = moodIsVisible(theme, row.palette ?? {});
+            if (onRow < MOOD_VISIBLE_MIN) {
+                bill('a mood nobody can see', `${row.label} moves its grounds by ΔE00 ${onRow.toFixed(2)}`);
+            }
+            const worn = paintedGrounds();
+            if (typeof bareGrounds === 'string' || typeof worn === 'string') {
+                bill('a mood nobody can see', `${row.label}: ${typeof worn === 'string' ? worn : bareGrounds}`);
+                continue;
+            }
+            const onPage = moodIsVisible(bareGrounds, worn);
+            if (onPage < MOOD_VISIBLE_MIN) {
+                bill('a mood nobody can see', `${row.label} moves the painted page by ΔE00 ${onPage.toFixed(2)}`);
             }
             continue;
         }
