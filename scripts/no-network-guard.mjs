@@ -15,14 +15,19 @@
  *   Node's `fetch` and `WebSocket`): a host that is a loopback IP literal
  *   goes through; the name `localhost` goes through only when every address
  *   it resolves to is loopback, checked on the lookup's own answer (a
- *   `lookup` option included); any other host is refused;
+ *   `lookup` option included); any other host is refused. A Unix-domain
+ *   socket stays on this machine, like loopback, and goes through;
+ *   `strict` refuses it with the rest;
  * - `dns.lookup` (and its promise form): a loopback literal, or `localhost`
  *   answered with loopback only; every other name or address is refused.
  *   `resolve*`, `reverse`, `lookupService` and every `Resolver` query a DNS
  *   server whatever they are asked, and are refused outright;
  * - `dgram` (UDP): `send` and `connect` to a loopback literal, or to
  *   `localhost`, which is sent to the socket family's own loopback literal;
- *   every other address is refused;
+ *   every other address is refused. A multicast join (`addMembership`,
+ *   `addSourceSpecificMembership`) sends a membership report on the
+ *   interface it joins on, whatever the group, so it goes through only on a
+ *   loopback interface named outright;
  * - worker threads and Node child processes: this file is injected into
  *   each (`execArgv`, `NODE_OPTIONS`), with where to report and which test
  *   started it, and every spawn road re-injects it however its `env` was
@@ -185,7 +190,15 @@ function installSockets(s) {
         // A Unix socket only when `path` is a non-empty string: Node's http
         // passes `path: null` beside the host.
         const pipe = typeof opts.path === 'string' && opts.path !== '';
-        if (!pipe) {
+        if (pipe) {
+            // This machine, like loopback: through, except under `strict`,
+            // which refuses every road so the self-tests see this one too
+            // (CRITIC-CARRYOVER-9 item 4). A local daemon that forwards it
+            // onward is not seen, as a loopback proxy is not.
+            if (s.strict) {
+                throw refuse('socket', `unix:${String(opts.path)}`);
+            }
+        } else {
             const host = String(opts.host ?? 'localhost').replace(/^\[|\]$/g, '');
             const to = `${host}:${String(opts.port)}`;
             if (s.strict) {
@@ -315,6 +328,28 @@ function installDgram(s) {
             ? connect.call(this, port, target.address, callback)
             : connect.call(this, port, address, callback);
     };
+    // A join sends a membership report (IGMP, MLD) on the interface it joins
+    // on, whatever the group: through only on a loopback interface named
+    // outright, and never under `strict` (CRITIC-CARRYOVER-9 item 4). With no
+    // interface the system picks one, and that is the network.
+    for (const [name, groupAt] of [
+        ['addMembership', 0],
+        ['addSourceSpecificMembership', 1],
+    ]) {
+        const join = proto[name];
+        if (typeof join !== 'function') {
+            continue;
+        }
+        proto[name] = function guardedJoin(...args) {
+            const group = String(args[groupAt]);
+            const on = args[groupAt + 1];
+            const loopback = typeof on === 'string' && net.isIP(on) !== 0 && isLoopbackAddress(on);
+            if (s.strict || !loopback) {
+                throw refuse('udp-join', typeof on === 'string' ? `${group} on ${on}` : group);
+            }
+            return join.apply(this, args);
+        };
+    }
 }
 
 /** The environment a child or a worker gets: this guard injected, where to report, and who started it. */

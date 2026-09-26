@@ -61,7 +61,11 @@
  * exception win from being made, and a right one remembered is what keeps
  * a lagging replica from undoing it. The cost, stated: a wrong exception
  * win over a read that saw no mined transaction on its page is still made,
- * and remembered for the session.
+ * and remembered for the session. Its trigger (CRITIC-CARRYOVER-9 item 6):
+ * at least `HISTORY_PAGE_SIZE` (200) unconfirmed transactions in the
+ * walked index, the mempool coming first — or an index with nothing mined
+ * at all — which a stranger can cause cheaply with dust to the address or
+ * `STLD`-shaped spam.
  *
  * **One record read twice keeps its known height** (CRITIC-CARRYOVER-9
  * item 1, the window's decision by recommendation). Where both reads

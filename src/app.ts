@@ -1608,10 +1608,13 @@ export function boot(
                 }
                 // Nothing marks the valve's carried line here: after an open
                 // the app paints this sheet again only when it hands itself
-                // back, which says whether a wallet opened
-                // (`PayShown.opened`), and on a close, which drops the line
+                // back, and on a close, which drops the line
                 // (CRITIC-CARRYOVER-8 item 6: the mark no road reached is
-                // gone).
+                // gone). "Pay several" says in its hand-back whether a
+                // wallet opened (`PayShown.opened`); the single sheet hands
+                // its valve line back only to a sheet whose record left,
+                // whose one sentence `payWalletWasOpened` decides
+                // (CRITIC-CARRYOVER-9 item 6).
             },
             onToggleSelection: () => {
                 selectionOpen = !selectionOpen;

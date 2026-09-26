@@ -22,6 +22,7 @@ import dns from 'node:dns';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
@@ -97,6 +98,25 @@ describe('no-test-reaches-the-network', () => {
         expect(drain()).toEqual(['socket 0.0.0.0:9', 'socket :::9']);
     });
 
+    it('lets a Unix-domain socket through as this machine, and refuses it under strict', () => {
+        // CRITIC-CARRYOVER-9 item 4: it passed unrecorded even under
+        // strict. Refused before any connect, so no file need exist.
+        const at = join(tmpdir(), `stall-no-network-${process.pid}.sock`);
+        const sockets: net.Socket[] = [];
+        try {
+            strictly(() => {
+                expect(() => sockets.push(net.connect({ path: at }))).toThrow(`a test reached the network: socket unix:${at}`);
+                expect(() => sockets.push(net.connect(at))).toThrow(`a test reached the network: socket unix:${at}`);
+            });
+        } finally {
+            for (const socket of sockets) {
+                socket.on('error', () => undefined);
+                socket.destroy();
+            }
+        }
+        expect(drain()).toEqual([`socket unix:${at}`, `socket unix:${at}`]);
+    });
+
     it('trusts localhost only when it resolves to loopback, a lookup option included', async () => {
         const errors: string[] = [];
         const socket = net.connect({ host: 'localhost', port: 9, lookup: elsewhere } as net.NetConnectOpts);
@@ -162,6 +182,36 @@ describe('no-test-reaches-the-network', () => {
             socket.close();
         }
         expect(drain()).toEqual(['udp 0.0.0.0:9', 'udp 127.0.0.1:9', 'udp localhost:9', 'udp 0.0.0.0:9']);
+    });
+
+    it('refuses a multicast join but on a loopback interface named outright, and that too under strict', () => {
+        // CRITIC-CARRYOVER-9 item 4: a join sends a membership report on
+        // the interface it joins on. Strict first, on the loopback
+        // interface: were the road open, that join is the one that stays on
+        // this machine, and the case stops there.
+        const socket = dgram.createSocket('udp4');
+        try {
+            strictly(() => {
+                expect(() => socket.addMembership('239.255.0.9', '127.0.0.1')).toThrow(
+                    'a test reached the network: udp-join 239.255.0.9 on 127.0.0.1',
+                );
+            });
+            expect(() => socket.addMembership('239.255.0.9')).toThrow('a test reached the network: udp-join 239.255.0.9');
+            expect(() => socket.addMembership('239.255.0.9', '0.0.0.0')).toThrow(
+                'a test reached the network: udp-join 239.255.0.9 on 0.0.0.0',
+            );
+            expect(() => socket.addSourceSpecificMembership('127.0.0.1', '232.0.0.9')).toThrow(
+                'a test reached the network: udp-join 232.0.0.9',
+            );
+        } finally {
+            socket.close();
+        }
+        expect(drain()).toEqual([
+            'udp-join 239.255.0.9 on 127.0.0.1',
+            'udp-join 239.255.0.9',
+            'udp-join 239.255.0.9 on 0.0.0.0',
+            'udp-join 232.0.0.9',
+        ]);
     });
 
     it('is loaded into a worker thread, however its execArgv and env are given, and reports back', async () => {
