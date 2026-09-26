@@ -1463,6 +1463,58 @@ row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
 
+## Nothing in the body reaches the status line (step 5b, 2026-09-26, the owner's (a))
+
+The wall's grid gives the body a `minmax(0, 1fr)` row and the status line
+the row under it, and the body does not clip. A Cycle card taller than its
+row painted straight over the status line, and no geometry rule saw it:
+the status line is no protected box, the card is no decoration, and
+`nothing-on-the-wall-is-cut-from-below` reads clips, of which there were
+none. The line-rect contrast read (D7) found it first, reading "Showing
+listings" at 1.96:1 against the card's own dashed edge.
+
+`nothing-in-the-body-reaches-the-status-line`: on every wall screen, every
+element in `.stall-body` that no ancestor inside the body clips must end
+above the status line's top (a device pixel's tolerance) wherever the two
+share columns. It counts the elements it asks (`statusLineChecks`), and the
+canvas, portrait and tablet passes owe some (`probe-coverage.mjs`).
+
+**Red on `main`, as it stood** (every look, bare, one row at a time and all
+worn): at 1920×1080 the card ended 110.2px over the line on Rural with the
+Yard beetle, 10.2px on Rural bare and under every other Rural row, 9.4 /
+7.4px on Modern under the Awning; at the counter tablet (768×1024) 47.9px
+on Rural with the beetle and 2.5px on Modern all worn — 9 failures on the
+canvas pass and 6 on the tablet.
+
+**The fix** (`window.css`, the owner's (a): the card's own air steps down,
+the code does not, every decoration stays as worn): a landscape block for
+the 901–1200px-tall container (the 1080 wall) takes the body's block
+padding to 10px, the card's to 16px, its row gap to 8px, the name to
+`min(4.8cqh, 4cqw)` (52px at most) and the figure to `min(7.4cqh, 6.4cqw)`
+(80px at most); the tablet's own block takes the same padding and gap and
+no type — its code is at its 280px floor already. **The tablet is the
+owner's (a) carried one size over**: the decision named the 1080 wall, and
+the rule found the same overflow at 768×1024 the day it landed.
+
+Card bottom against the status line's top, before → after (px; negative
+is clear):
+
+| Size | Look, worn | Before | After |
+|---|---|---|---|
+| 1920×1080 | Modern bare / Pinstripe | −41 / −40 | −104 / −103 |
+| 1920×1080 | Modern all worn (Awning) | **+9.4** | −67.6 |
+| 1920×1080 | Neo, any | −43 | −106 |
+| 1920×1080 | Rural bare, and each row but the beetle | **+10.2** | −65.9 |
+| 1920×1080 | Rural + Yard beetle, alone or all worn | **+110.2** | −15.9 |
+| 1920×1080 | skeleton | −41 | −104 |
+| 768×1024 | Modern all worn | **+2.5** | −40.2 |
+| 768×1024 | Rural + Yard beetle | **+47.9** | −23.7 |
+| 768×1024 | the rest | −36 to −70 | −74 to −107 |
+| 1080×1920, 1280×900 | every look and row | unchanged | unchanged |
+
+(At 1280×900 Rural with the beetle stands 1.8px clear, unchanged.)
+Pictures: `private/design/workshop-2026-09-23/step5b-shots/wall-*`.
+
 ## No look pseudo paints inside a protected box (step 5b, D6(i), 2026-09-26)
 
 A pseudo-element has no box the DOM hands back. The geometry passes refuse

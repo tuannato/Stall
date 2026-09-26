@@ -10,6 +10,7 @@ const full = {
     doorMiniClasses: SHIPPED,
     ladderTiers: { 1: 2, 2: 1, 3: 1 },
     wallControlChecks: 24,
+    statusLineChecks: 50,
     wallControlRoles: {
         'window-back': 6,
         'window-pay': 6,
@@ -87,7 +88,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         ]);
         assert.deepEqual(probeCoverageGaps('mobile', phoneOnly, { shippedClasses: SHIPPED, skeleton: true }), []);
         // The canvas owes the stream's two skips and the wall's controls, and no label, row or ladder.
-        assert.deepEqual(probeCoverageGaps('canvas', { skipChecks: { 'stream-card': 1 }, wallControlRoles: full.wallControlRoles }, {
+        assert.deepEqual(probeCoverageGaps('canvas', { skipChecks: { 'stream-card': 1 }, wallControlRoles: full.wallControlRoles, statusLineChecks: 3 }, {
             shippedClasses: SHIPPED,
             skeleton: true,
         }), ['an-unbuyable-offer-paints-no-figure-and-says-so saw no stream-ticker skip an unbuyable listing']);
@@ -100,6 +101,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             assert.deepEqual(
                 probeCoverageGaps(pass, {
                     wallControlRoles: { ...full.wallControlRoles, 'window-step-fewer': 0, 'pay-borrowed': 0 },
+                    statusLineChecks: 3,
                 }),
                 [
                     'nothing-on-the-wall-is-cut-from-below read no window-step-fewer on a wall',
@@ -116,7 +118,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(probeCoverageGaps('mobile', kit), []);
         assert.deepEqual(probeCoverageGaps('desktop', kit), []);
         assert.equal(probeCoverageGaps('mobile', {}).length, 4);
-        assert.equal(probeCoverageGaps('canvas', {}).length, 9);
+        assert.equal(probeCoverageGaps('canvas', {}).length, 10);
     });
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
@@ -127,20 +129,20 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         const quiet = { ...full, smallText: [] };
         assert.equal(
             probeCoverageLine('canvas', quiet),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · wall controls read: 24',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · wall controls read: 24 · status line asked: 50',
         );
-        assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24');
+        assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24 · status line asked: 50');
         assert.equal(
             probeCoverageLine('tablet', {
                 ...quiet,
                 wallSlivers: ['pay-3 Modern: window-step-more 12/72px y', 'pay-3 Rural: window-step-more 28/72px y'],
             }),
-            'wall controls read: 24 · shown only in part inside a scroller: window-step-more ×2 (least 12/72px)',
+            'wall controls read: 24 · status line asked: 50 · shown only in part inside a scroller: window-step-more ×2 (least 12/72px)',
         );
         // Text no reader is given is printed on every pass that paints some.
         assert.equal(
             probeCoverageLine('portrait', full),
-            'wall controls read: 24 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
+            'wall controls read: 24 · status line asked: 50 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
         );
         assert.equal(probeCoverageLine('reduced-motion', full), '');
     });

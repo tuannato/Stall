@@ -1737,6 +1737,60 @@ let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
 const wallSlivers = new Set<string>();
 
+/*
+ * **Nothing in the body reaches the status line** (step 5b, 2026-09-26, the
+ * owner's (a)). The wall's grid gives the body a `minmax(0, 1fr)` row and
+ * the status line the row under it, and the body does not clip: a Cycle
+ * card taller than its row painted straight over the status line — 110px on
+ * Rural with the Yard beetle at 1920x1080, where "Showing listings" and
+ * "Updated …" stood under the card's edge — and no geometry rule saw it:
+ * the status line is no protected box, the card is no decoration, and the
+ * cut-from-below rule reads clips, which there were none of. Only the
+ * contrast read of the status words, once it read them per line (D7),
+ * found it. So on every wall screen: every element in `.stall-body` that no
+ * ancestor inside the body clips must end above the status line's top
+ * (within a device pixel) wherever the two share columns.
+ * `statusLineChecks` counts the elements asked; the canvas, portrait and
+ * tablet passes owe some (`probe-coverage.mjs`).
+ */
+const STATUS_LINE_CHECK = 'nothing-in-the-body-reaches-the-status-line';
+let statusLineChecks = 0;
+
+function statusLineFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const status of document.querySelectorAll<HTMLElement>('#app .stall.shop-window .sw-status')) {
+        const wall = status.closest('.stall-scroll');
+        const body = wall?.querySelector<HTMLElement>(':scope > .stall-body');
+        if (body === null || body === undefined) continue;
+        const line = status.getBoundingClientRect();
+        if (line.height === 0) continue;
+        for (const el of body.querySelectorAll<HTMLElement>('*')) {
+            let clipped = false;
+            for (let at = el.parentElement; at !== null && at !== body; at = at.parentElement) {
+                const cs = getComputedStyle(at);
+                if (cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
+                    clipped = true;
+                    break;
+                }
+            }
+            if (clipped) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            statusLineChecks += 1;
+            if (r.bottom > line.top + 1 && r.right > line.left && r.left < line.right && r.top < line.bottom) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: STATUS_LINE_CHECK,
+                    detail: `${describe(el)} ends at ${r.bottom.toFixed(1)}, ${(r.bottom - line.top).toFixed(1)}px over the status line (top ${line.top.toFixed(1)})`,
+                });
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 type Span = { lo: number; hi: number };
 
 function wallCuts(screen: string, label: string): Failure[] {
@@ -2900,6 +2954,7 @@ for (const screen of measured) {
             }
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
+            failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
@@ -4205,6 +4260,7 @@ const verdict = {
     rowSizeClasses: [...rowSizeClasses].sort(),
     doorMiniClasses: [...doorMiniClasses].sort(),
     wallControlChecks,
+    statusLineChecks,
     wallControlRoles,
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,

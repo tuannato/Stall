@@ -33,6 +33,8 @@
  * - **`an-outline-that-shows-at-rest`** reads the rain-wearing root's
  *   layers by what they are, on the phone and desk passes wherever Neo is
  *   measured: the rain is set aside there by name, or no root was read.
+ * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
+ *   on the three wall passes.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -86,6 +88,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
                 gaps.push(`nothing-on-the-wall-is-cut-from-below read no ${role} on a wall`);
             }
         }
+    }
+    if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
+        gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
     }
     const places = UNBUYABLE_PLACES[pass];
     if (places === undefined) return gaps;
@@ -145,7 +150,7 @@ export function probeCoverageLine(pass, report) {
     // never failed — on every pass that paints some, not the page ones only.
     const hiddenSmall = (report.smallText ?? []).length === 0 ? '' : ` · under 11px, aria-hidden: ${report.smallText.join('; ')}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
