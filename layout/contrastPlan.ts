@@ -100,6 +100,19 @@ export const RAIN_JOBS: readonly string[] = [
     'item-quote',
 ];
 
+/**
+ * A decoration sampled worn on its own, beside the bare and all-worn jobs
+ * (2026-09-26, the critic on Grid horizon v6): the all-worn job puts the
+ * sign's text under every Neo row at once — The sign hums' glow in place of
+ * Neo's own, its failing lamp dimming one letter — so a seller holding the
+ * horizon alone, whose name and tagline stand over the lit skyline and the
+ * stars, wore a combination no job read. `cls` names the row; its bit is read
+ * off the look's own table, so a row's bit is never restated here.
+ */
+export const SOLO_JOBS: ReadonlyArray<{ screen: string; look: number; cls: string }> = [
+    { screen: 'offers', look: NEO_CITY_THEME_ID, cls: 'att-horizon' },
+];
+
 /** The overlay screens the pass samples; every other overlay screen is geometry. */
 export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);
 
@@ -142,7 +155,14 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                 if (!canWear(look, screen)) {
                     continue;
                 }
-                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, WORN_ALL];
+                const solo = SOLO_JOBS.filter((j) => j.screen === screen && j.look === look.id).map((j) => {
+                    const row = look.rows.find((r) => r.cls === j.cls);
+                    if (row === undefined) {
+                        throw new Error(`SOLO_JOBS: ${look.label} has no row ${j.cls}`);
+                    }
+                    return 1 << row.bit;
+                });
+                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, WORN_ALL, ...solo];
                 for (const flags of variants) {
                     const job = {
                         viewport: viewport.name,

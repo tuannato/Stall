@@ -71,7 +71,7 @@ const FOLLOWS: Readonly<Record<string, 'palette' | 'art'>> = {
     'att-awning': 'palette',
     'att-hum': 'palette',
     'att-rainfall': 'art',
-    'att-horizon': 'palette',
+    'att-horizon': 'art',
     'att-aurora': 'palette',
     'att-beetle': 'art',
     'att-sunburst': 'palette',
@@ -181,8 +181,8 @@ const keyframes = (): Map<string, string> => {
 
 /** The `background-size` a rule states, from the longhand or out of the
  *  `background` shorthand's `/ size` component — `.att-bunting` and
- *  `.att-beetle-bug` both use the shorthand, so a longhand-only reader is
- *  blind on exactly the drawn-art rows. */
+ *  the beetle's sprite (until v3) used the shorthand, so a longhand-only
+ *  reader was blind on exactly the drawn-art rows. */
 const sizesOf = (body: string): string[] | undefined => {
     const long = decl(body, 'background-size');
     if (long !== undefined) {
@@ -600,10 +600,10 @@ const DECORATION_ART: Readonly<Record<string, string>> = {
     '.stall.att-pinstripe .item | background-image':
         'Pinstripe’s card border: the card’s own surface restated in its padding box, the stripes only in its 2px border',
     '.stall.att-horizon .stall-sign | background-image':
-        'the Horizon is a floor drawn on the sign’s own panel (`yard` on Neo), and its haze and scrim sink its own floor lines under the name, as shipped',
+        'the Horizon is a floor and a skyline drawn on the sign’s own panel (`yard` on Neo): the city, moon and stars stand behind the name as a picture does, and the haze and scrim sink its own floor lines under the name, as shipped',
     '.att-bunting | background': 'a decoration node’s own box: aria-hidden, no text in it',
     '.att-beetle | background-image': 'a decoration node’s own box: the beetle’s rail, aria-hidden, no text in it',
-    '.att-beetle-bug | background': 'a decoration node’s own box: the beetle sprite, aria-hidden, no text in it',
+    '.att-beetle-bug | background-image': 'a decoration node’s own box: the beetle sprite, walking or flying, aria-hidden, no text in it',
 };
 
 /** Whether a rule reaches past a decoration class: its selector names one. */

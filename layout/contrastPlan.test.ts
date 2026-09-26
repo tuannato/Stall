@@ -36,7 +36,14 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 198, desktop: 226, canvas: 29, total: 453 });
+        }).toEqual({ mobile: 199, desktop: 227, canvas: 29, total: 455 });
+    });
+
+    it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {
+        // SOLO_JOBS: the all-worn job reads the sign under every Neo row at
+        // once, and the horizon alone was a combination nothing read.
+        const solo = jobs.filter((j) => j.flags !== 0 && j.flags !== WORN_ALL);
+        expect(solo.map((j) => j.key).sort()).toEqual(['desktop/offers/2/4', 'mobile/offers/2/4']);
     });
 
     it('walks the runner’s own viewports', () => {
@@ -77,7 +84,9 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         const byCell = new Map<string, ContrastJob[]>();
         // The reduced-motion jobs are a second paint of a planned one, held
         // below; the rest are one job per look and variant.
-        for (const job of jobs.filter((j) => j.reduced !== true && !RAIN_JOBS.includes(j.screen))) {
+        // The solo jobs (SOLO_JOBS) are held in their own case above.
+        const isSolo = (j: ContrastJob): boolean => j.flags !== 0 && j.flags !== WORN_ALL;
+        for (const job of jobs.filter((j) => j.reduced !== true && !RAIN_JOBS.includes(j.screen) && !isSolo(j))) {
             const cell = `${job.viewport}/${job.screen}`;
             byCell.set(cell, [...(byCell.get(cell) ?? []), job]);
         }
@@ -107,7 +116,11 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             'desktop/unbuyable/3/0/reduce',
             `desktop/unbuyable/3/${WORN_ALL}/reduce`,
         ]);
-        expect(jobs.every((job) => job.flags === 0 || job.flags === WORN_ALL)).toBe(true);
+        // Bare, all worn, or one of SOLO_JOBS' rows alone.
+        expect(jobs.filter((job) => job.flags !== 0 && job.flags !== WORN_ALL).map((j) => j.key).sort()).toEqual([
+            'desktop/offers/2/4',
+            'mobile/offers/2/4',
+        ]);
         // The rain's own jobs: Neo worn alone, at the phone and the desk, on
         // the five geometry-only screens whose lines stand on the ground.
         expect(RAIN_JOBS.every((screen) => GEOMETRY_ONLY_SCREENS.has(screen))).toBe(true);
