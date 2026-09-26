@@ -644,6 +644,12 @@ export const SCREENS: Record<string, StallView> = {
             [NFT, 'One of one'],
             [STUDIO_NO_GENESIS, 'Words on a token this page never read'],
         ]),
+        // One twin carries a quote and a shelf, so the id line is measured in
+        // the tallest row the card paints: the quote figure under
+        // `seller-price` and the shelf beside the words (the critic,
+        // 2026-09-26).
+        prices: new Map<string, TokenPrice>([[STUDIO_TWIN_A, { code: 'usd', exponent: 2, amount: 1250n }]]),
+        shelves: new Map([[STUDIO_TWIN_A, 'Spring shelf']]),
     }),
     /*
      * Both lists at once, because they are two different surfaces: the ring on

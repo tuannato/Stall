@@ -1123,7 +1123,7 @@ describe('the-describe-picker-labels-carry-ticker-and-short-id', () => {
     const TWIN_B = 'b2'.repeat(30) + 'bbbb';
     const PLAIN = 'c3'.repeat(32);
     const BARE = 'e5'.repeat(32);
-    it('labels each option Name (TICKER) · short id, keeps the full id as the value', () => {
+    it('labels each option short id · Name (TICKER), keeps the full id as the value', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
@@ -1138,12 +1138,33 @@ describe('the-describe-picker-labels-carry-ticker-and-short-id', () => {
         );
         const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
         const label = (id: string) => [...picker.options].find((o) => o.value === id)?.textContent;
-        expect(label(TWIN_A)).toBe(`Honey (HNY) · ${shortTokenId(TWIN_A)}`);
-        expect(label(TWIN_B)).toBe(`Honey (HNY) · ${shortTokenId(TWIN_B)}`);
-        expect(label(PLAIN)).toBe(`Candle · ${shortTokenId(PLAIN)}`);
+        expect(label(TWIN_A)).toBe(`\u2066${shortTokenId(TWIN_A)}\u2069 · Honey (HNY)`);
+        expect(label(TWIN_B)).toBe(`\u2066${shortTokenId(TWIN_B)}\u2069 · Honey (HNY)`);
+        expect(label(PLAIN)).toBe(`\u2066${shortTokenId(PLAIN)}\u2069 · Candle`);
         // A name that fell back to the id keeps its current label.
         expect(label(BARE)).toBe(BARE);
         expect([...picker.options].map((o) => o.value).sort()).toEqual([BARE, PLAIN, TWIN_A, TWIN_B].sort());
+    });
+
+    it('the-picker-label-keeps-the-short-id-under-a-long-name', () => {
+        // A closed <select> cuts its label at the right edge; the short id
+        // leads, isolated, so a 64-code-point name and ticker — or a name
+        // carrying a fake `abcdef…wxyz` of its own — cannot push it out of
+        // view or stand in its place.
+        const long = 'W'.repeat(40) + ' a7a7a7…01b2 ' + 'W'.repeat(11);
+        const { root } = paint(
+            idlePubkey({
+                fetch: { kind: 'empty' },
+                overlay: { kind: 'describe' },
+                descriptions: new Map([[TWIN_A, 'Words']]),
+                tokens: new Map<string, TokenMeta>([
+                    [TWIN_A, { tokenId: TWIN_A, name: long, ticker: 'T'.repeat(64), decimals: 0 }],
+                ]),
+            }),
+        );
+        const picker = root.querySelector('[data-role="describe-token"]') as HTMLSelectElement;
+        const text = [...picker.options].find((o) => o.value === TWIN_A)!.textContent!;
+        expect(text.startsWith(`\u2066${shortTokenId(TWIN_A)}\u2069 · `)).toBe(true);
     });
 });
 
@@ -1245,6 +1266,14 @@ describe('the-items-card-lists-the-describe-pickers-set', () => {
         expect([...card.querySelectorAll('[data-role="studio-item"]')]).toHaveLength(1);
         // The row's short token id is hex and names no count; everything
         // else on the card carries no digit.
+        // First, that the line holds exactly the ticker and the short id and
+        // nothing else, so stripping it cannot hide a count.
+        const idLines = [...card.querySelectorAll('[data-role="studio-item-id"]')];
+        expect(idLines.map((line) => line.textContent)).toEqual([
+            TEA.ticker !== undefined && TEA.ticker !== '' && TEA.ticker !== TEA.name
+                ? `${TEA.ticker} · ${shortTokenId(OTHER_TOKEN)}`
+                : shortTokenId(OTHER_TOKEN),
+        ]);
         const counted = card.cloneNode(true) as HTMLElement;
         counted.querySelectorAll('[data-role="studio-item-id"]').forEach((line) => line.remove());
         expect(counted.textContent).not.toMatch(/\d/);
@@ -13074,7 +13103,7 @@ describe('a-pasted-token-id-joins-the-picker', () => {
         expect([...picker.options].map((o) => o.value)).toContain(PASTED);
         expect(picker.value).toBe(PASTED);
         expect([...picker.options].find((o) => o.value === PASTED)?.textContent).toBe(
-            `Sticker pack (STK) · ${shortTokenId(PASTED)}`,
+            `\u2066${shortTokenId(PASTED)}\u2069 · Sticker pack (STK)`,
         );
     });
 
@@ -13141,7 +13170,7 @@ describe('a-picker-option-takes-the-name-the-sheet-learned', () => {
 
         expect(h.onLookupToken).toHaveBeenCalledWith(DESCRIBED);
         expect(option()?.textContent, 'the name the lookup answered with').toBe(
-            `Beeswax Wrap (BWX) · ${shortTokenId(DESCRIBED)}`,
+            `\u2066${shortTokenId(DESCRIBED)}\u2069 · Beeswax Wrap (BWX)`,
         );
         // The same answer's other half, which was never the broken one.
         expect(describeField(root, 'describe-price-why').textContent).toBe(

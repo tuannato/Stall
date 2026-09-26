@@ -77,6 +77,13 @@ export function cutAtCodePoints(text: string, max: number): string {
  * 2026-09-25). Display only — every control keeps carrying the full id, and
  * nothing routes on, compares or looks up by this string. A string no longer
  * than the glance is shown whole.
+ *
+ * **A reading aid, never proof of identity.** Ten hex characters are 40 bits,
+ * which a stranger can grind: a gift listing (§10) can plant a token with the
+ * seller's name, ticker and these same ten characters. It tells the
+ * seller's own tokens apart; against a planted lookalike the full id (the
+ * row's `title`) is the proof. §3 refused a 32-bit `?pay=` prefix for the
+ * same reason.
  */
 export function shortTokenId(tokenId: string): string {
     return tokenId.length <= 14 ? tokenId : `${tokenId.slice(0, 6)}…${tokenId.slice(-4)}`;

@@ -4444,6 +4444,10 @@ textarea.share-embed {
 
 .tid-hex {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* An isolate, left to right: a right-to-left ticker before ` · ` must not
+       pull the id's leading digits over to its side (the critic, 2026-09-26). */
+    unicode-bidi: isolate;
+    direction: ltr;
 }
 
 .tstate {

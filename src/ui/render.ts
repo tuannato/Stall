@@ -11090,10 +11090,19 @@ function tokenIdLine(tokens: StallView['tokens'], tokenId: string): HTMLElement 
 }
 
 /**
- * A describe picker option's label: `Name (TICKER) · abcdef…wxyz`, or
- * `Name · abcdef…wxyz` with no ticker — both screened through `tokenName` and
+ * A describe picker option's label: `abcdef…wxyz · Name (TICKER)`, or
+ * `abcdef…wxyz · Name` with no ticker — both screened through `tokenName` and
  * `tokenTicker`. A name that fell back to the id keeps the id alone. The
  * option's value stays the full id.
+ *
+ * **The short id leads** (the critic, 2026-09-26): a closed `<select>` cuts
+ * its label at the right edge, ~350px on a phone, and a name may run to 64
+ * code points, so an id at the end was the part cut — two same-name tokens
+ * looked identical in the one control a seller chooses from before signing,
+ * and a stranger's gift listing could carry a fake `abcdef…wxyz` in its name
+ * where the real one should be. First, the real one is never cut, and it
+ * sits in a directional isolate (U+2066 … U+2069, our own characters, never
+ * chain bytes) so a right-to-left name cannot pull its digits apart.
  */
 function pickerLabel(tokens: StallView['tokens'], tokenId: string): string {
     const name = tokenName(tokens, tokenId);
@@ -11101,7 +11110,7 @@ function pickerLabel(tokens: StallView['tokens'], tokenId: string): string {
         return name;
     }
     const ticker = tokenTicker(tokens, tokenId);
-    return `${name}${ticker !== undefined ? ` (${ticker})` : ''} · ${shortTokenId(tokenId)}`;
+    return `\u2066${shortTokenId(tokenId)}\u2069 · ${name}${ticker !== undefined ? ` (${ticker})` : ''}`;
 }
 
 function decimalsOf(tokens: StallView['tokens'], tokenId: string): number {
