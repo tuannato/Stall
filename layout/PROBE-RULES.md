@@ -3077,6 +3077,18 @@ takes the screen off that list.
 Under the rain the first-stall link inherits its line's outline and is
 read in its ring, and the muted lift it wore for one round is gone.
 
+**A visited link is held by a unit test, since no pass can see it** (step
+5b, SAMPLER-STEP-PLAN v2 item 9). A browser never hands script a visited
+link's colour, so the probe's pixels read the unvisited one alone.
+`every-anchor-the-app-builds-sets-its-own-colour`
+(`layout/anchorColour.test.ts`, happy-dom) renders every fixture screen
+under every shipped look and holds every `<a>` `renderStall` builds to a
+rule in a sheet the app loads that declares `color` and matches the anchor
+itself at rest (a state rule or a pseudo-element's does not count) — a
+class rule colours a link in both states, so the visited colour is that
+colour. Proved red by taking `color` off `.door-nav a`: the door's two
+site-bar links on every look.
+
 **Three guards closed** (round 9, the critic's eighth pass, item 7).
 
 - **No other mark under text on a decoration**
