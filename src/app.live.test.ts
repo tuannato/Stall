@@ -380,7 +380,7 @@ vi.mock('./ui', async (importOriginal) => {
     };
 });
 
-const { boot: bootApp } = await import('./app');
+const { boot: bootApp, WINDOW_BEAT_MS } = await import('./app');
 
 /**
  * Every app a test booted, torn down after it (CRITIC-CARRYOVER-9 item 5).
@@ -8787,5 +8787,117 @@ describe('boot-returns-a-teardown-that-stops-the-app', () => {
         expect(loads, 'a popstate after the teardown loads nothing').toBe(2);
         expect(root.firstElementChild, 'and nothing paints').toBe(painted);
         stop();
+    });
+
+    /**
+     * CRITIC-CARRYOVER-10 item 8 (the critic's `t10`): the teardown cleared
+     * every timer standing, but a read in flight at it armed one more when
+     * it landed — the glance's re-read (five minutes, which then asked the
+     * feed again for an app that was gone) and the wall's heartbeat (its
+     * `finally`). Each is now refused after the teardown. The long timers
+     * are caught rather than run (a spy on `setTimeout` for delays of ten
+     * seconds and more), so what an app arms is read, not waited for.
+     */
+    const catchLongTimers = (): {
+        armed: Array<{ ms: number; run: () => void }>;
+        restore: () => void;
+    } => {
+        const armed: Array<{ ms: number; run: () => void }> = [];
+        const real = globalThis.setTimeout;
+        const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms?: number) => {
+            if ((ms ?? 0) >= 10_000) {
+                armed.push({ ms: ms ?? 0, run });
+                return 0 as unknown as ReturnType<typeof setTimeout>;
+            }
+            return real(run, ms);
+        }) as typeof setTimeout);
+        return { armed, restore: () => spy.mockRestore() };
+    };
+
+    it('a glance read in flight at the teardown arms no re-read when it lands', async () => {
+        let asks = 0;
+        let landing: (rate: bigint | undefined) => void = () => undefined;
+        priceControl.fetch = () => {
+            asks += 1;
+            return new Promise<bigint | undefined>((resolve) => {
+                landing = resolve;
+            });
+        };
+        const root = document.createElement('div');
+        document.body.append(root);
+        const stop = bootApp(root, async () => ({
+            ...stallEmpty({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN, TOKEN_META]]) }),
+            offers: [OFFER],
+        }));
+        try {
+            await flush();
+            openGlanceFold(root);
+            await flush();
+            expect(asks, 'the fold on screen asks for the glance').toBe(1);
+            stop();
+            const timers = catchLongTimers();
+            try {
+                landing(30_000n);
+                await flush();
+            } finally {
+                timers.restore();
+            }
+            expect(
+                timers.armed.map((timer) => timer.ms),
+                'nothing armed for the app that is gone',
+            ).toEqual([]);
+            expect(asks, 'and the feed is not asked again').toBe(1);
+        } finally {
+            stop();
+            root.remove();
+        }
+    });
+
+    it("a heartbeat in flight at the teardown arms no beat when its refresh ends", async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=listings&mode=cycle`);
+        const state: State = {
+            ...stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+            } as Partial<State['view']>),
+            offers: [OFFER],
+        };
+        let loads = 0;
+        let held: (next: State) => void = () => undefined;
+        const root = document.createElement('div');
+        document.body.append(root);
+        const timers = catchLongTimers();
+        let stop: () => void = () => undefined;
+        try {
+            stop = bootApp(root, () => {
+                loads += 1;
+                return loads === 1
+                    ? Promise.resolve(state)
+                    : new Promise<State>((resolve) => {
+                          held = resolve;
+                      });
+            });
+            await flush();
+            expect(root.querySelector('[data-role="shop-window"]'), 'a wall').not.toBeNull();
+            const beat = timers.armed.find((timer) => timer.ms === WINDOW_BEAT_MS);
+            expect(beat, 'the wall armed its heartbeat').toBeDefined();
+            timers.armed.length = 0;
+            // The beat: a full refresh, its load held past the teardown.
+            beat!.run();
+            await flush();
+            expect(loads).toBe(2);
+            stop();
+            held(state);
+            await flush();
+            expect(
+                timers.armed.map((timer) => timer.ms),
+                'no beat armed for the app that is gone',
+            ).toEqual([]);
+        } finally {
+            timers.restore();
+            stop();
+            root.remove();
+        }
     });
 });

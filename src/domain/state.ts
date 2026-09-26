@@ -827,8 +827,13 @@ export type StallView = WindowState & {
      * opened — whatever it absorbed since, unlike `payWalletOpened` — so a
      * sheet whose record left says so without "no wallet was opened"
      * (`PAY_QUOTE_GONE_OPENED`; CRITIC-CARRYOVER-8 item 2). Set by the open
-     * (`onPayWalletOpened`), kept for that sheet across every hand-back, and
-     * dropped when a pay sheet opens or closes.
+     * (`onPayWalletOpened`) and kept for that sheet across every hand-back.
+     * Dropped by every road that opens a pay sheet (`onOpenPay`,
+     * `onOpenPaySeveral`, the `?pay=` road) and by the sheet's own close
+     * (`onClosePublish`); a `refresh()` or `popstate` that takes the sheet
+     * away leaves it, harmless, since the app paints it only for the
+     * overlay it names and every road to a pay sheet drops it first
+     * (CRITIC-CARRYOVER-9 item 6, CRITIC-CARRYOVER-10 item 9).
      */
     payWalletWasOpened?: true;
     /**

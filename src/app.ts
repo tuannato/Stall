@@ -655,8 +655,13 @@ export function boot(
      * opened (`payOverlayKey`): painted as `payWalletWasOpened`, so the sheet
      * the app paints after a hand-back — the record gone — never says "no
      * wallet was opened" (CRITIC-CARRYOVER-8 item 2). Set by the open
-     * (`onPayWalletOpened`), and dropped wherever a pay sheet opens or
-     * closes, beside `payOutcomeCarried`.
+     * (`onPayWalletOpened`) and kept across every hand-back. Dropped by
+     * every road that opens a pay sheet (`onOpenPay`, `onOpenPaySeveral`,
+     * the `?pay=` road) and by the sheet's own close (`onClosePublish`),
+     * beside `payOutcomeCarried`; a `refresh()` or `popstate` that takes the
+     * sheet away leaves it, harmless, since it is painted only for the
+     * overlay it names and every road to a pay sheet drops it first
+     * (CRITIC-CARRYOVER-9 item 6, CRITIC-CARRYOVER-10 item 9).
      */
     let payWalletWasOpenedFor: string | undefined;
     /**
@@ -1068,6 +1073,12 @@ export function boot(
         if (glanceTimer !== undefined) {
             clearTimeout(glanceTimer);
             glanceTimer = undefined;
+        }
+        // Torn down: a glance read in flight at the teardown calls this when
+        // it lands, and would arm a re-read for an app that is gone
+        // (CRITIC-CARRYOVER-10 item 8).
+        if (stopped) {
+            return;
         }
         if (!glanceOnScreen() || document.visibilityState === 'hidden') {
             return;
@@ -2175,7 +2186,10 @@ export function boot(
                 // guard is what keeps the two paths from arming two timers:
                 // on the ordinary path `syncWindow` has already set it.
                 void refresh().finally(() => {
-                    if (wallParams() !== undefined && windowBeat === undefined) {
+                    // Never after the teardown: a beat in flight at it would
+                    // arm one more for an app that is gone (CRITIC-CARRYOVER-10
+                    // item 8).
+                    if (!stopped && wallParams() !== undefined && windowBeat === undefined) {
                         windowBeat = setTimeout(beat, WINDOW_BEAT_MS);
                     }
                 });
