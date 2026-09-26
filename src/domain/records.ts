@@ -314,6 +314,17 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         // (`older`) the loss for the session.
         const look =
             mine.txid === theirs.txid && mine.height === undefined && theirs.height !== undefined ? theirs : rank;
+        // One record, two looks: a known first-seen stamp from either is
+        // kept (CRITIC-CARRYOVER-10 item 3, the window's decision by
+        // recommendation, PLAN B8's "keep"). A node that never saw the
+        // transaction in its mempool stores 0, which says nothing; taking
+        // the look whole let that 0 stand over a stamp the other read knew,
+        // and §5's one case the stamps exist for — a newer edit mined a block
+        // before an older one — fell back to height and crowned the older.
+        const firstSeen =
+            mine.txid === theirs.txid
+                ? (knownSeen(look.firstSeen) ?? knownSeen(mine.firstSeen) ?? knownSeen(theirs.firstSeen))
+                : undefined;
         // One record, both reads still seeing it unmined: the higher of the
         // two heights they saw it unmined at. Each came from the page that
         // carried it; neither is lent to a record it was not seen beside.
@@ -332,6 +343,7 @@ export function mergeFailedRead(read: RecordMaps, decided: ReadonlySet<string>, 
         const { older: _own, seenHeight: _seen, ...bare } = look;
         ranks.set(tokenId, {
             ...bare,
+            ...(firstSeen === undefined ? {} : { firstSeen }),
             ...(older.size > 0 ? { older } : {}),
             ...(seenHeight === undefined ? {} : { seenHeight }),
         });

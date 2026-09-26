@@ -811,3 +811,75 @@ describe('a-lagging-look-at-the-screens-record-keeps-its-height', () => {
         });
     }
 });
+
+describe('a-same-record-merge-keeps-a-known-first-seen', () => {
+    /**
+     * CRITIC-CARRYOVER-10 item 3 (the critic's `y10a`; the window's decision
+     * by recommendation, consistent with PLAN B8's "keep"). §5's backwards
+     * case: the seller's older record R1 (500,000) mined at 900, their newer
+     * edit R2 (900,000) mined a block early, at 899. On screen, a node that
+     * never saw R1 in its mempool (first seen 0) crowned R1 by height — §5's
+     * stated cost — with R2 ranked below it. Replica B, behind both blocks
+     * and blind to R2, answers R1 finalized and unmined, first seen 1,000.
+     * Replica C, up to date with both stamps, answers R2 (first seen 2,000)
+     * over R1. One record read twice kept the screen's mined look whole, its
+     * 0 included, so C's R2 lost to R1 on height again: 500,000. The stamp B
+     * knew is kept now, and R2 wins on the stamps: 900,000.
+     */
+    const A = 'a'.repeat(64);
+    const price = (amount: bigint) => ({ code: 'xec', exponent: 2, amount });
+    const R1 = '1'.repeat(64);
+    const R2 = '2'.repeat(64);
+    const screen = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: 900, isFinal: true, firstSeen: 0, older: new Set([R2]) }]]),
+    };
+    const lagging = {
+        prices: new Map([[A, price(500_000n)]]),
+        ranks: new Map([[A, { txid: R1, height: undefined, isFinal: true, firstSeen: 1_000, seenHeight: 850 }]]),
+    };
+    const current = {
+        prices: new Map([[A, price(900_000n)]]),
+        ranks: new Map([[A, { txid: R2, height: 899, isFinal: true, firstSeen: 2_000, older: new Set([R1]) }]]),
+    };
+
+    for (const [road, merge] of [
+        ['a walk that threw', mergeFailedRead],
+        ['a walk that finished', mergeFinishedRead],
+    ] as const) {
+        it(`${road}: B's look keeps R1's height and lends its known stamp, so C's R2 wins on the stamps: 900,000`, () => {
+            const s1 = merge(lagging, new Set([A]), screen);
+            expect(s1.prices.get(A)).toEqual(price(500_000n));
+            for (const next of [mergeFailedRead, mergeFinishedRead]) {
+                const s2 = next(current, new Set([A]), s1);
+                expect(s2.prices.get(A), '900,000 holds').toEqual(price(900_000n));
+                expect(s2.ranks.get(A)?.txid).toBe(R2);
+            }
+            expect(s1.ranks.get(A), 'the known height and the known stamp').toEqual({
+                txid: R1,
+                height: 900,
+                isFinal: true,
+                firstSeen: 1_000,
+                older: new Set([R2]),
+            });
+        });
+
+        it(`${road}: the control — C straight over the screen — is §5's stated cost, unchanged`, () => {
+            expect(merge(current, new Set([A]), screen).prices.get(A)).toEqual(price(500_000n));
+        });
+
+        it(`${road}: two known stamps keep the look's own, and two unknown ones stay unknown`, () => {
+            const known = {
+                ...screen,
+                ranks: new Map([[A, { txid: R1, height: 900, isFinal: true, firstSeen: 1_500 }]]),
+            };
+            expect(merge(lagging, new Set([A]), known).ranks.get(A)?.firstSeen, "the mined look's own").toBe(1_500);
+            const blind = {
+                ...lagging,
+                ranks: new Map([[A, { ...lagging.ranks.get(A)!, firstSeen: 0 }]]),
+            };
+            const plain = { ...screen, ranks: new Map([[A, { txid: R1, height: 900, isFinal: true, firstSeen: 0 }]]) };
+            expect(merge(blind, new Set([A]), plain).ranks.get(A)?.firstSeen, 'nothing known is invented').toBe(0);
+        });
+    }
+});
