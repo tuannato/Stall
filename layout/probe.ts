@@ -3277,6 +3277,8 @@ type ContrastPrepared = {
     painted: { screen: string; look: number; flags: number };
     vw: number;
     vh: number;
+    /** The look pseudos generated in the job's scope (D6(i)): none means no second frame. */
+    lookPseudos?: number;
 };
 
 /** The live boxes, with the nonce of the prepare that collected their nodes and the viewport now. */
@@ -3300,6 +3302,10 @@ declare global {
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
+        /** Hide (or show again) every look pseudo the last prepare marked; how many are marked (D6(i)). */
+        __lookPseudosHidden: (hide: boolean) => Promise<number>;
+        /** The protected boxes in the last prepare's scope, as they stand now (D6(i)). */
+        __protectedBoxes: () => { x: number; y: number; w: number; h: number; sel: string }[];
         /**
          * Show (or blank again) the glyphs of every prepared target that
          * wears the outline, for the ring read's second capture.
@@ -3868,6 +3874,112 @@ function pageHeight(scope: ParentNode): number {
 /** Whether the sheet that blanks a target's pseudo-element glyphs is adopted (once per page). */
 let pseudoBlankAdopted = false;
 
+/*
+ * **No look pseudo paints inside a protected box** (D6(i), step 5b;
+ * `PROBE-RULES.md`). A pseudo-element has no box the DOM hands back, so the
+ * geometry passes refuse a positioned one outright and cannot see where an
+ * in-flow one paints — a `position: relative` with offsets, or a negative
+ * margin, can put its paint over a money figure while every box the probe
+ * reads stands clear. So it is measured the only way a pseudo can be: by
+ * its paint. A **look pseudo** is a `::before` or `::after` a look sheet or
+ * a decoration rule generates — a rule whose selector names a look's class
+ * (`t-…`) or a decoration's (`att-…`); the base sheet's own pseudos are the
+ * app's chrome, held by the geometry rules like any node. Every element in
+ * the contrast job's scope that generates one is marked here
+ * (`data-probe-lp-before` / `-after`); the runner captures the frame once
+ * more with every marked pseudo at `visibility: hidden`
+ * (`__lookPseudosHidden`) and compares the two frames inside every
+ * protected box (`__protectedBoxes`), a device pixel in from each edge: a
+ * pixel that changed is a look pseudo painting inside a protected box, and
+ * the job fails. No capture where no look pseudo exists.
+ */
+const LOOK_RULE = /(?:^|[\s>+~,(])\.(?:t-[a-z0-9]+|att-[a-z0-9-]+)\b/;
+const PSEUDO_AT = /::?(before|after)\b/;
+
+/** Every rule in every sheet on the page, `@media` and other groups opened. */
+function styleRules(): CSSStyleRule[] {
+    const out: CSSStyleRule[] = [];
+    const walk = (list: CSSRuleList): void => {
+        for (const rule of list) {
+            if (rule instanceof CSSStyleRule) {
+                out.push(rule);
+            } else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules !== undefined) {
+                walk((rule as CSSGroupingRule).cssRules);
+            }
+        }
+    };
+    for (const sheet of document.styleSheets) {
+        try {
+            walk(sheet.cssRules);
+        } catch {
+            throw new Error(`a sheet the probe cannot read: ${sheet.href ?? '(inline)'}`);
+        }
+    }
+    return out;
+}
+
+/** The look pseudos generated in `scope`, marked; how many. */
+function markLookPseudos(scope: ParentNode): number {
+    for (const el of document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]')) {
+        el.removeAttribute('data-probe-lp-before');
+        el.removeAttribute('data-probe-lp-after');
+    }
+    let n = 0;
+    for (const rule of styleRules()) {
+        for (const one of rule.selectorText.split(',')) {
+            const pseudo = PSEUDO_AT.exec(one);
+            if (pseudo === null || !LOOK_RULE.test(one)) continue;
+            const host = one.replace(/::?(?:before|after)\b/g, '').trim() || '*';
+            let hosts: NodeListOf<Element>;
+            try {
+                hosts = scope.querySelectorAll(host);
+            } catch {
+                throw new Error(`a look pseudo's selector the probe cannot match: ${one}`);
+            }
+            for (const el of hosts) {
+                if (el.closest('.deck-stall') !== null) continue;
+                const which = pseudo[1] as 'before' | 'after';
+                const content = getComputedStyle(el, `::${which}`).content;
+                if (content === 'none' || content === 'normal') continue;
+                if (!el.hasAttribute(`data-probe-lp-${which}`)) {
+                    el.setAttribute(`data-probe-lp-${which}`, '');
+                    n += 1;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+let lookPseudoSheetAdopted = false;
+
+window.__lookPseudosHidden = async (hide: boolean) => {
+    if (!lookPseudoSheetAdopted) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(
+            'html[data-probe-lp-off] [data-probe-lp-before]::before,html[data-probe-lp-off] [data-probe-lp-after]::after{visibility:hidden!important}',
+        );
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        lookPseudoSheetAdopted = true;
+    }
+    document.documentElement.toggleAttribute('data-probe-lp-off', hide);
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]').length;
+};
+
+/** The protected boxes in the last prepare's scope, the deck aside, as they stand now. */
+window.__protectedBoxes = () =>
+    [...(preparedScope ?? document).querySelectorAll(PROTECTED)]
+        .filter((node) => node.closest('.deck-stall') === null)
+        .map((node) => {
+            const r = node.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height, sel: describe(node) };
+        })
+        .filter((b) => b.w > 0 && b.h > 0);
+
+/** The scope the last prepare read: an open sheet's, or the page. */
+let preparedScope: ParentNode | undefined;
+
 window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
     preparedNonce = nonce;
     const echo = {
@@ -3933,6 +4045,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // 5b, CRITIC-SAMPLER-STEP item 9; `PROBE-RULES.md`, "The door's deck is
     // not a contrast target").
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
+    preparedScope = scope;
+    const lookPseudos = markLookPseudos(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
     // 8 (2026-09-15) — had its colour set to transparent by the outer node's
@@ -4015,6 +4129,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         nodes: preparedNodes.length,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
+        // The look pseudos in scope, marked for D6(i)'s second frame.
+        lookPseudos,
         ...echo,
     };
 };

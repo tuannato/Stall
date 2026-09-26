@@ -1463,6 +1463,42 @@ row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
 
+## No look pseudo paints inside a protected box (step 5b, D6(i), 2026-09-26)
+
+A pseudo-element has no box the DOM hands back. The geometry passes refuse
+a positioned one outright (`positionedPseudos`), and an in-flow one is
+invisible to them: `position: relative` with offsets, or a negative
+margin, moves its paint while every box the probe reads stands where it
+stood. So a look pseudo is measured by its paint. A **look pseudo** is a
+`::before` or `::after` a look sheet or a decoration rule generates — a
+rule whose selector names a `t-…` or `att-…` class (`markLookPseudos`,
+which walks every rule of every sheet, `@media` groups opened, and marks
+each element in the job's scope that generates one with content). The base
+sheet's own pseudos are the app's chrome and are held like any node.
+
+On every contrast job whose scope holds one, the runner captures a fresh
+frame, hides every marked pseudo (`visibility: hidden`, through an adopted
+sheet toggled on the root), captures again and shows them, and compares the
+two frames inside every protected box (`__protectedBoxes`), a device pixel
+in from each edge; a channel moving more than `LOOK_PSEUDO_LEVELS` (2) is a
+look pseudo painting there, and the job fails
+(`no-look-pseudo-paints-inside-a-protected-box`). No capture where no look
+pseudo exists, so today it runs on Neo's jobs alone: 64 jobs, 1,744,542
+protected pixels, 12.4 s (phase `look pseudos`) on the day it landed, with
+nothing changed. A shipped run that compared no frame fails as vacuous.
+
+**Proved red** by the critic's plant (CRITIC-STEP-5 item 11): `.t-neo
+.item-a::after { content: ''; display: inline-block; width: 24px; height:
+12px; background: #f0f; position: relative; left: -30px }` → 40 protected
+boxes "changes 276 px … when the look's pseudo-elements are hidden", beside
+the box reads that also caught the pink inside a price box.
+
+**D6(ii) is not landed with it**: the adopted sheet that blanks a target's
+pseudo glyphs stays until the line-rect sampler (D7) lands, since only the
+line read makes it unnecessary — and D7 is held (step 5b's report). When it
+comes off, this rule is what keeps a whole-box money read safe from a look
+pseudo's glyph standing inside the box (`layout/moneySet.ts`).
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

@@ -297,6 +297,13 @@ function contrast(la, lb) {
 /** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
 const PIXEL_CONTRAST_FLOOR = 3;
 /**
+ * How far a channel may move inside a protected box between the frame with
+ * the look's pseudos and the frame without them before it counts as their
+ * paint (D6(i)): two levels, the capture's own noise across two frames of
+ * one still page (measured: none on the day it landed).
+ */
+const LOOK_PSEUDO_LEVELS = 2;
+/**
  * The contrast jobs that must have had Neo's rain at its brightest drop
  * (`a-line-on-the-ground-reads-wherever-a-drop-falls`): Neo worn, at the
  * phone and the desk, on the screens whose lines stand on the stall's own
@@ -1411,6 +1418,10 @@ try {
         // Outlined money figures ring-read, each on a job whose rain was at
         // its brightest (`an-outlined-money-figure-is-ring-read-at-its-worst`).
         let moneyRingRead = 0;
+        // D6(i): jobs whose look pseudos were hidden and compared, and the
+        // protected-box pixels compared.
+        let lookPseudoJobs = 0;
+        let lookPseudoPixels = 0;
         const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1821,6 +1832,75 @@ try {
                         entry.ms += performance.now() - ringStart;
                         phases.set('ring', entry);
                     }
+                    /*
+                     * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
+                     * (step 5b; the probe's `markLookPseudos`): where the job's
+                     * scope holds a look pseudo, a frame with every one of
+                     * them hidden against a fresh frame with them shown,
+                     * compared inside every protected box a device pixel in
+                     * from each edge. A pixel that moved is a look pseudo
+                     * painting over money, a code or a control. No capture
+                     * where no look pseudo exists.
+                     */
+                    if (retryWhy.length === 0 && (prep.lookPseudos ?? 0) > 0) {
+                        const lpStart = performance.now();
+                        const hidden = async (hide) => {
+                            const r = await cdp.send(
+                                'Runtime.evaluate',
+                                { expression: `window.__lookPseudosHidden(${hide})`, awaitPromise: true, returnByValue: true },
+                                sessionId,
+                            );
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const on = await capture();
+                        await hidden(true);
+                        const off = await capture();
+                        await hidden(false);
+                        const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
+                        const why = [...on.why, ...off.why];
+                        if (why.length > 0) {
+                            retryWhy = why.map((w) => `for the look-pseudo frames, ${w}`);
+                        } else {
+                            lookPseudoJobs += 1;
+                            let changedAll = 0;
+                            for (const b of shields) {
+                                const x0 = Math.max(0, Math.ceil(b.x) + 1);
+                                const y0 = Math.max(0, Math.ceil(b.y) + 1);
+                                const x1 = Math.min(on.shot.width - 1, Math.floor(b.x + b.w) - 2);
+                                const y1 = Math.min(on.shot.height - 1, Math.floor(b.y + b.h) - 2);
+                                let changed = 0;
+                                let first;
+                                for (let y = y0; y <= y1; y += 1) {
+                                    for (let x = x0; x <= x1; x += 1) {
+                                        const i = (y * on.shot.width + x) * on.shot.bpp;
+                                        lookPseudoPixels += 1;
+                                        if (
+                                            Math.abs(on.shot.data[i] - off.shot.data[i]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.shot.data[i + 1] - off.shot.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.shot.data[i + 2] - off.shot.data[i + 2]) > LOOK_PSEUDO_LEVELS
+                                        ) {
+                                            changed += 1;
+                                            first ??= [x, y];
+                                        }
+                                    }
+                                }
+                                changedAll += changed;
+                                if (changed > 0) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
+                                            `changes ${changed} px (the first at ${first.join(',')}) when the look's pseudo-elements are hidden — ` +
+                                            `no-look-pseudo-paints-inside-a-protected-box`,
+                                    );
+                                }
+                            }
+                            record.lookPseudos = { marked: prep.lookPseudos, boxes: shields.length, changed: changedAll };
+                        }
+                        const entry = phases.get('look pseudos') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - lpStart;
+                        phases.set('look pseudos', entry);
+                    }
                     record.sampled = sampled;
                     record.dropped = dropped;
                     record.retried = retried;
@@ -1897,6 +1977,12 @@ try {
             // no rain job samples paints it (`RAIN_JOBS`).
             verdicts.push(`an outline nobody reads — outlined on a screen the pass paints and never ring-read: ${unread.join(', ')}`);
         }
+        if (LOOKS === 'shipped' && lookPseudoJobs === 0) {
+            // Neo's sheet generates pseudos on every screen with a heading or
+            // a Wearing line: a shipped run that compared no frame proved
+            // nothing.
+            verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
+        }
         if (LOOKS === 'shipped' && moneyRingRead === 0) {
             // The Activity fold's receipt amount is outlined on Neo worn: a
             // shipped run that ring-read no money figure proved the rule over
@@ -1918,6 +2004,7 @@ try {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
+                        `${lookPseudoJobs} job(s) with look pseudos hidden and compared (${lookPseudoPixels} protected pixels), ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );
