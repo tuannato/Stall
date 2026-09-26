@@ -24,6 +24,7 @@ const full = {
     outlineChecks: 400,
     moneyChecks: 300,
     atRestSetAside: { 'the rain': 120, 'Neo’s scanlines': 120 },
+    buntingChecks: 40,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
 };
 
@@ -45,6 +46,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 outlineChecks: 5,
                 moneyChecks: 4,
                 atRestSetAside: { 'the rain': 1 },
+                buntingChecks: 2,
             },
             { shippedClasses: SHIPPED, skeleton: true },
         );
@@ -68,6 +70,14 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             ]);
         }
         assert.deepEqual(probeCoverageGaps('canvas', { ...full, moneyChecks: 0 }, { shippedClasses: SHIPPED }), []);
+    });
+
+    it('owes a bunting swept wherever Rural is measured, and nowhere else', () => {
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, buntingChecks: 0 }, { shippedClasses: SHIPPED, skeleton: true }), [
+            'the-bunting-never-swings-into-the-ornament-label swept no bunting',
+        ]);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...full, buntingChecks: 0 }, { shippedClasses: ['t-modern', 't-neo'] }).filter((g) => g.includes('bunting')), []);
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, buntingChecks: 0 }, { shippedClasses: SHIPPED }), []);
     });
 
     it('owes an outlined line wherever Neo is measured, and nowhere else', () => {
@@ -124,7 +134,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · at rest, set aside: Neo’s scanlines 120, the rain 120 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(

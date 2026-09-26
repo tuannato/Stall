@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, RAIN_JOBS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
@@ -36,13 +36,13 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 199, desktop: 227, canvas: 29, total: 455 });
+        }).toEqual({ mobile: 221, desktop: 251, canvas: 29, total: 501 });
     });
 
     it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {
         // SOLO_JOBS: the all-worn job reads the sign under every Neo row at
         // once, and the horizon alone was a combination nothing read.
-        const solo = jobs.filter((j) => j.flags !== 0 && j.flags !== WORN_ALL);
+        const solo = jobs.filter((j) => j.flags !== 0 && j.flags !== WORN_ALL && j.tide === undefined);
         expect(solo.map((j) => j.key).sort()).toEqual(['desktop/offers/2/4', 'mobile/offers/2/4']);
     });
 
@@ -86,7 +86,7 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // below; the rest are one job per look and variant.
         // The solo jobs (SOLO_JOBS) are held in their own case above.
         const isSolo = (j: ContrastJob): boolean => j.flags !== 0 && j.flags !== WORN_ALL;
-        for (const job of jobs.filter((j) => j.reduced !== true && !RAIN_JOBS.includes(j.screen) && !isSolo(j))) {
+        for (const job of jobs.filter((j) => j.reduced !== true && j.tide === undefined && !RAIN_JOBS.includes(j.screen) && !isSolo(j))) {
             const cell = `${job.viewport}/${job.screen}`;
             byCell.set(cell, [...(byCell.get(cell) ?? []), job]);
         }
@@ -117,16 +117,31 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             `desktop/unbuyable/3/${WORN_ALL}/reduce`,
         ]);
         // Bare, all worn, or one of SOLO_JOBS' rows alone.
-        expect(jobs.filter((job) => job.flags !== 0 && job.flags !== WORN_ALL).map((j) => j.key).sort()).toEqual([
+        expect(jobs.filter((job) => job.flags !== 0 && job.flags !== WORN_ALL && job.tide === undefined).map((j) => j.key).sort()).toEqual([
             'desktop/offers/2/4',
             'mobile/offers/2/4',
         ]);
         // The rain's own jobs: Neo worn alone, at the phone and the desk, on
         // the five geometry-only screens whose lines stand on the ground.
         expect(RAIN_JOBS.every((screen) => GEOMETRY_ONLY_SCREENS.has(screen))).toBe(true);
-        expect(jobs.filter((j) => RAIN_JOBS.includes(j.screen)).map((j) => j.key)).toEqual(
+        expect(jobs.filter((j) => RAIN_JOBS.includes(j.screen) && j.tide === undefined).map((j) => j.key)).toEqual(
             ['mobile', 'desktop'].flatMap((vp) => RAIN_JOBS.map((screen) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${WORN_ALL}`)),
         );
+    });
+
+    it('reads the aurora worn alone at both ends of its tide, where lines stand on Neo’s ground (the-aurora-is-read-at-both-ends-of-its-tide)', () => {
+        const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID)!;
+        const aurora = neo.rows.find((row) => row.cls === 'att-aurora')!;
+        const tide = jobs.filter((j) => j.tide !== undefined);
+        expect(tide.every((j) => j.look === NEO_CITY_THEME_ID && j.flags === 1 << aurora.bit && j.reduced !== true)).toBe(true);
+        const expected = (['mobile', 'desktop', 'canvas'] as const).flatMap((vp) => {
+            const here = new Set(jobs.filter((j) => j.viewport === vp && j.tide === undefined).map((j) => j.screen));
+            return TIDE_SCREENS.filter((screen) => here.has(screen)).flatMap((screen) => [0, 1].map((t) => `${vp}/${screen}/2/${1 << aurora.bit}/tide${t}`));
+        });
+        expect(tide.map((j) => j.key)).toEqual(expected);
+        // Every tide screen is read somewhere, the wall's Cycle at the desk.
+        expect(new Set(tide.map((j) => j.screen))).toEqual(new Set(TIDE_SCREENS));
+        expect(tide.length).toBe(46);
     });
 
     it('measures a workshop look alone, and never on the door', () => {

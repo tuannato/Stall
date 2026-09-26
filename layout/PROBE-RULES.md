@@ -1551,6 +1551,55 @@ line read makes it unnecessary — and D7 is held (step 5b's report). When it
 comes off, this rule is what keeps a whole-box money read safe from a look
 pseudo's glyph standing inside the box (`layout/moneySet.ts`).
 
+## Every moving decoration has a reader or a reason (step 5b, 2026-09-26)
+
+The pass freezes every animation at one instant, so a green under a moving
+decoration is luck. `layout/movingDecor.ts` lists every catalogue row with
+`motion: true`, keyed by its class, each with a **reader** — the rule or
+test that holds the lines it can reach at its worst — or a written
+**reason** it needs none; `every-moving-decoration-has-a-reader-or-a-reason`
+holds the keys to exactly the moving rows and each reader to a name some
+test or rule in the repository carries.
+
+| Class | Reader, or reason |
+|---|---|
+| `att-rainfall` | `a-line-on-the-ground-reads-wherever-a-drop-falls` (the flattening, the ring read) |
+| `att-confetti` | `every-confetti-scrap-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-sunburst` | `every-sunburst-ray-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-aurora` | `the-aurora-is-read-at-both-ends-of-its-tide` (below) |
+| `att-bunting` | `the-bunting-never-swings-into-the-ornament-label` (below) |
+| `att-pinstripe` | reason: runs in the cards' 2px border alone, under no line |
+| `att-hum` | reason: moves an ink, not a ground (staged with G7) |
+| `att-beetle` | reason: roams its own yard strip, where no line stands |
+
+Moving inks (Neo's ticker flicker, the hum's dimmed lamp, the pin demo,
+Rural's swaying tag and swinging board) are not grounds and stay open,
+staged with G7.
+
+**The aurora is read at both ends of its tide** (`TIDE_SCREENS`,
+`contrastPlan.ts`). Worn alone no line wears the outline, and the all-worn
+job wears the rain with it. So each screen whose lines stand on Neo's bare
+ground — the rain's own list, the offers screen, the wall's Cycle — is
+painted with the aurora alone, its `--au-tide` held (important) at 0 and
+again at 1; each channel of the wash is convex in the tide, so the ends
+are the worst. 46 jobs; each job's echo holds every aurora-wearing stall to
+a held tide, and a shipped plan with none fails as vacuous. The first run
+read Neo's vacant-box line at 2.69–2.95:1 over both ends; the owner's lift
+(the colour, `.sparse-empty-s` to the muted under the aurora as under the
+rain) reads 4.92–5.52. Proved red by taking the lift off: three figures at
+2.69–2.90:1.
+
+**The bunting never swings into the ornament label**: Rural's bunting row
+sways ±0.6° about its origin inside `.orn`, beside the strip's own label.
+The probe reads the widest turn from the row's own keyframes, the row's
+box before its turn from its art's topmost paint down (`buntingArt.ts`,
+an allow-list reader of `bunting.svg`: every control point bounds a path;
+the box is taller than the drawing, and the first version, which swept the
+whole box, failed on the empty space above the string), and turns it to
+each end: it must not reach any line of the strip's own text, a device
+pixel in. Phone and desk passes owe a row swept where Rural is measured.
+Proved red by `.t-rural .att-bunting { margin-top: -34px }`: 123 failures.
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

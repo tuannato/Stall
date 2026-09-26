@@ -35,6 +35,8 @@
  *   measured: the rain is set aside there by name, or no root was read.
  * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
  *   on the three wall passes.
+ * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
+ *   bunting on the phone and desk passes wherever Rural is measured.
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -112,6 +114,11 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     if (!((report.floorNamedChecks ?? 0) > 0)) {
         gaps.push('small-text-is-at-least-11px read no named small-text node');
     }
+    // Rural's bunting sways in its ornament strip; a pass that measured
+    // Rural and swept no row swept none of them (`movingDecor.ts`).
+    if (shippedClasses.includes('t-rural') && !((report.buntingChecks ?? 0) > 0)) {
+        gaps.push('the-bunting-never-swings-into-the-ornament-label swept no bunting');
+    }
     // Neo's rain outlines every line on its bare ground, so a pass that
     // measured Neo and read no outline read none of them.
     if (shippedClasses.includes('t-neo') && !((report.outlineChecks ?? 0) > 0)) {
@@ -181,6 +188,7 @@ export function probeCoverageLine(pass, report) {
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
         ` · money nodes asked: ${report.moneyChecks ?? 0}` +
         ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
+        ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

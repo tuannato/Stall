@@ -656,19 +656,20 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined) {
     const args = `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}`;
+    const tideArg = tide === undefined ? 'undefined' : String(tide);
     if (heightOnly) {
         // The paint and its height, and nothing to wait for: no box is
         // collected and no glyph blanked on a paint the grow throws away.
-        return evalJson(cdp, sessionId, `window.__contrastPrepare(${args}, true)`);
+        return evalJson(cdp, sessionId, `window.__contrastPrepare(${args}, true, ${tideArg})`);
     }
     const r = await cdp.send(
         'Runtime.evaluate',
         {
             expression:
                 `(async () => { ` +
-                `const out = window.__contrastPrepare(${args}); ` +
+                `const out = window.__contrastPrepare(${args}, false, ${tideArg}); ` +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -719,6 +720,16 @@ function paintEcho(job, out, nonce, width, height) {
     const rain = out.rain ?? { worn: 0, flattened: 0 };
     if (rain.worn !== rain.flattened) {
         why.push(`${rain.worn} stall(s) wore the rain and ${rain.flattened} had it at its brightest`);
+    }
+    // The aurora worn alone at one end of its tide (`TIDE_JOBS`): every
+    // stall wearing it had the tide held there, and a job that asked for no
+    // tide held none.
+    const tide = out.tide ?? { worn: 0, held: 0 };
+    if (job.tide !== undefined && !(tide.worn > 0 && tide.held === tide.worn)) {
+        why.push(`${tide.worn} stall(s) wore the aurora and ${tide.held} had its tide held at ${job.tide}`);
+    }
+    if (job.tide === undefined && tide.held > 0) {
+        why.push(`${tide.held} stall(s) had the aurora's tide held on a job that asked for none`);
     }
     const classes = out.sheetClasses ?? [];
     if (job.screen === 'door') {
@@ -1422,6 +1433,9 @@ try {
         // protected-box pixels compared.
         let lookPseudoJobs = 0;
         let lookPseudoPixels = 0;
+        // Jobs with the aurora worn alone and its tide held at an end
+        // (`the-aurora-is-read-at-both-ends-of-its-tide`, `TIDE_SCREENS`).
+        let tideJobs = 0;
         const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1470,9 +1484,22 @@ try {
                 currentStep = `contrast job ${plannedJob.key}`;
                 done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
                 const { screen, look: theme, flags } = plannedJob;
-                const wornAll = flags !== 0;
                 const reduced = plannedJob.reduced === true;
-                const job = { pass: 'contrast', viewport: vp.name, screen, look: theme, flags, ...(reduced ? { reduced } : {}) };
+                const tideHeld = plannedJob.tide;
+                // How a line names the job's decorations: all worn, a solo
+                // row's bits, the aurora's tide held (`TIDE_SCREENS`).
+                const wornLabel =
+                    (flags === 0 ? '' : flags === 0xffff ? ' + worn' : ` + flags ${flags}`) +
+                    (tideHeld === undefined ? '' : ` tide ${tideHeld}`);
+                const job = {
+                    pass: 'contrast',
+                    viewport: vp.name,
+                    screen,
+                    look: theme,
+                    flags,
+                    ...(reduced ? { reduced } : {}),
+                    ...(tideHeld === undefined ? {} : { tide: tideHeld }),
+                };
                 // A job of `REDUCED_JOBS` is painted under reduced motion: a
                 // box the sampler cannot read while it moves (Rural's swaying
                 // tag) is read stilled. Switched per job, and back after it.
@@ -1504,7 +1531,7 @@ try {
                 let nonce;
                 const prepare = (neutral, heightOnly = false) => {
                     nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly);
+                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide);
                 };
                 // First paint tells us how tall the page is — the document,
                 // and the viewport it takes for the shell's region and an
@@ -1572,6 +1599,9 @@ try {
                         continue;
                     }
                     for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                    if ((prep.tide?.held ?? 0) > 0) {
+                        tideJobs += 1;
+                    }
                     if ((prep.rain?.flattened ?? 0) > 0) {
                         rainJobs += 1;
                         rainKeys.add(plannedJob.key);
@@ -1687,7 +1717,7 @@ try {
                         });
                         if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                             dim.push(
-                                `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
                                     `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
                                     (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
                             );
@@ -1775,7 +1805,7 @@ try {
                                 moneyRingRead += 1;
                                 if (!((prep.rain?.flattened ?? 0) > 0)) {
                                     dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
                                     );
                                 }
                             }
@@ -1805,7 +1835,7 @@ try {
                                 chars: r.chars,
                                 bareLines: r.bare.length,
                             });
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
                             if (r.ringPx === 0 || r.thin.length > 0) {
                                 const line = r.thin[0];
                                 dim.push(
@@ -1888,7 +1918,7 @@ try {
                                 changedAll += changed;
                                 if (changed > 0) {
                                     dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
                                             `changes ${changed} px (the first at ${first.join(',')}) when the look's pseudo-elements are hidden — ` +
                                             `no-look-pseudo-paints-inside-a-protected-box`,
                                     );
@@ -1983,6 +2013,15 @@ try {
             // nothing.
             verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
         }
+        if (LOOKS === 'shipped' && tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
+            // Every planned tide job held the tide (a job that did not is
+            // refused by its echo); a count that differs is a walk that lost
+            // some, said by name.
+            verdicts.push(`the-aurora-is-read-at-both-ends-of-its-tide held the tide on ${tideJobs} of ${plan.filter((j) => j.tide !== undefined).length} planned job(s)`);
+        }
+        if (LOOKS === 'shipped' && plan.every((j) => j.tide === undefined)) {
+            verdicts.push('the-aurora-is-read-at-both-ends-of-its-tide: the plan holds no tide job — vacuous green');
+        }
         if (LOOKS === 'shipped' && moneyRingRead === 0) {
             // The Activity fold's receipt amount is outlined on Neo worn: a
             // shipped run that ring-read no money figure proved the rule over
@@ -2005,6 +2044,7 @@ try {
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
                         `${lookPseudoJobs} job(s) with look pseudos hidden and compared (${lookPseudoPixels} protected pixels), ` +
+                        `the aurora's tide held at an end on ${tideJobs}, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );

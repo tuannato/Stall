@@ -20,6 +20,8 @@ import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
+import buntingSvg from '../src/ui/decor/bunting.svg?raw';
+import { artTopShare } from './buntingArt';
 import { brightestDrop, type Drop } from './rainDrop';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
@@ -2781,6 +2783,118 @@ function moneySetFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **The bunting never swings into the ornament label** (step 5b; the
+ * moving-decoration table's reader for `att-bunting`, `movingDecor.ts`).
+ * Rural's bunting is a row in the ornament strip that sways about its own
+ * `transform-origin`, and the strip's own text stands beside it. The pass
+ * freezes it at one instant; this bounds it over its whole swing instead:
+ * the widest turn the row's own keyframes reach (read off its running
+ * animations, never stated here); the row's box before any turn (read with
+ * its transform held off for the measurement and put back), from its art's
+ * topmost paint down (`buntingArt.ts`: the box is taller than the drawing,
+ * and its empty top read as the bunting touching the label); turned about
+ * its origin to each end of the swing and back to rest, it must not reach
+ * any line of the strip's own text (`Range` rects of every text node in its
+ * `.orn` outside the bunting), within a device pixel.
+ * `buntingChecks` counts the rows swept; the runner requires some on the
+ * phone and desk passes where Rural is measured (`probe-coverage.mjs`).
+ */
+const BUNTING_CHECK = 'the-bunting-never-swings-into-the-ornament-label';
+let buntingChecks = 0;
+
+/** The widest turn, in degrees, any of `node`'s running animations reaches. */
+function widestTurn(node: Element): number {
+    let widest = 0;
+    for (const a of node.getAnimations()) {
+        const effect = a.effect;
+        if (!(effect instanceof KeyframeEffect)) continue;
+        for (const frame of effect.getKeyframes()) {
+            for (const value of [frame['transform'], frame['rotate']]) {
+                if (typeof value !== 'string') continue;
+                for (const m of value.matchAll(/(-?[\d.]+)deg/g)) {
+                    widest = Math.max(widest, Math.abs(Number(m[1])));
+                }
+            }
+        }
+    }
+    return widest;
+}
+
+/** Whether the rectangle `r` (turned `a` about `p`) and the axis-aligned `q` share any area: separating axes. */
+function turnedRectMeets(
+    r: { x0: number; y0: number; x1: number; y1: number },
+    p: [number, number],
+    a: number,
+    q: { x0: number; y0: number; x1: number; y1: number },
+): boolean {
+    const turn = ([x, y]: [number, number]): [number, number] => [
+        p[0] + (x - p[0]) * Math.cos(a) - (y - p[1]) * Math.sin(a),
+        p[1] + (x - p[0]) * Math.sin(a) + (y - p[1]) * Math.cos(a),
+    ];
+    const poly = ([[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]] as [number, number][]).map(turn);
+    const box: [number, number][] = [[q.x0, q.y0], [q.x1, q.y0], [q.x1, q.y1], [q.x0, q.y1]];
+    const axes: [number, number][] = [[1, 0], [0, 1], [Math.cos(a), Math.sin(a)], [-Math.sin(a), Math.cos(a)]];
+    return axes.every(([ax, ay]) => {
+        const span = (pts: [number, number][]): [number, number] => {
+            const d = pts.map(([x, y]) => x * ax + y * ay);
+            return [Math.min(...d), Math.max(...d)];
+        };
+        const [p0, p1] = span(poly);
+        const [q0, q1] = span(box);
+        return p1 > q0 && q1 > p0;
+    });
+}
+
+/** The bunting art's topmost paint as a share of its tile's height, read once (`buntingArt.ts`). */
+const BUNTING_TOP = artTopShare(buntingSvg);
+
+function buntingSwingFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const row of document.querySelectorAll<HTMLElement>('#app .att-bunting')) {
+        if (row.closest('.deck-stall') !== null) continue;
+        const strip = row.closest('.orn');
+        if (strip === null) continue;
+        const fail = (detail: string): void => {
+            out.push({ screen, theme: label, check: BUNTING_CHECK, detail });
+        };
+        const cs = getComputedStyle(row);
+        // The row paints its one drawn tile from its top edge, repeated
+        // sideways: the art's top is a share of that tile's height.
+        const tileH = Number.parseFloat(cs.backgroundSize.split(' ')[1] ?? '');
+        if (BUNTING_TOP === undefined || !Number.isFinite(tileH) || !/^(?:0%|0px) (?:0%|0px)$/.test(cs.backgroundPosition) || !['repeat-x', 'repeat no-repeat'].includes(cs.backgroundRepeat)) {
+            fail(`the bunting's art or its tile (${cs.backgroundSize}; ${cs.backgroundPosition}; ${cs.backgroundRepeat}) is not one this rule reads — refused rather than guessed`);
+            continue;
+        }
+        buntingChecks += 1;
+        const turn = (widestTurn(row) * Math.PI) / 180;
+        row.style.setProperty('transform', 'none', 'important');
+        const box = row.getBoundingClientRect();
+        const [ox, oy] = cs.transformOrigin.split(' ').map((v) => Number.parseFloat(v));
+        row.style.removeProperty('transform');
+        const pivot: [number, number] = [box.left + (ox ?? 0), box.top + (oy ?? 0)];
+        const painted = { x0: box.left, y0: box.top + BUNTING_TOP * tileH, x1: box.right, y1: box.bottom };
+        const range = document.createRange();
+        const walker = document.createTreeWalker(strip, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            if ((text.textContent ?? '').trim() === '' || text.parentElement?.closest('.att-bunting') !== null) continue;
+            range.selectNodeContents(text);
+            for (const r of range.getClientRects()) {
+                if (r.width <= 0 || r.height <= 0) continue;
+                // A device pixel's tolerance at every edge.
+                const line = { x0: r.left + 1, y0: r.top + 1, x1: r.right - 1, y1: r.bottom - 1 };
+                const hit = [-turn, 0, turn].find((a) => turnedRectMeets(painted, pivot, a, line));
+                if (hit !== undefined) {
+                    fail(
+                        `the bunting's paint (from ${painted.y0.toFixed(1)}px, its art's top) turned ${((hit * 180) / Math.PI).toFixed(2)}° of its ±${((turn * 180) / Math.PI).toFixed(2)}° reaches the strip's line "${(text.textContent ?? '').trim().slice(0, 24)}" at ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}`,
+                    );
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/*
  * **A tile shows its letters whole** (2026-09-24, the critic's item 10).
  * A token tile (`.item-ic`) paints the name's initials until a picture
  * lands, and it clips (`overflow: hidden`, a radius): the Activity row's
@@ -2960,6 +3074,7 @@ for (const screen of measured) {
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...outlineFaults(screen, label));
             failures.push(...moneySetFaults(screen, label));
+            failures.push(...buntingSwingFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -3334,6 +3449,10 @@ type ContrastPrepared = {
     vh: number;
     /** The look pseudos generated in the job's scope (D6(i)): none means no second frame. */
     lookPseudos?: number;
+    /** The stalls that wore Neo's rain, and how many had it at its brightest. */
+    rain: { worn: number; flattened: number };
+    /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
+    tide: { worn: number; held: number };
 };
 
 /** The live boxes, with the nonce of the prepare that collected their nodes and the viewport now. */
@@ -3353,6 +3472,7 @@ declare global {
             neutral: boolean,
             nonce: string,
             heightOnly?: boolean,
+            tide?: 0 | 1,
         ) => ContrastPrepared;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
@@ -3884,6 +4004,26 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
 }
 
 /**
+ * The aurora at one end of its tide (`TIDE_SCREENS` in `contrastPlan.ts`):
+ * every stall wearing it — the deck's minis aside — has `--au-tide` held at
+ * `tide`, important, so the tide's own animation cannot move it (an
+ * important declaration outranks an animation, the rain flattening's own
+ * reason). How many wore it and how many were held; nothing is held when no
+ * tide was asked for.
+ */
+function auroraTideAt(tide: 0 | 1 | undefined): { worn: number; held: number } {
+    let worn = 0;
+    let held = 0;
+    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-aurora:not(.deck-stall)')) {
+        worn += 1;
+        if (tide === undefined) continue;
+        stall.style.setProperty('--au-tide', String(tide), 'important');
+        held += 1;
+    }
+    return { worn, held };
+}
+
+/**
  * The viewport height at which nothing a reader scrolls to is behind its
  * clip: the document's own height, and — for the two surfaces a reader
  * scrolls inside, the shell's region and an open sheet — the viewport plus
@@ -4035,7 +4175,7 @@ window.__protectedBoxes = () =>
 /** The scope the last prepare read: an open sheet's, or the page. */
 let preparedScope: ParentNode | undefined;
 
-window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
+window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false, tide?: 0 | 1) => {
     preparedNonce = nonce;
     const echo = {
         nonce,
@@ -4050,7 +4190,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         // The apex can only wear the default look — see `looksFor`. The plan
         // never asks for this; the runner refuses a job with no targets.
         preparedNodes = [];
-        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, ...echo };
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
     }
     if (neutral) {
         paint(NEUTRAL_SCREEN, look, []);
@@ -4058,6 +4198,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     paint(screen, look, wornOf(look, flags));
     freezeAnimations();
     const rain = rainAtItsBrightest();
+    const tideHeld = auroraTideAt(tide);
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
     // there compares an undimmed text colour against scrimmed paint, which
@@ -4090,6 +4231,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
             rain,
+            tide: tideHeld,
             ...echo,
         };
     }
@@ -4186,6 +4328,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         rain,
         // The look pseudos in scope, marked for D6(i)'s second frame.
         lookPseudos,
+        // The stalls that wore the aurora, and how many had its tide held.
+        tide: tideHeld,
         ...echo,
     };
 };
@@ -4267,6 +4411,7 @@ const verdict = {
     outlineChecks,
     moneyChecks,
     atRestSetAside,
+    buntingChecks,
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,

@@ -34,9 +34,10 @@ export const DUMP_DIR = '.layout-dump';
 export const FLOOR = 3;
 
 /** One job's key: the combination the pass painted. */
-export function jobKey({ pass, viewport, screen, look, flags, reduced }) {
-    // A job painted under reduced motion is a job of its own (`REDUCED_JOBS`).
-    return `${pass}|${viewport}|${screen}|${look}|${flags}${reduced === true ? '|reduce' : ''}`;
+export function jobKey({ pass, viewport, screen, look, flags, reduced, tide }) {
+    // A job painted under reduced motion is a job of its own (`REDUCED_JOBS`),
+    // and so is one with the aurora's tide held at an end (`TIDE_SCREENS`).
+    return `${pass}|${viewport}|${screen}|${look}|${flags}${reduced === true ? '|reduce' : ''}${tide === undefined ? '' : `|tide${tide}`}`;
 }
 
 /** One box's key, inside its job. */
