@@ -1593,14 +1593,14 @@ body {
 
 /*
  * The roam, 24s: rest (5%), walk the yard (to 38%), turn up the stem and
- * climb it (41–55%), step onto the bloom and rest there facing out (58–66%),
+ * climb it (41–55%), step onto the bloom and rest there, still (58–64%), turn (64–66%),
  * open the wings and fly home in a falling arc (67–86%), land and fold them
  * (89%), rest (to 94%) and turn to face the yard again (96%). Travel is
  * `left`/`bottom`, so the box never leaves the strip; a turn is a mirror
  * (`scaleX`), never a half-rotation, which would walk it home belly-up; the
  * climb is the one quarter-turn. The sprite changes twice a lap, walking to
- * flying and back — one flash in 24s by the flash rule's count, which reads
- * a `background-image` change as a flash.
+ * flying and back: two changes a lap, five seconds apart, which the flash
+ * rule (it reads a `background-image` change) counts as no flash.
  */
 @keyframes att-beetle-roam {
     0% {
@@ -1622,23 +1622,34 @@ body {
     41% {
         left: calc(100% - 50 * var(--att-yu));
         bottom: calc(12 * var(--att-yu));
-        transform: rotate(-90deg);
+        transform: rotate(-90deg) scaleX(1);
     }
     55% {
         left: calc(100% - 50 * var(--att-yu));
         bottom: calc(34 * var(--att-yu));
-        transform: rotate(-90deg);
+        transform: rotate(-90deg) scaleX(1);
     }
+    /* The rest on the bloom is still, and the turn after it is quick: the
+       same two functions at 58, 64 and 66%, so nothing but the scale moves
+       and only in the last 0.48s. The mock went rotate(0) -> scaleX(-1)
+       across the whole rest, which interpolates as a matrix and squeezed
+       the beetle to a sliver for 1.9s (the critic, 2026-09-26). */
     58% {
         left: calc(100% - 53 * var(--att-yu));
         bottom: calc(42 * var(--att-yu));
-        transform: rotate(0deg);
+        transform: rotate(0deg) scaleX(1);
+        background-image: url('decor/beetle-walk.svg');
+    }
+    64% {
+        left: calc(100% - 53 * var(--att-yu));
+        bottom: calc(42 * var(--att-yu));
+        transform: rotate(0deg) scaleX(1);
         background-image: url('decor/beetle-walk.svg');
     }
     66% {
         left: calc(100% - 53 * var(--att-yu));
         bottom: calc(42 * var(--att-yu));
-        transform: scaleX(-1);
+        transform: rotate(0deg) scaleX(-1);
         background-image: url('decor/beetle-walk.svg');
     }
     67% {
