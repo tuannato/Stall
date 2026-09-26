@@ -21,7 +21,7 @@ import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import { brightestDrop, type Drop } from './rainDrop';
-import { MOOD_VISIBLE_MIN, moodIsVisible, type Rgb as MoodRgb } from './moodVisible';
+import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
@@ -2721,9 +2721,10 @@ failures.push(...doorMiniFaults());
  * could not tell they were wearing it. Measured in CIEDE2000 since step 5a′
  * (`moodVisible.ts`, where the threshold's reason is): the row's own `bg`
  * and `surface`, AND the grounds the page actually painted — the stall's and
- * the first card's computed `background-color`, bare against worn — because
- * a look sheet that paints its ground from a literal would pass on the row
- * alone while the page stood still.
+ * the first card's computed `background-color`, bare against worn, each
+ * measured where it is opaque both ways — because a look sheet that paints
+ * both grounds from literals would pass on the row alone while the page
+ * stood still.
  */
 /**
  * The FULL computed style of every element in the painted tree — not the
@@ -2765,27 +2766,31 @@ function paintSignature(): string {
 
 /**
  * The two grounds the offers screen actually painted: the stall root's and
- * the first card's computed `background-color`, opaque `rgb()` only. A
- * ground the page paints translucent or through an image alone cannot be
- * read as one colour, and says so rather than reading as unmoved.
+ * the first card's computed `background-color`, resolved to sRGB by the
+ * browser itself — filled into a 1x1 canvas and read back — so `color-mix()`
+ * (which Chrome serialises as `color(srgb …)`), `oklch()`, `lab()` and
+ * fractional channels read like any `rgb()`. A ground that is not opaque
+ * (alpha under 255, or transparent) is `undefined`: not measured, skipped.
  */
-function paintedGrounds(): { bg: MoodRgb; surface: MoodRgb } | string {
+const groundCanvas = document.createElement('canvas');
+groundCanvas.width = 1;
+groundCanvas.height = 1;
+const groundCtx = groundCanvas.getContext('2d', { willReadFrequently: true })!;
+function paintedGrounds(): { stall: MoodRgb | undefined; item: MoodRgb | undefined } {
     const app = document.getElementById('app')!;
-    const read = (sel: string): MoodRgb | string => {
+    const read = (sel: string): MoodRgb | undefined => {
         const node = app.querySelector(sel);
         if (node === null) {
-            return `no ${sel} to read a ground from`;
+            return undefined;
         }
-        const value = getComputedStyle(node).backgroundColor;
-        const m = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
-        return m === null ? `${sel} paints no opaque ground (${value})` : { r: +m[1]!, g: +m[2]!, b: +m[3]! };
+        groundCtx.clearRect(0, 0, 1, 1);
+        groundCtx.fillStyle = 'transparent';
+        groundCtx.fillStyle = getComputedStyle(node).backgroundColor;
+        groundCtx.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = groundCtx.getImageData(0, 0, 1, 1).data;
+        return a === 255 ? { r: r!, g: g!, b: b! } : undefined;
     };
-    const bg = read('.stall');
-    const surface = read('.item');
-    if (typeof bg === 'string') {
-        return bg;
-    }
-    return typeof surface === 'string' ? surface : { bg, surface };
+    return { stall: read('.stall'), item: read('.item') };
 }
 
 // Every measured look — on a workshop page the kit's alone, judged against
@@ -2802,17 +2807,21 @@ for (const look of measuredLooks()) {
             failures.push({ screen: 'billboard', theme: theme.label, check, detail });
         };
         if (row.slot === 'mood') {
-            const onRow = moodIsVisible(theme, row.palette ?? {});
+            const onRow = moodDistance(theme, row.palette ?? {});
             if (onRow < MOOD_VISIBLE_MIN) {
                 bill('a mood nobody can see', `${row.label} moves its grounds by ΔE00 ${onRow.toFixed(2)}`);
             }
             const worn = paintedGrounds();
-            if (typeof bareGrounds === 'string' || typeof worn === 'string') {
-                bill('a mood nobody can see', `${row.label}: ${typeof worn === 'string' ? worn : bareGrounds}`);
-                continue;
-            }
-            const onPage = moodIsVisible(bareGrounds, worn);
-            if (onPage < MOOD_VISIBLE_MIN) {
+            const onPage = paintedDistance([
+                { bare: bareGrounds.stall, worn: worn.stall },
+                { bare: bareGrounds.item, worn: worn.item },
+            ]);
+            if (onPage === undefined) {
+                bill(
+                    'a mood nobody can see',
+                    `${row.label}: neither .stall nor the first .item paints an opaque background-color both bare and worn, so the painted page could not be measured`,
+                );
+            } else if (onPage < MOOD_VISIBLE_MIN) {
                 bill('a mood nobody can see', `${row.label} moves the painted page by ΔE00 ${onPage.toFixed(2)}`);
             }
             continue;

@@ -15,7 +15,7 @@
  * pinned because it moves the verdicts: CSS `lab()` is D50, and there the
  * fixtures read 7.89 / 4.18 / 6.97 (CRITIC-STEP-5 item 5).
  *
- * `moodIsVisible(base, palette)` is the largest ΔE00 over the two grounds a
+ * `moodDistance(base, palette)` is the largest ΔE00 over the two grounds a
  * mood swaps — `bg` and `surface`, each falling back to the base look's —
  * and the probe compares it with `MOOD_VISIBLE_MIN`. The fixtures in
  * `moodVisible.test.ts` are RGB literals, never names:
@@ -37,14 +37,17 @@ export type Lab = readonly [number, number, number];
 
 /**
  * The threshold, in ΔE00. Why 5 and not a just-noticeable difference
- * (≈ 2.3): CIEDE2000 discounts lightness differences near white and weights
- * hue lightly at low chroma, which is exactly the region Rural's papers
- * live in — so it separates 青墨 (7.34, a hue move on a pale ground a buyer
- * sees at once) from Sun-faded v2 over today's paper (4.11, a pale-on-pale
- * bleach). OKLab cannot: it reads 青墨 2.57 below v2's 2.85. Only the first
- * Sun-faded was ever judged by eye; the gap 4.11 → 6.86 is narrow, and a
- * mood that lands inside it is a call to make with the pictures, not by
- * moving this number.
+ * (≈ 2.3): the two moods it separates move differently, and CIEDE2000
+ * counts the two moves differently near white. 青墨 is mostly a loss of
+ * chroma — b* 9.13 → 1.25, ΔC* −6.14, a small ΔL* −1.37 — and at chroma
+ * this low CIEDE2000 counts a chroma move close to one for one: the a*b*
+ * part alone is 7.29 of its 7.34. Sun-faded v2 over today's paper is half a
+ * lightening, ΔL* +2.95 at L* ≈ 97, where the lightness weight S_L ≈ 1.7
+ * cuts it to 1.73, beside a chroma loss of 4.98 that counts 3.73: 4.11 in
+ * all. OKLab weights the lightening more and reads them the other way
+ * (青墨 2.57 below v2's 2.85). Only the first Sun-faded was ever judged by
+ * eye; the gap 4.11 → 6.86 is narrow, and a mood that lands inside it is a
+ * call to make with the pictures, not by moving this number.
  */
 export const MOOD_VISIBLE_MIN = 5;
 
@@ -142,9 +145,9 @@ export function deltaE2000Rgb(a: Rgb, b: Rgb): number {
 /**
  * How far a mood moves the canvas: the larger ΔE00 of the two grounds it
  * swaps, each falling back to the base look's when the mood leaves it.
- * Compare with `MOOD_VISIBLE_MIN`.
+ * A distance, not a verdict: compare it with `MOOD_VISIBLE_MIN`.
  */
-export function moodIsVisible(
+export function moodDistance(
     base: { readonly bg: Rgb; readonly surface: Rgb },
     palette: { readonly bg?: Rgb; readonly surface?: Rgb },
 ): number {
@@ -152,4 +155,21 @@ export function moodIsVisible(
         deltaE2000Rgb(base.bg, palette.bg ?? base.bg),
         deltaE2000Rgb(base.surface, palette.surface ?? base.surface),
     );
+}
+
+/**
+ * How far the painted page moved: the larger ΔE00 over the grounds the
+ * probe could read opaque in BOTH paints, bare and worn. `undefined` when
+ * none could be read — the caller says so rather than calling it unmoved.
+ */
+export function paintedDistance(
+    grounds: readonly { readonly bare: Rgb | undefined; readonly worn: Rgb | undefined }[],
+): number | undefined {
+    let most: number | undefined;
+    for (const { bare, worn } of grounds) {
+        if (bare !== undefined && worn !== undefined) {
+            most = Math.max(most ?? 0, deltaE2000Rgb(bare, worn));
+        }
+    }
+    return most;
 }
