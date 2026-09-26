@@ -202,7 +202,7 @@ describe('a-sheet-reaches-only-the-art-it-was-sent-with', () => {
             writeFileSync(join(artDir, 'a.svg'), '<svg/>');
             writeFileSync(join(artDir, 'Big.svg'), '<svg/>');
             writeFileSync(join(artDir, 'b.png'), '');
-            symlinkSync('/etc/hostname', join(artDir, 'link.svg'));
+            symlinkSync('/etc/hosts', join(artDir, 'link.svg'));
             assert.deepEqual([...readArt(artDir)], ['a.svg']);
             // A folder that is itself a link lists nothing.
             symlinkSync(artDir, join(dir, 'linked'));
