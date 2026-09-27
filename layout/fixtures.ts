@@ -1582,8 +1582,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
  *   390px measures pixels nobody paints. The page passes skip them for the
  *   same reason in reverse.
  * - **They wear no decorations.** `renderStall`'s broadcast branch passes only
- *   `slot: 'mood'` rows to `applyTheme` and mounts no ornament strip, so the
- *   worn variants are the same paint measured three times. `variantsFor`
+ *   `slot: 'mood'` rows to `applyTheme`, strips every `att-` class a mood may
+ *   carry (D11), and mounts no ornament strip, so the worn variants are the
+ *   same paint measured three times. `variantsFor`
  *   returns the bare list and the contrast driver skips the `wornAll` loop
  *   outright — a `continue` after `__contrastPrepare` still pays the paint,
  *   the fonts wait and two frames, which is nearly the whole cost.

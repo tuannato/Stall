@@ -605,7 +605,8 @@ export function renderStall(
      * The overlay is a second render path on every route except `invalid`
      * (a streamer who typed a wrong seller needs to read that) and `home`
      * (the param cannot land there). Early return: no tabs, no publish
-     * mount, no ornament, no footer. Moods still reach the palette.
+     * mount, no ornament, no footer. Moods still reach the palette — and
+     * the palette alone.
      */
     if (
         view.broadcast !== undefined &&
@@ -614,6 +615,21 @@ export function renderStall(
     ) {
         const moods = (view.worn ?? []).filter((row) => row.slot === 'mood');
         applyTheme(stall, theme, moods, { ornament: false });
+        /*
+         * A mood may carry a look-scoped class (D11, step 5c): the shop and
+         * the wall wear it, and the overlay never does. Stripped here, after
+         * the root is dressed and by prefix, rather than by handing
+         * `applyTheme` moods without one — a class that reached this root
+         * by any road is a look's rule reaching a stream nobody can close,
+         * over plates the probe measures bare. What stays is the palette,
+         * merged into the inline vars. Test:
+         * `a-mood-class-never-reaches-the-overlay`.
+         */
+        for (const cls of [...stall.classList]) {
+            if (cls.startsWith('att-')) {
+                stall.classList.remove(cls);
+            }
+        }
         stall.classList.add('broadcast');
         if (view.broadcast.transparent) {
             stall.classList.add('bc-clear');
@@ -1073,7 +1089,7 @@ function paintHome(
     stall.classList.add('door');
     /*
      * The door wears no look of its own — no `t-*` class and no decoration
-     * class — only the default look's `--s-*` values, which `applyTheme`
+     * or mood class (a mood may carry one since D11) — only the default look's `--s-*` values, which `applyTheme`
      * wrote inline (2026-09-24, the step-2 critic's item 8). A look's sheet
      * selects by descent (`.t-modern .stall-name`), and CSS has no nearest
      * ancestor for that: a door dressed `t-modern` reached into every mini

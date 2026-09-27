@@ -165,3 +165,22 @@ export function canWear(look: Look, screen: string): boolean {
 export function wornOf(look: Look, flags: number): readonly ShippedAttachment[] {
     return wornFrom(look.rows, flags);
 }
+
+/**
+ * Every all-worn state `look` can be in, as flags: one per mood (D11, the
+ * step-5 plan's "one all-worn variant per mood").
+ *
+ * `0xffff` wears every row the picker can, one per slot — and a look's moods
+ * share a slot, so it wears the mood with the lowest bit alone. A look with a
+ * second mood then had an all-worn state no pass painted: that mood's
+ * palette, and since D11 its class, beside every other row. Each further mood
+ * is one more value here, `0xffff` with every other mood's bit cleared.
+ * Every shipped look has at most one mood, so this is `[0xffff]` for each of
+ * them and the plans' pinned counts do not move; Ink wash's two moods make it
+ * two.
+ */
+export function wornAllFlags(look: Look): number[] {
+    const moods = look.rows.filter((row) => row.slot === 'mood').sort((a, b) => a.bit - b.bit);
+    const moodBits = moods.reduce((bits, row) => bits | (1 << row.bit), 0);
+    return [0xffff, ...moods.slice(1).map((row) => (0xffff & ~moodBits) | (1 << row.bit))];
+}

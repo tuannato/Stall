@@ -52,13 +52,22 @@ export type ShippedAttachment = {
     /**
      * The class this row paints under. **Must start with `att-`**:
      * `decorations()` in `layout/probe.ts` finds decorations by that prefix, so
-     * a row named anything else ships with no guard at all. Absent for `mood`,
-     * which moves the palette and paints nothing.
+     * a row named anything else ships with no guard at all.
+     *
+     * **A `mood` may carry one too** (D11, step 5c, 2026-09-27; the owner's
+     * Q7 of 2026-09-23: a crude guard is fixed, a design is not cut). It
+     * lands on the stall root beside the look's own class, it is
+     * **look-scoped** — its rules name its look's class, and no other row
+     * owns it (`a-mood-class-is-look-scoped`) — and the stream overlay never
+     * gets it: the broadcast branch strips every `att-` class after it
+     * dresses the root, so a mood reaches the overlay as a palette alone
+     * (`a-mood-class-never-reaches-the-overlay`). A mood with no class moves
+     * the palette and paints nothing, and no shipped mood carries one today.
      */
     cls?: string;
     /**
      * Where the class lands, so the renderer never needs to know one row from
-     * another. `root` puts it on the stall and the look comes from descendant
+     * another. Never set on a `mood`: a mood's class lands on the root, always. `root` puts it on the stall and the look comes from descendant
      * rules — the only shape allowed to exist without a node, and only for
      * paint that cannot leave the element it is on (a rule on the sign, a glow
      * on the name). `node` builds an element the guard can measure, which is
@@ -523,10 +532,15 @@ export function withMood(
     return mood?.palette === undefined ? theme : { ...theme, ...mood.palette };
 }
 
-/** The classes a worn set puts on the stall root — the `root` rows only. */
+/**
+ * The classes a worn set puts on the stall root: the `root` rows, and a mood
+ * that names one (D11). A mood's class has no other home — it is a
+ * disposition of the whole stall, never a node — so this is where it lands
+ * (`a-mood-class-reaches-the-stall-root`); the overlay takes it back off.
+ */
 export function attachmentClasses(worn: readonly ShippedAttachment[]): string[] {
     return worn
-        .filter((a) => a.paint === 'root')
+        .filter((a) => a.paint === 'root' || a.slot === 'mood')
         .map((a) => a.cls)
         .filter((c): c is string => c !== undefined);
 }

@@ -133,8 +133,17 @@ const ownRules = (cls: string): Rule[] =>
 const anyRules = (cls: string): Rule[] =>
     RULES.filter((r) => classesIn(r.selector).some((found) => ownedBy(cls, found)));
 
+/**
+ * The decorations: every row with a class, less a mood's (D11). A mood's
+ * class is a look's own and its rules live in that look's sheet, where the
+ * look lint reads them — never in stall.css, which is what this gate's
+ * paint and colour tables read — so it is held by
+ * `a-mood-class-is-look-scoped` below instead. Its rules are still
+ * decoration-scoped (`DECORATION_SCOPED`): no ground under text, no mark but
+ * the outline, exactly as a decoration's.
+ */
 const paintable: readonly (ShippedAttachment & { cls: string })[] = SHIPPED_ATTACHMENTS.filter(
-    (row): row is ShippedAttachment & { cls: string } => row.cls !== undefined,
+    (row): row is ShippedAttachment & { cls: string } => row.cls !== undefined && row.slot !== 'mood',
 );
 
 /** Top-level commas only: a gradient carries plenty of its own. */
@@ -287,8 +296,10 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
     it('says where its colours come from, and the sheet agrees', () => {
         /*
          * Round 15's lesson, and the most expensive one the workshop will
-         * inherit: a MOOD paints no class — it swaps the palette and nothing
-         * else — so nothing in CSS can ask whether one is worn. A row whose
+         * inherit: a MOOD swaps the palette, and a decoration's rules cannot
+         * ask whether one is worn — a mood may carry a class since D11, but
+         * it is its look's own (`a-mood-class-is-look-scoped`), never a
+         * decoration's selector, and no shipped mood carries one. A row whose
          * colours are tokens follows a mood for free. A row that ships drawn
          * art cannot follow one at all, and under Modern's After hours the
          * awning's baked daylight blue read as a cut-out pasted on a
@@ -799,6 +810,167 @@ function groundsUnderText(
     }
     return out;
 }
+
+/** `text` split at `sep` where no bracket, parenthesis or quote is open. */
+function splitTop(text: string, sep: (ch: string) => boolean): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let quote = '';
+    let cur = '';
+    for (const ch of text) {
+        if (quote !== '') {
+            cur += ch;
+            if (ch === quote) quote = '';
+            continue;
+        }
+        if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === '(' || ch === '[') depth += 1;
+        else if (ch === ')' || ch === ']') depth -= 1;
+        if (depth === 0 && sep(ch)) {
+            out.push(cur);
+            cur = '';
+            continue;
+        }
+        cur += ch;
+    }
+    out.push(cur);
+    return out.map((part) => part.trim()).filter((part) => part !== '');
+}
+
+/**
+ * Every selector in `css` that reads the mood class `cls` (or a child class
+ * of it) outside its look, each with the reason. A selector naming it must:
+ *
+ * - name one of `lookClasses` **in the same compound** — the class lands on
+ *   the stall root beside the look's own, so `.t-rural.att-x` is its look and
+ *   `.t-rural .att-x` or `.att-x` alone is not. For a kit sheet the sheet's
+ *   own class counts (`t-workshop`): `workshop:start` copies a shipped mood's
+ *   rules re-scoped there, and the kit allows the class (step 5c's critic,
+ *   item 2);
+ * - carry **no functional pseudo-class** (`:is()`, `:not()`, `:where()`,
+ *   `:has()`, …) anywhere: `:is(.t-neo, .t-rural).att-x` names the look's
+ *   class as text and matches another look, and `:not(.t-rural).att-x`
+ *   matches every other look (item 3). Refused outright rather than parsed —
+ *   nothing a mood's rule needs is said only that way;
+ * - name **no other row's `att-` class**: a mood's class is never a
+ *   decoration's selector, so `.t-rural.att-x.att-confetti` — a mood
+ *   re-dressing a decoration — is refused (item 1). A decoration that must
+ *   change under a mood is written in the tokens (CLAUDE §4).
+ */
+function outOfScope(css: string, cls: string, lookClasses: readonly string[]): string[] {
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const out: string[] = [];
+    for (const m of bare.matchAll(/([^{}]+)\{/g)) {
+        const head = m[1]!.trim();
+        if (head.startsWith('@')) {
+            continue;
+        }
+        for (const selector of splitTop(head, (ch) => ch === ',').map((one) => one.replace(/\s+/g, ' '))) {
+            if (!classesIn(selector).some((found) => ownedBy(cls, found))) {
+                continue;
+            }
+            if (/:(?!:)[a-z-]+\(/.test(selector)) {
+                out.push(`${selector} — a functional pseudo-class`);
+                continue;
+            }
+            const others = classesIn(selector).filter((found) => !ownedBy(cls, found));
+            if (others.length > 0) {
+                out.push(`${selector} — names another row's ${others.join(', ')}`);
+                continue;
+            }
+            const compounds = splitTop(selector, (ch) => /[\s>+~]/.test(ch));
+            const home = compounds.find((compound) => classesIn(compound).some((found) => ownedBy(cls, found)))!;
+            const tokens = [...home.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((t) => t[1]!);
+            if (!lookClasses.some((look) => tokens.includes(look))) {
+                out.push(`${selector} — not beside ${lookClasses.map((look) => `.${look}`).join(' or ')}`);
+            }
+        }
+    }
+    return out;
+}
+
+/** The classes a mood's rule may stand beside in `sheet`: its look's, and a kit sheet's own. */
+const lookClassesFor = (lookClass: string, sheet: { role: string; lookClass?: string }): string[] =>
+    sheet.role === 'kit' && sheet.lookClass !== undefined ? [lookClass, sheet.lookClass] : [lookClass];
+
+describe('a-mood-class-is-look-scoped', () => {
+    /**
+     * D11 (step 5c): a mood may name one class. It rides the stall root on
+     * the shop and the wall and is stripped from the overlay
+     * (`a-mood-class-never-reaches-the-overlay`); here, the CSS half of
+     * "look-scoped", read over every served sheet by `outOfScope`: beside
+     * its look's class in one compound, through no functional pseudo-class,
+     * and never beside another row's class — a mood's class is never a
+     * decoration's selector. In a look's sheet the look lint already holds
+     * every selector under that class. The shape and the owner are
+     * `moodClassProblems` (`layout/moodClass.ts`), read by the catalogue's
+     * pin test and the kit. No shipped mood carries a class today, so the
+     * plants are what show the rule refusing.
+     */
+    const sheets = SERVED_SHEETS.map((sheet) => ({
+        sheet,
+        css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'),
+    }));
+
+    it('holds every shipped mood class to its look, in every served sheet', () => {
+        for (const row of SHIPPED_ATTACHMENTS.filter((a) => a.slot === 'mood' && a.cls !== undefined)) {
+            const lookClass = decodeTheme(row.themeId).sheetClass;
+            for (const { sheet, css } of sheets) {
+                expect(outOfScope(css, row.cls!, lookClassesFor(lookClass, sheet)), `${row.label} in ${sheet.path}`).toEqual([]);
+            }
+        }
+    });
+
+    it('refuses a rule that reads a mood class outside its look (plants)', () => {
+        const at = 'att-harness-dusk';
+        const rural = ['t-rural'];
+        expect(outOfScope(`.t-rural.${at} .item { color: red }`, at, rural)).toEqual([]);
+        expect(outOfScope(`.stall.t-rural.${at}-line::after { color: red }`, at, rural)).toEqual([]);
+        expect(outOfScope(`@media (min-width: 680px) { .t-rural.${at} .item { color: red } }`, at, rural)).toEqual([]);
+        expect(outOfScope(`.stall.${at} .item { color: red }`, at, rural)).toHaveLength(1);
+        expect(outOfScope(`.t-rural .x, .${at} .item { color: red }`, at, rural)).toHaveLength(1);
+        expect(outOfScope(`.t-neo.${at} .item { color: red }`, at, rural)).toHaveLength(1);
+        expect(outOfScope(`.t-rurals.${at} .item { color: red }`, at, rural)).toHaveLength(1);
+        // The look's class in another compound is not its look: the class is
+        // on the root, beside the look's own.
+        expect(outOfScope(`.t-rural .${at} .item { color: red }`, at, rural)).toHaveLength(1);
+        // Another class that merely starts with the same letters is not its.
+        expect(outOfScope(`.stall.${at}s .item { color: red }`, at, rural)).toEqual([]);
+    });
+
+    it('refuses a mood class read beside a decoration (item 1)', () => {
+        const at = 'att-harness-dusk';
+        expect(outOfScope(`.t-rural.${at}.att-confetti .item { color: red }`, at, ['t-rural'])[0]).toMatch(
+            /names another row's att-confetti/,
+        );
+        expect(outOfScope(`.t-rural.${at} .att-beetle-bug { color: red }`, at, ['t-rural'])[0]).toMatch(
+            /names another row's att-beetle-bug/,
+        );
+    });
+
+    it('refuses the look class behind :is() or :not() (item 3)', () => {
+        const at = 'att-harness-dusk';
+        for (const plant of [
+            `:is(.t-neo, .t-rural).${at} .item { color: red }`,
+            `:not(.t-rural).${at} .item { color: red }`,
+            `.t-rural:where(.${at}) .item { color: red }`,
+        ]) {
+            expect(outOfScope(plant, at, ['t-rural']), plant).toHaveLength(1);
+            expect(outOfScope(plant, at, ['t-rural'])[0]).toMatch(/functional pseudo-class/);
+        }
+        // A pseudo-element's double colon is not a pseudo-class.
+        expect(outOfScope(`.t-rural.${at}::after { color: red }`, at, ['t-rural'])).toEqual([]);
+    });
+
+    it("reads a kit sheet under the sheet's own class, and no other sheet (item 2)", () => {
+        const at = 'att-harness-dusk';
+        const kit = SERVED_SHEETS.find((sheet) => sheet.role === 'kit')!;
+        const base = SERVED_SHEETS.find((sheet) => sheet.role === 'base')!;
+        const copied = `.t-workshop.${at} .item { color: red }`;
+        expect(outOfScope(copied, at, lookClassesFor('t-rural', kit))).toEqual([]);
+        expect(outOfScope(copied, at, lookClassesFor('t-rural', base))).toHaveLength(1);
+    });
+});
 
 describe('a-decoration-lays-no-ground-under-text', () => {
     /**

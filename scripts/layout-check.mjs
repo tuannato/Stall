@@ -2567,7 +2567,9 @@ try {
      * is measured here even though the contrast pass skips it for these
      * screens: a mood is the ONE worn row that reaches the overlay
      * (`renderStall` keeps `slot: 'mood'`), and After hours moves both the
-     * plate and its ink.
+     * plate and its ink. Its palette only: since D11 a mood may carry a
+     * class, and the broadcast branch strips it
+     * (`a-mood-class-never-reaches-the-overlay`). One worn job per mood.
      *
      * The alpha assertion is what keeps this honest. Measured 2026-09-02:
      * `Page.captureScreenshot { fromSurface: true }` with no override returns
@@ -2603,9 +2605,15 @@ try {
         let clearRatio = 1;
         const clearClasses = new Set();
         for (const screen of CLEAR_SCREENS) {
-            for (const { id: theme, rows, sheetClass } of themes) {
-                for (const wornAll of rows === 0 ? [false] : [false, true]) {
-                    const flags = wornAll ? 0xffff : 0;
+            for (const { id: theme, rows, sheetClass, wornAll: allFlags } of themes) {
+                // Bare, and one all-worn state per mood (D11: `wornAllFlags`,
+                // which the page publishes) — `0xffff` alone for every look
+                // with one mood at most.
+                if (rows > 0 && (!Array.isArray(allFlags) || allFlags[0] !== 0xffff)) {
+                    throw new Error(`theme ${theme}: the page published no all-worn flags — refusing a pass that could skip a mood`);
+                }
+                for (const flags of rows === 0 ? [0] : [0, ...allFlags]) {
+                    const wornAll = flags !== 0;
                     currentStep = `transparency job ${screen}/${theme}/${flags}`;
                     const nonce = `transparency/${screen}/${theme}/${flags}#${(prepareSerial += 1)}`;
                     const prep = await contrastPrepare(cdp, sessionId, screen, theme, flags, true, nonce);
@@ -2689,7 +2697,7 @@ try {
                                 counted += 1;
                                 if (worst < PIXEL_CONTRAST_FLOOR) {
                                     found.push(
-                                        `${screen} @canvas / theme ${theme}${wornAll ? ' + worn' : ''} ` +
+                                        `${screen} @canvas / theme ${theme}${wornAll ? (flags === 0xffff ? ' + worn' : ` + worn ${flags}`) : ''} ` +
                                             `over ${ground}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
                                             `sits on paint at ${worst.toFixed(2)}:1`,
                                     );

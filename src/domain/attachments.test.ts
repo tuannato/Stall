@@ -24,6 +24,7 @@ import {
     MIN_CONTRAST,
     contrastRatio,
 } from './theme';
+import { moodClassProblems } from '../../layout/moodClass';
 
 const bits = (...ns: number[]): number => ns.reduce((f, n) => f | (1 << n), 0);
 
@@ -87,9 +88,16 @@ describe('attachment-table-ids-are-pinned', () => {
     it('names every paintable row with the prefix the guard looks for', () => {
         for (const a of SHIPPED_ATTACHMENTS) {
             if (a.slot === 'mood') {
-                // A mood paints no node; it moves the palette instead.
-                expect(a.cls).toBeUndefined();
+                // A mood paints no node; it moves the palette. Its class is
+                // undefined, or look-scoped and stripped on the overlay (D11,
+                // step 5c): the shape and the scope here, over the whole
+                // catalogue (`moodClassProblems`); the CSS half is the decor
+                // gate's `a-mood-class-is-look-scoped`; the strip is
+                // `a-mood-class-never-reaches-the-overlay` in render.test.ts,
+                // which dresses every shipped mood in a class to prove it.
                 expect(a.palette).toBeDefined();
+                expect(a.paint, `${a.label}: a mood's class lands on the root`).toBeUndefined();
+                expect(moodClassProblems(a, SHIPPED_ATTACHMENTS), a.label).toEqual([]);
                 continue;
             }
             expect(a.palette).toBeUndefined();
@@ -471,6 +479,16 @@ describe('attachmentClasses', () => {
         expect(
             attachmentNodesWanted(wornAttachments(RURAL_THEME_ID, bits(0))).map((a) => a.cls),
         ).toEqual(['att-beetle']);
+    });
+
+    it("puts a mood's class on the root when the mood names one (D11), and nothing when it does not", () => {
+        const [afterHours, pinstripe] = wornAttachments(DEFAULT_THEME_ID, bits(0, 1));
+        expect(afterHours!.slot).toBe('mood');
+        expect(attachmentClasses([afterHours!, pinstripe!])).toEqual(['att-pinstripe']);
+        const dressed: ShippedAttachment = { ...afterHours!, cls: 'att-test-dusk' };
+        expect(attachmentClasses([dressed, pinstripe!])).toEqual(['att-test-dusk', 'att-pinstripe']);
+        // Never as a node: a mood is a disposition of the whole stall.
+        expect(attachmentNodesWanted([dressed])).toEqual([]);
     });
 });
 

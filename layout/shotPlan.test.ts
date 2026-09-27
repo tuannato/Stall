@@ -95,7 +95,7 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect([SHOT_VIEWPORTS.canvas.width, SHOT_VIEWPORTS.canvas.height]).toEqual(probe('canvas'));
     });
 
-    it('shoots every variant: bare, every decoration where decorations paint, and each mood everywhere', () => {
+    it('shoots every variant: bare, every decoration where decorations paint, each mood everywhere, and each mood with every decoration', () => {
         const cells = new Map<string, ShotJob[]>();
         for (const job of jobs) {
             const key = `${job.viewport.name}/${job.screen}`;
@@ -108,8 +108,13 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
             expect(variants.has('mood-after-dark'), key).toBe(true);
             expect(variants.has('mood-noon'), key).toBe(true);
             expect(variants.has('decorations'), key).toBe(!NO_DECOR_SCREENS.has(screen));
-            expect(variants.size, key).toBe(NO_DECOR_SCREENS.has(screen) ? 3 : 4);
+            // One all-worn state per mood (D11), where decorations paint.
+            expect(variants.has('worn-after-dark'), key).toBe(!NO_DECOR_SCREENS.has(screen));
+            expect(variants.has('worn-noon'), key).toBe(!NO_DECOR_SCREENS.has(screen));
+            expect(variants.size, key).toBe(NO_DECOR_SCREENS.has(screen) ? 3 : 6);
         }
+        expect(jobs.find((job) => job.variant === 'worn-after-dark')!.flags).toBe(0xffff);
+        expect(jobs.find((job) => job.variant === 'worn-noon')!.flags).toBe(0xffff & ~(1 << 0));
         const decorations = jobs.find((job) => job.variant === 'decorations')!;
         expect(decorations.flags).toBe((1 << 2) | (1 << 3));
         expect(jobs.find((job) => job.variant === 'mood-noon')!.flags).toBe(1 << 1);
@@ -181,5 +186,17 @@ describe('the-diff-plan-shoots-every-probed-screen-under-every-shipped-look', ()
         }
         // One stem per shot: the before / after / diff files never collide.
         expect(new Set(jobs.map((job) => job.file)).size).toBe(jobs.length);
+    });
+
+    it('shoots a look\u2019s further mood all-worn too (D11), and nothing more for a look with one', () => {
+        const two = { ...dressed, id: 3, label: 'Two moods' };
+        const list = diffPlan([two]);
+        const cell = list.filter((job) => job.viewport.name === 'phone' && job.screen === 'offers');
+        expect(cell.map((job) => [job.variant, job.flags])).toEqual([
+            ['bare', 0],
+            ['worn', 0xffff],
+            ['worn-noon', 0xffff & ~(1 << 0)],
+        ]);
+        expect(new Set(list.map((job) => job.file)).size).toBe(list.length);
     });
 });
