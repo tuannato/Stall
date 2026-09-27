@@ -1570,18 +1570,6 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // row, the face, its fold, the wall's Browse, the overlay card and the
     // ticker — `[data-role="unbuyable"]` in `CONTRAST_TEXT`.
     'shop-window-cycle-unbuyable',
-    /*
-     * The Studio items card with its glance lines (2026-09-26). Measured
-     * before it was listed: every `.tid` line read 5.58:1 or better on
-     * every look, bare and worn, at 390 and 1280 — but the card's hint
-     * paints its guide link here and nowhere else sampled, and at 1280 on
-     * Modern, Rural and the skeleton that link wraps onto a second line, and
-     * a wrapped inline target is read as one box (1.00–1.08:1 over its union,
-     * PROBE-RULES "a wrapped inline target"; step 5b's fix). Not this
-     * feature's defect, and no fixture is bent around it: geometry only
-     * until 5b reads a wrapped target line by line.
-     */
-    'studio-items',
 ]);
 
 /**

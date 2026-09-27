@@ -20,12 +20,15 @@ import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
+import buntingSvg from '../src/ui/decor/bunting.svg?raw';
+import { artTopShare } from './buntingArt';
 import { brightestDrop, type Drop } from './rainDrop';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -84,6 +87,12 @@ const PROTECTED = [
     '[data-role="selection-total"]',
     '[data-role="pay-lines"]',
     '[data-role="pay-total"]',
+    // A chosen row's line, "2 × $5.00 = $10.00" (step 5b, the critic): money
+    // a buyer adds up, which the line-rect read took from the box read when
+    // it read `.sel-sub` as words; and the touch wall's Pay, the control that
+    // composes the payment code.
+    '[data-role="selection-figure"]',
+    '[data-role="window-pay"]',
 ].join(', ');
 
 /**
@@ -1736,6 +1745,60 @@ let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
 const wallSlivers = new Set<string>();
 
+/*
+ * **Nothing in the body reaches the status line** (step 5b, 2026-09-26, the
+ * owner's (a)). The wall's grid gives the body a `minmax(0, 1fr)` row and
+ * the status line the row under it, and the body does not clip: a Cycle
+ * card taller than its row painted straight over the status line — 110px on
+ * Rural with the Yard beetle at 1920x1080, where "Showing listings" and
+ * "Updated …" stood under the card's edge — and no geometry rule saw it:
+ * the status line is no protected box, the card is no decoration, and the
+ * cut-from-below rule reads clips, which there were none of. Only the
+ * contrast read of the status words, once it read them per line (D7),
+ * found it. So on every wall screen: every element in `.stall-body` that no
+ * ancestor inside the body clips must end above the status line's top
+ * (within a device pixel) wherever the two share columns.
+ * `statusLineChecks` counts the elements asked; the canvas, portrait and
+ * tablet passes owe some (`probe-coverage.mjs`).
+ */
+const STATUS_LINE_CHECK = 'nothing-in-the-body-reaches-the-status-line';
+let statusLineChecks = 0;
+
+function statusLineFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const status of document.querySelectorAll<HTMLElement>('#app .stall.shop-window .sw-status')) {
+        const wall = status.closest('.stall-scroll');
+        const body = wall?.querySelector<HTMLElement>(':scope > .stall-body');
+        if (body === null || body === undefined) continue;
+        const line = status.getBoundingClientRect();
+        if (line.height === 0) continue;
+        for (const el of body.querySelectorAll<HTMLElement>('*')) {
+            let clipped = false;
+            for (let at = el.parentElement; at !== null && at !== body; at = at.parentElement) {
+                const cs = getComputedStyle(at);
+                if (cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
+                    clipped = true;
+                    break;
+                }
+            }
+            if (clipped) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            statusLineChecks += 1;
+            if (r.bottom > line.top + 1 && r.right > line.left && r.left < line.right && r.top < line.bottom) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: STATUS_LINE_CHECK,
+                    detail: `${describe(el)} ends at ${r.bottom.toFixed(1)}, ${(r.bottom - line.top).toFixed(1)}px over the status line (top ${line.top.toFixed(1)})`,
+                });
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 type Span = { lo: number; hi: number };
 
 function wallCuts(screen: string, label: string): Failure[] {
@@ -2027,29 +2090,16 @@ const CONTRAST_TEXT = [
      */
     '.mini:not(.sw-switch)',
     '.sw-switch-label',
+    '.sw-switch-state',
     /*
-     * `.sw-switch-state` is deliberately NOT here, and the reason is the
-     * one the `r` clamp above already tells: a `border-radius: 999px` pill
-     * ~17px tall, whose sample band the insets cannot reliably land inside.
-     * It reported 1.00:1 on four of six look-and-decoration combinations —
-     * and 1.00:1 is not a colour this component can produce. Pressed it is
-     * `--s-surface` ink on an opaque `--s-accent`; unpressed it inherits
-     * `--s-accent` over the button's `--s-surface`. **Measured across every
-     * shipped look and mood, the worst of those pairs is 5.17:1** (Modern;
-     * Rural under Sun-faded was 4.05 until its inks went darker on
-     * 2026-09-25 and is 5.65 now) against this pass's floor of 3 — not `legibleOn`,
-     * which arbitrates accent against `--s-bg` and never against
-     * `--s-surface`; the pair is held by the palettes' own numbers. Both
-     * sides are tokens declared in one rule, which
-     * `a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground` does
-     * read, and `window.css` is on that test's sheet list.
-     *
-     * **What produced 1.00 is unexplained**, and it is recorded as
-     * unexplained rather than as a theory: the first write-up blamed the
-     * sampler's insets, and the insets narrow horizontally only, by an
-     * amount that lands inside a pill this size. A false red is as useless
-     * as a false green — and a wrong reason for withdrawing a target is
-     * worse than both, because it is what stops the next person looking.
+     * `.sw-switch-state` joined in step 5b. It was left out because the box
+     * read put this ~17px `border-radius: 999px` pill at 1.00:1 on four of
+     * six combinations — unexplained, and recorded as unexplained. Read over
+     * its own line rect it reads 5.17:1 on every shipped look and every
+     * decoration and 4.61 on the skeleton (the unpressed accent over the
+     * skeleton's sheet surface, the one pair the palettes' own numbers did
+     * not list); the unexplained 1.00 was the box read, which no longer
+     * reads it.
      */
     '.tab',
     // The "Publishes:" line on both record sheets. It is the only sentence
@@ -2137,6 +2187,8 @@ const CONTRAST_TEXT = [
     '.sw-pay-more',
     '.sw-pay-borrowed',
     '.sel-sub',
+    '[data-role="selection-figure"]',
+    '[data-role="window-pay"]',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
     // claims of the design board, measured here rather than asserted.
@@ -2218,26 +2270,24 @@ const CONTRAST_TEXT = [
     // (`sparse-pasted`, the critic's fourth pass).
     '.notice-invite .invite-text',
     /*
-     * And the rest of what the rain exposed, sampled where it is worn: the
-     * brand strip, the footer's Wearing line, the section and shelf heads,
-     * the face's back control. Unscoped, three reads fall under 3:1 on other
-     * looks with every decoration worn, and two of them are this sampler's
-     * mistakes (the critic's fourth pass): Modern's section and shelf heads
-     * (2.56:1) read the heading's own 2px accent underline, inside the box
-     * and never reached by the glyphs, and Rural's strip (1.1:1) reads the
-     * bunting row its box also holds. Rural's Wearing links and back control
-     * (2.53:1, sun-faded worn) are real and open. Scoped to the rain, where
-     * each wears the outline and is read in the ring around its own glyphs
-     * (round 8, `ringRead` in the runner), which never reaches an underline
-     * or a bunting row; elsewhere the box read would.
+     * The rest of what the rain exposed: the brand strip, the footer's
+     * Wearing line and its links, the section and shelf heads, the face's
+     * back control. Scoped to the rain until step 5b, because the box read
+     * failed three of them on other looks — two the sampler's own mistakes
+     * (Modern's heads read against their 2px accent underline, Rural's strip
+     * against the bunting row in its box) and one real (Rural's Wearing
+     * links under Sun-faded, 2.53:1, fixed since in the mood's inks). Read
+     * over their line rects (D7) they are read on every look, bare and worn;
+     * where the rain is worn they wear the outline and are read in its ring
+     * (SAMPLER-STEP-PLAN §2).
      */
-    '.stall.att-rainfall:not(.deck-stall) .orn',
-    '.stall.att-rainfall:not(.deck-stall) .wearing',
-    '.stall.att-rainfall:not(.deck-stall) .wearing-link',
-    '.stall.att-rainfall:not(.deck-stall) .section-title',
-    '.stall.att-rainfall:not(.deck-stall) .collection-name',
-    '.stall.att-rainfall:not(.deck-stall) .collection-count',
-    '.stall.att-rainfall:not(.deck-stall) .item-back',
+    '.orn',
+    '.wearing',
+    '.wearing-link',
+    '.section-title',
+    '.collection-name',
+    '.collection-count',
+    '.item-back',
     /*
      * The rest of the lines standing on the rain's ground, each outlined
      * there (round 8): the Activity rows, the first-stall steps' numbers,
@@ -2343,6 +2393,12 @@ function outlineOf(node: HTMLElement): number {
  *
  * `outlineChecks` counts the outlined elements read, and the runner requires
  * some on the phone and desk passes (`probe-coverage.mjs`).
+ *
+ * **Asked only inside a stall wearing the rain** (step 5b, CRITIC-FINAL-MERGE
+ * item 4), where the outline is scoped in stall.css. Elsewhere an opaque,
+ * unblurred `text-shadow` is a look's own mark — an emboss, a letterpress —
+ * and not this rule's; the look rules and the static
+ * `an-outline-is-the-only-mark-under-text-on-a-decoration` govern it.
  */
 const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
 let outlineChecks = 0;
@@ -2357,26 +2413,40 @@ let outlineChecks = 0;
  * root — the line's own box included — composited over it in paint order.
  *
  * - **A gradient** laid under the line (the notice's wash) is no single
- *   colour, so the outline is held to the colours it paints — between its
- *   stops, each composited over what lies under it, `AT_REST_LEVELS` either
- *   side — and never to one: the notice's midpoint passes, the look's
- *   ground under it fails. How far it shows at the wash's ends is measured
- *   and stated in `PROBE-RULES.md`, not guarded.
- * - **The root's own image layers are not read as the ground**, and are
- *   the stated exceptions: the rain is what the outline is for; the
- *   aurora's washes and Neo's own backdrop (its cyan falloff and its
- *   scanlines) are gradients across the whole stall that no single colour
- *   can match, and the outline on the plain ground stays `var(--s-bg)`
- *   over them. Neo's heading glow is the third: a shadow the heading
- *   paints under its own outline, not a ground, so this rule cannot see it.
- *   Their levels at rest are measured and stated (`PROBE-RULES.md`,
- *   round 10).
- * - A picture laid under the line between it and the root (a full-size
- *   `url()` layer) is a ground this rule cannot read, and fails.
- * - Not read, stated: a gradient sized smaller than its box (the vacant
- *   box's corner brackets — an ornament, not the ground under a line), a
- *   ground painted by a pseudo-element or by a box that is not an ancestor,
- *   and an ancestor's `opacity` or blend.
+ *   colour, so the outline is held to the colours it paints **under the
+ *   line itself** — a linear gradient is evaluated across the line's own
+ *   box, every colour composited over what lies under it, `AT_REST_LEVELS`
+ *   either side — and never to one: the notice's midpoint passes, the
+ *   look's ground under it fails. It was held to anywhere between the
+ *   gradient's stops until step 5b (CRITIC-FINAL-MERGE item 3): a gradient
+ *   from black to white accepted any outline at all. A gradient this rule
+ *   cannot evaluate across a box (radial, conic, repeating) is still held
+ *   to its stops, and counted by name (`atRestSetAside`). How far the
+ *   outline shows at the wash's ends is measured and stated in
+ *   `PROBE-RULES.md`, not guarded.
+ * - **The root's own image layers are read by what they are**, never passed
+ *   by where they sit (`a-new-root-layer-is-not-exempt-by-position`, step
+ *   5b, the same item). Each layer of the stall root is one of the named
+ *   exceptions in `ROOT_LAYERS_SET_ASIDE`, matched on its own form and on
+ *   the class that paints it — the rain, what the outline is for; the
+ *   aurora's washes and its tint over the rain, and Neo's own backdrop (its
+ *   scanlines and its top glow), gradients across the whole stall that no
+ *   single colour can match, where the outline on the plain ground stays
+ *   `var(--s-bg)` — or it is read like any layer under the line: a colour
+ *   or a full-size gradient composited in, anything else a failure. Until
+ *   step 5b every root layer was passed by its position, so a new root
+ *   decoration's layer would have been exempt the day it shipped. Neo's
+ *   heading glow is the other stated exception: a shadow the heading paints
+ *   under its own outline, not a ground, so this rule cannot see it. Their
+ *   levels at rest are measured and stated (`PROBE-RULES.md`, round 10).
+ * - A picture laid under the line between it and the root — a `url()`
+ *   layer of any size — is a ground this rule cannot read, and fails (a
+ *   picture smaller than its box was passed silently until step 5b).
+ * - Set aside and counted by reason (`atRestSetAside`), never silently: a
+ *   gradient sized smaller than its box (the vacant box's corner brackets,
+ *   the sign's rules — an ornament, not the ground under a line). Not read,
+ *   stated: a ground painted by a pseudo-element or by a box that is not an
+ *   ancestor, and an ancestor's `opacity` or blend.
  */
 const AT_REST_CHECK = 'an-outline-that-shows-at-rest';
 const AT_REST_LEVELS = 4;
@@ -2389,22 +2459,186 @@ function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
 }
 
 /**
+ * The root's image layers this rule sets aside, each by its own form and
+ * the class that paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
+ * A root layer none of these names is read like any layer under a line.
+ */
+const C = String.raw`(?:rgba?\([^)]*\)|color\(srgb [\d.]+ [\d.]+ [\d.]+(?: \/ [\d.]+)?\))`;
+/**
+ * Whether every colour a layer names is one of the stall's own tokens, at no
+ * more than `most` alpha, or transparent: the aurora's washes are its accent
+ * and its second accent and nothing else (the critic, 2026-09-27: the entry
+ * matched any root `radial-gradient(farthest-side, …` on a stall wearing
+ * the aurora).
+ */
+function coloursAre(layer: string, stall: HTMLElement, tokens: readonly string[], most: number): boolean {
+    const cs = getComputedStyle(stall);
+    const allowed = tokens.map((t) => colourOf(cs.getPropertyValue(t).trim())?.rgb);
+    const named = layer.match(new RegExp(C, 'g')) ?? [];
+    return (
+        named.length > 0 &&
+        named.every((text) => {
+            const c = colourOf(text);
+            if (c === undefined) return false;
+            if (c.alpha === 0) return true;
+            return c.alpha <= most + 1e-6 && allowed.some((a) => a !== undefined && a.every((v, i) => Math.abs(v - c.rgb[i]!) <= 1));
+        })
+    );
+}
+
+const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: (layer: string, stall: HTMLElement) => boolean }> = [
+    // What the outline is for.
+    { name: 'the rain', paints: 'att-rainfall', test: (l) => /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/.test(l) },
+    // Two washes across the whole stall, each one accent at most 28% fading
+    // to nothing at 66%, and their tint over the rain (140deg, the two
+    // accents at most 16%, transparent at 46%) — the exact shapes
+    // stall.css's aurora rules paint.
+    {
+        name: 'the aurora’s washes',
+        paints: 'att-aurora',
+        test: (l, stall) =>
+            new RegExp(String.raw`^radial-gradient\(farthest-side, ${C}, rgba\(0, 0, 0, 0\) 66%\)$`).test(l) &&
+            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.28),
+    },
+    {
+        name: 'the aurora’s tint over the rain',
+        paints: 'att-aurora',
+        test: (l, stall) =>
+            new RegExp(String.raw`^linear-gradient\(140deg, ${C}, rgba\(0, 0, 0, 0\) 46%, ${C}\)$`).test(l) &&
+            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.16),
+    },
+    // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
+    { name: 'Neo’s scanlines', paints: 't-neo', test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
+    { name: 'Neo’s top glow', paints: 't-neo', test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
+];
+
+/** What the at-rest rule set aside, by reason, over the whole pass. */
+const atRestSetAside: Record<string, number> = {};
+const setAside = (why: string): void => {
+    atRestSetAside[why] = (atRestSetAside[why] ?? 0) + 1;
+};
+
+const FULL_SIZE = ['auto', 'auto auto', 'cover', '100% 100%', '100%'];
+
+/** The colour stops of a gradient's computed text, each with its position as a share of the gradient line, or `undefined`. */
+function gradientStops(args: string[], length: number): { c: { rgb: Rgb; alpha: number }; at: number }[] | undefined {
+    const stops: { c: { rgb: Rgb; alpha: number }; at: number | undefined }[] = [];
+    for (const arg of args) {
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\))(?:\s+(-?[\d.]+)(%|px))?(?:\s+(-?[\d.]+)(%|px))?$/.exec(arg);
+        if (m === null) return undefined;
+        const c = colourOf(m[1]!);
+        if (c === undefined) return undefined;
+        const pos = (v: string | undefined, u: string | undefined): number | undefined =>
+            v === undefined ? undefined : u === '%' ? Number(v) / 100 : Number(v) / length;
+        stops.push({ c, at: pos(m[2], m[3]) });
+        if (m[4] !== undefined) stops.push({ c, at: pos(m[4], m[5]) });
+    }
+    if (stops.length < 2) return undefined;
+    stops[0]!.at ??= 0;
+    stops[stops.length - 1]!.at ??= 1;
+    // A stop with no position sits evenly between its neighbours that have one.
+    for (let i = 1; i < stops.length - 1; i += 1) {
+        if (stops[i]!.at !== undefined) continue;
+        let j = i;
+        while (stops[j]!.at === undefined) j += 1;
+        const from = stops[i - 1]!.at!;
+        const to = stops[j]!.at!;
+        for (let k = i; k < j; k += 1) stops[k]!.at = from + ((to - from) * (k - i + 1)) / (j - i + 1);
+    }
+    // Positions never run backwards (CSS clamps a later stop to the one before it).
+    for (let i = 1; i < stops.length; i += 1) stops[i]!.at = Math.max(stops[i]!.at!, stops[i - 1]!.at!);
+    return stops as { c: { rgb: Rgb; alpha: number }; at: number }[];
+}
+
+/** A gradient's colour at `t` on its line, interpolated in premultiplied sRGB, as CSS does. */
+function colourAt(stops: { c: { rgb: Rgb; alpha: number }; at: number }[], t: number): { rgb: Rgb; alpha: number } {
+    if (t <= stops[0]!.at) return stops[0]!.c;
+    for (let i = 1; i < stops.length; i += 1) {
+        const a = stops[i - 1]!;
+        const b = stops[i]!;
+        if (t > b.at) continue;
+        const f = b.at === a.at ? 1 : (t - a.at) / (b.at - a.at);
+        const alpha = a.c.alpha + (b.c.alpha - a.c.alpha) * f;
+        const rgb = [0, 1, 2].map((k) => {
+            const pre = a.c.rgb[k]! * a.c.alpha + (b.c.rgb[k]! * b.c.alpha - a.c.rgb[k]! * a.c.alpha) * f;
+            return alpha === 0 ? 0 : pre / alpha;
+        }) as unknown as Rgb;
+        return { rgb, alpha };
+    }
+    return stops[stops.length - 1]!.c;
+}
+
+/**
+ * The colours a full-size `linear-gradient` on `el` paints under `line`
+ * (a box inside it): the gradient line's share at each corner of `line`,
+ * and the colours between them — the stops that fall inside and sixteen
+ * steps — or `undefined` for a gradient this cannot evaluate.
+ */
+function linearUnder(layer: string, el: HTMLElement, line: DOMRect): { rgb: Rgb; alpha: number }[] | undefined {
+    const m = /^linear-gradient\((.*)\)$/.exec(layer);
+    if (m === null) return undefined;
+    const args = splitLayers(m[1]!);
+    let angle = 180;
+    const head = args[0]!;
+    const deg = /^(-?[\d.]+)deg$/.exec(head);
+    const TO: Record<string, number> = { 'to top': 0, 'to right': 90, 'to bottom': 180, 'to left': 270 };
+    if (deg !== null) {
+        angle = Number(deg[1]);
+        args.shift();
+    } else if (TO[head] !== undefined) {
+        angle = TO[head]!;
+        args.shift();
+    } else if (/^to /.test(head)) {
+        return undefined;
+    }
+    const box = el.getBoundingClientRect();
+    const rad = (angle * Math.PI) / 180;
+    const dir = [Math.sin(rad), -Math.cos(rad)];
+    const length = Math.abs(box.width * dir[0]!) + Math.abs(box.height * dir[1]!);
+    const stops = length > 0 ? gradientStops(args, length) : undefined;
+    if (stops === undefined) return undefined;
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const ts = [
+        [line.left, line.top],
+        [line.right, line.top],
+        [line.left, line.bottom],
+        [line.right, line.bottom],
+    ].map(([x, y]) => 0.5 + ((x! - cx) * dir[0]! + (y! - cy) * dir[1]!) / length);
+    const t0 = Math.max(0, Math.min(...ts));
+    const t1 = Math.min(1, Math.max(...ts));
+    const at = [...Array.from({ length: 17 }, (_, k) => t0 + ((t1 - t0) * k) / 16), ...stops.map((s) => s.at).filter((t) => t > t0 && t < t1)];
+    return at.map((t) => colourAt(stops, t));
+}
+
+/** A layer's colours composited over the range `lo`…`hi`, widening it. */
+function composite(colours: { rgb: Rgb; alpha: number }[], lo: Rgb, hi: Rgb): { lo: Rgb; hi: Rgb } {
+    const painted = colours.flatMap((c) => [over(c, lo), over(c, hi)]);
+    return {
+        lo: [0, 1, 2].map((k) => Math.min(...painted.map((c) => c[k]!))) as unknown as Rgb,
+        hi: [0, 1, 2].map((k) => Math.max(...painted.map((c) => c[k]!))) as unknown as Rgb,
+    };
+}
+
+/**
  * The ground painted under `node` as its lowest and highest colour on each
  * channel (one colour, when nothing between it and its stall's root is a
- * gradient), or the box whose picture this rule cannot read.
+ * gradient), or the layer this rule cannot read — a picture, or a root layer
+ * it does not know.
  */
-function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Element } | undefined {
+function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Element; what: string } | undefined {
     const stall = node.closest<HTMLElement>('.stall');
     const base = stall === null ? undefined : colourOf(getComputedStyle(stall).backgroundColor);
     if (stall === null || base === undefined || base.alpha < 1) return undefined;
-    const chain: HTMLElement[] = [];
-    for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.unshift(at);
+    const line = node.getBoundingClientRect();
+    const chain: HTMLElement[] = [stall];
+    for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.splice(1, 0, at);
     let lo: Rgb = base.rgb;
     let hi: Rgb = base.rgb;
     for (const el of chain) {
         const cs = getComputedStyle(el);
         const fill = colourOf(cs.backgroundColor);
-        if (fill !== undefined && fill.alpha > 0) {
+        if (el !== stall && fill !== undefined && fill.alpha > 0) {
             lo = over(fill, lo);
             hi = over(fill, hi);
         }
@@ -2414,17 +2648,35 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
         // Bottom layer first: the first layer listed paints on top.
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const size = sizes[i % sizes.length]!;
-            if (!['auto', 'auto auto', 'cover', '100% 100%', '100%'].includes(size)) continue;
             const layer = layers[i]!;
-            if (/^url\(/.test(layer)) return { picture: el };
+            if (el === stall) {
+                const known = ROOT_LAYERS_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && k.test(layer, stall));
+                if (known !== undefined) {
+                    setAside(known.name);
+                    continue;
+                }
+                if (!FULL_SIZE.includes(size) || !/gradient\(/.test(layer)) {
+                    return { picture: el, what: `a root layer this rule does not know (${layer.slice(0, 60)}…, ${size}) — a-new-root-layer-is-not-exempt-by-position` };
+                }
+            }
+            if (/^url\(/.test(layer)) return { picture: el, what: `a picture (${size}) this rule cannot read` };
             if (!/gradient\(/.test(layer)) continue;
+            if (!FULL_SIZE.includes(size)) {
+                setAside('a gradient smaller than its box');
+                continue;
+            }
+            const under = linearUnder(layer, el, line);
+            if (under !== undefined) {
+                ({ lo, hi } = composite(under, lo, hi));
+                continue;
+            }
+            // Held to its stops: a gradient this cannot evaluate across a box.
+            setAside('a gradient held to its stops');
             const stops = (layer.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? [])
                 .map((c) => colourOf(c))
                 .filter((c): c is NonNullable<typeof c> => c !== undefined);
             if (stops.length === 0) continue;
-            const painted = stops.flatMap((stop) => [over(stop, lo), over(stop, hi)]);
-            lo = [0, 1, 2].map((k) => Math.min(...painted.map((c) => c[k]!))) as unknown as Rgb;
-            hi = [0, 1, 2].map((k) => Math.max(...painted.map((c) => c[k]!))) as unknown as Rgb;
+            ({ lo, hi } = composite(stops, lo, hi));
         }
     }
     return { lo, hi };
@@ -2475,6 +2727,12 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
         }
         if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
+        // Only where the rain is worn (CRITIC-FINAL-MERGE item 4, step 5b):
+        // the outline is the rain's, scoped to `.stall.att-rainfall` in
+        // stall.css, and a hard shadow anywhere else is a look's own mark —
+        // a white emboss on Rural is not an outline, and was failed as one
+        // ("neither outline set") on every look until this line.
+        if (node.closest('.stall.att-rainfall') === null) continue;
         const { width, rgb } = outlineRead(node);
         if (width === 0) continue;
         outlineChecks += 1;
@@ -2498,7 +2756,7 @@ function outlineFaults(screen: string, label: string): Failure[] {
         if (rgb !== undefined && ground !== undefined) {
             const said = `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" wears its outline in ${rgbText(rgb)}`;
             if ('picture' in ground) {
-                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a picture on ${describe(ground.picture)} this rule cannot read — an outline that shows at rest` });
+                out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over ${ground.what} on ${describe(ground.picture)} — an outline that shows at rest` });
             } else if (rgb.some((c, i) => c < ground.lo[i]! - AT_REST_LEVELS || c > ground.hi[i]! + AT_REST_LEVELS)) {
                 const painted = ground.lo.every((c, i) => Math.abs(c - ground.hi[i]!) < 0.5) ? rgbText(ground.lo) : `${rgbText(ground.lo)} to ${rgbText(ground.hi)}`;
                 out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a ground painted ${painted} — an outline that shows at rest` });
@@ -2509,6 +2767,291 @@ function outlineFaults(screen: string, label: string): Failure[] {
             fail(node, 'wears the outline and is no contrast target — an outline nobody reads');
         } else {
             outlinedTargets.add(describe(target));
+        }
+    }
+    return out;
+}
+
+/*
+ * **The money set is every protected contrast target** (step 5b; its static
+ * half is `layout/moneySet.test.ts`). On every screen, look and variant of
+ * every geometry pass: every painted node that is a contrast target AND a
+ * protected box — or a contrast target standing inside a protected box that
+ * is money — must be money (`MONEY`), because the contrast pass reads a
+ * money box whole and everything else over its line rects, and a protected
+ * figure that fell to the line read would be read by a weaker verdict; and
+ * every node `MONEY` matches must be a contrast target standing in a
+ * protected box (`MONEY_OUTSIDE_PROTECTED` aside), or the set names
+ * something that is not money. The deck's minis are pictures and are not
+ * asked. `moneyChecks` counts the nodes asked; the runner requires some on
+ * the phone and desk passes (`probe-coverage.mjs`).
+ */
+const MONEY_CHECK = 'the-money-set-is-every-protected-contrast-target';
+let moneyChecks = 0;
+
+function moneySetFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const app = document.getElementById('app')!;
+    const fail = (node: Element, what: string): void => {
+        out.push({ screen, theme: label, check: MONEY_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
+    };
+    for (const node of app.querySelectorAll(CONTRAST_TEXT)) {
+        if (node.closest('.deck-stall') !== null) continue;
+        if (node.matches(PROTECTED)) {
+            moneyChecks += 1;
+            if (!node.matches(MONEY)) {
+                fail(node, 'is a protected box and a contrast target, and is not in the money set');
+            }
+            continue;
+        }
+        // A target inside a money box is money's text too (the critic,
+        // 2026-09-27): read over its line rects it would be read by a weaker
+        // verdict than the box it stands in (`.sw-pay-v` inside `pay-lines`).
+        const box = node.parentElement?.closest(PROTECTED);
+        if (box !== null && box !== undefined && box.matches(MONEY)) {
+            moneyChecks += 1;
+            if (!node.matches(MONEY)) {
+                fail(node, `is a contrast target inside the money box ${describe(box)}, and is not in the money set`);
+            }
+        }
+    }
+    for (const node of app.querySelectorAll(MONEY)) {
+        if (node.closest('.deck-stall') !== null) continue;
+        moneyChecks += 1;
+        if (!node.matches(CONTRAST_TEXT)) {
+            fail(node, 'is in the money set and no contrast target');
+        } else if (node.closest(PROTECTED) === null && !node.matches(MONEY_OUTSIDE_PROTECTED)) {
+            fail(node, 'is in the money set and stands in no protected box');
+        }
+    }
+    return out;
+}
+
+/*
+ * **The bunting never swings into the ornament label** (step 5b; the
+ * moving-decoration table's reader for `att-bunting`, `movingDecor.ts`).
+ * Rural's bunting is a row in the ornament strip that sways about its own
+ * `transform-origin`, and the strip's own text stands beside it. The pass
+ * freezes it at one instant; this bounds it over its whole swing instead:
+ * the widest turn the row's own keyframes reach (read off its running
+ * animations, never stated here); the row's box before any turn (read with
+ * its transform held off for the measurement and put back), from its art's
+ * topmost paint down (`buntingArt.ts`: the box is taller than the drawing,
+ * and its empty top read as the bunting touching the label); turned about
+ * its origin to each end of the swing and back to rest, it must not reach
+ * any line of the strip's own text (`Range` rects of every text node in its
+ * `.orn` outside the bunting), within a device pixel.
+ * `buntingChecks` counts the rows swept; the runner requires some on the
+ * phone and desk passes where Rural is measured (`probe-coverage.mjs`).
+ */
+const BUNTING_CHECK = 'the-bunting-never-swings-into-the-ornament-label';
+let buntingChecks = 0;
+
+/** The widest turn, in degrees, any of `node`'s running animations reaches. */
+function widestTurn(node: Element): number {
+    let widest = 0;
+    for (const a of node.getAnimations()) {
+        const effect = a.effect;
+        if (!(effect instanceof KeyframeEffect)) continue;
+        for (const frame of effect.getKeyframes()) {
+            for (const value of [frame['transform'], frame['rotate']]) {
+                if (typeof value !== 'string') continue;
+                for (const m of value.matchAll(/(-?[\d.]+)deg/g)) {
+                    widest = Math.max(widest, Math.abs(Number(m[1])));
+                }
+            }
+        }
+    }
+    return widest;
+}
+
+/** Whether the rectangle `r` (turned `a` about `p`) and the axis-aligned `q` share any area: separating axes. */
+function turnedRectMeets(
+    r: { x0: number; y0: number; x1: number; y1: number },
+    p: [number, number],
+    a: number,
+    q: { x0: number; y0: number; x1: number; y1: number },
+): boolean {
+    const turn = ([x, y]: [number, number]): [number, number] => [
+        p[0] + (x - p[0]) * Math.cos(a) - (y - p[1]) * Math.sin(a),
+        p[1] + (x - p[0]) * Math.sin(a) + (y - p[1]) * Math.cos(a),
+    ];
+    const poly = ([[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]] as [number, number][]).map(turn);
+    const box: [number, number][] = [[q.x0, q.y0], [q.x1, q.y0], [q.x1, q.y1], [q.x0, q.y1]];
+    const axes: [number, number][] = [[1, 0], [0, 1], [Math.cos(a), Math.sin(a)], [-Math.sin(a), Math.cos(a)]];
+    return axes.every(([ax, ay]) => {
+        const span = (pts: [number, number][]): [number, number] => {
+            const d = pts.map(([x, y]) => x * ax + y * ay);
+            return [Math.min(...d), Math.max(...d)];
+        };
+        const [p0, p1] = span(poly);
+        const [q0, q1] = span(box);
+        return p1 > q0 && q1 > p0;
+    });
+}
+
+/** The bunting art's topmost paint as a share of its tile's height, read once (`buntingArt.ts`). */
+const BUNTING_TOP = artTopShare(buntingSvg);
+
+function buntingSwingFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const row of document.querySelectorAll<HTMLElement>('#app .att-bunting')) {
+        if (row.closest('.deck-stall') !== null) continue;
+        const strip = row.closest('.orn');
+        if (strip === null) continue;
+        const fail = (detail: string): void => {
+            out.push({ screen, theme: label, check: BUNTING_CHECK, detail });
+        };
+        const cs = getComputedStyle(row);
+        // The row paints its one drawn tile from its top edge, repeated
+        // sideways: the art's top is a share of that tile's height.
+        const tileH = Number.parseFloat(cs.backgroundSize.split(' ')[1] ?? '');
+        if (BUNTING_TOP === undefined || !Number.isFinite(tileH) || !/^(?:0%|0px) (?:0%|0px)$/.test(cs.backgroundPosition) || !['repeat-x', 'repeat no-repeat'].includes(cs.backgroundRepeat)) {
+            fail(`the bunting's art or its tile (${cs.backgroundSize}; ${cs.backgroundPosition}; ${cs.backgroundRepeat}) is not one this rule reads — refused rather than guessed`);
+            continue;
+        }
+        buntingChecks += 1;
+        const turn = (widestTurn(row) * Math.PI) / 180;
+        row.style.setProperty('transform', 'none', 'important');
+        const box = row.getBoundingClientRect();
+        const [ox, oy] = cs.transformOrigin.split(' ').map((v) => Number.parseFloat(v));
+        row.style.removeProperty('transform');
+        const pivot: [number, number] = [box.left + (ox ?? 0), box.top + (oy ?? 0)];
+        const painted = { x0: box.left, y0: box.top + BUNTING_TOP * tileH, x1: box.right, y1: box.bottom };
+        const range = document.createRange();
+        const walker = document.createTreeWalker(strip, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            if ((text.textContent ?? '').trim() === '' || text.parentElement?.closest('.att-bunting') !== null) continue;
+            range.selectNodeContents(text);
+            for (const r of range.getClientRects()) {
+                if (r.width <= 0 || r.height <= 0) continue;
+                // A device pixel's tolerance at every edge.
+                const line = { x0: r.left + 1, y0: r.top + 1, x1: r.right - 1, y1: r.bottom - 1 };
+                const hit = [-turn, 0, turn].find((a) => turnedRectMeets(painted, pivot, a, line));
+                if (hit !== undefined) {
+                    fail(
+                        `the bunting's paint (from ${painted.y0.toFixed(1)}px, its art's top) turned ${((hit * 180) / Math.PI).toFixed(2)}° of its ±${((turn * 180) / Math.PI).toFixed(2)}° reaches the strip's line "${(text.textContent ?? '').trim().slice(0, 24)}" at ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}`,
+                    );
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/*
+ * **A halo never reaches a neighbour's text** (step 5b; SAMPLER-STEP-PLAN
+ * v2 item 10, CRITIC-SAMPLER-STEP item 11). A `box-shadow` with a spread or
+ * an offset paints outside its element's box — the rain's old halos, the
+ * sticky sheet head's `0 -26px` slab, a card's drop — and nothing measured
+ * where. So on every screen, look and variant of the geometry passes, every
+ * halo — a non-inset shadow at half opacity or more, with a spread or an
+ * offset, whose blur is less than twice both (a ground laid outside a box,
+ * not a glow) — has its painted extent (the box moved by its offset, grown
+ * by its spread and half its blur) held off every other
+ * element's text on the same surface: no line rect of a text node outside
+ * the shadowing element may meet it, a device pixel in. A soft shadow (a
+ * card's drop, a glow) is not a halo; measured as one, it met the next line
+ * on every look (1,700 failures a pass), a guard refusing a safe design. `haloChecks` counts the
+ * shadows asked; the phone and desk passes owe some.
+ */
+const HALO_CHECK = 'a-halo-never-reaches-a-neighbours-text';
+let haloChecks = 0;
+
+type BoxShadow = { alpha: number; x: number; y: number; blur: number; spread: number; inset: boolean };
+
+let haloCtx: CanvasRenderingContext2D | undefined;
+
+/** A computed `box-shadow` as its shadows, or `undefined` for a part that does not read. */
+function boxShadowsOf(value: string): BoxShadow[] | undefined {
+    if (value === 'none') return [];
+    const out: BoxShadow[] = [];
+    for (const part of splitLayers(value)) {
+        const m = /^((?:rgba?|color|oklab|oklch|lab|lch)\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px(?:\s+(-?[\d.]+)px)?(?:\s+(-?[\d.]+)px)?(\s+inset)?$/.exec(part);
+        if (m === null) return undefined;
+        // The browser resolves the colour (a 1×1 canvas, `paintedGrounds`'
+        // way): `oklab()` and `color-mix()` results read like any `rgb()`.
+        haloCtx ??= (() => {
+            const c = document.createElement('canvas');
+            c.width = 1;
+            c.height = 1;
+            return c.getContext('2d', { willReadFrequently: true })!;
+        })();
+        haloCtx.clearRect(0, 0, 1, 1);
+        haloCtx.fillStyle = 'transparent';
+        haloCtx.fillStyle = m[1]!;
+        haloCtx.fillRect(0, 0, 1, 1);
+        const alpha = haloCtx.getImageData(0, 0, 1, 1).data[3]! / 255;
+        out.push({ alpha, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4] ?? 0), spread: Number(m[5] ?? 0), inset: m[6] !== undefined });
+    }
+    return out;
+}
+
+function haloFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const app = document.getElementById('app')!;
+    // Every text rect on the page, once, with the element that owns it.
+    const lines: { owner: Element; r: DOMRect; text: string }[] = [];
+    const range = document.createRange();
+    const walker = document.createTreeWalker(app, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || (text.textContent ?? '').trim() === '' || owner.closest('.deck-stall, svg') !== null) continue;
+        if (getComputedStyle(owner).visibility !== 'visible') continue;
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) {
+            if (r.width > 0 && r.height > 0) lines.push({ owner, r, text: (text.textContent ?? '').trim().slice(0, 24) });
+        }
+    }
+    for (const el of app.querySelectorAll<HTMLElement>('*')) {
+        if (el.closest('.deck-stall') !== null) continue;
+        const cs = getComputedStyle(el);
+        if (cs.boxShadow === 'none') continue;
+        const shadows = boxShadowsOf(cs.boxShadow);
+        if (shadows === undefined) {
+            out.push({ screen, theme: label, check: HALO_CHECK, detail: `${describe(el)} wears a box-shadow this rule cannot read: ${cs.boxShadow.slice(0, 80)}` });
+            continue;
+        }
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        for (const sh of shadows) {
+            // A halo is a ground: a hard shadow (no blur) at half opacity or
+            // more, with a spread or an offset. A soft shadow — a card's
+            // drop, a glow — is light around a box, not a ground under text,
+            // and measured literally it met the next line on every look.
+            // Soft means the blur outreaches the ground the shadow lays: at
+            // least twice its spread and its offset (the critic, 2026-09-27 —
+            // a 1px blur on a 30px spread is a slab, not a glow).
+            const soft = sh.blur > 0 && sh.blur >= 2 * Math.max(sh.spread, Math.abs(sh.x), Math.abs(sh.y));
+            if (sh.inset || soft || sh.alpha < OWN_GROUND_ALPHA || (sh.spread === 0 && sh.x === 0 && sh.y === 0)) continue;
+            haloChecks += 1;
+            const grow = Math.max(0, sh.spread) + sh.blur / 2;
+            const x0 = box.left + sh.x - grow;
+            const x1 = box.right + sh.x + grow;
+            const y0 = box.top + sh.y - grow;
+            const y1 = box.bottom + sh.y + grow;
+            // Only text on the same surface: behind an open sheet's scrim the
+            // stall is another layer, under the sheet and its slab.
+            const surface = el.closest('.sheet, [data-role="poster"]');
+            const hit = lines.find(
+                ({ owner, r }) =>
+                    owner.closest('.sheet, [data-role="poster"]') === surface &&
+                    !el.contains(owner) &&
+                    !owner.contains(el) &&
+                    // Outside the element's own box: a shadow never paints under
+                    // its own border box.
+                    !(r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom) &&
+                    r.right > x0 + 1 && r.left < x1 - 1 && r.bottom > y0 + 1 && r.top < y1 - 1,
+            );
+            if (hit !== undefined) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: HALO_CHECK,
+                    detail: `${describe(el)}'s shadow (${sh.x}px ${sh.y}px, blur ${sh.blur}, spread ${sh.spread}) reaches ${describe(hit.owner)} "${hit.text}" at ${Math.round(hit.r.left)},${Math.round(hit.r.top)}`,
+                });
+                break;
+            }
         }
     }
     return out;
@@ -2688,10 +3231,14 @@ for (const screen of measured) {
             }
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
+            failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...outlineFaults(screen, label));
+            failures.push(...moneySetFaults(screen, label));
+            failures.push(...buntingSwingFaults(screen, label));
+            failures.push(...haloFaults(screen, label));
             if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 failures.push(...rowStatesItsSizes(look, label));
                 gatherShopDress(look);
@@ -2965,15 +3512,36 @@ type ContrastTarget = {
      * 1.12:1 until the segments took their own radius.
      */
     r: number;
-    /**
-     * Chrome laid over the box — a control's cue drawn on a text box's
-     * corner — as boxes the sampler steps around, the way it steps past the
-     * border. `CHROME_ON_TEXT` says which elements count and why; the cap
-     * in `chromeOver` keeps the mechanism from ever excusing a cover.
-     */
-    holes: Hole[];
     /** What was measured, for a failure a person can find. */
     sel: string;
+    /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
+    money: boolean;
+    /**
+     * The rotation of this node's frame, radians: the sum of every
+     * `transform` and `rotate` from the node up to the root (step 5b). A
+     * money box inside a turned ancestor is read over its own rotated box
+     * rather than its axis-aligned bounds less a fixed 8px pad
+     * (`legacyPad`), which dropped a Rural price figure outright.
+     */
+    angle: number;
+    /**
+     * The node's own box before its frame turned — centre, width, height —
+     * when `angle` is not zero: a money box inside a turned ancestor is read
+     * at the lattice points inside it (step 5b).
+     */
+    frame?: { cx: number; cy: number; w: number; h: number };
+    /** The pad the sampler used before step 5b, kept for the legacy read the bucketing compares against. */
+    legacyPad: number;
+    /** The whole-box read had no box to read (a sliver after the clamp): its legacy value is none. */
+    legacyDropped: boolean;
+    /**
+     * Every other target's sample (D7, step 5b): its own text's line
+     * rects — or, for a control whose only mark is a drawn glyph, that
+     * glyph's box — each clipped like the text is, each with the ink its
+     * own element paints in. `undefined` for a money box and an outlined
+     * line, which are read whole and in the ring.
+     */
+    rects?: LineRect[];
     /**
      * The outline this line wears where a decoration falls behind it
      * (`--rain-outline-1` / `--rain-outline-2`, round 8): its width in CSS
@@ -3000,6 +3568,20 @@ type ContrastTarget = {
 type Hole = { x: number; y: number; w: number; h: number };
 
 /**
+ * One line of a target's own text, as the line-rect sampler reads it: the
+ * rect `Range.getClientRects()` gives for a text node's fragment on one line
+ * (the font's content area, axis-aligned), clipped by the target's own
+ * overflow and every clipping ancestor's (`x`…`h`); where the text's frame
+ * is turned, the line box itself — centred on the unclipped rect's centre
+ * (`cx`, `cy`), `rw` by `rh` before the turn, at `angle` — so only pixels
+ * inside the turned line are read. `ink` is the colour this line's own
+ * element paints its glyphs in, which is how a muted name inside an ink
+ * control is read against its own ink. `glyph` marks a drawn icon's box,
+ * read for a control that carries no text.
+ */
+type LineRect = Hole & { cx: number; cy: number; rw: number; rh: number; angle: number; ink: string; glyph?: true };
+
+/**
  * One line of an outlined target: a text node's glyphs on one line box —
  * how many letters and digits it shows (`chars`, what the glyph mask is held
  * in proportion to) and how many visible characters at all (`glyphs`: a
@@ -3007,43 +3589,14 @@ type Hole = { x: number; y: number; w: number; h: number };
  */
 type RingLine = Hole & { chars: number; glyphs: number; ink: string };
 
-/**
- * Elements that are chrome ON a measured text box, never its ground: the
- * face's expand cue, a 22px badge on the hero tile's corner (2026-09-20). The
- * pass blanks a target and its descendants and then reads every pixel left
- * as the ground under the letters — and the cue is a sibling, so its own
- * white stroke was read as the ground under Neo's cyan letters at 1.01:1,
- * and its near-black disc as the ground under Modern's night-dark letters
- * at 2.72:1. No paint can clear both: a pixel that contrasts 3:1 with a light
- * ink and with a dark one does not exist, and the badge must be one badge on
- * every look. The letters never touch it — two initials centred in the tile
- * end well short of its corner — so the border's own rule applies: chrome is
- * stepped around, not sampled. Extending this list needs the incident
- * written in `PROBE-RULES.md`; the cap below is what stops it from ever
- * hiding a real cover.
+/*
+ * `CHROME_ON_TEXT` is retired (step 5b): the face's expand cue on the hero
+ * tile's corner was stepped around because the box read took every pixel
+ * left in the tile as the letters' ground. The line read reads the letters'
+ * own rects, which end well short of the corner, and with the mechanism
+ * switched off every tile read the same (4.61:1 at the least, the letters'
+ * own ground). A cue that ever reaches a letter is read as its ground now.
  */
-const CHROME_ON_TEXT = '.face-ic-cue';
-
-/** No more than this share of a target's box may be stepped around. */
-const CHROME_HOLE_CAP = 0.25;
-
-function chromeOver(node: HTMLElement, box: Hole): Hole[] {
-    const holes: Hole[] = [];
-    let covered = 0;
-    for (const chrome of document.querySelectorAll<HTMLElement>(CHROME_ON_TEXT)) {
-        if (chrome === node || node.contains(chrome)) continue;
-        const c = chrome.getBoundingClientRect();
-        const x = Math.max(box.x, c.x);
-        const y = Math.max(box.y, c.y);
-        const w = Math.min(box.x + box.w, c.right) - x;
-        const h = Math.min(box.y + box.h, c.bottom) - y;
-        if (w <= 0 || h <= 0) continue;
-        holes.push({ x, y, w, h });
-        covered += w * h;
-    }
-    // Over the cap it is a cover, not a cue, and the pass reads it as such.
-    return covered > CHROME_HOLE_CAP * box.w * box.h ? [] : holes;
-}
 
 
 /**
@@ -3062,6 +3615,14 @@ type ContrastPrepared = {
     painted: { screen: string; look: number; flags: number };
     vw: number;
     vh: number;
+    /** The look pseudos generated in the job's scope (D6(i)): none means no second frame. */
+    lookPseudos?: number;
+    /** The elements whose visible text no contrast target reads, described (a report, step 5b). */
+    uncovered?: string[];
+    /** The stalls that wore Neo's rain, and how many had it at its brightest. */
+    rain: { worn: number; flattened: number };
+    /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
+    tide: { worn: number; held: number };
 };
 
 /** The live boxes, with the nonce of the prepare that collected their nodes and the viewport now. */
@@ -3070,6 +3631,8 @@ type ContrastLive = {
     vw: number;
     vh: number;
     boxes: (ContrastTarget & { i: number })[];
+    /** The prepared nodes that gave no box, counted by the reason `targetFor` gave. */
+    skips: Record<string, number>;
 };
 
 declare global {
@@ -3081,10 +3644,15 @@ declare global {
             neutral: boolean,
             nonce: string,
             heightOnly?: boolean,
+            tide?: 0 | 1,
         ) => ContrastPrepared;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
+        /** Hide (or show again) every look pseudo the last prepare marked; how many are marked (D6(i)). */
+        __lookPseudosHidden: (hide: boolean) => Promise<number>;
+        /** The protected boxes in the last prepare's scope, as they stand now (D6(i)). */
+        __protectedBoxes: () => { x: number; y: number; w: number; h: number; sel: string }[];
         /**
          * Show (or blank again) the glyphs of every prepared target that
          * wears the outline, for the ring read's second capture.
@@ -3165,7 +3733,7 @@ let preparedNodes: HTMLElement[] = [];
 let preparedNonce: string | undefined;
 
 /** One node's sample box and static fields, or nothing worth sampling. */
-function targetFor(node: HTMLElement): ContrastTarget | undefined {
+function targetFor(node: HTMLElement): ContrastTarget | string {
     if (node.querySelector('img') !== null) {
         // A tile wearing its token's picture has no letters to measure: the
         // pixels in its box are the image's own, and sampling them against
@@ -3173,7 +3741,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         // description-row tile at 1.18–2.64:1 on Rural and Neo (2026-09-15,
         // the day `.event-sum .event-ic` joined the list). The letters
         // tiles and the empty tiles beside it measured 5.7–17:1.
-        return undefined;
+        return 'picture';
     }
     if (drawsNothing(node)) {
         // A box with no letters, no glyph and no generated text has no ink
@@ -3182,7 +3750,7 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         // sampled as "text" against its own transparent ground, which read
         // 2.66:1 the day the rain's ground came off from under it (round 6,
         // 2026-09-24). The picture tile above is the same rule's first case.
-        return undefined;
+        return 'draws-nothing';
     }
     const full = node.getBoundingClientRect();
     let box: { x: number; y: number; width: number; height: number } = full;
@@ -3208,6 +3776,11 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         clipper = clipper.parentElement;
     }
     const clip = clipper?.getBoundingClientRect();
+    // A box the clamp cut to a sliver, or to nothing, is a box the whole-box
+    // read cannot use. It decides a money box and an outlined line, as it
+    // always did; every other target is read over its line rects, which are
+    // clipped on their own and decide for themselves (step 5b).
+    let sliver = false;
     if (clip !== undefined) {
         const x = Math.max(box.x, clip.x);
         const y = Math.max(box.y, clip.y);
@@ -3225,31 +3798,23 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             (box.height < 16 && box.height < full.height - 1) ||
             (box.width < 16 && box.width < full.width - 1)
         ) {
-            return undefined;
+            sliver = true;
         }
     }
     if (box.width < 2 || box.height < 2) {
-        return undefined;
+        sliver = true;
     }
-    // A heading's own in-flow marker is chrome, not its ground: Neo's
-    // section and shelf wedge is an inline-block `::before` at the start of
-    // the line, inside the heading's box, and the glyphs never cross it. Read
-    // as ground it put the heading at 1.2:1 against its own wedge on every
-    // Neo screen, bare or worn (2026-09-24). The band starts after it.
-    const mark = getComputedStyle(node, '::before');
-    if (mark.content !== 'none' && mark.content !== 'normal' && mark.display === 'inline-block') {
-        const lead =
-            (Number.parseFloat(mark.marginLeft) || 0) +
-            (Number.parseFloat(mark.width) || 0) +
-            (Number.parseFloat(mark.marginRight) || 0);
-        if (lead > 0 && lead < box.width / 2) {
-            box = { x: box.x + lead, y: box.y, width: box.width - lead, height: box.height };
-        }
-    }
+    // The heading step-past (Neo's inline-block wedge read as the heading's
+    // ground at 1.2:1, 2026-09-24) is gone with step 5b: a marker the text
+    // does not cross lies outside every line rect by construction, and no
+    // money box carries one.
     const style = getComputedStyle(node);
+    const money = node.matches(MONEY);
     // The element's OWN clip, narrowing the band to paint (see `clipBand`).
     // Resolved against `full`, which is the box a polygon's coordinates are
     // relative to, then intersected with whatever the scroll clamp left.
+    // The line rects take the same band (`ownBand`).
+    let ownBand: { x0: number; x1: number } | undefined;
     const ownClip = style.clipPath;
     if (ownClip.startsWith('polygon(')) {
         const poly = parsePolygon(ownClip, full.width, full.height);
@@ -3259,11 +3824,12 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         const band = clipBand(poly, full.height);
         if (band === undefined) {
             // Non-convex, or nothing left: refused rather than guessed at.
-            return undefined;
+            return 'unreadable-clip';
         }
+        ownBand = { x0: full.x + band.x0, x1: full.x + band.x1 };
         const x = Math.max(box.x, full.x + band.x0);
         const right = Math.min(box.x + box.width, full.x + band.x1);
-        if (right - x < 2) return undefined;
+        if (right - x < 2) return 'clipped-away';
         box = { x, y: box.y, width: right - x, height: box.height };
     }
     // The colour the glyphs would paint in: read from the blanking backup,
@@ -3272,6 +3838,15 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
     node.dataset['probeInk'] = ink;
     const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
     const ring = Math.max(0, outlineOf(node));
+    const lined = !money && ring === 0;
+    if (!lined && sliver) {
+        return 'sliver';
+    }
+    const angle = angleOf(node);
+    const read = lined ? lineRectsOf(node, ink, ownBand) : undefined;
+    if (read !== undefined && read.rects.length === 0) {
+        return read.why;
+    }
     const ringBox = (() => {
         const wide = { x: box.x - ring, y: box.y - ring, right: box.x + box.width + ring, bottom: box.y + box.height + ring };
         const x = Math.max(wide.x, clip?.x ?? 0, 0);
@@ -3307,9 +3882,14 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
             Number.parseFloat(style.borderBottomWidth) || 0,
             Number.parseFloat(style.borderLeftWidth) || 0,
         ),
-        pad: insideTransform(node) ? 8 : 0,
-        holes: chromeOver(node, { x: box.x, y: box.y, w: box.width, h: box.height }),
+        pad: 0,
+        legacyPad: insideTransform(node) ? 8 : 0,
+        angle,
+        ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
         sel: describe(node),
+        money,
+        rects: read?.rects,
+        legacyDropped: sliver,
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
         icons:
@@ -3322,6 +3902,140 @@ function targetFor(node: HTMLElement): ContrastTarget | undefined {
         ringBox,
         offsets: ring === 1 ? OUTLINE_1 : ring === 2 ? OUTLINE_2 : [],
     };
+}
+
+/**
+ * The turn of `el`'s frame, in radians: every `transform` and `rotate` from
+ * `el` up to the root, summed. Two-dimensional turns only — a skew or a
+ * perspective is not a turn this sampler can undo, and none is shipped on a
+ * text frame.
+ */
+function angleOf(el: Element | null): number {
+    let angle = 0;
+    for (let at = el; at !== null && at !== document.documentElement; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        if (cs.transform !== 'none') {
+            const m = new DOMMatrixReadOnly(cs.transform);
+            angle += Math.atan2(m.b, m.a);
+        }
+        const turn = /^(-?[\d.]+)deg$/.exec(cs.rotate.trim());
+        if (turn !== null) {
+            angle += (Number(turn[1]) * Math.PI) / 180;
+        }
+    }
+    return angle;
+}
+
+/**
+ * A turned box before its turn: `getBoundingClientRect()` and
+ * `Range.getClientRects()` answer a turned box's axis-aligned bounds, W×H,
+ * and for a turn θ those are w·c + h·s by w·s + h·c — solved here for w and
+ * h, about the same centre.
+ */
+function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } {
+    const c = Math.abs(Math.cos(angle));
+    const sn = Math.abs(Math.sin(angle));
+    const det = c * c - sn * sn;
+    const w = angle === 0 ? r.width : (r.width * c - r.height * sn) / det;
+    const h = angle === 0 ? r.height : (r.height * c - r.width * sn) / det;
+    if (!(det > 0 && w > 0 && h > 0)) {
+        throw new Error(`a box turned ${((angle * 180) / Math.PI).toFixed(2)}° at ${Math.round(r.x)},${Math.round(r.y)} gives no box before its turn`);
+    }
+    return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w, h };
+}
+
+/**
+ * The box `el`'s overflow clips its content to, per axis — its padding box
+ * on an axis whose `overflow` is not `visible` — or nothing. An inline box
+ * clips nothing, whatever it says.
+ */
+function clipOf(el: Element): { x0: number; x1: number; y0: number; y1: number } | undefined {
+    const cs = getComputedStyle(el);
+    const cutsX = cs.overflowX !== 'visible';
+    const cutsY = cs.overflowY !== 'visible';
+    if ((!cutsX && !cutsY) || cs.display === 'inline' || cs.display === 'contents') {
+        return undefined;
+    }
+    const r = el.getBoundingClientRect();
+    const x0 = r.left + el.clientLeft;
+    const y0 = r.top + el.clientTop;
+    return {
+        x0: cutsX ? x0 : -Infinity,
+        x1: cutsX ? x0 + el.clientWidth : Infinity,
+        y0: cutsY ? y0 : -Infinity,
+        y1: cutsY ? y0 + el.clientHeight : Infinity,
+    };
+}
+
+/**
+ * A target's own text as the line-rect sampler reads it (D7, step 5b;
+ * `PROBE-RULES.md`, "The sampler reads text"): every non-blank text node
+ * whose nearest contrast target is this one — a nested target is read as
+ * itself — and every fragment of it on a line (`Range.getClientRects()`),
+ * each clipped like its text is: by the target's own overflow and every
+ * clipping ancestor's, and by the target's own convex `clip-path` band.
+ * No radius or border inset: a line rect holds no border and no arc. A
+ * control whose only mark is a drawn glyph (`.step`, the sheet close) is
+ * read over that glyph's box instead. When nothing is left, the reason
+ * says why — `clipped-away` (every fragment outside a clip: not on screen)
+ * or `not-rendered` (no fragment at all, as a `display: none` span) — and
+ * the runner counts every reason.
+ */
+function lineRectsOf(
+    node: HTMLElement,
+    ink: string,
+    ownBand: { x0: number; x1: number } | undefined,
+): { rects: LineRect[]; why: string } {
+    const rects: LineRect[] = [];
+    let fragments = 0;
+    const clipped = (owner: Element, r: DOMRect): Hole | undefined => {
+        let x0 = r.left;
+        let y0 = r.top;
+        let x1 = r.right;
+        let y1 = r.bottom;
+        for (let at: Element | null = owner; at !== null && at !== document.documentElement; at = at.parentElement) {
+            const c = clipOf(at);
+            if (c === undefined) continue;
+            x0 = Math.max(x0, c.x0);
+            x1 = Math.min(x1, c.x1);
+            y0 = Math.max(y0, c.y0);
+            y1 = Math.min(y1, c.y1);
+        }
+        if (ownBand !== undefined) {
+            x0 = Math.max(x0, ownBand.x0);
+            x1 = Math.min(x1, ownBand.x1);
+        }
+        return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : undefined;
+    };
+    const push = (owner: Element, r: DOMRect, lineInk: string, glyph: boolean): void => {
+        if (r.width <= 0 || r.height <= 0) return;
+        fragments += 1;
+        const cut = clipped(owner, r);
+        if (cut === undefined) return;
+        const angle = angleOf(owner);
+        const line = turnedBox(r, angle);
+        rects.push({ ...cut, cx: line.cx, cy: line.cy, rw: line.w, rh: line.h, angle, ink: lineInk, ...(glyph ? { glyph: true as const } : {}) });
+    };
+    const range = document.createRange();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || owner.closest('svg') !== null || (text.textContent ?? '').trim() === '') continue;
+        if (owner.closest(CONTRAST_TEXT) !== node) continue;
+        const cs = getComputedStyle(owner);
+        if (cs.visibility !== 'visible') continue;
+        const lineInk = owner === node ? ink : owner instanceof HTMLElement && owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) push(owner, r, lineInk, false);
+    }
+    if (fragments === 0) {
+        // No text on a line: a control drawn with a glyph alone.
+        for (const svg of node.querySelectorAll('svg')) {
+            if (svg.closest(CONTRAST_TEXT) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
+            push(svg, svg.getBoundingClientRect(), ink, true);
+        }
+    }
+    return { rects, why: fragments === 0 ? 'not-rendered' : 'clipped-away' };
 }
 
 /** No text, no drawn glyph, no generated content: nothing in the box has an ink. */
@@ -3410,8 +4124,10 @@ function ringLines(node: HTMLElement, box: { x: number; y: number; width: number
 /**
  * The ring read's second capture: every prepared target that wears the
  * outline, and each descendant, has its glyphs shown again (the colour the
- * prepare blanked, put back) or blanked once more. Pseudo-elements stay
- * blanked in both: the mask is read inside the text nodes' own line boxes.
+ * prepare blanked, put back) or blanked once more. A pseudo-element with an
+ * ink of its own paints in both captures and one inheriting the line's
+ * follows it; the mask is read inside the text nodes' own line boxes either
+ * way (D6(ii), step 5b).
  */
 window.__contrastGlyphs = async (show: boolean) => {
     let n = 0;
@@ -3434,20 +4150,23 @@ window.__contrastGlyphs = async (show: boolean) => {
  * the neighbouring selected tab's ground — 1.20:1 reported on a dock whose
  * DOM held nothing but cream at those coordinates.
  */
-window.__contrastBoxes = () => ({
-    nonce: preparedNonce,
-    vw: window.innerWidth,
-    vh: window.innerHeight,
-    boxes: preparedNodes
-        // Each box carries its node's index among the prepared nodes: stable
-        // DOM order, so a box the page drops does not renumber the rest in
-        // the runner's per-box dump (`scripts/contrast-dump.mjs`).
-        .map((node, i) => {
-            const target = targetFor(node);
-            return target === undefined ? undefined : { ...target, i };
-        })
-        .filter((t): t is ContrastTarget & { i: number } => t !== undefined),
-});
+window.__contrastBoxes = () => {
+    const skips: Record<string, number> = {};
+    const boxes: (ContrastTarget & { i: number })[] = [];
+    // Each box carries its node's index among the prepared nodes: stable
+    // DOM order, so a box the page drops does not renumber the rest in the
+    // runner's per-box dump (`scripts/contrast-dump.mjs`). A node that gives
+    // no box says why, and every reason is counted (step 5b: no silent drop).
+    preparedNodes.forEach((node, i) => {
+        const target = targetFor(node);
+        if (typeof target === 'string') {
+            skips[target] = (skips[target] ?? 0) + 1;
+        } else {
+            boxes.push({ ...target, i });
+        }
+    });
+    return { nonce: preparedNonce, vw: window.innerWidth, vh: window.innerHeight, boxes, skips };
+};
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -3607,6 +4326,26 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
 }
 
 /**
+ * The aurora at one end of its tide (`TIDE_SCREENS` in `contrastPlan.ts`):
+ * every stall wearing it — the deck's minis aside — has `--au-tide` held at
+ * `tide`, important, so the tide's own animation cannot move it (an
+ * important declaration outranks an animation, the rain flattening's own
+ * reason). How many wore it and how many were held; nothing is held when no
+ * tide was asked for.
+ */
+function auroraTideAt(tide: 0 | 1 | undefined): { worn: number; held: number } {
+    let worn = 0;
+    let held = 0;
+    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall.att-aurora:not(.deck-stall)')) {
+        worn += 1;
+        if (tide === undefined) continue;
+        stall.style.setProperty('--au-tide', String(tide), 'important');
+        held += 1;
+    }
+    return { worn, held };
+}
+
+/**
  * The viewport height at which nothing a reader scrolls to is behind its
  * clip: the document's own height, and — for the two surfaces a reader
  * scrolls inside, the shell's region and an open sheet — the viewport plus
@@ -3649,10 +4388,140 @@ function pageHeight(scope: ParentNode): number {
     return need;
 }
 
-/** Whether the sheet that blanks a target's pseudo-element glyphs is adopted (once per page). */
-let pseudoBlankAdopted = false;
 
-window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false) => {
+/*
+ * **No look pseudo paints inside a protected box** (D6(i), step 5b;
+ * `PROBE-RULES.md`). A pseudo-element has no box the DOM hands back, so the
+ * geometry passes refuse a positioned one outright and cannot see where an
+ * in-flow one paints — a `position: relative` with offsets, or a negative
+ * margin, can put its paint over a money figure while every box the probe
+ * reads stands clear. So it is measured the only way a pseudo can be: by
+ * its paint. A **look pseudo** is a `::before` or `::after` a look sheet or
+ * a decoration rule generates — a rule whose selector names a look's class
+ * (`t-…`) or a decoration's (`att-…`); the base sheet's own pseudos are the
+ * app's chrome, held by the geometry rules like any node. Every element in
+ * the contrast job's scope that generates one is marked here
+ * (`data-probe-lp-before` / `-after`); the runner captures the frame once
+ * more with every marked pseudo at `visibility: hidden`
+ * (`__lookPseudosHidden`) and compares the two frames inside every
+ * protected box (`__protectedBoxes`), a device pixel in from each edge: a
+ * pixel that changed is a look pseudo painting inside a protected box, and
+ * the job fails. No capture where no look pseudo exists.
+ */
+const LOOK_RULE = /(?:^|[\s>+~,(])\.(?:t-[a-z0-9]+|att-[a-z0-9-]+)\b/;
+const PSEUDO_AT = /::?(before|after)\b/;
+
+/** Every rule in every sheet on the page, `@media` and other groups opened. */
+function styleRules(): CSSStyleRule[] {
+    const out: CSSStyleRule[] = [];
+    const walk = (list: CSSRuleList): void => {
+        for (const rule of list) {
+            if (rule instanceof CSSStyleRule) {
+                out.push(rule);
+            } else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules !== undefined) {
+                walk((rule as CSSGroupingRule).cssRules);
+            }
+        }
+    };
+    for (const sheet of document.styleSheets) {
+        try {
+            walk(sheet.cssRules);
+        } catch {
+            throw new Error(`a sheet the probe cannot read: ${sheet.href ?? '(inline)'}`);
+        }
+    }
+    return out;
+}
+
+/** The look pseudos generated in `scope`, marked; how many. */
+function markLookPseudos(scope: ParentNode): number {
+    for (const el of document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]')) {
+        el.removeAttribute('data-probe-lp-before');
+        el.removeAttribute('data-probe-lp-after');
+    }
+    let n = 0;
+    for (const rule of styleRules()) {
+        for (const one of rule.selectorText.split(',')) {
+            const pseudo = PSEUDO_AT.exec(one);
+            if (pseudo === null || !LOOK_RULE.test(one)) continue;
+            const host = one.replace(/::?(?:before|after)\b/g, '').trim() || '*';
+            let hosts: NodeListOf<Element>;
+            try {
+                hosts = scope.querySelectorAll(host);
+            } catch {
+                throw new Error(`a look pseudo's selector the probe cannot match: ${one}`);
+            }
+            for (const el of hosts) {
+                if (el.closest('.deck-stall') !== null) continue;
+                const which = pseudo[1] as 'before' | 'after';
+                const content = getComputedStyle(el, `::${which}`).content;
+                if (content === 'none' || content === 'normal') continue;
+                if (!el.hasAttribute(`data-probe-lp-${which}`)) {
+                    el.setAttribute(`data-probe-lp-${which}`, '');
+                    n += 1;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+/*
+ * **Text no target reads** (step 5b; SAMPLER-STEP-PLAN v2 item 9): every
+ * visible, non-aria-hidden text node in the job's scope whose element is in
+ * no contrast target, described once per element kind. A report, printed
+ * on the pass's line whatever the verdict — the list the next target is
+ * chosen from, and the answer to "what did the pass not read" — never a
+ * failure: most of it is text on a card every look was proved on.
+ */
+function uncoveredText(scope: ParentNode): string[] {
+    const out = new Set<string>();
+    const root = scope === document ? document.getElementById('app')! : (scope as Element);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        const owner = text.parentElement;
+        if (owner === null || (text.textContent ?? '').trim() === '') continue;
+        if (owner.closest('.deck-stall, svg, [aria-hidden="true"], #layout-result') !== null) continue;
+        if (owner.closest(CONTRAST_TEXT) !== null) continue;
+        if (getComputedStyle(owner).visibility !== 'visible') continue;
+        range.selectNodeContents(text);
+        if ([...range.getClientRects()].every((r) => r.width === 0 || r.height === 0)) continue;
+        out.add(describe(owner));
+    }
+    return [...out];
+}
+
+let lookPseudoSheetAdopted = false;
+
+window.__lookPseudosHidden = async (hide: boolean) => {
+    if (!lookPseudoSheetAdopted) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(
+            'html[data-probe-lp-off] [data-probe-lp-before]::before,html[data-probe-lp-off] [data-probe-lp-after]::after{visibility:hidden!important}',
+        );
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        lookPseudoSheetAdopted = true;
+    }
+    document.documentElement.toggleAttribute('data-probe-lp-off', hide);
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]').length;
+};
+
+/** The protected boxes in the last prepare's scope, the deck aside, as they stand now. */
+window.__protectedBoxes = () =>
+    [...(preparedScope ?? document).querySelectorAll(PROTECTED)]
+        .filter((node) => node.closest('.deck-stall') === null)
+        .map((node) => {
+            const r = node.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height, sel: describe(node) };
+        })
+        .filter((b) => b.w > 0 && b.h > 0);
+
+/** The scope the last prepare read: an open sheet's, or the page. */
+let preparedScope: ParentNode | undefined;
+
+window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly = false, tide?: 0 | 1) => {
     preparedNonce = nonce;
     const echo = {
         nonce,
@@ -3667,7 +4536,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         // The apex can only wear the default look — see `looksFor`. The plan
         // never asks for this; the runner refuses a job with no targets.
         preparedNodes = [];
-        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, ...echo };
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
     }
     if (neutral) {
         paint(NEUTRAL_SCREEN, look, []);
@@ -3675,6 +4544,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     paint(screen, look, wornOf(look, flags));
     freezeAnimations();
     const rain = rainAtItsBrightest();
+    const tideHeld = auroraTideAt(tide);
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
     // there compares an undimmed text colour against scrimmed paint, which
@@ -3707,10 +4577,20 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
             rain,
+            tide: tideHeld,
             ...echo,
         };
     }
-    preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)];
+    // The door's deck minis are pictures (`aria-hidden`, zoomed, no control):
+    // no line of them is read by anyone, and a mini's `.orn` read over its
+    // look's unflattened rain was the critic's case for leaving them out of
+    // every contrast job, globally, before the rain scoping came off (step
+    // 5b, CRITIC-SAMPLER-STEP item 9; `PROBE-RULES.md`, "The door's deck is
+    // not a contrast target").
+    preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
+    preparedScope = scope;
+    const lookPseudos = markLookPseudos(scope);
+    const uncovered = uncoveredText(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
     // 8 (2026-09-15) — had its colour set to transparent by the outer node's
@@ -3719,7 +4599,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     const targets: ContrastTarget[] = [];
     for (const node of preparedNodes) {
         const target = targetFor(node);
-        if (target !== undefined) {
+        if (typeof target !== 'string') {
             targets.push(target);
         }
     }
@@ -3752,30 +4632,23 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // ground the ring read measures, so it stays in both captures;
             // any other shadow is the glyph's own paint and goes with it.
             // An element outside every outlined target wears none.
-            if (outlineOf(el) > 0) {
-                el.setAttribute('data-probe-outline', '');
-            } else {
+            if (outlineOf(el) <= 0) {
                 el.style.textShadow = 'none';
             }
-            // And its pseudo-elements' glyphs (2026-09-24): Neo's Wearing
-            // line opens with a `::before` "// " in its own cyan, which an
-            // inline colour cannot reach — its glyphs stayed and were read
-            // as the line's ground at 1.20:1. A pseudo's background is not
-            // touched: that is ground, or chrome the band steps past.
-            el.setAttribute('data-probe-blank', '');
         }
     }
-    // Through the CSSOM: the page's policy refuses an injected `<style>`
-    // (`style-src 'self'`), and a refused sheet blanks nothing, silently.
-    if (!pseudoBlankAdopted) {
-        const sheet = new CSSStyleSheet();
-        sheet.replaceSync(
-            '[data-probe-blank]::before,[data-probe-blank]::after{color:transparent!important;-webkit-text-fill-color:transparent!important}' +
-                '[data-probe-blank]:not([data-probe-outline])::before,[data-probe-blank]:not([data-probe-outline])::after{text-shadow:none!important}',
-        );
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-        pseudoBlankAdopted = true;
-    }
+    /*
+     * A pseudo-element's glyphs are no longer blanked (D6(ii), step 5b). The
+     * adopted sheet that turned every target's `::before`/`::after` ink
+     * transparent (2026-09-24: Neo's Wearing line's cyan "// " read as the
+     * line's ground at 1.20:1) is gone with the line-rect read: a pseudo
+     * beside the text lies outside every line rect, and one that paints
+     * over the text is ground and read as such — which the sheet used to
+     * hide. A pseudo inherits the inline transparent ink where it sets no
+     * colour of its own. A whole-box money read is safe from a pseudo's glyph
+     * only because no look pseudo may paint inside a protected box
+     * (`no-look-pseudo-paints-inside-a-protected-box`, D6(i)).
+     */
     // Anything the prepare itself started — a fold it opened — is frozen too.
     freezeAnimations();
     // The runner grows the emulated viewport to this and repaints before the
@@ -3793,6 +4666,12 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         nodes: preparedNodes.length,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
+        // The look pseudos in scope, marked for D6(i)'s second frame.
+        lookPseudos,
+        // Visible text no target reads, reported (step 5b).
+        uncovered,
+        // The stalls that wore the aurora, and how many had its tide held.
+        tide: tideHeld,
         ...echo,
     };
 };
@@ -3867,10 +4746,15 @@ const verdict = {
     rowSizeClasses: [...rowSizeClasses].sort(),
     doorMiniClasses: [...doorMiniClasses].sort(),
     wallControlChecks,
+    statusLineChecks,
     wallControlRoles,
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,
     outlineChecks,
+    moneyChecks,
+    atRestSetAside,
+    buntingChecks,
+    haloChecks,
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,

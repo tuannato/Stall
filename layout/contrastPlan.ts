@@ -65,6 +65,8 @@ export type ContrastJob = {
     readonly flags: number;
     /** Painted under `prefers-reduced-motion: reduce` (`REDUCED_JOBS`). */
     readonly reduced?: boolean;
+    /** Neo's aurora worn alone with its tide held at one end (`TIDE_JOBS`). */
+    readonly tide?: 0 | 1;
 };
 
 /**
@@ -112,6 +114,39 @@ export const RAIN_JOBS: readonly string[] = [
 export const SOLO_JOBS: ReadonlyArray<{ screen: string; look: number; cls: string }> = [
     { screen: 'offers', look: NEO_CITY_THEME_ID, cls: 'att-horizon' },
 ];
+
+/**
+ * **The aurora worn alone, at both ends of its tide** (step 5b, the
+ * moving-decoration table's reader for `att-aurora`; `movingDecor.ts`).
+ * The aurora is two washes on the stall's own ground whose colour turns
+ * over four seconds (`--au-tide`, 0 → 1): the cyan wash at its strongest at
+ * one end, the pink at the other. The pass froze it at one instant, and
+ * the all-worn job wears the rain with it, where every line on the ground
+ * wears the outline; worn alone, no line does. So each screen whose lines
+ * stand on Neo's bare ground — the rain's own list, the offers screen and
+ * the wall's Cycle — is painted with the aurora and nothing else, its tide
+ * held at 0 and again at 1. Each channel of the wash's paint is a convex
+ * function of the tide (one wash's alpha grows as the other's falls, and
+ * the two blend multiplicatively), so the lightest ground a line meets is
+ * at one end or the other, never between.
+ */
+export const TIDE_SCREENS: readonly string[] = [
+    'offers',
+    'activity',
+    'plugin-missing',
+    'empty',
+    'quotes-failed',
+    'nothing-quoted',
+    'quotes-truncated',
+    'first-stall',
+    'sparse-pasted',
+    'item-listing',
+    'item-quote',
+    'shop-window-cycle',
+];
+
+/** The aurora's class: its bit is read off Neo's own table, never restated here. */
+export const TIDE_CLASS = 'att-aurora';
 
 /** The overlay screens the pass samples; every other overlay screen is geometry. */
 export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);
@@ -182,7 +217,8 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
         }
         const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID);
         const regular = sampledScreens(viewport.width, viewport.canvas, looks);
-        for (const screen of contrastScreens(viewport.width, viewport.canvas, looks).filter((name) => !regular.includes(name))) {
+        const pageScreens = contrastScreens(viewport.width, viewport.canvas, looks);
+        for (const screen of pageScreens.filter((name) => !regular.includes(name))) {
             if (neo === undefined) {
                 continue;
             }
@@ -196,6 +232,27 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                 sheetClass: neo.theme.sheetClass,
                 flags: WORN_ALL,
             });
+        }
+        // The aurora alone at both ends of its tide, last in the viewport and
+        // only on screens this viewport already samples, so the screens the
+        // page publishes are unchanged (`TIDE_SCREENS`).
+        const aurora = neo?.rows.find((row) => row.cls === TIDE_CLASS);
+        if (neo !== undefined && aurora !== undefined) {
+            for (const screen of TIDE_SCREENS.filter((name) => pageScreens.includes(name) && canWear(neo, name))) {
+                for (const tide of [0, 1] as const) {
+                    jobs.push({
+                        key: `${viewport.name}/${screen}/${neo.id}/${1 << aurora.bit}/tide${tide}`,
+                        viewport: viewport.name,
+                        width: viewport.width,
+                        height: viewport.height,
+                        screen,
+                        look: neo.id,
+                        sheetClass: neo.theme.sheetClass,
+                        flags: 1 << aurora.bit,
+                        tide,
+                    });
+                }
+            }
         }
     }
     return jobs;

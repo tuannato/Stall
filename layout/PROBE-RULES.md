@@ -561,6 +561,73 @@ Sampling amendments, each measured:
   translucent Modern dock at 2.48:1 over Drifting light's orbs under After
   hours — mobile-only had certified pixels nobody paints at 1280.
 
+## The money set is every protected contrast target (step 5b, 2026-09-26)
+
+Step 5b reads every contrast target over its own text's line rects except
+the money boxes, which keep the whole-box read (below, "The sampler reads
+text"). So which targets are money has to be one closed list, and it is:
+`MONEY_SET` in `layout/moneySet.ts`, selector literals pinned by value —
+the price, the You-pay row (`.row.big dd`), every `.buy`, the address's
+two spans, both record hexes, the fiat glance and the rate, the receipt
+amount, the seller's price, both surcharge lines, the selection's total,
+the pay sheet's lines and total, and the two Pay controls by role
+(`pay-cashtab`, a `.buy`; `pay-wallet`, a `.mini`). PROPOSAL §12 named the
+set in words ("the Pay pills"), which is not a selector; CRITIC-STEP-5
+item 2 found five members the words missed.
+
+`the-money-set-is-every-protected-contrast-target` holds it from both
+sides:
+
+- **statically** (`moneySet.test.ts`): every selector that is in
+  `PROTECTED` and in `CONTRAST_TEXT` is in the set, every member is a
+  contrast target (the two Pay roles through the class each wears), and the
+  probe takes the set from that module;
+- **in the browser**, on every screen, look and variant of every geometry
+  pass: every painted node that is a contrast target and a protected box
+  matches the set, and every node the set matches is a contrast target
+  standing in a protected box — `pay-wallet` aside, money by what it hands
+  a wallet and in no protected box by its dress. The deck is not asked.
+  `moneyChecks` counts the nodes asked; it runs on every geometry pass,
+  and the phone and desk passes owe some (`probe-coverage.mjs`): 4,804 and
+  5,212 on the day it landed.
+
+**Money outside `PROTECTED`, and text inside a money box** (the critic,
+2026-09-27). The set began as `PROTECTED ∩ CONTRAST_TEXT`, so money text
+outside a protected box fell to the line read with D7: a chosen row's line
+("2 × $5.00 = $10.00") wears its own role now, `selection-figure`, which is
+protected, a contrast target and money; the touch wall's Pay
+(`window-pay`) matched no contrast target at all and is all three now. And
+the browser half fails a contrast target whose nearest protected ancestor
+is money unless it is money too: the wall payment's `.sw-pay-v` and
+`.sw-pay-s`, inside `pay-lines`, read by the line read until then (2,223
+and 57 failures before they joined the set). Proved red by taking
+`selection-figure` and `window-pay` out of the set (below, in the step's
+last commit).
+
+**Proved red** by taking `receipt-amount` out of the set: 35 failures on
+the phone and 35 on the desk, every one the Activity fold's amount ("is a
+protected box and a contrast target, and is not in the money set"), the
+static test red on both halves, and the rule below vacuous.
+
+### An outlined money figure is ring-read at its worst
+
+PROPOSAL §12 said "money boxes keep the whole-box sampler", and round 8 had
+already made that false: the Activity receipt amount is outlined on Neo's
+rain and read in the ring around its glyphs, because a whole-box read over
+the flattened drop fails it with nothing but a ground or a moved row to
+fix it (CRITIC-STEP-5 item 1). The amendment, the window's by
+recommendation: **a money box is never read by a weaker verdict** — the
+whole box, or, for a figure outlined on a decoration's bare ground, every
+solid ring pixel, no percentile, with the decoration at its worst.
+`an-outlined-money-figure-is-ring-read-at-its-worst` is the runner's: an
+outlined target that is money must have been ring-read on a job whose rain
+was flattened (the outline is scoped to the rain, and a job whose worn and
+flattened counts differ is refused by its echo — this names the money half
+of that), and a shipped run that ring-read no money figure fails as
+vacuous. It read 10 on the day it landed (the receipt amounts on
+`activity`, Neo worn, at the phone and the desk). Proved red by the same
+plant: "read no outlined money figure — vacuous green".
+
 ## The shop window hung the tall way (pass 2b, 2026-09-19)
 
 `window.css` carries **three** layouts for the cycle card, and the probe
@@ -1410,6 +1477,312 @@ row a buyer reads is still measured on every stall screen. Every other rule
 — cover, clip, sideways scroll, spills, contrast — runs over the deck as
 over anything else.
 
+## Nothing in the body reaches the status line (step 5b, 2026-09-26, the owner's (a))
+
+The wall's grid gives the body a `minmax(0, 1fr)` row and the status line
+the row under it, and the body does not clip. A Cycle card taller than its
+row painted straight over the status line, and no geometry rule saw it:
+the status line is no protected box, the card is no decoration, and
+`nothing-on-the-wall-is-cut-from-below` reads clips, of which there were
+none. The line-rect contrast read (D7) found it first, reading "Showing
+listings" at 1.96:1 against the card's own dashed edge.
+
+`nothing-in-the-body-reaches-the-status-line`: on every wall screen, every
+element in `.stall-body` that no ancestor inside the body clips must end
+above the status line's top (a device pixel's tolerance) wherever the two
+share columns. It counts the elements it asks (`statusLineChecks`), and the
+canvas, portrait and tablet passes owe some (`probe-coverage.mjs`).
+
+**Red on `main`, as it stood** (every look, bare, one row at a time and all
+worn): at 1920×1080 the card ended 110.2px over the line on Rural with the
+Yard beetle, 10.2px on Rural bare and under every other Rural row, 9.4 /
+7.4px on Modern under the Awning; at the counter tablet (768×1024) 47.9px
+on Rural with the beetle and 2.5px on Modern all worn — 9 failures on the
+canvas pass and 6 on the tablet.
+
+**The fix** (`window.css`, the owner's (a): the card's own air steps down,
+the code does not, every decoration stays as worn): a landscape block for
+the 901–1200px-tall container (the 1080 wall) takes the body's block
+padding to 10px, the card's to 16px, its row gap to 8px, the name to
+`min(4.8cqh, 4cqw)` (52px at most) and the figure to `min(7.4cqh, 6.4cqw)`
+(80px at most); the tablet's own block takes the same padding and gap and
+no type — its code is at its 280px floor already. **The tablet is the
+owner's (a) carried one size over**: the decision named the 1080 wall, and
+the rule found the same overflow at 768×1024 the day it landed.
+
+Card bottom against the status line's top, before → after (px; negative
+is clear):
+
+| Size | Look, worn | Before | After |
+|---|---|---|---|
+| 1920×1080 | Modern bare / Pinstripe | −41 / −40 | −104 / −103 |
+| 1920×1080 | Modern all worn (Awning) | **+9.4** | −67.6 |
+| 1920×1080 | Neo, any | −43 | −106 |
+| 1920×1080 | Rural bare, and each row but the beetle | **+10.2** | −65.9 |
+| 1920×1080 | Rural + Yard beetle, alone or all worn | **+110.2** | −15.9 |
+| 1920×1080 | skeleton | −41 | −104 |
+| 768×1024 | Modern all worn | **+2.5** | −40.2 |
+| 768×1024 | Rural + Yard beetle | **+47.9** | −23.7 |
+| 768×1024 | the rest | −36 to −70 | −74 to −107 |
+| 1080×1920, 1280×900 | every look and row | unchanged | unchanged |
+
+(At 1280×900 Rural with the beetle stands 1.8px clear, unchanged.)
+Pictures: `private/design/workshop-2026-09-23/step5b-shots/wall-*`.
+
+## No look pseudo paints inside a protected box (step 5b, D6(i), 2026-09-26)
+
+A pseudo-element has no box the DOM hands back. The geometry passes refuse
+a positioned one outright (`positionedPseudos`), and an in-flow one is
+invisible to them: `position: relative` with offsets, or a negative
+margin, moves its paint while every box the probe reads stands where it
+stood. So a look pseudo is measured by its paint. A **look pseudo** is a
+`::before` or `::after` a look sheet or a decoration rule generates — a
+rule whose selector names a `t-…` or `att-…` class (`markLookPseudos`,
+which walks every rule of every sheet, `@media` groups opened, and marks
+each element in the job's scope that generates one with content). The base
+sheet's own pseudos are the app's chrome and are held like any node.
+
+On every contrast job whose scope holds one, the runner captures a fresh
+frame, hides every marked pseudo (`visibility: hidden`, through an adopted
+sheet toggled on the root), captures again and shows them, and compares the
+two frames inside every protected box (`__protectedBoxes`), a device pixel
+in from each edge; a channel moving more than `LOOK_PSEUDO_LEVELS` (2) is a
+look pseudo painting there, and the job fails
+(`no-look-pseudo-paints-inside-a-protected-box`). No capture where no look
+pseudo exists, so today it runs on Neo's jobs alone: 64 jobs, 1,744,542
+protected pixels, 12.4 s (phase `look pseudos`) on the day it landed, with
+nothing changed. A shipped run that compared no frame fails as vacuous.
+
+**Proved red** by the critic's plant (CRITIC-STEP-5 item 11): `.t-neo
+.item-a::after { content: ''; display: inline-block; width: 24px; height:
+12px; background: #f0f; position: relative; left: -30px }` → 40 protected
+boxes "changes 276 px … when the look's pseudo-elements are hidden", beside
+the box reads that also caught the pink inside a price box.
+
+**D6(ii), the blank sheet removed** (step 5b, after D7). The adopted sheet
+that turned every target's `::before`/`::after` ink transparent is gone: a
+pseudo beside the text lies outside every line rect, and one over the text
+is ground and is read — which the sheet used to hide. Removing it moved no
+box (the dump before and after: 7,342 identical). A whole-box money read
+stays safe from a look pseudo's glyph only because of the rule above.
+**Proved red** by the critic's plant, `.t-neo .wearing::before { position:
+relative; left: 40px }`: 42 Wearing lines at 1.03:1, the pseudo's cyan
+"//" now read as the ground under the words.
+
+**The rain scoping came off** (SAMPLER-STEP-PLAN §2, the same commit):
+`.orn`, `.wearing`, `.wearing-link`, `.section-title`, `.collection-name`,
+`.collection-count` and `.item-back` are contrast targets on every look,
+bare and worn, read over their line rects (and in the ring where the rain
+is worn). The three reds that scoped them are gone: Modern's section and
+shelf heads read 15.54:1 at the least (2.56 by the box, its underline),
+Neo's 9.93 (1.24, its wedge), Rural's ornament strip 4.20 (1.01, its
+bunting row), Neo's Wearing line 6.74 (1.08, its "//"); Rural's Wearing
+links 3.12 under Sun-faded since its inks went darker. The Activity rows,
+the first-stall numbers, the footer's lines and the invite's chip stay
+scoped to the rain: elsewhere they stand on a card or a ground every look
+was proved on, which is their own reason, not the sampler's.
+
+## Every moving decoration has a reader or a reason (step 5b, 2026-09-26)
+
+The pass freezes every animation at one instant, so a green under a moving
+decoration is luck. `layout/movingDecor.ts` lists every catalogue row with
+`motion: true`, keyed by its class, each with a **reader** — the rule or
+test that holds the lines it can reach at its worst — or a written
+**reason** it needs none; `every-moving-decoration-has-a-reader-or-a-reason`
+holds the keys to exactly the moving rows and each reader to a name some
+test or rule in the repository carries.
+
+| Class | Reader, or reason |
+|---|---|
+| `att-rainfall` | `a-line-on-the-ground-reads-wherever-a-drop-falls` (the flattening, the ring read) |
+| `att-confetti` | `every-confetti-scrap-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-sunburst` | `every-sunburst-ray-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-aurora` | `the-aurora-is-read-at-both-ends-of-its-tide` (below) |
+| `att-bunting` | `the-bunting-never-swings-into-the-ornament-label` (below) |
+| `att-pinstripe` | reason: runs in the cards' 2px border alone, under no line |
+| `att-hum` | reason: moves an ink, not a ground (staged with G7) |
+| `att-beetle` | reason: roams its own yard strip, where no line stands |
+
+Moving inks (Neo's ticker flicker, the hum's dimmed lamp, the pin demo,
+Rural's swaying tag and swinging board) are not grounds and stay open,
+staged with G7.
+
+**The aurora is read at both ends of its tide** — on two conditions its
+pure half pins (`layout/auroraTide.test.ts`): each wash's colour is at
+least the ground's on every channel, every ink Neo sets on bare ground is
+lighter than the ground, and, the washes' alphas read from the sheet, the
+least contrast across the tide at every falloff strength is at an end
+(`TIDE_SCREENS`,
+`contrastPlan.ts`). Worn alone no line wears the outline, and the all-worn
+job wears the rain with it. So each screen whose lines stand on Neo's bare
+ground — the rain's own list, the offers screen, the wall's Cycle — is
+painted with the aurora alone, its `--au-tide` held (important) at 0 and
+again at 1; each channel of the wash is convex in the tide, so the ends
+are the worst. 46 jobs; each job's echo holds every aurora-wearing stall to
+a held tide, and a shipped plan with none fails as vacuous. The first run
+read Neo's vacant-box line at 2.69–2.95:1 over both ends; the owner's lift
+(the colour, `.sparse-empty-s` to the muted under the aurora as under the
+rain) reads 4.92–5.52. Proved red by taking the lift off: three figures at
+2.69–2.90:1.
+
+**The bunting never swings into the ornament label**: Rural's bunting row
+sways ±0.6° about its origin inside `.orn`, beside the strip's own label.
+The probe reads the widest turn from the row's own keyframes, the row's
+box before its turn from its art's topmost paint down (`buntingArt.ts`,
+an allow-list reader of `bunting.svg`: every control point bounds a path;
+the box is taller than the drawing, and the first version, which swept the
+whole box, failed on the empty space above the string), and turns it to
+each end: it must not reach any line of the strip's own text, a device
+pixel in. Phone and desk passes owe a row swept where Rural is measured.
+Proved red by `.t-rural .att-bunting { margin-top: -34px }`: 123 failures.
+
+## The sampler reads text (step 5b, D7, 2026-09-26)
+
+The pass read the worst pixel inside a target's border box, so anything the
+look painted in the box that the glyphs never cross counted as ground —
+Modern's accent underline under a heading, Rural's bunting row in `.orn`,
+a card's dashed edge — and two workarounds grew for the same mistake (the
+heading's in-flow-marker step-past, the rain scoping). Now **every contrast
+target outside the money set (`layout/moneySet.ts`) that wears no outline is
+read over its own text's line rects** (`lineRectsOf` in the probe,
+`lineRead` in the runner):
+
+- the rects `Range.getClientRects()` gives for every non-blank text node
+  whose nearest contrast target is this one (a nested target is read as
+  itself), **each against its own element's ink** — a muted name inside an
+  ink control is read against the muted;
+- clipped like the text: by the target's own overflow and every clipping
+  ancestor's, per axis, and by its own convex `clip-path` band;
+- **every pixel wholly inside a rect** — no lattice, no radius or border
+  inset (a line rect holds neither);
+- where the frame is turned (Rural's swaying tag, the swinging board), the
+  line box before its turn, from the actual angle (`angleOf`), and only the
+  pixels inside it — the fixed 8px pad is gone. A money box inside a turned
+  frame is read at the lattice points inside its own turned box, and a
+  Rural price figure the old pad erased is read now (11.37 bare, 5.31 worn);
+- a control whose only mark is a drawn glyph (`.step`, the sheet close) is
+  read over its `svg.ic`'s box;
+- **no silent drop**: a line target that yields a rect and no pixel fails
+  the job ("a target with text and no sample"), a whole-box read that finds
+  no pixel fails too, and every node that gave no box is counted by reason
+  on the pass's line (`nodes that gave no box: clipped-away, draws-nothing,
+  not-rendered, sliver`) and per job in the dump (`skips`).
+
+The heading step-past is deleted: a marker the text does not cross lies
+outside every rect. Money boxes keep the whole-box read (and outlined lines
+the ring), "a money box is never read by a weaker verdict".
+
+**What moved, on the same capture.** The comparison is not part of an
+ordinary run, stated plainly: only `LAYOUT_LEGACY=1 pnpm test:layout` reads
+each line target the old way too and writes `legacy`, `at` and `bucket`
+into the dump (`.layout-dump/shipped-latest.json`, untracked); an ordinary
+run reads the new way alone, so nothing guards the falls between two
+commits but the 3:1 floor. To ask again: run with `LAYOUT_LEGACY=1` and
+tally the dump's line boxes whose `worst` is under `legacy`, by `bucket`.
+The last full list of falls past 0.1 is untracked, in the owner's working
+tree (`private/design/workshop-2026-09-23/step5b-shots/d7-falls.txt`); the
+figures below are that run's: 4,744 targets read over line rects; 288 rose, 3,818 stayed,
+476 fell, **none across 3:1** once the wall's card fit and the vacant line
+was lifted (before those two fixes this read is what found them, at 1.96
+and 2.73–2.95:1). The falls, bucketed by where the new worst pixel lies:
+
+| Bucket | Falls | Past 0.1 | What it is |
+|---|---|---|---|
+| lattice | 418 | 238 | inside the old band: a pixel the old 12×8 lattice stepped over |
+| ink | 28 | 28 | a nested line read against its own ink (the Shop tab's muted name, 13.09 → 5.48) |
+| inset | 27 | 16 | inside the box, in the old radius, border or 8px pad |
+| content area | 3 | 3 | past the box's top or bottom: a font's content area over a tight line box |
+| spill / clipped / dropped | 0 | 0 | — |
+
+162 line targets the old read dropped in silence are read now (the letter
+tiles' initials 132, the sheet close 20, Rural's unbuyable label 4, two
+more). Against the previous commit's dump: 6,411 identical, 929 moved; the
+money boxes that moved are the five inside a turned frame (the Rural figure
+above, 11.37 / 5.31 from none; Rural's surcharge on the wall 12.90 → 13.52
+and 12.20 → 13.52; the ticker's Rural figure 6.06 → 6.04); one old box is
+gone (a Browse tile whose letters are scrolled out of the strip, which the
+old clamp sampled as a 16px sliver of the tile's ground) and one appears
+(a chip on the 35-item plate the old sliver rule skipped).
+
+## What the line read retired and let in (step 5b, 2026-09-26)
+
+- **`studio-items` is sampled** (off `GEOMETRY_ONLY_SCREENS`). It was held
+  out for its wrapped guide link, which the box read put at 1.00–1.08:1
+  over its union (the hint's grey words inside it). Per line fragment it
+  reads 5.17:1 at the least on every look, bare and worn; the `.tid`
+  glance 5.58, Rural worn's `.tool-lede` 5.58. The plan grows by 7 jobs on
+  the phone and 7 on the desk, as the token-glance note measured:
+  `the-contrast-plan-is-every-job-the-pass-owes` is pinned at mobile 228,
+  desktop 258, canvas 29, total 515.
+- **`CHROME_ON_TEXT` is retired.** The face's expand cue was stepped
+  around because the box read took every pixel in the hero tile as the
+  letters' ground; the letters' own rects never reach the cue's corner, and
+  with the mechanism switched off every tile read the same (4.61:1 at the
+  least). The holes, the cap and `chromeOver` are gone.
+- **`.sw-switch-state` is a target.** The box read put the 17px pill at an
+  unexplained 1.00:1; its line reads 5.17:1 on every shipped look and
+  decoration and 4.61 on the skeleton.
+- **The insets stay for money only.** The radius, border and far-edge rules
+  of the whole-box read (above, "Rendered-pixel contrast") now apply to the
+  money set alone; a line rect holds no border and no arc.
+
+## A line clipped out of view is held to a ceiling (step 5b, the critic, 2026-09-27)
+
+A line target whose every fragment is clipped away, or that is not
+rendered at the pass's width, gives no box and is counted, never failed —
+it is not on screen. So a change that clipped a whole line out of view read
+green. `LINE_SKIP_CEILING` in the runner holds those counts per viewport at
+what they were when step 5b landed (mobile: clipped-away 63, not-rendered
+35; desktop: 23 and 28; canvas: 726 and 0 — 964 until the wall payment's lines joined the money set and left the line read; `clipped-away` also counts a
+target whose own `clip-path` leaves under 2px). A pass that finds more
+fails and names the count; one that finds fewer says so, and the ceiling
+should come down with the change that lowered it.
+
+## A halo never reaches a neighbour's text, and what no target reads is said (step 5b, 2026-09-26)
+
+**`a-halo-never-reaches-a-neighbours-text`** (probe, every screen, look and
+variant of the geometry passes; SAMPLER-STEP-PLAN v2 item 10). A halo is a
+ground laid outside a box: a non-inset `box-shadow` with no blur, at half
+opacity or more, with a spread or an offset — the rain's old halos, the
+sticky sheet head's `0 -26px` slab. Its painted extent (the box moved and
+grown) must not meet a line rect of any text outside the shadowing element
+on the same surface (behind an open sheet's scrim is another layer), a
+device pixel in. The colour's alpha is resolved by the browser, so an
+`oklab()` or `color-mix()` shadow reads. It runs on every geometry pass,
+and the phone and desk passes owe **A soft shadow is not a halo** — soft meaning its blur is at least twice
+its spread and its offset (the critic, 2026-09-27: a 1px blur on a 30px
+spread is a slab, and was exempt when any blur was), and a hard one's
+extent grows by half its blur — stated:, stated: measured literally, every card's drop and every glow met
+the next line on every look — 1,700 failures a pass over designs that read
+— and a guard refusing a safe design is a guard defect. Proved red by
+`.t-neo .notice { box-shadow: 0 0 0 30px var(--s-bg) }`: 54 failures, the
+notice's halo over the sign's tagline.
+
+**Text no target reads** is printed on the contrast pass's line, whatever
+the verdict (`uncoveredText`): every element kind whose visible,
+non-aria-hidden text stands in no contrast target, and on how many jobs.
+A report, never a failure — most of it is text on a card every look was
+proved on; it is the list the next target is chosen from.
+
+## The door's deck is not a contrast target (step 5b, 2026-09-26)
+
+The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a
+`.deck-stall` before anything is read: the door's three minis are pictures
+(`aria-hidden`, zoomed, no control), and a line in one is read by nobody.
+It changed no reading on the day it landed — the nine deck nodes the door
+matched produced no target (the dump before and after: 6,618 boxes
+identical, the door's 26 renumbered, none moved) — and that is why it
+comes first: the line-rect sampler and the rain scoping coming off would
+otherwise start reading a mini's `.orn` over its look's unflattened rain,
+the critic's case (CRITIC-SAMPLER-STEP item 9). The other rules already
+skip the deck by name (the rain flattening, the outline rules, the class
+audit).
+
+The same commit gives the probe's Chrome `--disable-partial-raster`, which
+`looks-diff.mjs` already carried: the look-pseudo check (D6(i), below)
+compares two frames pixel for pixel. It moved no box either (6,650
+identical against two runs of `main`, which were themselves identical).
+
 ## A door mini paints as its own look (2026-09-24)
 
 The step-2 critic's item 8: the door root was `stall t-modern door`, and a
@@ -1487,6 +1860,10 @@ guard; a green that depends on a Worker answering in time is the false
 signal AGENTS §4 names.
 
 ## A cue on a text box is chrome, and the sampler steps around it
+
+**Retired in step 5b** ("What the line read retired and let in", above):
+the line read reads the letters' own rects and never reaches the cue. The
+incident is kept for its reason.
 
 The contrast pass blanks a target and its descendants and reads every pixel
 left in the box as the ground under the letters. The face's expand cue is a
@@ -2969,6 +3346,18 @@ takes the screen off that list.
 Under the rain the first-stall link inherits its line's outline and is
 read in its ring, and the muted lift it wore for one round is gone.
 
+**A visited link is held by a unit test, since no pass can see it** (step
+5b, SAMPLER-STEP-PLAN v2 item 9). A browser never hands script a visited
+link's colour, so the probe's pixels read the unvisited one alone.
+`every-anchor-the-app-builds-sets-its-own-colour`
+(`layout/anchorColour.test.ts`, happy-dom) renders every fixture screen
+under every shipped look and holds every `<a>` `renderStall` builds to a
+rule in a sheet the app loads that declares `color` and matches the anchor
+itself at rest (a state rule or a pseudo-element's does not count) — a
+class rule colours a link in both states, so the visited colour is that
+colour. Proved red by taking `color` off `.door-nav a`: the door's two
+site-bar links on every look.
+
 **Three guards closed** (round 9, the critic's eighth pass, item 7).
 
 - **No other mark under text on a decoration**
@@ -3068,24 +3457,70 @@ colour and full-size gradient between the line and the root (the line's
 own box included), composited over it.
 
 - A gradient under the line (the notice's wash) is no single colour. The
-  outline is held to the colours the gradient paints: between its stops,
-  each composited over what lies under it, 4 levels either side. The
-  midpoint passes, and the look's ground fails.
-- A full-size `url()` layer under the line is a ground this rule cannot
+  outline is held to the colours the gradient paints **under the line
+  itself**: a linear gradient is evaluated across the line's own box (the
+  gradient line's share at each corner, the stops between and sixteen
+  steps, interpolated in premultiplied sRGB as CSS does), each colour
+  composited over what lies under it, 4 levels either side. The midpoint
+  passes, and the look's ground fails. (Until step 5b it was held to
+  anywhere between the gradient's stops — below.) A gradient this cannot
+  evaluate across a box (radial, conic, repeating) is held to its stops
+  and counted.
+- A `url()` layer of any size under the line is a ground this rule cannot
   read, so it fails.
-- The stall root's image layers are not read as the ground. These are the
-  stated exceptions, with the levels they leave at rest in the table below:
-  - the rain, which is what the outline is for;
-  - Neo's own backdrop (the cyan glow over the stall's top 480 px, and a
-    1 px scanline every 4 px) and the aurora's washes, which are gradients
-    across the whole stall that no single colour matches;
+- The stall root's image layers are read by what they are, never passed by
+  where they sit (below). These are the stated exceptions, each matched on
+  its own computed form and on the class that paints it
+  (`ROOT_LAYERS_SET_ASIDE`; the aurora's washes and tint by their exact
+  shape — the stops and their places — and colours that are the stall's
+  own two accents at no more than the alpha the sheet paints, never by the
+  form alone, the critic's item 7), with the levels they leave at rest in
+  the table below:
+  - the rain (`att-rainfall`), which is what the outline is for;
+  - Neo's own backdrop (`t-neo`: the cyan glow over the stall's top 480 px,
+    and a 1 px scanline every 4 px) and the aurora's washes and its tint
+    over the rain (`att-aurora`), which are gradients across the whole
+    stall that no single colour matches;
   - Neo's heading glow, which is a shadow under the heading's own outline,
     not a ground.
-- Not read, stated:
-  - a gradient sized smaller than its box (the vacant box's corner
-    brackets);
-  - a pseudo-element's ground, or a non-ancestor's;
-  - an ancestor's `opacity` or blend.
+  Any other root layer is read like a layer under the line: a colour or a
+  full-size gradient composited in, anything else a failure.
+- Set aside and counted by reason (`atRestSetAside`, on the pass's
+  `compared:` line): a gradient sized smaller than its box (the vacant
+  box's corner brackets, the sign's rules). Not read, stated: a
+  pseudo-element's ground, or a non-ancestor's; an ancestor's `opacity` or
+  blend.
+
+**Bounded, step 5b** (CRITIC-FINAL-MERGE item 3, the rule's exceptions were
+unbounded): every root image layer was passed by its position, so a new
+root decoration's layer was exempt the day it shipped; a gradient accepted
+any outline between its stops, so a wash from black to white accepted
+anything; a `url()` layer smaller than its box was passed silently; and
+nothing counted what was set aside. Now the root's layers are named
+(`a-new-root-layer-is-not-exempt-by-position`), the gradient is read under
+the line, every picture fails, and what is set aside is counted — on the
+day it landed, on the phone: the rain 1,653, the aurora's washes 972, its
+tint 486, Neo's scanlines and top glow 551 each (one per outlined line and
+layer), a gradient smaller than its box 169; the phone and desk passes owe
+the rain set aside wherever Neo is measured (`probe-coverage.mjs`). **Proved
+red**, and green on `main` with the same plants: a `url()` layer added to
+the rain-wearing Neo root → 201 lines "over a root layer this rule does not
+know … a-new-root-layer-is-not-exempt-by-position" (0 on `main`); the
+notice's outline set to its violet end over the ground, `rgb(18, 18, 37)`,
+inside the stops' range and not under the words → the four notice lines
+under every decoration fail "over a ground painted rgb(31, 17, 32) to
+rgb(40, 18, 34)" (0 on `main`).
+
+**Asked only where the rain is worn** (step 5b, CRITIC-FINAL-MERGE item 4).
+`an-outline-where-the-text-has-its-own-ground` and this rule read an
+element only inside a `.stall.att-rainfall`, where the outline is scoped in
+`stall.css`. Before, the probe read every opaque, unblurred `text-shadow`
+on every look as a would-be outline, so a look's own emboss failed as
+"neither outline set in one colour" — proved: `.t-rural .section-title {
+text-shadow: 0 1px 0 #fff }` read 206 such failures on `main` and none
+now. A look's own hard shadow is the look rules' business, and a
+decoration's is `an-outline-is-the-only-mark-under-text-on-a-decoration`'s
+(static, every served sheet).
 
 **Measured at rest** (`visible-batch-shots/15-outline-b/`, `levels.json`).
 Each figure is the largest level by which the outline changes a pixel with

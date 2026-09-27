@@ -10,6 +10,7 @@ const full = {
     doorMiniClasses: SHIPPED,
     ladderTiers: { 1: 2, 2: 1, 3: 1 },
     wallControlChecks: 24,
+    statusLineChecks: 50,
     wallControlRoles: {
         'window-back': 6,
         'window-pay': 6,
@@ -21,6 +22,10 @@ const full = {
     },
     floorNamedChecks: 900,
     outlineChecks: 400,
+    moneyChecks: 300,
+    haloChecks: 30,
+    atRestSetAside: { 'the rain': 120, 'Neo’s scanlines': 120 },
+    buntingChecks: 40,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
 };
 
@@ -40,6 +45,10 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 doorMiniClasses: ['t-modern', 't-neo'],
                 floorNamedChecks: 3,
                 outlineChecks: 5,
+                moneyChecks: 4,
+                haloChecks: 1,
+                atRestSetAside: { 'the rain': 1 },
+                buntingChecks: 2,
             },
             { shippedClasses: SHIPPED, skeleton: true },
         );
@@ -56,9 +65,29 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(phone, ['the-skeletons-ladder-steps-the-rows-size read no tier-1 figure']);
     });
 
+    it('owes money nodes asked on the phone and the desk, and nowhere else', () => {
+        for (const pass of ['mobile', 'desktop']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...full, moneyChecks: 0 }, { shippedClasses: SHIPPED, skeleton: true }), [
+                'the-money-set-is-every-protected-contrast-target asked no node',
+            ]);
+        }
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, moneyChecks: 0 }, { shippedClasses: SHIPPED }), []);
+    });
+
+    it('owes a bunting swept wherever Rural is measured, and nowhere else', () => {
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, buntingChecks: 0 }, { shippedClasses: SHIPPED, skeleton: true }), [
+            'the-bunting-never-swings-into-the-ornament-label swept no bunting',
+        ]);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...full, buntingChecks: 0 }, { shippedClasses: ['t-modern', 't-neo'] }).filter((g) => g.includes('bunting')), []);
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, buntingChecks: 0 }, { shippedClasses: SHIPPED }), []);
+    });
+
     it('owes an outlined line wherever Neo is measured, and nowhere else', () => {
         assert.deepEqual(probeCoverageGaps('mobile', { ...full, outlineChecks: 0 }, { shippedClasses: SHIPPED }), [
             'an-outline-where-the-text-has-its-own-ground read no outlined line',
+        ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, atRestSetAside: {} }, { shippedClasses: SHIPPED }), [
+            'an-outline-that-shows-at-rest read no rain-wearing root',
         ]);
         assert.deepEqual(probeCoverageGaps('desktop', { ...full, outlineChecks: 0 }, { shippedClasses: ['t-modern', 't-rural'] }).filter((g) => g.startsWith('an-outline')), []);
         assert.deepEqual(probeCoverageGaps('canvas', { ...full, outlineChecks: 0 }, { shippedClasses: SHIPPED }), []);
@@ -71,7 +100,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         ]);
         assert.deepEqual(probeCoverageGaps('mobile', phoneOnly, { shippedClasses: SHIPPED, skeleton: true }), []);
         // The canvas owes the stream's two skips and the wall's controls, and no label, row or ladder.
-        assert.deepEqual(probeCoverageGaps('canvas', { skipChecks: { 'stream-card': 1 }, wallControlRoles: full.wallControlRoles }, {
+        assert.deepEqual(probeCoverageGaps('canvas', { skipChecks: { 'stream-card': 1 }, wallControlRoles: full.wallControlRoles, statusLineChecks: 3 }, {
             shippedClasses: SHIPPED,
             skeleton: true,
         }), ['an-unbuyable-offer-paints-no-figure-and-says-so saw no stream-ticker skip an unbuyable listing']);
@@ -84,6 +113,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             assert.deepEqual(
                 probeCoverageGaps(pass, {
                     wallControlRoles: { ...full.wallControlRoles, 'window-step-fewer': 0, 'pay-borrowed': 0 },
+                    statusLineChecks: 3,
                 }),
                 [
                     'nothing-on-the-wall-is-cut-from-below read no window-step-fewer on a wall',
@@ -96,35 +126,35 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     });
 
     it('asks a kit run for the labels, skips and small text alone: it measures no shipped look and no skeleton', () => {
-        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40 };
+        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20, haloChecks: 2 };
         assert.deepEqual(probeCoverageGaps('mobile', kit), []);
         assert.deepEqual(probeCoverageGaps('desktop', kit), []);
-        assert.equal(probeCoverageGaps('mobile', {}).length, 3);
-        assert.equal(probeCoverageGaps('canvas', {}).length, 9);
+        assert.equal(probeCoverageGaps('mobile', {}).length, 5);
+        assert.equal(probeCoverageGaps('canvas', {}).length, 10);
     });
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(
             probeCoverageLine('canvas', quiet),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · wall controls read: 24',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · wall controls read: 24 · status line asked: 50',
         );
-        assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24');
+        assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24 · status line asked: 50');
         assert.equal(
             probeCoverageLine('tablet', {
                 ...quiet,
                 wallSlivers: ['pay-3 Modern: window-step-more 12/72px y', 'pay-3 Rural: window-step-more 28/72px y'],
             }),
-            'wall controls read: 24 · shown only in part inside a scroller: window-step-more ×2 (least 12/72px)',
+            'wall controls read: 24 · status line asked: 50 · shown only in part inside a scroller: window-step-more ×2 (least 12/72px)',
         );
         // Text no reader is given is printed on every pass that paints some.
         assert.equal(
             probeCoverageLine('portrait', full),
-            'wall controls read: 24 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
+            'wall controls read: 24 · status line asked: 50 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
         );
         assert.equal(probeCoverageLine('reduced-motion', full), '');
     });

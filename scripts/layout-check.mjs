@@ -297,6 +297,35 @@ function contrast(la, lb) {
 /** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
 const PIXEL_CONTRAST_FLOOR = 3;
 /**
+ * How far a channel may move inside a protected box between the frame with
+ * the look's pseudos and the frame without them before it counts as their
+ * paint (D6(i)): two levels, the capture's own noise across two frames of
+ * one still page (measured: none on the day it landed).
+ */
+const LOOK_PSEUDO_LEVELS = 2;
+/**
+ * The line targets that yield no line rect on screen, per viewport, as
+ * measured when step 5b landed (the critic, 2026-09-27): a line target
+ * whose every fragment is clipped away, or that is not rendered at this
+ * width, is counted and never failed — it is not on screen — so a change
+ * that clipped a whole line out of view would read green. These are
+ * ceilings, exact today: a pass that finds more fails and names the count;
+ * one that finds fewer says so, and the number here should come down with
+ * the change that lowered it.
+ */
+const LINE_SKIP_CEILING = {
+    mobile: { 'clipped-away': 63, 'not-rendered': 35 },
+    desktop: { 'clipped-away': 23, 'not-rendered': 28 },
+    canvas: { 'clipped-away': 726, 'not-rendered': 0 },
+};
+/**
+ * `LAYOUT_LEGACY=1` reads every line-read target the pre-5b way too, on the
+ * same capture, and writes the old value and — for a fall — its bucket into
+ * the dump (`legacy`, `at`, `bucket`): the measurement step 5b's commit body
+ * carries, and the way to ask it again.
+ */
+const LEGACY = process.env.LAYOUT_LEGACY === '1';
+/**
  * The contrast jobs that must have had Neo's rain at its brightest drop
  * (`a-line-on-the-ground-reads-wherever-a-drop-falls`): Neo worn, at the
  * phone and the desk, on the screens whose lines stand on the stall's own
@@ -511,7 +540,7 @@ function ringRead(blank, shown, target) {
  * included, which is the whole point: `legibleOn` proves the flat palette
  * roles, and nothing else proves what is actually painted behind a figure.
  */
-function worstContrastInBox(img, target, textColor) {
+function worstContrastInBox(img, target, textColor, { legacy = false } = {}) {
     // Browsers serialize a color-mix() result as color(srgb r g b) with
     // 0-1 floats; plain colours stay rgb(). Read both.
     let cr;
@@ -539,7 +568,22 @@ function worstContrastInBox(img, target, textColor) {
     const r = target.r ?? 0;
     // The border's own pixels are chrome, never the text's ground: a dashed
     // pill edge blended to 2.2:1 against its ink is not a reading surface.
-    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.pad ?? 0);
+    // The pad for a box inside a turned frame was a fixed 8px until step 5b
+    // (`legacyPad`, kept for the legacy read the bucketing compares
+    // against); a turned money box is now read at the lattice points inside
+    // its own turned box (`frame`, below), and dropped a Rural price figure
+    // at 17px tall no more.
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (legacy ? (target.legacyPad ?? 0) : (target.pad ?? 0));
+    const frame = legacy ? undefined : target.frame;
+    const cos = Math.cos(target.angle ?? 0);
+    const sin = Math.sin(target.angle ?? 0);
+    const inset = (target.bw ?? 0) + (target.bw ? 1 : 0) + 1;
+    const inFrame = (x, y) => {
+        if (frame === undefined) return true;
+        const dx = x + 0.5 - frame.cx;
+        const dy = y + 0.5 - frame.cy;
+        return Math.abs(dx * cos + dy * sin) <= frame.w / 2 - r - inset && Math.abs(-dx * sin + dy * cos) <= frame.h / 2 - inset;
+    };
     /*
      * Both far edges use `floor`, not `ceil` (2026-09-22). A box rarely
      * lands on whole pixels: at `y + h = 340.5` the last row Chrome paints
@@ -566,12 +610,9 @@ function worstContrastInBox(img, target, textColor) {
     let worst = Infinity;
     const stepX = Math.max(1, Math.floor((x1 - x0) / 12));
     const stepY = Math.max(1, Math.floor((y1 - y0) / 8));
-    // Chrome laid over the box (the face's cue on the hero tile's corner)
-    // is stepped around like the border: see CHROME_ON_TEXT in the probe.
-    const holes = target.holes ?? [];
     for (let y = y0; y <= y1; y += stepY) {
         for (let x = x0; x <= x1; x += stepX) {
-            if (holes.some((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h)) {
+            if (!inFrame(x, y)) {
                 continue;
             }
             const i = (y * img.width + x) * img.bpp;
@@ -592,7 +633,92 @@ function worstContrastInBox(img, target, textColor) {
             }
         }
     }
-    return worst;
+    // A turned frame whose every lattice point fell outside it read nothing.
+    return worst === Infinity && frame !== undefined ? undefined : worst;
+}
+
+/**
+ * The band `worstContrastInBox` walks for a target read the way it was read
+ * before step 5b — the box less its radius, its border and its fixed
+ * transform pad — for the bucketing to ask whether a line read's worst
+ * pixel was one the old read could have seen.
+ */
+function legacyBand(img, target) {
+    const r = target.r ?? 0;
+    const bw = (target.bw ?? 0) + (target.bw ? 1 : 0) + (target.legacyPad ?? 0);
+    return {
+        x0: Math.max(0, Math.floor(target.x + r + bw) + 1),
+        y0: Math.max(0, Math.floor(target.y + bw) + 1),
+        x1: Math.min(img.width - 1, Math.floor(target.x + target.w - r - bw) - 1),
+        y1: Math.min(img.height - 1, Math.floor(target.y + target.h - bw) - 1),
+    };
+}
+
+/**
+ * **The line read** (D7, step 5b; `PROBE-RULES.md`, "The sampler reads
+ * text"). Every target outside the money set that wears no outline is read
+ * over its own text's line rects (`lineRectsOf` in the probe), never over
+ * its box: every pixel wholly inside a rect — no lattice, no radius or
+ * border inset, since a line rect holds no border and no arc — and, where
+ * the line's frame is turned, only the pixels inside the turned line box.
+ * Each rect is read against its own ink, so a muted name inside an ink
+ * control is read against the muted ink. Returns the worst contrast, the pixels read,
+ * and where the worst one was.
+ */
+function lineRead(img, target) {
+    let worst = Infinity;
+    let px = 0;
+    let at;
+    for (const rect of target.rects) {
+        const [ir, ig, ib] = rgbaOf(rect.ink);
+        const inkLum = luminance(ir, ig, ib);
+        const x0 = Math.max(0, Math.ceil(rect.x));
+        const y0 = Math.max(0, Math.ceil(rect.y));
+        const x1 = Math.min(img.width - 1, Math.floor(rect.x + rect.w) - 1);
+        const y1 = Math.min(img.height - 1, Math.floor(rect.y + rect.h) - 1);
+        const turned = Math.abs(rect.angle) > 1e-9;
+        const cos = Math.cos(rect.angle);
+        const sin = Math.sin(rect.angle);
+        for (let y = y0; y <= y1; y += 1) {
+            for (let x = x0; x <= x1; x += 1) {
+                if (turned) {
+                    const dx = x + 0.5 - rect.cx;
+                    const dy = y + 0.5 - rect.cy;
+                    if (Math.abs(dx * cos + dy * sin) > rect.rw / 2 - 0.5 || Math.abs(-dx * sin + dy * cos) > rect.rh / 2 - 0.5) continue;
+                }
+                const i = (y * img.width + x) * img.bpp;
+                px += 1;
+                const c = contrast(inkLum, luminance(img.data[i], img.data[i + 1], img.data[i + 2]));
+                if (c < worst) {
+                    worst = c;
+                    at = { x, y, ink: rect.ink, glyph: rect.glyph === true, ground: [img.data[i], img.data[i + 1], img.data[i + 2]] };
+                }
+            }
+        }
+    }
+    return { worst, px, at };
+}
+
+/**
+ * Where a line read's worst pixel was, against the read before step 5b on
+ * the same capture (`LAYOUT_LEGACY=1`): only asked of a fall. `ink` when the
+ * worst pixel's line wears another ink than the target's own (a nested
+ * element's colour, which the box read never compared); `lattice` when it
+ * lies inside the old band, where only the old lattice's spacing missed it;
+ * `spill` when it lies past the box's side, `content-area` past its top or
+ * bottom (a font's content area is taller than a tight line box); `inset`
+ * inside the box and outside the band — the radius, the border, the old
+ * 8px transform pad. A line cut by a clip only ever shrinks the read, so a
+ * clip causes no fall.
+ */
+function bucketOf(img, target, at) {
+    if (at === undefined) return 'dropped';
+    if (at.ink !== target.color) return 'ink';
+    const band = legacyBand(img, target);
+    if (at.x >= band.x0 && at.x <= band.x1 && at.y >= band.y0 && at.y <= band.y1) return 'lattice';
+    if (at.x < target.x || at.x >= target.x + target.w) return 'spill';
+    if (at.y < target.y || at.y >= target.y + target.h) return 'content-area';
+    return 'inset';
 }
 
 /**
@@ -649,19 +775,20 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined) {
     const args = `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}`;
+    const tideArg = tide === undefined ? 'undefined' : String(tide);
     if (heightOnly) {
         // The paint and its height, and nothing to wait for: no box is
         // collected and no glyph blanked on a paint the grow throws away.
-        return evalJson(cdp, sessionId, `window.__contrastPrepare(${args}, true)`);
+        return evalJson(cdp, sessionId, `window.__contrastPrepare(${args}, true, ${tideArg})`);
     }
     const r = await cdp.send(
         'Runtime.evaluate',
         {
             expression:
                 `(async () => { ` +
-                `const out = window.__contrastPrepare(${args}); ` +
+                `const out = window.__contrastPrepare(${args}, false, ${tideArg}); ` +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -712,6 +839,16 @@ function paintEcho(job, out, nonce, width, height) {
     const rain = out.rain ?? { worn: 0, flattened: 0 };
     if (rain.worn !== rain.flattened) {
         why.push(`${rain.worn} stall(s) wore the rain and ${rain.flattened} had it at its brightest`);
+    }
+    // The aurora worn alone at one end of its tide (`TIDE_JOBS`): every
+    // stall wearing it had the tide held there, and a job that asked for no
+    // tide held none.
+    const tide = out.tide ?? { worn: 0, held: 0 };
+    if (job.tide !== undefined && !(tide.worn > 0 && tide.held === tide.worn)) {
+        why.push(`${tide.worn} stall(s) wore the aurora and ${tide.held} had its tide held at ${job.tide}`);
+    }
+    if (job.tide === undefined && tide.held > 0) {
+        why.push(`${tide.held} stall(s) had the aurora's tide held on a job that asked for none`);
     }
     const classes = out.sheetClasses ?? [];
     if (job.screen === 'door') {
@@ -939,6 +1076,12 @@ try {
             '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
             '--no-sandbox',
             '--hide-scrollbars',
+            // Every tile rastered whole (step 5b, D6): with partial raster on,
+            // a frame could carry a tile from before a style change, and the
+            // look-pseudo check compares two frames pixel for pixel —
+            // `looks-diff.mjs` measured the same flag's absence as a Neo
+            // pixel and a Rural card corner in one of two states per load.
+            '--disable-partial-raster',
             `--user-data-dir=${profile}`,
             `--remote-debugging-port=${DEVTOOLS_PORT}`,
             'about:blank',
@@ -1390,6 +1533,12 @@ try {
     // The least ring read per kind of outlined line (`ringRead`), printed
     // whatever the verdict.
     const ringKindsOut = new Map();
+    // The prepared nodes that gave no box, summed by reason (step 5b).
+    const skipTotals = new Map();
+    // Visible text no contrast target reads, by element kind, and on how many jobs.
+    const uncoveredKinds = new Map();
+    // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
+    const lineSkips = {};
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1402,6 +1551,17 @@ try {
         let ringTargets = 0;
         let ringPixels = 0;
         let ringLeastPerChar = Infinity;
+        // Outlined money figures ring-read, each on a job whose rain was at
+        // its brightest (`an-outlined-money-figure-is-ring-read-at-its-worst`).
+        let moneyRingRead = 0;
+        // D6(i): jobs whose look pseudos were hidden and compared, and the
+        // protected-box pixels compared.
+        let lookPseudoJobs = 0;
+        let lookPseudoPixels = 0;
+        // Jobs with the aurora worn alone and its tide held at an end
+        // (`the-aurora-is-read-at-both-ends-of-its-tide`, `TIDE_SCREENS`).
+        let tideJobs = 0;
+        let lineTargets = 0;
         const ringKinds = ringKindsOut;
         // Every class the prepares painted: each one must be a class this run
         // measures, and together they must be all of them.
@@ -1450,9 +1610,22 @@ try {
                 currentStep = `contrast job ${plannedJob.key}`;
                 done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
                 const { screen, look: theme, flags } = plannedJob;
-                const wornAll = flags !== 0;
                 const reduced = plannedJob.reduced === true;
-                const job = { pass: 'contrast', viewport: vp.name, screen, look: theme, flags, ...(reduced ? { reduced } : {}) };
+                const tideHeld = plannedJob.tide;
+                // How a line names the job's decorations: all worn, a solo
+                // row's bits, the aurora's tide held (`TIDE_SCREENS`).
+                const wornLabel =
+                    (flags === 0 ? '' : flags === 0xffff ? ' + worn' : ` + flags ${flags}`) +
+                    (tideHeld === undefined ? '' : ` tide ${tideHeld}`);
+                const job = {
+                    pass: 'contrast',
+                    viewport: vp.name,
+                    screen,
+                    look: theme,
+                    flags,
+                    ...(reduced ? { reduced } : {}),
+                    ...(tideHeld === undefined ? {} : { tide: tideHeld }),
+                };
                 // A job of `REDUCED_JOBS` is painted under reduced motion: a
                 // box the sampler cannot read while it moves (Rural's swaying
                 // tag) is read stilled. Switched per job, and back after it.
@@ -1484,7 +1657,7 @@ try {
                 let nonce;
                 const prepare = (neutral, heightOnly = false) => {
                     nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly);
+                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide);
                 };
                 // First paint tells us how tall the page is — the document,
                 // and the viewport it takes for the shell's region and an
@@ -1552,6 +1725,9 @@ try {
                         continue;
                     }
                     for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                    if ((prep.tide?.held ?? 0) > 0) {
+                        tideJobs += 1;
+                    }
                     if ((prep.rain?.flattened ?? 0) > 0) {
                         rainJobs += 1;
                         rainKeys.add(plannedJob.key);
@@ -1599,6 +1775,16 @@ try {
                         continue;
                     }
                     let targets = firstRead.live.boxes;
+                    // Every prepared node that gave no box, by the reason the
+                    // page gave (step 5b: no silent drop) — per job in the
+                    // dump, summed on the pass's line.
+                    for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
+                    record.skips = firstRead.live.skips ?? {};
+                    for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
+                    for (const why of ['clipped-away', 'not-rendered']) {
+                        const at = (lineSkips[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+                        at[why] += record.skips[why] ?? 0;
+                    }
                     // A failing box is re-shot once before it is believed:
                     // capture right after an emulated resize can raster a
                     // stale frame — measured: the live DOM held transparent
@@ -1622,18 +1808,41 @@ try {
                     const sampleStart = performance.now();
                     let retryMs = 0;
                     let retryWhy = [];
+                    /*
+                     * One target's read: a money box or a box with no line
+                     * rects whole (`worstContrastInBox`), every other target
+                     * over its line rects (`lineRead`, D7). `undefined` when
+                     * the read found no pixel — never a silent drop (step
+                     * 5b): the target is named below and the job fails.
+                     */
+                    const readOne = (image, t) => {
+                        if (t.rects === undefined) {
+                            return { worst: worstContrastInBox(image, t, t.color), px: undefined, at: undefined };
+                        }
+                        const r = lineRead(image, t);
+                        return { worst: r.px > 0 ? r.worst : undefined, px: r.px, at: r.at };
+                    };
                     for (let ti = 0; ti < targets.length; ti += 1) {
                         let t = targets[ti];
                         // An outlined line is read in its ring, below.
                         if (t.ring > 0) continue;
-                        let worst = worstContrastInBox(img, t, t.color);
+                        let read = readOne(img, t);
+                        let worst = read.worst;
+                        const kind = t.rects === undefined ? 'box' : 'line';
                         if (worst === undefined) {
                             dropped += 1;
-                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null });
+                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null, read: kind });
+                            dim.push(
+                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                    (kind === 'line'
+                                        ? `has ${t.rects.length} line rect(s) on screen and no pixel wholly inside one — a target with text and no sample`
+                                        : `is ${t.money ? 'money' : 'a box'} the whole-box read found no pixel of — a target with no sample`),
+                            );
                             continue;
                         }
                         boxes += 1;
                         sampled += 1;
+                        if (kind === 'line') lineTargets += 1;
                         let firstWorst;
                         if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
                             const retryStart = performance.now();
@@ -1649,10 +1858,11 @@ try {
                                 t = targets[ti];
                             }
                             retried = true;
-                            worst = worstContrastInBox(img, t, t.color);
+                            read = readOne(img, t);
+                            worst = read.worst;
                             retryMs += performance.now() - retryStart;
                         }
-                        dumpBoxes.push({
+                        const entry = {
                             key: boxKey(job, t),
                             job: record.key,
                             i: t.i,
@@ -1663,13 +1873,33 @@ try {
                             h: t.h,
                             color: t.color,
                             worst: dumpValue(worst),
+                            read: kind,
                             ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
-                        });
+                        };
+                        if (kind === 'line') {
+                            entry.rects = t.rects.length;
+                            entry.px = read.px;
+                            if (LEGACY) {
+                                // The read before step 5b on this same
+                                // capture, and — for a fall — where the new
+                                // read's worst pixel lies against it.
+                                const legacy = t.legacyDropped ? undefined : worstContrastInBox(img, t, t.color, { legacy: true });
+                                entry.legacy = dumpValue(legacy);
+                                entry.at = read.at === undefined ? null : [read.at.x, read.at.y];
+                                if (legacy !== undefined && worst !== undefined && worst < legacy) {
+                                    entry.bucket = bucketOf(img, t, read.at);
+                                }
+                            }
+                        }
+                        dumpBoxes.push(entry);
                         if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                             dim.push(
-                                `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ` +
+                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
                                     `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
-                                    (process.env.LAYOUT_WHY ? `\n        ${globalThis.__why ?? ''}` : ''),
+                                    (kind === 'line' && read.at !== undefined
+                                        ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
+                                        : '') +
+                                    (process.env.LAYOUT_WHY && kind === 'box' ? `\n        ${globalThis.__why ?? ''}` : ''),
                             );
                         }
                     }
@@ -1739,6 +1969,26 @@ try {
                         sampled += results.length;
                         for (const { t, r } of results) {
                             ringTargets += 1;
+                            if (t.money) {
+                                /*
+                                 * A money box is never read by a weaker
+                                 * verdict (step 5b; PROPOSAL §12 as amended):
+                                 * a figure outlined on a decoration's bare
+                                 * ground is read in its ring — every solid
+                                 * ring pixel, no percentile — and only with
+                                 * the decoration at its worst. The outline
+                                 * is worn only where the rain is, and a job
+                                 * whose rain was not flattened is refused
+                                 * by its echo (`paintEcho`); this holds the
+                                 * money half to it by name.
+                                 */
+                                moneyRingRead += 1;
+                                if (!((prep.rain?.flattened ?? 0) > 0)) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
+                                    );
+                                }
+                            }
                             ringPixels += r.ringPx;
                             if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
                             const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
@@ -1765,7 +2015,7 @@ try {
                                 chars: r.chars,
                                 bareLines: r.bare.length,
                             });
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornAll ? ' + worn' : ''}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
                             if (r.ringPx === 0 || r.thin.length > 0) {
                                 const line = r.thin[0];
                                 dim.push(
@@ -1791,6 +2041,75 @@ try {
                         entry.calls += 1;
                         entry.ms += performance.now() - ringStart;
                         phases.set('ring', entry);
+                    }
+                    /*
+                     * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
+                     * (step 5b; the probe's `markLookPseudos`): where the job's
+                     * scope holds a look pseudo, a frame with every one of
+                     * them hidden against a fresh frame with them shown,
+                     * compared inside every protected box a device pixel in
+                     * from each edge. A pixel that moved is a look pseudo
+                     * painting over money, a code or a control. No capture
+                     * where no look pseudo exists.
+                     */
+                    if (retryWhy.length === 0 && (prep.lookPseudos ?? 0) > 0) {
+                        const lpStart = performance.now();
+                        const hidden = async (hide) => {
+                            const r = await cdp.send(
+                                'Runtime.evaluate',
+                                { expression: `window.__lookPseudosHidden(${hide})`, awaitPromise: true, returnByValue: true },
+                                sessionId,
+                            );
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const on = await capture();
+                        await hidden(true);
+                        const off = await capture();
+                        await hidden(false);
+                        const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
+                        const why = [...on.why, ...off.why];
+                        if (why.length > 0) {
+                            retryWhy = why.map((w) => `for the look-pseudo frames, ${w}`);
+                        } else {
+                            lookPseudoJobs += 1;
+                            let changedAll = 0;
+                            for (const b of shields) {
+                                const x0 = Math.max(0, Math.ceil(b.x) + 1);
+                                const y0 = Math.max(0, Math.ceil(b.y) + 1);
+                                const x1 = Math.min(on.shot.width - 1, Math.floor(b.x + b.w) - 2);
+                                const y1 = Math.min(on.shot.height - 1, Math.floor(b.y + b.h) - 2);
+                                let changed = 0;
+                                let first;
+                                for (let y = y0; y <= y1; y += 1) {
+                                    for (let x = x0; x <= x1; x += 1) {
+                                        const i = (y * on.shot.width + x) * on.shot.bpp;
+                                        lookPseudoPixels += 1;
+                                        if (
+                                            Math.abs(on.shot.data[i] - off.shot.data[i]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.shot.data[i + 1] - off.shot.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.shot.data[i + 2] - off.shot.data[i + 2]) > LOOK_PSEUDO_LEVELS
+                                        ) {
+                                            changed += 1;
+                                            first ??= [x, y];
+                                        }
+                                    }
+                                }
+                                changedAll += changed;
+                                if (changed > 0) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
+                                            `changes ${changed} px (the first at ${first.join(',')}) when the look's pseudo-elements are hidden — ` +
+                                            `no-look-pseudo-paints-inside-a-protected-box`,
+                                    );
+                                }
+                            }
+                            record.lookPseudos = { marked: prep.lookPseudos, boxes: shields.length, changed: changedAll };
+                        }
+                        const entry = phases.get('look pseudos') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - lpStart;
+                        phases.set('look pseudos', entry);
                     }
                     record.sampled = sampled;
                     record.dropped = dropped;
@@ -1868,6 +2187,41 @@ try {
             // no rain job samples paints it (`RAIN_JOBS`).
             verdicts.push(`an outline nobody reads — outlined on a screen the pass paints and never ring-read: ${unread.join(', ')}`);
         }
+        if (LOOKS === 'shipped') {
+            for (const [viewport, ceiling] of Object.entries(LINE_SKIP_CEILING)) {
+                for (const [why, most] of Object.entries(ceiling)) {
+                    const n = lineSkips[viewport]?.[why] ?? 0;
+                    if (n > most) {
+                        verdicts.push(
+                            `${n} line target(s) ${why} at ${viewport}, over the ${most} measured when step 5b landed — a line clipped out of view reads green unless this is held (LINE_SKIP_CEILING)`,
+                        );
+                    } else if (n < most) {
+                        console.log(`  ${viewport}: ${n} line target(s) ${why}, under the ${most} LINE_SKIP_CEILING holds — lower it`);
+                    }
+                }
+            }
+        }
+        if (LOOKS === 'shipped' && lookPseudoJobs === 0) {
+            // Neo's sheet generates pseudos on every screen with a heading or
+            // a Wearing line: a shipped run that compared no frame proved
+            // nothing.
+            verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
+        }
+        if (LOOKS === 'shipped' && tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
+            // Every planned tide job held the tide (a job that did not is
+            // refused by its echo); a count that differs is a walk that lost
+            // some, said by name.
+            verdicts.push(`the-aurora-is-read-at-both-ends-of-its-tide held the tide on ${tideJobs} of ${plan.filter((j) => j.tide !== undefined).length} planned job(s)`);
+        }
+        if (LOOKS === 'shipped' && plan.every((j) => j.tide === undefined)) {
+            verdicts.push('the-aurora-is-read-at-both-ends-of-its-tide: the plan holds no tide job — vacuous green');
+        }
+        if (LOOKS === 'shipped' && moneyRingRead === 0) {
+            // The Activity fold's receipt amount is outlined on Neo worn: a
+            // shipped run that ring-read no money figure proved the rule over
+            // nothing.
+            verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
+        }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is
             // vacuous: the shipped rain outlines lines on every Neo worn
@@ -1883,7 +2237,10 @@ try {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
-                        `${ringTargets} outlined line(s) ring-read (${ringPixels} ring pixels, ` +
+                        `${lookPseudoJobs} job(s) with look pseudos hidden and compared (${lookPseudoPixels} protected pixels), ` +
+                        `the aurora's tide held at an end on ${tideJobs}, ` +
+                        `${lineTargets} of them over their line rects, ` +
+                        `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
                 );
             }
@@ -1918,6 +2275,30 @@ try {
                             ` (${k.ring}px, ${k.n})`,
                     )
                     .join('; '),
+        );
+    }
+    // Every prepared node that gave no box, by the page's reason, whatever
+    // the verdict (step 5b: no silent drop): a picture tile, a box that
+    // draws nothing, a whole-box read cut to a sliver, text scrolled wholly
+    // behind a clip, text not rendered at this width.
+    if (skipTotals.size > 0) {
+        console.log(
+            `  nodes that gave no box: ` +
+                [...skipTotals]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([why, n]) => `${why} ${n}`)
+                    .join(', '),
+        );
+    }
+    // Visible text no target reads (a report, never a verdict): each element
+    // kind and on how many jobs it stood unread.
+    if (uncoveredKinds.size > 0) {
+        console.log(
+            `  text no target reads (${uncoveredKinds.size} kinds; jobs): ` +
+                [...uncoveredKinds]
+                    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                    .map(([kind, n]) => `${kind} ${n}`)
+                    .join(', '),
         );
     }
     // Printed whatever the verdict, a pass that threw included: a slow red

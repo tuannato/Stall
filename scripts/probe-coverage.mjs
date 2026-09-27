@@ -27,6 +27,19 @@
  *   comparing a nonzero count.
  * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines Neo's
  *   rain outlines, on the phone and desk passes wherever Neo is measured.
+ * - **`the-money-set-is-every-protected-contrast-target`** runs on every
+ *   geometry pass; the phone and desk passes owe nodes asked (a canvas or
+ *   wall pass may paint none of one kind, so it owes nothing here).
+ * - **`an-outline-that-shows-at-rest`** reads the rain-wearing root's
+ *   layers by what they are, on the phone and desk passes wherever Neo is
+ *   measured: the rain is set aside there by name, or no root was read.
+ * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
+ *   on the three wall passes.
+ * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
+ *   bunting on the phone and desk passes wherever Rural is measured.
+ * - **`a-halo-never-reaches-a-neighbours-text`** runs on every geometry
+ *   pass; the phone and desk passes owe halos asked (the sticky sheet
+ *   head's slab among them).
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
@@ -81,6 +94,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
             }
         }
     }
+    if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
+        gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
+    }
     const places = UNBUYABLE_PLACES[pass];
     if (places === undefined) return gaps;
     const read = report.unbuyableChecks ?? {};
@@ -95,13 +111,30 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
+    if (!((report.haloChecks ?? 0) > 0)) {
+        gaps.push('a-halo-never-reaches-a-neighbours-text asked no halo');
+    }
+    if (!((report.moneyChecks ?? 0) > 0)) {
+        gaps.push('the-money-set-is-every-protected-contrast-target asked no node');
+    }
     if (!((report.floorNamedChecks ?? 0) > 0)) {
         gaps.push('small-text-is-at-least-11px read no named small-text node');
+    }
+    // Rural's bunting sways in its ornament strip; a pass that measured
+    // Rural and swept no row swept none of them (`movingDecor.ts`).
+    if (shippedClasses.includes('t-rural') && !((report.buntingChecks ?? 0) > 0)) {
+        gaps.push('the-bunting-never-swings-into-the-ornament-label swept no bunting');
     }
     // Neo's rain outlines every line on its bare ground, so a pass that
     // measured Neo and read no outline read none of them.
     if (shippedClasses.includes('t-neo') && !((report.outlineChecks ?? 0) > 0)) {
         gaps.push('an-outline-where-the-text-has-its-own-ground read no outlined line');
+    }
+    // The at-rest rule reads the rain-wearing root's layers by what they
+    // are: a pass that measured Neo and set the rain aside nowhere read no
+    // root at all (`a-new-root-layer-is-not-exempt-by-position`).
+    if (shippedClasses.includes('t-neo') && !(((report.atRestSetAside ?? {})['the rain'] ?? 0) > 0)) {
+        gaps.push('an-outline-that-shows-at-rest read no rain-wearing root');
     }
     const rows = new Set(report.rowSizeClasses ?? []);
     const minis = new Set(report.doorMiniClasses ?? []);
@@ -130,7 +163,7 @@ export function probeCoverageLine(pass, report) {
     // never failed — on every pass that paints some, not the page ones only.
     const hiddenSmall = (report.smallText ?? []).length === 0 ? '' : ` · under 11px, aria-hidden: ${report.smallText.join('; ')}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -159,6 +192,10 @@ export function probeCoverageLine(pass, report) {
         ` · small text read: ${report.floorNamedChecks ?? 0}` +
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
+        ` · money nodes asked: ${report.moneyChecks ?? 0}` +
+        ` · halos asked: ${report.haloChecks ?? 0}` +
+        ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
+        ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
     );
 }

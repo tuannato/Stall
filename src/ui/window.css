@@ -454,6 +454,43 @@
     }
 }
 
+/*
+ * A 1080-tall landscape wall — the screen this feature is for — steps the
+ * Cycle card down so it ends above the status line (step 5b, the owner's
+ * (a), 2026-09-26).
+ *
+ * The stacked card (name, figure, then the code under them) was sized for a
+ * body that is not there once a sign carries an announcement and a look
+ * wears its yard: measured on `main`, the card ran 110px over the status
+ * bar on Rural with the Yard beetle (the bar's "Showing listings" and
+ * "Updated …" painted under the card's own edge), 10px on Rural bare and
+ * 9px on Modern under the Awning. The code is not what gives: it is the one
+ * number here that is not taste (`WINDOW_QR_PX`), and every decoration stays
+ * as worn. What steps down is the card's own air — its padding, its row
+ * gap and the body's padding — and then the figure and the name, as the
+ * tablet's block steps its own. At 900 tall and under the code moves beside
+ * the figure instead (the block above), so this one starts above that.
+ * `nothing-in-the-body-reaches-the-status-line` is the probe's rule for it.
+ */
+@container sw (orientation: landscape) and (min-height: 901px) and (max-height: 1200px) {
+    .stall.shop-window[data-mode='cycle'] .stall-body {
+        padding-block: 10px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-head {
+        padding: 16px 40px;
+        row-gap: 8px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-n {
+        font-size: clamp(26px, min(4.8cqh, 4cqw), 52px);
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-x {
+        font-size: clamp(40px, min(7.4cqh, 6.4cqw), 80px);
+    }
+}
+
 /* ---------- browse: a price list, and one code for the shop ---------- */
 
 .stall.shop-window[data-mode='browse'] .stall-body {
@@ -709,6 +746,21 @@
     .stall.shop-window[data-mode='cycle'] .item-from,
     .stall.shop-window[data-mode='cycle'] .item-u {
         font-size: 20px;
+    }
+
+    /* The card's own air steps down here too (step 5b): the same overflow
+       the 1080-tall landscape wall had, found at the counter tablet by
+       `nothing-in-the-body-reaches-the-status-line` the day it landed —
+       48px over the status line on Rural with the Yard beetle, 2.5px on
+       Modern under every decoration. The code is at its 280px floor here
+       already, so only the padding and the gap give. */
+    .stall.shop-window[data-mode='cycle'] .stall-body {
+        padding-block: 10px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-head {
+        padding: 16px 32px;
+        row-gap: 8px;
     }
 }
 
