@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
+import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 const full = {
@@ -24,6 +24,7 @@ const full = {
     outlineChecks: 400,
     moneyChecks: 300,
     haloChecks: 30,
+    fileClipChecks: 5000,
     atRestSetAside: { 'the rain': 120, 'Neo’s scanlines': 120 },
     buntingChecks: 40,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
@@ -47,6 +48,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 outlineChecks: 5,
                 moneyChecks: 4,
                 haloChecks: 1,
+                fileClipChecks: 1,
                 atRestSetAside: { 'the rain': 1 },
                 buntingChecks: 2,
             },
@@ -126,17 +128,17 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     });
 
     it('asks a kit run for the labels, skips and small text alone: it measures no shipped look and no skeleton', () => {
-        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20, haloChecks: 2 };
+        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20, haloChecks: 2, fileClipChecks: 90 };
         assert.deepEqual(probeCoverageGaps('mobile', kit), []);
         assert.deepEqual(probeCoverageGaps('desktop', kit), []);
-        assert.equal(probeCoverageGaps('mobile', {}).length, 5);
+        assert.equal(probeCoverageGaps('mobile', {}).length, 6);
         assert.equal(probeCoverageGaps('canvas', {}).length, 10);
     });
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(
@@ -157,5 +159,66 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             'wall controls read: 24 · status line asked: 50 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
         );
         assert.equal(probeCoverageLine('reduced-motion', full), '');
+    });
+});
+
+describe('a-look-is-measured-with-its-sheet', () => {
+    /** A pass owes, for every look it measures but the skeleton, a stall whose sheet named it. */
+    it('refuses a pass that read no sheet name for a look it measures, on every pass', () => {
+        for (const pass of ['mobile', 'desktop', 'canvas', 'portrait', 'tablet']) {
+            const gaps = probeCoverageGaps(pass, { ...full, lookSheetsRead: ['t-modern', 't-neo'] }, { sheetedClasses: SHIPPED });
+            assert.ok(gaps.includes("a-look-is-measured-with-its-sheet read no sheet's name on a t-rural stall"), `${pass}: ${gaps.join('; ')}`);
+            const whole = probeCoverageGaps(pass, { ...full, lookSheetsRead: SHIPPED }, { sheetedClasses: SHIPPED });
+            assert.ok(!whole.some((g) => g.startsWith('a-look-is-measured-with-its-sheet')), `${pass}: ${whole.join('; ')}`);
+        }
+    });
+});
+
+describe('a-worn-only-sheet-loads-under-the-production-policy', () => {
+    const held = {
+        url: '/assets/fixture-look-abc.css',
+        before: '',
+        loaded: true,
+        error: '',
+        last: true,
+        sameOrigin: true,
+        after: 't-fixture-worn',
+        art: [200],
+        missingRejected: true,
+        inEntryCss: false,
+        refusals: [],
+    };
+
+    it('holds a job that loaded, landed last, named itself, fetched its art and refused a missing sheet', () => {
+        assert.deepEqual(wornSheetJobFaults(held), []);
+    });
+
+    it('names each way the road can fail', () => {
+        for (const [change, pattern] of [
+            [{ before: 't-fixture-worn' }, /in the entry CSS/],
+            [{ inEntryCss: true }, /already on the page/],
+            [{ loaded: false, error: 'the look sheet at x did not load', after: '' }, /did not load/],
+            [{ last: false }, /did not land after/],
+            [{ sameOrigin: false }, /not same-origin/],
+            [{ after: '' }, /names ""/],
+            [{ art: [] }, /never fetched/],
+            [{ art: [404] }, /answered 404/],
+            [{ missingRejected: false }, /did not reject/],
+            [{ refusals: [{ directive: 'style-src-elem', blocked: 'inline', source: '' }] }, /refused inline under style-src-elem/],
+        ]) {
+            const faults = wornSheetJobFaults({ ...held, ...change });
+            assert.ok(faults.some((f) => pattern.test(f)), `${JSON.stringify(change)}: ${faults.join('; ') || '(none)'}`);
+        }
+    });
+});
+
+describe('no-word-is-clipped-by-a-file', () => {
+    it('refuses a phone or desk pass that asked no element with words, and owes nothing elsewhere', () => {
+        for (const pass of ['mobile', 'desktop']) {
+            const gaps = probeCoverageGaps(pass, { ...full, fileClipChecks: 0 }, { shippedClasses: SHIPPED });
+            assert.ok(gaps.includes('no-word-is-clipped-by-a-file asked no element with words'), `${pass}: ${gaps.join('; ')}`);
+        }
+        const canvas = probeCoverageGaps('canvas', { ...full, fileClipChecks: 0 }, { shippedClasses: SHIPPED });
+        assert.ok(!canvas.some((g) => g.startsWith('no-word-is-clipped-by-a-file')), canvas.join('; '));
     });
 });

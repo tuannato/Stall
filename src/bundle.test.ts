@@ -3,6 +3,16 @@ import { join } from 'node:path';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { KIT_SKELETON } from '../layout/workshopStarter';
+import { wornSheets } from '../scripts/sheet-roles.mjs';
+import {
+    LOOK_ART_BUDGET_GZIP,
+    bytesOf,
+    lookArtBudget,
+    weightBuckets,
+    type BuiltPart as WeighedPart,
+} from '../scripts/weight-buckets.mjs';
+import { attachmentsForTheme } from './domain/attachments';
+import { SHIPPED_THEMES, decodeTheme } from './domain/theme';
 
 /** Structural, because `rollup` is not a dependency of this app to import types from. */
 type BuiltPart = {
@@ -129,11 +139,75 @@ describe('nothing-is-served-as-a-data-url', () => {
     }, 120_000);
 });
 
+/*
+ * The weight guard, split by who pays (step 6, 6.1 of the step-6 plan v2):
+ * `scripts/weight-buckets.mjs` puts every emitted file in one bucket —
+ * every visitor, one worn-only look, or on demand — and each ceiling reads
+ * the bucket it is about. One production build and one probe build (the
+ * app's config plus `layout/probe.html`, which carries the harness's
+ * worn-only fixture look), each built once for this file.
+ */
+let appBuild: Promise<readonly WeighedPart[]> | undefined;
+let probeBuild: Promise<readonly WeighedPart[]> | undefined;
+const builtParts = (configFile?: string): Promise<readonly WeighedPart[]> =>
+    build({ configFile, logLevel: 'silent', build: { write: false } }).then(
+        (result) => partsOf(result) as unknown as readonly WeighedPart[],
+    );
+const appParts = (): Promise<readonly WeighedPart[]> => (appBuild ??= builtParts());
+const probeParts = (): Promise<readonly WeighedPart[]> => (probeBuild ??= builtParts('vite.probe.config.ts'));
+
+/** The worn-only look sheets the role table names, as the buckets read them. */
+const WORN = wornSheets().map((sheet) => ({ lookClass: sheet.lookClass!, source: sheet.path }));
+
+/** Every emitted CSS file's text, by file name. */
+function cssText(parts: readonly WeighedPart[], names: readonly string[]): string {
+    return parts
+        .filter((part) => names.includes(part.fileName) && part.fileName.endsWith('.css'))
+        .map((part) => (typeof part.source === 'string' ? part.source : ''))
+        .join('\n');
+}
+
+describe('every-visitor-weight-has-a-ceiling', () => {
+    /*
+     * What a first visit to any page of the app downloads before anything
+     * is painted: index.html, its entry chunk and every chunk that imports
+     * statically, and the CSS they link (`weightBuckets`' every-visitor
+     * bucket). Faces, decoration art and pictures a script imports are on
+     * demand, and a worn-only look's sheet and art are that look's alone,
+     * so neither is here. Measured 860,043 bytes on 2026-09-27 (the three
+     * look sheets naming themselves included); the ceiling is that plus the
+     * same deliberate 4% the served ceiling's readings have been given.
+     * The number to watch is the delta a raise records; the ceiling is the
+     * alarm. Red: a ~40 KB static import from render.ts.
+     */
+    const EVERY_VISITOR_CEILING_BYTES = 895_000;
+
+    it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {
+        const buckets = weightBuckets(await appParts(), { worn: WORN });
+        expect(buckets.problems).toEqual([]);
+        const files = buckets.everyVisitor.files;
+        expect(files).toContain('index.html');
+        expect(files.filter((name) => name.endsWith('.js')).length, 'no entry chunk').toBeGreaterThan(0);
+        expect(files.filter((name) => name.endsWith('.css')).length, 'no entry CSS').toBeGreaterThan(0);
+        expect(buckets.everyVisitor.bytes, 'nothing was measured').toBeGreaterThan(500_000);
+        expect(
+            buckets.everyVisitor.bytes,
+            `every visitor downloads ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
+        ).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
+    }, 120_000);
+});
+
 /**
  * The served weight has a ceiling. The wasm removal (§9) took the script from
  * ~2.05 MB to ~0.39 MB, and nothing since has watched the sum — a third font
  * subset or a careless dependency would land unnoticed. Raising this number
  * is allowed and must be a deliberate diff, not a surprise.
+ *
+ * Since step 6 it counts UTF-8 BYTES (it counted `code.length`, ~660 under)
+ * and everything a visitor to a stall in a BUNDLED look can be served —
+ * every-visitor and on demand — but no worn-only look's sheet or art: those
+ * are that look's, under its own budget (`each-look-keeps-its-art-budget`),
+ * and a fifth look must not eat this ceiling's headroom for the others.
  */
 describe('served-weight-has-a-ceiling', () => {
     // Measured 564,858 the day the two Inter subsets landed, 649,559 the day
@@ -176,26 +250,224 @@ describe('served-weight-has-a-ceiling', () => {
     // self-hosted, the owner's call, so every OS paints one font: six woff2
     // files, 148,264 bytes, took it to 1,085,256. A visitor fetches only the
     // subsets the look on screen uses. Raised to 1,130,000, the same 4%.
+    // 2026-09-27 (step 6): 1,122,889 in bytes (1,122,220 characters), no
+    // worn-only look shipped; the ceiling unchanged.
     const CEILING_BYTES = 1_130_000;
 
-    it(`keeps the built output under ${CEILING_BYTES} bytes`, async () => {
-        const result = await build({ logLevel: 'silent', build: { write: false } });
-        const parts = partsOf(result);
-        let total = 0;
-        for (const part of parts) {
-            if (typeof part.code === 'string') {
-                total += part.code.length;
-            } else if (typeof part.source === 'string') {
-                total += part.source.length;
-            } else if (part.source instanceof Uint8Array) {
-                total += part.source.byteLength;
-            }
-        }
+    it(`keeps the built output under ${CEILING_BYTES} bytes, worn-only looks apart`, async () => {
+        const parts = await appParts();
+        const buckets = weightBuckets(parts, { worn: WORN });
+        expect(buckets.problems).toEqual([]);
+        const total = buckets.everyVisitor.bytes + buckets.onDemand.bytes;
         expect(total, 'nothing was built').toBeGreaterThan(100_000);
-        expect(total, 'the served weight grew past the stated ceiling').toBeLessThan(
-            CEILING_BYTES,
+        const worn = Object.values(buckets.worn).reduce((sum, bucket) => sum + bucket.bytes, 0);
+        expect(total + worn, 'a file fell out of every bucket').toBe(
+            parts.reduce((sum, part) => sum + bytesOf(part), 0),
         );
+        expect(total, 'the served weight grew past the stated ceiling').toBeLessThan(CEILING_BYTES);
     }, 120_000);
+});
+
+describe('every-emitted-file-is-in-one-weight-bucket', () => {
+    /*
+     * Every file a build emits lands in exactly one bucket, and a worn-only
+     * look's file named anywhere else — the entry CSS, a shared decoration
+     * another sheet names, another look's sheet — is a refusal: counted in
+     * two places it is either under-counted by the look's budget or dropped
+     * by the served ceiling where a visitor still pays for it. The
+     * production build carries no worn-only look yet; the probe build
+     * carries the harness's fixture (`layout/fixture-look.css`), which is
+     * the subject until one ships. Red: the fixture sheet naming
+     * `../src/ui/decor/rain-near.svg`, which `stall.css` also names.
+     */
+    for (const [name, parts] of [
+        ['the production build', appParts],
+        ['the probe build (the fixture look)', probeParts],
+    ] as const) {
+        it(`puts every file of ${name} in one bucket`, async () => {
+            const built = await parts();
+            const buckets = weightBuckets(built, { worn: WORN });
+            expect(buckets.problems).toEqual([]);
+            const all = [
+                ...buckets.everyVisitor.files,
+                ...buckets.onDemand.files,
+                ...Object.values(buckets.worn).flatMap((bucket) => bucket.files),
+            ];
+            expect(new Set(all).size, 'a file is in two buckets').toBe(all.length);
+            expect([...all].sort()).toEqual(built.map((part) => part.fileName).sort());
+        }, 120_000);
+    }
+
+    it('files the fixture look under its own bucket, sheet and art, on the probe build', async () => {
+        const buckets = weightBuckets(await probeParts(), { worn: WORN });
+        const fixture = buckets.worn['t-fixture-worn'];
+        expect(fixture, 'the probe build emitted no fixture sheet').toBeDefined();
+        expect(fixture!.sheet).toMatch(/^assets\/fixture-look-[\w-]+\.css$/);
+        expect(fixture!.art).toEqual([expect.stringMatching(/^assets\/ground-[\w-]+\.svg$/)]);
+    }, 120_000);
+
+    it('refuses a worn-only file another sheet names, and a worn sheet built into another file', () => {
+        const sheet = (fileName: string, source: string, from: string): WeighedPart => ({
+            type: 'asset',
+            fileName,
+            source,
+            originalFileNames: [from],
+        });
+        const entry: WeighedPart = {
+            type: 'chunk',
+            fileName: 'assets/index.js',
+            code: 'x',
+            isEntry: true,
+            facadeModuleId: '/r/index.html',
+            imports: [],
+            viteMetadata: { importedCss: new Set(['assets/index.css']) },
+        };
+        const html = sheet('index.html', '<!doctype html>', '/r/index.html');
+        const rain = sheet('assets/rain.svg', '<svg/>', 'src/ui/decor/rain.svg');
+        const shared = weightBuckets(
+            [
+                entry,
+                html,
+                sheet('assets/index.css', '.a{background:url(/assets/rain.svg)}', 'index.html'),
+                sheet('assets/look.css', '.t-x{background:url(/assets/rain.svg)}', 'src/looks/x/look.css'),
+                rain,
+            ],
+            { worn: [{ lookClass: 't-x', source: 'src/looks/x/look.css' }] },
+        );
+        expect(shared.problems.join('\n')).toMatch(/assets\/rain\.svg is in more than one weight bucket/);
+        const inlined = weightBuckets(
+            [
+                { ...entry, moduleIds: ['/r/src/looks/x/look.css'] },
+                html,
+                sheet('assets/index.css', '.t-x{--look-sheet:t-x}', 'index.html'),
+            ],
+            { worn: [{ lookClass: 't-x', source: 'src/looks/x/look.css' }] },
+        );
+        expect(inlined.problems.join('\n')).toMatch(/built into another file rather than its own sheet/);
+    });
+});
+
+describe('a-worn-only-look-sheet-is-not-in-the-entry-css', () => {
+    /*
+     * A worn-only look's sheet is its own file, fetched for a stall that
+     * wears it — never in the CSS every visitor downloads, where it would
+     * cost every visitor and paint before any stall asked for it. Read by
+     * the sheet's own name (`--look-sheet`), so a side-effect import that
+     * inlined it anywhere in the every-visitor CSS is caught however it got
+     * there. Red: `import '../../layout/fixture-look.css'` in render.ts.
+     */
+    for (const [name, parts] of [
+        ['the production build', appParts],
+        ['the probe build', probeParts],
+    ] as const) {
+        it(`keeps every worn-only sheet out of ${name}'s every-visitor CSS`, async () => {
+            const built = await parts();
+            const buckets = weightBuckets(built, { worn: WORN });
+            const css = cssText(built, buckets.everyVisitor.files);
+            expect(css.length, 'no every-visitor CSS was read').toBeGreaterThan(10_000);
+            expect(css, 'the shipped looks name themselves in the entry CSS').toMatch(/--look-sheet:\s*t-neo/);
+            for (const worn of WORN) {
+                expect(css, `${worn.lookClass} is in the every-visitor CSS`).not.toMatch(
+                    new RegExp(`--look-sheet:\\s*${worn.lookClass}(?![\\w-])`),
+                );
+                expect(css, `${worn.lookClass} has a rule in the every-visitor CSS`).not.toContain(`.${worn.lookClass}`);
+            }
+        }, 120_000);
+    }
+});
+
+describe('each-look-keeps-its-art-budget', () => {
+    /*
+     * What one visitor to a stall in a worn-only look downloads for it, in
+     * gzip -9 bytes (Node zlib): the look's sheet and the art its bare rules
+     * name, plus the largest row of each decoration slot
+     * (`lookArtBudget`), under `LOOK_ART_BUDGET_GZIP` — whose number and
+     * reason (Ink wash as drawn, 164,872 before its face) are in
+     * `scripts/weight-buckets.mjs`. The bundled looks are the every-visitor
+     * ceiling's, not this budget's. No shipped look is worn only yet, so
+     * the real subject is the harness's fixture look on the probe build,
+     * and a synthetic look holds the arithmetic: two rows in one slot count
+     * the larger, a second slot adds its own, and 600 KB of art is refused.
+     */
+    const budgetOf = (parts: readonly WeighedPart[], lookClass: string, rows: readonly { cls?: string; slot: string }[]) => {
+        const buckets = weightBuckets(parts, { worn: WORN });
+        const bucket = buckets.worn[lookClass];
+        if (bucket === undefined) throw new Error(`${lookClass}: no worn-only bucket`);
+        const byName = new Map(parts.map((part) => [part.fileName, part]));
+        const bytes = (name: string): string | Uint8Array => byName.get(name)?.source ?? '';
+        return lookArtBudget({
+            sheet: String(bytes(bucket.sheet)),
+            sheetFile: bucket.sheet,
+            files: new Map(bucket.art.map((name) => [name, bytes(name)])),
+            rows,
+        });
+    };
+
+    it(`keeps every worn-only look under ${LOOK_ART_BUDGET_GZIP} gzip bytes`, async () => {
+        const production = await appParts();
+        for (const sheet of wornSheets().filter((s) => s.role === 'look')) {
+            const row = SHIPPED_THEMES.map(({ id }) => decodeTheme(id)).find((t) => t.sheetClass === sheet.lookClass)!;
+            const reading = budgetOf(production, sheet.lookClass!, attachmentsForTheme(row.id));
+            expect(reading.total, `${sheet.lookClass}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+        }
+        const fixture = budgetOf(await probeParts(), 't-fixture-worn', []);
+        expect(fixture.total, 'the fixture look was not read').toBeGreaterThan(100);
+        expect(fixture.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+    }, 120_000);
+
+    it('counts the bare look and the largest row of each slot, and refuses 600 KB of art', () => {
+        // Bytes gzip cannot shrink: a fixed-seed generator, so the reading is the same every run.
+        let seed = 0x2545f491;
+        const noise = (n: number): Uint8Array =>
+            Uint8Array.from({ length: n }, () => {
+                seed ^= seed << 13;
+                seed ^= seed >>> 17;
+                seed ^= seed << 5;
+                return (seed >>> 0) & 0xff;
+            });
+        const sheet =
+            '.t-x{--look-sheet:t-x;background:url(/assets/paper.svg)}' +
+            '.t-x.att-a .b{background:url(/assets/a.svg)}' +
+            '.t-x.att-b .b{background:url(/assets/b.svg)}' +
+            '.t-x.att-c .c{background:url(/assets/c.svg)}';
+        const rows = [
+            { cls: 'att-a', slot: 'yard' },
+            { cls: 'att-b', slot: 'yard' },
+            { cls: 'att-c', slot: 'trim' },
+        ];
+        const files = new Map<string, Uint8Array>([
+            ['assets/paper.svg', noise(10_000)],
+            ['assets/a.svg', noise(40_000)],
+            ['assets/b.svg', noise(20_000)],
+            ['assets/c.svg', noise(5_000)],
+        ]);
+        const reading = lookArtBudget({ sheet, sheetFile: 'assets/look.css', files, rows });
+        expect(reading.slots.yard!.cls).toBe('att-a');
+        expect(reading.slots.trim!.cls).toBe('att-c');
+        expect(reading.total).toBe(reading.bare + reading.slots.yard!.gzip + reading.slots.trim!.gzip);
+        // Incompressible, so gzip adds a little and removes nothing.
+        expect(reading.bare).toBeGreaterThan(10_000);
+        expect(reading.slots.yard!.gzip).toBeGreaterThan(40_000);
+        expect(reading.slots.yard!.gzip).toBeLessThan(40_000 + 200);
+        expect(reading.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+
+        // A row's class only inside `:not()`, `:is()` or `:where()` does not
+        // scope a rule to that row: its art counts as bare.
+        for (const wrapped of [':not(.att-c)', ':is(.att-c)', ':where(.att-c)']) {
+            const hidden = lookArtBudget({
+                sheet: sheet.replace('.t-x.att-c .c', `.t-x${wrapped} .c`),
+                sheetFile: 'assets/look.css',
+                files,
+                rows,
+            });
+            expect(hidden.slots.trim, `${wrapped} scoped a rule to its row`).toBeUndefined();
+            expect(hidden.bare, `${wrapped}: the art left the bare count`).toBeGreaterThan(reading.bare + 5_000);
+        }
+
+        files.set('assets/paper.svg', noise(600_000));
+        const heavy = lookArtBudget({ sheet, sheetFile: 'assets/look.css', files, rows });
+        expect(heavy.total, 'a 600 KB look passed the budget').toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+    });
 });
 
 /**
@@ -260,6 +532,8 @@ describe('gallery-is-not-served', () => {
             )
             .join('\n');
         expect(text, 'the kit class is in the served files').not.toContain('t-workshop');
+        // The harness's worn-only look (`layout/fixture-look.css`): never served.
+        expect(text, 'the fixture look is in the served files').not.toContain('t-fixture-worn');
     }, 120_000);
 });
 

@@ -1,10 +1,10 @@
 import { strict as assert } from 'node:assert';
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { servedFlashReport, servedSheets, themeVarValues } from './look-flash.mjs';
-import { appSheets, sheetsWithRole } from './sheet-roles.mjs';
+import { SERVED_SHEETS, appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import {
     GENERATED_TEXT,
     LOOK_MEDIA,
@@ -17,7 +17,9 @@ import {
     lintSheet,
     PRESENCE_ATTRIBUTES,
     parseSheet,
+    foreignNamingProblems,
     rescopeSheet,
+    wornSheetProblems,
 } from './workshop-css.mjs';
 
 /**
@@ -418,5 +420,207 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
             [1, [['transform', 'scale(2)']]],
         ]);
         assert.deepEqual(keyframeFlashes(moving, { seconds: 0.01 }), { changes: 0, flashes: 0 });
+    });
+});
+
+/* ---------- step 6: a look sheet names itself; a worn-only sheet keeps to itself ---------- */
+
+/** A worn sheet's own directory, relative to the sheet, and the plain files in it. */
+function ownArtOf(sheet) {
+    const dir = join(ROOT, sheet.artDir);
+    return {
+        dir: relative(dirname(join(ROOT, sheet.path)), dir).replaceAll('\\', '/'),
+        files: readdirSync(dir).filter((name) => statSync(join(dir, name)).isFile()),
+    };
+}
+
+const FIXTURE = sheetsWithRole('fixture')[0];
+const FIXTURE_CSS = read(FIXTURE.path);
+const FIXTURE_ART = ownArtOf(FIXTURE);
+const FIXTURE_REDUCE = FIXTURE_CSS.lastIndexOf('@media (prefers-reduced-motion: reduce)');
+/** A copy of the fixture's worn-only sheet with `rule` planted before its reduce block. */
+const plantedFixture = (rule) => `${FIXTURE_CSS.slice(0, FIXTURE_REDUCE)}${rule}\n\n${FIXTURE_CSS.slice(FIXTURE_REDUCE)}`;
+const lintFixture = (css, ownArt = FIXTURE_ART) =>
+    lintLookSheet(css, { lookClass: FIXTURE.lookClass, load: 'worn', ownArt });
+
+/** Every served sheet as `wornSheetProblems` reads it, with `swap` replacing one path's text. */
+function servedWith(swap = {}) {
+    return SERVED_SHEETS.map((sheet) => ({
+        path: sheet.path,
+        css: swap[sheet.path] ?? read(sheet.path),
+        load: sheet.load,
+        lookClass: sheet.lookClass,
+    }));
+}
+
+describe('every-look-sheet-names-itself', () => {
+    /**
+     * `.t-x { --look-sheet: t-x; }`, once, on the bare class: what the probe
+     * and looks:diff read on every painted stall to know the look was
+     * measured with its sheet (`a-look-is-measured-with-its-sheet`). Every
+     * look sheet carries it — the shipped three, the kit's (the skeleton and
+     * every starter) and the fixture's worn-only one.
+     */
+    it('passes every look sheet in the table', () => {
+        assert.deepEqual(lookSheets().map((s) => s.lookClass).sort(), ['t-fixture-worn', 't-modern', 't-neo', 't-rural', 't-workshop']);
+        for (const sheet of sheetsWithRole('look')) {
+            assert.deepEqual(lintLookSheet(read(sheet.path), { lookClass: sheet.lookClass }), [], sheet.path);
+        }
+        assert.deepEqual(lintSheet(read('workshop/theme-workshop.css')), []);
+        assert.deepEqual(lintFixture(FIXTURE_CSS), []);
+    });
+
+    it('refuses a sheet that does not name itself, in the shipped sheet and its starter', () => {
+        const bare = NEO_CSS.replace('--look-sheet: t-neo;', '');
+        assert.notEqual(bare, NEO_CSS, 'the plant found the sentinel');
+        const shipped = lintLookSheet(bare, { lookClass: 't-neo' });
+        assert.ok(shipped.some((p) => /does not name itself/.test(p)), shipped.join('\n'));
+        const kit = lintSheet(rescopeSheet(bare, 'neo', carried));
+        assert.ok(kit.some((p) => /does not name itself/.test(p)), kit.join('\n'));
+    });
+
+    it('lets no sheet but a look\'s declare the name, in the base, a screen sheet or a document', () => {
+        assert.deepEqual(foreignNamingProblems(servedWith()), []);
+        for (const path of ['src/ui/stall.css', 'src/ui/window.css', 'public/guide.css', 'layout/gallery.css']) {
+            const problems = foreignNamingProblems(servedWith({ [path]: `${read(path)}\n.t-neo { --look-sheet: t-neo; }\n` }));
+            assert.ok(problems.some((p) => p.startsWith(`${path}: declares --look-sheet`)), `${path}: ${problems.join('; ') || '(none)'}`);
+        }
+    });
+
+    it('refuses a second naming, a naming off the bare class, and the wrong name', () => {
+        plant('.t-neo .item-n { --look-sheet: t-neo; }', /declared 2 times/);
+        const moved = NEO_CSS.replace('.t-neo {\n    --look-sheet: t-neo;\n}', '.stall.t-neo {\n    --look-sheet: t-neo;\n}');
+        assert.notEqual(moved, NEO_CSS);
+        assert.ok(lintLookSheet(moved, { lookClass: 't-neo' }).some((p) => /on its bare class/.test(p)));
+        const media = NEO_CSS.replace('.t-neo {\n    --look-sheet: t-neo;\n}', '@media (min-width: 680px) { .t-neo { --look-sheet: t-neo; } }');
+        assert.ok(lintLookSheet(media, { lookClass: 't-neo' }).some((p) => /on its bare class/.test(p)));
+        const wrong = NEO_CSS.replace('--look-sheet: t-neo;', '--look-sheet: t-rural;');
+        assert.ok(lintLookSheet(wrong, { lookClass: 't-neo' }).some((p) => /holds "t-rural"/.test(p)));
+    });
+});
+
+describe('a-worn-only-sheet-names-only-its-own-art', () => {
+    /**
+     * A worn-only sheet and its art are one download, counted together
+     * (`each-look-keeps-its-art-budget`): every `url()` is a file in the
+     * look's own directory (`artDir` in the role table). Reaching into the
+     * shared decorations would make one file two buckets'.
+     */
+    it('passes the fixture, which names its own art', () => {
+        assert.ok(wornSheets().length > 0, 'a worn-only sheet is on the table');
+        for (const sheet of wornSheets()) {
+            assert.ok(sheet.artDir !== undefined, `${sheet.path} names its art directory`);
+            assert.deepEqual(lintLookSheet(read(sheet.path), { lookClass: sheet.lookClass, load: 'worn', ownArt: ownArtOf(sheet) }), [], sheet.path);
+        }
+        assert.match(FIXTURE_CSS, /url\(\.\/fixture-look\/ground\.svg\)/);
+    });
+
+    it('refuses a shared decoration, a missing file, a data: URL, another site and src()', () => {
+        for (const [rule, pattern] of [
+            ['.t-fixture-worn .a { background-image: url(../src/ui/decor/rain-near.svg); }', /names only its own art/],
+            ['.t-fixture-worn .a { background-image: url(./fixture-look/nothing.svg); }', /no plain file fixture-look\/nothing\.svg/],
+            ['.t-fixture-worn .a { background-image: url(data:image/svg+xml,%3Csvg%3E); }', /a data: URL/],
+            ['.t-fixture-worn .a { background-image: url(https://example.com/a.svg); }', /another site/],
+            ['.t-fixture-worn .a { background-image: url(/assets/a.svg); }', /names only its own art/],
+            ['.t-fixture-worn .a { background-image: image-set("../src/ui/decor/rain-near.svg" 1x); }', /names only its own art/],
+            ['.t-fixture-worn .a { background-image: src("./fixture-look/ground.svg"); }', /src\(\) is not allowed/],
+        ]) {
+            const problems = lintFixture(plantedFixture(rule));
+            assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('leaves a bundled look sheet under its own url rules: the worn road is the worn sheet\'s', () => {
+        // A shipped look names no url() today; the plant is read without the worn rule.
+        const shipped = lintLookSheet(plantedNeo('.t-neo .a { background-image: url(../ui/decor/rain-near.svg); }'), { lookClass: 't-neo' });
+        assert.ok(!shipped.some((p) => /its own art/.test(p)), shipped.join('\n'));
+    });
+});
+
+describe('a-worn-only-sheet-replaces-no-keyframes', () => {
+    /**
+     * Keyframe names and `@font-face` families are global, and a worn-only
+     * sheet lands after the entry CSS: a name it shares with any other sheet
+     * replaces that sheet's on every stall of the page once it loads.
+     */
+    it('passes every served sheet', () => {
+        assert.deepEqual(wornSheetProblems(servedWith()), []);
+    });
+
+    it('refuses a keyframe name or a face family another sheet declares', () => {
+        const kf = wornSheetProblems(servedWith({ [FIXTURE.path]: plantedFixture('@keyframes om-flick { from { rotate: 0deg; } to { rotate: 1deg; } }') }));
+        assert.ok(kf.some((p) => /@keyframes om-flick is also declared in src\/ui\/stall\.css/.test(p)), kf.join('\n'));
+        const face = '@font-face { font-family: t-fixture-worn-serif; src: url(./fixture-look/ground.svg) format("woff2"); }';
+        const clash = wornSheetProblems(
+            servedWith({
+                [FIXTURE.path]: plantedFixture(face),
+                // In another case: family names match without regard to it.
+                'src/ui/stall.css': `${read('src/ui/stall.css')}\n@font-face { font-family: "T-Fixture-Worn-Serif"; src: url(./fonts/inter-latin.woff2) format("woff2"); }\n`,
+            }),
+        );
+        assert.ok(clash.some((p) => /family "t-fixture-worn-serif" is also declared in src\/ui\/stall\.css/.test(p)), clash.join('\n'));
+    });
+
+    it('lets a worn-only sheet carry its own namespaced face, from its own directory, and nothing else', () => {
+        const art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'serif.woff2'] };
+        assert.deepEqual(
+            lintFixture(plantedFixture('@font-face { font-family: "t-fixture-worn-serif"; src: url(./fixture-look/serif.woff2) format("woff2"); }'), art),
+            [],
+        );
+        for (const [face, pattern] of [
+            ['@font-face { font-family: Inter; src: url(./fixture-look/serif.woff2) format("woff2"); }', /not namespaced to the look/],
+            ['@font-face { font-family: t-fixture-worn-serif; src: local("Georgia"), url(./fixture-look/serif.woff2); }', /no local\(\)/],
+            ['@font-face { font-family: t-fixture-worn-serif; src: url(../src/ui/fonts/inter-latin.woff2); }', /names only its own art/],
+        ]) {
+            const problems = lintFixture(plantedFixture(face), art);
+            assert.ok(problems.some((p) => pattern.test(p)), `${face}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // A bundled look carries no face at all, as before.
+        plant('@font-face { font-family: t-neo-serif; src: url(./x.woff2); }', /@font-face is not allowed/);
+    });
+});
+
+describe('no-bundled-sheet-names-a-worn-only-look', () => {
+    /**
+     * A rule for a worn-only look in a bundled sheet paints before that
+     * look's sheet arrives and stays when it fails — the look half-dressed —
+     * so every rule of a worn-only look lives in its own file.
+     */
+    it('refuses a rule for the worn-only look in the base, a screen sheet and a document', () => {
+        for (const path of ['src/ui/stall.css', 'src/ui/broadcast.css', 'public/stream.css']) {
+            const problems = wornSheetProblems(servedWith({ [path]: `${read(path)}\n.stall.t-fixture-worn .item-n { color: red; }\n` }));
+            assert.ok(
+                problems.some((p) => p.startsWith(`${path}: `) && /names \.t-fixture-worn, a worn-only look/.test(p)),
+                `${path}:\n  ${problems.join('\n  ') || '(no problem)'}`,
+            );
+        }
+    });
+});
+
+describe('a-file-mask-arrives-at-rest', () => {
+    /**
+     * `no-word-is-clipped-by-a-file` reads the probe's paints, at rest and
+     * frozen at one instant: a file's mask or clip written in a state rule
+     * or a keyframe is refused here instead (the step-6 critic's P3). A mask
+     * or clip with no file, or a file mask on a box at rest, is the probe's.
+     */
+    it('refuses a file mask or clip in a state rule and in a keyframe, shipped and kit', () => {
+        for (const rule of [
+            '.t-neo .item-n:hover { mask-image: url(./x.svg); }',
+            '.t-neo .item-n:focus-visible { -webkit-mask-image: url(./x.svg); mask-image: url(./x.svg); }',
+            '.t-neo .mini[aria-pressed="true"] { clip-path: url(./x.svg); }',
+            '.t-neo details[open] .x { mask: url(./x.svg) no-repeat; }',
+            '.t-neo .addr[data-copied="true"] { -webkit-mask-box-image-source: url(./x.svg); }',
+        ]) {
+            plant(rule, /a file's mask or clip in a state rule/);
+        }
+        plant('@keyframes t-neo-veil { from { mask-image: url(./x.svg); } to { mask-image: none; } }', /a file's mask or clip in a keyframe/);
+    });
+
+    it('accepts a mask with no file, a clip shape, and a file mask at rest', () => {
+        accepts('.t-neo .item-n:hover { mask-image: linear-gradient(#000, transparent); }');
+        accepts('.t-neo .item-n:hover { clip-path: inset(0 2px); }');
+        accepts('.t-neo .item-n { mask-image: url(./x.svg); }');
+        accepts('.t-neo [data-role="price"] { mask-image: url(./x.svg); }');
     });
 });

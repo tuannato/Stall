@@ -9,6 +9,16 @@
  * rows), and the address is never truncated.
  */
 
+/*
+ * The sheet names itself (`every-look-sheet-names-itself`): the probe reads
+ * this on every painted stall wearing the look, and looks:diff on every shot
+ * (`a-look-is-measured-with-its-sheet`), so a look measured without its sheet
+ * fails rather than passing as the base. Paints nothing.
+ */
+.t-neo {
+    --look-sheet: t-neo;
+}
+
 .stall.t-neo {
     font-size: 13.5px;
 }

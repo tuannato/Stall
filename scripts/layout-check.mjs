@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
+import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -248,10 +248,42 @@ async function readVerdict(cdp, sessionId, url) {
             },
             sessionId,
         );
-        if (typeof r.result.value === 'string') return JSON.parse(r.result.value);
+        if (typeof r.result.value === 'string') {
+            const report = JSON.parse(r.result.value);
+            report.failures.push(...(await lateRefusals(cdp, sessionId, report)));
+            return report;
+        }
         await sleep(100);
     }
     throw new Error('the probe never reported. It threw, or never ran.');
+}
+
+/*
+ * The policy's refusals the page met after writing its verdict — a picture's
+ * request is refused as it is made, and the event lands as a task — as
+ * failures of `the-probe-page-meets-no-csp-refusal`, on every pass whose
+ * verdict this runner reads (the phone, desk and canvas passes, the portrait
+ * and tablet walls, the reduced-motion passes; the step-6 critic's P3).
+ */
+async function lateRefusals(cdp, sessionId, report) {
+    await sleep(50);
+    const r = await cdp.send(
+        'Runtime.evaluate',
+        { expression: 'JSON.stringify(window.__cspRefusals?.() ?? [])', returnByValue: true },
+        sessionId,
+    );
+    const all = typeof r.result?.value === 'string' ? JSON.parse(r.result.value) : [];
+    return refusalFailures(all.slice((report.cspRefusals ?? []).length), ' (after the verdict)');
+}
+
+/** Refusals as the probe's own failure records. */
+function refusalFailures(refusals, when = '') {
+    return refusals.map((r) => ({
+        screen: 'probe page',
+        theme: '-',
+        check: 'the-probe-page-meets-no-csp-refusal',
+        detail: `${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}${when}`,
+    }));
 }
 
 /** Evaluate an expression in the page and parse its JSON result. */
@@ -1234,6 +1266,7 @@ try {
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
+            sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
         });
         if (gaps.length > 0) {
             failed = true;
@@ -1289,6 +1322,53 @@ try {
         );
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+        }
+    }
+
+    /*
+     * The worn-only road, once, under the production policy
+     * (`a-worn-only-sheet-loads-under-the-production-policy`, step 6): the
+     * harness's fixture look (`layout/fixtureLook.ts`) painted, then its
+     * sheet appended as a same-origin link (`window.__wornSheetJob`). The
+     * ordinary run only: the kit's page is built from the same probe, and
+     * the road is the app's, not the look's.
+     */
+    if (LOOKS === 'shipped') {
+        const label = 'worn-only sheet (a-worn-only-sheet-loads-under-the-production-policy)';
+        try {
+            await cdp.send(
+                'Emulation.setDeviceMetricsOverride',
+                { width: VIEWPORTS[1].width, height: VIEWPORTS[1].height, deviceScaleFactor: 1, mobile: false },
+                sessionId,
+            );
+            await cdp.send('Page.navigate', { url: probeUrl(VIEWPORTS[1], '&screens=') }, sessionId);
+            await waitForFlag(cdp, sessionId, '__probeReady');
+            const missing = `/assets/no-such-look-sheet-${Date.now().toString(36)}.css`;
+            const r = await cdp.send(
+                'Runtime.evaluate',
+                {
+                    expression: `window.__wornSheetJob(${JSON.stringify(missing)}).then((v) => JSON.stringify(v))`,
+                    awaitPromise: true,
+                    returnByValue: true,
+                },
+                sessionId,
+            );
+            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+            const job = JSON.parse(r.result.value);
+            const faults = wornSheetJobFaults(job);
+            if (faults.length === 0) {
+                console.log(
+                    `✓ ${label}: ${job.url} loaded last, same origin, named itself (${job.after}); its art ${job.art.join(', ')}; ` +
+                        `a missing sheet (answered ${job.missingStatus}) rejected: ${job.missingWhy}; no refusal`,
+                );
+            } else {
+                failed = true;
+                console.error(`✗ ${label}:`);
+                for (const fault of faults) console.error(`    ${fault}`);
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
         }
     }
 
@@ -1576,7 +1656,19 @@ try {
      */
     const PAGE_MAX_AGE_MS = 60_000;
     let loadedAt = 0;
+    /*
+     * The policy's refusals on every contrast page, asked before the page
+     * is left and once more at the end: its jobs paint after the verdict
+     * the page wrote, so the verdict's own list cannot carry them
+     * (`the-probe-page-meets-no-csp-refusal`, `cspWatch.ts`).
+     */
+    const contrastRefusals = [];
+    const collectRefusals = async () => {
+        if (loadedAt === 0) return;
+        contrastRefusals.push(...(await evalJson(cdp, sessionId, 'window.__cspRefusals()')));
+    };
     const loadContrastPage = async (vp, phase = 'load') => {
+        await collectRefusals();
         await timed(`${phase}: navigate`, () =>
             cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId),
         );
@@ -2341,6 +2433,10 @@ try {
         // for one reason still names the others (round 8 — a missing rain
         // key used to hide the figures under the floor).
         const verdicts = [];
+        await collectRefusals();
+        for (const r of contrastRefusals) {
+            verdicts.push(`the-probe-page-meets-no-csp-refusal: ${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}`);
+        }
         if (boxes === 0) {
             verdicts.push('no figure boxes were sampled — vacuous green.');
         }
@@ -2745,15 +2841,22 @@ try {
             }
         }
         const clearPct = (clearRatio * 100).toFixed(0);
+        // The policy's refusals on the transparency page, over its whole life
+        // (`the-probe-page-meets-no-csp-refusal`).
+        const clearRefusals = refusalFailures(await evalJson(cdp, sessionId, 'window.__cspRefusals()'));
+        if (clearRefusals.length > 0) {
+            failed = true;
+            for (const f of clearRefusals) console.error(`✗ transparency: ${f.check}: ${f.detail}`);
+        }
         if (sheetClassesWrong([...clearClasses]) !== undefined) {
             failed = true;
             console.error(`✗ transparency: ${sheetClassesWrong([...clearClasses])}`);
-        } else if (dim.length === 0) {
+        } else if (dim.length === 0 && clearRefusals.length === 0) {
             console.log(
                 `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
                     `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,
             );
-        } else {
+        } else if (dim.length > 0) {
             failed = true;
             console.error(
                 `✗ transparency: ${dim.length} figure(s) below ${PIXEL_CONTRAST_FLOOR}:1 ` +

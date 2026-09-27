@@ -88,7 +88,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, encodePng, findChrome } from './browser.mjs';
-import { LOADS_PER_PAGE, classify, diffMap, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, classify, diffMap, lookSheetRefusal, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -485,6 +485,7 @@ try {
                 'await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))); ' +
                 'const scroll = document.querySelector(".stall-scroll"); ' +
                 'return { classes: window.__sheetClasses(), ' +
+                'sheets: typeof window.__lookSheets === "function" ? window.__lookSheets() : undefined, ' +
                 'pageH: Math.max(document.documentElement.scrollHeight, scroll?.scrollHeight ?? 0) }; })()',
         );
     /*
@@ -521,6 +522,12 @@ try {
         if (grown !== height) {
             await metrics(side, width, grown);
             state = await paint(side, job, neutral);
+        }
+        // A look painted without its sheet is no comparison of that look
+        // (`looks-diff-refuses-a-look-painted-without-its-sheet`): the run fails.
+        const bare = lookSheetRefusal(state.sheets);
+        if (bare !== undefined) {
+            throw new Error(`${side.name} ${job.screen} ${job.viewport.name}: ${bare} — refused, a look is compared with its sheet`);
         }
         const masks = await evaluate(cdp, side.sessionId, HOLD);
         return { png: await settledShot(side), masks, classes: state.classes.join(' ') };

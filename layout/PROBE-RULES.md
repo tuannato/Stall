@@ -3939,3 +3939,109 @@ What the faces found, and what each fix is:
 - **Neo's worn wall status line read 2.61:1 in the ring**: the text ink.
 - **Rural's studio doors**: the oval's curve crossed the lede (2.96:1); the
   radius is capped at 22px.
+
+## A look is measured with its sheet (step 6, 2026-09-27)
+
+Every look sheet names itself on its bare class — `.t-neo { --look-sheet:
+t-neo; }`, once (`every-look-sheet-names-itself`, the look lint, which also
+reads the kit's sheet and the harness's worn-only fixture). The probe reads
+that name on every painted `.stall` wearing a `t-*` class after every paint
+(`lookSheetFaults`, `layout/wornSheet.ts`) and fails a stall whose sheet did
+not name it: **`a-look-is-measured-with-its-sheet`**. The skeleton is the one
+look painted without a sheet on purpose (`SHEETLESS_CLASSES`). A name set
+inline on the stall fails too, skeleton included — the renderer writes the
+theme's vars inline, and a `--look-sheet` among them would read true without
+the sheet — and no sheet but a look's may declare the property at all
+(`foreignNamingProblems`, the lint's half; the step-6 critic's P3). The classes
+read are echoed (`lookSheetsRead`), and the runner refuses a pass that read
+no name for a look it measures (`probe-coverage.mjs`, every pass).
+
+Why now: from Ink wash on (step 8) a look's sheet is its own file, fetched
+only for a stall that wears it, and a sheet that did not load leaves the
+stall painted by the base sheets alone — which every other rule here would
+measure green. Until then no look is worn only, so the probe page appends
+every worn-only sheet of `measuredLooks()` before its first paint
+(`wornSheetsOf`, `loadWornSheet`) — none — and a worn-only row reaching a
+measured page with no sheet URL fails the page rather than being measured
+bare. `pnpm looks:diff` holds the same line on every shot
+(`looks-diff-refuses-a-look-painted-without-its-sheet`; the showroom's
+`window.__lookSheets()`, a ref predating the hook exempt). The name paints
+nothing: `pnpm looks:diff main` compared every shot of the three looks with
+the naming rule against main without it — 850 identical, 0 real, 0 noise,
+0 inconclusive (2026-09-27; main predates the hook, so its side was
+exempt and the working tree's side read every look's name on every shot).
+
+Proved red by deleting Rural's naming rule: every Rural paint on every
+pass failed, and the pass's coverage line refused `t-rural`.
+
+## The probe page meets no policy refusal (step 6, 2026-09-27)
+
+The probe is previewed under the production policy, so a stylesheet, a
+picture or a face the policy refuses paints nothing there — as it would for
+a visitor — and a layout measured without it certified a page nobody sees.
+`layout/cspWatch.ts`, the probe's first import, records every
+`securitypolicyviolation` from the page's first module statement; the verdict
+carries them and fails **`the-probe-page-meets-no-csp-refusal`**, and the
+runner asks `window.__cspRefusals()` again after every verdict it reads —
+the phone, desk and canvas passes, the portrait and tablet walls and the
+reduced-motion passes (`readVerdict`; a picture's refusal lands as a task,
+after the verdict was written) — on every contrast page before it leaves
+it, and at the end of the transparency pass (their jobs paint after the
+verdict). The workshop's probe page exempts one refusal by
+design: the icon host under `img-src`, which the kit's preview policy
+drops (`vite.workshop.config.ts`) — its first run met 90 of them on the
+contrast pages. Not heard, stated: a refusal before any module ran (the
+entry's own tags, which the page could not load at all). Proved red by a planted
+`setAttribute('style', …)`, which `style-src 'self'` refuses.
+
+## The worn-only road under the production policy (step 6, 2026-09-27)
+
+**`a-worn-only-sheet-loads-under-the-production-policy`** is one job of the
+ordinary run (`window.__wornSheetJob`, judged by `wornSheetJobFaults`): the
+harness's fixture look (`FIXTURE_LOOK` in `looks.ts`, `t-fixture-worn`,
+`0xfd`, never a row, never served) is painted on the neutral screen, then its
+sheet — `layout/fixture-look.css` built by `?url` as its own asset
+(`fixtureLook.ts`) — appended as a same-origin `<link>`, the road step 8's
+loader takes. Held: the look named no sheet before (the sheet is not in the
+entry CSS), the link loaded, landed last among the page's sheets and was
+same-origin, the look then named itself, its own art was fetched with a 200
+(`img-src 'self'`), a sheet URL that does not exist rejected, and the policy
+refused nothing.
+
+**`load` is not "loaded"** — found by this job's first run, which failed on
+"a sheet URL that does not exist did not reject": `vite preview` answers a
+missing file with its SPA fallback (`htmlFallbackMiddleware`: a stylesheet
+request accepts `*/*`, so it is rewritten to `/index.html`, 200, HTML), and
+Chrome fired `load`, not `error`, on the link (whether it then applied
+anything was not read; the sheet did not name the look). So
+the harness's `loadWornSheet` resolves only when the loaded sheet's own
+CSSOM holds `.<class> { --look-sheet: <class>; }` (`sheetNamesItself`), and
+the job prints the status the missing URL was answered with. Step 8's
+production loader must keep that rule: a Pages 404 fires `error`, but a
+proxy or a stale deploy that answers with HTML would not. Not held here,
+stated: Pages itself, OBS's browser, Safari and Firefox.
+
+## No word is clipped by a file (step 6, 2026-09-27)
+
+A mask image that has not loaded or failed is transparent black by the
+spec, and a mask of transparent black hides what is under it. So no element
+holding words of its own — nor, since the step-6 critic's P2, any protected
+box, money node, field (`.paste-in`, `.share-url`, `.share-embed`), form
+control or control, icon-only ones included (`FILE_CLIP_SUBJECTS`): a code,
+a readonly link and a close button carry no text node — nor any ancestor of
+it up to `#app`, may compute a
+`mask-image`, `-webkit-mask-image`, mask border source or `clip-path` naming
+a FILE (`url(#id)` in this document passes; a gradient passes; a `data:`
+URL counts as a file, since the policy's `img-src` refuses it):
+**`no-word-is-clipped-by-a-file`**, after every paint, every look and
+variant, counted (`fileClipChecks`) and owed on the phone and desk passes.
+Its cost is Ink wash's: its masked grounds move to a sibling layer with no
+text in it, and the colophon mask over the seller's name is refused (the
+owner sees that at the port). Proved red by a planted
+`mask-image: url(./decor/rain-near.svg)` on Neo's row name, and — for the
+subjects with no words — on `.pay-qr` and on `.share-url`. The probe reads
+paints at rest and frozen, so a file's mask or clip written in a state rule
+(a user-action pseudo-class, or any attribute selector but `data-role`) or
+in a keyframe is refused statically by the look lint instead
+(`a-file-mask-arrives-at-rest`); a `url()` carried in by `var()` is not
+seen there, stated.

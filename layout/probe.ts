@@ -12,6 +12,8 @@
  * in a real browser, and writes a verdict into the DOM for the runner to read.
  * It asserts what only a browser can see.
  */
+// First: it listens for the policy's refusals from the page's first module statement.
+import { cspRefusals, type CspRefusal } from './cspWatch';
 import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
@@ -31,8 +33,10 @@ import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
-import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
+import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { lookSheetFault, lookSheetReads, loadWornSheet, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
+import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { screensAt } from './screenSplit';
 import {
@@ -3287,7 +3291,158 @@ function skeletonLadderFaults(screen: string, label: string): Failure[] {
     return out;
 }
 
+/*
+ * `a-look-is-measured-with-its-sheet` (step 6, 6.7): every painted `.stall`
+ * wearing a `t-*` class computes that class as `--look-sheet`, the name its
+ * own sheet gives it (`every-look-sheet-names-itself`) — or the look was
+ * measured without its sheet and every other rule on this paint certified
+ * the base sheets alone. The skeleton is sheetless by design and exempt
+ * (`SHEETLESS_CLASSES`). The classes read are echoed (`lookSheetsRead`)
+ * and the runner refuses a pass that read none of a look it measures
+ * (`probe-coverage.mjs`). Proved red by deleting Rural's naming rule.
+ */
+const LOOK_SHEET_CHECK = 'a-look-is-measured-with-its-sheet';
+const lookSheetsRead = new Set<string>();
+
+function lookSheetFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const read of lookSheetReads(document.getElementById('app')!)) {
+        const fault = lookSheetFault(read);
+        if (fault === undefined) {
+            lookSheetsRead.add(read.cls);
+        } else if (!out.some((f) => f.detail === fault)) {
+            out.push({ screen, theme: label, check: LOOK_SHEET_CHECK, detail: fault });
+        }
+    }
+    return out;
+}
+
+/*
+ * `no-word-is-clipped-by-a-file` (step 6, 6.6 of the step-6 plan v2): no
+ * element holding text of its own — nor a protected box, a money node, a
+ * field, a form control or a control (`FILE_CLIP_SUBJECTS`) — nor any
+ * ancestor of it up to `#app`,
+ * computes a `mask-image`, a `-webkit-mask-image`, a mask border's source or
+ * a `clip-path` that names a FILE. A mask image that has not loaded — or
+ * failed: a 404, a refused MIME type, a policy refusal, a worn-only look's
+ * art that has not arrived — is transparent black by the spec, and a mask
+ * of transparent black hides everything under it: the words, the asked
+ * amount, the address. A file can always fail to load; so a word may never
+ * depend on one to be seen. A `url(#id)` naming an element of this document
+ * is not a file and passes; a gradient mask is not a file and passes.
+ * The cost, stated: a look that masks a ground in its own art (Ink wash's
+ * washes) moves the masked ground to a sibling layer with no text in it.
+ * Counted per paint (`fileClipChecks`); the phone and desk passes owe a
+ * nonzero count (`probe-coverage.mjs`). Proved red by a planted
+ * `mask-image: url(...)` on a row's name.
+ */
+const FILE_CLIP_CHECK = 'no-word-is-clipped-by-a-file';
+const FILE_CLIP_PROPS = [
+    'mask-image',
+    '-webkit-mask-image',
+    'mask-border-source',
+    '-webkit-mask-box-image-source',
+    'clip-path',
+] as const;
+let fileClipChecks = 0;
+/*
+ * What a file's mask may hide that has no text node of its own (the step-6
+ * critic's P2): every protected box (the QR, the buy control, the address,
+ * the record's hex…), the money set, the field block — a readonly link or
+ * embed code is a value, not a text node — every form control, and every
+ * control, an icon-only close or copy included. Each is asked with its
+ * ancestors like a line of words.
+ */
+const FILE_CLIP_SUBJECTS = [
+    PROTECTED,
+    MONEY,
+    '.paste-in, .share-url, .share-embed',
+    'input, textarea, select',
+    'button, a[href], summary, [role="button"], [role="link"]',
+].join(', ');
+
+/** The first file a computed mask or clip value names, or undefined: `url(#id)` is this document, not a file. */
+function fileNamedBy(value: string): string | undefined {
+    for (const m of value.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/g)) {
+        const target = (m[1] ?? m[2] ?? m[3] ?? '').trim();
+        if (target === '' || target.startsWith('#')) continue;
+        const url = new URL(target, location.href);
+        if (url.hash !== '' && url.origin + url.pathname + url.search === location.origin + location.pathname + location.search) {
+            continue;
+        }
+        return target;
+    }
+    return undefined;
+}
+
+function fileClipFaults(screen: string, label: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    const named = new Map<Element, string | undefined>();
+    const fileOn = (el: Element): string | undefined => {
+        if (named.has(el)) return named.get(el);
+        const cs = getComputedStyle(el);
+        let found: string | undefined;
+        for (const prop of FILE_CLIP_PROPS) {
+            const file = fileNamedBy(cs.getPropertyValue(prop));
+            if (file !== undefined) {
+                found = `${prop} names ${file}`;
+                break;
+            }
+        }
+        named.set(el, found);
+        return found;
+    };
+    const said = new Set<Element>();
+    for (const el of root.querySelectorAll('*')) {
+        const ownText = [...el.childNodes].some(
+            (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '',
+        );
+        if (!ownText && !el.matches(FILE_CLIP_SUBJECTS)) continue;
+        fileClipChecks += 1;
+        for (let at: Element | null = el; at !== null && at !== root; at = at.parentElement) {
+            const why = fileOn(at);
+            if (why === undefined) continue;
+            if (!said.has(at)) {
+                said.add(at);
+                out.push({
+                    screen,
+                    theme: label,
+                    check: FILE_CLIP_CHECK,
+                    detail: `${describe(el)}'s words are under ${at === el ? 'their own box' : describe(at)}, whose ${why}`,
+                });
+            }
+            break;
+        }
+    }
+    return out;
+}
+
 const failures: Failure[] = [];
+
+/*
+ * **A look is measured with its sheet** (step 6, 6.7). Every worn-only
+ * look this page measures has its sheet appended before the first paint,
+ * the way the production loader will (step 8) — none today: no row is worn
+ * only, so this awaits nothing, and a worn-only row reaching a measured
+ * page without a URL is a failure here rather than a look measured bare.
+ * Then every paint reads each stall's `--look-sheet` against its `t-*`
+ * class (`a-look-is-measured-with-its-sheet`, `lookSheetFaults` below).
+ */
+try {
+    const worn = wornSheetsOf(measuredLooks());
+    if (worn.length > 0) {
+        await Promise.all(worn.map(({ url, cls }) => loadWornSheet(url, cls)));
+    }
+} catch (err) {
+    failures.push({
+        screen: 'probe page',
+        theme: '-',
+        check: LOOK_SHEET_CHECK,
+        detail: err instanceof Error ? err.message : String(err),
+    });
+}
+
 const measured = screensToRun();
 /**
  * Screens that actually mounted a seller's figure while they were measured.
@@ -3308,6 +3463,8 @@ for (const screen of measured) {
                     ? look.label
                     : `${look.label} + ${worn.map((a) => a.label).join(' + ')}`;
             failures.push(...checkOverTime(screen, look, label, worn));
+            failures.push(...lookSheetFaults(screen, label));
+            failures.push(...fileClipFaults(screen, label));
             // The tree `checkOverTime` measured is still mounted: it seeks the
             // animations it painted rather than repainting.
             // A pay screen owes a seller's figure. The several-items sheet
@@ -3781,6 +3938,24 @@ declare global {
         /** Each measured look's id, and how many decoration rows it has — none means no worn half. */
         __themes: { id: number; rows: number; sheetClass: string; wornAll: number[] }[];
         __probeReady: boolean;
+        /** Every policy refusal the page has met so far (`cspWatch.ts`). */
+        __cspRefusals: () => readonly CspRefusal[];
+        /** The worn-only road under the production policy, with `missing` a URL that must not load. */
+        __wornSheetJob: (missing: string) => Promise<{
+            url: string;
+            before: string;
+            loaded: boolean;
+            error: string;
+            last: boolean;
+            sameOrigin: boolean;
+            after: string;
+            art: number[];
+            missingRejected: boolean;
+            missingWhy: string;
+            missingStatus: number;
+            inEntryCss: boolean;
+            refusals: readonly CspRefusal[];
+        }>;
     }
 }
 
@@ -5031,6 +5206,91 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
  * dressed it back into the flow fails every pass rather than padding every
  * shot again.
  */
+/*
+ * `the-probe-page-meets-no-csp-refusal` (step 6): the page is previewed
+ * under the production policy, so a refusal here is one a visitor meets —
+ * a sheet, a picture or a face that paints nothing. `cspWatch.ts` listens
+ * from the first module statement; the runner asks again after the jobs
+ * that run past this verdict (`window.__cspRefusals`).
+ */
+for (const refusal of cspRefusals()) {
+    failures.push({
+        screen: 'probe page',
+        theme: '-',
+        check: 'the-probe-page-meets-no-csp-refusal',
+        detail: `${refusal.directive} refused ${refusal.blocked || '(inline)'}${refusal.source === '' ? '' : ` at ${refusal.source}`}`,
+    });
+}
+window.__cspRefusals = () => cspRefusals();
+
+/*
+ * `a-worn-only-sheet-loads-under-the-production-policy` (step 6, 6.7): the
+ * harness's worn-only look (`fixtureLook.ts`) is painted without its sheet,
+ * then its sheet appended as a same-origin `<link>` — the road a worn-only
+ * look's sheet takes (step 8's loader) — under the preview's production
+ * policy. The runner holds the answer (`layout-check.mjs`): the look read
+ * no name before the sheet (so the sheet is not in the entry CSS), the
+ * link loaded, landed last among the page's sheets and was same-origin, the
+ * look then named itself, its own art was fetched with a 200, a URL that
+ * does not exist rejected rather than hanging or passing, and the policy
+ * refused nothing. One paint of the neutral screen: the job is about the
+ * road, not the look.
+ */
+window.__wornSheetJob = async (missing: string) => {
+    const root = document.getElementById('app')!;
+    renderStall(root, { ...SCREENS[NEUTRAL_SCREEN]!, theme: FIXTURE_LOOK.theme, worn: [] }, handlers);
+    const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
+    const named = (): string =>
+        stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
+    const before = named();
+    let loaded = false;
+    let last = false;
+    let sameOrigin = false;
+    let error = '';
+    try {
+        const link = await loadWornSheet(FIXTURE_SHEET_URL, FIXTURE_SHEET_CLASS);
+        loaded = true;
+        const sheets = [...document.styleSheets];
+        last = sheets[sheets.length - 1]?.ownerNode === link;
+        sameOrigin = new URL(link.href).origin === location.origin;
+    } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+    }
+    const after = named();
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    const art = (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+        .filter((entry) => /\/assets\/ground-[\w-]+\.svg$/.test(new URL(entry.name).pathname))
+        .map((entry) => entry.responseStatus);
+    let missingRejected = false;
+    let missingWhy = '';
+    try {
+        await loadWornSheet(missing, FIXTURE_SHEET_CLASS);
+    } catch (err) {
+        missingRejected = true;
+        missingWhy = err instanceof Error ? err.message : String(err);
+    }
+    const missingEntry = (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).find(
+        (entry) => new URL(entry.name).pathname === missing,
+    );
+    return {
+        url: FIXTURE_SHEET_URL,
+        before,
+        loaded,
+        error,
+        last,
+        sameOrigin,
+        after,
+        art,
+        missingRejected,
+        missingWhy,
+        missingStatus: missingEntry?.responseStatus ?? 0,
+        inEntryCss: [...document.styleSheets].some(
+            (sheet) => sheet.ownerNode instanceof HTMLLinkElement && sheet.ownerNode.href !== new URL(FIXTURE_SHEET_URL, location.href).href && [...sheet.cssRules].some((rule) => rule.cssText.includes(FIXTURE_SHEET_CLASS)),
+        ),
+        refusals: cspRefusals(),
+    };
+};
+
 const result = document.createElement('pre');
 result.id = 'layout-result';
 result.hidden = true;
@@ -5073,6 +5333,12 @@ const verdict = {
      * kit, the three shipped classes otherwise).
      */
     sheetClasses: [...sheetClassesPainted].sort(),
+    /* The look classes whose sheet named them on a painted stall (`a-look-is-measured-with-its-sheet`). */
+    lookSheetsRead: [...lookSheetsRead].sort(),
+    /* Elements with words of their own asked about a mask or clip naming a file (`no-word-is-clipped-by-a-file`). */
+    fileClipChecks,
+    /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */
+    cspRefusals: cspRefusals(),
     clipSkips,
     clipChecks,
     screensWithQuote: [...withQuote],

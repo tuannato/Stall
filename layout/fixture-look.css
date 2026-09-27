@@ -1,0 +1,25 @@
+/*
+ * The harness's worn-only look (`layout/fixtureLook.ts`): a look sheet that
+ * reaches a page the way a worn-only look's will — its own file, fetched for
+ * a stall that wears it, never in the entry CSS. Never a row of the theme
+ * table and never in the production bundle (`gallery-is-not-served`); the
+ * probe's dedicated job `a-worn-only-sheet-loads-under-the-production-policy`
+ * loads it under the preview's production policy, and the weight guard's
+ * worn-only bucket and the worn-only lints read it as their subject until a
+ * shipped look is worn only (step 6, the step-6 plan v2).
+ *
+ * Deliberately small: the sheet names itself, paints one piece of its own
+ * art and keeps the look rules' reduce block last.
+ */
+
+.t-fixture-worn {
+    --look-sheet: t-fixture-worn;
+}
+
+.stall.t-fixture-worn {
+    background-image: url(./fixture-look/ground.svg);
+    background-size: 24px 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+}

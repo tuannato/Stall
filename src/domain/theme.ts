@@ -230,6 +230,20 @@ export type DecodedTheme = {
      * before it adds this one, and a space would throw in `classList.add`.
      */
     sheetClass: `t-${string}`;
+    /**
+     * How the look's own sheet reaches a page. `bundled`: imported with the
+     * app, in the entry CSS every visitor downloads — the three shipped
+     * looks, which the door paints (Q8) and every record on chain names.
+     * `worn`: its own file, fetched only for a stall that wears the look
+     * (Q17; from Ink wash on). No row is `worn` yet: the loader that fetches
+     * one is step 8's, and until it lands a `worn` row would paint without
+     * its sheet. The sheet's own role table says the same per file
+     * (`scripts/sheet-roles.mjs`, `load`), and
+     * `every-look-row-loads-its-sheet-the-way-its-role-says` holds the two
+     * together; the weight guard counts a worn sheet and its art apart from
+     * what every visitor pays (`scripts/weight-buckets.mjs`).
+     */
+    sheetLoad: 'bundled' | 'worn';
     /** The words a seller reads for this look — ours, and free to rename. */
     label: string;
     /**
@@ -334,6 +348,7 @@ export const DEFAULT_THEME: DecodedTheme = {
     id: DEFAULT_THEME_ID,
     known: true,
     sheetClass: 't-modern',
+    sheetLoad: 'bundled',
     label: 'Modern',
     tierCeilings: [7, 9, 12],
     overlayTierCeilings: [5, 7, 9],
@@ -473,6 +488,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
         NEO_CITY_THEME_ID,
         {
             sheetClass: 't-neo',
+            sheetLoad: 'bundled',
             label: 'Neo city',
             tierCeilings: [7, 9, 12],
             overlayTierCeilings: [5, 7, 9],
@@ -620,6 +636,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
         RURAL_THEME_ID,
         {
             sheetClass: 't-rural',
+            sheetLoad: 'bundled',
             label: 'Rural',
             tierCeilings: [6, 8, 11],
             overlayTierCeilings: [8, 10, 12],

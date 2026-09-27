@@ -818,11 +818,43 @@ const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']
  * the rule's selector list, or undefined inside a keyframe, where `content`
  * is refused outright.
  */
+/** The properties that clip or mask a box: what a file's mask hides, it hides whole. */
+const MASKING = /^(?:-webkit-)?mask(?:-|$)|^clip-path$|^-webkit-mask-box-image/;
+
+/**
+ * Pseudo-classes and attributes a box reaches only after the page is used:
+ * the probe measures every screen at rest, so a rule gated on one of these
+ * paints on a screen no pass measured.
+ */
+const STATE_PSEUDO = /:(?:hover|focus|focus-visible|focus-within|active|checked|target|open|popover-open|disabled|enabled|placeholder-shown|invalid|valid|indeterminate|visited|link|any-link)(?![\w-])/i;
+
+/** True when a selector reaches its box only in a state (`STATE_PSEUDO`, or any attribute but `data-role`). */
+function isStateSelector(selector) {
+    if (STATE_PSEUDO.test(selector)) return true;
+    return [...selector.matchAll(/\[\s*([\w-]+)/g)].some((m) => m[1].toLowerCase() !== 'data-role');
+}
+
 function declarationProblems(decls, selectors) {
     const out = [];
     for (const { prop, value } of decls) {
         const shown = `${prop}: ${echo(value, 48)}`;
         const bare = withoutStrings(value);
+        /*
+         * A file's mask or clip in a state rule or a keyframe (the step-6
+         * critic's P3): `no-word-is-clipped-by-a-file` asks the probe's
+         * paints, which are at rest and frozen at one instant, so a mask
+         * that arrives with a hover, a pressed state or an animation step
+         * would hide words on a screen the probe never measured. Refused
+         * where it is written; a mask on a box at rest is the probe's to
+         * judge. Not seen, stated: a `url()` carried in by `var()`.
+         */
+        if (MASKING.test(prop) && /(?<![\w-])url\(/i.test(value)) {
+            if (selectors === undefined) {
+                out.push(`${shown} — a file's mask or clip in a keyframe: the probe reads one frozen instant, so a mask that animates in is measured by no pass`);
+            } else if (selectors.some(isStateSelector)) {
+                out.push(`${shown} — a file's mask or clip in a state rule: the probe measures every screen at rest, so a mask that arrives with a state is measured by no pass`);
+            }
+        }
         if (/!\s*important/i.test(bare)) {
             out.push(
                 `${shown} — !important outranks the look's own inline values (a mood's palette, the contrast fence on the tokens); write the selector more specifically instead`,
@@ -958,7 +990,7 @@ const REFUSED_AT_RULES = Object.freeze({
  * `wk-` keyframes) to what every look sheet obeys. Shared by `lintSheet` and
  * `lintLookSheet`, so a rule the shipped looks obey is a rule the kit obeys.
  */
-function lintLook(css, { scope, kit, art }) {
+function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }) {
     const { text, nodes, errors } = parseSheet(css);
     const problems = errors.map((e) => `line ${lineOf(text, e.at)}: ${e.message}`);
     const at = (index, message) => problems.push(`line ${lineOf(text, index)}: ${message}`);
@@ -989,6 +1021,8 @@ function lintLook(css, { scope, kit, art }) {
                         for (const why of declarationProblems(declarationsOf(stop.body), undefined)) at(node.start, why);
                     }
                 }
+            } else if (node.name === 'font-face' && load === 'worn' && !node.statement) {
+                for (const why of fontFaceProblems(node.body ?? '', scope)) at(node.start, why);
             } else if (node.name === 'media' && !node.statement) {
                 const condition = mediaCondition(node.prelude);
                 if (!LOOK_MEDIA.includes(condition)) {
@@ -1009,6 +1043,18 @@ function lintLook(css, { scope, kit, art }) {
     };
     walk(nodes);
 
+    for (const why of namesItselfProblems(nodes, scope)) problems.push(why);
+    if (load === 'worn' && !kit) {
+        const own = ownArt ?? { dir: '', files: [] };
+        const listed = new Set(own.files);
+        for (const target of urlTargets(text)) {
+            const why = ownArtProblem(target.value, own.dir, listed);
+            if (why !== undefined) at(target.at, `url "${echo(target.value)}": ${why}`);
+        }
+        for (const m of text.matchAll(/(?<![\w-])src\(/gi)) {
+            at(m.index, `src() is not allowed — ${ownArtRule(own.dir)}`);
+        }
+    }
     if (kit) {
         const listed = new Set(art);
         for (const target of urlTargets(text)) {
@@ -1065,8 +1111,225 @@ export function lintSheet(css, { art = [] } = {}) {
  * outside a string). The kit's art and keyframe-name rules are the kit's:
  * a shipped sheet is Stall's own, built and reviewed here.
  */
-export function lintLookSheet(css, { lookClass }) {
-    return lintLook(css, { scope: lookClass, kit: false, art: [] });
+export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
+    return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
+}
+
+/* ---------- a look sheet names itself; a worn-only sheet keeps to itself ---------- */
+
+/**
+ * The custom property a look sheet declares on its own bare class, holding
+ * that class: `.t-neo { --look-sheet: t-neo; }`. It paints nothing. The
+ * probe reads it on every painted stall wearing a look, and `looks:diff` on
+ * every shot (`a-look-is-measured-with-its-sheet`), so a look measured
+ * without its sheet — a worn-only sheet that did not load, or a bundled one
+ * dropped from the build — fails rather than passing as the base sheets
+ * alone. Not `--s-`: those are the theme table's vars, emitted inline.
+ */
+export const LOOK_SHEET_PROPERTY = '--look-sheet';
+
+/**
+ * `every-look-sheet-names-itself`: exactly one `--look-sheet` declaration in
+ * the sheet, in a top-level rule whose selector is the look's bare class
+ * and nothing else, holding that class. One, because a second in a state
+ * rule or a media block could read true on a stall where the first does
+ * not; the bare class, because the root of every stall wearing the look
+ * carries it and nothing narrower is guaranteed to match.
+ */
+function namesItselfProblems(nodes, scope) {
+    const found = [];
+    const visit = (list, top) => {
+        for (const node of list) {
+            if (node.kind === 'rule') {
+                for (const decl of declarationsOf(node.body)) {
+                    if (decl.prop === LOOK_SHEET_PROPERTY) found.push({ node, decl, top });
+                }
+            } else if (node.children !== undefined) {
+                visit(node.children, false);
+            } else if (node.name === 'keyframes' && /--look-sheet\s*:/i.test(node.body ?? '')) {
+                found.push({ node, decl: undefined, top: false });
+            }
+        }
+    };
+    visit(nodes, true);
+    const want = `.${scope} { ${LOOK_SHEET_PROPERTY}: ${scope}; }`;
+    if (found.length === 0) {
+        return [`the sheet does not name itself — add ${want}, how the probe knows the sheet is loaded`];
+    }
+    if (found.length > 1) {
+        return [`${LOOK_SHEET_PROPERTY} is declared ${found.length} times — the sheet names itself once, as ${want}`];
+    }
+    const [{ node, decl, top }] = found;
+    if (!top || decl === undefined || node.prelude.replace(/\s+/g, ' ').trim() !== `.${scope}`) {
+        return [`${LOOK_SHEET_PROPERTY} is declared under "${echo(node.prelude)}" — the sheet names itself on its bare class, as ${want}`];
+    }
+    if (decl.value !== scope) {
+        return [`${LOOK_SHEET_PROPERTY} holds "${echo(decl.value)}" — the sheet names itself, as ${want}`];
+    }
+    return [];
+}
+
+/**
+ * The other half of `every-look-sheet-names-itself` (the step-6 critic's
+ * P3): a sheet that is no look's — the base, a screen sheet, a document,
+ * the harness's chrome — declares `--look-sheet` nowhere. The name is how
+ * the probe and looks:diff know a look's own sheet was on the page; one
+ * declared anywhere else would read true on a stall whose sheet never
+ * loaded. `sheets` are `{ path, css, lookClass }`, `lookClass` absent on a
+ * sheet that is no look's.
+ */
+export function foreignNamingProblems(sheets) {
+    const out = [];
+    for (const sheet of sheets) {
+        if (sheet.lookClass !== undefined) continue;
+        const count = [...blankComments(sheet.css).matchAll(/--look-sheet\s*:/gi)].length;
+        if (count > 0) {
+            out.push(`${sheet.path}: declares ${LOOK_SHEET_PROPERTY} ${count} time(s) — only a look's own sheet names a look (every-look-sheet-names-itself)`);
+        }
+    }
+    return out;
+}
+
+/** The one road a worn-only sheet's `url()` may take: a file in its own directory. */
+function ownArtRule(dir) {
+    return `a worn-only sheet names only its own art — url(./${dir}/<name>.svg|.woff2), a file in that directory named in lower-case letters, digits and hyphens`;
+}
+
+/** A file name a worn-only look's directory may hold: its art and its faces. */
+export const OWN_ART_NAME = /^[a-z0-9-]{1,64}\.(?:svg|woff2)$/;
+
+/**
+ * `a-worn-only-sheet-names-only-its-own-art`: every `url()` or `image-set()`
+ * target is `./<dir>/<name>` or `<dir>/<name>`, `dir` the look's own
+ * directory relative to the sheet and `name` one of `files`, the plain files
+ * that directory holds. A worn-only sheet and its art are one download,
+ * counted together against the look's budget (`each-look-keeps-its-art-budget`);
+ * a sheet that reached into the shared decorations would make one file two
+ * buckets' (`every-emitted-file-is-in-one-weight-bucket`), and one that
+ * reached anywhere else is the kit's intake problem on a shipped look.
+ */
+function ownArtProblem(target, dir, files) {
+    const value = target.trim();
+    if (/^data:/i.test(value)) return `a data: URL — ${ownArtRule(dir)}`;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//')) {
+        return `nothing loads from another site — ${ownArtRule(dir)}`;
+    }
+    const m = /^(?:\.\/)?([a-z0-9/-]+)\/([^/]+)$/.exec(value);
+    if (m === null || m[1] !== dir || !OWN_ART_NAME.test(m[2])) return ownArtRule(dir);
+    return files.has(m[2]) ? undefined : `there is no plain file ${dir}/${m[2]} beside the sheet`;
+}
+
+/** The family names an `@font-face` block declares, unquoted. */
+function fontFamiliesOf(body) {
+    return declarationsOf(body)
+        .filter((decl) => decl.prop === 'font-family')
+        .map((decl) => decl.value.replace(/^(["'])([\s\S]*)\1$/, '$2').trim());
+}
+
+/**
+ * A worn-only sheet may carry its own face (v2 of the step-6 plan, item 8):
+ * an `@font-face` for a family namespaced to the look — `<class>-…`, so it
+ * can collide with no family another sheet declares
+ * (`a-worn-only-sheet-replaces-no-keyframes` holds the collision) — whose
+ * `src` is its own directory's files alone, `url()` and `format()` and
+ * nothing a reader's machine supplies: `local()` paints a face installed
+ * there, which differs per machine. The file is the look's own art
+ * directory's, checked with every other `url()`.
+ */
+function fontFaceProblems(body, scope) {
+    const out = [];
+    const families = fontFamiliesOf(body);
+    if (families.length !== 1) {
+        out.push('an @font-face names exactly one font-family');
+    }
+    for (const family of families) {
+        if (!new RegExp(`^${scope}-[a-z0-9-]+$`).test(family)) {
+            out.push(`@font-face family "${echo(family)}" is not namespaced to the look — name it ${scope}-<name>`);
+        }
+    }
+    for (const decl of declarationsOf(body)) {
+        if (decl.prop === 'src' && /(?<![\w-])local\(/i.test(decl.value)) {
+            out.push("@font-face src takes no local() — a face on the reader's machine paints differently per machine");
+        }
+    }
+    return out;
+}
+
+/** Every `@keyframes` name and `@font-face` family a sheet declares, at any depth. */
+function declaredNames(css) {
+    const keyframes = [];
+    const families = [];
+    const visit = (list) => {
+        for (const node of list) {
+            if (node.kind !== 'at') continue;
+            if (node.name === 'keyframes') keyframes.push(node.prelude.replace(/^@keyframes\s*/i, '').trim());
+            else if (node.name === 'font-face') families.push(...fontFamiliesOf(node.body ?? ''));
+            else if (node.children !== undefined) visit(node.children);
+        }
+    };
+    visit(parseSheet(css).nodes);
+    return { keyframes, families };
+}
+
+/** Every selector of every rule a sheet holds, at any depth. */
+function selectorsOf(css) {
+    const out = [];
+    const visit = (list) => {
+        for (const node of list) {
+            if (node.kind === 'rule') out.push(...splitTopLevel(node.prelude, ','));
+            else if (node.children !== undefined) visit(node.children);
+        }
+    };
+    visit(parseSheet(css).nodes);
+    return out;
+}
+
+/**
+ * The worn-only rules that need every sheet at once, over `sheets` — each
+ * `{ path, css, load, lookClass }`, `load` absent on a sheet that is no
+ * look's (a base, a screen, a document): it is loaded with whatever serves
+ * it, never on its own.
+ *
+ * - `a-worn-only-sheet-replaces-no-keyframes`: a `@keyframes` name or an
+ *   `@font-face` family a worn-only sheet declares is declared by no other
+ *   sheet. Both are global: a worn sheet arrives after the entry CSS, so a
+ *   name it shares with a bundled sheet REPLACES that one on every stall of
+ *   the page from the moment it loads — Stall's own animation or face,
+ *   redrawn by one look's file, on every look.
+ * - `no-bundled-sheet-names-a-worn-only-look`: no other sheet has a
+ *   selector naming a worn-only look's class. A bundled rule for that look
+ *   paints before its sheet arrives and stays when the sheet fails — the
+ *   look half-dressed — so a worn-only look keeps all of its rules (its
+ *   overlay plate's included, which `broadcast.css` keeps for the bundled
+ *   three) in its own file.
+ */
+export function wornSheetProblems(sheets) {
+    const out = [];
+    const worn = sheets.filter((sheet) => sheet.load === 'worn');
+    const names = new Map(sheets.map((sheet) => [sheet.path, declaredNames(sheet.css)]));
+    for (const sheet of worn) {
+        const own = names.get(sheet.path);
+        for (const other of sheets) {
+            if (other.path === sheet.path) continue;
+            const theirs = names.get(other.path);
+            for (const name of own.keyframes.filter((n) => theirs.keyframes.includes(n))) {
+                out.push(`${sheet.path}: @keyframes ${echo(name)} is also declared in ${other.path} — a worn-only sheet replaces no keyframes (a-worn-only-sheet-replaces-no-keyframes)`);
+            }
+            // Family names match without regard to case, as the cascade matches them.
+            const lower = new Set(theirs.families.map((f) => f.toLowerCase()));
+            for (const family of own.families.filter((f) => lower.has(f.toLowerCase()))) {
+                out.push(`${sheet.path}: @font-face family "${echo(family)}" is also declared in ${other.path} — a worn-only sheet replaces no face (a-worn-only-sheet-replaces-no-keyframes)`);
+            }
+        }
+        const cls = new RegExp(`\\.${escapeRe(sheet.lookClass)}(?![\\w-])`);
+        for (const other of sheets) {
+            if (other.path === sheet.path) continue;
+            for (const selector of selectorsOf(other.css).filter((sel) => cls.test(sel))) {
+                out.push(`${other.path}: "${echo(selector)}" names .${sheet.lookClass}, a worn-only look — its rules live in its own sheet (no-bundled-sheet-names-a-worn-only-look)`);
+            }
+        }
+    }
+    return out;
 }
 
 /* ---------- G6: how often a keyframe flashes, read from the sheets ---------- */
@@ -1576,7 +1839,16 @@ export function flashReport(sheets, { vars = {} } = {}) {
 export function sheetHasRules(css) {
     const { nodes, errors } = parseSheet(css);
     if (errors.length > 0) return true;
-    return nodes.some((node) => !(isReduceBlock(node) && (node.children ?? []).length === 0));
+    return nodes.some(
+        (node) => !(isReduceBlock(node) && (node.children ?? []).length === 0) && !isNamingRule(node),
+    );
+}
+
+/** The skeleton's one rule: the kit's sheet naming itself, and nothing else in that block. */
+function isNamingRule(node) {
+    if (node.kind !== 'rule' || node.prelude.trim() !== `.${KIT_CLASS}`) return false;
+    const decls = declarationsOf(node.body);
+    return decls.length === 1 && decls[0].prop === LOOK_SHEET_PROPERTY && decls[0].value === KIT_CLASS;
 }
 
 function escapeRe(text) {
@@ -1636,7 +1908,10 @@ export function lookRules(css, base) {
  */
 export function rescopeSheet(lookCss, base, carried = []) {
     const cls = new RegExp(`\\.t-${escapeRe(base)}(?![\\w-])`, 'g');
-    const rescope = (css) => rebaseUrls(css.replace(cls, `.${KIT_CLASS}`));
+    // The sheet's name is a value, not a selector: `.t-neo { --look-sheet: t-neo; }`
+    // re-scoped must name the kit, or the starter fails its own lint.
+    const named = new RegExp(`(${escapeRe(LOOK_SHEET_PROPERTY)}\\s*:\\s*)t-${escapeRe(base)}(?![\\w-])`, 'g');
+    const rescope = (css) => rebaseUrls(css.replace(cls, `.${KIT_CLASS}`).replace(named, `$1${KIT_CLASS}`));
     let out = rescope(lookCss);
     const names = [...blankComments(lookCss).matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]);
     const prefix = new RegExp(`^t-${escapeRe(base)}-`);
