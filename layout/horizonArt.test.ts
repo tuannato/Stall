@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { artPaints, brightestArt } from './horizonArt';
+import { artPaints, brightestArt, signLayersRead } from './horizonArt';
 import type { Rgb } from './rainDrop';
 
 const DECOR = join(dirname(fileURLToPath(import.meta.url)), '../src/ui/decor');
@@ -41,11 +41,32 @@ describe('the-horizon-is-read-from-its-own-art', () => {
             ['a named colour', stars.replace(/fill="#[0-9a-f]{6}"/, 'fill="white"')],
             ['a filled path', stars.replace('</svg>', '<path d="M0 0h9v9z" fill="#ffffff"/></svg>')],
             ['text', stars.replace('</svg>', 'hello</svg>')],
+            ['an empty opacity', stars.replace(/fill-opacity="[\d.]+"/, 'fill-opacity=""')],
+            ['an exponent opacity', stars.replace(/fill-opacity="[\d.]+"/, 'fill-opacity="1e-1"')],
+            ['a percent opacity', stars.replace(/fill-opacity="[\d.]+"/, 'fill-opacity="50%"')],
         ];
         for (const [what, sheet] of plants) {
             expect(sheet, what).not.toBe(stars);
             expect(brightestArt([left, right, fill, sheet], PANEL), what).toBeUndefined();
         }
+    });
+
+    it('flattens a sign whose pictures are the four sheets and the moon, and refuses any other picture', () => {
+        const u = (name: string): string => `url("http://localhost/assets/${name}-AbC123.svg")`;
+        const sign = [
+            'linear-gradient(rgba(0, 0, 0, 0) 44%, rgb(5, 6, 13) 80%)',
+            u('horizon-sky-left'),
+            u('horizon-sky-right'),
+            u('horizon-sky-fill'),
+            u('horizon-moon'),
+            u('horizon-stars'),
+        ];
+        expect(signLayersRead(sign)).toBe(true);
+        expect(signLayersRead(sign.filter((l) => !l.includes('moon')))).toBe(true);
+        expect(signLayersRead([...sign, u('horizon-comet')]), 'a picture nobody read').toBe(false);
+        expect(signLayersRead([...sign, 'url("data:image/svg+xml,%3Csvg/%3E")']), 'an inline picture').toBe(false);
+        expect(signLayersRead(sign.filter((l) => !l.includes('stars'))), 'a sheet missing').toBe(false);
+        expect(signLayersRead([...sign, u('horizon-stars')]), 'a sheet twice').toBe(false);
     });
 
     it('reads the moon for nothing: it is not one of the sheets, and it would be refused', () => {

@@ -1123,7 +1123,7 @@ const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
             sunk: 0.5,
         },
         reason:
-            'the tagline under Grid horizon (step 5a″, the owner via the window): it stands lower on the sign than the name, where the horizon’s floor sink (the page ground at 86%, from 44% to 80% of the sign) darkens the panel toward the page ground — the panel’s top two stops taken half way to `--s-bg`, which the at-rest read measured inside the ground on every screen and width, where the panel’s own colour fell outside it at the desk and on the wall',
+            'the tagline under Grid horizon (step 5a″, the owner via the window): the panel’s top two stops taken half way to `--s-bg`. `sunk: 0.5` is a fitted value, not a derived one: the ground under the tagline darkens differently by place — below the horizon’s line at a phone and a desk, where the floor sink (the page ground at 86%, from 44% to 80% of the sign) lies over the panel; on the wall it stands in the sky just above the line, and the sink, which begins above the line at 44%, already darkens it there — and the half-way mix is the one colour the at-rest read measured inside the ground on every screen and width, where the panel’s own colour fell outside it at the desk and on the wall',
     },
 };
 

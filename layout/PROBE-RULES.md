@@ -1870,8 +1870,12 @@ lower than the name, where the horizon's floor sink darkens the panel, so
 its outline is the panel's top two stops taken half way to the page ground
 (`OUTLINE_GROUNDS`' `.stall-tagline` row, a `stops` read with `sunk: 0.5`;
 the panel's own colour fell outside its ground at the desk and on the
-wall). The sign's third line, `.stall-sub`, is a target too, and needs no
-outline: its own bordered chip stands below the line, 7.25:1 at the
+wall). **`sunk: 0.5` is fitted, not derived**: below the line at a phone
+and a desk the floor sink lies over the panel; on the wall the tagline
+stands in the sky just above the line, where the sink (from 44% of the sign)
+has already begun; the half-way mix is the one colour measured inside every
+one of those grounds. The sign's third line, `.stall-sub`, is a target too, and needs no
+outline: its own bordered chip stands below the line, 9.30:1 at the
 horizon's worst.
 
 **Every outline guard takes it for its own reason:**
@@ -1909,13 +1913,23 @@ horizon's worst.
   read, the art is flattened (`__horizonAtItsWorst`: the skyline and star
   sheets as one layer of their brightest paint, read from the SVGs through
   `layout/horizonArt.ts`'s allow-list — today the stars' `#e8fbff` at 0.79;
-  the moon kept, stated), captured blanked and with the glyphs shown, the
-  sign's lines read, the art put back. The least today: the name 2.76:1
-  (`desktop/unreachable`), the tagline 1.92:1 (the desk's shop window), the
-  state line 7.25:1. `HORIZON_WORST` in the runner pins each 0.01 under
-  those: a lower read fails as a regression, a higher one prints "raise it".
-  The limit, stated: another seller's words can put a glyph beside a lit
-  window or a star, where the ring reads as low as those numbers. The rain
+  the moon kept, stated; a sign carrying any other picture is refused,
+  `signLayersRead`), over the **sky band** only — from the sign's top to
+  the line at 52% (or the stars' foot, if lower), where the art is drawn;
+  it covered the whole sign until the critic's item 5 — captured blanked
+  and with the glyphs shown, the sign's lines read, the art put back. The
+  least today: the name 2.76:1 (`desktop/unreachable`), the tagline 1.92:1
+  (`desktop/shop-window-cycle`), the state line 9.30:1
+  (`mobile/item-listing`; 7.25 when the flat layer covered the whole sign —
+  it stands below the line). `HORIZON_WORST` (`scripts/horizon-worst.mjs`,
+  pinned by value in `horizon-worst-baselines-are-the-owners-numbers`)
+  holds each number with the job it was read on: that job is owed, must
+  read it again within 0.01 — lower is a regression, higher fails until the
+  constant is updated — and no other job may read lower. A line read at the
+  worst with no sample fails, named. The limit, stated: another seller's
+  words can put a glyph beside a lit window or a star, where the ring reads
+  as low as those numbers — and the flat layer is the brightest paint over
+  the whole sky band, so it is a bound over every placement of a light. The rain
   stays flattened as a fail because its drops cross every glyph within one
   drift; the horizon's lights are static and sparse. The critic's pure test
   ("every art paint half covered by the one-pixel ring clears 3:1") is not
@@ -1945,8 +1959,11 @@ panel's gradient and the floor sink — so a single outline colour cannot
 match it everywhere, and the read passes it partly on the head's cyan glow
 (a radial gradient) and scanlines, held to their stops, which widen
 [lo, hi]. Read without them (the critic's tightening, measured and not
-committed), the lamp's outline on `invalid` at 390 and the wall's tagline
-sat 5–18 levels off the ground.
+committed, re-measured 2026-09-27 under the current colours): the tagline's
+outline, rgb(9, 14, 26), sits up to 10 levels off the ground at a phone
+and a desk and up to 6 on the wall (69 lines); the lamp's on `invalid` at
+390, rgb(13, 21, 38), 7 levels. (The 5–18 first measured was the tagline
+under the panel's own colour, before it had its own.)
 
 **The lamp's dip is G7's, and over the skyline it is expected to fail.** The
 dim frames paint the letter in `color-mix(in srgb, var(--s-text) 74%,

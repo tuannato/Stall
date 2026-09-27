@@ -931,10 +931,13 @@ body {
 }
 
 /*
- * The tagline stands lower, where the horizon's floor sink (its first
- * layer: the page's own ground at 86%, from 44% to 80% of the sign) darkens
- * the panel toward the page ground: its outline is the panel and the page
- * ground mixed evenly, the sink half way.
+ * The tagline stands lower than the name, where the horizon's floor sink
+ * (its first layer: the page's own ground at 86%, from 44% to 80% of the
+ * sign) darkens the panel toward the page ground — below the line at a phone
+ * and a desk, and on the wall in the sky just above it, where the sink has
+ * already begun. Its outline is the panel and the page ground mixed evenly:
+ * a fitted colour, the one the at-rest read measured inside the ground at
+ * every width, not one derived from the sink.
  */
 .stall.att-horizon:not(.deck-stall) .stall-tagline {
     --rain-outline-ground: color-mix(in srgb, var(--s-bg), color-mix(in srgb, #101a2c, #0a1120));

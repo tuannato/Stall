@@ -55,13 +55,39 @@ export function artPaints(sheet: string): ArtPaint[] | undefined {
         }
         if (m[1] === 'svg') continue;
         const hex = /^#([0-9a-fA-F]{6})$/.exec(attrs.get('fill') ?? '')?.[1];
-        const alpha = attrs.has('fill-opacity') ? Number(attrs.get('fill-opacity')) : 1;
+        // A plain number from 0 to 1 and nothing else (the critic, step 5a″
+        // item 2): `Number('')` is 0 and `Number('1e-1')` reads, and neither
+        // is a way the art is written.
+        const opacity = attrs.get('fill-opacity');
+        if (opacity !== undefined && !/^(0|1|0?\.\d+)$/.test(opacity)) return undefined;
+        const alpha = opacity === undefined ? 1 : Number(opacity);
         if (hex === undefined || !(alpha >= 0 && alpha <= 1)) return undefined;
         out.push({ rgb: [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as unknown as Rgb, alpha });
     }
     // Anything the pattern did not consume — text, a comment, a tag written
     // another way — is something this reading has not understood.
     return rest.trim() === '' && !first ? out : undefined;
+}
+
+/** One of the four sheets this reading reads, as a computed `url()` layer. */
+export const isHorizonSheet = (layer: string): boolean =>
+    /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|stars)[^")]*"?\)$/.test(layer);
+
+/** The moon, which this reading does not read and the flatten keeps. */
+export const isHorizonMoon = (layer: string): boolean => /^url\("?[^")]*\/horizon-moon[^")]*"?\)$/.test(layer);
+
+/**
+ * Whether a sign's computed background layers are ones the flatten may
+ * replace: the four sheets each once, the moon at most once, and no other
+ * picture — any other `url()` is art this reading has not read, and the
+ * sign is refused rather than flattened around it (the critic, step 5a″
+ * item 2).
+ */
+export function signLayersRead(layers: readonly string[]): boolean {
+    const pictures = layers.filter((layer) => /^url\(/.test(layer));
+    const sheets = pictures.filter(isHorizonSheet);
+    const moons = pictures.filter(isHorizonMoon);
+    return sheets.length === 4 && new Set(sheets.map((l) => /horizon-[a-z-]+/.exec(l)![0])).size === 4 && moons.length <= 1 && sheets.length + moons.length === pictures.length;
 }
 
 /**

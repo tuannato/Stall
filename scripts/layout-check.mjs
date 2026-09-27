@@ -40,6 +40,7 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
+import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
@@ -355,18 +356,8 @@ const RAIN_REQUIRED = [
     'desktop/shop-window-cycle/2/65535',
 ];
 
-/**
- * **Grid horizon at its worst, a known limit** (the owner's C, 2026-09-27):
- * the least ring read of the sign's outlined lines (the name, the tagline)
- * and the least line read of its state line (`sub`) with the horizon's
- * skyline and stars flattened to their brightest paint. Another seller's
- * words can put a glyph beside a lit window or a star, where the ring reads
- * this low; the owner accepted it. A read lower than these is a regression
- * and fails; a higher one says to raise the number. Measured 2026-09-27.
- */
-// Each 0.01 under the least read on 2026-09-27 (2.76, 1.92, 7.25), so a
-// rounding of the same frame never reads as a regression.
-const HORIZON_WORST = { name: 2.75, tagline: 1.91, sub: 7.24 };
+// Grid horizon at its worst: the owner's numbers and their verdict (`horizon-worst.mjs`).
+
 
 /**
  * The jobs that must read Grid horizon at its worst (step 5a″): the name on
@@ -374,11 +365,15 @@ const HORIZON_WORST = { name: 2.75, tagline: 1.91, sub: 7.24 };
  * phone, a desk and the 1920 wall, where the tagline stands in the sky.
  */
 const HORIZON_REQUIRED = [
-    'mobile/offers/2/4',
-    'desktop/offers/2/4',
-    'mobile/offers/2/65535',
-    'desktop/offers/2/65535',
-    'canvas/shop-window-wall/2/65535',
+    ...new Set([
+        'mobile/offers/2/4',
+        'desktop/offers/2/4',
+        'mobile/offers/2/65535',
+        'desktop/offers/2/65535',
+        'canvas/shop-window-wall/2/65535',
+        // And the job each of the owner's numbers was read on.
+        ...Object.values(HORIZON_WORST).map((at) => at.job),
+    ]),
 ];
 
 /*
@@ -1621,8 +1616,10 @@ try {
         // Jobs whose Grid horizon was flattened to its brightest paint, by key
         // (`HORIZON_REQUIRED`).
         const horizonKeys = new Set();
-        // The least read per sign line at the horizon's worst, and where.
+        // Each sign line's least read per job at the horizon's worst, and
+        // the lines that gave no sample there.
         const horizonWorst = new Map();
+        const horizonUnread = [];
         const dim = [];
         // The ring read (`ringRead`): outlined targets read, ring pixels
         // read, and the least ring contrast per kind of line, for the report.
@@ -2205,9 +2202,16 @@ try {
                                         : t.rects === undefined
                                           ? worstContrastInBox(blankCap.shot, t, t.color)
                                           : lineRead(blankCap.shot, t).worst;
-                                if (least === undefined || !Number.isFinite(least)) continue;
-                                const at = horizonWorst.get(part) ?? { least: Infinity, job: '' };
-                                if (least < at.least) horizonWorst.set(part, { least, job: plannedJob.key });
+                                if (least === undefined || !Number.isFinite(least)) {
+                                    // A line read with no sample is named,
+                                    // never skipped (5b's rule; the critic,
+                                    // step 5a″ item 3).
+                                    horizonUnread.push(`${plannedJob.key} ${t.sel}`);
+                                    continue;
+                                }
+                                const byJob = horizonWorst.get(part) ?? new Map();
+                                byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
+                                horizonWorst.set(part, byJob);
                             }
                         }
                         const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
@@ -2354,25 +2358,17 @@ try {
             );
         }
         if (LOOKS === 'shipped') {
-            // At the horizon's worst, a report held to a baseline: a least
-            // read lower than the baseline is a regression and fails; one
-            // higher says the baseline can be raised.
-            const said = [];
-            for (const [part, baseline] of Object.entries(HORIZON_WORST)) {
-                const read = horizonWorst.get(part);
-                if (read === undefined) {
-                    verdicts.push(`the sign's ${part} at Grid horizon's worst was read on no job — vacuous`);
-                    continue;
-                }
-                said.push(`${part} ${read.least.toFixed(2)} (${read.job}; baseline ${baseline.toFixed(2)})`);
-                if (read.least < baseline - 0.005) {
-                    verdicts.push(
-                        `the sign's ${part} at Grid horizon's worst reads ${read.least.toFixed(2)}:1 on ${read.job}, under the ${baseline.toFixed(2)} HORIZON_WORST holds — a regression (lower it only with the owner)`,
-                    );
-                } else if (read.least > baseline + 0.05) {
-                    console.log(`  the sign's ${part} at Grid horizon's worst reads ${read.least.toFixed(2)}:1, over the ${baseline.toFixed(2)} HORIZON_WORST holds — raise it`);
-                }
+            // At the horizon's worst, held to the owner's numbers
+            // (`horizonWorstVerdict`): the job each was read on is owed and
+            // must read it again, and no job may read lower.
+            for (const line of horizonWorstVerdict(horizonWorst)) verdicts.push(line);
+            if (horizonUnread.length > 0) {
+                verdicts.push(`${horizonUnread.length} sign line(s) at Grid horizon's worst gave no sample: ${horizonUnread.join(', ')}`);
             }
+            const said = [...horizonWorst].map(([part, byJob]) => {
+                const [job, least] = [...byJob].sort((a, b) => a[1] - b[1])[0];
+                return `${part} ${least.toFixed(4)} (${job}; pinned ${HORIZON_WORST[part]?.least.toFixed(2)} on ${HORIZON_WORST[part]?.job})`;
+            });
             console.log(`  Grid horizon at its worst, least per sign line (a known limit, the owner's C, 2026-09-27): ${said.join('; ')}`);
         }
         if (LOOKS === 'shipped' && HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {

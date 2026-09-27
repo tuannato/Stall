@@ -23,7 +23,7 @@ import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import buntingSvg from '../src/ui/decor/bunting.svg?raw';
 import { artTopShare } from './buntingArt';
 import { brightestDrop, type Drop } from './rainDrop';
-import { brightestArt } from './horizonArt';
+import { brightestArt, isHorizonSheet, signLayersRead } from './horizonArt';
 import horizonLeftSvg from '../src/ui/decor/horizon-sky-left.svg?raw';
 import horizonRightSvg from '../src/ui/decor/horizon-sky-right.svg?raw';
 import horizonFillSvg from '../src/ui/decor/horizon-sky-fill.svg?raw';
@@ -4568,6 +4568,8 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
  * ring read there fails as everywhere; then, for the report, every sign
  * wearing it (`__horizonAtItsWorst(true)`) has its skyline and star sheets (`horizon-sky-left`, `-right`, `-fill`,
  * `-stars`) replaced by ONE flat layer of the brightest paint those sheets
+ * — over the sky band only, from the sign's top to the line (or the stars'
+ * foot, if lower), where the art is drawn —
  * draw, over the colour the sign's outline is written in — read from the
  * art through an allow-list (`layout/horizonArt.ts`), today the stars'
  * `#e8fbff` at 0.79 — in the first sheet's place, every other layer kept:
@@ -4595,9 +4597,18 @@ function horizonAtItsWorst(): { worn: number; flattened: number } {
         probe.remove();
         const art = ground === undefined ? undefined : brightestArt(HORIZON_SHEETS, ground.rgb);
         const layers = splitLayers(cs.backgroundImage);
-        const isSheet = (layer: string): boolean => /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|stars)[^")]*"?\)$/.test(layer);
+        const isSheet = isHorizonSheet;
         const first = layers.findIndex(isSheet);
-        if (art === undefined || first < 0 || layers.filter(isSheet).length !== HORIZON_SHEETS.length) continue;
+        // Any picture on the sign that is neither one of the four sheets nor
+        // the moon is art this reading has not read: refused, never flattened
+        // around (`signLayersRead`, the critic's step 5a″ item 2).
+        if (art === undefined || first < 0 || !signLayersRead(layers)) continue;
+        // The sky band, never the whole sign (the critic, step 5a″ item 5):
+        // the skyline stands with its foot on the line at 52% of the sign and
+        // the stars hang from its top, 4px down and 60px tall, both times the
+        // decoration scale — the art is drawn nowhere below the band.
+        const scale = Number.parseFloat(cs.getPropertyValue('--s-decor-scale')) || 1;
+        const band = Math.max(0.52 * sign.getBoundingClientRect().height, 64 * scale);
         const paint = `rgba(${art.rgb.join(', ')}, ${art.alpha})`;
         const rebuild = (list: string[], flatEntry: string): string =>
             layers
@@ -4605,9 +4616,9 @@ function horizonAtItsWorst(): { worn: number; flattened: number } {
                 .join(', ');
         const set = (prop: string, value: string): void => sign.style.setProperty(prop, value, 'important');
         set('background-image', rebuild(layers, `linear-gradient(${paint}, ${paint})`));
-        set('background-size', rebuild(splitLayers(cs.backgroundSize), '100% 100%'));
+        set('background-size', rebuild(splitLayers(cs.backgroundSize), `100% ${band}px`));
         set('background-repeat', rebuild(splitLayers(cs.backgroundRepeat), 'no-repeat'));
-        set('background-position', rebuild(splitLayers(cs.backgroundPosition), '0% 0%'));
+        set('background-position', rebuild(splitLayers(cs.backgroundPosition), '0px 0px'));
         flattened += 1;
     }
     return { worn, flattened };
