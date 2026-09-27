@@ -304,6 +304,21 @@ const PIXEL_CONTRAST_FLOOR = 3;
  */
 const LOOK_PSEUDO_LEVELS = 2;
 /**
+ * The line targets that yield no line rect on screen, per viewport, as
+ * measured when step 5b landed (the critic, 2026-09-27): a line target
+ * whose every fragment is clipped away, or that is not rendered at this
+ * width, is counted and never failed — it is not on screen — so a change
+ * that clipped a whole line out of view would read green. These are
+ * ceilings, exact today: a pass that finds more fails and names the count;
+ * one that finds fewer says so, and the number here should come down with
+ * the change that lowered it.
+ */
+const LINE_SKIP_CEILING = {
+    mobile: { 'clipped-away': 63, 'not-rendered': 35 },
+    desktop: { 'clipped-away': 23, 'not-rendered': 28 },
+    canvas: { 'clipped-away': 726, 'not-rendered': 0 },
+};
+/**
  * `LAYOUT_LEGACY=1` reads every line-read target the pre-5b way too, on the
  * same capture, and writes the old value and — for a fall — its bucket into
  * the dump (`legacy`, `at`, `bucket`): the measurement step 5b's commit body
@@ -1522,6 +1537,8 @@ try {
     const skipTotals = new Map();
     // Visible text no contrast target reads, by element kind, and on how many jobs.
     const uncoveredKinds = new Map();
+    // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
+    const lineSkips = {};
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1764,6 +1781,10 @@ try {
                     for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
                     record.skips = firstRead.live.skips ?? {};
                     for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
+                    for (const why of ['clipped-away', 'not-rendered']) {
+                        const at = (lineSkips[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+                        at[why] += record.skips[why] ?? 0;
+                    }
                     // A failing box is re-shot once before it is believed:
                     // capture right after an emulated resize can raster a
                     // stale frame — measured: the live DOM held transparent
@@ -2165,6 +2186,20 @@ try {
             // somewhere, or the outline on it is one nobody reads: a screen
             // no rain job samples paints it (`RAIN_JOBS`).
             verdicts.push(`an outline nobody reads — outlined on a screen the pass paints and never ring-read: ${unread.join(', ')}`);
+        }
+        if (LOOKS === 'shipped') {
+            for (const [viewport, ceiling] of Object.entries(LINE_SKIP_CEILING)) {
+                for (const [why, most] of Object.entries(ceiling)) {
+                    const n = lineSkips[viewport]?.[why] ?? 0;
+                    if (n > most) {
+                        verdicts.push(
+                            `${n} line target(s) ${why} at ${viewport}, over the ${most} measured when step 5b landed — a line clipped out of view reads green unless this is held (LINE_SKIP_CEILING)`,
+                        );
+                    } else if (n < most) {
+                        console.log(`  ${viewport}: ${n} line target(s) ${why}, under the ${most} LINE_SKIP_CEILING holds — lower it`);
+                    }
+                }
+            }
         }
         if (LOOKS === 'shipped' && lookPseudoJobs === 0) {
             // Neo's sheet generates pseudos on every screen with a heading or

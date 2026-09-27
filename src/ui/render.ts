@@ -6136,7 +6136,11 @@ function selectionLineNode(
             ? copy.selectionLine(count.toString(), quoteFigure(item.price), lineFigure(item.price, count))
             : copy.SELECTION_NOT_CHOSEN,
     );
-    sub.setAttribute('data-role', 'selection-sub');
+    // The chosen line is money — "2 × $5.00 = $10.00", the figure a buyer
+    // adds up before Pay — and wears its own role, which the layout probe
+    // protects and reads whole (`layout/moneySet.ts`); the unchosen note is
+    // words.
+    sub.setAttribute('data-role', count > 0n ? 'selection-figure' : 'selection-sub');
     const stepper = el('span', 'sel-step');
     const fewer = el('button', 'step');
     fewer.type = 'button';

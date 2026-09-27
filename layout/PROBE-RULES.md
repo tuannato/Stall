@@ -587,8 +587,22 @@ sides:
   matches the set, and every node the set matches is a contrast target
   standing in a protected box — `pay-wallet` aside, money by what it hands
   a wallet and in no protected box by its dress. The deck is not asked.
-  `moneyChecks` counts the nodes asked, and the phone and desk passes owe
-  some (`probe-coverage.mjs`): 4,804 and 5,212 on the day it landed.
+  `moneyChecks` counts the nodes asked; it runs on every geometry pass,
+  and the phone and desk passes owe some (`probe-coverage.mjs`): 4,804 and
+  5,212 on the day it landed.
+
+**Money outside `PROTECTED`, and text inside a money box** (the critic,
+2026-09-27). The set began as `PROTECTED ∩ CONTRAST_TEXT`, so money text
+outside a protected box fell to the line read with D7: a chosen row's line
+("2 × $5.00 = $10.00") wears its own role now, `selection-figure`, which is
+protected, a contrast target and money; the touch wall's Pay
+(`window-pay`) matched no contrast target at all and is all three now. And
+the browser half fails a contrast target whose nearest protected ancestor
+is money unless it is money too: the wall payment's `.sw-pay-v` and
+`.sw-pay-s`, inside `pay-lines`, read by the line read until then (2,223
+and 57 failures before they joined the set). Proved red by taking
+`selection-figure` and `window-pay` out of the set (below, in the step's
+last commit).
 
 **Proved red** by taking `receipt-amount` out of the set: 35 failures on
 the phone and 35 on the desk, every one the Activity fold's amount ("is a
@@ -1568,6 +1582,128 @@ the first-stall numbers, the footer's lines and the invite's chip stay
 scoped to the rain: elsewhere they stand on a card or a ground every look
 was proved on, which is their own reason, not the sampler's.
 
+## Every moving decoration has a reader or a reason (step 5b, 2026-09-26)
+
+The pass freezes every animation at one instant, so a green under a moving
+decoration is luck. `layout/movingDecor.ts` lists every catalogue row with
+`motion: true`, keyed by its class, each with a **reader** — the rule or
+test that holds the lines it can reach at its worst — or a written
+**reason** it needs none; `every-moving-decoration-has-a-reader-or-a-reason`
+holds the keys to exactly the moving rows and each reader to a name some
+test or rule in the repository carries.
+
+| Class | Reader, or reason |
+|---|---|
+| `att-rainfall` | `a-line-on-the-ground-reads-wherever-a-drop-falls` (the flattening, the ring read) |
+| `att-confetti` | `every-confetti-scrap-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-sunburst` | `every-sunburst-ray-clears-three-to-one-under-every-ground-ink` (pure) |
+| `att-aurora` | `the-aurora-is-read-at-both-ends-of-its-tide` (below) |
+| `att-bunting` | `the-bunting-never-swings-into-the-ornament-label` (below) |
+| `att-pinstripe` | reason: runs in the cards' 2px border alone, under no line |
+| `att-hum` | reason: moves an ink, not a ground (staged with G7) |
+| `att-beetle` | reason: roams its own yard strip, where no line stands |
+
+Moving inks (Neo's ticker flicker, the hum's dimmed lamp, the pin demo,
+Rural's swaying tag and swinging board) are not grounds and stay open,
+staged with G7.
+
+**The aurora is read at both ends of its tide** — on two conditions its
+pure half pins (`layout/auroraTide.test.ts`): each wash's colour is at
+least the ground's on every channel, every ink Neo sets on bare ground is
+lighter than the ground, and, the washes' alphas read from the sheet, the
+least contrast across the tide at every falloff strength is at an end
+(`TIDE_SCREENS`,
+`contrastPlan.ts`). Worn alone no line wears the outline, and the all-worn
+job wears the rain with it. So each screen whose lines stand on Neo's bare
+ground — the rain's own list, the offers screen, the wall's Cycle — is
+painted with the aurora alone, its `--au-tide` held (important) at 0 and
+again at 1; each channel of the wash is convex in the tide, so the ends
+are the worst. 46 jobs; each job's echo holds every aurora-wearing stall to
+a held tide, and a shipped plan with none fails as vacuous. The first run
+read Neo's vacant-box line at 2.69–2.95:1 over both ends; the owner's lift
+(the colour, `.sparse-empty-s` to the muted under the aurora as under the
+rain) reads 4.92–5.52. Proved red by taking the lift off: three figures at
+2.69–2.90:1.
+
+**The bunting never swings into the ornament label**: Rural's bunting row
+sways ±0.6° about its origin inside `.orn`, beside the strip's own label.
+The probe reads the widest turn from the row's own keyframes, the row's
+box before its turn from its art's topmost paint down (`buntingArt.ts`,
+an allow-list reader of `bunting.svg`: every control point bounds a path;
+the box is taller than the drawing, and the first version, which swept the
+whole box, failed on the empty space above the string), and turns it to
+each end: it must not reach any line of the strip's own text, a device
+pixel in. Phone and desk passes owe a row swept where Rural is measured.
+Proved red by `.t-rural .att-bunting { margin-top: -34px }`: 123 failures.
+
+## The sampler reads text (step 5b, D7, 2026-09-26)
+
+The pass read the worst pixel inside a target's border box, so anything the
+look painted in the box that the glyphs never cross counted as ground —
+Modern's accent underline under a heading, Rural's bunting row in `.orn`,
+a card's dashed edge — and two workarounds grew for the same mistake (the
+heading's in-flow-marker step-past, the rain scoping). Now **every contrast
+target outside the money set (`layout/moneySet.ts`) that wears no outline is
+read over its own text's line rects** (`lineRectsOf` in the probe,
+`lineRead` in the runner):
+
+- the rects `Range.getClientRects()` gives for every non-blank text node
+  whose nearest contrast target is this one (a nested target is read as
+  itself), **each against its own element's ink** — a muted name inside an
+  ink control is read against the muted;
+- clipped like the text: by the target's own overflow and every clipping
+  ancestor's, per axis, and by its own convex `clip-path` band;
+- **every pixel wholly inside a rect** — no lattice, no radius or border
+  inset (a line rect holds neither);
+- where the frame is turned (Rural's swaying tag, the swinging board), the
+  line box before its turn, from the actual angle (`angleOf`), and only the
+  pixels inside it — the fixed 8px pad is gone. A money box inside a turned
+  frame is read at the lattice points inside its own turned box, and a
+  Rural price figure the old pad erased is read now (11.37 bare, 5.31 worn);
+- a control whose only mark is a drawn glyph (`.step`, the sheet close) is
+  read over its `svg.ic`'s box;
+- **no silent drop**: a line target that yields a rect and no pixel fails
+  the job ("a target with text and no sample"), a whole-box read that finds
+  no pixel fails too, and every node that gave no box is counted by reason
+  on the pass's line (`nodes that gave no box: clipped-away, draws-nothing,
+  not-rendered, sliver`) and per job in the dump (`skips`).
+
+The heading step-past is deleted: a marker the text does not cross lies
+outside every rect. Money boxes keep the whole-box read (and outlined lines
+the ring), "a money box is never read by a weaker verdict".
+
+**What moved, on the same capture.** The comparison is not part of an
+ordinary run, stated plainly: only `LAYOUT_LEGACY=1 pnpm test:layout` reads
+each line target the old way too and writes `legacy`, `at` and `bucket`
+into the dump (`.layout-dump/shipped-latest.json`, untracked); an ordinary
+run reads the new way alone, so nothing guards the falls between two
+commits but the 3:1 floor. To ask again: run with `LAYOUT_LEGACY=1` and
+tally the dump's line boxes whose `worst` is under `legacy`, by `bucket`.
+The last full list of falls past 0.1 is untracked, in the owner's working
+tree (`private/design/workshop-2026-09-23/step5b-shots/d7-falls.txt`); the
+figures below are that run's: 4,744 targets read over line rects; 288 rose, 3,818 stayed,
+476 fell, **none across 3:1** once the wall's card fit and the vacant line
+was lifted (before those two fixes this read is what found them, at 1.96
+and 2.73–2.95:1). The falls, bucketed by where the new worst pixel lies:
+
+| Bucket | Falls | Past 0.1 | What it is |
+|---|---|---|---|
+| lattice | 418 | 238 | inside the old band: a pixel the old 12×8 lattice stepped over |
+| ink | 28 | 28 | a nested line read against its own ink (the Shop tab's muted name, 13.09 → 5.48) |
+| inset | 27 | 16 | inside the box, in the old radius, border or 8px pad |
+| content area | 3 | 3 | past the box's top or bottom: a font's content area over a tight line box |
+| spill / clipped / dropped | 0 | 0 | — |
+
+162 line targets the old read dropped in silence are read now (the letter
+tiles' initials 132, the sheet close 20, Rural's unbuyable label 4, two
+more). Against the previous commit's dump: 6,411 identical, 929 moved; the
+money boxes that moved are the five inside a turned frame (the Rural figure
+above, 11.37 / 5.31 from none; Rural's surcharge on the wall 12.90 → 13.52
+and 12.20 → 13.52; the ticker's Rural figure 6.06 → 6.04); one old box is
+gone (a Browse tile whose letters are scrolled out of the strip, which the
+old clamp sampled as a 16px sliver of the tile's ground) and one appears
+(a chip on the 35-item plate the old sliver rule skipped).
+
 ## What the line read retired and let in (step 5b, 2026-09-26)
 
 - **`studio-items` is sampled** (off `GEOMETRY_ONLY_SCREENS`). It was held
@@ -1590,6 +1726,18 @@ was proved on, which is their own reason, not the sampler's.
   of the whole-box read (above, "Rendered-pixel contrast") now apply to the
   money set alone; a line rect holds no border and no arc.
 
+## A line clipped out of view is held to a ceiling (step 5b, the critic, 2026-09-27)
+
+A line target whose every fragment is clipped away, or that is not
+rendered at the pass's width, gives no box and is counted, never failed —
+it is not on screen. So a change that clipped a whole line out of view read
+green. `LINE_SKIP_CEILING` in the runner holds those counts per viewport at
+what they were when step 5b landed (mobile: clipped-away 63, not-rendered
+35; desktop: 23 and 28; canvas: 726 and 0 — 964 until the wall payment's lines joined the money set and left the line read; `clipped-away` also counts a
+target whose own `clip-path` leaves under 2px). A pass that finds more
+fails and names the count; one that finds fewer says so, and the ceiling
+should come down with the change that lowered it.
+
 ## A halo never reaches a neighbour's text, and what no target reads is said (step 5b, 2026-09-26)
 
 **`a-halo-never-reaches-a-neighbours-text`** (probe, every screen, look and
@@ -1600,9 +1748,11 @@ sticky sheet head's `0 -26px` slab. Its painted extent (the box moved and
 grown) must not meet a line rect of any text outside the shadowing element
 on the same surface (behind an open sheet's scrim is another layer), a
 device pixel in. The colour's alpha is resolved by the browser, so an
-`oklab()` or `color-mix()` shadow reads. The phone and desk passes owe
-halos asked (264 on the phone on the day it landed). **A soft shadow is not
-a halo**, stated: measured literally, every card's drop and every glow met
+`oklab()` or `color-mix()` shadow reads. It runs on every geometry pass,
+and the phone and desk passes owe **A soft shadow is not a halo** — soft meaning its blur is at least twice
+its spread and its offset (the critic, 2026-09-27: a 1px blur on a 30px
+spread is a slab, and was exempt when any blur was), and a hard one's
+extent grows by half its blur — stated:, stated: measured literally, every card's drop and every glow met
 the next line on every look — 1,700 failures a pass over designs that read
 — and a guard refusing a safe design is a guard defect. Proved red by
 `.t-neo .notice { box-shadow: 0 0 0 30px var(--s-bg) }`: 54 failures, the
@@ -3321,8 +3471,11 @@ own box included), composited over it.
 - The stall root's image layers are read by what they are, never passed by
   where they sit (below). These are the stated exceptions, each matched on
   its own computed form and on the class that paints it
-  (`ROOT_LAYERS_SET_ASIDE`), with the levels they leave at rest in the
-  table below:
+  (`ROOT_LAYERS_SET_ASIDE`; the aurora's washes and tint by their exact
+  shape — the stops and their places — and colours that are the stall's
+  own two accents at no more than the alpha the sheet paints, never by the
+  form alone, the critic's item 7), with the levels they leave at rest in
+  the table below:
   - the rain (`att-rainfall`), which is what the outline is for;
   - Neo's own backdrop (`t-neo`: the cyan glow over the stall's top 480 px,
     and a 1 px scanline every 4 px) and the aurora's washes and its tint

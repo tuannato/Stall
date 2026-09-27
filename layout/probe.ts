@@ -87,6 +87,12 @@ const PROTECTED = [
     '[data-role="selection-total"]',
     '[data-role="pay-lines"]',
     '[data-role="pay-total"]',
+    // A chosen row's line, "2 × $5.00 = $10.00" (step 5b, the critic): money
+    // a buyer adds up, which the line-rect read took from the box read when
+    // it read `.sel-sub` as words; and the touch wall's Pay, the control that
+    // composes the payment code.
+    '[data-role="selection-figure"]',
+    '[data-role="window-pay"]',
 ].join(', ');
 
 /**
@@ -2181,6 +2187,8 @@ const CONTRAST_TEXT = [
     '.sw-pay-more',
     '.sw-pay-borrowed',
     '.sel-sub',
+    '[data-role="selection-figure"]',
+    '[data-role="window-pay"]',
     // Round 8 (2026-09-15): the Activity tile's letters, restyled to be read
     // at 9px, and the door's fact chips, restyled as facts — both contrast
     // claims of the design board, measured here rather than asserted.
@@ -2455,15 +2463,53 @@ function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
  * the class that paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
  * A root layer none of these names is read like any layer under a line.
  */
-const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: RegExp }> = [
+const C = String.raw`(?:rgba?\([^)]*\)|color\(srgb [\d.]+ [\d.]+ [\d.]+(?: \/ [\d.]+)?\))`;
+/**
+ * Whether every colour a layer names is one of the stall's own tokens, at no
+ * more than `most` alpha, or transparent: the aurora's washes are its accent
+ * and its second accent and nothing else (the critic, 2026-09-27: the entry
+ * matched any root `radial-gradient(farthest-side, …` on a stall wearing
+ * the aurora).
+ */
+function coloursAre(layer: string, stall: HTMLElement, tokens: readonly string[], most: number): boolean {
+    const cs = getComputedStyle(stall);
+    const allowed = tokens.map((t) => colourOf(cs.getPropertyValue(t).trim())?.rgb);
+    const named = layer.match(new RegExp(C, 'g')) ?? [];
+    return (
+        named.length > 0 &&
+        named.every((text) => {
+            const c = colourOf(text);
+            if (c === undefined) return false;
+            if (c.alpha === 0) return true;
+            return c.alpha <= most + 1e-6 && allowed.some((a) => a !== undefined && a.every((v, i) => Math.abs(v - c.rgb[i]!) <= 1));
+        })
+    );
+}
+
+const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: (layer: string, stall: HTMLElement) => boolean }> = [
     // What the outline is for.
-    { name: 'the rain', paints: 'att-rainfall', test: /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/ },
-    // Two washes across the whole stall, and their tint over the rain.
-    { name: 'the aurora’s washes', paints: 'att-aurora', test: /^radial-gradient\(farthest-side, / },
-    { name: 'the aurora’s tint over the rain', paints: 'att-aurora', test: /^linear-gradient\(140deg, / },
+    { name: 'the rain', paints: 'att-rainfall', test: (l) => /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/.test(l) },
+    // Two washes across the whole stall, each one accent at most 28% fading
+    // to nothing at 66%, and their tint over the rain (140deg, the two
+    // accents at most 16%, transparent at 46%) — the exact shapes
+    // stall.css's aurora rules paint.
+    {
+        name: 'the aurora’s washes',
+        paints: 'att-aurora',
+        test: (l, stall) =>
+            new RegExp(String.raw`^radial-gradient\(farthest-side, ${C}, rgba\(0, 0, 0, 0\) 66%\)$`).test(l) &&
+            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.28),
+    },
+    {
+        name: 'the aurora’s tint over the rain',
+        paints: 'att-aurora',
+        test: (l, stall) =>
+            new RegExp(String.raw`^linear-gradient\(140deg, ${C}, rgba\(0, 0, 0, 0\) 46%, ${C}\)$`).test(l) &&
+            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.16),
+    },
     // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
-    { name: 'Neo’s scanlines', paints: 't-neo', test: /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/ },
-    { name: 'Neo’s top glow', paints: 't-neo', test: /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/ },
+    { name: 'Neo’s scanlines', paints: 't-neo', test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
+    { name: 'Neo’s top glow', paints: 't-neo', test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
 ];
 
 /** What the at-rest rule set aside, by reason, over the whole pass. */
@@ -2604,7 +2650,7 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
             const size = sizes[i % sizes.length]!;
             const layer = layers[i]!;
             if (el === stall) {
-                const known = ROOT_LAYERS_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && k.test.test(layer));
+                const known = ROOT_LAYERS_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && k.test(layer, stall));
                 if (known !== undefined) {
                     setAside(known.name);
                     continue;
@@ -2730,7 +2776,8 @@ function outlineFaults(screen: string, label: string): Failure[] {
  * **The money set is every protected contrast target** (step 5b; its static
  * half is `layout/moneySet.test.ts`). On every screen, look and variant of
  * every geometry pass: every painted node that is a contrast target AND a
- * protected box must be money (`MONEY`), because the contrast pass reads a
+ * protected box — or a contrast target standing inside a protected box that
+ * is money — must be money (`MONEY`), because the contrast pass reads a
  * money box whole and everything else over its line rects, and a protected
  * figure that fell to the line read would be read by a weaker verdict; and
  * every node `MONEY` matches must be a contrast target standing in a
@@ -2749,10 +2796,23 @@ function moneySetFaults(screen: string, label: string): Failure[] {
         out.push({ screen, theme: label, check: MONEY_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
     };
     for (const node of app.querySelectorAll(CONTRAST_TEXT)) {
-        if (node.closest('.deck-stall') !== null || !node.matches(PROTECTED)) continue;
-        moneyChecks += 1;
-        if (!node.matches(MONEY)) {
-            fail(node, 'is a protected box and a contrast target, and is not in the money set');
+        if (node.closest('.deck-stall') !== null) continue;
+        if (node.matches(PROTECTED)) {
+            moneyChecks += 1;
+            if (!node.matches(MONEY)) {
+                fail(node, 'is a protected box and a contrast target, and is not in the money set');
+            }
+            continue;
+        }
+        // A target inside a money box is money's text too (the critic,
+        // 2026-09-27): read over its line rects it would be read by a weaker
+        // verdict than the box it stands in (`.sw-pay-v` inside `pay-lines`).
+        const box = node.parentElement?.closest(PROTECTED);
+        if (box !== null && box !== undefined && box.matches(MONEY)) {
+            moneyChecks += 1;
+            if (!node.matches(MONEY)) {
+                fail(node, `is a contrast target inside the money box ${describe(box)}, and is not in the money set`);
+            }
         }
     }
     for (const node of app.querySelectorAll(MONEY)) {
@@ -2885,9 +2945,10 @@ function buntingSwingFaults(screen: string, label: string): Failure[] {
  * an offset paints outside its element's box — the rain's old halos, the
  * sticky sheet head's `0 -26px` slab, a card's drop — and nothing measured
  * where. So on every screen, look and variant of the geometry passes, every
- * halo — a non-inset shadow with no blur, at half opacity or more, with a
- * spread or an offset: a ground laid outside a box — has its painted extent
- * (the box moved by its offset, grown by its spread) held off every other
+ * halo — a non-inset shadow at half opacity or more, with a spread or an
+ * offset, whose blur is less than twice both (a ground laid outside a box,
+ * not a glow) — has its painted extent (the box moved by its offset, grown
+ * by its spread and half its blur) held off every other
  * element's text on the same surface: no line rect of a text node outside
  * the shadowing element may meet it, a device pixel in. A soft shadow (a
  * card's drop, a glow) is not a halo; measured as one, it met the next line
@@ -2958,9 +3019,13 @@ function haloFaults(screen: string, label: string): Failure[] {
             // more, with a spread or an offset. A soft shadow — a card's
             // drop, a glow — is light around a box, not a ground under text,
             // and measured literally it met the next line on every look.
-            if (sh.inset || sh.blur > 0 || sh.alpha < OWN_GROUND_ALPHA || (sh.spread === 0 && sh.x === 0 && sh.y === 0)) continue;
+            // Soft means the blur outreaches the ground the shadow lays: at
+            // least twice its spread and its offset (the critic, 2026-09-27 —
+            // a 1px blur on a 30px spread is a slab, not a glow).
+            const soft = sh.blur > 0 && sh.blur >= 2 * Math.max(sh.spread, Math.abs(sh.x), Math.abs(sh.y));
+            if (sh.inset || soft || sh.alpha < OWN_GROUND_ALPHA || (sh.spread === 0 && sh.x === 0 && sh.y === 0)) continue;
             haloChecks += 1;
-            const grow = Math.max(0, sh.spread);
+            const grow = Math.max(0, sh.spread) + sh.blur / 2;
             const x0 = box.left + sh.x - grow;
             const x1 = box.right + sh.x + grow;
             const y0 = box.top + sh.y - grow;

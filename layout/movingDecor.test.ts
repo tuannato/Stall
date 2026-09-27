@@ -20,7 +20,12 @@ function sources(): { path: string; text: string }[] {
             if (statSync(path).isDirectory()) {
                 walk(path);
             } else if (/\.(ts|mjs)$/.test(name) && !path.endsWith('movingDecor.ts') && !path.endsWith('movingDecor.test.ts')) {
-                out.push({ path: relative(ROOT, path), text: readFileSync(path, 'utf8') });
+                // Code only: a name in a comment reads nothing (the critic,
+                // 2026-09-27).
+                const code = readFileSync(path, 'utf8')
+                    .replace(/\/\*[\s\S]*?\*\//g, '')
+                    .replace(/(^|\s)\/\/.*$/gm, '$1');
+                out.push({ path: relative(ROOT, path), text: code });
             }
         }
     };
@@ -54,9 +59,19 @@ describe('every-moving-decoration-has-a-reader-or-a-reason', () => {
         const files = sources();
         for (const [cls, entry] of Object.entries(MOVING_DECORATIONS)) {
             if (!('reader' in entry)) continue;
-            const carriers = files.filter((f) => f.text.includes(entry.reader)).map((f) => f.path);
-            expect(carriers, `${cls}: ${entry.reader}`).not.toEqual([]);
+            // As a string literal in code: a test's `describe(` name, or the
+            // check name a probe rule or the runner reports under.
+            const literal = new RegExp(`(?:'|"|\`)${entry.reader}(?:'|"|\`|\\b)`);
+            const carriers = files.filter((f) => literal.test(f.text)).map((f) => f.path);
+            expect(carriers, `${cls}: ${entry.reader} is a string literal in code somewhere`).not.toEqual([]);
         }
+    });
+
+    it('does not count a name that stands only in a comment', () => {
+        const strip = (t: string): string => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
+        const literal = /(?:'|"|`)a-made-up-reader(?:'|"|`|\b)/;
+        expect(literal.test(strip("/* 'a-made-up-reader' */ const x = 1; // 'a-made-up-reader'"))).toBe(false);
+        expect(literal.test(strip("describe('a-made-up-reader', () => {});"))).toBe(true);
     });
 
     it('reads the aurora through the class the tide jobs key on', () => {

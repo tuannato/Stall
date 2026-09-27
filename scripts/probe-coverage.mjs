@@ -27,9 +27,9 @@
  *   comparing a nonzero count.
  * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines Neo's
  *   rain outlines, on the phone and desk passes wherever Neo is measured.
- * - **`the-money-set-is-every-protected-contrast-target`** asks every
- *   protected contrast target and every money node, on the phone and desk
- *   passes.
+ * - **`the-money-set-is-every-protected-contrast-target`** runs on every
+ *   geometry pass; the phone and desk passes owe nodes asked (a canvas or
+ *   wall pass may paint none of one kind, so it owes nothing here).
  * - **`an-outline-that-shows-at-rest`** reads the rain-wearing root's
  *   layers by what they are, on the phone and desk passes wherever Neo is
  *   measured: the rain is set aside there by name, or no root was read.
@@ -37,8 +37,9 @@
  *   on the three wall passes.
  * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
  *   bunting on the phone and desk passes wherever Rural is measured.
- * - **`a-halo-never-reaches-a-neighbours-text`** asks the hard shadows
- *   (the sticky sheet head's slab among them) on the phone and desk passes.
+ * - **`a-halo-never-reaches-a-neighbours-text`** runs on every geometry
+ *   pass; the phone and desk passes owe halos asked (the sticky sheet
+ *   head's slab among them).
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.

@@ -19196,9 +19196,11 @@ describe('a-quote-row-in-selection-mode-builds-no-pay-and-a-stepper', () => {
         expect(line.querySelector('[data-role="selection-count"]')?.textContent).toBe('2');
         // The quote as written, so the "=" is true; the surcharge is the row's
         // own line above and the strip's note, never folded into this figure.
-        expect(line.querySelector('[data-role="selection-sub"]')?.textContent).toBe(
+        // Its own role, which the layout probe protects and reads whole.
+        expect(line.querySelector('[data-role="selection-figure"]')?.textContent).toBe(
             copy.selectionLine('2', '$5.00', '$10.00'),
         );
+        expect(line.querySelector('[data-role="selection-sub"]')).toBeNull();
         expect((line.querySelector('[data-role="selection-fewer"]') as HTMLButtonElement).disabled).toBe(false);
         expect(line.querySelector('[data-role="selection-fewer"]')?.getAttribute('aria-label')).toBe(
             copy.selectionFewer('Roasted Beans', '2'),

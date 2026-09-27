@@ -17,7 +17,8 @@
  * statically, every selector that is in `PROTECTED` and in `CONTRAST_TEXT`
  * is here and every one here is in `CONTRAST_TEXT`; and in the browser, on
  * every screen of every geometry pass, every painted node that is a contrast
- * target and a protected box matches this set, and every node this set
+ * target and a protected box — or a contrast target inside a protected box
+ * that is money — matches this set, and every node this set
  * matches is a contrast target standing in a protected box — save the pay
  * sheets' second road (`pay-wallet`), which is money by what it hands a
  * wallet and a `.mini` by its dress, so it is in no protected box.
@@ -46,6 +47,12 @@ export const MONEY_SET: readonly string[] = [
     '[data-role="pay-total"]',
     '[data-role="pay-cashtab"]',
     '[data-role="pay-wallet"]',
+    '[data-role="selection-figure"]',
+    '[data-role="window-pay"]',
+    // The wall payment's own lines and their notes, inside `pay-lines`
+    // (the critic, 2026-09-27): text in a money box is read as money.
+    '.sw-pay-v',
+    '.sw-pay-s',
 ];
 
 /** The one money node allowed to stand in no protected box, and why is above. */

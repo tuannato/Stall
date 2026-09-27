@@ -40,6 +40,10 @@ describe('the-money-set-is-every-protected-contrast-target', () => {
             '[data-role="pay-total"]',
             '[data-role="pay-cashtab"]',
             '[data-role="pay-wallet"]',
+            '[data-role="selection-figure"]',
+            '[data-role="window-pay"]',
+            '.sw-pay-v',
+            '.sw-pay-s',
         ]);
         expect(MONEY).toBe(MONEY_SET.join(', '));
         expect(MONEY_SET).toContain(MONEY_OUTSIDE_PROTECTED);
