@@ -200,9 +200,17 @@ export function summarize(entries, { expected = [], compared = new Set() } = {})
  */
 export function lookSheetRefusal(reads, { sheetless = ['t-skeleton'] } = {}) {
     if (reads === undefined || reads === null) return undefined;
-    const bare = reads.filter((read) => !sheetless.includes(read.cls) && read.sheet !== read.cls);
+    const bare = reads.filter(
+        (read) => (read.inline ?? '') !== '' || (!sheetless.includes(read.cls) && read.sheet !== read.cls),
+    );
     if (bare.length === 0) return undefined;
     return bare
-        .map((read) => (read.sheet === '' ? `${read.cls} was painted without its sheet` : `${read.cls} computes --look-sheet: ${read.sheet}`))
+        .map((read) =>
+            (read.inline ?? '') !== ''
+                ? `${read.cls} sets --look-sheet: ${read.inline} inline, where only its sheet may name it`
+                : read.sheet === ''
+                  ? `${read.cls} was painted without its sheet`
+                  : `${read.cls} computes --look-sheet: ${read.sheet}`,
+        )
         .join('; ');
 }

@@ -17,6 +17,7 @@ import {
     lintSheet,
     PRESENCE_ATTRIBUTES,
     parseSheet,
+    foreignNamingProblems,
     rescopeSheet,
     wornSheetProblems,
 } from './workshop-css.mjs';
@@ -478,6 +479,14 @@ describe('every-look-sheet-names-itself', () => {
         assert.ok(kit.some((p) => /does not name itself/.test(p)), kit.join('\n'));
     });
 
+    it('lets no sheet but a look\'s declare the name, in the base, a screen sheet or a document', () => {
+        assert.deepEqual(foreignNamingProblems(servedWith()), []);
+        for (const path of ['src/ui/stall.css', 'src/ui/window.css', 'public/guide.css', 'layout/gallery.css']) {
+            const problems = foreignNamingProblems(servedWith({ [path]: `${read(path)}\n.t-neo { --look-sheet: t-neo; }\n` }));
+            assert.ok(problems.some((p) => p.startsWith(`${path}: declares --look-sheet`)), `${path}: ${problems.join('; ') || '(none)'}`);
+        }
+    });
+
     it('refuses a second naming, a naming off the bare class, and the wrong name', () => {
         plant('.t-neo .item-n { --look-sheet: t-neo; }', /declared 2 times/);
         const moved = NEO_CSS.replace('.t-neo {\n    --look-sheet: t-neo;\n}', '.stall.t-neo {\n    --look-sheet: t-neo;\n}');
@@ -585,5 +594,33 @@ describe('no-bundled-sheet-names-a-worn-only-look', () => {
                 `${path}:\n  ${problems.join('\n  ') || '(no problem)'}`,
             );
         }
+    });
+});
+
+describe('a-file-mask-arrives-at-rest', () => {
+    /**
+     * `no-word-is-clipped-by-a-file` reads the probe's paints, at rest and
+     * frozen at one instant: a file's mask or clip written in a state rule
+     * or a keyframe is refused here instead (the step-6 critic's P3). A mask
+     * or clip with no file, or a file mask on a box at rest, is the probe's.
+     */
+    it('refuses a file mask or clip in a state rule and in a keyframe, shipped and kit', () => {
+        for (const rule of [
+            '.t-neo .item-n:hover { mask-image: url(./x.svg); }',
+            '.t-neo .item-n:focus-visible { -webkit-mask-image: url(./x.svg); mask-image: url(./x.svg); }',
+            '.t-neo .mini[aria-pressed="true"] { clip-path: url(./x.svg); }',
+            '.t-neo details[open] .x { mask: url(./x.svg) no-repeat; }',
+            '.t-neo .addr[data-copied="true"] { -webkit-mask-box-image-source: url(./x.svg); }',
+        ]) {
+            plant(rule, /a file's mask or clip in a state rule/);
+        }
+        plant('@keyframes t-neo-veil { from { mask-image: url(./x.svg); } to { mask-image: none; } }', /a file's mask or clip in a keyframe/);
+    });
+
+    it('accepts a mask with no file, a clip shape, and a file mask at rest', () => {
+        accepts('.t-neo .item-n:hover { mask-image: linear-gradient(#000, transparent); }');
+        accepts('.t-neo .item-n:hover { clip-path: inset(0 2px); }');
+        accepts('.t-neo .item-n { mask-image: url(./x.svg); }');
+        accepts('.t-neo [data-role="price"] { mask-image: url(./x.svg); }');
     });
 });

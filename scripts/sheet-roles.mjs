@@ -30,9 +30,11 @@
  *   which Pages serves whether or not anything links it.
  *
  * `load` says how a look sheet (a `look`, the `kit` or a `fixture`) reaches a
- * page — `bundled`, imported with the app into the entry CSS every visitor
- * downloads, or `worn`, its own file fetched only for a stall that wears
- * the look — and a worn sheet names `artDir`, the one directory its
+ * page — `bundled`, a side-effect import of the page that paints it, so it
+ * lands in that page's entry CSS (the app's for the three shipped looks,
+ * which every visitor downloads; the showroom's and the workshop probe's for
+ * the kit, which the app never serves), or `worn`, its own file fetched only
+ * for a stall that wears the look — and a worn sheet names `artDir`, the one directory its
  * `url()`s may reach (its art and its faces), counted with it by the weight
  * guard (`scripts/weight-buckets.mjs`). A shipped look's `load` is its
  * theme row's `sheetLoad` (`every-look-row-loads-its-sheet-the-way-its-role-says`).

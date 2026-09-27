@@ -95,7 +95,7 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
 
     /**
      * A look sheet is loaded the way its `load` says, and no other: a
-     * bundled one only as a side-effect import (into the entry CSS), a
+     * bundled one only as a side-effect import (into its page's entry CSS), a
      * worn-only one only as `?url` (its own built file, never inlined into
      * the CSS every visitor downloads — `?inline` and `?raw` would put it in
      * a script, a side effect in the entry CSS). The weight guard holds the

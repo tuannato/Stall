@@ -3319,7 +3319,9 @@ function lookSheetFaults(screen: string, label: string): Failure[] {
 
 /*
  * `no-word-is-clipped-by-a-file` (step 6, 6.6 of the step-6 plan v2): no
- * element holding text of its own, nor any ancestor of it up to `#app`,
+ * element holding text of its own — nor a protected box, a money node, a
+ * field, a form control or a control (`FILE_CLIP_SUBJECTS`) — nor any
+ * ancestor of it up to `#app`,
  * computes a `mask-image`, a `-webkit-mask-image`, a mask border's source or
  * a `clip-path` that names a FILE. A mask image that has not loaded — or
  * failed: a 404, a refused MIME type, a policy refusal, a worn-only look's
@@ -3343,6 +3345,21 @@ const FILE_CLIP_PROPS = [
     'clip-path',
 ] as const;
 let fileClipChecks = 0;
+/*
+ * What a file's mask may hide that has no text node of its own (the step-6
+ * critic's P2): every protected box (the QR, the buy control, the address,
+ * the record's hex…), the money set, the field block — a readonly link or
+ * embed code is a value, not a text node — every form control, and every
+ * control, an icon-only close or copy included. Each is asked with its
+ * ancestors like a line of words.
+ */
+const FILE_CLIP_SUBJECTS = [
+    PROTECTED,
+    MONEY,
+    '.paste-in, .share-url, .share-embed',
+    'input, textarea, select',
+    'button, a[href], summary, [role="button"], [role="link"]',
+].join(', ');
 
 /** The first file a computed mask or clip value names, or undefined: `url(#id)` is this document, not a file. */
 function fileNamedBy(value: string): string | undefined {
@@ -3381,7 +3398,7 @@ function fileClipFaults(screen: string, label: string): Failure[] {
         const ownText = [...el.childNodes].some(
             (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '',
         );
-        if (!ownText) continue;
+        if (!ownText && !el.matches(FILE_CLIP_SUBJECTS)) continue;
         fileClipChecks += 1;
         for (let at: Element | null = el; at !== null && at !== root; at = at.parentElement) {
             const why = fileOn(at);

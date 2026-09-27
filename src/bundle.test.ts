@@ -451,6 +451,19 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(reading.slots.yard!.gzip).toBeLessThan(40_000 + 200);
         expect(reading.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
 
+        // A row's class only inside `:not()`, `:is()` or `:where()` does not
+        // scope a rule to that row: its art counts as bare.
+        for (const wrapped of [':not(.att-c)', ':is(.att-c)', ':where(.att-c)']) {
+            const hidden = lookArtBudget({
+                sheet: sheet.replace('.t-x.att-c .c', `.t-x${wrapped} .c`),
+                sheetFile: 'assets/look.css',
+                files,
+                rows,
+            });
+            expect(hidden.slots.trim, `${wrapped} scoped a rule to its row`).toBeUndefined();
+            expect(hidden.bare, `${wrapped}: the art left the bare count`).toBeGreaterThan(reading.bare + 5_000);
+        }
+
         files.set('assets/paper.svg', noise(600_000));
         const heavy = lookArtBudget({ sheet, sheetFile: 'assets/look.css', files, rows });
         expect(heavy.total, 'a 600 KB look passed the budget').toBeGreaterThan(LOOK_ART_BUDGET_GZIP);

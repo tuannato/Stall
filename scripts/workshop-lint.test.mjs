@@ -224,6 +224,13 @@ describe('workshop-start-refuses-a-sheet-with-rules', () => {
         assert.equal(sheetHasRules(sheet('.t-workshop .a { color: red; }\n')), true);
         assert.equal(sheetHasRules('@media (prefers-reduced-motion: reduce) { .t-workshop .a { animation: none; } }'), true);
         assert.equal(sheetHasRules('.t-workshop .a { color: red;'), true, 'an unreadable sheet is kept');
+        // The naming rule is the one rule the skeleton holds, and only as it
+        // is written there: a second declaration in it, or another value,
+        // makes it a rule the creator wrote.
+        assert.equal(sheetHasRules(sheet('')), false, 'the naming rule alone is no rule');
+        assert.equal(sheetHasRules(`.t-workshop { --look-sheet: t-workshop; color: red; }\n${REDUCE}`), true);
+        assert.equal(sheetHasRules(`.t-workshop { --look-sheet: t-neo; }\n${REDUCE}`), true);
+        assert.equal(sheetHasRules(`.t-workshop .a { --look-sheet: t-workshop; }\n${REDUCE}`), true);
     });
 });
 

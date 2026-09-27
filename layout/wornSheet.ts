@@ -110,16 +110,23 @@ export function wornSheetsOf(
         });
 }
 
-/** One painted stall's look class and the name its sheet gave it. */
-export type LookSheetRead = { readonly cls: string; readonly sheet: string };
+/**
+ * One painted stall's look class, the name its computed style gives it, and
+ * any name set inline on the stall itself — which must be none: the
+ * renderer writes the theme's `--s-*` inline, and a `--look-sheet` among
+ * them would read true on a stall whose sheet never loaded (the step-6
+ * critic's P3).
+ */
+export type LookSheetRead = { readonly cls: string; readonly sheet: string; readonly inline: string };
 
 /** Every painted `.stall` under `root` wearing a `t-*` class, with the `--look-sheet` it computes. */
 export function lookSheetReads(root: ParentNode): LookSheetRead[] {
     const out: LookSheetRead[] = [];
     for (const stall of root.querySelectorAll('.stall')) {
         const sheet = getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
+        const inline = stall instanceof HTMLElement ? stall.style.getPropertyValue(LOOK_SHEET_PROPERTY).trim() : '';
         for (const cls of stall.classList) {
-            if (cls.startsWith('t-')) out.push({ cls, sheet });
+            if (cls.startsWith('t-')) out.push({ cls, sheet, inline });
         }
     }
     return out;
@@ -127,6 +134,9 @@ export function lookSheetReads(root: ParentNode): LookSheetRead[] {
 
 /** Why a read says a look was painted without its sheet, or undefined. */
 export function lookSheetFault(read: LookSheetRead): string | undefined {
+    if (read.inline !== '') {
+        return `a stall wearing ${read.cls} sets ${LOOK_SHEET_PROPERTY}: ${read.inline} inline — only its sheet may name it`;
+    }
     if (SHEETLESS_CLASSES.includes(read.cls) || read.sheet === read.cls) return undefined;
     return read.sheet === ''
         ? `a stall wearing ${read.cls} names no sheet — the look was painted without its own`

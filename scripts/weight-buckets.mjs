@@ -58,9 +58,16 @@ import { parseSheet, splitTopLevel } from './workshop-css.mjs';
  * (2026-09-27: "Ảnh raster bị mờ thì không thể chấp nhận được"). Its face,
  * Noto Serif subset to Latin with small caps, was not measured; the shipped
  * Stall Serif's Latin subset is 37,740 as woff2, which gzip barely moves.
- * So 256,000 leaves Ink wash ~90 KB for its face and its finishing, and
- * binds the next look to the same order of weight — about a sixth of what
- * every visitor already pays (`EVERY_VISITOR_CEILING_BYTES`, uncompressed).
+ *
+ * Against like for like: the every-visitor bucket — index.html, the entry
+ * chunk and the entry CSS — is 235,100 gzip -9 bytes (860,043 raw, measured
+ * 2026-09-27, and by the step-6 critic). So 256,000 lets one worn-only look
+ * cost a visitor to its stall about 1.09× the whole app compressed. The
+ * number is 164,872 measured for Ink wash, plus its unmeasured face (~40 KB
+ * by Stall Serif's measure), plus ~50 KB of headroom — a judgement, not a
+ * measurement: room for Ink wash's finishing (its rows still need their art
+ * finished) without a raise, and small enough that a look twice Ink wash's
+ * weight is refused.
  */
 export const LOOK_ART_BUDGET_GZIP = 256_000;
 
@@ -232,11 +239,35 @@ export function gzipBytes(bytes) {
 }
 
 /**
+ * A selector with every functional pseudo-class's argument blanked —
+ * `:not(…)`, `:is(…)`, `:where(…)`, `:has(…)` and the rest. A row's class
+ * that appears only inside one does not scope the rule to that row
+ * (`.t-x:not(.att-a) .b` paints on every stall BUT that row's), so its
+ * `url()`s count as bare: conservative, never under (the step-6 critic).
+ */
+function outsideFunctions(selector) {
+    let out = '';
+    let depth = 0;
+    for (let i = 0; i < selector.length; i += 1) {
+        const c = selector[i];
+        if (c === '(') {
+            depth += 1;
+        } else if (c === ')') {
+            depth = Math.max(0, depth - 1);
+        } else if (depth === 0) {
+            out += c;
+        }
+    }
+    return out;
+}
+
+/**
  * One worn-only look's budget reading: `sheet` its built CSS text, `files`
  * a map from each file its `url()`s name (as that sheet names them, after
  * `fileNamed`) to that file's bytes, `rows` the look's decoration rows
  * (`{ cls, slot }`, the catalogue's). A `url()` counts under the rows whose
- * class its rule's selectors name — every selector of the rule naming one —
+ * class its rule's selectors name — every selector of the rule naming one, outside any
+ * `:not()`, `:is()` or `:where()` (`outsideFunctions`) —
  * and under the bare look otherwise: a url in a bare rule, in a keyframe or
  * in a face is fetched whatever the stall wears. Where a url is written is
  * where it counts, so art a bare custom property carries into a row's rule
@@ -262,7 +293,9 @@ export function lookArtBudget({ sheet, sheetFile = 'sheet.css', files, rows = []
         for (const node of list) {
             if (node.kind === 'rule') {
                 const selectors = splitTopLevel(node.prelude, ',');
-                const named = selectors.map((sel) => [...sel.matchAll(/\.([a-z0-9-]+)/gi)].map((m) => m[1]).filter((c) => rowClasses.has(c)));
+                const named = selectors.map((sel) =>
+                    [...outsideFunctions(sel).matchAll(/\.([a-z0-9-]+)/gi)].map((m) => m[1]).filter((c) => rowClasses.has(c)),
+                );
                 const owners = named.some((list_) => list_.length === 0) ? [] : [...new Set(named.flat())];
                 for (const target of builtUrls(node.body)) place(target, owners);
             } else if (node.children !== undefined) {

@@ -818,11 +818,43 @@ const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']
  * the rule's selector list, or undefined inside a keyframe, where `content`
  * is refused outright.
  */
+/** The properties that clip or mask a box: what a file's mask hides, it hides whole. */
+const MASKING = /^(?:-webkit-)?mask(?:-|$)|^clip-path$|^-webkit-mask-box-image/;
+
+/**
+ * Pseudo-classes and attributes a box reaches only after the page is used:
+ * the probe measures every screen at rest, so a rule gated on one of these
+ * paints on a screen no pass measured.
+ */
+const STATE_PSEUDO = /:(?:hover|focus|focus-visible|focus-within|active|checked|target|open|popover-open|disabled|enabled|placeholder-shown|invalid|valid|indeterminate|visited|link|any-link)(?![\w-])/i;
+
+/** True when a selector reaches its box only in a state (`STATE_PSEUDO`, or any attribute but `data-role`). */
+function isStateSelector(selector) {
+    if (STATE_PSEUDO.test(selector)) return true;
+    return [...selector.matchAll(/\[\s*([\w-]+)/g)].some((m) => m[1].toLowerCase() !== 'data-role');
+}
+
 function declarationProblems(decls, selectors) {
     const out = [];
     for (const { prop, value } of decls) {
         const shown = `${prop}: ${echo(value, 48)}`;
         const bare = withoutStrings(value);
+        /*
+         * A file's mask or clip in a state rule or a keyframe (the step-6
+         * critic's P3): `no-word-is-clipped-by-a-file` asks the probe's
+         * paints, which are at rest and frozen at one instant, so a mask
+         * that arrives with a hover, a pressed state or an animation step
+         * would hide words on a screen the probe never measured. Refused
+         * where it is written; a mask on a box at rest is the probe's to
+         * judge. Not seen, stated: a `url()` carried in by `var()`.
+         */
+        if (MASKING.test(prop) && /(?<![\w-])url\(/i.test(value)) {
+            if (selectors === undefined) {
+                out.push(`${shown} — a file's mask or clip in a keyframe: the probe reads one frozen instant, so a mask that animates in is measured by no pass`);
+            } else if (selectors.some(isStateSelector)) {
+                out.push(`${shown} — a file's mask or clip in a state rule: the probe measures every screen at rest, so a mask that arrives with a state is measured by no pass`);
+            }
+        }
         if (/!\s*important/i.test(bare)) {
             out.push(
                 `${shown} — !important outranks the look's own inline values (a mood's palette, the contrast fence on the tokens); write the selector more specifically instead`,
@@ -1135,6 +1167,27 @@ function namesItselfProblems(nodes, scope) {
         return [`${LOOK_SHEET_PROPERTY} holds "${echo(decl.value)}" — the sheet names itself, as ${want}`];
     }
     return [];
+}
+
+/**
+ * The other half of `every-look-sheet-names-itself` (the step-6 critic's
+ * P3): a sheet that is no look's — the base, a screen sheet, a document,
+ * the harness's chrome — declares `--look-sheet` nowhere. The name is how
+ * the probe and looks:diff know a look's own sheet was on the page; one
+ * declared anywhere else would read true on a stall whose sheet never
+ * loaded. `sheets` are `{ path, css, lookClass }`, `lookClass` absent on a
+ * sheet that is no look's.
+ */
+export function foreignNamingProblems(sheets) {
+    const out = [];
+    for (const sheet of sheets) {
+        if (sheet.lookClass !== undefined) continue;
+        const count = [...blankComments(sheet.css).matchAll(/--look-sheet\s*:/gi)].length;
+        if (count > 0) {
+            out.push(`${sheet.path}: declares ${LOOK_SHEET_PROPERTY} ${count} time(s) — only a look's own sheet names a look (every-look-sheet-names-itself)`);
+        }
+    }
+    return out;
 }
 
 /** The one road a worn-only sheet's `url()` may take: a file in its own directory. */

@@ -9,7 +9,7 @@ export type ServedSheet = {
     readonly role: SheetRole;
     /** A look's (or the kit's) scoping class, without the dot. */
     readonly lookClass?: string;
-    /** How a look sheet reaches a page: in the entry CSS, or its own file for a stall that wears it. */
+    /** How a look sheet reaches a page: a side-effect import into its page's entry CSS, or its own file for a stall that wears it. */
     readonly load?: SheetLoad;
     /** A worn sheet's own directory, the one its `url()`s may reach. */
     readonly artDir?: string;

@@ -228,6 +228,8 @@ describe('looks-diff-refuses-a-look-painted-without-its-sheet', () => {
     it('refuses a look whose sheet did not name it, and one named wrong', () => {
         assert.match(lookSheetRefusal([{ cls: 't-rural', sheet: '' }]), /t-rural was painted without its sheet/);
         assert.match(lookSheetRefusal([{ cls: 't-neo', sheet: 't-neo' }, { cls: 't-rural', sheet: 't-neo' }]), /t-rural computes --look-sheet: t-neo/);
+        // A name set inline on the stall reads true whether or not the sheet loaded.
+        assert.match(lookSheetRefusal([{ cls: 't-neo', sheet: 't-neo', inline: 't-neo' }]), /sets --look-sheet: t-neo inline/);
     });
 
     it('passes a look its sheet named, the sheetless skeleton, and a ref that predates the hook', () => {

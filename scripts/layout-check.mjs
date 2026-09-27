@@ -248,10 +248,42 @@ async function readVerdict(cdp, sessionId, url) {
             },
             sessionId,
         );
-        if (typeof r.result.value === 'string') return JSON.parse(r.result.value);
+        if (typeof r.result.value === 'string') {
+            const report = JSON.parse(r.result.value);
+            report.failures.push(...(await lateRefusals(cdp, sessionId, report)));
+            return report;
+        }
         await sleep(100);
     }
     throw new Error('the probe never reported. It threw, or never ran.');
+}
+
+/*
+ * The policy's refusals the page met after writing its verdict — a picture's
+ * request is refused as it is made, and the event lands as a task — as
+ * failures of `the-probe-page-meets-no-csp-refusal`, on every pass whose
+ * verdict this runner reads (the phone, desk and canvas passes, the portrait
+ * and tablet walls, the reduced-motion passes; the step-6 critic's P3).
+ */
+async function lateRefusals(cdp, sessionId, report) {
+    await sleep(50);
+    const r = await cdp.send(
+        'Runtime.evaluate',
+        { expression: 'JSON.stringify(window.__cspRefusals?.() ?? [])', returnByValue: true },
+        sessionId,
+    );
+    const all = typeof r.result?.value === 'string' ? JSON.parse(r.result.value) : [];
+    return refusalFailures(all.slice((report.cspRefusals ?? []).length), ' (after the verdict)');
+}
+
+/** Refusals as the probe's own failure records. */
+function refusalFailures(refusals, when = '') {
+    return refusals.map((r) => ({
+        screen: 'probe page',
+        theme: '-',
+        check: 'the-probe-page-meets-no-csp-refusal',
+        detail: `${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}${when}`,
+    }));
 }
 
 /** Evaluate an expression in the page and parse its JSON result. */
@@ -1177,20 +1209,6 @@ try {
             );
             failed = true;
             continue;
-        }
-        // A refusal the page met after writing its verdict — a picture's
-        // request is refused as it is made, and the event lands as a task —
-        // is asked for again here (`the-probe-page-meets-no-csp-refusal`).
-        const lateRefusals = (await evalJson(cdp, sessionId, 'window.__cspRefusals()')).slice(
-            (report.cspRefusals ?? []).length,
-        );
-        for (const r of lateRefusals) {
-            report.failures.push({
-                screen: 'probe page',
-                theme: '-',
-                check: 'the-probe-page-meets-no-csp-refusal',
-                detail: `${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`} (after the verdict)`,
-            });
         }
         const wrongLook = sheetClassesWrong(report.sheetClasses);
         if (wrongLook !== undefined) {
@@ -2823,15 +2841,22 @@ try {
             }
         }
         const clearPct = (clearRatio * 100).toFixed(0);
+        // The policy's refusals on the transparency page, over its whole life
+        // (`the-probe-page-meets-no-csp-refusal`).
+        const clearRefusals = refusalFailures(await evalJson(cdp, sessionId, 'window.__cspRefusals()'));
+        if (clearRefusals.length > 0) {
+            failed = true;
+            for (const f of clearRefusals) console.error(`✗ transparency: ${f.check}: ${f.detail}`);
+        }
         if (sheetClassesWrong([...clearClasses]) !== undefined) {
             failed = true;
             console.error(`✗ transparency: ${sheetClassesWrong([...clearClasses])}`);
-        } else if (dim.length === 0) {
+        } else if (dim.length === 0 && clearRefusals.length === 0) {
             console.log(
                 `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
                     `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,
             );
-        } else {
+        } else if (dim.length > 0) {
             failed = true;
             console.error(
                 `✗ transparency: ${dim.length} figure(s) below ${PIXEL_CONTRAST_FLOOR}:1 ` +
