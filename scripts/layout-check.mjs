@@ -355,6 +355,32 @@ const RAIN_REQUIRED = [
     'desktop/shop-window-cycle/2/65535',
 ];
 
+/**
+ * **Grid horizon at its worst, a known limit** (the owner's C, 2026-09-27):
+ * the least ring read of the sign's outlined lines (the name, the tagline)
+ * and the least line read of its state line (`sub`) with the horizon's
+ * skyline and stars flattened to their brightest paint. Another seller's
+ * words can put a glyph beside a lit window or a star, where the ring reads
+ * this low; the owner accepted it. A read lower than these is a regression
+ * and fails; a higher one says to raise the number. Measured 2026-09-27.
+ */
+// Each 0.01 under the least read on 2026-09-27 (2.76, 1.92, 7.25), so a
+// rounding of the same frame never reads as a regression.
+const HORIZON_WORST = { name: 2.75, tagline: 1.91, sub: 7.24 };
+
+/**
+ * The jobs that must read Grid horizon at its worst (step 5a″): the name on
+ * the sign over the horizon alone at a phone and a desk, and all worn at a
+ * phone, a desk and the 1920 wall, where the tagline stands in the sky.
+ */
+const HORIZON_REQUIRED = [
+    'mobile/offers/2/4',
+    'desktop/offers/2/4',
+    'mobile/offers/2/65535',
+    'desktop/offers/2/65535',
+    'canvas/shop-window-wall/2/65535',
+];
+
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
  * (`outlineOf` in the probe: `text-shadow` in one opaque colour — the ground
@@ -865,6 +891,12 @@ function paintEcho(job, out, nonce, width, height) {
     const rain = out.rain ?? { worn: 0, flattened: 0 };
     if (rain.worn !== rain.flattened) {
         why.push(`${rain.worn} stall(s) wore the rain and ${rain.flattened} had it at its brightest`);
+    }
+    // Grid horizon is read as painted (the owner's C, 2026-09-27): a
+    // prepare that flattened it would read the report's frame as the job's.
+    const horizon = out.horizon ?? { worn: 0, flattened: 0 };
+    if (horizon.flattened !== 0) {
+        why.push(`${horizon.flattened} sign(s) had Grid horizon flattened in the prepare, where the job reads it as painted`);
     }
     // The aurora worn alone at one end of its tide (`TIDE_JOBS`): every
     // stall wearing it had the tide held there, and a job that asked for no
@@ -1586,6 +1618,11 @@ try {
         // owes the screens whose lines stand on the ground (`RAIN_REQUIRED`).
         let rainJobs = 0;
         const rainKeys = new Set();
+        // Jobs whose Grid horizon was flattened to its brightest paint, by key
+        // (`HORIZON_REQUIRED`).
+        const horizonKeys = new Set();
+        // The least read per sign line at the horizon's worst, and where.
+        const horizonWorst = new Map();
         const dim = [];
         // The ring read (`ringRead`): outlined targets read, ring pixels
         // read, and the least ring contrast per kind of line, for the report.
@@ -2128,6 +2165,57 @@ try {
                         phases.set('ring', entry);
                     }
                     /*
+                     * Grid horizon at its worst, reported (step 5a″; the
+                     * owner's C, 2026-09-27): the art flattened to its
+                     * brightest paint (`__horizonAtItsWorst`), a frame with
+                     * the glyphs blanked and one with them shown, the sign's
+                     * outlined lines ring-read and its other lines line-read
+                     * on them, the art put back. Held to `HORIZON_WORST`, a
+                     * regression guard and not a floor: the ring read on the
+                     * horizon as painted, above, is the failing guard.
+                     */
+                    if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
+                        const worstStart = performance.now();
+                        const page = async (expression) => {
+                            const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const flat = await page('window.__horizonAtItsWorst(true)');
+                        const blankCap = await capture();
+                        const flatRead = await reread();
+                        await page('window.__contrastGlyphs(true)');
+                        const shownCap = await capture();
+                        await page('window.__contrastGlyphs(false)');
+                        const back = await page('window.__horizonAtItsWorst(false)');
+                        const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
+                        if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
+                            why.push(`${prep.horizon.worn} sign(s) wore Grid horizon and ${flat.flattened} had its art at its brightest`);
+                        }
+                        if (why.length > 0) {
+                            retryWhy = why.map((w) => `for the horizon's worst, ${w}`);
+                        } else {
+                            horizonKeys.add(plannedJob.key);
+                            for (const t of flatRead.live.boxes) {
+                                const part = /(^|\.)stall-(name|tagline|sub)(\.|$)/.exec(t.sel)?.[2];
+                                if (part === undefined) continue;
+                                const least =
+                                    t.ring > 0
+                                        ? ringRead(blankCap.shot, shownCap.shot, t).worst
+                                        : t.rects === undefined
+                                          ? worstContrastInBox(blankCap.shot, t, t.color)
+                                          : lineRead(blankCap.shot, t).worst;
+                                if (least === undefined || !Number.isFinite(least)) continue;
+                                const at = horizonWorst.get(part) ?? { least: Infinity, job: '' };
+                                if (least < at.least) horizonWorst.set(part, { least, job: plannedJob.key });
+                            }
+                        }
+                        const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - worstStart;
+                        phases.set('horizon worst', entry);
+                    }
+                    /*
                      * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
                      * (step 5b; the probe's `markLookPseudos`): where the job's
                      * scope holds a look pseudo, a frame with every one of
@@ -2263,6 +2351,33 @@ try {
             // critic's third pass).
             verdicts.push(
                 `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
+            );
+        }
+        if (LOOKS === 'shipped') {
+            // At the horizon's worst, a report held to a baseline: a least
+            // read lower than the baseline is a regression and fails; one
+            // higher says the baseline can be raised.
+            const said = [];
+            for (const [part, baseline] of Object.entries(HORIZON_WORST)) {
+                const read = horizonWorst.get(part);
+                if (read === undefined) {
+                    verdicts.push(`the sign's ${part} at Grid horizon's worst was read on no job — vacuous`);
+                    continue;
+                }
+                said.push(`${part} ${read.least.toFixed(2)} (${read.job}; baseline ${baseline.toFixed(2)})`);
+                if (read.least < baseline - 0.005) {
+                    verdicts.push(
+                        `the sign's ${part} at Grid horizon's worst reads ${read.least.toFixed(2)}:1 on ${read.job}, under the ${baseline.toFixed(2)} HORIZON_WORST holds — a regression (lower it only with the owner)`,
+                    );
+                } else if (read.least > baseline + 0.05) {
+                    console.log(`  the sign's ${part} at Grid horizon's worst reads ${read.least.toFixed(2)}:1, over the ${baseline.toFixed(2)} HORIZON_WORST holds — raise it`);
+                }
+            }
+            console.log(`  Grid horizon at its worst, least per sign line (a known limit, the owner's C, 2026-09-27): ${said.join('; ')}`);
+        }
+        if (LOOKS === 'shipped' && HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {
+            verdicts.push(
+                `the sign's lines over Grid horizon were read at its worst on ${horizonKeys.size} job(s) but not on ${HORIZON_REQUIRED.filter((key) => !horizonKeys.has(key)).join(', ')}`,
             );
         }
         const unread = [...outlinedTargetsSeen].filter((kind) => !ringKinds.has(kind));

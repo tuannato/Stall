@@ -1004,9 +1004,11 @@ type OutlineGround = {
      * Where the surface is painted: the rule, and whether its paint is one
      * fill, a two-stop wash read at its midpoint, or — `stops`, a panel
      * whose ground is one layer of a stack — the even mix of that layer's
-     * first two stops, the layer named as written (`layer`).
+     * first two stops, the layer named as written (`layer`) — and, with
+     * `sunk`, that mix taken that share of the way to the page ground
+     * (`--s-bg`), where a decoration's floor sink darkens the panel.
      */
-    paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' | 'stops'; layer?: string };
+    paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' | 'stops'; layer?: string; sunk?: number };
     reason: string;
     /**
      * Each state — `:hover`, `:focus`, `:focus-visible`, `:focus-within`,
@@ -1109,6 +1111,19 @@ const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
         },
         reason:
             'the sign, where Grid horizon draws its skyline, windows and stars behind the seller’s name (step 5a″, D14, the owner’s (a)): the ground under that art is Neo’s sign panel, a gradient whose top two stops are where the name stands — their even mix, both literals of Neo’s own sheet that no token carries',
+    },
+    '.stall-tagline': {
+        scope: HORIZON_SCOPE,
+        colour: 'color-mix(in srgb, var(--s-bg), color-mix(in srgb, #101a2c, #0a1120))',
+        paint: {
+            sheet: 'src/ui/theme-neo.css',
+            rule: '.t-neo .stall-head',
+            read: 'stops',
+            layer: 'linear-gradient(180deg, #101a2c 0%, #0a1120 55%, #070c17 100%)',
+            sunk: 0.5,
+        },
+        reason:
+            'the tagline under Grid horizon (step 5a″, the owner via the window): it stands lower on the sign than the name, where the horizon’s floor sink (the page ground at 86%, from 44% to 80% of the sign) darkens the panel toward the page ground — the panel’s top two stops taken half way to `--s-bg`, which the at-rest read measured inside the ground on every screen and width, where the panel’s own colour fell outside it at the desk and on the wall',
     },
 };
 
@@ -1273,6 +1288,10 @@ function outlineGroundMismatches(
                     .map((stop) => paintOf(stop.replace(/\s+-?[\d.]+%$/, ''), vars));
                 if (stops.length === 2 && stops.every((stop) => stop !== undefined && stop.alpha === 1)) {
                     painted = stops[0]!.rgb.map((c, k) => (c + stops[1]!.rgb[k]!) / 2) as unknown as Rgb3;
+                    const sunk = entry.paint.sunk ?? 0;
+                    if (sunk > 0) {
+                        painted = ground === undefined ? undefined : (painted.map((c, k) => c * (1 - sunk) + ground.rgb[k]! * sunk) as unknown as Rgb3);
+                    }
                 }
             } else if (ground !== undefined && rule !== undefined && entry.paint.read === 'fill') {
                 const fill = paintOf(rule, vars);
@@ -1713,6 +1732,11 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         const sign = OUTLINE_GROUNDS['.stall-sign']!;
         expect(outlineGroundMismatches({ '.stall-sign': { ...sign, colour: 'color-mix(in srgb, #0a1120, #070c17)' } })).not.toEqual([]);
         expect(outlineGroundMismatches({ '.stall-sign': { ...sign, paint: { ...sign.paint, rule: '.t-neo .stall-sign' } } })).not.toEqual([]);
+        // The tagline: the sink's share moved, and the plain panel colour
+        // listed where the paint says it is sunk — each refused.
+        const tagline = OUTLINE_GROUNDS['.stall-tagline']!;
+        expect(outlineGroundMismatches({ '.stall-tagline': { ...tagline, paint: { ...tagline.paint, sunk: 0.25 } } })).not.toEqual([]);
+        expect(outlineGroundMismatches({ '.stall-tagline': { ...tagline, colour: sign.colour } })).not.toEqual([]);
     });
 
     it('refuses every other mark in the ground’s colour, and passes the outline with the look’s glow beside it', () => {

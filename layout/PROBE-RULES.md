@@ -1862,9 +1862,17 @@ the horizon is worn, the name wears the rain's outline — the one-pixel set
 stands on — and nothing else changes: no ground under the words, the art
 untouched, Neo's glow restated after the outline (and the crest's, with the
 lamp's flicker run as `att-hum-gutter-outlined`, the outline in every
-frame). On the wall the tagline stands in the sky beside the name and read
-1.08:1; it takes the same outline there (`.stall.shop-window`), 21px, the
-one-pixel set, and reads as it is elsewhere.
+frame). The tagline wears it wherever the horizon is worn (the owner, via
+the window): on the wall it stands in the sky beside the name and read
+1.08:1 bare. Its set is its size's — two pixels at 12px on a phone, one at
+14px at the desk and 21px on the wall — and its colour its own: it stands
+lower than the name, where the horizon's floor sink darkens the panel, so
+its outline is the panel's top two stops taken half way to the page ground
+(`OUTLINE_GROUNDS`' `.stall-tagline` row, a `stops` read with `sunk: 0.5`;
+the panel's own colour fell outside its ground at the desk and on the
+wall). The sign's third line, `.stall-sub`, is a target too, and needs no
+outline: its own bordered chip stands below the line, 7.25:1 at the
+horizon's worst.
 
 **Every outline guard takes it for its own reason:**
 - **The surface a decoration paints on** (`OUTLINE_SURFACES`): the rain's
@@ -1892,10 +1900,28 @@ one-pixel set, and reads as it is elsewhere.
   it to the layer as `theme-neo.css` writes it. Proved red:
   `--rain-outline-ground: var(--s-bg)` on the sign → rgb(5, 6, 13) over a
   ground painted rgb(10, 17, 32), on every horizon screen.
-- **The ring read**: at the horizon's worst (it is still, so as painted) the
+- **The ring read, on the horizon as painted — the failing guard**: the
   outlined name reads 4.51:1 at 390 (`opening`), 7.56:1 at 1280 and 10.79:1
-  on the 1920 wall, and 8.92 / 8.60 with the horizon alone; the wall's
-  tagline 3.42:1. Before the lamp carried the outline its bare letter read
+  on the 1920 wall, and 8.92 / 8.60 with the horizon alone; the tagline
+  3.63:1 at the least (the wall).
+- **At the horizon's worst — a report held to a baseline, a known limit
+  accepted by the owner on 2026-09-27 (the owner's C).** After the as-painted
+  read, the art is flattened (`__horizonAtItsWorst`: the skyline and star
+  sheets as one layer of their brightest paint, read from the SVGs through
+  `layout/horizonArt.ts`'s allow-list — today the stars' `#e8fbff` at 0.79;
+  the moon kept, stated), captured blanked and with the glyphs shown, the
+  sign's lines read, the art put back. The least today: the name 2.76:1
+  (`desktop/unreachable`), the tagline 1.92:1 (the desk's shop window), the
+  state line 7.25:1. `HORIZON_WORST` in the runner pins each 0.01 under
+  those: a lower read fails as a regression, a higher one prints "raise it".
+  The limit, stated: another seller's words can put a glyph beside a lit
+  window or a star, where the ring reads as low as those numbers. The rain
+  stays flattened as a fail because its drops cross every glyph within one
+  drift; the horizon's lights are static and sparse. The critic's pure test
+  ("every art paint half covered by the one-pixel ring clears 3:1") is not
+  added: it fails by design — 2.71:1 for the tagline's pink over half the
+  white star — which is the limit accepted. 77 jobs, 20.6 s (phase `horizon
+  worst`). The runner owes five jobs by name (`HORIZON_REQUIRED`). Before the lamp carried the outline its bare letter read
   2.09–2.24:1 on the ring, and before the probe read `oklab()` — the colour
   an animation's interpolated shadow computes to — the lamp's outline was
   taken for none and blanked, 1.88:1: both fixed, both red proofs.
@@ -1912,12 +1938,15 @@ the panel's colour, and between the white glyph and Neo's cyan halo it
 reads as a dark one-pixel ring round every letter — visible in
 `step5a2-shots/after/neo-horizon-390-name-3x.png`, which the owner has seen.
 The halo is the name's own shadow, painted under the outline, so no colour
-the outline could take matches both the panel and the halo. And the at-rest
-read passes it partly on a band: the head's cyan glow (a radial gradient)
-and scanlines are held to their stops, which widens [lo, hi]; read without
-them, the lamp's outline on `invalid` and the wall's tagline sit 5–18
-levels off the ground (measured, the critic's tightening, not yet guarded —
-see the open decision below).
+the outline could take matches both the panel and the halo. **And the
+at-rest read passes it partly on a band, stated and not tightened** (the
+owner's C): the ground under the sign's lines darkens down the sign — the
+panel's gradient and the floor sink — so a single outline colour cannot
+match it everywhere, and the read passes it partly on the head's cyan glow
+(a radial gradient) and scanlines, held to their stops, which widen
+[lo, hi]. Read without them (the critic's tightening, measured and not
+committed), the lamp's outline on `invalid` at 390 and the wall's tagline
+sat 5–18 levels off the ground.
 
 **The lamp's dip is G7's, and over the skyline it is expected to fail.** The
 dim frames paint the letter in `color-mix(in srgb, var(--s-text) 74%,

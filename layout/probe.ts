@@ -23,6 +23,11 @@ import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import buntingSvg from '../src/ui/decor/bunting.svg?raw';
 import { artTopShare } from './buntingArt';
 import { brightestDrop, type Drop } from './rainDrop';
+import { brightestArt } from './horizonArt';
+import horizonLeftSvg from '../src/ui/decor/horizon-sky-left.svg?raw';
+import horizonRightSvg from '../src/ui/decor/horizon-sky-right.svg?raw';
+import horizonFillSvg from '../src/ui/decor/horizon-sky-fill.svg?raw';
+import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
@@ -2127,6 +2132,9 @@ const CONTRAST_TEXT = [
     // The tagline under it, on the same sign and over the same art (the
     // window's side note on D14): read over its line rects on every look.
     '.stall-tagline:not(.deck-stall *)',
+    // And the sign's third line, its state ("Items for sale"), over the
+    // same art (the critic's item 9), on the same terms.
+    '.stall-sub:not(.deck-stall *)',
     // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
     // a theme file, so nothing else measures the ink it declares — and the
     // studio section is the one place a seller reads instructions rather than
@@ -3707,6 +3715,8 @@ type ContrastPrepared = {
     nameChrome?: string[];
     /** The stalls that wore Neo's rain, and how many had it at its brightest. */
     rain: { worn: number; flattened: number };
+    /** The signs that wore Grid horizon (painted as they are; `__horizonAtItsWorst` flattens them for the report). */
+    horizon: { worn: number; flattened: number };
     /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
     tide: { worn: number; held: number };
 };
@@ -3732,6 +3742,8 @@ declare global {
             heightOnly?: boolean,
             tide?: 0 | 1,
         ) => ContrastPrepared;
+        /** Flatten Grid horizon's art to its brightest paint on every sign (or take it off again); the signs worn and flattened. */
+        __horizonAtItsWorst: (on: boolean) => Promise<{ worn: number; flattened: number }>;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
@@ -4547,6 +4559,77 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
 }
 
 /**
+ * **Grid horizon at its worst — a report, not a fail** (step 5a″, the
+ * critic's item 1; the owner's C, 2026-09-27). The horizon draws its
+ * skyline's lit windows and its stars on the sign behind the seller's name
+ * and tagline; which of them fall under a ring pixel of an outlined line
+ * depends on the seller's own words, so a read of the art as painted is a
+ * read of one name. The contrast job reads the sign as painted, and the
+ * ring read there fails as everywhere; then, for the report, every sign
+ * wearing it (`__horizonAtItsWorst(true)`) has its skyline and star sheets (`horizon-sky-left`, `-right`, `-fill`,
+ * `-stars`) replaced by ONE flat layer of the brightest paint those sheets
+ * draw, over the colour the sign's outline is written in — read from the
+ * art through an allow-list (`layout/horizonArt.ts`), today the stars'
+ * `#e8fbff` at 0.79 — in the first sheet's place, every other layer kept:
+ * the line, the floor, the haze, the sky wash, and the moon, which this
+ * reading does not model (a mask and a gradient) and which stands in the
+ * pin's gutter, clear of the name, and is not drawn without a pin. Important
+ * longhands, like the rain's, taken off again after (`false`). The runner
+ * ring-reads the sign's outlined lines on that frame and holds the least to
+ * a pinned baseline — a regression guard, not a floor (`HORIZON_WORST`).
+ */
+const HORIZON_SHEETS = [horizonLeftSvg, horizonRightSvg, horizonFillSvg, horizonStarsSvg];
+
+function horizonAtItsWorst(): { worn: number; flattened: number } {
+    let worn = 0;
+    let flattened = 0;
+    for (const sign of document.querySelectorAll<HTMLElement>('#app .stall.att-horizon:not(.deck-stall) .stall-sign')) {
+        worn += 1;
+        const cs = getComputedStyle(sign);
+        // The colour the sign's outline is written in, resolved: a custom
+        // property computes to its tokens, so it is read through a colour.
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--rain-outline-ground)';
+        sign.append(probe);
+        const ground = colourOf(getComputedStyle(probe).color);
+        probe.remove();
+        const art = ground === undefined ? undefined : brightestArt(HORIZON_SHEETS, ground.rgb);
+        const layers = splitLayers(cs.backgroundImage);
+        const isSheet = (layer: string): boolean => /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|stars)[^")]*"?\)$/.test(layer);
+        const first = layers.findIndex(isSheet);
+        if (art === undefined || first < 0 || layers.filter(isSheet).length !== HORIZON_SHEETS.length) continue;
+        const paint = `rgba(${art.rgb.join(', ')}, ${art.alpha})`;
+        const rebuild = (list: string[], flatEntry: string): string =>
+            layers
+                .flatMap((layer, i) => (!isSheet(layer) ? [list[i % list.length]!] : i === first ? [flatEntry] : []))
+                .join(', ');
+        const set = (prop: string, value: string): void => sign.style.setProperty(prop, value, 'important');
+        set('background-image', rebuild(layers, `linear-gradient(${paint}, ${paint})`));
+        set('background-size', rebuild(splitLayers(cs.backgroundSize), '100% 100%'));
+        set('background-repeat', rebuild(splitLayers(cs.backgroundRepeat), 'no-repeat'));
+        set('background-position', rebuild(splitLayers(cs.backgroundPosition), '0% 0%'));
+        flattened += 1;
+    }
+    return { worn, flattened };
+}
+
+const FLATTENED = ['background-image', 'background-size', 'background-repeat', 'background-position'];
+
+window.__horizonAtItsWorst = async (on: boolean) => {
+    let out = { worn: 0, flattened: 0 };
+    if (on) {
+        out = horizonAtItsWorst();
+    } else {
+        for (const sign of document.querySelectorAll<HTMLElement>('#app .stall.att-horizon:not(.deck-stall) .stall-sign')) {
+            out.worn += 1;
+            for (const prop of FLATTENED) sign.style.removeProperty(prop);
+        }
+    }
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return out;
+};
+
+/**
  * The aurora at one end of its tide (`TIDE_SCREENS` in `contrastPlan.ts`):
  * every stall wearing it — the deck's minis aside — has `--au-tide` held at
  * `tide`, important, so the tide's own animation cannot move it (an
@@ -4757,7 +4840,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         // The apex can only wear the default look — see `looksFor`. The plan
         // never asks for this; the runner refuses a job with no targets.
         preparedNodes = [];
-        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, horizon: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
     }
     if (neutral) {
         paint(NEUTRAL_SCREEN, look, []);
@@ -4765,6 +4848,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     paint(screen, look, wornOf(look, flags));
     freezeAnimations();
     const rain = rainAtItsBrightest();
+    const horizon = { worn: document.querySelectorAll('#app .stall.att-horizon:not(.deck-stall) .stall-sign').length, flattened: 0 };
     const tideHeld = auroraTideAt(tide);
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
@@ -4798,6 +4882,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
             rain,
+            horizon,
             tide: tideHeld,
             ...echo,
         };
@@ -4897,6 +4982,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         nodes: preparedNodes.length,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
+        // The signs that wore Grid horizon, painted as they are.
+        horizon,
         // The look pseudos in scope, marked for D6(i)'s second frame.
         lookPseudos,
         // Visible text no target reads, reported (step 5b).

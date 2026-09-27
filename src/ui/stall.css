@@ -740,7 +740,8 @@ body {
 .stall.att-rainfall,
 .stall.att-rainfall:not(.deck-stall)
     :is([data-role='list-first'], .event-txid, .notice-invite, .notice:not(.stall-sign .notice), .studio-browser),
-.stall.att-horizon:not(.deck-stall) .stall-sign {
+.stall.att-horizon:not(.deck-stall) .stall-sign,
+.stall.att-horizon:not(.deck-stall) .stall-tagline {
     --rain-outline-1:
         1px 0 0 var(--rain-outline-ground), -1px 0 0 var(--rain-outline-ground), 0 1px 0 var(--rain-outline-ground),
         0 -1px 0 var(--rain-outline-ground), 1px 1px 0 var(--rain-outline-ground), 1px -1px 0 var(--rain-outline-ground),
@@ -915,9 +916,28 @@ body {
  * every letter. The halo is the name's own shadow, painted under the
  * outline, and no one colour matches both it and the panel
  * (`PROBE-RULES.md`, "The seller's name on the sign reads").
+ *
+ * **A known limit, accepted by the owner on 2026-09-27**: the contrast pass
+ * holds the name and tagline to 3:1 on the horizon as painted, and reports
+ * them at the horizon's worst (its lights flattened to the brightest) only
+ * against a baseline — another seller's words can put a glyph beside a lit
+ * window or a star, where the one-pixel ring reads as low as 2.76:1 for the
+ * name and 1.92:1 for the tagline. The rain is held at its worst as a fail
+ * because its drops cross every glyph; the horizon's lights are static and
+ * sparse.
  */
 .stall.att-horizon:not(.deck-stall) .stall-sign {
     --rain-outline-ground: color-mix(in srgb, #101a2c, #0a1120);
+}
+
+/*
+ * The tagline stands lower, where the horizon's floor sink (its first
+ * layer: the page's own ground at 86%, from 44% to 80% of the sign) darkens
+ * the panel toward the page ground: its outline is the panel and the page
+ * ground mixed evenly, the sink half way.
+ */
+.stall.att-horizon:not(.deck-stall) .stall-tagline {
+    --rain-outline-ground: color-mix(in srgb, var(--s-bg), color-mix(in srgb, #101a2c, #0a1120));
 }
 
 .stall.att-horizon:not(.deck-stall) .stall-name {
@@ -942,13 +962,20 @@ body {
 }
 
 /*
- * The tagline on the wall stands in the sky beside the name, over the same
- * windows and stars (1.08:1 at the desk and on the 1920 canvas), and takes
- * the same outline there: 21px, the one-pixel set. Elsewhere it stands below
- * the horizon on the dark floor and reads as it is.
+ * The tagline wears it wherever the horizon is worn (the owner, via the
+ * window, 2026-09-27): on the wall it stands in the sky beside the name,
+ * over the same windows and stars (1.08:1 bare), and elsewhere under the
+ * horizon's line — the set by its size: 12px on a phone takes the two-pixel
+ * set, 14px at the desk and 21px on the wall the one-pixel set.
  */
-.stall.shop-window.att-horizon:not(.deck-stall) .stall-tagline {
-    text-shadow: var(--rain-outline-1);
+.stall.att-horizon:not(.deck-stall) .stall-tagline {
+    text-shadow: var(--rain-outline-2);
+}
+
+@media (min-width: 680px) {
+    .stall.att-horizon:not(.deck-stall) .stall-tagline {
+        text-shadow: var(--rain-outline-1);
+    }
 }
 
 /* `att-hum-gutter`, frame for frame, with the outline under every glow. */
