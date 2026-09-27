@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { SERVED_SHEETS, SHEET_ROLE_NAMES, appSheets, sheetsWithRole } from './sheet-roles.mjs';
+import { SERVED_SHEETS, SHEET_LOADS, SHEET_ROLE_NAMES, appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import { parseSheet, splitTopLevel } from './workshop-css.mjs';
 
 /**
@@ -98,8 +98,14 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
         for (const sheet of SERVED_SHEETS) {
             assert.ok(existsSync(join(ROOT, sheet.path)), `${sheet.path} is on disk`);
             assert.ok(SHEET_ROLE_NAMES.includes(sheet.role), `${sheet.path}: role ${sheet.role}`);
-            const scoped = sheet.role === 'look' || sheet.role === 'kit';
-            assert.equal(sheet.lookClass !== undefined, scoped, `${sheet.path}: a class exactly on a look or the kit`);
+            const scoped = ['look', 'kit', 'fixture'].includes(sheet.role);
+            assert.equal(sheet.lookClass !== undefined, scoped, `${sheet.path}: a class exactly on a look, the kit or the fixture`);
+            assert.equal(sheet.load !== undefined, scoped, `${sheet.path}: a load exactly on a look sheet`);
+            if (scoped) assert.ok(SHEET_LOADS.includes(sheet.load), `${sheet.path}: load ${sheet.load}`);
+            assert.equal(sheet.artDir !== undefined, sheet.load === 'worn', `${sheet.path}: an art directory exactly on a worn-only sheet`);
+            if (sheet.artDir !== undefined) {
+                assert.ok(existsSync(join(ROOT, sheet.artDir)) && statSync(join(ROOT, sheet.artDir)).isDirectory(), `${sheet.artDir} is a directory`);
+            }
             if (sheet.role === 'look') {
                 assert.equal(sheet.path, `src/ui/theme-${sheet.lookClass.replace(/^t-/, '')}.css`, sheet.path);
             }
@@ -107,6 +113,12 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
         assert.deepEqual(
             sheetsWithRole('kit').map((s) => s.path),
             ['workshop/theme-workshop.css'],
+        );
+        // The harness's worn-only look: one sheet, under `layout/`, which the
+        // production build never reaches (`gallery-is-not-served`).
+        assert.deepEqual(
+            sheetsWithRole('fixture').map((s) => [s.path, s.lookClass, s.load]),
+            [['layout/fixture-look.css', 't-fixture-worn', 'worn']],
         );
         assert.deepEqual(
             appSheets().map((s) => s.role),
@@ -121,6 +133,28 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
             sheetsWithRole('look').map((s) => s.lookClass).sort(),
             classes,
         );
+    });
+
+    /**
+     * `every-look-row-loads-its-sheet-the-way-its-role-says`: a shipped
+     * look's `load` in this table is its theme row's `sheetLoad`, so the
+     * weight guard (which reads the table) and the renderer (which reads the
+     * row) cannot disagree about which sheet every visitor downloads. The
+     * kit is loaded with the showroom and the probe, bundled, until step 8;
+     * the fixture is the one worn-only sheet, and it is no row.
+     */
+    it('every-look-row-loads-its-sheet-the-way-its-role-says', async () => {
+        const theme = await import('../src/domain/theme.ts');
+        for (const { id } of theme.SHIPPED_THEMES) {
+            const row = theme.decodeTheme(id);
+            const sheet = sheetsWithRole('look').find((s) => s.lookClass === row.sheetClass);
+            assert.ok(sheet !== undefined, `${row.sheetClass} has a sheet`);
+            assert.equal(sheet.load, row.sheetLoad, `${row.sheetClass}: the table says ${sheet.load}, the row ${row.sheetLoad}`);
+        }
+        assert.deepEqual(lookSheets().map((s) => s.role).sort(), ['fixture', 'kit', 'look', 'look', 'look']);
+        assert.deepEqual(wornSheets().map((s) => s.path), ['layout/fixture-look.css']);
+        const shippedClasses = theme.SHIPPED_THEMES.map(({ id }) => theme.decodeTheme(id).sheetClass);
+        assert.ok(!shippedClasses.includes('t-fixture-worn'), 'the fixture is never a row');
     });
 
     it('marks shadowedByLooks exactly on the base and screen sheets that carry no per-look rule', () => {

@@ -27,7 +27,9 @@ import {
  */
 
 const REDUCE = '\n@media (prefers-reduced-motion: reduce) {\n}\n';
-const sheet = (body) => `${body}${REDUCE}`;
+/** The kit's sheet naming itself (`every-look-sheet-names-itself`), which every sheet the lint passes carries. */
+const NAMED = '\n.t-workshop { --look-sheet: t-workshop; }\n';
+const sheet = (body) => `${body}${NAMED}${REDUCE}`;
 
 describe('workshop-lint', () => {
     it('passes the committed skeleton and a scoped sheet', () => {
@@ -245,7 +247,9 @@ describe('workshop-starter-rescoping', () => {
             '.stall.broadcast .plate { color: red; }\n' +
             '.stall.t-neo.broadcast .plate, .stall.t-rural.broadcast .plate { border: 0; }\n';
         assert.deepEqual(lookRules(other, 'neo'), ['.stall.t-neo.broadcast .plate { border: 0; }']);
-        const out = rescopeSheet(`.t-neo .a { color: red; }\n${REDUCE}`, 'neo', [{ from: 'x.css', css: other }]);
+        const out = rescopeSheet(`.t-neo { --look-sheet: t-neo; }\n.t-neo .a { color: red; }\n${REDUCE}`, 'neo', [{ from: 'x.css', css: other }]);
+        // The sheet's name is re-scoped with it, or the starter fails its own lint.
+        assert.match(out, /\.t-workshop \{ --look-sheet: t-workshop; \}/);
         assert.match(out, /\.stall\.t-workshop\.broadcast \.plate \{ border: 0; \}/);
         assert.ok(out.indexOf('Carried from x.css') < out.indexOf('@media (prefers-reduced-motion'));
         assert.deepEqual(lintSheet(out), []);

@@ -19,10 +19,23 @@
  *   overlay, the studio's overlay guide, the shop window).
  * - `kit` — the workshop look's sheet: a creator's, linted by
  *   `pnpm workshop:lint` under the same rules as a `look` plus the kit's own.
+ * - `fixture` — a look sheet the layout harness paints to measure the
+ *   worn-only road (`layout/fixtureLook.ts`): never a row of the theme
+ *   table, never in the production bundle (`gallery-is-not-served`), and
+ *   the one worn-only sheet the guards read until a shipped look is worn
+ *   only.
  * - `harness` — a page of the workshop kit's that the app never serves (the
  *   showroom's chrome).
  * - `document` — a static page under `public/`, outside the Vite graph,
  *   which Pages serves whether or not anything links it.
+ *
+ * `load` says how a look sheet (a `look`, the `kit` or a `fixture`) reaches a
+ * page — `bundled`, imported with the app into the entry CSS every visitor
+ * downloads, or `worn`, its own file fetched only for a stall that wears
+ * the look — and a worn sheet names `artDir`, the one directory its
+ * `url()`s may reach (its art and its faces), counted with it by the weight
+ * guard (`scripts/weight-buckets.mjs`). A shipped look's `load` is its
+ * theme row's `sheetLoad` (`every-look-row-loads-its-sheet-the-way-its-role-says`).
  *
  * `shadowedByLooks` names the sheets `audit-shadowing.mjs` measures as its
  * base: a look's own rule can override what they declare, and they carry no
@@ -33,19 +46,29 @@
  * sheets' contents.
  */
 
-/** @typedef {'base' | 'look' | 'screen' | 'kit' | 'harness' | 'document'} SheetRole */
+/** @typedef {'base' | 'look' | 'screen' | 'kit' | 'fixture' | 'harness' | 'document'} SheetRole */
 
-export const SHEET_ROLE_NAMES = Object.freeze(['base', 'look', 'screen', 'kit', 'harness', 'document']);
+export const SHEET_ROLE_NAMES = Object.freeze(['base', 'look', 'screen', 'kit', 'fixture', 'harness', 'document']);
+
+/** How a look sheet reaches a page. */
+export const SHEET_LOADS = Object.freeze(['bundled', 'worn']);
 
 export const SERVED_SHEETS = Object.freeze([
     Object.freeze({ path: 'src/ui/stall.css', role: 'base', shadowedByLooks: true }),
-    Object.freeze({ path: 'src/ui/theme-modern.css', role: 'look', lookClass: 't-modern' }),
-    Object.freeze({ path: 'src/ui/theme-neo.css', role: 'look', lookClass: 't-neo' }),
-    Object.freeze({ path: 'src/ui/theme-rural.css', role: 'look', lookClass: 't-rural' }),
+    Object.freeze({ path: 'src/ui/theme-modern.css', role: 'look', lookClass: 't-modern', load: 'bundled' }),
+    Object.freeze({ path: 'src/ui/theme-neo.css', role: 'look', lookClass: 't-neo', load: 'bundled' }),
+    Object.freeze({ path: 'src/ui/theme-rural.css', role: 'look', lookClass: 't-rural', load: 'bundled' }),
     Object.freeze({ path: 'src/ui/broadcast.css', role: 'screen' }),
     Object.freeze({ path: 'src/ui/obsGuide.css', role: 'screen', shadowedByLooks: true }),
     Object.freeze({ path: 'src/ui/window.css', role: 'screen', shadowedByLooks: true }),
-    Object.freeze({ path: 'workshop/theme-workshop.css', role: 'kit', lookClass: 't-workshop' }),
+    Object.freeze({ path: 'workshop/theme-workshop.css', role: 'kit', lookClass: 't-workshop', load: 'bundled' }),
+    Object.freeze({
+        path: 'layout/fixture-look.css',
+        role: 'fixture',
+        lookClass: 't-fixture-worn',
+        load: 'worn',
+        artDir: 'layout/fixture-look',
+    }),
     Object.freeze({ path: 'layout/gallery.css', role: 'harness' }),
     Object.freeze({ path: 'public/stream.css', role: 'document' }),
     Object.freeze({ path: 'public/guide.css', role: 'document' }),
@@ -55,6 +78,16 @@ export const SERVED_SHEETS = Object.freeze([
 /** The sheets with one of `roles`, in table order. */
 export function sheetsWithRole(...roles) {
     return SERVED_SHEETS.filter((sheet) => roles.includes(sheet.role));
+}
+
+/** Every look sheet — the shipped looks, the kit's and the harness's fixture — with its `load`. */
+export function lookSheets() {
+    return sheetsWithRole('look', 'kit', 'fixture');
+}
+
+/** The look sheets fetched only for a stall that wears them. */
+export function wornSheets() {
+    return lookSheets().filter((sheet) => sheet.load === 'worn');
 }
 
 /** The sheets the app itself imports: the base, the looks and the screen sheets. */
