@@ -3317,6 +3317,90 @@ function lookSheetFaults(screen: string, label: string): Failure[] {
     return out;
 }
 
+/*
+ * `no-word-is-clipped-by-a-file` (step 6, 6.6 of the step-6 plan v2): no
+ * element holding text of its own, nor any ancestor of it up to `#app`,
+ * computes a `mask-image`, a `-webkit-mask-image`, a mask border's source or
+ * a `clip-path` that names a FILE. A mask image that has not loaded — or
+ * failed: a 404, a refused MIME type, a policy refusal, a worn-only look's
+ * art that has not arrived — is transparent black by the spec, and a mask
+ * of transparent black hides everything under it: the words, the asked
+ * amount, the address. A file can always fail to load; so a word may never
+ * depend on one to be seen. A `url(#id)` naming an element of this document
+ * is not a file and passes; a gradient mask is not a file and passes.
+ * The cost, stated: a look that masks a ground in its own art (Ink wash's
+ * washes) moves the masked ground to a sibling layer with no text in it.
+ * Counted per paint (`fileClipChecks`); the phone and desk passes owe a
+ * nonzero count (`probe-coverage.mjs`). Proved red by a planted
+ * `mask-image: url(...)` on a row's name.
+ */
+const FILE_CLIP_CHECK = 'no-word-is-clipped-by-a-file';
+const FILE_CLIP_PROPS = [
+    'mask-image',
+    '-webkit-mask-image',
+    'mask-border-source',
+    '-webkit-mask-box-image-source',
+    'clip-path',
+] as const;
+let fileClipChecks = 0;
+
+/** The first file a computed mask or clip value names, or undefined: `url(#id)` is this document, not a file. */
+function fileNamedBy(value: string): string | undefined {
+    for (const m of value.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/g)) {
+        const target = (m[1] ?? m[2] ?? m[3] ?? '').trim();
+        if (target === '' || target.startsWith('#')) continue;
+        const url = new URL(target, location.href);
+        if (url.hash !== '' && url.origin + url.pathname + url.search === location.origin + location.pathname + location.search) {
+            continue;
+        }
+        return target;
+    }
+    return undefined;
+}
+
+function fileClipFaults(screen: string, label: string): Failure[] {
+    const root = document.getElementById('app')!;
+    const out: Failure[] = [];
+    const named = new Map<Element, string | undefined>();
+    const fileOn = (el: Element): string | undefined => {
+        if (named.has(el)) return named.get(el);
+        const cs = getComputedStyle(el);
+        let found: string | undefined;
+        for (const prop of FILE_CLIP_PROPS) {
+            const file = fileNamedBy(cs.getPropertyValue(prop));
+            if (file !== undefined) {
+                found = `${prop} names ${file}`;
+                break;
+            }
+        }
+        named.set(el, found);
+        return found;
+    };
+    const said = new Set<Element>();
+    for (const el of root.querySelectorAll('*')) {
+        const ownText = [...el.childNodes].some(
+            (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '',
+        );
+        if (!ownText) continue;
+        fileClipChecks += 1;
+        for (let at: Element | null = el; at !== null && at !== root; at = at.parentElement) {
+            const why = fileOn(at);
+            if (why === undefined) continue;
+            if (!said.has(at)) {
+                said.add(at);
+                out.push({
+                    screen,
+                    theme: label,
+                    check: FILE_CLIP_CHECK,
+                    detail: `${describe(el)}'s words are under ${at === el ? 'their own box' : describe(at)}, whose ${why}`,
+                });
+            }
+            break;
+        }
+    }
+    return out;
+}
+
 const failures: Failure[] = [];
 
 /*
@@ -3363,6 +3447,7 @@ for (const screen of measured) {
                     : `${look.label} + ${worn.map((a) => a.label).join(' + ')}`;
             failures.push(...checkOverTime(screen, look, label, worn));
             failures.push(...lookSheetFaults(screen, label));
+            failures.push(...fileClipFaults(screen, label));
             // The tree `checkOverTime` measured is still mounted: it seeks the
             // animations it painted rather than repainting.
             // A pay screen owes a seller's figure. The several-items sheet
@@ -5233,6 +5318,8 @@ const verdict = {
     sheetClasses: [...sheetClassesPainted].sort(),
     /* The look classes whose sheet named them on a painted stall (`a-look-is-measured-with-its-sheet`). */
     lookSheetsRead: [...lookSheetsRead].sort(),
+    /* Elements with words of their own asked about a mask or clip naming a file (`no-word-is-clipped-by-a-file`). */
+    fileClipChecks,
     /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */
     cspRefusals: cspRefusals(),
     clipSkips,

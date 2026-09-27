@@ -39,8 +39,8 @@ export const SHEETLESS_CLASSES: readonly string[] = [SKELETON_SHEET_CLASS];
  * `names` (`.<names> { --look-sheet: <names>; }`, read from its own CSSOM);
  * rejected on `error` (a 404, a policy refusal) or on a load that is not
  * that sheet. The second half is not caution: `vite preview` answers a
- * missing file with its SPA fallback, 200 and HTML, and Chrome fires `load`
- * on a stylesheet link it refused to apply for its MIME type (measured by
+ * missing file with its SPA fallback, 200 and HTML, and Chrome fires `load`,
+ * not `error`, on a stylesheet link answered that way (measured by
  * `a-worn-only-sheet-loads-under-the-production-policy`, 2026-09-27) — so
  * `load` alone says a response arrived, and only the sheet's own name says
  * it is the sheet. The link stays either way; a failed one is inert.

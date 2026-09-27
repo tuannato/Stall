@@ -4000,10 +4000,26 @@ refused nothing.
 "a sheet URL that does not exist did not reject": `vite preview` answers a
 missing file with its SPA fallback (`htmlFallbackMiddleware`: a stylesheet
 request accepts `*/*`, so it is rewritten to `/index.html`, 200, HTML), and
-Chrome fired `load`, not `error`, on the link it then refused to apply. So
+Chrome fired `load`, not `error`, on the link (whether it then applied
+anything was not read; the sheet did not name the look). So
 the harness's `loadWornSheet` resolves only when the loaded sheet's own
 CSSOM holds `.<class> { --look-sheet: <class>; }` (`sheetNamesItself`), and
 the job prints the status the missing URL was answered with. Step 8's
 production loader must keep that rule: a Pages 404 fires `error`, but a
 proxy or a stale deploy that answers with HTML would not. Not held here,
 stated: Pages itself, OBS's browser, Safari and Firefox.
+
+## No word is clipped by a file (step 6, 2026-09-27)
+
+A mask image that has not loaded or failed is transparent black by the
+spec, and a mask of transparent black hides what is under it. So no element
+holding words of its own, nor any ancestor of it up to `#app`, may compute a
+`mask-image`, `-webkit-mask-image`, mask border source or `clip-path` naming
+a FILE (`url(#id)` in this document passes; a gradient passes; a `data:`
+URL counts as a file, since the policy's `img-src` refuses it):
+**`no-word-is-clipped-by-a-file`**, after every paint, every look and
+variant, counted (`fileClipChecks`) and owed on the phone and desk passes.
+Its cost is Ink wash's: its masked grounds move to a sibling layer with no
+text in it, and the colophon mask over the seller's name is refused (the
+owner sees that at the port). Proved red by a planted
+`mask-image: url(./decor/rain-near.svg)` on Neo's row name.

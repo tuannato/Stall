@@ -46,6 +46,9 @@
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
+ * - **`no-word-is-clipped-by-a-file`** asks, on the phone and desk passes,
+ *   every element with words of its own whether it or an ancestor is masked
+ *   or clipped by a file.
  * - **`a-look-is-measured-with-its-sheet`** reads, on every pass, the name
  *   each look's sheet gives a painted stall (`sheetedClasses`: every look the
  *   run measures but the sheetless skeleton) — a look this pass painted and
@@ -122,6 +125,9 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     if (!PAGE_PASSES.has(pass)) return gaps;
+    if (!((report.fileClipChecks ?? 0) > 0)) {
+        gaps.push('no-word-is-clipped-by-a-file asked no element with words');
+    }
     if (!((report.haloChecks ?? 0) > 0)) {
         gaps.push('a-halo-never-reaches-a-neighbours-text asked no halo');
     }
@@ -205,6 +211,7 @@ export function probeCoverageLine(pass, report) {
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +
         ` · money nodes asked: ${report.moneyChecks ?? 0}` +
         ` · halos asked: ${report.haloChecks ?? 0}` +
+        ` · words asked about a mask from a file: ${report.fileClipChecks ?? 0}` +
         ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
         ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
