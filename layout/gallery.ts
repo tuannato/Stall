@@ -25,7 +25,13 @@
  *   __shotPlan()                    — the workshop look's shot list (`shotPlan.ts`)
  *   __diffPlan()                    — the shipped looks' before/after list (`pnpm looks:diff`)
  *   __screens()                     — every fixture screen this build paints
+ *   __lookSheets()                  — each painted stall's `t-*` class and the name its sheet gives it
  *   __galleryReady                  — true once the module has evaluated
+ *
+ * A worn-only look's sheet is appended before the first paint, the way the
+ * probe's page does (`wornSheet.ts`) — none today: no row is worn only — and
+ * `pnpm looks:diff` refuses a shot whose painted look its sheet did not
+ * name (`looks-diff-refuses-a-look-painted-without-its-sheet`).
  */
 import { renderStall } from '../src/ui/render';
 import { WORKSHOP_THEME_ID } from '../src/domain/theme';
@@ -33,6 +39,7 @@ import { SCREENS, handlers } from './fixtures';
 import { galleryLooks, kitLook, lookById, registerWorkshopLook, shippedLooks, wornOf, type Look } from './looks';
 import { diffPlan, shotPlan, type DiffJob, type ShotJob } from './shotPlan';
 import { loadKitLook } from './workshopKit';
+import { loadWornSheet, lookSheetReads, wornSheetsOf, type LookSheetRead } from './wornSheet';
 // After the app's own sheets (imported through `render`), so the kit's sheet
 // lands where a shipped look's does: last among equals in the cascade.
 import '../workshop/theme-workshop.css';
@@ -52,6 +59,9 @@ try {
 } catch (err) {
     kitProblem = (err as Error).message;
 }
+
+// Every worn-only look this showroom offers, its sheet on the page before the first paint.
+await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadWornSheet(url, cls)));
 
 function numberParam(raw: string | null): number | undefined {
     if (raw === null || raw === '') {
@@ -229,6 +239,7 @@ declare global {
         __shotPlan: () => ShotJob[];
         __diffPlan: () => DiffJob[];
         __screens: () => string[];
+        __lookSheets: () => LookSheetRead[];
         __galleryReady: boolean;
     }
 }
@@ -254,4 +265,5 @@ window.__shotPlan = () => {
 };
 window.__diffPlan = () => diffPlan(shippedLooks());
 window.__screens = () => Object.keys(SCREENS);
+window.__lookSheets = () => lookSheetReads(app);
 window.__galleryReady = true;

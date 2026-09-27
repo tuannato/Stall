@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
-import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
+import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, lookSheetRefusal, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
 
 /** A 10×10 RGBA frame, grey, with `paint` pixels set to red. */
 function frame(paint = []) {
@@ -216,5 +216,24 @@ describe('looks-diff-expects-by-screen-look-and-variant', () => {
         assert.equal(out.code, 1);
         assert.deepEqual(out.unmet, ['activity:neo-city/worn', '*:rural/worn']);
         assert.deepEqual(out.notCompared, ['door:modern']);
+    });
+});
+
+describe('looks-diff-refuses-a-look-painted-without-its-sheet', () => {
+    /**
+     * Each painted stall's `t-*` class against the `--look-sheet` it
+     * computes (`window.__lookSheets()` in the showroom): a look its sheet
+     * did not name was painted without it, and a shot of it is refused.
+     */
+    it('refuses a look whose sheet did not name it, and one named wrong', () => {
+        assert.match(lookSheetRefusal([{ cls: 't-rural', sheet: '' }]), /t-rural was painted without its sheet/);
+        assert.match(lookSheetRefusal([{ cls: 't-neo', sheet: 't-neo' }, { cls: 't-rural', sheet: 't-neo' }]), /t-rural computes --look-sheet: t-neo/);
+    });
+
+    it('passes a look its sheet named, the sheetless skeleton, and a ref that predates the hook', () => {
+        assert.equal(lookSheetRefusal([{ cls: 't-neo', sheet: 't-neo' }, { cls: 't-modern', sheet: 't-modern' }]), undefined);
+        assert.equal(lookSheetRefusal([{ cls: 't-skeleton', sheet: '' }]), undefined);
+        assert.equal(lookSheetRefusal(undefined), undefined);
+        assert.equal(lookSheetRefusal([]), undefined);
     });
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { probeCoverageGaps, probeCoverageLine } from './probe-coverage.mjs';
+import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 const full = {
@@ -157,5 +157,55 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             'wall controls read: 24 · status line asked: 50 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
         );
         assert.equal(probeCoverageLine('reduced-motion', full), '');
+    });
+});
+
+describe('a-look-is-measured-with-its-sheet', () => {
+    /** A pass owes, for every look it measures but the skeleton, a stall whose sheet named it. */
+    it('refuses a pass that read no sheet name for a look it measures, on every pass', () => {
+        for (const pass of ['mobile', 'desktop', 'canvas', 'portrait', 'tablet']) {
+            const gaps = probeCoverageGaps(pass, { ...full, lookSheetsRead: ['t-modern', 't-neo'] }, { sheetedClasses: SHIPPED });
+            assert.ok(gaps.includes("a-look-is-measured-with-its-sheet read no sheet's name on a t-rural stall"), `${pass}: ${gaps.join('; ')}`);
+            const whole = probeCoverageGaps(pass, { ...full, lookSheetsRead: SHIPPED }, { sheetedClasses: SHIPPED });
+            assert.ok(!whole.some((g) => g.startsWith('a-look-is-measured-with-its-sheet')), `${pass}: ${whole.join('; ')}`);
+        }
+    });
+});
+
+describe('a-worn-only-sheet-loads-under-the-production-policy', () => {
+    const held = {
+        url: '/assets/fixture-look-abc.css',
+        before: '',
+        loaded: true,
+        error: '',
+        last: true,
+        sameOrigin: true,
+        after: 't-fixture-worn',
+        art: [200],
+        missingRejected: true,
+        inEntryCss: false,
+        refusals: [],
+    };
+
+    it('holds a job that loaded, landed last, named itself, fetched its art and refused a missing sheet', () => {
+        assert.deepEqual(wornSheetJobFaults(held), []);
+    });
+
+    it('names each way the road can fail', () => {
+        for (const [change, pattern] of [
+            [{ before: 't-fixture-worn' }, /in the entry CSS/],
+            [{ inEntryCss: true }, /already on the page/],
+            [{ loaded: false, error: 'the look sheet at x did not load', after: '' }, /did not load/],
+            [{ last: false }, /did not land after/],
+            [{ sameOrigin: false }, /not same-origin/],
+            [{ after: '' }, /names ""/],
+            [{ art: [] }, /never fetched/],
+            [{ art: [404] }, /answered 404/],
+            [{ missingRejected: false }, /did not reject/],
+            [{ refusals: [{ directive: 'style-src-elem', blocked: 'inline', source: '' }] }, /refused inline under style-src-elem/],
+        ]) {
+            const faults = wornSheetJobFaults({ ...held, ...change });
+            assert.ok(faults.some((f) => pattern.test(f)), `${JSON.stringify(change)}: ${faults.join('; ') || '(none)'}`);
+        }
     });
 });

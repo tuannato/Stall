@@ -112,6 +112,37 @@ const SKELETON: Look = {
     rows: [],
 };
 
+/**
+ * The harness's worn-only look (step 6, 6.7 of the step-6 plan v2): the
+ * default row under `t-fixture-worn`, `sheetLoad: 'worn'`, whose sheet
+ * (`layout/fixture-look.css`, its art in `layout/fixture-look/`) is its own
+ * built file — `fixtureLook.ts` holds its URL, and only the probe imports
+ * that. **Never a row and never measured**: `0xfd` is the harness's address
+ * for it like the skeleton's `0xfe`, it is in neither `measuredLooks()` nor
+ * `galleryLooks()`, and nothing under `src/` reaches it, so the production
+ * build carries neither the class nor the sheet (`gallery-is-not-served`).
+ * Its one job is `a-worn-only-sheet-loads-under-the-production-policy`
+ * (`window.__wornSheetJob` in `probe.ts`); it is also the worn-only subject
+ * of the weight guard and the worn-only lints until a shipped look is worn
+ * only.
+ */
+export const FIXTURE_LOOK_ID = 0xfd;
+
+/** The class the fixture's worn-only sheet is scoped under. */
+export const FIXTURE_SHEET_CLASS = 't-fixture-worn';
+
+export const FIXTURE_LOOK: Look = {
+    id: FIXTURE_LOOK_ID,
+    label: 'Fixture (worn-only)',
+    theme: {
+        ...decodeTheme(DEFAULT_THEME_ID),
+        sheetClass: FIXTURE_SHEET_CLASS,
+        sheetLoad: 'worn',
+        label: 'Fixture (worn-only)',
+    },
+    rows: [],
+};
+
 /** Every look the ordinary probe measures: the shipped looks, then the skeleton. */
 const MEASURED: readonly Look[] = [...SHIPPED, SKELETON];
 

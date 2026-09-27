@@ -46,6 +46,11 @@
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
+ * - **`a-look-is-measured-with-its-sheet`** reads, on every pass, the name
+ *   each look's sheet gives a painted stall (`sheetedClasses`: every look the
+ *   run measures but the sheetless skeleton) — a look this pass painted and
+ *   never read was measured with its sheet unproved.
+ *
  * The phone and desk passes owe the page rules, the canvas the overlay's
  * places and the wall's controls, and the portrait and tablet passes the
  * wall's controls; the reduced-motion and contrast passes owe nothing here
@@ -84,8 +89,14 @@ const WALL_ROLES = [
  * looks whose rows must be read; `skeleton` is whether the skeleton was
  * measured (the ordinary run, not the kit's).
  */
-export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton = false } = {}) {
+export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton = false, sheetedClasses = [] } = {}) {
     const gaps = [];
+    const sheetsRead = new Set(report.lookSheetsRead ?? []);
+    for (const cls of sheetedClasses) {
+        if (!sheetsRead.has(cls)) {
+            gaps.push(`a-look-is-measured-with-its-sheet read no sheet's name on a ${cls} stall`);
+        }
+    }
     if (WALL_PASSES.has(pass)) {
         const roles = report.wallControlRoles ?? {};
         for (const role of WALL_ROLES) {
@@ -219,4 +230,39 @@ function sliverLine(slivers) {
     }
     const parts = [...byRole].sort(([a], [b]) => a.localeCompare(b)).map(([role, at]) => `${role} ×${at.n} (least ${at.least}/${at.need}px)`);
     return ` · shown only in part inside a scroller: ${parts.join(', ')}`;
+}
+
+/**
+ * Why the worn-only road's job failed, as sentences — empty when it held
+ * (`a-worn-only-sheet-loads-under-the-production-policy`, step 6). `job` is
+ * what the page's `window.__wornSheetJob` answered:
+ *
+ * - `before` is empty: the fixture look named no sheet before its sheet was
+ *   appended, so the sheet is not in the entry CSS (and `inEntryCss` agrees);
+ * - the link `loaded`, landed `last` among the page's sheets (a worn sheet
+ *   lands after the entry CSS, which is what its cascade assumes) and was
+ *   `sameOrigin` (the policy's `style-src 'self'`);
+ * - `after` is the fixture's class: the loaded sheet names the look;
+ * - its own art was fetched and answered 200 (`art`, one status per fetch;
+ *   under `img-src 'self'`);
+ * - a sheet URL that does not exist `missingRejected` rather than loading;
+ * - the policy refused nothing (`refusals`).
+ */
+export function wornSheetJobFaults(job, { lookClass = 't-fixture-worn' } = {}) {
+    const faults = [];
+    if (job.before !== '') faults.push(`the look named "${job.before}" before its sheet was appended — the sheet is in the entry CSS`);
+    if (job.inEntryCss) faults.push(`a sheet already on the page carries .${lookClass}`);
+    if (!job.loaded) faults.push(`the sheet did not load: ${job.error || 'no reason given'}`);
+    if (job.loaded && !job.last) faults.push('the sheet did not land after every other sheet on the page');
+    if (job.loaded && !job.sameOrigin) faults.push('the sheet is not same-origin');
+    if (job.after !== lookClass) faults.push(`after loading, the look names "${job.after}", not ${lookClass}`);
+    if ((job.art ?? []).length === 0) faults.push("the look's own art was never fetched");
+    for (const status of job.art ?? []) {
+        if (status !== 200) faults.push(`the look's own art answered ${status}`);
+    }
+    if (!job.missingRejected) faults.push('a sheet URL that does not exist did not reject');
+    for (const r of job.refusals ?? []) {
+        faults.push(`the policy refused ${r.blocked || '(inline)'} under ${r.directive}`);
+    }
+    return faults;
 }

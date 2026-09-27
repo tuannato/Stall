@@ -185,3 +185,24 @@ export function summarize(entries, { expected = [], compared = new Set() } = {})
         noise,
     };
 }
+
+/**
+ * `looks-diff-refuses-a-look-painted-without-its-sheet` (step 6): a shot is
+ * compared only when every look it painted was painted with its own sheet —
+ * each painted `.stall`'s `t-*` class computes as its `--look-sheet`, the
+ * name its sheet gives it (`every-look-sheet-names-itself`). A look painted
+ * without its sheet on one side makes a difference of the sheet's absence,
+ * or hides one behind it on both. `reads` is the showroom's
+ * `window.__lookSheets()`: `undefined` on a ref that predates the hook,
+ * which is exempt — it cannot say, and refusing it would refuse every
+ * comparison against the past. `sheetless` names the looks painted without
+ * a sheet by design (the skeleton). Answers the refusal, or undefined.
+ */
+export function lookSheetRefusal(reads, { sheetless = ['t-skeleton'] } = {}) {
+    if (reads === undefined || reads === null) return undefined;
+    const bare = reads.filter((read) => !sheetless.includes(read.cls) && read.sheet !== read.cls);
+    if (bare.length === 0) return undefined;
+    return bare
+        .map((read) => (read.sheet === '' ? `${read.cls} was painted without its sheet` : `${read.cls} computes --look-sheet: ${read.sheet}`))
+        .join('; ');
+}
