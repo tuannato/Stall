@@ -545,7 +545,8 @@ describe('a-worn-only-sheet-replaces-no-keyframes', () => {
         const clash = wornSheetProblems(
             servedWith({
                 [FIXTURE.path]: plantedFixture(face),
-                'src/ui/stall.css': `${read('src/ui/stall.css')}\n@font-face { font-family: "t-fixture-worn-serif"; src: url(./fonts/inter-latin.woff2) format("woff2"); }\n`,
+                // In another case: family names match without regard to it.
+                'src/ui/stall.css': `${read('src/ui/stall.css')}\n@font-face { font-family: "T-Fixture-Worn-Serif"; src: url(./fonts/inter-latin.woff2) format("woff2"); }\n`,
             }),
         );
         assert.ok(clash.some((p) => /family "t-fixture-worn-serif" is also declared in src\/ui\/stall\.css/.test(p)), clash.join('\n'));

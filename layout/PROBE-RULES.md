@@ -3963,7 +3963,9 @@ bare. `pnpm looks:diff` holds the same line on every shot
 (`looks-diff-refuses-a-look-painted-without-its-sheet`; the showroom's
 `window.__lookSheets()`, a ref predating the hook exempt). The name paints
 nothing: `pnpm looks:diff main` compared every shot of the three looks with
-the naming rule against main without it.
+the naming rule against main without it — 850 identical, 0 real, 0 noise,
+0 inconclusive (2026-09-27; main predates the hook, so its side was
+exempt and the working tree's side read every look's name on every shot).
 
 Proved red by deleting Rural's naming rule: every Rural paint on every
 pass failed, and the pass's coverage line refused `t-rural`.
@@ -3976,10 +3978,16 @@ a visitor — and a layout measured without it certified a page nobody sees.
 `layout/cspWatch.ts`, the probe's first import, records every
 `securitypolicyviolation` from the page's first module statement; the verdict
 carries them and fails **`the-probe-page-meets-no-csp-refusal`**, and the
-runner asks `window.__cspRefusals()` again on every contrast page before it
-leaves it (its jobs paint after the verdict). Not heard, stated: a refusal
-before any module ran (the entry's own tags, which the page could not load
-at all), and the transparency pass's page. Proved red by a planted
+runner asks `window.__cspRefusals()` again after the phone, desk and canvas
+verdicts (a picture's refusal lands as a task, after the verdict was
+written) and on every contrast page before it leaves it (its jobs paint
+after the verdict). The workshop's probe page exempts one refusal by
+design: the icon host under `img-src`, which the kit's preview policy
+drops (`vite.workshop.config.ts`) — its first run met 90 of them on the
+contrast pages. Not heard, stated: a refusal before any module ran (the
+entry's own tags, which the page could not load at all), a late refusal on
+the portrait, tablet, reduced-motion and transparency pages (they carry the
+verdict's list alone). Proved red by a planted
 `setAttribute('style', …)`, which `style-src 'self'` refuses.
 
 ## The worn-only road under the production policy (step 6, 2026-09-27)

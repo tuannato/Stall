@@ -1262,7 +1262,9 @@ export function wornSheetProblems(sheets) {
             for (const name of own.keyframes.filter((n) => theirs.keyframes.includes(n))) {
                 out.push(`${sheet.path}: @keyframes ${echo(name)} is also declared in ${other.path} — a worn-only sheet replaces no keyframes (a-worn-only-sheet-replaces-no-keyframes)`);
             }
-            for (const family of own.families.filter((f) => theirs.families.includes(f))) {
+            // Family names match without regard to case, as the cascade matches them.
+            const lower = new Set(theirs.families.map((f) => f.toLowerCase()));
+            for (const family of own.families.filter((f) => lower.has(f.toLowerCase()))) {
                 out.push(`${sheet.path}: @font-face family "${echo(family)}" is also declared in ${other.path} — a worn-only sheet replaces no face (a-worn-only-sheet-replaces-no-keyframes)`);
             }
         }
