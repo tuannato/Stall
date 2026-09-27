@@ -39,6 +39,8 @@ import {
     waitUntil,
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
+import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
+import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
@@ -354,6 +356,26 @@ const RAIN_REQUIRED = [
     'desktop/shop-window-cycle/2/65535',
 ];
 
+// Grid horizon at its worst: the owner's numbers and their verdict (`horizon-worst.mjs`).
+
+
+/**
+ * The jobs that must read Grid horizon at its worst (step 5a″): the name on
+ * the sign over the horizon alone at a phone and a desk, and all worn at a
+ * phone, a desk and the 1920 wall, where the tagline stands in the sky.
+ */
+const HORIZON_REQUIRED = [
+    ...new Set([
+        'mobile/offers/2/4',
+        'desktop/offers/2/4',
+        'mobile/offers/2/65535',
+        'desktop/offers/2/65535',
+        'canvas/shop-window-wall/2/65535',
+        // And the job each of the owner's numbers was read on.
+        ...Object.values(HORIZON_WORST).map((at) => at.job),
+    ]),
+];
+
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
  * (`outlineOf` in the probe: `text-shadow` in one opaque colour — the ground
@@ -406,6 +428,31 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/**
+ * Every code a geometry pass painted, as `pass/screen:name` (the probe's
+ * `codesPainted`): the contrast pass lists which of them it read the quiet
+ * zone of and which it did not (D4, `a-code-keeps-its-quiet-zone-white`).
+ */
+const codesPaintedSeen = new Set();
+/**
+ * The codes the quiet-zone read owes by name: every code that pays — the
+ * pay sheet's and "Pay several"'s at a phone and a desk, the wall's payment
+ * plate — and one of each other kind: a record sheet's, the share code, the
+ * overlay's and the wall's shop code.
+ */
+const CODES_REQUIRED = [
+    'mobile/pay:pay-qr',
+    'desktop/pay:pay-qr',
+    'mobile/pay-several:pay-qr',
+    'desktop/pay-several:pay-qr',
+    'canvas/shop-window-touch-quotes-pay:window-paying',
+    'desktop/publish-name:publish-qr',
+    'desktop/describe:describe-qr',
+    'mobile/studio:copy-link',
+    'desktop/studio:copy-link',
+    'canvas/broadcast:broadcast',
+    'canvas/shop-window-wall:shop-window',
+];
 
 /**
  * Glyph pixels a line's mask must hold per letter or digit. The least any
@@ -840,6 +887,12 @@ function paintEcho(job, out, nonce, width, height) {
     if (rain.worn !== rain.flattened) {
         why.push(`${rain.worn} stall(s) wore the rain and ${rain.flattened} had it at its brightest`);
     }
+    // Grid horizon is read as painted (the owner's C, 2026-09-27): a
+    // prepare that flattened it would read the report's frame as the job's.
+    const horizon = out.horizon ?? { worn: 0, flattened: 0 };
+    if (horizon.flattened !== 0) {
+        why.push(`${horizon.flattened} sign(s) had Grid horizon flattened in the prepare, where the job reads it as painted`);
+    }
     // The aurora worn alone at one end of its tide (`TIDE_JOBS`): every
     // stall wearing it had the tide held there, and a job that asked for no
     // tide held none.
@@ -1177,6 +1230,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
@@ -1287,6 +1341,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const code of pv.codesPainted ?? []) codesPaintedSeen.add(`${PORTRAIT.name}/${code}`);
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
                 if (pv.failures.length === 0 && gaps.length === 0) {
@@ -1361,6 +1416,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const code of tv.codesPainted ?? []) codesPaintedSeen.add(`${TABLET.name}/${code}`);
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
                 if (tv.failures.length === 0 && gaps.length === 0) {
@@ -1537,6 +1593,18 @@ try {
     const skipTotals = new Map();
     // Visible text no contrast target reads, by element kind, and on how many jobs.
     const uncoveredKinds = new Map();
+    // D4: the codes whose quiet zone was read (`pass/screen:name` → jobs),
+    // the ones a job painted and could not read, and why.
+    const codesRead = new Map();
+    const codesUnread = new Map();
+    let quietPixels = 0;
+    // D14: the least the sign's name read per look and decoration state
+    // (line read, or ring read where it wears the outline), and how the
+    // name was painted where it was read (`nameChrome`).
+    const nameLeast = new Map();
+    const nameChromeSeen = new Set();
+    const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
+    const signPart = (sel) => (/(^|\.)stall-name(\.|$)/.test(sel) ? 'name' : 'tagline');
     // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
     const lineSkips = {};
     try {
@@ -1545,6 +1613,13 @@ try {
         // owes the screens whose lines stand on the ground (`RAIN_REQUIRED`).
         let rainJobs = 0;
         const rainKeys = new Set();
+        // Jobs whose Grid horizon was flattened to its brightest paint, by key
+        // (`HORIZON_REQUIRED`).
+        const horizonKeys = new Set();
+        // Each sign line's least read per job at the horizon's worst, and
+        // the lines that gave no sample there.
+        const horizonWorst = new Map();
+        const horizonUnread = [];
         const dim = [];
         // The ring read (`ringRead`): outlined targets read, ring pixels
         // read, and the least ring contrast per kind of line, for the report.
@@ -1892,6 +1967,10 @@ try {
                             }
                         }
                         dumpBoxes.push(entry);
+                        if (worst !== undefined && isName(t.sel)) {
+                            const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel}`;
+                            nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, worst));
+                        }
                         if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                             dim.push(
                                 `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
@@ -1910,6 +1989,42 @@ try {
                         entry.calls += 1;
                         entry.ms += performance.now() - sampleStart - retryMs;
                         phases.set('sample', entry);
+                    }
+                    /*
+                     * D4, `a-code-keeps-its-quiet-zone-white`: every code the
+                     * job's scope paints, its quiet zone read on the capture
+                     * the boxes were read on (`quiet-zone.mjs`). The prepare
+                     * blanks text and nothing else, so the code and its plate
+                     * are painted as a buyer sees them.
+                     */
+                    if (retryWhy.length === 0) {
+                        for (const line of prep.nameChrome ?? []) nameChromeSeen.add(line);
+                        const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                        for (const z of zones) {
+                            const code = `${vp.name}/${screen}:${z.name}`;
+                            if (z.turned) {
+                                codesUnread.set(code, 'its frame is turned');
+                                continue;
+                            }
+                            const r = readQuietZone(img, z);
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
+                            if (r.fault !== undefined) {
+                                dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
+                                continue;
+                            }
+                            if (r.px === 0) {
+                                codesUnread.set(code, 'wholly outside a clip or the shot');
+                                continue;
+                            }
+                            codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
+                            quietPixels += r.px;
+                            if (r.bad > 0) {
+                                dim.push(
+                                    `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
+                                        `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')})) — a-code-keeps-its-quiet-zone-white`,
+                                );
+                            }
+                        }
                     }
                     /*
                      * The ring read (`ringRead`): every outlined target, on a
@@ -1990,6 +2105,10 @@ try {
                                 }
                             }
                             ringPixels += r.ringPx;
+                            if (isName(t.sel)) {
+                                const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel} (ring)`;
+                                nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, r.worst));
+                            }
                             if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
                             const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
                             kind.n += 1;
@@ -2041,6 +2160,64 @@ try {
                         entry.calls += 1;
                         entry.ms += performance.now() - ringStart;
                         phases.set('ring', entry);
+                    }
+                    /*
+                     * Grid horizon at its worst, reported (step 5a″; the
+                     * owner's C, 2026-09-27): the art flattened to its
+                     * brightest paint (`__horizonAtItsWorst`), a frame with
+                     * the glyphs blanked and one with them shown, the sign's
+                     * outlined lines ring-read and its other lines line-read
+                     * on them, the art put back. Held to `HORIZON_WORST`, a
+                     * regression guard and not a floor: the ring read on the
+                     * horizon as painted, above, is the failing guard.
+                     */
+                    if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
+                        const worstStart = performance.now();
+                        const page = async (expression) => {
+                            const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const flat = await page('window.__horizonAtItsWorst(true)');
+                        const blankCap = await capture();
+                        const flatRead = await reread();
+                        await page('window.__contrastGlyphs(true)');
+                        const shownCap = await capture();
+                        await page('window.__contrastGlyphs(false)');
+                        const back = await page('window.__horizonAtItsWorst(false)');
+                        const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
+                        if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
+                            why.push(`${prep.horizon.worn} sign(s) wore Grid horizon and ${flat.flattened} had its art at its brightest`);
+                        }
+                        if (why.length > 0) {
+                            retryWhy = why.map((w) => `for the horizon's worst, ${w}`);
+                        } else {
+                            horizonKeys.add(plannedJob.key);
+                            for (const t of flatRead.live.boxes) {
+                                const part = /(^|\.)stall-(name|tagline|sub)(\.|$)/.exec(t.sel)?.[2];
+                                if (part === undefined) continue;
+                                const least =
+                                    t.ring > 0
+                                        ? ringRead(blankCap.shot, shownCap.shot, t).worst
+                                        : t.rects === undefined
+                                          ? worstContrastInBox(blankCap.shot, t, t.color)
+                                          : lineRead(blankCap.shot, t).worst;
+                                if (least === undefined || !Number.isFinite(least)) {
+                                    // A line read with no sample is named,
+                                    // never skipped (5b's rule; the critic,
+                                    // step 5a″ item 3).
+                                    horizonUnread.push(`${plannedJob.key} ${t.sel}`);
+                                    continue;
+                                }
+                                const byJob = horizonWorst.get(part) ?? new Map();
+                                byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
+                                horizonWorst.set(part, byJob);
+                            }
+                        }
+                        const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - worstStart;
+                        phases.set('horizon worst', entry);
                     }
                     /*
                      * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
@@ -2180,6 +2357,25 @@ try {
                 `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
         }
+        if (LOOKS === 'shipped') {
+            // At the horizon's worst, held to the owner's numbers
+            // (`horizonWorstVerdict`): the job each was read on is owed and
+            // must read it again, and no job may read lower.
+            for (const line of horizonWorstVerdict(horizonWorst)) verdicts.push(line);
+            if (horizonUnread.length > 0) {
+                verdicts.push(`${horizonUnread.length} sign line(s) at Grid horizon's worst gave no sample: ${horizonUnread.join(', ')}`);
+            }
+            const said = [...horizonWorst].map(([part, byJob]) => {
+                const [job, least] = [...byJob].sort((a, b) => a[1] - b[1])[0];
+                return `${part} ${least.toFixed(4)} (${job}; pinned ${HORIZON_WORST[part]?.least.toFixed(2)} on ${HORIZON_WORST[part]?.job})`;
+            });
+            console.log(`  Grid horizon at its worst, least per sign line (a known limit, the owner's C, 2026-09-27): ${said.join('; ')}`);
+        }
+        if (LOOKS === 'shipped' && HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {
+            verdicts.push(
+                `the sign's lines over Grid horizon were read at its worst on ${horizonKeys.size} job(s) but not on ${HORIZON_REQUIRED.filter((key) => !horizonKeys.has(key)).join(', ')}`,
+            );
+        }
         const unread = [...outlinedTargetsSeen].filter((kind) => !ringKinds.has(kind));
         if (unread.length > 0) {
             // Every target an outlined line stands in was read in its ring
@@ -2221,6 +2417,28 @@ try {
             // shipped run that ring-read no money figure proved the rule over
             // nothing.
             verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
+        }
+        if (LOOKS === 'shipped' && codesRead.size === 0) {
+            verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
+        }
+        if (LOOKS === 'shipped') {
+            // The codes a buyer pays by are owed by name (the critic, step
+            // 5a″ item 7): a fixture that stopped painting one would leave
+            // the rule green over the rest.
+            const unreadCodes = CODES_REQUIRED.filter((code) => !codesRead.has(code));
+            if (unreadCodes.length > 0) {
+                verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
+            }
+        }
+        if (LOOKS === 'shipped') {
+            // The sign's name is read on every shipped look, bare and worn
+            // (D14): a name the pass stopped reading on one is named.
+            const read = new Set([...nameLeast.keys()].map((at) => at.replace(/ \(ring\)$/, '')));
+            const owed = SHIPPED_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]);
+            const unreadNames = owed.filter((at) => !read.has(at));
+            if (unreadNames.length > 0) {
+                verdicts.push(`the-sellers-name-on-the-sign-reads read no name on ${unreadNames.join(', ')}`);
+            }
         }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is
@@ -2275,6 +2493,34 @@ try {
                             ` (${k.ring}px, ${k.n})`,
                     )
                     .join('; '),
+        );
+    }
+    // D14: the sign's name, the least per look and decoration state, and
+    // the instant it was read at (its animations and opacity, frozen).
+    if (nameLeast.size > 0) {
+        console.log(
+            `  sign name and tagline, least per look (the-sellers-name-on-the-sign-reads): ` +
+                [...nameLeast]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([at, least]) => `${at} ${least.toFixed(2)}`)
+                    .join('; '),
+        );
+        console.log(
+            `  sign name, as it was read (its own glow blanked with the glyph; the lamp's dip is G7): ` +
+                [...nameChromeSeen].sort().join('; '),
+        );
+    }
+    // D4: the codes whose quiet zone was read, and the codes a geometry pass
+    // painted that no contrast job read, whatever the verdict.
+    if (codesRead.size > 0 || codesPaintedSeen.size > 0) {
+        console.log(
+            `  quiet zone, codes read (a-code-keeps-its-quiet-zone-white; jobs; ${quietPixels} px): ` +
+                [...codesRead].sort(([a], [b]) => a.localeCompare(b)).map(([code, n]) => `${code} ${n}`).join(', '),
+        );
+        const notRead = [...codesPaintedSeen].filter((code) => !codesRead.has(code)).sort();
+        console.log(
+            `  quiet zone, codes painted and not read: ` +
+                (notRead.length === 0 ? 'none' : notRead.map((code) => (codesUnread.has(code) ? `${code} (${codesUnread.get(code)})` : code)).join(', ')),
         );
     }
     // Every prepared node that gave no box, by the page's reason, whatever

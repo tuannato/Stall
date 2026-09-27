@@ -23,6 +23,11 @@ import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
 import buntingSvg from '../src/ui/decor/bunting.svg?raw';
 import { artTopShare } from './buntingArt';
 import { brightestDrop, type Drop } from './rainDrop';
+import { brightestArt, isHorizonSheet, signLayersRead } from './horizonArt';
+import horizonLeftSvg from '../src/ui/decor/horizon-sky-left.svg?raw';
+import horizonRightSvg from '../src/ui/decor/horizon-sky-right.svg?raw';
+import horizonFillSvg from '../src/ui/decor/horizon-sky-fill.svg?raw';
+import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
@@ -2117,6 +2122,19 @@ const CONTRAST_TEXT = [
     // is not a money figure, and on a transparent wire it sits on the
     // streamer's video with nothing but the plate between them.
     '[data-role="stall-name"]',
+    /*
+     * The seller's name on the sign (step 5a″, D14,
+     * `the-sellers-name-on-the-sign-reads`): read over its line rects (D7);
+     * not money; the deck's minis are pictures and left out. The name's own
+     * glow is not its ground; the lamp's dip is G7.
+     */
+    '.stall-name:not(.deck-stall *)',
+    // The tagline under it, on the same sign and over the same art (the
+    // window's side note on D14): read over its line rects on every look.
+    '.stall-tagline:not(.deck-stall *)',
+    // And the sign's third line, its state ("Items for sale"), over the
+    // same art (the critic's item 9), on the same terms.
+    '.stall-sub:not(.deck-stall *)',
     // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
     // a theme file, so nothing else measures the ink it declares — and the
     // studio section is the one place a seller reads instructions rather than
@@ -2331,7 +2349,7 @@ function shadowsOf(value: string): Shadow[] | undefined {
     if (value === 'none') return [];
     const out: Shadow[] = [];
     for (const part of splitLayers(value)) {
-        const m = /^(rgba?\([^)]*\)|color\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\)|oklab\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
         const colour = m === null ? undefined : colourOf(m[1]!);
         if (m === null || colour === undefined) return undefined;
         out.push({ ...colour, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4]) });
@@ -2361,6 +2379,12 @@ function outlineRead(node: HTMLElement): { width: number; rgb?: readonly [number
     if (hard.some((sh) => sh.rgb.some((c, i) => c !== rgb[i]))) return { width: -1 };
     const width = outlineSet(hard.map((sh) => [sh.x, sh.y] as const));
     return width === 0 ? { width: -1 } : { width, rgb };
+}
+
+/** The hard, opaque shadows of `node`'s computed `text-shadow` — its outline — and nothing else. */
+function outlineOnly(node: HTMLElement): string {
+    const hard = (shadowsOf(getComputedStyle(node).textShadow) ?? []).filter((sh) => sh.alpha === 1 && sh.blur === 0);
+    return hard.length === 0 ? 'none' : hard.map((sh) => `rgb(${sh.rgb.join(', ')}) ${sh.x}px ${sh.y}px 0px`).join(', ');
 }
 
 function outlineOf(node: HTMLElement): number {
@@ -2394,13 +2418,43 @@ function outlineOf(node: HTMLElement): number {
  * `outlineChecks` counts the outlined elements read, and the runner requires
  * some on the phone and desk passes (`probe-coverage.mjs`).
  *
- * **Asked only inside a stall wearing the rain** (step 5b, CRITIC-FINAL-MERGE
- * item 4), where the outline is scoped in stall.css. Elsewhere an opaque,
+ * **Asked only where a decoration that outlines is worn** (step 5b,
+ * CRITIC-FINAL-MERGE item 4; the horizon since step 5a″), and only on the
+ * surface that decoration paints (`OUTLINE_SURFACES`), where the outline is
+ * scoped in stall.css. Elsewhere an opaque,
  * unblurred `text-shadow` is a look's own mark — an emboss, a letterpress —
  * and not this rule's; the look rules and the static
  * `an-outline-is-the-only-mark-under-text-on-a-decoration` govern it.
  */
 const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
+
+/**
+ * **The decorations that outline a line, and the surface each paints on**
+ * (step 5a″, D14, the owner's (a), 2026-09-27). The rain falls on the stall's
+ * own ground, so its surface is the stall root and a line anywhere on the
+ * bare ground may wear its outline. Grid horizon draws its skyline, windows
+ * and stars on the sign's own box (`.stall-sign`), so its surface is the
+ * sign, and only a line on the sign may wear the outline for it; the sign's
+ * panel (`.stall-head`) lies under that art. Everything between a line and
+ * its surface is the line's own ground (`an-outline-where-the-text-has-its-own-ground`);
+ * everything under the surface is not.
+ */
+const OUTLINE_SURFACES: ReadonlyArray<{ cls: string; surface: (node: HTMLElement, stall: HTMLElement) => HTMLElement | null }> = [
+    { cls: 'att-horizon', surface: (node) => node.closest<HTMLElement>('.stall-sign') },
+    { cls: 'att-rainfall', surface: (_node, stall) => stall },
+];
+
+/** The surface the decoration a line may be outlined for paints on, or `undefined` where none is worn. */
+function outlineSurface(node: HTMLElement): HTMLElement | undefined {
+    const stall = node.closest<HTMLElement>('.stall');
+    if (stall === null) return undefined;
+    for (const d of OUTLINE_SURFACES) {
+        if (!stall.classList.contains(d.cls)) continue;
+        const at = d.surface(node, stall);
+        if (at !== null) return at;
+    }
+    return undefined;
+}
 let outlineChecks = 0;
 
 /*
@@ -2510,6 +2564,23 @@ const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test:
     // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
     { name: 'Neo’s scanlines', paints: 't-neo', test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
     { name: 'Neo’s top glow', paints: 't-neo', test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
+];
+
+/**
+ * A decoration's own art on the surface it paints (step 5a″, D14): what the
+ * outline is for, like the rain on the root — matched on its form, the
+ * element it paints and the class that paints it. Grid horizon's skyline,
+ * moon and stars on the sign. Every other layer of that surface is read as
+ * any layer is: a full-size gradient evaluated under the line, a smaller
+ * one set aside and counted, a radial or repeating one held to its stops.
+ */
+const SURFACE_ART_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; on: string; test: (layer: string) => boolean }> = [
+    {
+        name: 'Grid horizon’s skyline, moon and stars',
+        paints: 'att-horizon',
+        on: '.stall-sign',
+        test: (l) => /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|moon|stars)[^")]*"?\)$/.test(l),
+    },
 ];
 
 /** What the at-rest rule set aside, by reason, over the whole pass. */
@@ -2659,6 +2730,11 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
                     return { picture: el, what: `a root layer this rule does not know (${layer.slice(0, 60)}…, ${size}) — a-new-root-layer-is-not-exempt-by-position` };
                 }
             }
+            const art = SURFACE_ART_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && el.matches(k.on) && k.test(layer));
+            if (art !== undefined) {
+                setAside(art.name);
+                continue;
+            }
             if (/^url\(/.test(layer)) return { picture: el, what: `a picture (${size}) this rule cannot read` };
             if (!/gradient\(/.test(layer)) continue;
             if (!FULL_SIZE.includes(size)) {
@@ -2727,12 +2803,14 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
         }
         if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
-        // Only where the rain is worn (CRITIC-FINAL-MERGE item 4, step 5b):
-        // the outline is the rain's, scoped to `.stall.att-rainfall` in
-        // stall.css, and a hard shadow anywhere else is a look's own mark —
-        // a white emboss on Rural is not an outline, and was failed as one
-        // ("neither outline set") on every look until this line.
-        if (node.closest('.stall.att-rainfall') === null) continue;
+        // Only where a decoration that outlines is worn (CRITIC-FINAL-MERGE
+        // item 4, step 5b; `OUTLINE_SURFACES`): the outline is scoped to
+        // those decorations in stall.css, and a hard shadow anywhere else
+        // is a look's own mark — a white emboss on Rural is not an outline,
+        // and was failed as one ("neither outline set") on every look until
+        // this line.
+        const surface = outlineSurface(node);
+        if (surface === undefined) continue;
         const { width, rgb } = outlineRead(node);
         if (width === 0) continue;
         outlineChecks += 1;
@@ -2745,8 +2823,12 @@ function outlineFaults(screen: string, label: string): Failure[] {
         if (width !== owed) {
             fail(node, `paints at ${px}px and wears the ${width}px outline; its size owes the ${owed}px one`);
         }
+        // Up to the surface the decoration paints on, never past it: what
+        // lies under the decoration (the sign's panel under the horizon's
+        // skyline) is not the text's own ground, and what lies between the
+        // line and the decoration — a card, a chip, a filled button — is.
         const root = node.closest('.stall');
-        for (let at: HTMLElement | null = node; at !== null && at !== root; at = at.parentElement) {
+        for (let at: HTMLElement | null = node; at !== null && at !== root && at !== surface; at = at.parentElement) {
             if (paintsOpaqueGround(getComputedStyle(at))) {
                 fail(node, `wears the outline over ${describe(at)}, a ground of its own — an outline where the text has its own ground`);
                 break;
@@ -3208,6 +3290,8 @@ const measured = screensToRun();
  * page reports what it saw; the runner decides which names owed a figure.
  */
 const withQuote = new Set<string>();
+/** Every code a measured screen painted, as `screen:name` (D4's not-read list). */
+const codesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
         for (const worn of variantsFor(screen, look)) {
@@ -3228,6 +3312,14 @@ for (const screen of measured) {
                 document.querySelector('[data-role="pay-total"]') !== null
             ) {
                 withQuote.add(screen);
+            }
+            // The codes this screen paints (D4): the runner lists which of
+            // them the contrast pass reads the quiet zone of, and which it
+            // does not.
+            for (const svg of document.querySelectorAll('svg.qr')) {
+                if (svg.closest('.deck-stall') !== null) continue;
+                const box = svg.getBoundingClientRect();
+                if (box.width > 0 && box.height > 0) codesPainted.add(`${screen}:${codeName(svg)}`);
             }
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
@@ -3619,8 +3711,12 @@ type ContrastPrepared = {
     lookPseudos?: number;
     /** The elements whose visible text no contrast target reads, described (a report, step 5b). */
     uncovered?: string[];
+    /** How the sign's name was painted at the frozen instant (D14): its animations and opacity. */
+    nameChrome?: string[];
     /** The stalls that wore Neo's rain, and how many had it at its brightest. */
     rain: { worn: number; flattened: number };
+    /** The signs that wore Grid horizon (painted as they are; `__horizonAtItsWorst` flattens them for the report). */
+    horizon: { worn: number; flattened: number };
     /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
     tide: { worn: number; held: number };
 };
@@ -3646,6 +3742,8 @@ declare global {
             heightOnly?: boolean,
             tide?: 0 | 1,
         ) => ContrastPrepared;
+        /** Flatten Grid horizon's art to its brightest paint on every sign (or take it off again); the signs worn and flattened. */
+        __horizonAtItsWorst: (on: boolean) => Promise<{ worn: number; flattened: number }>;
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
@@ -3664,6 +3762,8 @@ declare global {
          * requires. The runner samples the alpha channel OUTSIDE these.
          */
         __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
+        /** Every painted code in the last prepare's scope, for the quiet-zone read (D4). */
+        __quietZones: () => QuietZone[];
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
@@ -4061,6 +4161,31 @@ function colourOf(value: string): { rgb: [number, number, number]; alpha: number
         const rgb = [f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255)) as [number, number, number];
         return { rgb, alpha: f[4] === undefined ? 1 : Number(f[4]) };
     }
+    /*
+     * `oklab()` (step 5a″): a colour an animation sets is interpolated in
+     * OKLab and computed as one — the failing lamp's outlined frames
+     * (`att-hum-gutter-outlined`) serialise every shadow so, and read as
+     * "not an outline" the lamp's glyph lost its outline in the prepare and
+     * was read bare. Converted with Björn Ottosson's matrices, as CSS Color 4
+     * does, to sRGB rounded to the level.
+     */
+    const k = /oklab\((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)(?: \/ ([\d.]+))?\)/.exec(value);
+    if (k !== null) {
+        const [L, A, B] = [Number(k[1]), Number(k[2]), Number(k[3])];
+        const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+        const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+        const q = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+        const lin = [
+            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * q,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * q,
+            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * q,
+        ];
+        const rgb = lin.map((c) => {
+            const v = Math.min(1, Math.max(0, c));
+            return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+        }) as [number, number, number];
+        return { rgb, alpha: k[4] === undefined ? 1 : Number(k[4]) };
+    }
     return undefined;
 }
 
@@ -4136,7 +4261,11 @@ window.__contrastGlyphs = async (show: boolean) => {
         n += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
-            el.style.color = show ? el.dataset['probeColor'] : 'transparent';
+            if (show) {
+                el.style.color = el.dataset['probeColor'];
+            } else {
+                el.style.setProperty('color', 'transparent', 'important');
+            }
         }
     }
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
@@ -4167,6 +4296,110 @@ window.__contrastBoxes = () => {
     });
     return { nonce: preparedNonce, vw: window.innerWidth, vh: window.innerHeight, boxes, skips };
 };
+
+/**
+ * A code's name in a report: the nearest role above it, or its parent's
+ * first class — enough for a person to find which code on the screen it is.
+ */
+function codeName(svg: Element): string {
+    const owner = svg.parentElement?.closest('[data-role]');
+    if (owner !== null && owner !== undefined) return owner.getAttribute('data-role')!;
+    const cls = svg.parentElement?.getAttribute('class')?.split(/\s+/)[0];
+    return cls === undefined || cls === '' ? 'code' : cls;
+}
+
+/**
+ * **A code keeps its quiet zone white** (step 5a″, D4;
+ * `a-code-keeps-its-quiet-zone-white`, `PROBE-RULES.md`). Every painted
+ * code in the last prepare's scope (an open sheet's, or the page's), the
+ * door's deck aside, with the geometry the runner reads its ring from:
+ * the square `qrSvg` draws into — the content box, less the SVG's own
+ * letterboxing (`xMidYMid meet`) — its module (that square over the
+ * viewBox), the corner the element's own radius cuts past its padding and
+ * border, and the clip every clipping ancestor puts on it. A code whose
+ * frame is turned is not read (an axis-aligned ring cannot be read in a
+ * turned box) and says so.
+ */
+type QuietZone = {
+    name: string;
+    x: number;
+    y: number;
+    side: number;
+    module: number;
+    corner: number;
+    clip: { x0: number; y0: number; x1: number; y1: number };
+    turned: boolean;
+};
+
+window.__quietZones = () =>
+    [...(preparedScope ?? document).querySelectorAll<SVGSVGElement>('svg.qr')]
+        .filter((svg) => svg.closest('.deck-stall') === null && getComputedStyle(svg).visibility === 'visible')
+        .map((svg): QuietZone | undefined => {
+            const r = svg.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return undefined;
+            const cs = getComputedStyle(svg);
+            const px = (v: string): number => Number.parseFloat(v) || 0;
+            const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+            const top = px(cs.borderTopWidth) + px(cs.paddingTop);
+            const cw = r.width - left - px(cs.borderRightWidth) - px(cs.paddingRight);
+            const ch = r.height - top - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+            const side = Math.min(cw, ch);
+            const vb = svg.viewBox.baseVal.width;
+            if (!(side > 0) || !(vb > 0)) return undefined;
+            // The element's own radius cuts its corners at the border box;
+            // what it leaves of the content box's corner is the radius past
+            // the inset. Measured on the smallest of the four corners' insets.
+            const radius = px(cs.borderTopLeftRadius);
+            const inset = Math.min(left, top, r.width - left - cw, r.height - top - ch);
+            let x0 = -Infinity;
+            let y0 = -Infinity;
+            let x1 = Infinity;
+            let y1 = Infinity;
+            for (let at = svg.parentElement; at !== null && at !== document.documentElement; at = at.parentElement) {
+                const c = clipOf(at);
+                if (c === undefined) continue;
+                x0 = Math.max(x0, c.x0);
+                x1 = Math.min(x1, c.x1);
+                y0 = Math.max(y0, c.y0);
+                y1 = Math.min(y1, c.y1);
+            }
+            return {
+                name: codeName(svg),
+                x: r.x + left + (cw - side) / 2,
+                y: r.y + top + (ch - side) / 2,
+                side,
+                module: side / vb,
+                corner: Math.max(0, radius - inset),
+                // Finite, because the runner reads this through JSON, where
+                // an infinity is `null` — and a null clip is a clip at 0,
+                // which read every unclipped code as wholly clipped away.
+                clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
+                turned: angleOf(svg) !== 0,
+            };
+        })
+        .filter((z): z is QuietZone => z !== undefined);
+
+/**
+ * How the sign's name was painted when it was read (step 5a″, D14): each
+ * animation on a `.stall-name` or inside it, at the instant the pass froze
+ * it, and the name's computed opacity there — Neo's `neo-flick` dims the
+ * whole name by opacity, and the hum's lamp dims one letter. Reported, so a
+ * green over the name says which instant it was.
+ */
+function nameChrome(scope: ParentNode): string[] {
+    const out = new Set<string>();
+    for (const name of scope.querySelectorAll<HTMLElement>('.stall-name')) {
+        if (name.closest('.deck-stall') !== null) continue;
+        for (const el of [name, ...name.querySelectorAll<HTMLElement>('*')]) {
+            for (const a of el.getAnimations()) {
+                const label = a instanceof CSSAnimation ? a.animationName : 'animation';
+                out.add(`${el === name ? 'name' : describe(el)} ${label} at ${Math.round(Number(a.currentTime ?? 0))}ms (${a.playState})`);
+            }
+        }
+        out.add(`name opacity ${getComputedStyle(name).opacity}`);
+    }
+    return [...out].sort();
+}
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -4324,6 +4557,88 @@ function rainAtItsBrightest(): { worn: number; flattened: number } {
     }
     return { worn, flattened };
 }
+
+/**
+ * **Grid horizon at its worst — a report, not a fail** (step 5a″, the
+ * critic's item 1; the owner's C, 2026-09-27). The horizon draws its
+ * skyline's lit windows and its stars on the sign behind the seller's name
+ * and tagline; which of them fall under a ring pixel of an outlined line
+ * depends on the seller's own words, so a read of the art as painted is a
+ * read of one name. The contrast job reads the sign as painted, and the
+ * ring read there fails as everywhere; then, for the report, every sign
+ * wearing it (`__horizonAtItsWorst(true)`) has its skyline and star sheets (`horizon-sky-left`, `-right`, `-fill`,
+ * `-stars`) replaced by ONE flat layer of the brightest paint those sheets
+ * — over the sky band only, from the sign's top to the line (or the stars'
+ * foot, if lower), where the art is drawn —
+ * draw, over the colour the sign's outline is written in — read from the
+ * art through an allow-list (`layout/horizonArt.ts`), today the stars'
+ * `#e8fbff` at 0.79 — in the first sheet's place, every other layer kept:
+ * the line, the floor, the haze, the sky wash, and the moon, which this
+ * reading does not model (a mask and a gradient) and which stands in the
+ * pin's gutter, clear of the name, and is not drawn without a pin. Important
+ * longhands, like the rain's, taken off again after (`false`). The runner
+ * ring-reads the sign's outlined lines on that frame and holds the least to
+ * a pinned baseline — a regression guard, not a floor (`HORIZON_WORST`).
+ */
+const HORIZON_SHEETS = [horizonLeftSvg, horizonRightSvg, horizonFillSvg, horizonStarsSvg];
+
+function horizonAtItsWorst(): { worn: number; flattened: number } {
+    let worn = 0;
+    let flattened = 0;
+    for (const sign of document.querySelectorAll<HTMLElement>('#app .stall.att-horizon:not(.deck-stall) .stall-sign')) {
+        worn += 1;
+        const cs = getComputedStyle(sign);
+        // The colour the sign's outline is written in, resolved: a custom
+        // property computes to its tokens, so it is read through a colour.
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--rain-outline-ground)';
+        sign.append(probe);
+        const ground = colourOf(getComputedStyle(probe).color);
+        probe.remove();
+        const art = ground === undefined ? undefined : brightestArt(HORIZON_SHEETS, ground.rgb);
+        const layers = splitLayers(cs.backgroundImage);
+        const isSheet = isHorizonSheet;
+        const first = layers.findIndex(isSheet);
+        // Any picture on the sign that is neither one of the four sheets nor
+        // the moon is art this reading has not read: refused, never flattened
+        // around (`signLayersRead`, the critic's step 5a″ item 2).
+        if (art === undefined || first < 0 || !signLayersRead(layers)) continue;
+        // The sky band, never the whole sign (the critic, step 5a″ item 5):
+        // the skyline stands with its foot on the line at 52% of the sign and
+        // the stars hang from its top, 4px down and 60px tall, both times the
+        // decoration scale — the art is drawn nowhere below the band.
+        const scale = Number.parseFloat(cs.getPropertyValue('--s-decor-scale')) || 1;
+        const band = Math.max(0.52 * sign.getBoundingClientRect().height, 64 * scale);
+        const paint = `rgba(${art.rgb.join(', ')}, ${art.alpha})`;
+        const rebuild = (list: string[], flatEntry: string): string =>
+            layers
+                .flatMap((layer, i) => (!isSheet(layer) ? [list[i % list.length]!] : i === first ? [flatEntry] : []))
+                .join(', ');
+        const set = (prop: string, value: string): void => sign.style.setProperty(prop, value, 'important');
+        set('background-image', rebuild(layers, `linear-gradient(${paint}, ${paint})`));
+        set('background-size', rebuild(splitLayers(cs.backgroundSize), `100% ${band}px`));
+        set('background-repeat', rebuild(splitLayers(cs.backgroundRepeat), 'no-repeat'));
+        set('background-position', rebuild(splitLayers(cs.backgroundPosition), '0px 0px'));
+        flattened += 1;
+    }
+    return { worn, flattened };
+}
+
+const FLATTENED = ['background-image', 'background-size', 'background-repeat', 'background-position'];
+
+window.__horizonAtItsWorst = async (on: boolean) => {
+    let out = { worn: 0, flattened: 0 };
+    if (on) {
+        out = horizonAtItsWorst();
+    } else {
+        for (const sign of document.querySelectorAll<HTMLElement>('#app .stall.att-horizon:not(.deck-stall) .stall-sign')) {
+            out.worn += 1;
+            for (const prop of FLATTENED) sign.style.removeProperty(prop);
+        }
+    }
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return out;
+};
 
 /**
  * The aurora at one end of its tide (`TIDE_SCREENS` in `contrastPlan.ts`):
@@ -4536,7 +4851,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         // The apex can only wear the default look — see `looksFor`. The plan
         // never asks for this; the runner refuses a job with no targets.
         preparedNodes = [];
-        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
+        return { targets: [], pageH: 0, sheetClasses: [], nodes: 0, rain: { worn: 0, flattened: 0 }, horizon: { worn: 0, flattened: 0 }, tide: { worn: 0, held: 0 }, ...echo };
     }
     if (neutral) {
         paint(NEUTRAL_SCREEN, look, []);
@@ -4544,6 +4859,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     paint(screen, look, wornOf(look, flags));
     freezeAnimations();
     const rain = rainAtItsBrightest();
+    const horizon = { worn: document.querySelectorAll('#app .stall.att-horizon:not(.deck-stall) .stall-sign').length, flattened: 0 };
     const tideHeld = auroraTideAt(tide);
     // The same scoping as `measure()`: an open sheet is the surface being
     // read, and everything behind its scrim is deliberately dimmed — sampling
@@ -4577,6 +4893,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             sheetClasses: sheetClassesOn(document.getElementById('app')!),
             nodes: 0,
             rain,
+            horizon,
             tide: tideHeld,
             ...echo,
         };
@@ -4627,13 +4944,23 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // retried, and two runs of one tree differed on 38 boxes read
             // mid-fade on one of them (step 3a, `PROBE-RULES.md`).
             el.style.transition = 'none';
-            el.style.color = 'transparent';
+            // Important: an animation outranks an ordinary inline declaration,
+            // so an animated ink or glow (the hum's lamp) stayed painted.
+            el.style.setProperty('color', 'transparent', 'important');
+
             // Every shadow off but an outline (round 8): the outline is the
             // ground the ring read measures, so it stays in both captures;
             // any other shadow is the glyph's own paint and goes with it.
             // An element outside every outlined target wears none.
             if (outlineOf(el) <= 0) {
-                el.style.textShadow = 'none';
+                el.style.setProperty('text-shadow', 'none', 'important');
+            } else if (el.closest('.stall-name') !== null) {
+                // The seller's name keeps its outline and nothing else (step
+                // 5a″, D14): the name's own glow is not its ground. It is the
+                // glyph's paint, blanked with the glyph as on every name not
+                // outlined; the lamp's dip is G7. Important, because the
+                // failing lamp's frames set its shadow by animation.
+                el.style.setProperty('text-shadow', outlineOnly(el), 'important');
             }
         }
     }
@@ -4666,10 +4993,14 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         nodes: preparedNodes.length,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
+        // The signs that wore Grid horizon, painted as they are.
+        horizon,
         // The look pseudos in scope, marked for D6(i)'s second frame.
         lookPseudos,
         // Visible text no target reads, reported (step 5b).
         uncovered,
+        // The sign name's animations and opacity where it was read (D14).
+        nameChrome: nameChrome(scope),
         // The stalls that wore the aurora, and how many had its tide held.
         tide: tideHeld,
         ...echo,
@@ -4735,6 +5066,7 @@ const verdict = {
     clipSkips,
     clipChecks,
     screensWithQuote: [...withQuote],
+    codesPainted: [...codesPainted].sort(),
     /*
      * What the step-2 rules compared, for the runner to require
      * (`probe-coverage.mjs`): the unbuyable labels read per place, the
