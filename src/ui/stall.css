@@ -739,7 +739,8 @@ body {
  */
 .stall.att-rainfall,
 .stall.att-rainfall:not(.deck-stall)
-    :is([data-role='list-first'], .event-txid, .notice-invite, .notice:not(.stall-sign .notice), .studio-browser) {
+    :is([data-role='list-first'], .event-txid, .notice-invite, .notice:not(.stall-sign .notice), .studio-browser),
+.stall.att-horizon:not(.deck-stall) .stall-sign {
     --rain-outline-1:
         1px 0 0 var(--rain-outline-ground), -1px 0 0 var(--rain-outline-ground), 0 1px 0 var(--rain-outline-ground),
         0 -1px 0 var(--rain-outline-ground), 1px 1px 0 var(--rain-outline-ground), 1px -1px 0 var(--rain-outline-ground),
@@ -889,6 +890,111 @@ body {
  */
 .stall.att-rainfall:not(.deck-stall) :is(.sw-state, .sw-fresh) {
     color: var(--s-text);
+}
+
+/*
+ * **The seller's name wears the outline over Grid horizon** (step 5a″, D14;
+ * the owner's (a), 2026-09-27). The horizon draws its skyline, its lit
+ * windows and its stars on the sign's own box, behind the name, and the
+ * contrast pass read the name there at 1.79:1 on a phone, 2.25:1 at the desk
+ * and 1.51:1 on the wall, over a lit window or a star
+ * (`the-sellers-name-on-the-sign-reads`). So the name takes the rain's rule:
+ * the one-pixel outline (it is 27px and more on every screen), zero blur,
+ * alpha 1, in the colour of the ground it stands on — the sign's panel
+ * (`.t-neo .stall-head`) between its top two stops, where the name stands;
+ * the horizon's art is the decoration and is not that ground. Nothing is
+ * laid under the words and the horizon's art is untouched. Neo's own glow
+ * on the name is restated after the outline, and where the crest is worn
+ * too, the crest's glow — and its failing lamp runs the same flicker with
+ * the outline in every frame (`att-hum-gutter-outlined`), or that one letter
+ * would stand on the skyline bare. The sets are declared on the sign
+ * (above), where this ground's colour is read.
+ */
+.stall.att-horizon:not(.deck-stall) .stall-sign {
+    --rain-outline-ground: color-mix(in srgb, #101a2c, #0a1120);
+}
+
+.stall.att-horizon:not(.deck-stall) .stall-name {
+    text-shadow:
+        var(--rain-outline-1),
+        0 0 8px rgba(44, 233, 224, 0.9),
+        0 0 28px rgba(44, 233, 224, 0.5);
+}
+
+.stall.att-horizon.att-hum:not(.deck-stall) .stall-name {
+    text-shadow:
+        var(--rain-outline-1),
+        0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+        0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+        0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+        0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent),
+        0 2px 18px color-mix(in srgb, var(--s-accent-2) 32%, transparent);
+}
+
+.stall.att-horizon.att-hum:not(.deck-stall) .sign-lamp {
+    animation: att-hum-gutter-outlined 7s linear infinite;
+}
+
+/*
+ * The tagline on the wall stands in the sky beside the name, over the same
+ * windows and stars (1.08:1 at the desk and on the 1920 canvas), and takes
+ * the same outline there: 21px, the one-pixel set. Elsewhere it stands below
+ * the horizon on the dark floor and reads as it is.
+ */
+.stall.shop-window.att-horizon:not(.deck-stall) .stall-tagline {
+    text-shadow: var(--rain-outline-1);
+}
+
+/* `att-hum-gutter`, frame for frame, with the outline under every glow. */
+@keyframes att-hum-gutter-outlined {
+    0%,
+    41% {
+        color: inherit;
+        text-shadow:
+            var(--rain-outline-1),
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
+    41.6%,
+    42.4%,
+    43.6% {
+        color: color-mix(in srgb, var(--s-text) 74%, var(--s-bg));
+        text-shadow:
+            var(--rain-outline-1),
+            0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent),
+            0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent);
+    }
+    42%,
+    43%,
+    44.2%,
+    78.4% {
+        color: inherit;
+        text-shadow:
+            var(--rain-outline-1),
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
+    79% {
+        color: color-mix(in srgb, var(--s-text) 74%, var(--s-bg));
+        text-shadow:
+            var(--rain-outline-1),
+            0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent),
+            0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent);
+    }
+    79.8%,
+    100% {
+        color: inherit;
+        text-shadow:
+            var(--rain-outline-1),
+            0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)),
+            0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent),
+            0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent),
+            0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent);
+    }
 }
 
 /*
@@ -7824,7 +7930,8 @@ textarea.share-embed {
     }
 
     .stall-name,
-    .stall.att-hum .sign-lamp {
+    .stall.att-hum .sign-lamp,
+    .stall.att-horizon.att-hum:not(.deck-stall) .sign-lamp {
         animation: none;
     }
 

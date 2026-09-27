@@ -988,12 +988,25 @@ const OUTLINE_WRITTEN: ReadonlySet<string> = new Set(['var(--s-bg)', 'var(--rain
 /** The rain's root, where the plain ground's colour is declared, and the scope every surface's own colour is. */
 const RAIN_ROOT = '.stall.att-rainfall';
 const RAIN_SCOPE = '.stall.att-rainfall:not(.deck-stall)';
+/**
+ * Grid horizon's scope (step 5a″, D14): it paints its skyline on the sign's
+ * own box, so the one surface it outlines on is the sign, and the colour is
+ * declared there.
+ */
+const HORIZON_SCOPE = '.stall.att-horizon:not(.deck-stall)';
 
 type OutlineGround = {
+    /** The decoration's scope the surface is named under: the rain's (`RAIN_SCOPE`) unless stated. */
+    scope?: string;
     /** The colour `stall.css` gives `--rain-outline-ground` on this surface. */
     colour: string;
-    /** Where the surface is painted: the rule, and whether its paint is one fill or a two-stop wash read at its midpoint. */
-    paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' };
+    /**
+     * Where the surface is painted: the rule, and whether its paint is one
+     * fill, a two-stop wash read at its midpoint, or — `stops`, a panel
+     * whose ground is one layer of a stack — the even mix of that layer's
+     * first two stops, the layer named as written (`layer`).
+     */
+    paint: { sheet: string; rule: string; read: 'fill' | 'midpoint' | 'stops'; layer?: string };
     reason: string;
     /**
      * Each state — `:hover`, `:focus`, `:focus-visible`, `:focus-within`,
@@ -1014,16 +1027,19 @@ type GroundRow = {
     selector: string;
     colour: string;
     paint: OutlineGround['paint'];
+    /** The decoration's scope the row is declared under. */
+    scope: string;
 };
 
 /** Every colour a table lists, one row a surface and one row each state of it. */
 function groundRows(table: Readonly<Record<string, OutlineGround>>): GroundRow[] {
     return Object.entries(table).flatMap(([surface, ground]) => [
-        { surface, state: '', selector: `${RAIN_SCOPE} ${surface}`, colour: ground.colour, paint: ground.paint },
+        { surface, state: '', selector: `${ground.scope ?? RAIN_SCOPE} ${surface}`, colour: ground.colour, paint: ground.paint, scope: ground.scope ?? RAIN_SCOPE },
         ...Object.entries(ground.states ?? {}).map(([state, painted]) => ({
             surface,
             state,
-            selector: `${RAIN_SCOPE} ${surface}${state}`,
+            selector: `${ground.scope ?? RAIN_SCOPE} ${surface}${state}`,
+            scope: ground.scope ?? RAIN_SCOPE,
             colour: painted.colour,
             paint: { sheet: ground.paint.sheet, rule: painted.rule, read: 'fill' as const },
         })),
@@ -1081,6 +1097,18 @@ const OUTLINE_GROUNDS: Readonly<Record<string, OutlineGround>> = {
         paint: { sheet: 'src/ui/theme-neo.css', rule: '.t-neo .studio-browser', read: 'fill' },
         reason:
             'the Studio’s “This browser” box: Neo tints it with its accent at 4% — not on the owner’s list of four, found by `an-outline-that-shows-at-rest` (its note’s outline read 9 levels off the box)',
+    },
+    '.stall-sign': {
+        scope: HORIZON_SCOPE,
+        colour: 'color-mix(in srgb, #101a2c, #0a1120)',
+        paint: {
+            sheet: 'src/ui/theme-neo.css',
+            rule: '.t-neo .stall-head',
+            read: 'stops',
+            layer: 'linear-gradient(180deg, #101a2c 0%, #0a1120 55%, #070c17 100%)',
+        },
+        reason:
+            'the sign, where Grid horizon draws its skyline, windows and stars behind the seller’s name (step 5a″, D14, the owner’s (a)): the ground under that art is Neo’s sign panel, a gradient whose top two stops are where the name stands — their even mix, both literals of Neo’s own sheet that no token carries',
     },
 };
 
@@ -1165,7 +1193,7 @@ function outlineGroundOffences(
         for (const call of varCalls(colour)) {
             if (!call.name.startsWith('--s-')) out.push(`${surface}: its outline colour reads ${call.name}, not a look’s token`);
         }
-        const paintRule = paintRuleOf(ground, sheetOf);
+        const paintRule = ground.paint.read === 'stops' ? stopsLayerOf(ground, sheetOf) : paintRuleOf(ground, sheetOf);
         const literals = colour.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? [];
         for (const literal of literals) {
             const rgb = literalRgb(literal);
@@ -1173,7 +1201,7 @@ function outlineGroundOffences(
                 const q = literalRgb(p);
                 return rgb !== undefined && q !== undefined && q.every((c, i) => c === rgb[i]);
             });
-            const aToken = RAIN_LOOKS.some((id) =>
+            const aToken = looksOfScope(ground.scope).some((id) =>
                 Object.entries(themeVars(decodeTheme(id))).some(([name, value]) => {
                     const t = literalRgb(value);
                     return name.startsWith('--s-') && rgb !== undefined && t !== undefined && t.every((c, i) => c === rgb[i]);
@@ -1190,6 +1218,23 @@ function outlineGroundOffences(
 const RAIN_LOOKS: readonly number[] = [
     ...new Set(SHIPPED_ATTACHMENTS.filter((row) => row.cls === 'att-rainfall').map((row) => row.themeId)),
 ];
+
+/** The looks that wear the decoration a scope names (`.stall.att-…`). */
+function looksOfScope(scope: string): readonly number[] {
+    const cls = /\.(att-[a-z0-9-]+)/.exec(scope)?.[1];
+    return [...new Set(SHIPPED_ATTACHMENTS.filter((row) => row.cls === cls).map((row) => row.themeId))];
+}
+
+/** The two literal stops a `stops` read mixes, when the rule's background-image carries the named layer as written. */
+function stopsLayerOf(ground: { paint: OutlineGround['paint'] }, sheetOf: (path: string) => string): string | undefined {
+    if (ground.paint.read !== 'stops' || ground.paint.layer === undefined) return undefined;
+    const css = sheetOf(ground.paint.sheet).replace(/\/\*[\s\S]*?\*\//g, '');
+    const layers = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => topLevel(m[1]!).map(squash).includes(ground.paint.rule))
+        .flatMap((m) => declarationsOf(m[2]!).filter((d) => d.prop === 'background-image'))
+        .flatMap((d) => topLevel(squash(d.value)));
+    return layers.find((layer) => layer === squash(ground.paint.layer!));
+}
 
 /** The background a listed surface's paint rule declares, or `undefined` when the sheet has not exactly one such rule. */
 function paintRuleOf(ground: { paint: OutlineGround['paint'] }, sheetOf: (path: string) => string): string | undefined {
@@ -1211,15 +1256,25 @@ function outlineGroundMismatches(
     sheetOf: (path: string) => string = (path) => readFileSync(join(UI_DIR, '..', '..', path), 'utf8'),
 ): string[] {
     const out: string[] = [];
-    for (const id of RAIN_LOOKS) {
-        const vars = themeVars(decodeTheme(id));
-        const ground = paintOf('var(--s-bg)', vars);
-        for (const entry of groundRows(table)) {
+    for (const entry of groundRows(table)) {
+        for (const id of looksOfScope(entry.scope)) {
+            const vars = themeVars(decodeTheme(id));
+            const ground = paintOf('var(--s-bg)', vars);
             const surface = `${entry.surface}${entry.state}`;
             const listed = paintOf(entry.colour, vars);
-            const rule = paintRuleOf(entry, sheetOf);
+            const rule = entry.paint.read === 'stops' ? stopsLayerOf(entry, sheetOf) : paintRuleOf(entry, sheetOf);
             let painted: Rgb3 | undefined;
-            if (ground !== undefined && rule !== undefined && entry.paint.read === 'fill') {
+            if (rule !== undefined && entry.paint.read === 'stops') {
+                // A panel's own layer: its first two stops, both opaque, mixed evenly.
+                const inner = /^linear-gradient\((.*)\)$/.exec(rule)?.[1];
+                const args = inner === undefined ? [] : topLevel(inner);
+                const stops = (/^(?:-?[\d.]+deg|to [a-z ]+)$/.test(args[0] ?? '') ? args.slice(1) : args)
+                    .slice(0, 2)
+                    .map((stop) => paintOf(stop.replace(/\s+-?[\d.]+%$/, ''), vars));
+                if (stops.length === 2 && stops.every((stop) => stop !== undefined && stop.alpha === 1)) {
+                    painted = stops[0]!.rgb.map((c, k) => (c + stops[1]!.rgb[k]!) / 2) as unknown as Rgb3;
+                }
+            } else if (ground !== undefined && rule !== undefined && entry.paint.read === 'fill') {
                 const fill = paintOf(rule, vars);
                 painted = fill === undefined ? undefined : paintOver(fill, ground.rgb);
             } else if (ground !== undefined && rule !== undefined) {
@@ -1262,8 +1317,19 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
         return rgb !== undefined && grounds.some((g) => g.every((c, i) => c === rgb[i]));
     };
     const out: string[] = [];
-    for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const selectors = topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim());
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const frames = keyframeSpans(clean);
+    for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        // A keyframe's frame is judged by the rules that run it (step 5a″,
+        // the failing lamp's outlined flicker): each must be scoped to a
+        // decoration, and a frame nothing runs is judged as unscoped.
+        const frame = frames.find((f) => m.index! >= f.from && m.index! < f.to);
+        const selectors =
+            frame === undefined
+                ? topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim())
+                : runnersOf(clean, frame.name).length > 0
+                  ? runnersOf(clean, frame.name)
+                  : [`@keyframes ${frame.name} (run by no rule)`];
         for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === 'text-shadow')) {
             for (const value of expansions(d.value.replace(/\s*!important\s*$/i, ''), defs)) {
                 const shadows = topLevel(value).map((part) => {
@@ -1313,6 +1379,38 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
     return out;
 }
 
+/** Where each `@keyframes` block of `css` begins and ends, by name. */
+function keyframeSpans(css: string): { name: string; from: number; to: number }[] {
+    const out: { name: string; from: number; to: number }[] = [];
+    const head = /@keyframes\s+([a-zA-Z0-9_-]+)\s*\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = head.exec(css)) !== null) {
+        let depth = 1;
+        let i = head.lastIndex;
+        while (i < css.length && depth > 0) {
+            if (css[i] === '{') depth += 1;
+            if (css[i] === '}') depth -= 1;
+            i += 1;
+        }
+        out.push({ name: m[1]!, from: m.index, to: i });
+    }
+    return out;
+}
+
+/** The selectors of every rule in `css` that runs the keyframes `name`, outside any `@keyframes`. */
+function runnersOf(css: string, name: string): string[] {
+    const spans = keyframeSpans(css);
+    const out: string[] = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (spans.some((f) => m.index! >= f.from && m.index! < f.to)) continue;
+        const runs = declarationsOf(m[2]!)
+            .filter((d) => d.prop === 'animation' || d.prop === 'animation-name')
+            .some((d) => d.value.split(',').some((one) => one.trim().split(/\s+/).includes(name)));
+        if (runs) out.push(...topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim()));
+    }
+    return out;
+}
+
 /**
  * The text shadows a decoration-scoped rule may set besides the outline,
  * keyed `selector | the shadows left once the outline's are taken out`, each
@@ -1330,6 +1428,16 @@ const DECORATION_GLOW: Readonly<Record<string, string>> = {
         'the failing lamp’s lit frames (`att-hum-gutter`): the crest’s glow on one grapheme',
     '.stall.att-hum .sign-lamp | 0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent), 0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent)':
         'the failing lamp’s dim frames (`att-hum-gutter`): the glow cut, the letter still lit',
+    // Step 5a″, D14: the name outlined over Grid horizon keeps the glow it
+    // wore before, restated after the outline so the outline does not erase it.
+    '.stall.att-horizon:not(.deck-stall) .stall-name | 0 0 8px rgba(44, 233, 224, 0.9), 0 0 28px rgba(44, 233, 224, 0.5)':
+        'Neo’s own sign glow (`.t-neo .stall-name`), restated after the outline over Grid horizon: cyan, blurred, lighter than the panel, and blanked with the glyph in the contrast pass (the name’s own glow is not its ground)',
+    '.stall.att-horizon.att-hum:not(.deck-stall) .stall-name | 0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)), 0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent), 0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent), 0 2px 18px color-mix(in srgb, var(--s-accent-2) 32%, transparent)':
+        'the crest’s glow (`.stall.att-hum .stall-name`), restated after the outline where Grid horizon is worn with it',
+    '.stall.att-horizon.att-hum:not(.deck-stall) .sign-lamp | 0 0 2px color-mix(in srgb, #ffffff 85%, var(--s-accent)), 0 0 6px color-mix(in srgb, var(--s-accent) 95%, transparent), 0 0 13px color-mix(in srgb, var(--s-accent) 65%, transparent), 0 0 26px color-mix(in srgb, var(--s-accent) 38%, transparent)':
+        'the failing lamp’s lit frames with the outline under them (`att-hum-gutter-outlined`), where Grid horizon is worn with the crest',
+    '.stall.att-horizon.att-hum:not(.deck-stall) .sign-lamp | 0 0 2px color-mix(in srgb, var(--s-accent) 30%, transparent), 0 0 5px color-mix(in srgb, var(--s-accent) 16%, transparent)':
+        'the failing lamp’s dim frames with the outline under them (`att-hum-gutter-outlined`)',
 };
 
 /**
@@ -1501,7 +1609,18 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
                 const at = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => declarationsOf(m[2]!).some((d) => d.prop === name));
                 const expected =
                     sheet.path === 'src/ui/stall.css'
-                        ? [[RAIN_ROOT, `${RAIN_SCOPE} :is(${Object.keys(OUTLINE_GROUNDS).join(', ')})`].join(', ')]
+                        ? [
+                              [
+                                  RAIN_ROOT,
+                                  `${RAIN_SCOPE} :is(${Object.entries(OUTLINE_GROUNDS)
+                                      .filter(([, g]) => g.scope === undefined)
+                                      .map(([key]) => key)
+                                      .join(', ')})`,
+                                  ...groundRows(OUTLINE_GROUNDS)
+                                      .filter((row) => row.scope !== RAIN_SCOPE && row.state === '')
+                                      .map((row) => row.selector),
+                              ].join(', '),
+                          ]
                         : [];
                 expect(at.map((m) => topLevel(m[1]!).map(squash).join(', ')), `${sheet.path} ${name}`).toEqual(expected);
             }
@@ -1570,6 +1689,17 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
             expect(real(path)).toContain(from);
             expect(outlineGroundMismatches(OUTLINE_GROUNDS, planted), `${path}: ${to}`).not.toEqual([]);
         }
+        // The sign under Grid horizon (step 5a″, D14): its panel's top stop
+        // moved, the listed colour moved to another pair of stops, and the
+        // layer named but not in the rule — each refused.
+        expect(looksOfScope(HORIZON_SCOPE)).toEqual([NEO_CITY_THEME_ID]);
+        const panel = 'linear-gradient(180deg, #101a2c 0%, #0a1120 55%, #070c17 100%)';
+        expect(neo).toContain(panel);
+        const movedStop = (p: string): string => (p === 'src/ui/theme-neo.css' ? real(p).replace(panel, panel.replace('#101a2c', '#2a3a5c')) : real(p));
+        expect(outlineGroundMismatches(OUTLINE_GROUNDS, movedStop)).not.toEqual([]);
+        const sign = OUTLINE_GROUNDS['.stall-sign']!;
+        expect(outlineGroundMismatches({ '.stall-sign': { ...sign, colour: 'color-mix(in srgb, #0a1120, #070c17)' } })).not.toEqual([]);
+        expect(outlineGroundMismatches({ '.stall-sign': { ...sign, paint: { ...sign.paint, rule: '.t-neo .stall-sign' } } })).not.toEqual([]);
     });
 
     it('refuses every other mark in the ground’s colour, and passes the outline with the look’s glow beside it', () => {
@@ -1600,6 +1730,13 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         expect(outlineOffences('.stall.att-rainfall .fine { text-shadow: var(--rain-outline-2), 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
         // A shadow in another colour is the look's own and not this test's.
         expect(outlineOffences('.t-neo .x { text-shadow: 0 0 12px rgba(44, 233, 224, 0.5); }')).toEqual([]);
+        // A keyframe's frame is judged by the rules that run it (step 5a″,
+        // the failing lamp's outlined flicker): run by a decoration, it is
+        // the outline; run by a look, or by nothing, it is refused.
+        const frame = '@keyframes wk-o { to { text-shadow: var(--rain-outline-1); } }';
+        expect(outlineOffences(`${frame} .stall.att-horizon .x { animation: wk-o 1s; }`)).toEqual([]);
+        expect(outlineOffences(`${frame} .t-neo .x { animation: wk-o 1s; }`)).not.toEqual([]);
+        expect(outlineOffences(`${frame} .stall.att-horizon .x { animation: wk-o 1s; } .t-neo .y { animation: wk-o 1s; }`)).not.toEqual([]);
     });
 });
 

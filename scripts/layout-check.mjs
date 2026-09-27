@@ -1552,6 +1552,13 @@ try {
     const codesRead = new Map();
     const codesUnread = new Map();
     let quietPixels = 0;
+    // D14: the least the sign's name read per look and decoration state
+    // (line read, or ring read where it wears the outline), and how the
+    // name was painted where it was read (`nameChrome`).
+    const nameLeast = new Map();
+    const nameChromeSeen = new Set();
+    const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
+    const signPart = (sel) => (/(^|\.)stall-name(\.|$)/.test(sel) ? 'name' : 'tagline');
     // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
     const lineSkips = {};
     try {
@@ -1907,6 +1914,10 @@ try {
                             }
                         }
                         dumpBoxes.push(entry);
+                        if (worst !== undefined && isName(t.sel)) {
+                            const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel}`;
+                            nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, worst));
+                        }
                         if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
                             dim.push(
                                 `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
@@ -1934,6 +1945,7 @@ try {
                      * are painted as a buyer sees them.
                      */
                     if (retryWhy.length === 0) {
+                        for (const line of prep.nameChrome ?? []) nameChromeSeen.add(line);
                         const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
                         for (const z of zones) {
                             const code = `${vp.name}/${screen}:${z.name}`;
@@ -2040,6 +2052,10 @@ try {
                                 }
                             }
                             ringPixels += r.ringPx;
+                            if (isName(t.sel)) {
+                                const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel} (ring)`;
+                                nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, r.worst));
+                            }
                             if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
                             const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
                             kind.n += 1;
@@ -2275,6 +2291,16 @@ try {
         if (LOOKS === 'shipped' && codesRead.size === 0) {
             verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
         }
+        if (LOOKS === 'shipped') {
+            // The sign's name is read on every shipped look, bare and worn
+            // (D14): a name the pass stopped reading on one is named.
+            const read = new Set([...nameLeast.keys()].map((at) => at.replace(/ \(ring\)$/, '')));
+            const owed = SHIPPED_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]);
+            const unreadNames = owed.filter((at) => !read.has(at));
+            if (unreadNames.length > 0) {
+                verdicts.push(`the-sellers-name-on-the-sign-reads read no name on ${unreadNames.join(', ')}`);
+            }
+        }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is
             // vacuous: the shipped rain outlines lines on every Neo worn
@@ -2328,6 +2354,21 @@ try {
                             ` (${k.ring}px, ${k.n})`,
                     )
                     .join('; '),
+        );
+    }
+    // D14: the sign's name, the least per look and decoration state, and
+    // the instant it was read at (its animations and opacity, frozen).
+    if (nameLeast.size > 0) {
+        console.log(
+            `  sign name and tagline, least per look (the-sellers-name-on-the-sign-reads): ` +
+                [...nameLeast]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([at, least]) => `${at} ${least.toFixed(2)}`)
+                    .join('; '),
+        );
+        console.log(
+            `  sign name, as it was read (its own glow blanked with the glyph; the lamp's dip is G7): ` +
+                [...nameChromeSeen].sort().join('; '),
         );
     }
     // D4: the codes whose quiet zone was read, and the codes a geometry pass

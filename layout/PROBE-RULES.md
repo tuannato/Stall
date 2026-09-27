@@ -1814,6 +1814,76 @@ screen's) read as wholly clipped away — painted, listed as not read, green.
 The page sends finite bounds now and the reader refuses a clip that did
 not arrive as numbers.
 
+## The seller's name on the sign reads (step 5a″, D14, 2026-09-27)
+
+`.stall-name` is a contrast target on every look (`.stall-name:not(.deck-stall *)`:
+the door's deck minis keep the class and are pictures), read over its line
+rects (D7) — it is not money — and so is the tagline under it
+(`.stall-tagline:not(.deck-stall *)`, the window's side note: it was on the
+"text no target reads" list on 293 jobs). The static half is
+`layout/signName.test.ts`, `the-sellers-name-on-the-sign-reads`; the runner
+prints the least per look, bare and worn, and fails a shipped run that read
+no name on a shipped look bare or worn.
+
+**Blanked past any animation** (CRITIC-STEP-5 item 4): the prepare blanks a
+target's ink and shadow with `!important` inline declarations, because an
+animation outranks an ordinary inline one — the hum's failing lamp sets its
+colour and its glow by animation and stayed painted, read as its own ground.
+**The name's own glow is not its ground; the lamp's dip is G7**: Neo's cyan
+halo and a worn crest's hum are the glyph's own paint and are blanked with
+it — where the name wears the outline, the outline stays and every other
+shadow goes (`outlineOnly`). The name is read at the pass's frozen instant,
+which the run prints: `neo-flick` at 400 ms (opacity 1) and the lamp at
+400 ms of its cycle, lit.
+
+**What it read first, and the owner's (a).** On every look but Neo worn the
+name read 5.53:1 (Rural) and more. Over Grid horizon — Neo with the horizon
+alone, and every all-worn Neo job — it read 1.79:1 at 390, 2.25:1 at 1280 and
+1.51:1 on the wall, over a lit window or a star of the skyline the horizon
+draws on the sign (`step5a2-shots/`). The owner chose (a), 2026-09-27: where
+the horizon is worn, the name wears the rain's outline — the one-pixel set
+(it is 27px and more), zero blur, alpha 1, in the colour of the ground it
+stands on — and nothing else changes: no ground under the words, the art
+untouched, Neo's glow restated after the outline (and the crest's, with the
+lamp's flicker run as `att-hum-gutter-outlined`, the outline in every
+frame). On the wall the tagline stands in the sky beside the name and read
+1.08:1; it takes the same outline there (`.stall.shop-window`), 21px, the
+one-pixel set, and reads as it is elsewhere.
+
+**Every outline guard takes it for its own reason:**
+- **The surface a decoration paints on** (`OUTLINE_SURFACES`): the rain's
+  is the stall root; the horizon's is the sign (`.stall-sign`), and only a
+  line on the sign may be outlined for it. `an-outline-where-the-text-has-its-own-ground`
+  walks from the line up to that surface and no further: the sign's panel
+  (`.stall-head`, an opaque gradient) lies under the horizon's art, so it is
+  not the name's own ground — and anything between the name and the sign
+  that paints one is. Proved red: `.t-neo .stall-headings
+  { background-color: #0a1120 }` → the name and the lamp fail it on every
+  horizon screen.
+- **An outline that shows at rest**: the horizon's skyline, moon and stars
+  are the decoration's art on its own surface, set aside by name, form,
+  element and class (`SURFACE_ART_SET_ASIDE`), as the rain is on the root;
+  every other layer is read. The outline's colour is the sign panel's top two
+  stops mixed evenly, `color-mix(in srgb, #101a2c, #0a1120)`, listed in
+  `OUTLINE_GROUNDS` under the horizon's scope with a `stops` read that holds
+  it to the layer as `theme-neo.css` writes it. Proved red:
+  `--rain-outline-ground: var(--s-bg)` on the sign → rgb(5, 6, 13) over a
+  ground painted rgb(10, 17, 32), on every horizon screen.
+- **The ring read**: at the horizon's worst (it is still, so as painted) the
+  outlined name reads 4.51:1 at 390 (`opening`), 7.56:1 at 1280 and 10.79:1
+  on the 1920 wall, and 8.92 / 8.60 with the horizon alone; the wall's
+  tagline 3.42:1. Before the lamp carried the outline its bare letter read
+  2.09–2.24:1 on the ring, and before the probe read `oklab()` — the colour
+  an animation's interpolated shadow computes to — the lamp's outline was
+  taken for none and blanked, 1.88:1: both fixed, both red proofs.
+- **Static** (`decor-gate.test.ts`): a keyframe's frame is judged by the
+  rules that run it (a frame run by a look, or by nothing, is refused); the
+  four glows are listed in `DECORATION_GLOW`; the sets are declared once, on
+  the rain and each listed surface and the sign.
+
+Proved red for the target itself by the critic's plant, `.t-rural
+.stall-name { color: #7a4c28 }`: 110 jobs at 1.00:1.
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

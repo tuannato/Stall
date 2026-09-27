@@ -2117,6 +2117,16 @@ const CONTRAST_TEXT = [
     // is not a money figure, and on a transparent wire it sits on the
     // streamer's video with nothing but the plate between them.
     '[data-role="stall-name"]',
+    /*
+     * The seller's name on the sign (step 5a″, D14,
+     * `the-sellers-name-on-the-sign-reads`): read over its line rects (D7);
+     * not money; the deck's minis are pictures and left out. The name's own
+     * glow is not its ground; the lamp's dip is G7.
+     */
+    '.stall-name:not(.deck-stall *)',
+    // The tagline under it, on the same sign and over the same art (the
+    // window's side note on D14): read over its line rects on every look.
+    '.stall-tagline:not(.deck-stall *)',
     // The studio's step headings. `obsGuide.css` is a screen-owned sheet, not
     // a theme file, so nothing else measures the ink it declares — and the
     // studio section is the one place a seller reads instructions rather than
@@ -2331,7 +2341,7 @@ function shadowsOf(value: string): Shadow[] | undefined {
     if (value === 'none') return [];
     const out: Shadow[] = [];
     for (const part of splitLayers(value)) {
-        const m = /^(rgba?\([^)]*\)|color\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
+        const m = /^(rgba?\([^)]*\)|color\([^)]*\)|oklab\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/.exec(part);
         const colour = m === null ? undefined : colourOf(m[1]!);
         if (m === null || colour === undefined) return undefined;
         out.push({ ...colour, x: Number(m[2]), y: Number(m[3]), blur: Number(m[4]) });
@@ -2361,6 +2371,12 @@ function outlineRead(node: HTMLElement): { width: number; rgb?: readonly [number
     if (hard.some((sh) => sh.rgb.some((c, i) => c !== rgb[i]))) return { width: -1 };
     const width = outlineSet(hard.map((sh) => [sh.x, sh.y] as const));
     return width === 0 ? { width: -1 } : { width, rgb };
+}
+
+/** The hard, opaque shadows of `node`'s computed `text-shadow` — its outline — and nothing else. */
+function outlineOnly(node: HTMLElement): string {
+    const hard = (shadowsOf(getComputedStyle(node).textShadow) ?? []).filter((sh) => sh.alpha === 1 && sh.blur === 0);
+    return hard.length === 0 ? 'none' : hard.map((sh) => `rgb(${sh.rgb.join(', ')}) ${sh.x}px ${sh.y}px 0px`).join(', ');
 }
 
 function outlineOf(node: HTMLElement): number {
@@ -2394,13 +2410,43 @@ function outlineOf(node: HTMLElement): number {
  * `outlineChecks` counts the outlined elements read, and the runner requires
  * some on the phone and desk passes (`probe-coverage.mjs`).
  *
- * **Asked only inside a stall wearing the rain** (step 5b, CRITIC-FINAL-MERGE
- * item 4), where the outline is scoped in stall.css. Elsewhere an opaque,
+ * **Asked only where a decoration that outlines is worn** (step 5b,
+ * CRITIC-FINAL-MERGE item 4; the horizon since step 5a″), and only on the
+ * surface that decoration paints (`OUTLINE_SURFACES`), where the outline is
+ * scoped in stall.css. Elsewhere an opaque,
  * unblurred `text-shadow` is a look's own mark — an emboss, a letterpress —
  * and not this rule's; the look rules and the static
  * `an-outline-is-the-only-mark-under-text-on-a-decoration` govern it.
  */
 const OUTLINE_CHECK = 'an-outline-where-the-text-has-its-own-ground';
+
+/**
+ * **The decorations that outline a line, and the surface each paints on**
+ * (step 5a″, D14, the owner's (a), 2026-09-27). The rain falls on the stall's
+ * own ground, so its surface is the stall root and a line anywhere on the
+ * bare ground may wear its outline. Grid horizon draws its skyline, windows
+ * and stars on the sign's own box (`.stall-sign`), so its surface is the
+ * sign, and only a line on the sign may wear the outline for it; the sign's
+ * panel (`.stall-head`) lies under that art. Everything between a line and
+ * its surface is the line's own ground (`an-outline-where-the-text-has-its-own-ground`);
+ * everything under the surface is not.
+ */
+const OUTLINE_SURFACES: ReadonlyArray<{ cls: string; surface: (node: HTMLElement, stall: HTMLElement) => HTMLElement | null }> = [
+    { cls: 'att-horizon', surface: (node) => node.closest<HTMLElement>('.stall-sign') },
+    { cls: 'att-rainfall', surface: (_node, stall) => stall },
+];
+
+/** The surface the decoration a line may be outlined for paints on, or `undefined` where none is worn. */
+function outlineSurface(node: HTMLElement): HTMLElement | undefined {
+    const stall = node.closest<HTMLElement>('.stall');
+    if (stall === null) return undefined;
+    for (const d of OUTLINE_SURFACES) {
+        if (!stall.classList.contains(d.cls)) continue;
+        const at = d.surface(node, stall);
+        if (at !== null) return at;
+    }
+    return undefined;
+}
 let outlineChecks = 0;
 
 /*
@@ -2510,6 +2556,22 @@ const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test:
     // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
     { name: 'Neo’s scanlines', paints: 't-neo', test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
     { name: 'Neo’s top glow', paints: 't-neo', test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
+];
+
+/**
+ * A decoration's own art on the surface it paints (step 5a″, D14): what the
+ * outline is for, like the rain on the root — matched on its form, the
+ * element it paints and the class that paints it. Grid horizon's skyline,
+ * moon and stars on the sign. Every other layer of that surface is read
+ * like any layer under a line.
+ */
+const SURFACE_ART_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; on: string; test: (layer: string) => boolean }> = [
+    {
+        name: 'Grid horizon’s skyline, moon and stars',
+        paints: 'att-horizon',
+        on: '.stall-sign',
+        test: (l) => /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|moon|stars)[^")]*"?\)$/.test(l),
+    },
 ];
 
 /** What the at-rest rule set aside, by reason, over the whole pass. */
@@ -2659,6 +2721,11 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
                     return { picture: el, what: `a root layer this rule does not know (${layer.slice(0, 60)}…, ${size}) — a-new-root-layer-is-not-exempt-by-position` };
                 }
             }
+            const art = SURFACE_ART_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && el.matches(k.on) && k.test(layer));
+            if (art !== undefined) {
+                setAside(art.name);
+                continue;
+            }
             if (/^url\(/.test(layer)) return { picture: el, what: `a picture (${size}) this rule cannot read` };
             if (!/gradient\(/.test(layer)) continue;
             if (!FULL_SIZE.includes(size)) {
@@ -2727,12 +2794,14 @@ function outlineFaults(screen: string, label: string): Failure[] {
             if (child.nodeType === Node.TEXT_NODE) own += child.textContent ?? '';
         }
         if (own.trim() === '' || node.closest('.deck-stall') !== null) continue;
-        // Only where the rain is worn (CRITIC-FINAL-MERGE item 4, step 5b):
-        // the outline is the rain's, scoped to `.stall.att-rainfall` in
-        // stall.css, and a hard shadow anywhere else is a look's own mark —
-        // a white emboss on Rural is not an outline, and was failed as one
-        // ("neither outline set") on every look until this line.
-        if (node.closest('.stall.att-rainfall') === null) continue;
+        // Only where a decoration that outlines is worn (CRITIC-FINAL-MERGE
+        // item 4, step 5b; `OUTLINE_SURFACES`): the outline is scoped to
+        // those decorations in stall.css, and a hard shadow anywhere else
+        // is a look's own mark — a white emboss on Rural is not an outline,
+        // and was failed as one ("neither outline set") on every look until
+        // this line.
+        const surface = outlineSurface(node);
+        if (surface === undefined) continue;
         const { width, rgb } = outlineRead(node);
         if (width === 0) continue;
         outlineChecks += 1;
@@ -2745,8 +2814,12 @@ function outlineFaults(screen: string, label: string): Failure[] {
         if (width !== owed) {
             fail(node, `paints at ${px}px and wears the ${width}px outline; its size owes the ${owed}px one`);
         }
+        // Up to the surface the decoration paints on, never past it: what
+        // lies under the decoration (the sign's panel under the horizon's
+        // skyline) is not the text's own ground, and what lies between the
+        // line and the decoration — a card, a chip, a filled button — is.
         const root = node.closest('.stall');
-        for (let at: HTMLElement | null = node; at !== null && at !== root; at = at.parentElement) {
+        for (let at: HTMLElement | null = node; at !== null && at !== root && at !== surface; at = at.parentElement) {
             if (paintsOpaqueGround(getComputedStyle(at))) {
                 fail(node, `wears the outline over ${describe(at)}, a ground of its own — an outline where the text has its own ground`);
                 break;
@@ -3629,6 +3702,8 @@ type ContrastPrepared = {
     lookPseudos?: number;
     /** The elements whose visible text no contrast target reads, described (a report, step 5b). */
     uncovered?: string[];
+    /** How the sign's name was painted at the frozen instant (D14): its animations and opacity. */
+    nameChrome?: string[];
     /** The stalls that wore Neo's rain, and how many had it at its brightest. */
     rain: { worn: number; flattened: number };
     /** The stalls that wore the aurora, and how many had its tide held (`TIDE_SCREENS`). */
@@ -4073,6 +4148,31 @@ function colourOf(value: string): { rgb: [number, number, number]; alpha: number
         const rgb = [f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255)) as [number, number, number];
         return { rgb, alpha: f[4] === undefined ? 1 : Number(f[4]) };
     }
+    /*
+     * `oklab()` (step 5a″): a colour an animation sets is interpolated in
+     * OKLab and computed as one — the failing lamp's outlined frames
+     * (`att-hum-gutter-outlined`) serialise every shadow so, and read as
+     * "not an outline" the lamp's glyph lost its outline in the prepare and
+     * was read bare. Converted with Björn Ottosson's matrices, as CSS Color 4
+     * does, to sRGB rounded to the level.
+     */
+    const k = /oklab\((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)(?: \/ ([\d.]+))?\)/.exec(value);
+    if (k !== null) {
+        const [L, A, B] = [Number(k[1]), Number(k[2]), Number(k[3])];
+        const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+        const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+        const q = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+        const lin = [
+            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * q,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * q,
+            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * q,
+        ];
+        const rgb = lin.map((c) => {
+            const v = Math.min(1, Math.max(0, c));
+            return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+        }) as [number, number, number];
+        return { rgb, alpha: k[4] === undefined ? 1 : Number(k[4]) };
+    }
     return undefined;
 }
 
@@ -4148,7 +4248,11 @@ window.__contrastGlyphs = async (show: boolean) => {
         n += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
-            el.style.color = show ? el.dataset['probeColor'] : 'transparent';
+            if (show) {
+                el.style.color = el.dataset['probeColor'];
+            } else {
+                el.style.setProperty('color', 'transparent', 'important');
+            }
         }
     }
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
@@ -4261,6 +4365,28 @@ window.__quietZones = () =>
             };
         })
         .filter((z): z is QuietZone => z !== undefined);
+
+/**
+ * How the sign's name was painted when it was read (step 5a″, D14): each
+ * animation on a `.stall-name` or inside it, at the instant the pass froze
+ * it, and the name's computed opacity there — Neo's `neo-flick` dims the
+ * whole name by opacity, and the hum's lamp dims one letter. Reported, so a
+ * green over the name says which instant it was.
+ */
+function nameChrome(scope: ParentNode): string[] {
+    const out = new Set<string>();
+    for (const name of scope.querySelectorAll<HTMLElement>('.stall-name')) {
+        if (name.closest('.deck-stall') !== null) continue;
+        for (const el of [name, ...name.querySelectorAll<HTMLElement>('*')]) {
+            for (const a of el.getAnimations()) {
+                const label = a instanceof CSSAnimation ? a.animationName : 'animation';
+                out.add(`${el === name ? 'name' : describe(el)} ${label} at ${Math.round(Number(a.currentTime ?? 0))}ms (${a.playState})`);
+            }
+        }
+        out.add(`name opacity ${getComputedStyle(name).opacity}`);
+    }
+    return [...out].sort();
+}
 
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
@@ -4721,14 +4847,23 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // retried, and two runs of one tree differed on 38 boxes read
             // mid-fade on one of them (step 3a, `PROBE-RULES.md`).
             el.style.transition = 'none';
-            el.style.color = 'transparent';
+            // Important: an animation outranks an ordinary inline declaration,
+            // so an animated ink or glow (the hum's lamp) stayed painted.
+            el.style.setProperty('color', 'transparent', 'important');
 
             // Every shadow off but an outline (round 8): the outline is the
             // ground the ring read measures, so it stays in both captures;
             // any other shadow is the glyph's own paint and goes with it.
             // An element outside every outlined target wears none.
             if (outlineOf(el) <= 0) {
-                el.style.textShadow = 'none';
+                el.style.setProperty('text-shadow', 'none', 'important');
+            } else if (el.closest('.stall-name') !== null) {
+                // The seller's name keeps its outline and nothing else (step
+                // 5a″, D14): the name's own glow is not its ground. It is the
+                // glyph's paint, blanked with the glyph as on every name not
+                // outlined; the lamp's dip is G7. Important, because the
+                // failing lamp's frames set its shadow by animation.
+                el.style.setProperty('text-shadow', outlineOnly(el), 'important');
             }
         }
     }
@@ -4765,6 +4900,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         lookPseudos,
         // Visible text no target reads, reported (step 5b).
         uncovered,
+        // The sign name's animations and opacity where it was read (D14).
+        nameChrome: nameChrome(scope),
         // The stalls that wore the aurora, and how many had its tide held.
         tide: tideHeld,
         ...echo,
