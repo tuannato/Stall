@@ -133,8 +133,17 @@ const ownRules = (cls: string): Rule[] =>
 const anyRules = (cls: string): Rule[] =>
     RULES.filter((r) => classesIn(r.selector).some((found) => ownedBy(cls, found)));
 
+/**
+ * The decorations: every row with a class, less a mood's (D11). A mood's
+ * class is a look's own and its rules live in that look's sheet, where the
+ * look lint reads them — never in stall.css, which is what this gate's
+ * paint and colour tables read — so it is held by
+ * `a-mood-class-is-look-scoped` below instead. Its rules are still
+ * decoration-scoped (`DECORATION_SCOPED`): no ground under text, no mark but
+ * the outline, exactly as a decoration's.
+ */
 const paintable: readonly (ShippedAttachment & { cls: string })[] = SHIPPED_ATTACHMENTS.filter(
-    (row): row is ShippedAttachment & { cls: string } => row.cls !== undefined,
+    (row): row is ShippedAttachment & { cls: string } => row.cls !== undefined && row.slot !== 'mood',
 );
 
 /** Top-level commas only: a gradient carries plenty of its own. */
@@ -287,8 +296,10 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
     it('says where its colours come from, and the sheet agrees', () => {
         /*
          * Round 15's lesson, and the most expensive one the workshop will
-         * inherit: a MOOD paints no class — it swaps the palette and nothing
-         * else — so nothing in CSS can ask whether one is worn. A row whose
+         * inherit: a MOOD swaps the palette, and a decoration's rules cannot
+         * ask whether one is worn — a mood may carry a class since D11, but
+         * it is its look's own (`a-mood-class-is-look-scoped`), never a
+         * decoration's selector, and no shipped mood carries one. A row whose
          * colours are tokens follows a mood for free. A row that ships drawn
          * art cannot follow one at all, and under Modern's After hours the
          * awning's baked daylight blue read as a cut-out pasted on a
@@ -799,6 +810,69 @@ function groundsUnderText(
     }
     return out;
 }
+
+/**
+ * Every selector in `css` that names `cls` (or a child class of it) and does
+ * not also name `lookClass` — a mood's class read outside its look.
+ */
+function outOfScope(css: string, cls: string, lookClass: string): string[] {
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const out: string[] = [];
+    for (const m of bare.matchAll(/([^{}]+)\{/g)) {
+        const head = m[1]!.trim();
+        if (head.startsWith('@')) {
+            continue;
+        }
+        for (const selector of head.split(',').map((one) => one.replace(/\s+/g, ' ').trim())) {
+            const names = classesIn(selector).some((found) => ownedBy(cls, found));
+            const scoped = new RegExp(`\\.${lookClass}(?![a-z0-9-])`).test(selector);
+            if (names && !scoped) {
+                out.push(selector);
+            }
+        }
+    }
+    return out;
+}
+
+describe('a-mood-class-is-look-scoped', () => {
+    /**
+     * D11 (step 5c): a mood may name one class. It rides the stall root on
+     * the shop and the wall and is stripped from the overlay
+     * (`a-mood-class-never-reaches-the-overlay`); here, the CSS half of
+     * "look-scoped": every served rule that names it also names its look's
+     * own class, so it can never dress another look — and in a look's sheet
+     * the look lint already holds every selector under that class. The
+     * shape and the owner are `moodClassProblems` (`layout/moodClass.ts`),
+     * read by the catalogue's pin test and the kit. No shipped mood carries
+     * a class today, so the second case is what shows the rule refusing.
+     */
+    const sheets = SERVED_SHEETS.map((sheet) => ({
+        path: sheet.path,
+        css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'),
+    }));
+
+    it('holds every shipped mood class to its look, in every served sheet', () => {
+        for (const row of SHIPPED_ATTACHMENTS.filter((a) => a.slot === 'mood' && a.cls !== undefined)) {
+            const lookClass = decodeTheme(row.themeId).sheetClass;
+            for (const { path, css } of sheets) {
+                expect(outOfScope(css, row.cls!, lookClass), `${row.label} in ${path}`).toEqual([]);
+            }
+        }
+    });
+
+    it('refuses a rule that reads a mood class outside its look (plants)', () => {
+        const at = 'att-harness-dusk';
+        expect(outOfScope(`.t-rural.${at} .item { color: red }`, at, 't-rural')).toEqual([]);
+        expect(outOfScope(`.stall.t-rural.${at}-line::after { color: red }`, at, 't-rural')).toEqual([]);
+        expect(outOfScope(`@media (min-width: 680px) { .t-rural.${at} .item { color: red } }`, at, 't-rural')).toEqual([]);
+        expect(outOfScope(`.stall.${at} .item { color: red }`, at, 't-rural')).toEqual([`.stall.${at} .item`]);
+        expect(outOfScope(`.t-rural .x, .${at} .item { color: red }`, at, 't-rural')).toEqual([`.${at} .item`]);
+        expect(outOfScope(`.t-neo.${at} .item { color: red }`, at, 't-rural')).toEqual([`.t-neo.${at} .item`]);
+        expect(outOfScope(`.t-rurals.${at} .item { color: red }`, at, 't-rural')).toEqual([`.t-rurals.${at} .item`]);
+        // Another class that merely starts with the same letters is not its.
+        expect(outOfScope(`.stall.${at}s .item { color: red }`, at, 't-rural')).toEqual([]);
+    });
+});
 
 describe('a-decoration-lays-no-ground-under-text', () => {
     /**

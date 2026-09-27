@@ -24,13 +24,16 @@
  *   (`WORN_ALL`, the picker's all-worn state) where decorations paint — never
  *   on an overlay screen (`NO_DECOR_SCREENS`) and never for a look with no
  *   rows, whose worn paint is its bare paint again. A bitmask rather than a
- *   flag, so a variant per mood is a new value and not a new schema.
+ *   flag, so a variant per mood is a new value and not a new schema — and
+ *   it is one (D11): a look's second mood is all-worn under its own flags
+ *   (`wornAllFlags`), since `WORN_ALL` wears the first mood alone. No
+ *   shipped look has two, so no job was added.
  *
  * Test: `the-contrast-plan-is-every-job-the-pass-owes`.
  */
 import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, paintsBareOnly } from './fixtures';
 import { NEO_CITY_THEME_ID, RURAL_THEME_ID } from '../src/domain/theme';
-import { canWear, type Look } from './looks';
+import { canWear, wornAllFlags, type Look } from './looks';
 import { screensAt } from './screenSplit';
 
 export type ContrastViewport = {
@@ -197,7 +200,8 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                     }
                     return 1 << row.bit;
                 });
-                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, WORN_ALL, ...solo];
+                const variants =
+                    look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, ...wornAllFlags(look), ...solo];
                 for (const flags of variants) {
                     const job = {
                         viewport: viewport.name,

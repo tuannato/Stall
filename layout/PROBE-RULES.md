@@ -745,7 +745,8 @@ somebody else's video.
   an empty screen list — `measured 0 screen(s)` instead of a tick over a pass
   that ran nothing.
 - **The overlay wears nothing, so it buys one variant.** `renderStall`'s
-  broadcast branch keeps only `slot: 'mood'` rows and mounts no ornament, so
+  broadcast branch keeps only `slot: 'mood'` rows, strips every `att-` class
+  from its root (a mood may carry one since D11), and mounts no ornament, so
   every worn variant is the same tree. `variantsFor` returns the bare list and
   the contrast driver **skips the `wornAll` loop** rather than painting to
   return zero targets — the prepare (a full paint, `document.fonts.ready`, two
@@ -1972,6 +1973,81 @@ with a one-pixel ring half covering the art's brightest paints it reads
 2.95:1 over the amber window (`#ffd27a` at 0.8), 2.65:1 over the cyan one
 (`#2ce9e0` at 0.9) and 2.46:1 over the white star (`#e8fbff` at 0.79) — so the
 dip is expected to fail on the skyline, not on the panel, when G7 reads it.
+
+## A mood may carry a class, and the overlay never gets it (step 5c, D11, 2026-09-27)
+
+A mood moved the palette and nothing else, and that was a rule held by
+data: the catalogue pinned `cls` undefined for every mood, because the
+broadcast branch wears the moods and a class there is a look's rule on a
+stream nobody can close. Ink wash's 拓本 moods need line angles no token
+carries, and the owner's Q7 (2026-09-23) was to fix the crude guard rather
+than cut the design. So a mood may now name one class, and what held the
+old rule is now three guards, none of them in the browser:
+
+- **The class reaches the stall root first** — the positive control the
+  step-5 critic asked for (item 7). `attachmentClasses` emitted the `root`
+  rows alone, so a mood's class reached nothing and an overlay test would
+  have passed over a class that reached nowhere. It emits a mood's class
+  now, and `a-mood-class-reaches-the-stall-root` holds it on the stall and
+  on the wall, beside the look's class, with the palette moved.
+- **The overlay strips it**: the broadcast branch removes every `att-`
+  class from its root after `applyTheme` dresses it, so a mood reaches the
+  overlay as a palette alone (`a-mood-class-never-reaches-the-overlay`,
+  every shipped mood dressed in a harness class, on the offers, empty and
+  opening screens). The door takes it off with every `att-*` class and is
+  handed no worn rows anyway.
+- **It is look-scoped**: one `att-` class with no `paint`, owned by no other
+  row in either direction of the child-class rule (`moodClassProblems`,
+  `layout/moodClass.ts`, read by the catalogue's pin and the kit's
+  `look.json`), and every served rule naming it names its look's class
+  (`a-mood-class-is-look-scoped`, the decor gate; the look lint's
+  `a-mood-class-rule-is-read-under-its-look`). Its rules are
+  decoration-scoped by their `.att-` selector, so the ground and mark rules
+  read them as they read a decoration's.
+
+**What the probe measures, and why nothing moved.** No shipped mood carries
+a class, so every rule of this ledger measures the same pixels it did
+(`looks:diff main`: 0 real differences). The overlay screens are painted
+bare in every geometry pass (`paintsBareOnly`), and the strip keeps that
+honest: a mood's class, stripped, cannot change their geometry. **One
+all-worn variant per mood** (`wornAllFlags`, `layout/looks.ts`): `0xffff`
+wears one row per slot, and a look's moods share a slot, so it wore the
+lowest-bit mood alone and a look's second mood had an all-worn state no
+pass painted. Each further mood is one more set of flags — `0xffff` with
+every other mood's bit cleared — in the contrast plan, every geometry pass
+(`variantsFor`: card screens and state screens) and the transparency pass
+(the page's `__themes` publishes `wornAll`, and the runner refuses a look
+whose list does not start with `0xffff`). Every shipped look has one mood
+at most, so this is `[0xffff]` for each and the pinned plan
+(`the-contrast-plan-is-every-job-the-pass-owes`) did not move; a harness
+look with two moods is held to twice the worn jobs in
+`paints one all-worn variant per mood`.
+
+**Proved red**: without the overlay strip, `a-mood-class-never-reaches-the-
+overlay` fails (`After hours / offers: expected [ 'att-harness-0-1' ] to
+deeply equal []`); with `attachmentClasses` put back to `root` rows alone,
+the positive control and the domain case fail and the overlay test stays
+GREEN — the vacuous pass the critic named, which is why the control comes
+first. The door: dropping `paintHome`'s strip alone fails on `t-modern`,
+dropping the home route's empty worn list alone fails on the palette, and
+only both together put the mood's class on the door (four classes, the
+mood's among them): it reaches the door only when both layers are gone.
+`wornAllFlags` returning `[0xffff]` alone fails the two-mood case. A
+shipped mood given a class and a rule `.stall.att-…` in stall.css fails
+`a-mood-class-is-look-scoped`; the same class written `.t-modern.att-…`
+passes it; a mood class `att-pinstripe-night` fails the catalogue's pin
+(owned by Pinstripe).
+
+**Measured on the day it landed**: `pnpm test:layout` 137.9 s, the contrast
+plan 515 jobs, unchanged. **The capability, end to end, by hand**: the Rural
+starter (`pnpm workshop:start rural`) with Sun-faded given `att-harness-fade`,
+a second mood `att-harness-dusk` at bit 9 (a dark palette over Rural's
+paper) and one rule each under `.t-workshop.att-…` — the lint passed, and
+`pnpm workshop:probe` painted a third contrast job per cell, the second
+mood's all-worn state (flags 65533), and failed 71 figures, **every one of
+them on that job** and none on the others: the dark mood's light ink over
+the confetti and the sunburst, which `0xffff` alone would never have
+painted. The kit was put back to the skeleton afterwards.
 
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 

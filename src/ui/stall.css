@@ -303,10 +303,10 @@ body {
  * hours").
  *
  * v2 was `decor/awning.svg`, and that is exactly why it broke at night: a
- * MOOD paints no class — it swaps the palette and nothing else (the
- * catalogue pins `cls` undefined for every mood row, because a class would
- * reach the broadcast overlay) — so the only way a decoration can follow one
- * is THROUGH THE TOKENS. Baked art cannot. Under After hours the canopy
+ * MOOD swaps the palette, and a decoration's rule cannot ask whether one is
+ * worn (a mood may carry a class since D11, but that class is its own
+ * look's, stripped from the overlay, and After hours carries none) — so the
+ * only way a decoration can follow one is THROUGH THE TOKENS. Baked art cannot. Under After hours the canopy
  * stayed in daylight blue and cream over a near-black page and read as a
  * cut-out pasted on top, which is what the owner photographed.
  *
@@ -1526,9 +1526,10 @@ body {
  * torn and the rest cut clean, and a fold at one corner in a darker shade of
  * the same paper, which is what gives the reference its depth.
  *
- * **The cost, stated: art cannot follow a mood.** A mood paints no class
- * (§4: a class would reach the broadcast overlay), so nothing in CSS can ask
- * whether Sun-faded is worn, and these scraps do not bleach with the stall
+ * **The cost, stated: art cannot follow a mood.** Sun-faded carries no
+ * class, and a mood's class is its own look's rule, never a decoration's
+ * (D11, CLAUDE §4), so nothing in this sheet asks whether Sun-faded is
+ * worn, and these scraps do not bleach with the stall
  * they fall on — the lesson that deleted Modern's Awning, accepted here with
  * its own reason: the stall has stood a season, the paper was thrown today.
  * Neo's rain is the same standing exception.

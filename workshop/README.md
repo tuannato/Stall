@@ -134,15 +134,21 @@ a label or anything that carries a token or an address. *(The kit —
 
 ## Moods
 
-A mood moves the palette and nothing else: background, surface, text,
-muted, accent, second accent, shade. It must move far enough for a buyer to
+A mood moves the palette: background, surface, text, muted, accent,
+second accent, shade. It must move far enough for a buyer to
 see it. Stall measures that in CIEDE2000 (ΔE00) twice. In `look.json`, it
 compares your look's own `bg` and `surface` with the mood's. On the page, it
 compares the `background-color` of the stall and of its first card, bare
 against the mood (a colour that is not opaque is skipped). Each time, at
 least one of the two must move by 5 or more; `pnpm workshop:probe` checks
-it. A mood adds no class to the page, so anything that must change with it
-is written in the look's colour tokens (`var(--s-…)`).
+it. A mood may also name one class (`cls` in its row), starting with
+`att-` like a decoration's: while the mood is worn, Stall puts that class
+on the stall beside your look's own, so rules written as
+`.t-workshop.att-…` can change more than colour under that mood. The class
+is your look's own: no other row of your look and no decoration Stall
+ships may use it, and it never reaches the stream overlay, which takes a
+mood's colours only. Without a class, anything that must change with a
+mood is written in the look's colour tokens (`var(--s-…)`).
 *(The kit.)*
 
 ## Decorations

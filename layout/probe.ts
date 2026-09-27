@@ -31,7 +31,7 @@ import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
-import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornOf, type Look } from './looks';
+import { SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { screensAt } from './screenSplit';
@@ -566,9 +566,14 @@ function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): 
  */
 function wornVariants(look: Look): readonly (readonly ShippedAttachment[])[] {
     const rows = look.rows;
-    const all = wornOf(look, 0xffff);
+    // One all-worn variant per mood (D11): `0xffff` wears the lowest-bit mood
+    // alone, so a look's second mood is all-worn under its own flags. Every
+    // shipped look has one mood at most, so this is the one variant it was.
+    const alls = wornAllFlags(look)
+        .map((flags) => wornOf(look, flags))
+        .filter((all) => all.length > 1);
     const singles = rows.map((row) => [row]);
-    return [[], ...singles, ...(all.length > 1 ? [all] : [])];
+    return [[], ...singles, ...alls];
 }
 
 /**
@@ -1339,8 +1344,8 @@ function checkOverTime(
  */
 function variantsFor(screen: string, look: Look): readonly (readonly ShippedAttachment[])[] {
     // The overlay wears nothing: `renderStall`'s broadcast branch keeps only
-    // `slot: 'mood'` rows and mounts no ornament strip, so every worn variant
-    // paints the same tree. One bare pass, and the driver skips its `wornAll`
+    // `slot: 'mood'` rows, strips the class a mood may carry (D11), and mounts
+    // no ornament strip, so every worn variant paints the same tree. One bare pass, and the driver skips its `wornAll`
     // loop too — see NO_DECOR_SCREENS.
     // The door too, since it wears nothing (`paintsBareOnly`).
     if (paintsBareOnly(screen)) {
@@ -1350,7 +1355,10 @@ function variantsFor(screen: string, look: Look): readonly (readonly ShippedAtta
     if (!STATE_SCREENS.has(screen) || all.length < 2) {
         return all;
     }
-    return [all[0]!, all[all.length - 1]!];
+    // Bare, and every all-worn variant — one per mood (D11). For a shipped
+    // look that is the one fully-worn paint it always was (a look of one row
+    // wears that row).
+    return [all[0]!, ...wornAllFlags(look).map((flags) => wornOf(look, flags))];
 }
 
 /**
@@ -3771,7 +3779,7 @@ declare global {
         __noDecorScreens: string[];
         __canvasScreens: string[];
         /** Each measured look's id, and how many decoration rows it has — none means no worn half. */
-        __themes: { id: number; rows: number; sheetClass: string }[];
+        __themes: { id: number; rows: number; sheetClass: string; wornAll: number[] }[];
         __probeReady: boolean;
     }
 }
@@ -3813,6 +3821,8 @@ window.__themes = measuredLooks().map((look) => ({
     id: look.id,
     rows: look.rows.length,
     sheetClass: look.theme.sheetClass,
+    // One all-worn state per mood (D11), for the transparency pass.
+    wornAll: wornAllFlags(look),
 }));
 
 /** True when any ancestor up to the stall carries a live transform. */

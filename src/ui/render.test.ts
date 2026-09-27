@@ -22,6 +22,7 @@ import { qrMatrix } from '../domain/qr';
 import type { GenesisAttribution } from '../domain/genesis';
 import type {
     BroadcastParams,
+    FetchStatus,
     Outpoint,
     PosterFormat,
     StallEvent,
@@ -96,7 +97,7 @@ import {
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
 import { QUOTE_UNITS, scaleRate } from '../domain/fiat';
 import * as copy from './copy';
-import { SHIPPED_ATTACHMENTS, wornAttachments } from '../domain/attachments';
+import { SHIPPED_ATTACHMENTS, wornAttachments, type ShippedAttachment } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
 import { SHARE_QR_TOO_LONG, TOKEN_LINK_WARNING, listingsAtThisStall, lowestOfListings, TAB_SHOP, ACTIVITY_NOT_WATCHING, ACTIVITY_GAPS, ACTIVITY_QUIET, EVENT_BOOK, EVENT_OTHER, EVENT_BOOK_CONSUMED, EVENT_BOOK_APPEARED, EVENT_BOOK_BOTH, activityCapped } from './copy';
 import { ADDR_COPIED_MS,
@@ -4860,9 +4861,104 @@ describe('a-worn-decoration-reaches-the-stall', () => {
         );
         const stall = root.querySelector<HTMLElement>('.stall')!;
         expect(stall.style.getPropertyValue('--s-bg')).toBe('rgb(18, 21, 26)');
-        // A mood paints no node and carries no class of its own — the
-        // look's stylesheet class is applyTheme's, not the mood's.
+        // A mood paints no node, and After hours carries no class of its own
+        // — the look's stylesheet class is applyTheme's, not the mood's. A
+        // mood MAY name one since D11 (`a-mood-class-reaches-the-stall-root`);
+        // no shipped mood does.
         expect(stall.className).toBe('stall t-modern');
+    });
+});
+
+/**
+ * Every shipped mood, dressed in a harness class (D11, step 5c). No shipped
+ * mood carries a class — the capability ships before the look that needs it
+ * (Ink wash's 拓本) — so the proof is a row the tests make: the catalogue's
+ * own mood with a class added, which is exactly what a mood with a class is.
+ */
+const MOODS_WITH_A_CLASS: readonly ShippedAttachment[] = SHIPPED_ATTACHMENTS.filter((row) => row.slot === 'mood').map(
+    (row) => ({ ...row, cls: `att-harness-${row.bit}-${row.themeId}` }),
+);
+
+describe('a-mood-class-reaches-the-stall-root', () => {
+    /**
+     * The positive control, before the strip (the step-5 critic's item 7):
+     * `attachmentClasses` emitted `root` rows alone, so a mood's class
+     * reached nothing and a test that it never reached the overlay would
+     * have passed over a class that reached nowhere at all. So first: on the
+     * stall, the preview and the wall, the class IS on the root, beside the
+     * look's own class, and the palette moved with it.
+     */
+    it('puts the class on the stall root, beside the look, with the palette', () => {
+        expect(MOODS_WITH_A_CLASS.length).toBeGreaterThan(0);
+        for (const mood of MOODS_WITH_A_CLASS) {
+            const theme = decodeTheme(mood.themeId);
+            const { root } = paint(
+                idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), theme, worn: [mood] }),
+            );
+            const stall = root.querySelector<HTMLElement>('.stall')!;
+            expect([...stall.classList], mood.label).toEqual(['stall', theme.sheetClass, mood.cls]);
+            expect(stall.style.getPropertyValue('--s-bg'), mood.label).toBe(
+                `rgb(${mood.palette!.bg!.r}, ${mood.palette!.bg!.g}, ${mood.palette!.bg!.b})`,
+            );
+        }
+    });
+
+    it('and on the shop window, which wears whatever the seller chose', () => {
+        for (const mood of MOODS_WITH_A_CLASS) {
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    theme: decodeTheme(mood.themeId),
+                    worn: [mood],
+                    window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+                }),
+            );
+            const stall = root.querySelector<HTMLElement>('.stall.shop-window')!;
+            expect(stall, mood.label).not.toBeNull();
+            expect(stall.classList.contains(mood.cls!), mood.label).toBe(true);
+        }
+    });
+});
+
+describe('a-mood-class-never-reaches-the-overlay', () => {
+    /**
+     * The broadcast branch wears the moods (their palette reaches the
+     * plates), and since D11 a mood may carry a class — which a look's
+     * sheet would then paint on a stream nobody can close, over plates the
+     * probe measures bare. The branch strips every `att-` class after it
+     * dresses the root. Proved red by deleting that strip (the class reaches
+     * the overlay on every screen below); the positive control above is what
+     * makes the red mean something.
+     */
+    it('strips the class and keeps the palette, on every broadcast screen', () => {
+        for (const mood of MOODS_WITH_A_CLASS) {
+            const theme = decodeTheme(mood.themeId);
+            const fetches: FetchStatus[] = [{ kind: 'offers', offers: [OFFER] }, { kind: 'empty' }, { kind: 'opening' }];
+            for (const fetch of fetches) {
+                const { root } = paint(
+                    idlePubkey({ broadcast: BROADCAST, fetch, tokens: new Map([[TOKEN_ID, BEANS]]), theme, worn: [mood] }),
+                );
+                const stall = root.querySelector<HTMLElement>('.stall.broadcast')!;
+                expect(stall, `${mood.label} / ${fetch.kind}`).not.toBeNull();
+                expect([...stall.classList].filter((c) => c.startsWith('att-')), `${mood.label} / ${fetch.kind}`).toEqual([]);
+                expect(stall.classList.contains(theme.sheetClass)).toBe(true);
+                expect(root.querySelector(`.${mood.cls}`)).toBeNull();
+                expect(stall.style.getPropertyValue('--s-bg'), `${mood.label}: the palette still reaches the overlay`).toBe(
+                    `rgb(${mood.palette!.bg!.r}, ${mood.palette!.bg!.g}, ${mood.palette!.bg!.b})`,
+                );
+            }
+        }
+    });
+
+    it('and so does every other worn row, as before', () => {
+        const all = wornAttachments(NEO_CITY_THEME_ID, 0xffff);
+        expect(all.some((row) => row.paint === 'root')).toBe(true);
+        const { root } = paint(
+            idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'offers', offers: [OFFER] }, theme: decodeTheme(NEO_CITY_THEME_ID), worn: all }),
+        );
+        const stall = root.querySelector<HTMLElement>('.stall.broadcast')!;
+        expect([...stall.classList].filter((c) => c.startsWith('att-'))).toEqual([]);
     });
 });
 
@@ -18074,7 +18170,11 @@ describe('the-door-deck-is-three-real-looks-and-fetches-nothing', () => {
             route: { kind: 'home' },
             overlay: { kind: 'idle' },
             tokens: new Map(),
-            worn: SHIPPED_ATTACHMENTS.filter((row) => row.themeId === DEFAULT_THEME_ID),
+            // Modern's rows, its mood dressed in a class (D11): a mood's
+            // class is one more `att-` class the door must not wear.
+            worn: SHIPPED_ATTACHMENTS.filter((row) => row.themeId === DEFAULT_THEME_ID).map((row) =>
+                row.slot === 'mood' ? { ...row, cls: 'att-harness-door-mood' } : row,
+            ),
         });
         const door = root.querySelector('.stall.door') as HTMLElement;
         expect([...door.classList].filter((c) => c.startsWith('t-') || c.startsWith('att-'))).toEqual([]);

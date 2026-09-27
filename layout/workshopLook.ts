@@ -31,14 +31,21 @@
  *   they pair with the tier sizes the look's own sheet declares.
  * - `moods`, `decorations` — rows in the `ShippedAttachment` shape without
  *   `tokenId` (a kit row is never minted) and without `themeId` (the loader
- *   gives every row the kit's id).
+ *   gives every row the kit's id). A mood may name one `cls` since D11 (step
+ *   5c) and never a `paint`: its class lands on the stall root while it is
+ *   worn and never on the stream overlay, it takes the decorations' `att-`
+ *   shape, and no decoration of the look and no row Stall ships may own it
+ *   (`moodClassProblems`); every rule naming it sits under `.t-workshop`
+ *   like every other rule of the sheet (the lint).
  *
  * The id is fixed (`WORKSHOP_THEME_ID`), the class is fixed (`t-workshop`)
  * and `known` is true, because the look is ours to paint in the showroom and
  * `settingsNotes` would otherwise measure a screen no shipped look paints.
  */
+import { ATT_CLASS, moodClassProblems } from './moodClass';
 import {
     ATTACHMENT_BITS,
+    SHIPPED_ATTACHMENTS,
     type AttachmentSlot,
     type PaletteDelta,
     type ShippedAttachment,
@@ -325,8 +332,18 @@ function rows(
         }
         let moodPalette: PaletteDelta | undefined;
         if (at === 'moods') {
-            if (raw['cls'] !== undefined || raw['paint'] !== undefined) {
-                problems.push(`${here}: a mood moves the palette and paints nothing — no "cls" or "paint"`);
+            // A mood may name one class (D11): it lands on the stall root
+            // while the mood is worn, and never on the stream overlay. Its
+            // shape here; its owner below, once every row is read; its scope
+            // is the sheet's (every rule under `.t-workshop`, the lint).
+            if (raw['paint'] !== undefined) {
+                problems.push(`${here}.paint: a mood's class lands on the stall root — no "paint"`);
+            }
+            const cls = raw['cls'];
+            if (cls !== undefined && (typeof cls !== 'string' || !ATT_CLASS.test(cls))) {
+                problems.push(
+                    `${here}.cls: must be one class starting with "att-", lower-case letters, digits and single hyphens`,
+                );
             }
             moodPalette = palette(`${here}.palette`, raw['palette'], problems);
             if (moodPalette !== undefined && Object.keys(moodPalette).length === 0) {
@@ -337,7 +354,7 @@ function rows(
                 problems.push(`${here}.palette: only a mood moves the palette`);
             }
             const cls = raw['cls'];
-            if (typeof cls !== 'string' || !/^att-[a-z0-9]+(-[a-z0-9]+)*$/.test(cls)) {
+            if (typeof cls !== 'string' || !ATT_CLASS.test(cls)) {
                 problems.push(
                     `${here}.cls: must be one class starting with "att-", lower-case letters, digits and single hyphens`,
                 );
@@ -356,7 +373,7 @@ function rows(
             place: place!,
             motion: raw['motion'] as boolean,
             ...(at === 'moods'
-                ? { palette: moodPalette! }
+                ? { palette: moodPalette!, ...(raw['cls'] === undefined ? {} : { cls: raw['cls'] as string }) }
                 : { cls: raw['cls'] as string, paint: raw['paint'] as 'root' | 'node' }),
         };
         out.push(row);
@@ -447,6 +464,22 @@ export function lookFromJson(json: Json): WorkshopLook {
             } else {
                 byCls.set(row.cls, row.label);
             }
+        }
+        // A mood's class is the look's own: no other row of this look and
+        // no decoration Stall ships owns it, in either direction of the
+        // child-class rule — `att-rainfall` would wear Neo's rain wherever
+        // stall.css paints `.stall.att-rainfall`, which names no look
+        // (`moodClassProblems`, the catalogue's own pin). A shipped MOOD's
+        // class is not refused: its rules are scoped to its own look, and
+        // `pnpm workshop:start` copies them re-scoped to `.t-workshop` with
+        // the row. Two kit rows with one class are the duplicate check's,
+        // just below.
+        const others = [
+            ...all.filter((other) => other.cls !== row.cls),
+            ...SHIPPED_ATTACHMENTS.filter((shipped) => shipped.slot !== 'mood'),
+        ];
+        for (const why of moodClassProblems(row, others)) {
+            problems.push(`moods: "${row.label}" — ${why}`);
         }
         const place = placeOfSlot.get(row.slot);
         if (place === undefined) {

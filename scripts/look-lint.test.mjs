@@ -81,6 +81,26 @@ describe('the-shipped-look-sheets-pass-the-look-rules', () => {
     });
 });
 
+describe('a-mood-class-rule-is-read-under-its-look', () => {
+    /**
+     * D11 (step 5c): a mood may name one class, which lands on the stall
+     * root beside the look's own. Its rules live in the look's sheet, so the
+     * look rules read them like every other: compounded with the look's
+     * class they pass, and a selector that reaches the class outside the
+     * look is refused — the sheet's half of "look-scoped" (the decor gate's
+     * `a-mood-class-is-look-scoped` reads every served sheet for the same).
+     */
+    it('accepts a mood class compounded with the look, in the sheet and the starter', () => {
+        const rule = '.t-neo.att-harness-dusk .item-n { letter-spacing: 0.02em; }';
+        accepts(rule);
+        assert.deepEqual(lintSheet(plantedKit(rule)), []);
+    });
+
+    it('refuses one read outside the look', () => {
+        plant('.stall.att-harness-dusk .item-n { letter-spacing: 0.02em; }', /is not under \.t-(neo|workshop)/);
+    });
+});
+
 describe('a-look-cannot-target-one-seller', () => {
     /**
      * G3. A value selector is how one look paints one stall differently:

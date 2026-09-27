@@ -68,6 +68,24 @@ describe('a-kit-look-json-is-validated-and-every-fault-listed', () => {
         expect(look.rows[2]!.palette).toEqual({ bg: { r: 20, g: 20, b: 30 } });
     });
 
+    it('takes a mood that names its own class, and carries it to the row (D11)', () => {
+        const look = lookFromJson({
+            label: 'Harbour',
+            base: 'rural',
+            tierCeilings: [6, 8, 10],
+            overlayTierCeilings: [4, 6, 8],
+            moods: [
+                { bit: 1, slot: 'mood', label: 'Rubbing', place: 'the whole palette', motion: false, palette: { bg: [20, 20, 30] }, cls: 'att-rubbing' },
+                { bit: 2, slot: 'mood', label: 'Wash', place: 'the whole palette', motion: false, palette: { bg: [240, 240, 230] } },
+            ],
+            decorations: [],
+        });
+        expect(look.rows.map((row) => [row.label, row.cls, row.paint])).toEqual([
+            ['Rubbing', 'att-rubbing', undefined],
+            ['Wash', undefined, undefined],
+        ]);
+    });
+
     it('lists every fault in one error, and refuses what the file may not say', () => {
         const faulty = {
             label: '\u202Eevil',
@@ -79,6 +97,10 @@ describe('a-kit-look-json-is-validated-and-every-fault-listed', () => {
             tierCeilings: [9, 7, 12],
             moods: [
                 { bit: 0, slot: 'mood', label: 'A', place: 'the palette', motion: false, palette: {}, cls: 'att-a' },
+                { bit: 5, slot: 'mood', label: 'P', place: 'the palette', motion: false, palette: { bg: [1, 1, 1] }, cls: 'att-p', paint: 'root' },
+                { bit: 6, slot: 'mood', label: 'Q', place: 'the palette', motion: false, palette: { bg: [1, 1, 1] }, cls: 'q' },
+                { bit: 7, slot: 'mood', label: 'G', place: 'the palette', motion: false, palette: { bg: [1, 1, 1] }, cls: 'att-rainfall' },
+                { bit: 8, slot: 'mood', label: 'H', place: 'the palette', motion: false, palette: { bg: [1, 1, 1] }, cls: 'att-e-glow' },
             ],
             decorations: [
                 { bit: 16, slot: 'fringe', label: 'B', place: 'top', cls: 'b', paint: 'up', motion: 1, tokenId: 'aa' },
@@ -110,7 +132,10 @@ describe('a-kit-look-json-is-validated-and-every-fault-listed', () => {
             'shape.icon: must be a number of px',
             'tierCeilings: must be three whole numbers',
             'moods[0].palette: a mood must move at least one colour role',
-            'moods[0]: a mood moves the palette and paints nothing',
+            'moods[1].paint: a mood\'s class lands on the stall root',
+            'moods[2].cls: must be one class starting with "att-"',
+            'moods: "G" — att-rainfall: is also att-rainfall',
+            'moods: "H" — att-e-glow: shares an owner with att-e',
             'decorations[0].tokenId: unknown field — a kit row is never minted',
             'decorations[0].bit: must be a whole number from 0 to 15',
             'decorations[0].motion: must be true or false',

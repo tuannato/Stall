@@ -7,7 +7,7 @@ import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
 import { CONTRAST_VIEWPORTS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
-import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, type Look } from './looks';
+import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
 import { KIT_SKELETON } from './workshopStarter';
 
@@ -142,6 +142,35 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // Every tide screen is read somewhere, the wall's Cycle at the desk.
         expect(new Set(tide.map((j) => j.screen))).toEqual(new Set(TIDE_SCREENS));
         expect(tide.length).toBe(46);
+    });
+
+    it('paints one all-worn variant per mood, and a shipped look has one (D11)', () => {
+        // Every shipped look has one mood at most, so `WORN_ALL` is its only
+        // all-worn state and the size pinned above did not move.
+        for (const look of looks) {
+            expect(wornAllFlags(look), look.label).toEqual([WORN_ALL]);
+        }
+        // A harness look with two moods (Ink wash's shape), each with a
+        // class: `WORN_ALL` wears the lower-bit mood alone, so the second is
+        // all-worn under its own flags on every screen that samples worn.
+        const rural = looks.find((look) => look.id === 3)!;
+        const sunFaded = rural.rows.find((row) => row.slot === 'mood')!;
+        const dusk = { ...sunFaded, bit: 9, label: 'Harness dusk', cls: 'att-harness-dusk' };
+        const two: Look = { ...rural, rows: [...rural.rows.map((row) => (row === sunFaded ? { ...row, cls: 'att-harness-fade' } : row)), dusk] };
+        const flags = wornAllFlags(two);
+        expect(flags).toEqual([WORN_ALL, WORN_ALL & ~((1 << sunFaded.bit) | (1 << 9)) | (1 << 9)]);
+        expect(wornOf(two, flags[0]!).filter((row) => row.slot === 'mood').map((row) => row.label)).toEqual([sunFaded.label]);
+        expect(wornOf(two, flags[1]!).filter((row) => row.slot === 'mood').map((row) => row.label)).toEqual(['Harness dusk']);
+        // The rest of the dress is the same under either mood.
+        expect(wornOf(two, flags[1]!).length).toBe(wornOf(two, flags[0]!).length);
+        const once = contrastPlan([rural]);
+        const twice = contrastPlan([two]);
+        const worn = once.filter((job) => job.flags === WORN_ALL && job.reduced !== true);
+        expect(worn.length).toBeGreaterThan(0);
+        expect(twice.length).toBe(once.length + worn.length + once.filter((j) => j.flags === WORN_ALL && j.reduced === true).length);
+        expect(twice.filter((job) => job.flags === flags[1]).map((job) => job.key.replace(`/${flags[1]}`, `/${WORN_ALL}`))).toEqual(
+            once.filter((job) => job.flags === WORN_ALL).map((job) => job.key),
+        );
     });
 
     it('measures a workshop look alone, and never on the door', () => {
