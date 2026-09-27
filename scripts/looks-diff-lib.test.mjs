@@ -184,6 +184,8 @@ describe('looks-diff-expects-by-screen-look-and-variant', () => {
         assert.deepEqual(parseExpect('offers'), { token: 'offers', screen: 'offers', look: '*', variant: '*' });
         assert.deepEqual(parseExpect('*:neo-city/worn'), { token: '*:neo-city/worn', screen: '*', look: 'neo-city', variant: 'worn' });
         assert.deepEqual(parseExpect('offers:rural'), { token: 'offers:rural', screen: 'offers', look: 'rural', variant: '*' });
+        // A look's further mood all-worn (D11): `worn-<mood>`.
+        assert.equal(parseExpect('offers:ink-wash/worn-rubbing').variant, 'worn-rubbing');
         assert.equal(lookSlug('Neo city'), 'neo-city');
         assert.throws(() => parseExpect('offers:neo-city/decorations'), /screen\[:look\[\/variant\]\]/);
         assert.throws(() => parseExpect('Offers'));

@@ -16,10 +16,11 @@
  * - **its scope**: no other row owns it, in either direction of the
  *   `att-a` / `att-a-b` child-class rule the decor gate uses — a mood named
  *   `att-rainfall` would wear Neo's rain wherever stall.css paints
- *   `.stall.att-rainfall`, which is not look-scoped. The CSS half (every rule
- *   naming it names its look's class too) is `a-mood-class-is-look-scoped`
- *   for a shipped look, and the kit's lint for a creator's (every selector
- *   under `.t-workshop`);
+ *   `.stall.att-rainfall`, which is not look-scoped. The CSS half is
+ *   `a-mood-class-is-look-scoped` over every served sheet, the kit's
+ *   included: every rule naming it names its look's class (a kit sheet's own
+ *   `t-workshop` counts) in the same compound, through no functional
+ *   pseudo-class, and beside no other row's `att-` class;
  * - **the overlay strip**: `a-mood-class-never-reaches-the-overlay`.
  *
  * Used by the catalogue's pin test, the decor gate and the kit's `look.json`

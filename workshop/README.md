@@ -26,7 +26,7 @@ outside host blocked.
 |---|---|
 | `pnpm workshop:start modern` (or `neo`, `rural`) | Copies one of Stall's looks into `workshop/` as your starting point: its stylesheet re-scoped to `.t-workshop` and its row as `look.json`. **Start here** — the untouched kit is a bare skeleton: it passes the probe, but it is Stall's plain base with nothing of a look on it. Refuses to write over a stylesheet with a rule in it, or a `look.json` you have changed. |
 | `pnpm workshop` | Builds the app with your look and serves the showroom: every screen, your look, your moods and decorations, with a timeline to pause animations. Prints the address to open. |
-| `pnpm workshop:shots` | Screenshots every screen × bare / every decoration worn / each mood × the widths Stall measures (390, 1280, and the wall and stream sizes), plus a contact sheet at `.workshop-dist/shots-out/index.html`. Prints the count before it starts. |
+| `pnpm workshop:shots` | Screenshots every screen × bare / every decoration worn / each mood, alone and with every decoration × the widths Stall measures (390, 1280, and the wall and stream sizes), plus a contact sheet at `.workshop-dist/shots-out/index.html`. Prints the count before it starts. |
 | `pnpm workshop:probe` | Runs Stall's layout probe on your look alone — the same rules Stall's own looks pass before they ship, in one to two minutes. Red means a rule failed; the message names the screen, the element and the rule. |
 | `pnpm workshop:lint` | A quick read of your stylesheet for the rules below that need no browser. |
 
@@ -150,6 +150,15 @@ ships may use it, and it never reaches the stream overlay, which takes a
 mood's colours only. Without a class, anything that must change with a
 mood is written in the look's colour tokens (`var(--s-…)`).
 *(The kit.)*
+
+A rule under a mood's class is held like a decoration's rule: it lays no
+ground under text — no background, border, outline or box-shadow behind
+words — and puts no mark under a glyph (a shadow, a stroke, an underline)
+beyond the thin outline a decoration may give a line. It also stands
+beside your look's class in one compound (`.t-workshop.att-…`), never
+inside `:is()`, `:not()` or another functional pseudo-class, and never
+beside a decoration's class: a mood does not re-dress a decoration.
+*(Stall at intake.)*
 
 ## Decorations
 

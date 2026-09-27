@@ -128,11 +128,12 @@ export function classify({ before1, after1, before2, after2, masks = [] }) {
  * variant — `offers`, `offers:neo-city/worn`, `offers:neo-city` (either
  * variant), and `*` for every screen (`*:neo-city/worn`: every Neo worn
  * shot). The look is its label's slug (`Neo city` → `neo-city`), the
- * variant `bare` or `worn`, and `*` stands for any. A plain screen is every
+ * variant `bare`, `worn`, or `worn-<mood>` (a look's further mood all-worn,
+ * D11), and `*` stands for any. A plain screen is every
  * look and variant on it, as before.
  */
 export function parseExpect(token) {
-    const m = /^([a-z0-9*-]+)(?::([a-z0-9*-]+)(?:\/(bare|worn|\*))?)?$/.exec(token);
+    const m = /^([a-z0-9*-]+)(?::([a-z0-9*-]+)(?:\/(bare|worn(?:-[a-z0-9-]+)?|\*))?)?$/.exec(token);
     if (m === null) throw new Error(`--expect: "${token}" is not screen[:look[/variant]]`);
     return { token, screen: m[1], look: m[2] ?? '*', variant: m[3] ?? '*' };
 }

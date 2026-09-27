@@ -29,7 +29,7 @@
  * Test: `the-shots-cover-every-probed-screen-and-variant`.
  */
 import { NO_DECOR_SCREENS } from './fixtures';
-import { canWear, type Look } from './looks';
+import { canWear, wornAllFlags, wornOf, type Look } from './looks';
 import { clearScreens, screensAt, wallScreens } from './screenSplit';
 
 export type ShotViewport = {
@@ -105,6 +105,15 @@ export function shotPlan(look: Look): ShotJob[] {
             for (const mood of moods) {
                 variants.push({ variant: `mood-${slug(mood.label)}`, flags: 1 << mood.bit });
             }
+            // Each mood with every decoration — one all-worn state per mood
+            // (D11, `wornAllFlags`): a mood's class, or its palette, beside
+            // the decorations is a paint neither shot above shows.
+            if (moods.length > 0 && decorationBits !== 0 && !NO_DECOR_SCREENS.has(screen)) {
+                for (const flags of wornAllFlags(look)) {
+                    const mood = wornOf(look, flags).find((row) => row.slot === 'mood')!;
+                    variants.push({ variant: `worn-${slug(mood.label)}`, flags });
+                }
+            }
             const grounds: (ShotGround | undefined)[] = clear.has(screen) ? ['dark', 'light'] : [undefined];
             for (const { variant, flags } of variants) {
                 for (const ground of grounds) {
@@ -130,8 +139,9 @@ export type DiffJob = {
     /** The look's id, as `__paint` takes it. */
     readonly look: number;
     readonly lookLabel: string;
-    readonly variant: 'bare' | 'worn';
-    /** `0`, or every decoration at once — the probe's `wornAll` (`wornOf(look, 0xffff)`). */
+    /** `bare`, `worn` (`0xffff`), or `worn-<mood>`: a look's further mood all-worn (D11). */
+    readonly variant: string;
+    /** `0`, every decoration at once — the probe's `wornAll` (`wornOf(look, 0xffff)`) — or one of `wornAllFlags`. */
     readonly flags: number;
     /** The stem the before / after / diff PNGs are written under. */
     readonly file: string;
@@ -153,15 +163,31 @@ export function diffPlan(looks: readonly Look[]): DiffJob[] {
                 if (!canWear(look, screen)) {
                     continue;
                 }
-                const variants = look.rows.length === 0 ? (['bare'] as const) : (['bare', 'worn'] as const);
-                for (const variant of variants) {
+                // Bare, and one all-worn state per mood (D11, `wornAllFlags`):
+                // `worn` is `0xffff` as it always was, and a look's further
+                // mood is `worn-<mood>`. Every shipped look has one mood at
+                // most, so the plan is what it was.
+                const variants: { variant: string; flags: number }[] =
+                    look.rows.length === 0
+                        ? [{ variant: 'bare', flags: 0 }]
+                        : [
+                              { variant: 'bare', flags: 0 },
+                              ...wornAllFlags(look).map((flags, i) => ({
+                                  variant:
+                                      i === 0
+                                          ? 'worn'
+                                          : `worn-${slug(wornOf(look, flags).find((row) => row.slot === 'mood')!.label)}`,
+                                  flags,
+                              })),
+                          ];
+                for (const { variant, flags } of variants) {
                     jobs.push({
                         viewport,
                         screen,
                         look: look.id,
                         lookLabel: look.label,
                         variant,
-                        flags: variant === 'bare' ? 0 : 0xffff,
+                        flags,
                         file: `${viewport.name}/${screen}--${slug(look.label)}--${variant}`,
                     });
                 }

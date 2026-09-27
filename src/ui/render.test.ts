@@ -4885,8 +4885,8 @@ describe('a-mood-class-reaches-the-stall-root', () => {
      * `attachmentClasses` emitted `root` rows alone, so a mood's class
      * reached nothing and a test that it never reached the overlay would
      * have passed over a class that reached nowhere at all. So first: on the
-     * stall, the preview and the wall, the class IS on the root, beside the
-     * look's own class, and the palette moved with it.
+     * stall, the seller's try-on and the wall, the class IS on the root,
+     * beside the look's own class, and the palette moved with it.
      */
     it('puts the class on the stall root, beside the look, with the palette', () => {
         expect(MOODS_WITH_A_CLASS.length).toBeGreaterThan(0);
@@ -4900,6 +4900,30 @@ describe('a-mood-class-reaches-the-stall-root', () => {
             expect(stall.style.getPropertyValue('--s-bg'), mood.label).toBe(
                 `rgb(${mood.palette!.bg!.r}, ${mood.palette!.bg!.g}, ${mood.palette!.bg!.b})`,
             );
+        }
+    });
+
+    it("and on a try-on, which reads the catalogue's own row", () => {
+        // A try-on names bits, and `wornAttachments` reads the shipped
+        // catalogue — so the harness class goes on the catalogue's own row for
+        // the length of this case, and comes off again whatever happens.
+        const row = SHIPPED_ATTACHMENTS.find((a) => a.slot === 'mood' && a.themeId === DEFAULT_THEME_ID)!;
+        const mutable = row as { cls?: string };
+        expect(mutable.cls).toBeUndefined();
+        mutable.cls = 'att-harness-try-on';
+        try {
+            const { root } = paint(
+                idlePubkey({
+                    fetch: { kind: 'offers', offers: [OFFER] },
+                    tokens: new Map([[TOKEN_ID, BEANS]]),
+                    theme: decodeTheme(NEO_CITY_THEME_ID),
+                    previewLook: { themeId: DEFAULT_THEME_ID, attachmentFlags: 1 << row.bit },
+                }),
+            );
+            const stall = root.querySelector<HTMLElement>('.stall')!;
+            expect([...stall.classList]).toEqual(['stall', 't-modern', 'att-harness-try-on']);
+        } finally {
+            delete mutable.cls;
         }
     });
 
@@ -4931,7 +4955,13 @@ describe('a-mood-class-never-reaches-the-overlay', () => {
      * the overlay on every screen below); the positive control above is what
      * makes the red mean something.
      */
-    it('strips the class and keeps the palette, on every broadcast screen', () => {
+    /*
+     * Three screens under one preset, and why that is enough: the strip runs
+     * once, on the root, before the branch paints anything of its own, so no
+     * preset, card mode or screen can reach it by another road — the offers,
+     * empty and opening screens cover a card, no card and the waiting frame.
+     */
+    it('strips the class and keeps the palette, on the offers, empty and opening screens', () => {
         for (const mood of MOODS_WITH_A_CLASS) {
             const theme = decodeTheme(mood.themeId);
             const fetches: FetchStatus[] = [{ kind: 'offers', offers: [OFFER] }, { kind: 'empty' }, { kind: 'opening' }];

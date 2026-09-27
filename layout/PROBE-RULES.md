@@ -1999,9 +1999,13 @@ old rule is now three guards, none of them in the browser:
 - **It is look-scoped**: one `att-` class with no `paint`, owned by no other
   row in either direction of the child-class rule (`moodClassProblems`,
   `layout/moodClass.ts`, read by the catalogue's pin and the kit's
-  `look.json`), and every served rule naming it names its look's class
-  (`a-mood-class-is-look-scoped`, the decor gate; the look lint's
-  `a-mood-class-rule-is-read-under-its-look`). Its rules are
+  `look.json`), and every served rule naming it names its look's class in
+  the same compound — a kit sheet's own `t-workshop` counts, since
+  `workshop:start` copies a shipped mood's rules re-scoped — through no
+  functional pseudo-class (`:is(.t-neo, .t-rural).att-x` names the look as
+  text and matches another), and beside no other row's `att-` class, so a
+  mood never re-dresses a decoration (`a-mood-class-is-look-scoped`, the
+  decor gate; the look lint's `a-mood-class-rule-is-read-under-its-look`). Its rules are
   decoration-scoped by their `.att-` selector, so the ground and mark rules
   read them as they read a decoration's.
 
@@ -2037,6 +2041,18 @@ shipped mood given a class and a rule `.stall.att-…` in stall.css fails
 `a-mood-class-is-look-scoped`; the same class written `.t-modern.att-…`
 passes it; a mood class `att-pinstripe-night` fails the catalogue's pin
 (owned by Pinstripe).
+
+**The critic's read of a60e4eb, closed the next commit.** With After hours
+given a class, each plant red on the new gate and green on a60e4eb's:
+`.t-modern.att-harness-after.att-pinstripe .item` (a mood re-dressing a
+decoration), `:is(.t-neo, .t-modern).att-harness-after .item` and
+`:not(.t-modern).att-harness-after .item` in theme-modern.css. And
+`.t-workshop.att-harness-after .item-n` is green in the kit's sheet on the
+new gate and red on the old (the kit allowed the class, the gate refused
+the starter's re-scoped copy), and red in stall.css on both. The kit's
+shots and `looks:diff` gained the same all-worn state per mood
+(`worn-<mood>`; `looks:diff` keeps `worn` for `0xffff`, so its plan for the
+shipped looks is the 850 shots it was).
 
 **Measured on the day it landed**: `pnpm test:layout` 137.9 s, the contrast
 plan 515 jobs, unchanged. **The capability, end to end, by hand**: the Rural

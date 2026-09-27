@@ -472,8 +472,8 @@ export function lookFromJson(json: Json): WorkshopLook {
         // (`moodClassProblems`, the catalogue's own pin). A shipped MOOD's
         // class is not refused: its rules are scoped to its own look, and
         // `pnpm workshop:start` copies them re-scoped to `.t-workshop` with
-        // the row. Two kit rows with one class are the duplicate check's,
-        // just below.
+        // the row. Two kit rows with one class are the duplicate check's
+        // (`byCls`, above).
         const others = [
             ...all.filter((other) => other.cls !== row.cls),
             ...SHIPPED_ATTACHMENTS.filter((shipped) => shipped.slot !== 'mood'),
