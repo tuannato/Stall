@@ -39,6 +39,7 @@ import {
     waitUntil,
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
+import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
@@ -406,6 +407,12 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/**
+ * Every code a geometry pass painted, as `pass/screen:name` (the probe's
+ * `codesPainted`): the contrast pass lists which of them it read the quiet
+ * zone of and which it did not (D4, `a-code-keeps-its-quiet-zone-white`).
+ */
+const codesPaintedSeen = new Set();
 
 /**
  * Glyph pixels a line's mask must hold per letter or digit. The least any
@@ -1177,6 +1184,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
@@ -1287,6 +1295,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const code of pv.codesPainted ?? []) codesPaintedSeen.add(`${PORTRAIT.name}/${code}`);
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
                 if (pv.failures.length === 0 && gaps.length === 0) {
@@ -1361,6 +1370,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const code of tv.codesPainted ?? []) codesPaintedSeen.add(`${TABLET.name}/${code}`);
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
                 if (tv.failures.length === 0 && gaps.length === 0) {
@@ -1537,6 +1547,11 @@ try {
     const skipTotals = new Map();
     // Visible text no contrast target reads, by element kind, and on how many jobs.
     const uncoveredKinds = new Map();
+    // D4: the codes whose quiet zone was read (`pass/screen:name` → jobs),
+    // the ones a job painted and could not read, and why.
+    const codesRead = new Map();
+    const codesUnread = new Map();
+    let quietPixels = 0;
     // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
     const lineSkips = {};
     try {
@@ -1912,6 +1927,41 @@ try {
                         phases.set('sample', entry);
                     }
                     /*
+                     * D4, `a-code-keeps-its-quiet-zone-white`: every code the
+                     * job's scope paints, its quiet zone read on the capture
+                     * the boxes were read on (`quiet-zone.mjs`). The prepare
+                     * blanks text and nothing else, so the code and its plate
+                     * are painted as a buyer sees them.
+                     */
+                    if (retryWhy.length === 0) {
+                        const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                        for (const z of zones) {
+                            const code = `${vp.name}/${screen}:${z.name}`;
+                            if (z.turned) {
+                                codesUnread.set(code, 'its frame is turned');
+                                continue;
+                            }
+                            const r = readQuietZone(img, z);
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
+                            if (r.fault !== undefined) {
+                                dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
+                                continue;
+                            }
+                            if (r.px === 0) {
+                                codesUnread.set(code, 'wholly outside a clip or the shot');
+                                continue;
+                            }
+                            codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
+                            quietPixels += r.px;
+                            if (r.bad > 0) {
+                                dim.push(
+                                    `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
+                                        `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')})) — a-code-keeps-its-quiet-zone-white`,
+                                );
+                            }
+                        }
+                    }
+                    /*
                      * The ring read (`ringRead`): every outlined target, on a
                      * second capture with its glyphs shown. A failing ring is
                      * read again on a fresh pair before it is believed — the
@@ -2222,6 +2272,9 @@ try {
             // nothing.
             verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
         }
+        if (LOOKS === 'shipped' && codesRead.size === 0) {
+            verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
+        }
         if (LOOKS === 'shipped' && ringTargets === 0) {
             // The ring read has to have read something, or its green is
             // vacuous: the shipped rain outlines lines on every Neo worn
@@ -2275,6 +2328,19 @@ try {
                             ` (${k.ring}px, ${k.n})`,
                     )
                     .join('; '),
+        );
+    }
+    // D4: the codes whose quiet zone was read, and the codes a geometry pass
+    // painted that no contrast job read, whatever the verdict.
+    if (codesRead.size > 0 || codesPaintedSeen.size > 0) {
+        console.log(
+            `  quiet zone, codes read (a-code-keeps-its-quiet-zone-white; jobs; ${quietPixels} px): ` +
+                [...codesRead].sort(([a], [b]) => a.localeCompare(b)).map(([code, n]) => `${code} ${n}`).join(', '),
+        );
+        const notRead = [...codesPaintedSeen].filter((code) => !codesRead.has(code)).sort();
+        console.log(
+            `  quiet zone, codes painted and not read: ` +
+                (notRead.length === 0 ? 'none' : notRead.map((code) => (codesUnread.has(code) ? `${code} (${codesUnread.get(code)})` : code)).join(', ')),
         );
     }
     // Every prepared node that gave no box, by the page's reason, whatever

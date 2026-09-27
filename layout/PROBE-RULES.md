@@ -1764,6 +1764,56 @@ non-aria-hidden text stands in no contrast target, and on how many jobs.
 A report, never a failure — most of it is text on a card every look was
 proved on; it is the list the next target is chosen from.
 
+## A code keeps its quiet zone white (step 5a″, D4, 2026-09-27)
+
+`qrSvg` draws every code on a white rect of its own with four modules of
+white around the matrix — the quiet zone a camera needs to find the code.
+The geometry rules hold every box off a code; nothing held its paint. A
+look that clips the code or strokes an outline over it takes the quiet
+zone away while every box stands where it stood. So on every contrast job
+the runner reads, for every code in the job's scope (`__quietZones`, the
+deck aside), **the ring inside the square the SVG draws into** — the
+content box less its own letterboxing, module = that side over the
+viewBox — from one device pixel in to one device pixel short of the matrix
+(`4 × module − 1`), and every channel of every pixel there must be at least
+245 (`scripts/quiet-zone.mjs`, `QUIET_ZONE_FLOOR`;
+`a-code-keeps-its-quiet-zone-white`, pure half in `quiet-zone.test.mjs`).
+The code's own rounded corner is stepped past where the radius reaches past
+its padding and border, and only up to one module: a radius cutting deeper
+is a fault (CRITIC-STEP-5 item 3 — the square read of v1 failed Modern's 6px,
+Rural's 8px and the wall's and overlay's 4px corners on the sheet's
+ground). The ring is read inside every clipping ancestor and the shot; a
+code whose frame is turned is not read and is listed. The read is on the
+blanked capture, which blanks text alone. A shipped run that read no code
+fails as vacuous.
+
+**Read on the day it landed**: 21 codes, 3,231,032 ring pixels, all white —
+the overlay's (`broadcast`, `broadcast-ticker`), the wall's shop code
+(`shop-window-wall`, and Browse, Cycle, quotes and unbuyable at the desk)
+and its payment plate (`shop-window-touch-quotes-pay`, `-35`), the pay
+sheets' (`pay`, `pay-several`, phone and desk), the record sheets'
+(`publish-name`, `describe`, desk — the phone folds them away) and the
+share code (`studio`, `studio-items`, `unresolved`, both widths). The
+runner prints both lists on every run. **Painted and not read**, because
+their screens are geometry only: every other overlay screen (the same
+plate), `pay-moved`, `pay-xec`, the tag's poster (`pay-tag`, and print is
+not measured at all), `shop-window-cycle-unbuyable`,
+`shop-window-touch-quotes` and `-pay-3` on the canvas, and every wall code
+at 1080×1920 and 768×1024.
+
+**Proved red**, one run, three plants: `.t-neo .qr { clip-path: inset(12px) }`
+→ 42 codes; `.t-modern .qr { outline: 6px solid #e6f0ff; outline-offset:
+-14px }` → 40. The plan's own plant, a tint on the plate's inner edge
+(`.t-rural .qr { box-shadow: inset 0 0 0 12px #f3ddbe }`), reads green, as
+the critic said it would: an inset shadow paints under the SVG's own white
+and reaches only the padding, which is outside the zone `qrSvg` draws.
+**A bug the first run found in the rule itself**: the clip crossed to the
+runner as JSON, where an infinity is `null` and `Math.ceil(null)` is 0, so
+every code under no clipping ancestor (the overlay's, the unresolved
+screen's) read as wholly clipped away — painted, listed as not read, green.
+The page sends finite bounds now and the reader refuses a clip that did
+not arrive as numbers.
+
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
 The contrast prepare collects `CONTRAST_TEXT` and drops every node inside a

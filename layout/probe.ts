@@ -3208,6 +3208,8 @@ const measured = screensToRun();
  * page reports what it saw; the runner decides which names owed a figure.
  */
 const withQuote = new Set<string>();
+/** Every code a measured screen painted, as `screen:name` (D4's not-read list). */
+const codesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
         for (const worn of variantsFor(screen, look)) {
@@ -3228,6 +3230,14 @@ for (const screen of measured) {
                 document.querySelector('[data-role="pay-total"]') !== null
             ) {
                 withQuote.add(screen);
+            }
+            // The codes this screen paints (D4): the runner lists which of
+            // them the contrast pass reads the quiet zone of, and which it
+            // does not.
+            for (const svg of document.querySelectorAll('svg.qr')) {
+                if (svg.closest('.deck-stall') !== null) continue;
+                const box = svg.getBoundingClientRect();
+                if (box.width > 0 && box.height > 0) codesPainted.add(`${screen}:${codeName(svg)}`);
             }
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
@@ -3664,6 +3674,8 @@ declare global {
          * requires. The runner samples the alpha channel OUTSIDE these.
          */
         __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
+        /** Every painted code in the last prepare's scope, for the quiet-zone read (D4). */
+        __quietZones: () => QuietZone[];
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
@@ -4168,6 +4180,88 @@ window.__contrastBoxes = () => {
     return { nonce: preparedNonce, vw: window.innerWidth, vh: window.innerHeight, boxes, skips };
 };
 
+/**
+ * A code's name in a report: the nearest role above it, or its parent's
+ * first class — enough for a person to find which code on the screen it is.
+ */
+function codeName(svg: Element): string {
+    const owner = svg.parentElement?.closest('[data-role]');
+    if (owner !== null && owner !== undefined) return owner.getAttribute('data-role')!;
+    const cls = svg.parentElement?.getAttribute('class')?.split(/\s+/)[0];
+    return cls === undefined || cls === '' ? 'code' : cls;
+}
+
+/**
+ * **A code keeps its quiet zone white** (step 5a″, D4;
+ * `a-code-keeps-its-quiet-zone-white`, `PROBE-RULES.md`). Every painted
+ * code in the last prepare's scope (an open sheet's, or the page's), the
+ * door's deck aside, with the geometry the runner reads its ring from:
+ * the square `qrSvg` draws into — the content box, less the SVG's own
+ * letterboxing (`xMidYMid meet`) — its module (that square over the
+ * viewBox), the corner the element's own radius cuts past its padding and
+ * border, and the clip every clipping ancestor puts on it. A code whose
+ * frame is turned is not read (an axis-aligned ring cannot be read in a
+ * turned box) and says so.
+ */
+type QuietZone = {
+    name: string;
+    x: number;
+    y: number;
+    side: number;
+    module: number;
+    corner: number;
+    clip: { x0: number; y0: number; x1: number; y1: number };
+    turned: boolean;
+};
+
+window.__quietZones = () =>
+    [...(preparedScope ?? document).querySelectorAll<SVGSVGElement>('svg.qr')]
+        .filter((svg) => svg.closest('.deck-stall') === null && getComputedStyle(svg).visibility === 'visible')
+        .map((svg): QuietZone | undefined => {
+            const r = svg.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return undefined;
+            const cs = getComputedStyle(svg);
+            const px = (v: string): number => Number.parseFloat(v) || 0;
+            const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+            const top = px(cs.borderTopWidth) + px(cs.paddingTop);
+            const cw = r.width - left - px(cs.borderRightWidth) - px(cs.paddingRight);
+            const ch = r.height - top - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+            const side = Math.min(cw, ch);
+            const vb = svg.viewBox.baseVal.width;
+            if (!(side > 0) || !(vb > 0)) return undefined;
+            // The element's own radius cuts its corners at the border box;
+            // what it leaves of the content box's corner is the radius past
+            // the inset. Measured on the smallest of the four corners' insets.
+            const radius = px(cs.borderTopLeftRadius);
+            const inset = Math.min(left, top, r.width - left - cw, r.height - top - ch);
+            let x0 = -Infinity;
+            let y0 = -Infinity;
+            let x1 = Infinity;
+            let y1 = Infinity;
+            for (let at = svg.parentElement; at !== null && at !== document.documentElement; at = at.parentElement) {
+                const c = clipOf(at);
+                if (c === undefined) continue;
+                x0 = Math.max(x0, c.x0);
+                x1 = Math.min(x1, c.x1);
+                y0 = Math.max(y0, c.y0);
+                y1 = Math.min(y1, c.y1);
+            }
+            return {
+                name: codeName(svg),
+                x: r.x + left + (cw - side) / 2,
+                y: r.y + top + (ch - side) / 2,
+                side,
+                module: side / vb,
+                corner: Math.max(0, radius - inset),
+                // Finite, because the runner reads this through JSON, where
+                // an infinity is `null` — and a null clip is a clip at 0,
+                // which read every unclipped code as wholly clipped away.
+                clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
+                turned: angleOf(svg) !== 0,
+            };
+        })
+        .filter((z): z is QuietZone => z !== undefined);
+
 window.__opaqueBoxes = () =>
     [...document.querySelectorAll('.plate, .qr')].map((node) => {
         const box = node.getBoundingClientRect();
@@ -4628,6 +4722,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             // mid-fade on one of them (step 3a, `PROBE-RULES.md`).
             el.style.transition = 'none';
             el.style.color = 'transparent';
+
             // Every shadow off but an outline (round 8): the outline is the
             // ground the ring read measures, so it stays in both captures;
             // any other shadow is the glyph's own paint and goes with it.
@@ -4735,6 +4830,7 @@ const verdict = {
     clipSkips,
     clipChecks,
     screensWithQuote: [...withQuote],
+    codesPainted: [...codesPainted].sort(),
     /*
      * What the step-2 rules compared, for the runner to require
      * (`probe-coverage.mjs`): the unbuyable labels read per place, the
