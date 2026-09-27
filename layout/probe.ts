@@ -2562,8 +2562,9 @@ const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test:
  * A decoration's own art on the surface it paints (step 5a″, D14): what the
  * outline is for, like the rain on the root — matched on its form, the
  * element it paints and the class that paints it. Grid horizon's skyline,
- * moon and stars on the sign. Every other layer of that surface is read
- * like any layer under a line.
+ * moon and stars on the sign. Every other layer of that surface is read as
+ * any layer is: a full-size gradient evaluated under the line, a smaller
+ * one set aside and counted, a radial or repeating one held to its stops.
  */
 const SURFACE_ART_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; on: string; test: (layer: string) => boolean }> = [
     {

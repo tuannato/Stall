@@ -413,6 +413,25 @@ const outlinedTargetsSeen = new Set();
  * zone of and which it did not (D4, `a-code-keeps-its-quiet-zone-white`).
  */
 const codesPaintedSeen = new Set();
+/**
+ * The codes the quiet-zone read owes by name: every code that pays — the
+ * pay sheet's and "Pay several"'s at a phone and a desk, the wall's payment
+ * plate — and one of each other kind: a record sheet's, the share code, the
+ * overlay's and the wall's shop code.
+ */
+const CODES_REQUIRED = [
+    'mobile/pay:pay-qr',
+    'desktop/pay:pay-qr',
+    'mobile/pay-several:pay-qr',
+    'desktop/pay-several:pay-qr',
+    'canvas/shop-window-touch-quotes-pay:window-paying',
+    'desktop/publish-name:publish-qr',
+    'desktop/describe:describe-qr',
+    'mobile/studio:copy-link',
+    'desktop/studio:copy-link',
+    'canvas/broadcast:broadcast',
+    'canvas/shop-window-wall:shop-window',
+];
 
 /**
  * Glyph pixels a line's mask must hold per letter or digit. The least any
@@ -2290,6 +2309,15 @@ try {
         }
         if (LOOKS === 'shipped' && codesRead.size === 0) {
             verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
+        }
+        if (LOOKS === 'shipped') {
+            // The codes a buyer pays by are owed by name (the critic, step
+            // 5a″ item 7): a fixture that stopped painting one would leave
+            // the rule green over the rest.
+            const unreadCodes = CODES_REQUIRED.filter((code) => !codesRead.has(code));
+            if (unreadCodes.length > 0) {
+                verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
+            }
         }
         if (LOOKS === 'shipped') {
             // The sign's name is read on every shipped look, bare and worn

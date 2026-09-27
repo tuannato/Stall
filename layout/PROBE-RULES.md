@@ -1814,6 +1814,22 @@ screen's) read as wholly clipped away — painted, listed as not read, green.
 The page sends finite bounds now and the reader refuses a clip that did
 not arrive as numbers.
 
+**The codes owed by name** (the critic, step 5a″ item 7): a run reads the
+quiet zone of every code that pays — `pay` and `pay-several` at 390 and
+1280, the wall's payment plate on the 1920 canvas — and one of each other
+kind (both record sheets at the desk, the share code at both widths, the
+overlay's, the wall's shop code), and fails naming any it did not
+(`CODES_REQUIRED` in the runner). **Not read, stated**: the wall's plate at
+1080×1920 and 768×1024 — the portrait and tablet passes are geometry only,
+and reading them would add two viewports to the contrast plan; not done
+this step. **A code cut by an ancestor's clip reads green on the part still
+showing**: the ring is read only inside every clipping ancestor, so what
+the clip hides is not read. That cut is a geometry rule's, not this one's:
+`.qr` is a protected box, so `cutSideways` fails one cut at a side, and on
+the wall `nothing-on-the-wall-is-cut-from-below` fails one cut on either
+axis; elsewhere a code behind a scroller's edge is on screen once scrolled,
+and the contrast shot grows the page until it is.
+
 ## The seller's name on the sign reads (step 5a″, D14, 2026-09-27)
 
 `.stall-name` is a contrast target on every look (`.stall-name:not(.deck-stall *)`:
@@ -1862,8 +1878,15 @@ one-pixel set, and reads as it is elsewhere.
   horizon screen.
 - **An outline that shows at rest**: the horizon's skyline, moon and stars
   are the decoration's art on its own surface, set aside by name, form,
-  element and class (`SURFACE_ART_SET_ASIDE`), as the rain is on the root;
-  every other layer is read. The outline's colour is the sign panel's top two
+  element and class (`SURFACE_ART_SET_ASIDE`), as the rain is on the root.
+  **Not every other layer is read** (the critic, item 3): a layer sized
+  smaller than its box is set aside and counted ("a gradient smaller than
+  its box") — on the sign that is the horizon's line, its glow, the floor's
+  lines and verticals, the haze and the second accent's sky wash, which
+  stands behind the name at 390 — and a radial or repeating layer is held
+  to its stops (the head's cyan glow and scanlines), which widens the band.
+  Only the full-size floor sink and the panel's own gradient are evaluated
+  under the line. The outline's colour is the sign panel's top two
   stops mixed evenly, `color-mix(in srgb, #101a2c, #0a1120)`, listed in
   `OUTLINE_GROUNDS` under the horizon's scope with a `stops` read that holds
   it to the layer as `theme-neo.css` writes it. Proved red:
@@ -1883,6 +1906,26 @@ one-pixel set, and reads as it is elsewhere.
 
 Proved red for the target itself by the critic's plant, `.t-rural
 .stall-name { color: #7a4c28 }`: 110 jobs at 1.00:1.
+
+**It shows at rest, stated** (the critic, step 5a″ item 2). The outline is
+the panel's colour, and between the white glyph and Neo's cyan halo it
+reads as a dark one-pixel ring round every letter — visible in
+`step5a2-shots/after/neo-horizon-390-name-3x.png`, which the owner has seen.
+The halo is the name's own shadow, painted under the outline, so no colour
+the outline could take matches both the panel and the halo. And the at-rest
+read passes it partly on a band: the head's cyan glow (a radial gradient)
+and scanlines are held to their stops, which widens [lo, hi]; read without
+them, the lamp's outline on `invalid` and the wall's tagline sit 5–18
+levels off the ground (measured, the critic's tightening, not yet guarded —
+see the open decision below).
+
+**The lamp's dip is G7's, and over the skyline it is expected to fail.** The
+dim frames paint the letter in `color-mix(in srgb, var(--s-text) 74%,
+var(--s-bg))`, rgb(166, 184, 192) on Neo. On the panel that reads 8.83:1;
+with a one-pixel ring half covering the art's brightest paints it reads
+2.95:1 over the amber window (`#ffd27a` at 0.8), 2.65:1 over the cyan one
+(`#2ce9e0` at 0.9) and 2.46:1 over the white star (`#e8fbff` at 0.79) — so the
+dip is expected to fail on the skyline, not on the panel, when G7 reads it.
 
 ## The door's deck is not a contrast target (step 5b, 2026-09-26)
 
@@ -3631,7 +3674,9 @@ inside the stops' range and not under the words → the four notice lines
 under every decoration fail "over a ground painted rgb(31, 17, 32) to
 rgb(40, 18, 34)" (0 on `main`).
 
-**Asked only where the rain is worn** (step 5b, CRITIC-FINAL-MERGE item 4).
+**Asked only where the rain is worn** (step 5b, CRITIC-FINAL-MERGE item 4;
+since step 5a″ also where Grid horizon is worn, on the sign alone —
+`OUTLINE_SURFACES`).
 `an-outline-where-the-text-has-its-own-ground` and this rule read an
 element only inside a `.stall.att-rainfall`, where the outline is scoped in
 `stall.css`. Before, the probe read every opaque, unblurred `text-shadow`

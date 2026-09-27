@@ -3,6 +3,12 @@
  * browser half is the contrast pass: it reads the name over its line rects
  * on every shipped look, bare and worn, and fails a run that read none on
  * one of them (`layout-check.mjs`).
+ *
+ * **This half greps `probe.ts`'s source for literal strings** (the critic,
+ * step 5a″ item 10): it pins that the selectors and the blanking are
+ * written, not that they work — a rename that kept the behaviour turns it
+ * red, and a change that broke the behaviour while keeping the strings
+ * leaves it green. The browser guard is the real one; this is its tripwire.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';

@@ -1310,7 +1310,11 @@ function outlineGroundMismatches(
  * shadows, and be exactly one of the two sets. Any other shadow beside it
  * (Neo's heading glow) is the look's own.
  */
-function outlineOffences(css: string, defs: Map<string, string[]> = customProperties(css)): string[] {
+function outlineOffences(
+    css: string,
+    defs: Map<string, string[]> = customProperties(css),
+    runnersCss: string = servedCss(),
+): string[] {
     const grounds = (defs.get('--s-bg') ?? []).map(literalRgb).filter((c): c is Rgb3 => c !== undefined);
     const isGroundLiteral = (token: string): boolean => {
         const rgb = literalRgb(token);
@@ -1327,8 +1331,8 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
         const selectors =
             frame === undefined
                 ? topLevel(m[1]!).map((sel) => sel.replace(/\s+/g, ' ').trim())
-                : runnersOf(clean, frame.name).length > 0
-                  ? runnersOf(clean, frame.name)
+                : runnersOf(`${clean}\n${runnersCss}`, frame.name).length > 0
+                  ? runnersOf(`${clean}\n${runnersCss}`, frame.name)
                   : [`@keyframes ${frame.name} (run by no rule)`];
         for (const d of declarationsOf(m[2]!).filter((decl) => decl.prop === 'text-shadow')) {
             for (const value of expansions(d.value.replace(/\s*!important\s*$/i, ''), defs)) {
@@ -1377,6 +1381,15 @@ function outlineOffences(css: string, defs: Map<string, string[]> = customProper
         }
     }
     return out;
+}
+
+/**
+ * Every served sheet, comments out, one after another: a keyframe is run by
+ * a rule in any of them (the critic, step 5a″ item 4 — a look sheet may run
+ * a keyframe stall.css declares), so its runners are looked for in all.
+ */
+function servedCss(): string {
+    return SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')).join('\n');
 }
 
 /** Where each `@keyframes` block of `css` begins and ends, by name. */
@@ -1737,6 +1750,29 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         expect(outlineOffences(`${frame} .stall.att-horizon .x { animation: wk-o 1s; }`)).toEqual([]);
         expect(outlineOffences(`${frame} .t-neo .x { animation: wk-o 1s; }`)).not.toEqual([]);
         expect(outlineOffences(`${frame} .stall.att-horizon .x { animation: wk-o 1s; } .t-neo .y { animation: wk-o 1s; }`)).not.toEqual([]);
+        // A runner in another sheet counts (step 5a″ item 4): the frame in
+        // one sheet, a look sheet running it in another, refused; the
+        // shipped outlined flicker run by a look sheet, refused too.
+        expect(outlineOffences(frame, undefined, '.stall.att-horizon .x { animation: wk-o 1s; }')).toEqual([]);
+        expect(outlineOffences(frame, undefined, '.stall.att-horizon .x { animation: wk-o 1s; } .t-neo .y { animation: wk-o 1s; }')).not.toEqual([]);
+        const stall = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
+        expect(outlineOffences(stall, undefined, `${servedCss()}\n.t-neo .sign-lamp { animation: att-hum-gutter-outlined 7s linear infinite; }`)).not.toEqual([]);
+    });
+
+    it('runs the lamp’s outlined flicker frame for frame as the plain one, the outline under every glow', () => {
+        // Step 5a″ item 5: `att-hum-gutter-outlined` is `att-hum-gutter`
+        // with `var(--rain-outline-1)` first in every frame's shadow, and
+        // nothing else — a drifted copy would flicker differently over the
+        // horizon than off it.
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const frames = keyframesIn(css);
+        const plain = frames.get('att-hum-gutter');
+        const outlined = frames.get('att-hum-gutter-outlined');
+        expect(plain).toBeDefined();
+        expect(outlined).toBeDefined();
+        const norm = (body: string): string => squash(body.replace(/\s+/g, ' '));
+        expect(norm(outlined!)).toBe(norm(plain!.replace(/text-shadow:\s*/g, 'text-shadow: var(--rain-outline-1), ')));
+        expect((outlined!.match(/var\(--rain-outline-1\)/g) ?? []).length).toBe((plain!.match(/text-shadow:/g) ?? []).length);
     });
 });
 

@@ -909,6 +909,12 @@ body {
  * the outline in every frame (`att-hum-gutter-outlined`), or that one letter
  * would stand on the skyline bare. The sets are declared on the sign
  * (above), where this ground's colour is read.
+ *
+ * **It shows at rest, stated** (the critic, step 5a″ item 2): between the
+ * white glyph and Neo's cyan halo the outline is a dark one-pixel ring round
+ * every letter. The halo is the name's own shadow, painted under the
+ * outline, and no one colour matches both it and the panel
+ * (`PROBE-RULES.md`, "The seller's name on the sign reads").
  */
 .stall.att-horizon:not(.deck-stall) .stall-sign {
     --rain-outline-ground: color-mix(in srgb, #101a2c, #0a1120);
