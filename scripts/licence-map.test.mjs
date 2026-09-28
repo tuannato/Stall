@@ -38,8 +38,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /**
  * What git says about a checkout: the tracked files, the tree (tracked plus
  * untracked and not ignored), whether the clone is shallow, `origin/main`,
- * and every commit reachable from HEAD and not from `origin/main` — what a
- * push of HEAD would publish — that touches `src/looks` in any case.
+ * and every commit a push could publish — reachable from a local branch, a
+ * tag or HEAD and from no `origin/*` ref, so `push --all` and `push --tags`
+ * are covered as well as HEAD's own — with every path each one touches.
+ * No pathspec narrows the list: the lib's test is applied to each path,
+ * because a pathspec folds case the way git does and a disk may fold more.
  */
 function readGitFacts(root, git = 'git') {
     const run = (args) =>
@@ -63,27 +66,36 @@ function readGitFacts(root, git = 'git') {
             throw error;
         }
     }
-    const pathspec = `:(icase)${LOOK_ART_ROOT.slice(0, -1)}`;
+    // One record per commit (and per parent of a merge, -m): "\x01<hash>",
+    // then its paths, NUL-terminated, the first after a newline git adds.
     const unpushed = [];
-    if (upstream !== undefined) {
-        const commits = run(['rev-list', '--full-history', 'HEAD', '--not', upstream, '--', pathspec])
-            .split('\n')
-            .filter((line) => line !== '');
-        for (const commit of commits) {
-            const paths = list([
-                'diff-tree',
-                '-z',
-                '-r',
-                '-m',
-                '--root',
-                '--no-renames',
-                '--no-commit-id',
-                '--name-only',
-                commit,
-                '--',
-                pathspec,
-            ]);
-            unpushed.push({ commit, paths: [...new Set(paths)] });
+    const out = run([
+        'log',
+        '-z',
+        '-m',
+        '--full-history',
+        '--no-renames',
+        '--name-only',
+        '--format=%x01%H',
+        '--branches',
+        '--tags',
+        'HEAD',
+        '--not',
+        '--remotes=origin',
+    ]);
+    let current;
+    let first = false;
+    for (const token of out.split('\0')) {
+        if (token.startsWith('\x01')) {
+            current = unpushed.find((entry) => entry.commit === token.slice(1));
+            if (current === undefined) {
+                current = { commit: token.slice(1), paths: [] };
+                unpushed.push(current);
+            }
+            first = true;
+        } else if (token !== '' && current !== undefined) {
+            current.paths.push(first && token.startsWith('\n') ? token.slice(1) : token);
+            first = false;
         }
     }
     return { tracked, tree, shallow, upstream, unpushed };
@@ -95,16 +107,21 @@ function readGitFacts(root, git = 'git') {
  * `peerDependencies` (a peer its `peerDependenciesMeta` marks optional
  * counts as optional), each looked up the way `require` looks — the
  * `node_modules/<name>` of the dependent's real folder and every folder
- * above it. `--frozen-lockfile` is what keeps that tree the lockfile's.
+ * above it, up to the checkout. `--frozen-lockfile` is what keeps that tree
+ * the lockfile's.
  */
 function productionPackages(root) {
+    // Climb no higher than the checkout (or, where `node_modules` is a
+    // link, the checkout it points into): a package above the repository is
+    // not one this repository installs.
+    const tops = new Set([realpathSync(root), dirname(realpathSync(join(root, 'node_modules')))]);
     const lookup = (from, name) => {
         for (let dir = from; ; dir = dirname(dir)) {
             const json = join(dir, 'node_modules', name, 'package.json');
             if (existsSync(json)) {
                 return realpathSync(dirname(json));
             }
-            if (dirname(dir) === dir) {
+            if (tops.has(dir) || dirname(dir) === dir) {
                 return undefined;
             }
         }
@@ -113,7 +130,7 @@ function productionPackages(root) {
     const missing = [];
     const uninstalledOptional = [];
     const rootJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-    const queue = Object.keys(rootJson.dependencies ?? {}).map((name) => ({ from: root, by: 'the root', name, kind: 'dependency' }));
+    const queue = Object.keys(rootJson.dependencies ?? {}).map((name) => ({ from: realpathSync(root), by: 'the root', name, kind: 'dependency' }));
     while (queue.length > 0) {
         const { from, by, name, kind } = queue.shift();
         const dir = lookup(from, name);
@@ -226,8 +243,20 @@ describe('every-licence-file-is-on-the-map', () => {
     it('refuses a licence-looking file in any case that no row names', () => {
         const tracked = ['LICENSE', 'vendor/NOTICE.md', 'public/licenses.txt', ...fontLicences];
         assert.deepEqual(licenceFileProblems({ tracked, fontLicences }), []);
-        for (const planted of ['src/looks/x/LICENSE', 'src/licence.txt', 'COPYING', 'docs/notice.md', 'src/ui/fonts/OFL.txt']) {
+        for (const planted of [
+            'src/looks/x/LICENSE',
+            'src/licence.txt',
+            'COPYING',
+            'docs/notice.md',
+            'src/ui/fonts/OFL.txt',
+            'Licenses-MIT',
+            'NOTICES.TXT',
+        ]) {
             assert.equal(licenceFileProblems({ tracked: [...tracked, planted], fontLicences }).length, 1, planted);
+        }
+        // A name that only starts like one: code, not a licence.
+        for (const code of ['scripts/notices.mjs', 'scripts/notices-lib.mjs', 'scripts/licence-map-lib.mjs', 'src/ui/notice.ts', 'src/offline.ts']) {
+            assert.deepEqual(licenceFileProblems({ tracked: [...tracked, code], fontLicences }), [], code);
         }
         // A row's licence file that git does not track.
         assert.equal(licenceFileProblems({ tracked: tracked.filter((p) => p !== 'LICENSE'), fontLicences }).length, 1);
@@ -329,7 +358,9 @@ describe('look-art-waits-for-its-licence', () => {
         git('update-index', '--force-remove', 'src/looks/a.svg');
         plant('art/a.svg');
         git('commit', '-q', '-m', 'move');
-        assert.deepEqual(readGitFacts(dir).unpushed.map((c) => c.paths), [['src/looks/a.svg']]);
+        const moved = readGitFacts(dir);
+        assert.deepEqual(moved.unpushed.map((c) => c.paths.sort()), [['art/a.svg', 'src/looks/a.svg']]);
+        assert.equal(lookArtProblems(moved).length, 1);
     });
 
     it('reads a merge that brings the directory in and an untracked file under it', () => {
@@ -348,6 +379,23 @@ describe('look-art-waits-for-its-licence', () => {
         assert.equal(lookArtProblems(readGitFacts(untracked.dir)).length, 1, 'untracked and not ignored is in the tree');
     });
 
+    it('reads a commit on another local branch and under a tag, which HEAD does not reach', () => {
+        const { dir, git, plant } = plantRepo();
+        git('checkout', '-q', '-b', 'other');
+        plant('src/looks/o.svg');
+        git('commit', '-q', '-m', 'other');
+        git('update-index', '--force-remove', 'src/looks/o.svg');
+        git('checkout', '-q', 'main');
+        const branch = readGitFacts(dir);
+        assert.deepEqual(branch.tree, ['a.txt'], 'HEAD is clean');
+        assert.equal(lookArtProblems(branch).length, 1, 'push --all would publish the other branch');
+        git('tag', 'kept', 'other');
+        git('branch', '-q', '-D', 'other');
+        assert.equal(lookArtProblems(readGitFacts(dir)).length, 1, 'push --tags would publish the tag');
+        git('tag', '-d', 'kept');
+        assert.deepEqual(lookArtProblems(readGitFacts(dir)), []);
+    });
+
     it('fails on a shallow clone, with no origin/main, and when git cannot run', () => {
         const { dir, git } = plantRepo();
         git('commit', '-q', '--allow-empty', '-m', 'second');
@@ -364,7 +412,7 @@ describe('look-art-waits-for-its-licence', () => {
         assert.throws(() => readGitFacts(dir, join(dir, 'no-such-git')), /ENOENT/);
     });
 
-    it('finds src/looks empty in this checkout and in every commit a push of HEAD would publish', () => {
+    it('finds src/looks empty in this checkout and in every commit a push would publish', () => {
         assert.deepEqual(lookArtProblems(facts), []);
     });
 });
@@ -389,6 +437,38 @@ describe('a-case-variant-of-the-look-art-directory-is-refused', () => {
 
     it('finds no path in this checkout spelled two ways', () => {
         assert.deepEqual(caseVariantProblems(facts.tree), []);
+    });
+});
+
+describe('a-path-that-folds-to-src-looks-is-refused', () => {
+    // U+017F LATIN SMALL LETTER LONG S: APFS folds it to "s", lower-casing
+    // and git's :(icase) do not.
+    const folded = 'src/look\u017f/a.svg';
+    const clean = { tree: ['src/app.ts'], shallow: false, upstream: 'abc', unpushed: [] };
+
+    it('refuses a path that is not printable ASCII, in the tree and in a commit', () => {
+        assert.equal(folded.toLowerCase().startsWith(LOOK_ART_ROOT), false, 'lower-casing does not see it');
+        assert.equal(lookArtProblems({ ...clean, tree: [folded] }).length, 1);
+        assert.equal(lookArtProblems({ ...clean, unpushed: [{ commit: 'c1', paths: ['src/app.ts', folded] }] }).length, 1);
+        assert.equal(lookArtProblems({ ...clean, tree: ['src/caf\u00e9.ts', 'src/a\tb.ts'] }).length, 2);
+        assert.deepEqual(lookArtProblems({ ...clean, unpushed: [{ commit: 'c1', paths: ['src/app.ts'] }] }), []);
+    });
+
+    it('reads one planted and removed again in a repository, where no pathspec would', () => {
+        const { dir, git, plant } = plantRepo();
+        plant(folded);
+        git('commit', '-q', '-m', 'folded');
+        assert.equal(lookArtProblems(readGitFacts(dir)).length, 2, 'in the tree and in the commit');
+        git('update-index', '--force-remove', folded);
+        git('commit', '-q', '-m', 'gone');
+        const facts2 = readGitFacts(dir);
+        assert.deepEqual(facts2.tree, ['a.txt']);
+        assert.equal(lookArtProblems(facts2).length, 2, 'both commits touch it');
+        assert.equal(git('log', '--format=%H', 'HEAD', '--not', '--remotes=origin', '--', ':(icase)src/looks'), '', 'the pathspec misses it');
+    });
+
+    it('finds every path in this checkout printable ASCII', () => {
+        assert.deepEqual(facts.tree.filter((path) => !/^[\x20-\x7e]+$/.test(path)), []);
     });
 });
 
@@ -435,8 +515,13 @@ describe('no-creator-art-is-tracked-in-the-kit', () => {
         assert.deepEqual(kitProblems(facts.tracked), []);
     });
 
-    it('tells a creator that a public fork puts their files under its MIT licence', () => {
+    it('warns a creator that a public fork is read as MIT', () => {
         const readme = readFileSync(join(ROOT, 'workshop', 'README.md'), 'utf8').replace(/\s+/g, ' ');
-        assert.ok(readme.includes("sits under that fork's MIT LICENSE"), 'the kit README does not say it');
+        assert.ok(
+            readme.includes(
+                'Anyone reading a public fork will take every file in it to be under its MIT LICENSE; keep a look you mean to send out of any public repository.',
+            ),
+            'the kit README does not say it',
+        );
     });
 });

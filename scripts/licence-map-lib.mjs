@@ -69,34 +69,24 @@ export function rowFor(path, map = LICENCE_MAP) {
 
 /**
  * A file whose name says it carries licence terms: LICENSE, LICENCE,
- * COPYING, NOTICE, OFL, in any case, with anything after.
+ * COPYING, NOTICE or OFL, in any case, singular or plural, with an optional
+ * `-suffix`, and no extension or `.md` / `.txt` — so `LICENSE-OFL.txt` and
+ * `licenses.txt` are licence files, and `notices.mjs` or a future
+ * `src/ui/notice.ts` are not.
  */
-export const LICENCE_LOOKING = /^(licen[cs]e|copying|notice|ofl)/i;
-
-/**
- * The scripts whose names look like licence files and are not: they write
- * and check the notices and this map.
- */
-export const LICENCE_LOOKING_EXCEPTIONS = [
-    'scripts/licence-map-lib.mjs',
-    'scripts/licence-map.test.mjs',
-    'scripts/notices-lib.mjs',
-    'scripts/notices.mjs',
-    'scripts/notices.test.mjs',
-];
+export const LICENCE_LOOKING = /^(licen[cs]es?|copying|notices?|ofl)(-[^/.]*)?(\.(md|txt))?$/i;
 
 const baseName = (path) => path.slice(path.lastIndexOf('/') + 1);
 
 /**
- * Every tracked licence-looking file must be one a map row names, one of the
- * `fontLicences`, or a named exception.
+ * Every tracked licence-looking file must be one a map row names or one of
+ * the `fontLicences`.
  */
 export function licenceFileProblems({ tracked, fontLicences, map = LICENCE_MAP }) {
     const named = new Set([...map.flatMap((row) => row.licenceFiles), ...fontLicences]);
-    const exceptions = new Set(LICENCE_LOOKING_EXCEPTIONS);
     const problems = [];
     for (const path of tracked) {
-        if (!LICENCE_LOOKING.test(baseName(path)) || named.has(path) || exceptions.has(path)) {
+        if (!LICENCE_LOOKING.test(baseName(path)) || named.has(path)) {
             continue;
         }
         problems.push(`${path}: a licence-looking file no row of the licence map names`);
@@ -116,30 +106,54 @@ export function isLookArt(path) {
 }
 
 /**
+ * A path the guard refuses, and why: anything that is not printable ASCII
+ * (APFS folds more than capitals — `src/lookſ/` with U+017F is `src/looks/`
+ * to the disk, and neither lower-casing nor git's `:(icase)` sees it), and
+ * anything under `src/looks` in any case.
+ */
+export function refusedPath(path) {
+    if (!/^[\x20-\x7e]+$/.test(path)) {
+        return 'a path that is not printable ASCII (a disk that folds case may fold it into another)';
+    }
+    if (isLookArt(path)) {
+        return `${LOOK_ART_ROOT} is reserved, empty until LICENSE maps it`;
+    }
+    return undefined;
+}
+
+/**
  * `src/looks` stays empty — in the tree (tracked, or untracked and not
- * ignored) and in every commit a push would publish — until LICENSE maps it.
+ * ignored) and in every commit a push would publish — until LICENSE maps it,
+ * and no path anywhere is one a case-folding disk could turn into it.
  *
  * `facts`: `{ tree: string[], shallow: boolean, upstream: string | undefined,
  * unpushed: { commit: string, paths: string[] }[] }`. `unpushed` is every
- * commit reachable from HEAD and not from `upstream` that touches the
- * directory in any case; `upstream` undefined means there was nothing to
- * compare against, which fails rather than passing on an empty list.
+ * commit reachable from a local branch, a tag or HEAD and from no
+ * `origin/*` ref, with EVERY path it touches: the test is applied here, not
+ * by a git pathspec. `upstream` undefined means there is no `origin/main`,
+ * which fails rather than passing on an empty list.
  */
 export function lookArtProblems({ tree, shallow, upstream, unpushed }) {
     const problems = [];
-    for (const path of tree.filter(isLookArt)) {
-        problems.push(`${path}: ${LOOK_ART_ROOT} is reserved, empty until LICENSE maps it`);
+    for (const path of tree) {
+        const why = refusedPath(path);
+        if (why !== undefined) {
+            problems.push(`${JSON.stringify(path)}: ${why}`);
+        }
     }
     if (shallow) {
         problems.push('a shallow clone: the commits a push would publish cannot all be read');
     }
     if (upstream === undefined) {
-        problems.push('no origin/main to compare HEAD with: the commits a push would publish are unknown');
+        problems.push('no origin/main to compare with: the commits a push would publish are unknown');
     }
     for (const { commit, paths } of unpushed) {
-        problems.push(
-            `commit ${commit}, not on origin/main, touches ${LOOK_ART_ROOT}: ${paths.join(', ') || '(a merge)'}`,
-        );
+        const refused = [...new Set(paths)].filter((path) => refusedPath(path) !== undefined);
+        if (refused.length > 0) {
+            problems.push(
+                `commit ${commit}, on no origin/* ref, touches ${refused.map((p) => JSON.stringify(p)).join(', ')}: ${refusedPath(refused[0])}`,
+            );
+        }
     }
     return problems;
 }

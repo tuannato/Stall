@@ -76,6 +76,9 @@ pnpm test
 
 Runs the app's suite and the icon Worker's own tests. Green means the runner's
 own exit code was 0 and the summary line is in view.
+`pnpm test` needs a full git clone whose `origin` has `main`: a Download ZIP
+copy fails at import with `fatal: not a git repository`, and a shallow clone
+or a remote under another name fails the licence map's guard.
 
 ```bash
 pnpm test:layout
