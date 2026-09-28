@@ -76,6 +76,9 @@ pnpm test
 
 Runs the app's suite and the icon Worker's own tests. Green means the runner's
 own exit code was 0 and the summary line is in view.
+`pnpm test` needs a full git clone whose `origin` has `main`: a Download ZIP
+copy fails at import with `fatal: not a git repository`, and a shallow clone
+or a remote under another name fails the licence map's guard.
 
 ```bash
 pnpm test:layout
@@ -136,5 +139,9 @@ in the tests named above.
 
 [MIT](LICENSE) for this repository's own source.
 
-Packages under `vendor/` are separate. They are MIT and belong to the Bitcoin
-ABC project, and their terms travel with them.
+Packages under `vendor/` are separate: each is MIT under its own authors'
+copyright, and [vendor/NOTICE.md](vendor/NOTICE.md) names every tarball with
+its holders. The fonts under `src/ui/fonts/` are under the SIL Open Font
+License 1.1, each beside its own licence file. What the site sends to a
+browser, and the notices that travel with it, are listed in
+[public/licenses.txt](public/licenses.txt), served at `/licenses.txt`.

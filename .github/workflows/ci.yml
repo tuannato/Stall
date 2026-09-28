@@ -26,7 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # `pnpm test` holds src/looks empty in every commit on no origin/* ref
+      # (scripts/licence-map.test.mjs), and refuses a shallow clone or one
+      # with no origin/main: the whole history, then origin/main fetched by
+      # name, since a pull_request checkout sits on the merge ref.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
