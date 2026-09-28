@@ -2,7 +2,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { before, describe, it } from 'node:test';
-import { NOTICES_PATH, ROOT, bundleInventory, composeNotices } from './notices.mjs';
+import { FONTS, NOTICES_PATH, ROOT, bundleInventory, composeNotices } from './notices.mjs';
+import { LICENCE_ALLOW as NOTICES_ALLOW } from './notices-lib.mjs';
 
 /**
  * `public/licenses.txt` against what the bundle actually ships.
@@ -24,6 +25,13 @@ before(
 );
 
 const LICENCE_ALLOW = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
+
+describe('the-licence-allow-list-is-the-owners', () => {
+    it('is the literal the owner set, in the lib the script and the licence map both read', () => {
+        assert.deepEqual(NOTICES_ALLOW, ['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
+        assert.deepEqual(new Set(NOTICES_ALLOW), LICENCE_ALLOW);
+    });
+});
 
 /** Formatting aside: the file's words, compared with a source's words. */
 const flat = (text) => text.replace(/\s+/g, ' ').trim();
@@ -129,11 +137,12 @@ describe('the-notices-name-every-package-the-bundle-ships', () => {
             for (const source of asset.originalFileNames) {
                 const base = source.slice(source.lastIndexOf('/') + 1);
                 assert.ok(text.includes(base), `${base} is served and not named`);
-                // The licence that travels with a font sits beside it.
-                const dir = join(ROOT, dirname(source));
-                const licence = readdirSync(dir).find((name) => /licen[cs]e|ofl/i.test(name));
-                assert.ok(licence !== undefined, `${source} has no licence beside it`);
-                const words = plain(readFileSync(join(dir, licence), 'utf8'));
+                // The licence that travels with a font is its own entry's,
+                // beside it — never the first licence-looking file there.
+                const font = FONTS.find((entry) => entry.files[source] !== undefined);
+                assert.ok(font !== undefined, `${source} is served and FONTS does not name it`);
+                assert.equal(dirname(font.licence), dirname(source), `${source}: its licence is not beside it`);
+                const words = plain(readFileSync(join(ROOT, font.licence), 'utf8'));
                 assert.ok(flat(text).includes(words), `${source}: its licence is not in the file whole`);
             }
         }

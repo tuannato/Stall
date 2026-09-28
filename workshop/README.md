@@ -235,3 +235,7 @@ under Stall's review, so your files are processed that way.
 The kit is part of Stall and under the same MIT License as the rest of this
 repository. A look or decoration you send is covered by its own agreement,
 not by this licence.
+
+A clone of this repository pushed to a public fork sits under that fork's MIT
+LICENSE, and so does every file you commit to it: keep a look you mean to
+send in out of a public repository.
