@@ -1,0 +1,8 @@
+{
+  "name": "stall-deploy",
+  "private": true,
+  "description": "wrangler for .github/workflows/deploy.yml alone; never part of the app's install",
+  "devDependencies": {
+    "wrangler": "4.143.0"
+  }
+}

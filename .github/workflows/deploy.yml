@@ -1,0 +1,92 @@
+# The direct deploy road, preview only (step 7B-1). Pages' own Git build
+# still deploys `main` to production; this workflow never touches it. It
+# answers one question before anything depends on the answer: does
+# `wrangler pages deploy` land in the Git-connected project, serving the
+# same headers, redirects, 404 page and edge function the Git build serves?
+#
+# Run by hand only, from `main` (Actions → deploy → Run workflow): no `push`
+# and never a `pull_request` trigger. Two jobs, because a secret handed to
+# one step is not kept from code that ran earlier in the same job (an
+# install script, a build plugin, a test can write `$GITHUB_ENV` or
+# `$GITHUB_PATH`, or read the runner): `build` builds and tests with no
+# secret at all and hands `dist` on; `deploy` runs on a fresh machine,
+# installs with `--ignore-scripts`, runs no project code, and alone reads
+# the Cloudflare secrets, from the `cloudflare` Environment, which admits
+# `main` only. `scripts/deploy-workflow.test.mjs` holds these rules.
+name: deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The whole history and origin/main, for ci.yml's reason: `pnpm test`
+      # holds src/looks empty in every unpushed commit. No credential is
+      # left in the checkout: nothing here pushes.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          # ci.yml's reason: pnpm arrives from corepack in the next step.
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cloudflare
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare --activate
+      # functions/ imports packages from the root install; wrangler has its
+      # own package and lockfile. Neither install runs a package's scripts.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # From the repository root, so wrangler compiles ./functions. The
+      # first call fails when the project does not exist, so the deploy
+      # never creates one.
+      - name: Deploy dist to the preview-direct branch
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          deploy/node_modules/.bin/wrangler pages deployment list --project-name stall > /dev/null
+          deploy/node_modules/.bin/wrangler pages deploy dist --project-name stall --branch preview-direct --commit-hash "$GITHUB_SHA" --commit-dirty=false
