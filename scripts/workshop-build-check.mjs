@@ -21,7 +21,8 @@
  * - a file the baseline emits under the same name, byte for byte — every
  *   font, decoration and deck picture the app ships;
  * - an output the creator's files legitimately change (a chunk, a CSS
- *   bundle, an HTML entry), matched by its name with the content hash
+ *   bundle, the kit's sheet's own file — the kit loads it the worn-only
+ *   way, 8d1 — an HTML entry), matched by its name with the content hash
  *   stripped, **as a multiset**: a stranger named like a real chunk
  *   (`url(…/render.js)` emits `assets/render-<hash>.js`) finds its name
  *   already taken;
@@ -112,7 +113,13 @@ export async function kitBaseline({ configFile, root = process.cwd() }) {
                     resolved = config;
                 },
                 load(id) {
-                    return id.split('?')[0] === sheet ? BASELINE_SHEET : undefined;
+                    const [path, query = ''] = id.split('?');
+                    // The kit's pages import the sheet with `?url` (the
+                    // worn-only road, 8d1), which Vite answers by importing
+                    // it again with `?transform-only`: that second module is
+                    // the sheet's text, and the stand-in goes there.
+                    if (path !== sheet || new URLSearchParams(query).has('url')) return undefined;
+                    return BASELINE_SHEET;
                 },
             },
         ],
@@ -128,7 +135,12 @@ export async function kitBaseline({ configFile, root = process.cwd() }) {
     let cssText = '';
     for (const part of outputs) {
         const bytes = Buffer.from(part.type === 'chunk' ? part.code : part.source);
-        const isCss = css.has(part.fileName);
+        // The kit's sheet is its own file (`?url`, the worn-only road since
+        // 8d1), in no page's entry CSS: a creator's sheet changes it, so it
+        // is matched by name like a CSS bundle and read for `data:` URLs.
+        const isKitSheet =
+            part.type === 'asset' && (part.originalFileNames ?? []).some((name) => resolve(root, name) === sheet);
+        const isCss = css.has(part.fileName) || isKitSheet;
         const mayDiffer = part.type === 'chunk' || isCss || part.fileName.endsWith('.html');
         files.set(part.fileName, { bytes, mayDiffer });
         if (isCss) cssText += `${bytes.toString('utf8')}\n`;

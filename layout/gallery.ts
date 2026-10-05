@@ -26,10 +26,11 @@
  *   __diffPlan()                    — the shipped looks' before/after list (`pnpm looks:diff`)
  *   __screens()                     — every fixture screen this build paints
  *   __lookSheets()                  — each painted stall's `t-*` class and the name its sheet gives it
- *   __galleryReady                  — true once the module has evaluated
+ *   __galleryReady                  — true once the module has evaluated, a look's sheet that did not load included
  *
- * A worn-only look's sheet is appended before the first paint, the way the
- * probe's page does (`wornSheet.ts`) — none today: no row is worn only — and
+ * A worn-only look's sheet is loaded before the first paint, through the
+ * app's loader (`src/ui/lookSheets.ts`), the way the probe's page does
+ * (`wornSheet.ts`) — the kit's, which loads the worn-only way (8d1) — and
  * `pnpm looks:diff` refuses a shot whose painted look its sheet did not
  * name (`looks-diff-refuses-a-look-painted-without-its-sheet`).
  */
@@ -38,11 +39,10 @@ import { WORKSHOP_THEME_ID } from '../src/domain/theme';
 import { SCREENS, handlers } from './fixtures';
 import { galleryLooks, kitLook, lookById, registerWorkshopLook, shippedLooks, wornOf, type Look } from './looks';
 import { diffPlan, shotPlan, type DiffJob, type ShotJob } from './shotPlan';
+import { loadLookSheet } from '../src/ui/lookSheets';
 import { loadKitLook } from './workshopKit';
-import { loadWornSheet, lookSheetReads, wornSheetsOf, type LookSheetRead } from './wornSheet';
-// After the app's own sheets (imported through `render`), so the kit's sheet
-// lands where a shipped look's does: last among equals in the cascade.
-import '../workshop/theme-workshop.css';
+import { KIT_SHEET_URL } from './workshopKitSheet';
+import { lookSheetReads, wornSheetsOf, type LookSheetRead } from './wornSheet';
 
 const app = document.getElementById('app')!;
 const ui = document.getElementById('gallery-ui')!;
@@ -55,13 +55,25 @@ const params = new URLSearchParams(location.search);
  */
 let kitProblem: string | undefined;
 try {
-    registerWorkshopLook(loadKitLook());
+    registerWorkshopLook(loadKitLook(), KIT_SHEET_URL);
 } catch (err) {
     kitProblem = (err as Error).message;
 }
 
-// Every worn-only look this showroom offers, its sheet on the page before the first paint.
-await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadWornSheet(url, cls)));
+// Every worn-only look this showroom offers, its sheet on the page before
+// the first paint — through the app's loader, after every sheet the page
+// links: the kit's lands where a private look's does in the app. A sheet
+// that does not load (or loads and does not name its look) is said, as a
+// look.json that does not read is (CRITIC-STEP-8D1 item 5): the page comes
+// up with the reason where the look would paint, and the kit's look is
+// never painted without its sheet — `__paint` and `__shotPlan` refuse it
+// with the same sentence, which `pnpm workshop:shots` then prints.
+let sheetProblem: string | undefined;
+try {
+    await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadLookSheet(url, cls)));
+} catch (err) {
+    sheetProblem = `the workshop look's sheet did not load, so the showroom does not paint the look: ${(err as Error).message}`;
+}
 
 function numberParam(raw: string | null): number | undefined {
     if (raw === null || raw === '') {
@@ -85,6 +97,11 @@ let look: Look = lookParam() ?? kitLook() ?? galleryLooks()[0]!;
 let flags = numberParam(params.get('flags')) ?? 0;
 
 function paint(): string {
+    if (sheetProblem !== undefined && look === kitLook()) {
+        // The look without its sheet is not the look: say why instead.
+        app.replaceChildren(el('pre', 'g-problem', sheetProblem));
+        return sheetProblem;
+    }
     const worn = wornOf(look, flags);
     const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
     renderStall(app, view, handlers);
@@ -216,8 +233,10 @@ if (params.get('chrome') !== '0') {
     const panel = el('details');
     panel.open = true;
     panel.append(el('summary', undefined, 'showroom'));
-    if (kitProblem !== undefined) {
-        panel.append(el('pre', 'g-problem', kitProblem));
+    for (const problem of [kitProblem, sheetProblem]) {
+        if (problem !== undefined) {
+            panel.append(el('pre', 'g-problem', problem));
+        }
     }
     panel.append(labelled('screen', screenSelect));
     panel.append(labelled('look', themeSelect));
@@ -245,6 +264,9 @@ declare global {
 }
 
 window.__paint = (screenName: string, theme: number, flagBits: number): string => {
+    if (sheetProblem !== undefined && theme === kitLook()?.id) {
+        throw new Error(sheetProblem);
+    }
     screen = screenName;
     look = lookById(theme);
     flags = flagBits;
@@ -260,6 +282,9 @@ window.__shotPlan = () => {
     const kit = kitLook();
     if (kit === undefined) {
         throw new Error(kitProblem ?? 'no workshop look on this page');
+    }
+    if (sheetProblem !== undefined) {
+        throw new Error(sheetProblem);
     }
     return shotPlan(kit);
 };

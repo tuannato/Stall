@@ -16,7 +16,21 @@ vi.mock('virtual:stall-private-looks', async () =>
     (await import('../../layout/fixturePrivateLooks')).fixturePrivateLooksModule(),
 );
 
+/*
+ * The renderer's ask for a worn-only sheet (8d1), recorded rather than
+ * sent: a try-on of the fixture look asks for its sheet, and a connected
+ * stylesheet link is a request no test may make
+ * (`no-test-reaches-the-network`). The loader itself is
+ * `lookSheets.test.ts`'s.
+ */
+vi.mock('./lookSheets', async (original) => ({
+    ...(await original<typeof import('./lookSheets')>()),
+    askForLookSheet: vi.fn(),
+}));
+
 const { renderStall } = await import('./render');
+const { askForLookSheet } = await import('./lookSheets');
+const { fixturePrivateLooks } = await import('../../layout/fixturePrivateLooks');
 const copy = await import('./copy');
 const { decodeLook, mintedLookTokens, paintableLook } = await import('../domain/lookTable');
 const { DEFAULT_THEME, DEFAULT_THEME_ID, themeVars } = await import('../domain/theme');
@@ -260,5 +274,61 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
         expect(stall.classList.contains('t-fixture-private')).toBe(true);
         expect(stall.classList.contains('att-fixture-trim')).toBe(true);
         root.remove();
+    });
+});
+
+/**
+ * The renderer asks for a worn-only sheet for the row it paints, and only
+ * that row (8d1, `applyTheme`): a try-on of the fixture look — the press's
+ * live patch and every later paint — asks for the fixture's built sheet on
+ * the stall's own document; a record naming the locked look paints the
+ * default, a shipped look whose sheet is in the entry CSS, and asks for
+ * nothing; and nothing is asked for a public look. No paint waits for the
+ * answer (8d2's hold): the look's class is on the stall at once.
+ */
+describe('a-try-on-asks-for-its-sheet-and-a-locked-look-for-none', () => {
+    const ask = vi.mocked(askForLookSheet);
+    const SHEET = { url: fixturePrivateLooks()[0]!.sheetUrl, cls: 't-fixture-private' };
+
+    it('asks for nothing over a locked record, on the shop, the Studio, the wall and the overlay', () => {
+        ask.mockClear();
+        for (const over of [
+            {},
+            { panel: 'studio' as const },
+            { window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false } },
+            {
+                broadcast: { preset: 'corner', mode: 'rail', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
+                broadcastState: 'live',
+            },
+        ]) {
+            const { root } = paint(locked(over as Partial<StallView>));
+            root.remove();
+        }
+        expect(ask).not.toHaveBeenCalled();
+    });
+
+    it('asks for nothing for a public look', () => {
+        ask.mockClear();
+        const { root } = paint(locked({ recordTheme: decodeLook(DEFAULT_THEME_ID), worn: [] }));
+        root.remove();
+        expect(ask).not.toHaveBeenCalled();
+    });
+
+    it('asks for the fixture’s sheet when it is tried on, on the press and on every later paint', () => {
+        ask.mockClear();
+        const { root } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        expect(ask).not.toHaveBeenCalled();
+        root.querySelector<HTMLButtonElement>(`[data-role="look-${FIXTURE_ID}"]`)!.dispatchEvent(
+            new MouseEvent('click', { bubbles: true }),
+        );
+        expect(stallOf(root).classList.contains('t-fixture-private'), 'painted at once, no wait').toBe(true);
+        expect(ask).toHaveBeenCalledWith(SHEET, root.ownerDocument);
+        root.remove();
+        ask.mockClear();
+        const later = paint(locked({ previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }));
+        expect(stallOf(later.root).classList.contains('t-fixture-private')).toBe(true);
+        expect(ask).toHaveBeenCalledTimes(1);
+        expect(ask).toHaveBeenCalledWith(SHEET, later.root.ownerDocument);
+        later.root.remove();
     });
 });

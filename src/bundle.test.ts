@@ -1,7 +1,9 @@
-import { readdirSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { build } from 'vite';
+import { build, type PluginOption } from 'vite';
 import { afterAll, describe, expect, it } from 'vitest';
+import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
 import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
@@ -158,6 +160,24 @@ const builtParts = (configFile?: string): Promise<readonly WeighedPart[]> =>
     );
 const appParts = (): Promise<readonly WeighedPart[]> => (appBuild ??= builtParts());
 const probeParts = (): Promise<readonly WeighedPart[]> => (probeBuild ??= builtParts('vite.probe.config.ts'));
+
+/**
+ * The workshop kit's build (`vite.workshop.config.ts`, which refuses to
+ * build without a command named — `scripts/workshop.mjs` names one), with
+ * `plugins` added: the kit's sheet is worn-only since 8d1, so its weight is
+ * a look's budget, read here on a real build of the kit.
+ */
+async function workshopBuiltParts(plugins: PluginOption[] = []): Promise<readonly WeighedPart[]> {
+    const before = process.env['STALL_WORKSHOP_CMD'];
+    process.env['STALL_WORKSHOP_CMD'] = 'probe';
+    try {
+        const result = await build({ configFile: 'vite.workshop.config.ts', logLevel: 'silent', plugins, build: { write: false } });
+        return partsOf(result) as unknown as readonly WeighedPart[];
+    } finally {
+        if (before === undefined) delete process.env['STALL_WORKSHOP_CMD'];
+        else process.env['STALL_WORKSHOP_CMD'] = before;
+    }
+}
 
 /** The worn-only look sheets the role table names, as the buckets read them. */
 const WORN = wornSheets().map((sheet) => ({ lookClass: sheet.lookClass!, source: sheet.path }));
@@ -417,6 +437,64 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(fixture.total, 'the fixture look was not read').toBeGreaterThan(100);
         expect(fixture.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
     }, 120_000);
+
+    /*
+     * The workshop kit's look, on the kit's own build (8d1; STEP-6-PLAN v2
+     * item 6.8): the kit loads its sheet the worn-only way, so what a
+     * creator's look costs one visitor is a look's budget — the sheet and
+     * its art as the kit build emits them, the rows from `look.json`. The
+     * committed kit is the skeleton, a few dozen bytes; red over a planted
+     * kit whose sheet names ~600 KB of art gzip cannot shrink, in a folder
+     * shaped like the kit's (`…/workshop/theme-workshop.css`, the path the
+     * weight guard knows the kit's sheet by). Not covered, stated: the kit's
+     * commands do not run this budget; a creator meets it in `pnpm test`.
+     */
+    it(`keeps the workshop kit's look under ${LOOK_ART_BUDGET_GZIP} gzip bytes, on the kit's own build`, async () => {
+        const parts = await workshopBuiltParts();
+        const buckets = weightBuckets(parts, { worn: WORN });
+        expect(buckets.problems).toEqual([]);
+        expect(buckets.worn['t-workshop'], 'the kit build emitted no sheet of the kit’s own').toBeDefined();
+        const reading = budgetOf(parts, 't-workshop', loadKitLook().rows);
+        expect(reading.total, 'the kit look was not read').toBeGreaterThan(20);
+        expect(reading.total, JSON.stringify(reading)).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+
+        const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-kit-budget-')));
+        try {
+            mkdirSync(join(dir, 'workshop', 'art'), { recursive: true });
+            let seed = 0x2545f491;
+            const digits = Array.from({ length: 1_400_000 }, () => {
+                seed ^= seed << 13;
+                seed ^= seed >>> 17;
+                seed ^= seed << 5;
+                return String((seed >>> 0) % 10);
+            }).join('');
+            writeFileSync(
+                join(dir, 'workshop', 'art', 'heavy.svg'),
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`,
+            );
+            const sheet = join(dir, 'workshop', 'theme-workshop.css');
+            writeFileSync(
+                sheet,
+                '.t-workshop { --look-sheet: t-workshop; background-image: url(art/heavy.svg); }\n' +
+                    '@media (prefers-reduced-motion: reduce) {}\n',
+            );
+            const heavy = await workshopBuiltParts([
+                {
+                    name: 'test:plant-kit-sheet',
+                    enforce: 'pre',
+                    resolveId(source) {
+                        const [path, query] = source.split('?');
+                        if (!/[/\\]workshop[/\\]theme-workshop\.css$/.test(path!)) return undefined;
+                        return query === undefined ? sheet : `${sheet}?${query}`;
+                    },
+                },
+            ]);
+            const planted = budgetOf(heavy, 't-workshop', []);
+            expect(planted.total, `a heavy kit look passed the budget: ${JSON.stringify(planted)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 180_000);
 
     /*
      * Every private look a run reads (`scripts/served-sheets.mjs`: the

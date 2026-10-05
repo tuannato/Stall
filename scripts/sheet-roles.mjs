@@ -22,6 +22,9 @@
  *   overlay, the studio's overlay guide, the shop window).
  * - `kit` — the workshop look's sheet: a creator's, linted by
  *   `pnpm workshop:lint` under the same rules as a `look` plus the kit's own.
+ *   Worn-only since step 8d1: the kit's pages load it through the app's
+ *   loader (`layout/workshopKitSheet.ts`, `src/ui/lookSheets.ts`), the road a
+ *   private look's sheet takes in the app, its art its own folder.
  * - `fixture` — a look sheet the layout harness paints to measure the
  *   worn-only road (`layout/fixtureLook.ts`): never a row of the theme
  *   table, never in the production bundle (`gallery-is-not-served`), and
@@ -34,10 +37,11 @@
  *
  * `load` says how a look sheet (a `look`, the `kit` or a `fixture`) reaches a
  * page — `bundled`, a side-effect import of the page that paints it, so it
- * lands in that page's entry CSS (the app's for the three shipped looks,
- * which every visitor downloads; the showroom's and the workshop probe's for
- * the kit, which the app never serves), or `worn`, its own file fetched only
- * for a stall that wears the look — and a worn sheet names `artDir`, the one directory its
+ * lands in that page's entry CSS (the app's, for the three shipped looks,
+ * which every visitor downloads), or `worn`, its own file (a `?url` import)
+ * loaded by `src/ui/lookSheets.ts` only for a stall that paints the look (the
+ * kit's, on the showroom and the workshop probe; the fixture's, in the
+ * probe's one job) — and a worn sheet names `artDir`, the one directory its
  * `url()`s may reach (its art and its faces), counted with it by the weight
  * guard (`scripts/weight-buckets.mjs`). A shipped look's `load` is its
  * theme row's `sheetLoad` (`every-look-row-loads-its-sheet-the-way-its-role-says`).
@@ -66,7 +70,13 @@ export const SERVED_SHEETS = Object.freeze([
     Object.freeze({ path: 'src/ui/broadcast.css', role: 'screen' }),
     Object.freeze({ path: 'src/ui/obsGuide.css', role: 'screen', shadowedByLooks: true }),
     Object.freeze({ path: 'src/ui/window.css', role: 'screen', shadowedByLooks: true }),
-    Object.freeze({ path: 'workshop/theme-workshop.css', role: 'kit', lookClass: 't-workshop', load: 'bundled' }),
+    Object.freeze({
+        path: 'workshop/theme-workshop.css',
+        role: 'kit',
+        lookClass: 't-workshop',
+        load: 'worn',
+        artDir: 'workshop/art',
+    }),
     Object.freeze({
         path: 'layout/fixture-look.css',
         role: 'fixture',

@@ -22,6 +22,10 @@ import {
 import { loadKitLook } from './workshopKit';
 import { WORKSHOP_SHEET_CLASS, parseWorkshopLook, workshopLookProblems } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
+import { wornSheetsOf } from './wornSheet';
+
+/** The URL a kit page registers the kit's built sheet under — any same-origin path will do here. */
+const KIT_URL = '/assets/theme-workshop-test.css';
 
 const LAYOUT = dirname(fileURLToPath(import.meta.url));
 
@@ -93,7 +97,11 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         expect(looksFor('offers')).toContain(skeleton);
         expect(looksFor('door')).not.toContain(skeleton);
 
-        registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)));
+        // Every look read from data is worn-only from the row up (8d1):
+        // nothing that reads the kit's row before it is registered meets its
+        // base's `bundled`.
+        expect(parseWorkshopLook(lookFileText(KIT_SKELETON)).theme.sheetLoad).toBe('worn');
+        registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)), KIT_URL);
         const kit = kitLook()!;
         // The probe measures the kit ALONE, and the door not at all.
         expect(measuredLooks()).toEqual([kit]);
@@ -106,8 +114,12 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         ]);
         expect(lookById(WORKSHOP_THEME_ID)).toBe(kit);
         expect(kit.theme.sheetClass).toBe('t-workshop');
+        // The kit loads the worn-only way (8d1): its row says so, and the
+        // page loads the URL it registered before it paints.
+        expect(kit.theme.sheetLoad).toBe('worn');
+        expect(wornSheetsOf(measuredLooks())).toEqual([{ url: KIT_URL, cls: 't-workshop' }]);
         // Once only.
-        expect(() => registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)))).toThrow(
+        expect(() => registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)), KIT_URL)).toThrow(
             /already registered/,
         );
     });
@@ -130,7 +142,7 @@ describe('the-scratch-id-is-not-a-shipped-look', () => {
 
     it('a look under any other id is refused', () => {
         const kit = parseWorkshopLook(lookFileText(KIT_SKELETON));
-        expect(() => registerWorkshopLook({ ...kit, theme: { ...kit.theme, id: DEFAULT_THEME_ID } })).toThrow(
+        expect(() => registerWorkshopLook({ ...kit, theme: { ...kit.theme, id: DEFAULT_THEME_ID } }, KIT_URL)).toThrow(
             /carries id 255/,
         );
     });

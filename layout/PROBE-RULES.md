@@ -3959,11 +3959,12 @@ no name for a look it measures (`probe-coverage.mjs`, every pass).
 Why now: from Ink wash on (step 8) a look's sheet is its own file, fetched
 only for a stall that wears it, and a sheet that did not load leaves the
 stall painted by the base sheets alone — which every other rule here would
-measure green. Until then no look is worn only, so the probe page appends
-every worn-only sheet of `measuredLooks()` before its first paint
-(`wornSheetsOf`, `loadWornSheet`) — none — and a worn-only row reaching a
-measured page with no sheet URL fails the page rather than being measured
-bare. `pnpm looks:diff` holds the same line on every shot
+measure green. So the probe page loads every worn-only sheet of
+`measuredLooks()` before its first paint, through the app's own loader
+(`wornSheetsOf`, `loadLookSheet` in `src/ui/lookSheets.ts`, since 8d1) —
+none on the ordinary probe, the kit's on the workshop probe, which loads the
+worn-only way since 8d1 — and a worn-only row reaching a measured page with
+no sheet URL fails the page rather than being measured bare. `pnpm looks:diff` holds the same line on every shot
 (`looks-diff-refuses-a-look-painted-without-its-sheet`; the showroom's
 `window.__lookSheets()`, a ref predating the hook exempt). The name paints
 nothing: `pnpm looks:diff main` compared every shot of the three looks with
@@ -4001,12 +4002,17 @@ ordinary run (`window.__wornSheetJob`, judged by `wornSheetJobFaults`): the
 harness's fixture look (`FIXTURE_LOOK` in `looks.ts`, `t-fixture-worn`,
 `0xfd`, never a row, never served) is painted on the neutral screen, then its
 sheet — `layout/fixture-look.css` built by `?url` as its own asset
-(`fixtureLook.ts`) — appended as a same-origin `<link>`, the road step 8's
-loader takes. Held: the look named no sheet before (the sheet is not in the
-entry CSS), the link loaded, landed last among the page's sheets and was
-same-origin, the look then named itself, its own art was fetched with a 200
-(`img-src 'self'`), a sheet URL that does not exist rejected, and the policy
-refused nothing.
+(`fixtureLook.ts`) — put on the page by the app's own loader,
+`src/ui/lookSheets.ts`'s `loadLookSheet` (since 8d1; the harness carried a
+copy, `loadWornSheet`, until then). Held: the look named no sheet before
+(the sheet is not in the entry CSS), the link loaded, landed last among the
+page's sheets and was same-origin, the look then named itself, its own art
+was fetched with a 200 (`img-src 'self'`), the loader holds the sheet as
+`ready`, answers a second ask with the same link and put one link on the
+page for it, a sheet URL that does not exist rejected, is held `failed`,
+rejected again when asked again and was linked once (a failure is sticky,
+never a second fetch), and the policy refused nothing. Proved red, the judge
+(`probe-coverage.test.mjs`): each new field changed alone.
 
 **`load` is not "loaded"** — found by this job's first run, which failed on
 "a sheet URL that does not exist did not reject": `vite preview` answers a
@@ -4016,10 +4022,19 @@ Chrome fired `load`, not `error`, on the link (whether it then applied
 anything was not read; the sheet did not name the look). So
 the harness's `loadWornSheet` resolves only when the loaded sheet's own
 CSSOM holds `.<class> { --look-sheet: <class>; }` (`sheetNamesItself`), and
-the job prints the status the missing URL was answered with. Step 8's
-production loader must keep that rule: a Pages 404 fires `error`, but a
-proxy or a stale deploy that answers with HTML would not. Not held here,
-stated: Pages itself, OBS's browser, Safari and Firefox.
+the job prints the status the missing URL was answered with. The production
+loader keeps that rule (it is the same code since 8d1): a Pages 404 fires
+`error`, but a proxy or a stale deploy that answers with HTML would not. Not
+held here, stated: Pages itself, OBS's browser, Safari and Firefox; and the
+renderer's ask for a private look's sheet (`applyTheme` → `lookSheetOf` →
+the loader), which needs a build carrying a private look — the harness
+refuses a selection until 8e2 — and is held in happy-dom
+(`a-try-on-asks-for-its-sheet-and-a-locked-look-for-none`), measured in
+Chrome by hand once (8d1, a scratch page over a preview build of the
+fixture under the production policy: the locked record asked nothing; the
+try-on painted the class at once, named nothing until its sheet landed,
+then `ready`, named itself, landed last, one link across repaints, its art
+200, no refusal).
 
 ## No word is clipped by a file (step 6, 2026-09-27)
 
@@ -4045,3 +4060,48 @@ paints at rest and frozen, so a file's mask or clip written in a state rule
 in a keyframe is refused statically by the look lint instead
 (`a-file-mask-arrives-at-rest`); a `url()` carried in by `var()` is not
 seen there, stated.
+
+## The geometry passes measure whatever face is loaded — a gap, not a rule (8d1's critic, 2026-10-06)
+
+Not a rule: a measured gap, written down so nobody reads the passes as
+measuring the shipped faces. **The geometry passes (mobile, desktop,
+canvas, portrait, tablet) are one synchronous task** — the module body
+paints and measures every screen with no `await` — so a web face that is
+not already loaded when the body starts stays `loading` for the whole pass,
+and the pass lays out and measures every line in the fallback face. The
+contrast passes are the exception: their prepare awaits
+`document.fonts.ready`.
+
+Measured (an instrumented probe, `document.fonts` read per screen and
+variant, every pass, never committed):
+
+- **The ordinary probe on `main`:** the mobile pass, the first navigation of
+  the run, measured all 455 of its screen paints with Inter and JetBrains
+  Mono `loading`; the desktop pass, a later navigation in the same tab,
+  measured all 526 with them `loaded`. So **the phone's geometry — the
+  money pass at 390 — is measured in the fallback faces**, the desktop's in
+  the shipped ones, decided by the browser's cache and not by any rule.
+- **The workshop probe:** the same on `main` for the Rural starter (390
+  fallback; 1280, 1920, 1080×1920, 768×1024 and the second 390 loaded). On
+  8d1 every pass measured fallback faces: the kit's sheet now loads
+  worn-only, so the module body yields once before its first paint — and a
+  yield alone does it (planted: a 50 ms timer in the sheet's place, no
+  sheet appended, gave the same `loading` everywhere). A web face resolved
+  from the memory cache becomes `loaded` within the task that first uses it
+  only when nothing yielded before; why, in Chrome's loader, was not read.
+- **What moved:** the Rural starter's names lay out 1–2 px apart between
+  the two faces (`Roasted Beans` 131 / 133 px at 1280), so the marquee's
+  travel differs (7267 / 7167 ms on `long-item-name`; 3348 / 3087 and
+  5261 / 5022 ms on `shop-window-browse`) and so do the hit-test points that
+  land behind a clip: desktop 518 / 4446 → 531 / 4453, canvas 30 / 1135 →
+  29 / 1131 (`crowded`, `item-unbuyable-fold`, `long-item-name`,
+  `shop-window-browse`). Every verdict held. The critic measured the
+  skeleton's and the Modern starter's counts unchanged and the Neo
+  starter's canvas moved the same way (1051 / 31 → 1048 / 30); only the
+  Rural starter was instrumented here.
+
+Not fixed, stated: the cure — paint each measured look once, then await
+`document.fonts.ready` (or load every face the sheets declare) before the
+synchronous loop — changes what the phone pass of the ordinary probe
+measures for the shipped looks, and may surface failures; it is its own
+change, with a red proof by a face that never loads.

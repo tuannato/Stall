@@ -35,7 +35,8 @@ import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } fro
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
-import { lookSheetFault, lookSheetReads, loadWornSheet, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
+import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
+import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { screensAt } from './screenSplit';
@@ -3422,17 +3423,18 @@ const failures: Failure[] = [];
 
 /*
  * **A look is measured with its sheet** (step 6, 6.7). Every worn-only
- * look this page measures has its sheet appended before the first paint,
- * the way the production loader will (step 8) — none today: no row is worn
- * only, so this awaits nothing, and a worn-only row reaching a measured
- * page without a URL is a failure here rather than a look measured bare.
+ * look this page measures has its sheet loaded before the first paint,
+ * through the app's loader (`src/ui/lookSheets.ts`, 8d1) — on the ordinary
+ * probe none (no shipped row is worn only), on the workshop probe the
+ * kit's — and a worn-only row reaching a measured page without a URL is a
+ * failure here rather than a look measured bare.
  * Then every paint reads each stall's `--look-sheet` against its `t-*`
  * class (`a-look-is-measured-with-its-sheet`, `lookSheetFaults` below).
  */
 try {
     const worn = wornSheetsOf(measuredLooks());
     if (worn.length > 0) {
-        await Promise.all(worn.map(({ url, cls }) => loadWornSheet(url, cls)));
+        await Promise.all(worn.map(({ url, cls }) => loadLookSheet(url, cls)));
     }
 } catch (err) {
     failures.push({
@@ -3950,9 +3952,15 @@ declare global {
             sameOrigin: boolean;
             after: string;
             art: number[];
+            state: string;
+            askedAgain: boolean;
+            links: number;
             missingRejected: boolean;
             missingWhy: string;
             missingStatus: number;
+            missingState: string;
+            missingAgainRejected: boolean;
+            missingLinks: number;
             inEntryCss: boolean;
             refusals: readonly CspRefusal[];
         }>;
@@ -5226,15 +5234,18 @@ window.__cspRefusals = () => cspRefusals();
 /*
  * `a-worn-only-sheet-loads-under-the-production-policy` (step 6, 6.7): the
  * harness's worn-only look (`fixtureLook.ts`) is painted without its sheet,
- * then its sheet appended as a same-origin `<link>` — the road a worn-only
- * look's sheet takes (step 8's loader) — under the preview's production
- * policy. The runner holds the answer (`layout-check.mjs`): the look read
- * no name before the sheet (so the sheet is not in the entry CSS), the
- * link loaded, landed last among the page's sheets and was same-origin, the
- * look then named itself, its own art was fetched with a 200, a URL that
- * does not exist rejected rather than hanging or passing, and the policy
- * refused nothing. One paint of the neutral screen: the job is about the
- * road, not the look.
+ * then its sheet put on the page by the app's own loader
+ * (`src/ui/lookSheets.ts`, `loadLookSheet` — the road a private look's sheet
+ * takes, 8d1) under the preview's production policy. The runner holds the
+ * answer (`layout-check.mjs`): the look read no name before the sheet (so
+ * the sheet is not in the entry CSS), the link loaded, landed last among
+ * the page's sheets and was same-origin, the look then named itself, its
+ * own art was fetched with a 200, the loader holds the sheet as ready and
+ * answers a second ask with the same link and no second one on the page, a
+ * URL that does not exist rejected rather than hanging or passing — `vite
+ * preview` answers it with its SPA fallback and Chrome fires `load` — is
+ * held as failed and is not fetched again, and the policy refused nothing.
+ * One paint of the neutral screen: the job is about the road, not the look.
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
@@ -5242,17 +5253,24 @@ window.__wornSheetJob = async (missing: string) => {
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
         stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
+    /** How many stylesheet links on the page point at `url`. */
+    const linksTo = (url: string): number => {
+        const href = new URL(url, location.href).href;
+        return [...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].filter((l) => l.href === href).length;
+    };
     const before = named();
     let loaded = false;
     let last = false;
     let sameOrigin = false;
+    let askedAgain = false;
     let error = '';
     try {
-        const link = await loadWornSheet(FIXTURE_SHEET_URL, FIXTURE_SHEET_CLASS);
+        const link = await loadLookSheet(FIXTURE_SHEET_URL, FIXTURE_SHEET_CLASS);
         loaded = true;
         const sheets = [...document.styleSheets];
         last = sheets[sheets.length - 1]?.ownerNode === link;
         sameOrigin = new URL(link.href).origin === location.origin;
+        askedAgain = (await loadLookSheet(FIXTURE_SHEET_URL, FIXTURE_SHEET_CLASS)) === link;
     } catch (err) {
         error = err instanceof Error ? err.message : String(err);
     }
@@ -5264,10 +5282,16 @@ window.__wornSheetJob = async (missing: string) => {
     let missingRejected = false;
     let missingWhy = '';
     try {
-        await loadWornSheet(missing, FIXTURE_SHEET_CLASS);
+        await loadLookSheet(missing, FIXTURE_SHEET_CLASS);
     } catch (err) {
         missingRejected = true;
         missingWhy = err instanceof Error ? err.message : String(err);
+    }
+    let missingAgainRejected = false;
+    try {
+        await loadLookSheet(missing, FIXTURE_SHEET_CLASS);
+    } catch {
+        missingAgainRejected = true;
     }
     const missingEntry = (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).find(
         (entry) => new URL(entry.name).pathname === missing,
@@ -5281,9 +5305,15 @@ window.__wornSheetJob = async (missing: string) => {
         sameOrigin,
         after,
         art,
+        state: lookSheetState(FIXTURE_SHEET_URL) ?? '',
+        askedAgain,
+        links: linksTo(FIXTURE_SHEET_URL),
         missingRejected,
         missingWhy,
         missingStatus: missingEntry?.responseStatus ?? 0,
+        missingState: lookSheetState(missing) ?? '',
+        missingAgainRejected,
+        missingLinks: linksTo(missing),
         inEntryCss: [...document.styleSheets].some(
             (sheet) => sheet.ownerNode instanceof HTMLLinkElement && sheet.ownerNode.href !== new URL(FIXTURE_SHEET_URL, location.href).href && [...sheet.cssRules].some((rule) => rule.cssText.includes(FIXTURE_SHEET_CLASS)),
         ),

@@ -32,7 +32,9 @@
  * | `mintedLookTokens`        | `mintedAttachmentTokens`    |
  * | `lookAttachmentByTokenId` | `attachmentByTokenId`       |
  *
- * These eight and the gate are the module's whole runtime export
+ * These eight, the gate and `lookSheetOf` (the sheet a painted worn-only
+ * row loads, 8d1 — no public counterpart: a shipped look's sheet is in the
+ * entry CSS) are the module's whole runtime export
  * (`the-look-table-exports-exactly-its-merged-views`). Each view answers a
  * public id exactly as its public counterpart does, rows by reference
  * (`every-merged-view-answers-a-public-id-as-the-public-table-does`), and a
@@ -64,8 +66,8 @@
  * are refused by the build (`privateIndexProblems`) and not spelt here: the
  * served bundle must not carry them, which is how `gallery-is-not-served`
  * and `the-ordinary-probe-loads-no-kit` tell a harness leak from the app. An
- * admitted look's row is `sheetLoad: 'worn'`: its sheet is its own file,
- * never the entry CSS.
+ * admitted look's row is `sheetLoad: 'worn'` (`lookFromData` builds every
+ * look read from data so): its sheet is its own file, never the entry CSS.
  *
  * **The paid gate is one function** (the step-8 critic's item 3):
  * `paintableLook` decides what a record's look paints and wears. A record
@@ -92,6 +94,7 @@
  */
 import { carriesPrivateLooks, privateLooks } from 'virtual:stall-private-looks';
 import { SHIPPED_ATTACHMENTS, wornFrom, type ShippedAttachment } from './attachments';
+import { LOOK_CLASS } from './lookClass';
 import { lookFromData, type LookData, type PrivateLookSource } from './lookData';
 import { sameOwner } from './moodClass';
 import {
@@ -103,8 +106,6 @@ import {
     type DecodedTheme,
 } from './theme';
 
-/** One `t-` class token, as the private index writes one. */
-const LOOK_CLASS = /^t-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** How many times each value `key` gives appears across `items`. */
 function counts<T, K>(items: readonly T[], key: (item: T) => K): Map<K, number> {
@@ -144,7 +145,7 @@ function admitted(sources: readonly PrivateLookSource[]): readonly LookData[] {
                 file: `private look ${source.id}`,
                 mintable: true,
             });
-            read.push({ theme: { ...data.theme, sheetLoad: 'worn' }, rows: data.rows });
+            read.push(data);
         } catch {
             // Dropped: its id reads as unknown. The build said why, loudly.
         }
@@ -235,6 +236,49 @@ export function mintedLookTokens(): ReadonlySet<string> {
 /** The row a token entitles, by its genesis txid. */
 export function lookAttachmentByTokenId(tokenId: string): ShippedAttachment | undefined {
     return LOOK_ATTACHMENTS.find((row) => row.tokenId === tokenId);
+}
+
+/**
+ * The sheet a painted row needs on the page before its own rules apply: a
+ * private look's — worn-only, its own file (`src/ui/lookSheets.ts` loads
+ * it) — and undefined for every other row: a shipped look's sheet is in the
+ * entry CSS, the default a locked look paints is a shipped look, and an id
+ * this build carries no row for wears the default's. Read off the row the
+ * renderer is about to paint, never off a record: the gate has already
+ * decided what paints (`paintableLook`), so a look that is not painted asks
+ * for nothing. The row must be the table's own — its id and its class —
+ * so a harness row under another class is never handed a private look's
+ * sheet. A literal switch: a build that carries no private look answers
+ * undefined from the switch alone, and Rollup drops the loader with it.
+ */
+export function lookSheetOf(theme: DecodedTheme): { readonly url: string; readonly cls: `t-${string}` } | undefined {
+    // One return, whose answer the switch decides: Rollup folds a call it
+    // can read as a literal, and drops the loader behind it (measured: two
+    // return statements left the loader in the public bundle).
+    return carriesPrivateLooks ? privateSheetOf(theme) : undefined;
+}
+
+/**
+ * An admitted private look's built sheet: the URL the build wrote for it
+ * (`?url` — its own file, hashed, never in the entry CSS) and the class its
+ * row is painted under. Only an admitted look has one: a source the table
+ * dropped paints as an unknown id and loads nothing.
+ */
+function privateSheetOf(theme: DecodedTheme): { readonly url: string; readonly cls: `t-${string}` } | undefined {
+    const row = PRIVATE_ROWS.get(theme.id);
+    // The raw list, so read as the table reads it: never assumed well formed.
+    // An admitted row's id is one source's alone (`admitted`).
+    const source = privateLooks.find(
+        (entry): entry is PrivateLookSource => typeof entry === 'object' && entry !== null && entry.id === theme.id,
+    );
+    return row !== undefined &&
+        source !== undefined &&
+        typeof source.sheetUrl === 'string' &&
+        theme.known &&
+        theme.sheetLoad === 'worn' &&
+        theme.sheetClass === row.sheetClass
+        ? { url: source.sheetUrl, cls: row.sheetClass }
+        : undefined;
 }
 
 /** What a record's look paints and wears, and why it is not its own when it is not. */

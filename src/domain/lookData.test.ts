@@ -42,8 +42,10 @@ describe('a-look-is-read-under-the-place-it-is-given', () => {
         // nothing else restated: every other field is the base row's (Modern).
         expect(look.theme.bg).toEqual({ r: 236, g: 230, b: 218 });
         expect(look.theme.bg).not.toEqual(DEFAULT_THEME.bg);
-        const { id: _i, known: _k, sheetClass: _c, label: _l, bg: _b, ...rest } = look.theme;
-        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, bg: _b2, ...modern } = DEFAULT_THEME;
+        // Worn-only, as every look read from data is (8d1).
+        expect(look.theme.sheetLoad).toBe('worn');
+        const { id: _i, known: _k, sheetClass: _c, label: _l, bg: _b, sheetLoad: _s, ...rest } = look.theme;
+        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, bg: _b2, sheetLoad: _s2, ...modern } = DEFAULT_THEME;
         expect(rest).toEqual(modern);
         // Its rows carry the id, and a minted row its token; an unminted one none.
         expect(look.rows.map((row) => [row.bit, row.themeId, row.tokenId])).toEqual([

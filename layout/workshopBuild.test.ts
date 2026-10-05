@@ -107,35 +107,58 @@ describe('the-workshop-build-serves-the-same-app', () => {
     }, 180_000);
 
     /**
-     * The kit's sheet lands where a shipped look's does — after `stall.css` —
-     * on both kit pages. A build links an entry's stylesheets in the order it
-     * imports their chunks, and the kit's sheet shares a chunk with the kit's
-     * loaders: measured 2026-09-23, the workshop probe linked it AHEAD of the
-     * app's sheets until its entry imported the renderer first
-     * (`layout/probe-workshop.ts`). Found by reading the served page, so it
-     * is pinned here, by chunk metadata rather than by file name.
+     * The kit loads its sheet the worn-only way (8d1; STEP-6-PLAN v2 item
+     * 6.8): its own built file — in no kit page's entry CSS and linked by
+     * neither page's HTML — put on the page by the app's loader
+     * (`src/ui/lookSheets.ts`, through `layout/workshopKitSheet.ts`), the
+     * road a private look's sheet takes in the app. The loader appends it
+     * after every sheet the page already links, so it lands after the app's
+     * sheets by construction, where it once depended on the order a page
+     * imported its chunks (measured 2026-09-23: importing the register first
+     * linked it ahead of `stall.css`); that the loader's link lands last is
+     * measured in Chrome by the probe's
+     * `a-worn-only-sheet-loads-under-the-production-policy`.
      */
-    it('links the kit’s sheet after the app’s sheets on both kit pages', async () => {
+    it('builds the kit’s sheet as its own file, which both kit pages load through the app’s loader', async () => {
         const output = await workshopParts();
+        const sheets = output.filter(
+            (p): p is Asset =>
+                p.type === 'asset' &&
+                (p.originalFileNames ?? []).some((name) => name.replaceAll('\\', '/').endsWith('/workshop/theme-workshop.css')),
+        );
+        expect(sheets.map((p) => p.fileName)).toEqual([expect.stringMatching(/^assets\/theme-workshop-[\w-]+\.css$/)]);
+        const kitFile = sheets[0]!.fileName;
+        expect(String(sheets[0]!.source)).toMatch(/--look-sheet:\s*t-workshop/);
         const chunks = output.filter((p): p is Chunk => p.type === 'chunk');
-        const cssOf = (suffix: string): string[] => {
-            const owner = chunks.find((chunk) => chunk.moduleIds.some((id) => id.endsWith(suffix)));
-            expect(owner, `a chunk carries ${suffix}`).toBeDefined();
-            return [...(owner!.viteMetadata?.importedCss ?? [])];
-        };
-        const [appCss] = cssOf('/src/ui/stall.css');
-        const [kitCss] = cssOf('/workshop/theme-workshop.css');
-        expect(appCss).toBeDefined();
-        expect(kitCss).toBeDefined();
-        expect(kitCss).not.toBe(appCss);
+        for (const chunk of chunks) {
+            expect([...(chunk.viteMetadata?.importedCss ?? [])], `${chunk.fileName}'s entry CSS`).not.toContain(kitFile);
+            const css = [...(chunk.viteMetadata?.importedCss ?? [])].map(
+                (name) => output.find((p): p is Asset => p.type === 'asset' && p.fileName === name)!,
+            );
+            for (const part of css) {
+                expect(String(part.source), `${part.fileName} carries the kit's rules`).not.toMatch(/\.t-workshop\b/);
+            }
+        }
+        const byName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
         for (const page of ['layout/gallery.html', 'layout/probe-workshop.html']) {
             const html = output.find((p): p is Asset => p.type === 'asset' && p.fileName === page);
             expect(html, page).toBeDefined();
-            const text = String(html!.source);
-            const app = text.indexOf(`/${appCss}"`);
-            const kit = text.indexOf(`/${kitCss}"`);
-            expect(app, `${page} links the app's sheets`).toBeGreaterThan(-1);
-            expect(kit, `${page} links the kit's sheet after them`).toBeGreaterThan(app);
+            expect(String(html!.source), `${page} links the kit's sheet itself`).not.toContain(kitFile);
+            // The page's own graph carries the app's loader and the kit's URL.
+            const entry = chunks.find((chunk) => chunk.isEntry && (chunk.facadeModuleId ?? '').endsWith(`/${page}`));
+            expect(entry, page).toBeDefined();
+            const seen = new Set<string>();
+            const reach = (name: string): Chunk[] => {
+                if (seen.has(name)) return [];
+                seen.add(name);
+                const chunk = byName.get(name)!;
+                return [chunk, ...chunk.imports.flatMap(reach)];
+            };
+            const graph = reach(entry!.fileName);
+            const ids = graph.flatMap((chunk) => chunk.moduleIds);
+            expect(ids.some((id) => id.endsWith('/src/ui/lookSheets.ts')), `${page} carries the app's loader`).toBe(true);
+            expect(ids.some((id) => id.endsWith('/layout/workshopKitSheet.ts')), `${page} carries the kit's sheet URL`).toBe(true);
+            expect(graph.some((chunk) => chunk.code.includes(kitFile)), `${page} names the kit's built sheet`).toBe(true);
         }
     }, 180_000);
 

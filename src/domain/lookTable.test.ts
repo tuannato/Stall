@@ -21,6 +21,7 @@ import {
     attachmentsForLook,
     decodeLook,
     lookAttachmentByTokenId,
+    lookSheetOf,
     mintedLookTokens,
     paintableLook,
     publishableLookFlags,
@@ -566,16 +567,24 @@ const MERGED_VIEWS = [
 const GATE = 'paintableLook';
 
 /**
- * The look table's runtime exports are exactly its eight merged views and
- * the gate (the 8b1 critic's item 2; the gate is 8b2's, the step-8 critic's
- * item 3): a tenth is a view no parity test reads, and a missing one is a
- * site with nowhere to go. `every-merged-view-answers-the-fixture-look`
+ * The sheet a painted worn-only row needs (8d1): no public counterpart —
+ * a shipped look's sheet is in the entry CSS — so every public row answers
+ * none (`every-merged-view-answers-a-public-id-as-the-public-table-does`).
+ */
+const SHEET = 'lookSheetOf';
+
+/**
+ * The look table's runtime exports are exactly its eight merged views, the
+ * gate and the sheet a painted row loads (the 8b1 critic's item 2; the gate
+ * is 8b2's, the step-8 critic's item 3; the sheet 8d1's): an eleventh is a
+ * view no parity test reads, and a missing one is a site with nowhere to
+ * go. `every-merged-view-answers-the-fixture-look`
  * (`lookTable.private.test.ts`) enumerates the same exports and owes each a
  * case.
  */
 describe('the-look-table-exports-exactly-its-merged-views', () => {
-    it('exports the eight and the gate, and no other name', () => {
-        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS, GATE].sort());
+    it('exports the eight, the gate and the sheet, and no other name', () => {
+        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS, GATE, SHEET].sort());
     });
 });
 
@@ -609,6 +618,8 @@ describe('every-merged-view-answers-a-public-id-as-the-public-table-does', () =>
     it('decodes, lists and wears every public id as the public table does', () => {
         for (const id of PUBLIC_IDS) {
             expect(decodeLook(id), `decodeLook(${id})`).toEqual(decodeTheme(id));
+            // A public row's sheet is in the entry CSS: nothing to load.
+            expect(lookSheetOf(decodeLook(id)), `lookSheetOf(${id})`).toBeUndefined();
             sameRows(attachmentsForLook(id), attachmentsForTheme(id), `attachmentsForLook(${id})`);
             for (const flags of FLAG_VALUES) {
                 expect(publishableLookFlags(id, flags), `publishableLookFlags(${id}, ${flags})`).toBe(
@@ -658,6 +669,9 @@ describe('a-build-with-no-private-look-is-the-public-table', () => {
             expect(decodeLook(id)).toEqual(decodeTheme(id));
             expect(decodeLook(id).known).toBe(false);
             expect(attachmentsForLook(id)).toEqual([]);
+            // Nothing carried, so no sheet — even for a row dressed as worn.
+            expect(lookSheetOf(decodeLook(id))).toBeUndefined();
+            expect(lookSheetOf({ ...decodeLook(id), known: true, sheetLoad: 'worn' })).toBeUndefined();
             const painted = paintableLook(decodeLook(id), 0xffff, mintedAttachmentTokens());
             expect(painted).toEqual({ theme: decodeTheme(id), worn: [], why: 'unknown' });
         }

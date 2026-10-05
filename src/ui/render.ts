@@ -83,6 +83,7 @@ import {
 import {
     attachmentsForLook,
     decodeLook,
+    lookSheetOf,
     paintableLook,
     publishableLookFlags,
     wornForLook,
@@ -90,6 +91,7 @@ import {
     LOOK_ROWS,
     type PaintedLook,
 } from '../domain/lookTable';
+import { askForLookSheet } from './lookSheets';
 import type {
     SelectionAsk,
     RememberedSurcharge,
@@ -1099,6 +1101,21 @@ function applyTheme(
     opts: { ornament?: boolean } = {},
 ): void {
     const vars = dressLook(stall, theme, worn);
+    /*
+     * A worn-only look's sheet is its own file (`lookSheets.ts`): asked for
+     * here, where every road that puts a look on the stall passes — the
+     * frame on every route, the wall, the overlay and the try-on's live
+     * patch — and only for the row this paint puts on screen. The gate has
+     * already chosen it (`paintedTheme`, through `paintableLook`), so a
+     * locked look painted as the default asks for nothing, and a shipped
+     * look's sheet is in the entry CSS. No wait (8d2's hold): the look's
+     * class is on the stall now, and its rules apply when its sheet lands.
+     * Test: `a-try-on-asks-for-its-sheet-and-a-locked-look-for-none`.
+     */
+    const sheet = lookSheetOf(theme);
+    if (sheet !== undefined) {
+        askForLookSheet(sheet, stall.ownerDocument);
+    }
     // The browser chrome joins the look: the static #0a1b33 in index.html is
     // the pre-paint colour, and a Rural stall framed by navy is somebody
     // else's page. Mood included — it went through the same merge above.

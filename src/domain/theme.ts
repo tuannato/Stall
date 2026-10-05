@@ -234,10 +234,10 @@ export type DecodedTheme = {
      * How the look's own sheet reaches a page. `bundled`: imported with the
      * app, in the entry CSS every visitor downloads — the three shipped
      * looks, which the door paints (Q8) and every record on chain names.
-     * `worn`: its own file, fetched only for a stall that wears the look
-     * (Q17; from Ink wash on). No row is `worn` yet: the loader that fetches
-     * one is step 8's, and until it lands a `worn` row would paint without
-     * its sheet. The sheet's own role table says the same per file
+     * `worn`: its own file, fetched only for a stall that paints the look
+     * (Q17; from Ink wash on): every private look's row (`lookTable.ts`),
+     * whose sheet `src/ui/lookSheets.ts` loads when the renderer paints it
+     * (8d1). No shipped row is `worn`. The sheet's own role table says the same per file
      * (`scripts/sheet-roles.mjs`, `load`), and
      * `every-look-row-loads-its-sheet-the-way-its-role-says` holds the two
      * together; the weight guard counts a worn sheet and its art apart from

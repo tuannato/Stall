@@ -664,6 +664,34 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         assert.ok([...a.keys()].some((path) => path.endsWith('.js')));
     });
 
+    /**
+     * `the-worn-only-loader-ships-only-with-a-worn-only-look` (8d1): the
+     * loader (`src/ui/lookSheets.ts`) is reached from the renderer only
+     * behind `lookSheetOf`, which a build carrying no private look answers
+     * from the module's literal switch — so Rollup folds the ask away and
+     * drops the loader, and the public build is the bytes it was before the
+     * loader existed (measured: `dist` identical to 90b266e's). A build that
+     * carries the fixture carries the loader and names its look's sheet
+     * file. Red: a second `return` in `lookSheetOf`, which Rollup cannot
+     * read as a literal.
+     */
+    it('the-worn-only-loader-ships-only-with-a-worn-only-look', () => {
+        const LOADER = 'is not a sheet naming';
+        const js = (dir) =>
+            [...distFiles(dir)]
+                .filter(([path]) => path.endsWith('.js'))
+                .map(([, bytes]) => bytes.toString('utf8'))
+                .join('\n');
+        assert.ok(!js(publicDist).includes(LOADER), 'the public build carries the worn-only loader');
+        assert.ok(!js(productionDist).includes(LOADER), 'a build that carries no look carries the loader');
+        const preview = js(previewDist);
+        assert.ok(preview.includes(LOADER), 'a build carrying a look carries no loader for it');
+        const sheet = [...distFiles(previewDist)].find(
+            ([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'),
+        );
+        assert.ok(sheet !== undefined && preview.includes(`/${sheet[0]}`), "the script names the look's built sheet");
+    });
+
     it('carries the look at preview, in its own sheet, its art beside it', () => {
         const files = distFiles(previewDist);
         const sheets = [...files].filter(([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'));
