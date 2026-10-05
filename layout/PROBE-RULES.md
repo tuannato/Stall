@@ -4061,47 +4061,183 @@ in a keyframe is refused statically by the look lint instead
 (`a-file-mask-arrives-at-rest`); a `url()` carried in by `var()` is not
 seen there, stated.
 
-## The geometry passes measure whatever face is loaded — a gap, not a rule (8d1's critic, 2026-10-06)
+## Every face is loaded before the probe measures (2026-10-06)
 
-Not a rule: a measured gap, written down so nobody reads the passes as
-measuring the shipped faces. **The geometry passes (mobile, desktop,
-canvas, portrait, tablet) are one synchronous task** — the module body
-paints and measures every screen with no `await` — so a web face that is
-not already loaded when the body starts stays `loading` for the whole pass,
-and the pass lays out and measures every line in the fallback face. The
-contrast passes are the exception: their prepare awaits
-`document.fonts.ready`.
+**`every-face-is-loaded-before-the-probe-measures`.** Before the geometry
+loop, the page asks every face in `document.fonts` that is not loaded to
+load — every `@font-face` of every sheet on the page, each subset included,
+after the worn-only sheets so their faces are declared too — and waits for
+each to settle and for `document.fonts.ready`, bounded at 10 s
+(`loadEveryFace`, `layout/faces.ts`). Then it echoes each face's status at
+that moment (`faces`, and `window.__faces`). The runner
+(`scripts/probe-faces.mjs`) refuses a page whose echo is missing, whose
+wait ran out, any of whose faces is not `loaded`, or that lacks a face
+`src/ui/stall.css` declares — the list is read from that sheet's
+`@font-face` rules (eight today: Inter, Stall Serif and its italic,
+JetBrains Mono, each Latin and Vietnamese), never written in the runner,
+and a list read as empty stops the run before it builds. It is held on
+every pass that reads a verdict (mobile, desktop, canvas, portrait,
+tablet, both reduced-motion passes) and on every contrast and transparency
+page before its first job, and each pass prints what it waited for:
+`faces: 8 of 8 loaded before measuring (Inter 2, Stall Serif 4, JetBrains
+Mono 2); 8 asked, 13 ms`. **No warm-up paint**: a paint before the loop
+would hand the marquee's runs and the renderer's scroll and focus memory to
+the first measured screen, which is not the faces, and loading every
+declared face already asks for every face a paint would. A subset no
+fixture uses is loaded too: its `unicode-range` keeps it off every line
+outside its range, so it moves no layout. The echo is read once, when
+measuring begins: the loop and the verdict are one task, in which no sheet
+becomes active and no loaded face unloads (a second read at the verdict
+shipped in 52d7704 and was removed after its critic — it could not fire).
 
-Measured (an instrumented probe, `document.fonts` read per screen and
-variant, every pass, never committed):
+**What it proves: each declared face was loaded. Not that any line was
+drawn in one** (the critic's P2-1, 2026-10-06). Every face is asked to load
+whether or not a line uses it, so `loaded` is true by construction; on
+`main`, a `loaded` face had at least been asked for by layout. The critic
+measured two misses on this branch's own build with CDP
+`CSS.getPlatformFontsForNode` (`item-listing` at 390, the three looks bare;
+the critic's reading, not re-run here): the rate's `≈` drawn from a system
+face on every look (`.SF NS`, `Menlo`, `Iowan Old Style`) with all eight
+faces `loaded`; and the stall's `--s-font` misspelt `"Intr"` drew every
+`price`, `rate` and `fiat` node in `.SF NS` while the pass printed `faces:
+8 of 8 loaded`. `document.fonts.check()` is no help (it answered `true` for
+both). Those are held statically now, beside this rule:
 
-- **The ordinary probe on `main`:** the mobile pass, the first navigation of
-  the run, measured all 455 of its screen paints with Inter and JetBrains
-  Mono `loading`; the desktop pass, a later navigation in the same tab,
-  measured all 526 with them `loaded`. So **the phone's geometry — the
-  money pass at 390 — is measured in the fallback faces**, the desktop's in
-  the shipped ones, decided by the browser's cache and not by any rule.
-- **The workshop probe:** the same on `main` for the Rural starter (390
-  fallback; 1280, 1920, 1080×1920, 768×1024 and the second 390 loaded). On
-  8d1 every pass measured fallback faces: the kit's sheet now loads
-  worn-only, so the module body yields once before its first paint — and a
-  yield alone does it (planted: a 50 ms timer in the sheet's place, no
-  sheet appended, gave the same `loading` everywhere). A web face resolved
-  from the memory cache becomes `loaded` within the task that first uses it
-  only when nothing yielded before; why, in Chrome's loader, was not read.
-- **What moved:** the Rural starter's names lay out 1–2 px apart between
-  the two faces (`Roasted Beans` 131 / 133 px at 1280), so the marquee's
-  travel differs (7267 / 7167 ms on `long-item-name`; 3348 / 3087 and
-  5261 / 5022 ms on `shop-window-browse`) and so do the hit-test points that
-  land behind a clip: desktop 518 / 4446 → 531 / 4453, canvas 30 / 1135 →
-  29 / 1131 (`crowded`, `item-unbuyable-fold`, `long-item-name`,
-  `shop-window-browse`). Every verdict held. The critic measured the
-  skeleton's and the Modern starter's counts unchanged and the Neo
-  starter's canvas moved the same way (1051 / 31 → 1048 / 30); only the
-  Rural starter was instrumented here.
+- **`every-font-family-opens-with-a-served-face`**
+  (`scripts/served-faces.test.mjs`): every `FONT_STACKS` entry, every
+  `--s-font…` value the theme table emits for every shipped look, and every
+  `font-family`, `font` and `--s-font…` declaration of every sheet the app
+  paints (base, looks, screens, the kit, the fixture look, every private
+  look a run reads) open with a family a served `@font-face` declares,
+  `inherit` or `var(--s-font…)` — a worn-only sheet's own face included.
+  `SERVED_FAMILIES` (`scripts/workshop-css.mjs`) is held to `stall.css`'s
+  families, and no other public sheet declares a face. The documents
+  (`/stream`, `/guide`, `/404`) load no app face by design and are not read.
+- **`a-look-names-only-a-served-face`** (the look lint, the critic's
+  P2-2): the same rule in the walk every look sheet goes through —
+  `lintLookSheet` for the shipped looks and a private look's sheet,
+  `lintSheet` for the kit (`workshop:lint`).
+- **`every-glyph-the-app-prints-is-in-its-face`**: every code point in the
+  app's own string and template literals (`src/`, read with the TypeScript
+  parser, cooked so `≈` counts; tests, declarations and the withheld
+  list's generated data aside), every `content` string of the base, look,
+  screen and kit sheets, `GENERATED_TEXT`, and printable ASCII — glyphless
+  characters (controls, format characters such as the picker's isolates)
+  left out — held to the WOFF2 `cmap` (`woff2CodePoints`,
+  `scripts/look-faces.mjs`) of the face whose `unicode-range` covers it, on
+  each of Inter, Stall Serif, Stall Serif italic and JetBrains Mono. What no
+  served face draws today is pinned, each with where it prints: `≈` (the
+  unit rate under a listing and the pay sheets' rate row,
+  `[data-role="rate"]`, a money node), `→` (`DESC_SUB`, the first-stall
+  checklist's "Share your link" step, `OBS_RECIPE_SOURCE`), `◆` (the
+  ticker's separator, `GENERATED_TEXT`), and `元 ₹ ₪ ₩ ₦ ₱ ₺ р` (a quote's
+  `seller-price`, a money node, in CNY, INR, ILS, KRW, NGN, PHP, TRY, RUB).
+  Each is drawn by a font of the reader's machine, so differently per OS,
+  and the probe measures this Mac's. Whether to re-subset the faces for
+  them is the owner's call; the list is the statement until then. A second
+  pinned list holds the code points a face's `unicode-range` names on its
+  own that its file lacks — Fontsource's family ranges are wider than the
+  subsets: `₫` in Stall Serif's two Vietnamese files, `↑ ↓` in its two
+  Latin ones, U+2215 in Inter's Latin, U+0329 in all eight, U+FFFD in the
+  four Latin files of Inter, Stall Serif and JetBrains Mono — none printed
+  by the app today (VND prints `đ`), which the test holds too.
 
-Not fixed, stated: the cure — paint each measured look once, then await
-`document.fonts.ready` (or load every face the sheets declare) before the
-synchronous loop — changes what the phone pass of the ordinary probe
-measures for the shipped looks, and may surface failures; it is its own
-change, with a red proof by a face that never loads.
+**The incident (8d1's critic, measured with an instrumented probe, never
+committed).** The geometry passes are one synchronous task — the module
+body paints and measures every screen with no `await` — so a face not
+loaded when the body started stayed `loading` for the whole pass. On
+`main`, the mobile pass, the first navigation of a run, measured all 455
+of its paints with Inter and JetBrains Mono `loading`; the desktop pass, a
+later navigation in the same tab, measured all 526 with them `loaded` —
+**the phone's geometry, the money pass at 390, was measured in the fallback
+faces**, decided by Chrome's cache and not by any rule. The critic read
+the workshop probe on 8d1 as measuring every pass in the fallback faces
+(the kit's sheet loads worn-only, so the body yields once before its first
+paint), reading `document.fonts` per screen and variant on the Rural
+starter. Re-read here on the skeleton, which never paints Stall Serif, and
+only at each verdict — a weaker instrument on a different look, since a
+status can turn `loaded` inside the measuring task, so `loaded` at the
+verdict does not show the early paints used the face: with the wait
+removed and nothing asked, the three faces the skeleton uses were
+`loading` at the 390 pass's verdict and `loaded` at every later one. The
+question is moot with the wait in. The Rural starter's names lay out 1–2
+px apart between the two faces (`Roasted Beans` 131 / 133 px at 1280),
+which moved the marquee's travel (7267 / 7167 ms on `long-item-name`) and
+the hit-test points that land behind a clip. The contrast passes were never
+exposed: their prepare awaits `document.fonts.ready` and re-reads its boxes
+after.
+
+**What loading the faces first moved, 2026-10-06** (this Mac, the same
+tree with and without the wait): the mobile pass's hit-test points went
+from 926 of 11034 behind a clip to 912 of 10922, and every verdict held —
+`pnpm test:layout` green, no stylesheet or threshold touched. The desktop,
+canvas, portrait and tablet counts are unchanged (1723/13780, 119/3214, and
+the same `compared:` lines): those passes already had the faces from the
+cache. The contrast dump is **bitwise identical**, 9737 of 9737 boxes
+(`node scripts/contrast-dump.mjs`, main's against this tree's). The
+workshop probe on the skeleton is green with the wait. The wait costs 0–13
+ms a page (the first navigation fetches the eight files; every later one
+reads Chrome's cache).
+
+**Red proofs**, each against the real run (the first three read the
+statuses at the start, and at each verdict with the second read since
+removed):
+
+- **The wait removed, the loads asked** (`void loadEveryFace(...)`, the
+  echo read at once): **red on the 390 pass alone** — all eight faces
+  `loading` at the start and still `loading` at the verdict, and the pass's
+  points 926/11034, main's to the point — and green on every later pass,
+  because a face asked for from Chrome's memory cache is `loaded` within the
+  same task. That is the shape `main` had. The workshop probe under the same
+  plant: the same, red on its 390 pass alone.
+- **The wait removed, nothing asked** (the echo read at once): red on every
+  pass, eight faces `unloaded` at the start; at the verdict the 390 pass
+  still had seven `loading`, the later passes only the italic Vietnamese
+  subset no fixture uses `unloaded`. The contrast and transparency passes
+  were refused at their first page. On the workshop probe the same plant
+  is red everywhere too, and at the verdict it is the 390 pass alone with
+  faces `loading` (above).
+- **A face that never loads** (a planted `@font-face` in `stall.css` whose
+  file does not exist): `error` on every pass, the eight real faces
+  `loaded` beside it, the contrast and transparency pages refused; the wait
+  ended at once (an error settles).
+- **No face declared** (`stall.css`'s eight `@font-face` renamed away):
+  the runner stops before it builds, "declares no @font-face".
+- **The static rules**: `FONT_STACKS` renaming Stall Serif to `"Stal
+  Serif"` — two red (the stacks, and Rural's `--s-font`); `stall.css`
+  renaming its face to `'Lora'` — the served list no longer matches, and
+  the glyph test cannot read its face sets; a `★` added to `DESC_SUB` —
+  "printed in no served face"; the rate's `≈` taken out of both its lines
+  — "no longer printed from src/ui/copy.ts"; Inter's Vietnamese file
+  copied over its Latin one — 93 of the 95 printable ASCII characters undrawn in Inter; the lint rule
+  switched off — the critic's two plants (`Georgia, "Comic Sans MS"` and
+  `"Stal Serif"`, in the Neo sheet and its starter) and the rest go green
+  where they must be red.
+- The pure halves: `scripts/probe-faces.test.mjs` (a face not loaded, a
+  missing echo, a page that declares nothing, a wait that ran out, a face
+  stall.css declares missing from the page; the sheet's range spelling and
+  the browser's read as one) and `layout/faces.test.ts` (only faces not
+  loaded are asked, `ready` is awaited, a failed load is `error`, the
+  bound).
+
+**Stated limits.** The echo is each face's status, not which face a given
+line was drawn in; the static rules cover the app's own words and names,
+not a seller's (their names, words and descriptions can hold any character)
+nor what an `Intl` formatter writes at runtime. **The fallback state is
+measured by nothing**: what a visitor sees during the `font-display: swap`
+period on a slow line, or for good when a face is blocked, is the
+machine's fallback stack — on `main` the 390 pass measured this Mac's by
+accident, and every verdict held — and no pass paints it now. A
+blocked-faces pass (CDP `Network.setBlockedURLs` on `*.woff2` at 390) would
+measure only this machine's fallback, at the cost of one more pass; whether
+to build it is the owner's call. An optional end-to-end glyph check — CDP
+`CSS.getPlatformFontsForNode` on the money nodes refusing any run that is
+not a custom font, or in the page the two-fallback width trick (a string
+measured in `<first family>, serif` and in `<first family>, monospace` is
+the same width exactly when the first family draws every glyph) — is not
+built. The runner's list is `stall.css`'s: a worn-only look's own faces are
+owed `loaded` by the page's echo but are not named by the runner. The
+worn-only sheet job's page measures no text and its echo is not read.
+`scripts/print-measure.mjs` loads the same page and so inherits the wait,
+but holds no echo of its own (its own `document.fonts.ready` after the
+prepare covers it; only an `error` face would go unsaid there).

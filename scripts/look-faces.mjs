@@ -101,11 +101,14 @@ function base128(buf, at) {
 }
 
 /**
- * Every name record of a single-font WOFF2, as `{ id, platform, text }`.
- * Throws when `buf` is not a WOFF2, its stream does not decompress, or it
- * holds no name table — never an empty list for a file it could not read.
+ * The decompressed tables of a single-font WOFF2, keyed by their known-tag
+ * index (the spec's table of 63 tags: 0 is `cmap`, 5 is `name`) or, for a
+ * tag outside it, its four letters. A transformed table (`glyf`, `loca`, a
+ * transformed `hmtx`) is its transformed bytes; the readers here read only
+ * tables WOFF2 never transforms. Throws when `buf` is not a WOFF2 or its
+ * stream does not decompress.
  */
-export function woff2NameRecords(buf) {
+function woff2Tables(buf) {
     if (buf.length < 48 || buf.toString('latin1', 0, 4) !== 'wOF2') {
         throw new Error('not a WOFF2 file (no wOF2 signature)');
     }
@@ -131,14 +134,22 @@ export function woff2NameRecords(buf) {
         tables.push({ tag, length });
     }
     const stream = brotliDecompressSync(buf.subarray(at.i, at.i + compressedSize));
+    const out = new Map();
     let offset = 0;
-    let name;
     for (const table of tables) {
-        if (table.tag === 5) {
-            name = stream.subarray(offset, offset + table.length);
-        }
+        out.set(table.tag, stream.subarray(offset, offset + table.length));
         offset += table.length;
     }
+    return out;
+}
+
+/**
+ * Every name record of a single-font WOFF2, as `{ id, platform, text }`.
+ * Throws when `buf` is not a WOFF2, its stream does not decompress, or it
+ * holds no name table — never an empty list for a file it could not read.
+ */
+export function woff2NameRecords(buf) {
+    const name = woff2Tables(buf).get(5);
     if (name === undefined || name.length < 6) {
         throw new Error('no name table');
     }
@@ -154,6 +165,74 @@ export function woff2NameRecords(buf) {
         const raw = name.subarray(start, start + length);
         const text = platform === 3 || platform === 0 ? Buffer.from(raw).swap16().toString('utf16le') : raw.toString('latin1');
         out.push({ id, platform, text });
+    }
+    return out;
+}
+
+/**
+ * Every code point a single-font WOFF2 maps to a glyph other than
+ * `.notdef`, read from its `cmap`: a Unicode subtable of format 12 when the
+ * face has one, else of format 4 (platform 0, or platform 3 encoding 1 or
+ * 10). The face's own coverage, which its `@font-face` `unicode-range` only
+ * declares — a range may claim a code point the file holds no glyph for
+ * (`every-glyph-the-app-prints-is-in-its-face`, `scripts/served-faces.mjs`).
+ * Throws when the file holds no Unicode subtable this reader reads.
+ */
+export function woff2CodePoints(buf) {
+    const cmap = woff2Tables(buf).get(0);
+    if (cmap === undefined || cmap.length < 4) {
+        throw new Error('no cmap table');
+    }
+    const records = [];
+    for (let r = 0; r < cmap.readUInt16BE(2); r += 1) {
+        const rec = 4 + r * 8;
+        const platform = cmap.readUInt16BE(rec);
+        const encoding = cmap.readUInt16BE(rec + 2);
+        const offset = cmap.readUInt32BE(rec + 4);
+        const unicode = platform === 0 || (platform === 3 && (encoding === 1 || encoding === 10));
+        if (unicode) records.push({ offset, format: cmap.readUInt16BE(offset) });
+    }
+    const out = new Set();
+    const twelve = records.find((r) => r.format === 12);
+    if (twelve !== undefined) {
+        const groups = cmap.readUInt32BE(twelve.offset + 12);
+        for (let g = 0; g < groups; g += 1) {
+            const at = twelve.offset + 16 + g * 12;
+            const start = cmap.readUInt32BE(at);
+            const end = cmap.readUInt32BE(at + 4);
+            const glyph = cmap.readUInt32BE(at + 8);
+            for (let c = start; c <= end; c += 1) {
+                if (glyph + (c - start) !== 0) out.add(c);
+            }
+        }
+        return out;
+    }
+    const four = records.find((r) => r.format === 4);
+    if (four === undefined) {
+        throw new Error('no Unicode cmap subtable of format 4 or 12');
+    }
+    const base = four.offset;
+    const segments = cmap.readUInt16BE(base + 6) / 2;
+    const ends = base + 14;
+    const starts = ends + segments * 2 + 2;
+    const deltas = starts + segments * 2;
+    const rangeOffsets = deltas + segments * 2;
+    for (let s = 0; s < segments; s += 1) {
+        const end = cmap.readUInt16BE(ends + s * 2);
+        const start = cmap.readUInt16BE(starts + s * 2);
+        const delta = cmap.readInt16BE(deltas + s * 2);
+        const rangeOffset = cmap.readUInt16BE(rangeOffsets + s * 2);
+        for (let c = start; c <= end && c !== 0xffff; c += 1) {
+            let glyph;
+            if (rangeOffset === 0) {
+                glyph = (c + delta) & 0xffff;
+            } else {
+                const at = rangeOffsets + s * 2 + rangeOffset + (c - start) * 2;
+                const raw = cmap.readUInt16BE(at);
+                glyph = raw === 0 ? 0 : (raw + delta) & 0xffff;
+            }
+            if (glyph !== 0) out.add(c);
+        }
     }
     return out;
 }

@@ -28,6 +28,7 @@ import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser
 import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
     interruptedCode,
@@ -93,6 +94,32 @@ stopOnSignals('layout-check');
 const SHIPPED_SHEET_CLASSES = LOOKS === 'workshop' ? [] : ['t-modern', 't-neo', 't-rural'];
 const EXPECTED_SHEET_CLASSES =
     LOOKS === 'workshop' ? ['t-workshop'] : [...SHIPPED_SHEET_CLASSES, 't-skeleton'];
+
+/*
+ * The faces every probe page owes before it measures
+ * (`every-face-is-loaded-before-the-probe-measures`, `probe-faces.mjs`):
+ * read from `src/ui/stall.css`'s `@font-face` rules, never listed here. The
+ * page echoes each face's status when its measuring began
+ * (`layout/faces.ts`), and a page whose echo is not every one of these
+ * loaded is refused — on every pass whose verdict this reads, and on every
+ * contrast and transparency page before its first job.
+ */
+const DECLARED_FACES = declaredStallFaces();
+if (DECLARED_FACES.length === 0) {
+    // A list read as empty would hold every page to nothing.
+    console.error('layout-check: src/ui/stall.css declares no @font-face — the faces every page owes cannot be read');
+    process.exit(1);
+}
+
+/** The face faults of a page's echo, as the probe's own failure records. */
+function faceFailures(echo) {
+    return facesFaults(echo, DECLARED_FACES).map((detail) => ({
+        screen: 'probe page',
+        theme: '-',
+        check: FACES_CHECK,
+        detail,
+    }));
+}
 
 /** Why a painted class set is not the one this run measures, or undefined. */
 function sheetClassesWrong(painted) {
@@ -256,6 +283,9 @@ async function readVerdict(cdp, sessionId, url) {
         if (typeof r.result.value === 'string') {
             const report = JSON.parse(r.result.value);
             report.failures.push(...(await lateRefusals(cdp, sessionId, report)));
+            // Measured in the faces it owes, or the pass is refused — every
+            // pass that reads a verdict, the reduced-motion ones included.
+            report.failures.push(...faceFailures(report.faces));
             return report;
         }
         await sleep(100);
@@ -1316,14 +1346,16 @@ try {
                 console.log(
                     `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
                         clipLine +
-                        (compared === '' ? '' : `\n    compared: ${compared}`),
+                        (compared === '' ? '' : `\n    compared: ${compared}`) +
+                        `\n    faces: ${facesLine(report.faces)}`,
                 );
             }
             continue;
         }
         failed = true;
         console.error(
-            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipLine}`,
+            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipLine}` +
+                `\n    faces: ${facesLine(report.faces)}`,
         );
         for (const f of report.failures) {
             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
@@ -1432,7 +1464,10 @@ try {
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
                 if (pv.failures.length === 0 && gaps.length === 0) {
-                    console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}`);
+                    console.log(
+                        `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
+                            `\n    faces: ${facesLine(pv.faces)}`,
+                    );
                 } else {
                     failed = true;
                     if (pv.failures.length > 0) {
@@ -1507,7 +1542,10 @@ try {
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
                 if (tv.failures.length === 0 && gaps.length === 0) {
-                    console.log(`✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}`);
+                    console.log(
+                        `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
+                            `\n    faces: ${facesLine(tv.faces)}`,
+                    );
                 } else {
                     failed = true;
                     if (tv.failures.length > 0) {
@@ -1611,7 +1649,7 @@ try {
                     ).join(', ')} mounted no [data-role="seller-price"].`,
                 );
             } else if (rm.failures.length === 0) {
-                console.log(`✓ ${label}: every look — ${took()}`);
+                console.log(`✓ ${label}: every look — ${took()}\n    faces: ${facesLine(rm.faces)}`);
             } else {
                 failed = true;
                 console.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${took()}`);
@@ -1674,6 +1712,8 @@ try {
         if (loadedAt === 0) return;
         contrastRefusals.push(...(await evalJson(cdp, sessionId, 'window.__cspRefusals()')));
     };
+    // One faces line per contrast page loaded, printed with the pass's verdict.
+    const contrastFacePages = [];
     const loadContrastPage = async (vp, phase = 'load') => {
         await collectRefusals();
         await timed(`${phase}: navigate`, () =>
@@ -1681,6 +1721,15 @@ try {
         );
         await timed(`${phase}: ready`, () => waitForFlag(cdp, sessionId, '__probeReady'));
         loadedAt = performance.now();
+        // Every face loaded before the first job on this page
+        // (`every-face-is-loaded-before-the-probe-measures`): a job paints
+        // after the page's own wait, so one check per page covers its jobs.
+        const echo = await evalJson(cdp, sessionId, 'window.__faces ?? null');
+        const faults = facesFaults(echo, DECLARED_FACES);
+        if (faults.length > 0) {
+            throw new Error(`the ${vp.name} page was not measured in its faces (${FACES_CHECK}): ${faults.join('; ')}`);
+        }
+        contrastFacePages.push(facesLine(echo));
     };
     // Jobs refused by their echo checks, one line each — said whatever else
     // the pass does, a pass that threw later included.
@@ -2562,7 +2611,9 @@ try {
                         `the aurora's tide held at an end on ${tideJobs}, ` +
                         `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
-                        `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}`,
+                        `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}` +
+                        `\n    faces: every face loaded before the first job on all ${contrastFacePages.length} contrast pages` +
+                        ` (the first: ${contrastFacePages[0] ?? 'none'})`,
                 );
             }
         } else {
@@ -2698,6 +2749,12 @@ try {
         currentStep = 'transparency: loading the canvas page';
         await cdp.send('Page.navigate', { url: probeUrl(CANVAS, '&screens=') }, sessionId);
         await waitForFlag(cdp, sessionId, '__probeReady');
+        // Every face loaded before the first job (`every-face-is-loaded-before-the-probe-measures`).
+        const faceEcho = await evalJson(cdp, sessionId, 'window.__faces ?? null');
+        const faceFaults = facesFaults(faceEcho, DECLARED_FACES);
+        if (faceFaults.length > 0) {
+            throw new Error(`the canvas page was not measured in its faces (${FACES_CHECK}): ${faceFaults.join('; ')}`);
+        }
         const themes = await evalJson(cdp, sessionId, 'window.__themes');
         const dim = [];
         let boxes = 0;
@@ -2861,7 +2918,8 @@ try {
         } else if (dim.length === 0 && clearRefusals.length === 0) {
             console.log(
                 `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
-                    `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}`,
+                    `outside the plates at alpha 0; ${boxes} figure boxes over black and white — ${took()}` +
+                    `\n    faces: ${facesLine(faceEcho)}`,
             );
         } else if (dim.length > 0) {
             failed = true;

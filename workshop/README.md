@@ -105,7 +105,8 @@ accepted. *(Stall at intake.)*
 **Type.** Pick one of three stacks for the look: a sans (Inter), a
 monospace (JetBrains Mono) or a serif (the face Rural wears). Stall serves
 all three itself, so a look reads the same on every phone and computer and
-the kit measures what visitors see. No new font files.
+the kit measures what visitors see. No new font files. *(The kit —
+`workshop:lint`.)*
 Text a reader is given is never smaller than 11 px — Stall's small-text
 scale is 11 px for labels and 11.5 px for fine print — and every control
 keeps a 44 px touch target. *(The kit — `workshop:probe` fails any text

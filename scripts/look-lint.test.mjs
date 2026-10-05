@@ -19,6 +19,7 @@ import {
     lintLookSheet,
     lintSheet,
     PRESENCE_ATTRIBUTES,
+    SERVED_FAMILIES,
     parseSheet,
     foreignNamingProblems,
     rescopeSheet,
@@ -753,5 +754,81 @@ describe('a-file-mask-arrives-at-rest', () => {
         accepts('.t-neo .item-n:hover { clip-path: inset(0 2px); }');
         accepts('.t-neo .item-n { mask-image: url(./x.svg); }');
         accepts('.t-neo [data-role="price"] { mask-image: url(./x.svg); }');
+    });
+});
+
+describe('a-look-names-only-a-served-face', () => {
+    /**
+     * The probe-fonts critic's P2-2: a look sheet could name any family, so
+     * a kit look set in this machine's Georgia, or in a one-letter misspelling
+     * of a served face, painted in whatever each reader's machine has while
+     * `workshop:probe` printed every face loaded. A `font-family`, a `font`
+     * shorthand's family and a `--s-font…` value open with `inherit`, a
+     * `var(--s-font…)`, a family Stall serves (`SERVED_FAMILIES`, held to
+     * `stall.css` by `every-font-family-opens-with-a-served-face`) or, in a
+     * worn-only sheet, the family its own `@font-face` declares. Red by the
+     * critic's two plants, in the Neo sheet and its starter.
+     */
+    it('refuses the critic\'s plants, shipped and kit', () => {
+        plant('.t-neo .item-x { font-family: Georgia, "Comic Sans MS", serif; }', /opens with "Georgia".*\(a-look-names-only-a-served-face\)/);
+        plant('.t-neo .item-x { font-family: "Stal Serif"; }', /opens with "Stal Serif".*\(a-look-names-only-a-served-face\)/);
+    });
+
+    it('refuses a stack of generics alone, a shorthand, a var and a --s-font naming another face, and a keyframe', () => {
+        for (const [rule, pattern] of [
+            ['.t-neo .item-x { font-family: serif; }', /opens with "serif"/],
+            ['.t-neo .item-x { font: 700 14px/1 Georgia, serif; }', /font: .*opens with "Georgia"/],
+            ['.t-neo .item-x { font: var(--x); }', /a font shorthand whose family this lint cannot read/],
+            ['.t-neo .item-x { font-family: var(--x); }', /opens with "var\(--x\)"/],
+            ['.t-neo .item-x { --s-font: Georgia, serif; }', /--s-font: .*opens with "Georgia"/],
+            ['.t-neo .item-x { font-family: inherit, serif; }', /inherit stands alone/],
+            ['@keyframes t-neo-face { from { font-family: Georgia; } to { font-family: inherit; } }', /opens with "Georgia"/],
+        ]) {
+            plant(rule, pattern);
+        }
+    });
+
+    it('accepts inherit, the theme\'s own var, and every family Stall serves', () => {
+        assert.deepEqual([...SERVED_FAMILIES].sort(), ['Inter', 'JetBrains Mono', 'Stall Serif']);
+        for (const rule of [
+            '.t-neo .item-x { font-family: inherit; }',
+            '.t-neo .item-x { font-family: var(--s-font); }',
+            '.t-neo .item-x { font-family: var(--s-font, serif); }',
+            '.t-neo .item-x { font-family: "Stall Serif", Georgia, serif; }',
+            '.t-neo .item-x { font-family: Inter, sans-serif; }',
+            ".t-neo .item-x { font-family: 'JetBrains Mono', monospace; }",
+            '.t-neo .item-x { font-family: stall serif; }',
+            '.t-neo .item-x { font: 700 14px/1 var(--s-font); }',
+            // Unquoted: a string in a shorthand is refused on its own (a string stands only in content, a font's names and features, the grid templates).
+            '.t-neo .item-x { font: italic 600 1.2em / 1.4 Stall Serif, serif; }',
+            '.t-neo .item-x { font: inherit; }',
+        ]) {
+            accepts(rule);
+        }
+    });
+
+    it('accepts a worn-only sheet\'s own face there, and only there', () => {
+        const art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'brush.woff2'] };
+        const own =
+            '@font-face { font-family: t-fixture-worn-brush; font-display: swap; src: url(./fixture-look/brush.woff2) format("woff2"); }\n' +
+            '.t-fixture-worn .item-n { font-family: t-fixture-worn-brush, serif; }';
+        assert.deepEqual(lintFixture(plantedFixture(own), art), []);
+        // Named without the face that declares it, the family is a face nobody serves.
+        const problems = lintFixture(plantedFixture('.t-fixture-worn .item-n { font-family: t-fixture-worn-brush, serif; }'), art);
+        assert.ok(problems.some((p) => /opens with "t-fixture-worn-brush".*\(a-look-names-only-a-served-face\)/.test(p)), problems.join('\n'));
+    });
+
+    it('holds every shipped look sheet, the kit and every private look sheet a run reads', () => {
+        for (const sheet of LOOKS) {
+            assert.deepEqual(lintLookSheet(read(sheet.path), { lookClass: sheet.lookClass }).filter((p) => /served-face/.test(p)), [], sheet.path);
+        }
+        assert.deepEqual(lintSheet(read('workshop/theme-workshop.css')).filter((p) => /served-face/.test(p)), []);
+        for (const row of PRIVATE) {
+            assert.deepEqual(
+                lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt }).filter((p) => /served-face/.test(p)),
+                [],
+                row.path,
+            );
+        }
     });
 });

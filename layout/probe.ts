@@ -39,6 +39,7 @@ import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
+import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -3445,6 +3446,21 @@ try {
     });
 }
 
+/*
+ * **Every face is loaded before the probe measures**
+ * (`every-face-is-loaded-before-the-probe-measures`, `layout/faces.ts`).
+ * The loop below is one synchronous task, so a face still loading when it
+ * starts is the fallback face for the whole pass — before this wait, that
+ * was the 390 pass, every run. After the worn-only sheets above, so their
+ * faces are declared too; style is resolved first, so every sheet's
+ * `@font-face` is registered before the set is read. Every page load waits, the contrast
+ * and transparency pages (no screens of their own) included, and publishes
+ * the echo for the runner (`window.__faces`, and the verdict's `faces`).
+ */
+void document.documentElement.getBoundingClientRect();
+const facesAtStart = await loadEveryFace(document.fonts);
+window.__faces = facesAtStart;
+
 const measured = screensToRun();
 /**
  * Screens that actually mounted a seller's figure while they were measured.
@@ -3900,6 +3916,8 @@ type ContrastLive = {
 
 declare global {
     interface Window {
+        /** Every face's status when measuring began (`layout/faces.ts`), for the runner to hold. */
+        __faces: FaceEcho;
         __contrastPrepare: (
             screen: string,
             themeId: number,
@@ -5356,6 +5374,13 @@ const verdict = {
     portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
         .matches,
     screensMeasured: measured,
+    /*
+     * Every face's status when the measuring began (`layout/faces.ts`; the
+     * runner holds it, `scripts/probe-faces.mjs`). Read once: the loop and
+     * this verdict are one task, in which no sheet becomes active and no
+     * loaded face unloads.
+     */
+    faces: facesAtStart,
     /*
      * Every `t-*` class a painted `.stall` wore — the look this page
      * actually measured, not the one it was asked for. The runner refuses

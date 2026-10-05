@@ -15,6 +15,7 @@ export declare function holdersIn(text: string): string[];
 export declare const FONT_NAME_MAX: number;
 export declare const SUBSET_MAX: number;
 export declare function woff2NameRecords(buf: Buffer): { id: number; platform: number; text: string }[];
+export declare function woff2CodePoints(buf: Buffer): Set<number>;
 export declare function reservedFontNames(licenceText: string): string[];
 export declare function parseLookFonts(text: string): { fonts: LookFont[] | undefined; problems: string[] };
 export declare function lookFaceProblems(input: { fontsText: string | undefined; art: readonly ArtFile[]; named: ReadonlySet<string> }): string[];
