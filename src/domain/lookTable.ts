@@ -66,8 +66,8 @@
  * are refused by the build (`privateIndexProblems`) and not spelt here: the
  * served bundle must not carry them, which is how `gallery-is-not-served`
  * and `the-ordinary-probe-loads-no-kit` tell a harness leak from the app. An
- * admitted look's row is `sheetLoad: 'worn'`: its sheet is its own file,
- * never the entry CSS.
+ * admitted look's row is `sheetLoad: 'worn'` (`lookFromData` builds every
+ * look read from data so): its sheet is its own file, never the entry CSS.
  *
  * **The paid gate is one function** (the step-8 critic's item 3):
  * `paintableLook` decides what a record's look paints and wears. A record
@@ -94,6 +94,7 @@
  */
 import { carriesPrivateLooks, privateLooks } from 'virtual:stall-private-looks';
 import { SHIPPED_ATTACHMENTS, wornFrom, type ShippedAttachment } from './attachments';
+import { LOOK_CLASS } from './lookClass';
 import { lookFromData, type LookData, type PrivateLookSource } from './lookData';
 import { sameOwner } from './moodClass';
 import {
@@ -105,8 +106,6 @@ import {
     type DecodedTheme,
 } from './theme';
 
-/** One `t-` class token, as the private index writes one. */
-const LOOK_CLASS = /^t-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** How many times each value `key` gives appears across `items`. */
 function counts<T, K>(items: readonly T[], key: (item: T) => K): Map<K, number> {
@@ -146,7 +145,7 @@ function admitted(sources: readonly PrivateLookSource[]): readonly LookData[] {
                 file: `private look ${source.id}`,
                 mintable: true,
             });
-            read.push({ theme: { ...data.theme, sheetLoad: 'worn' }, rows: data.rows });
+            read.push(data);
         } catch {
             // Dropped: its id reads as unknown. The build said why, loudly.
         }

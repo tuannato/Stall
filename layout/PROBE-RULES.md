@@ -4060,3 +4060,48 @@ paints at rest and frozen, so a file's mask or clip written in a state rule
 in a keyframe is refused statically by the look lint instead
 (`a-file-mask-arrives-at-rest`); a `url()` carried in by `var()` is not
 seen there, stated.
+
+## The geometry passes measure whatever face is loaded — a gap, not a rule (8d1's critic, 2026-10-06)
+
+Not a rule: a measured gap, written down so nobody reads the passes as
+measuring the shipped faces. **The geometry passes (mobile, desktop,
+canvas, portrait, tablet) are one synchronous task** — the module body
+paints and measures every screen with no `await` — so a web face that is
+not already loaded when the body starts stays `loading` for the whole pass,
+and the pass lays out and measures every line in the fallback face. The
+contrast passes are the exception: their prepare awaits
+`document.fonts.ready`.
+
+Measured (an instrumented probe, `document.fonts` read per screen and
+variant, every pass, never committed):
+
+- **The ordinary probe on `main`:** the mobile pass, the first navigation of
+  the run, measured all 455 of its screen paints with Inter and JetBrains
+  Mono `loading`; the desktop pass, a later navigation in the same tab,
+  measured all 526 with them `loaded`. So **the phone's geometry — the
+  money pass at 390 — is measured in the fallback faces**, the desktop's in
+  the shipped ones, decided by the browser's cache and not by any rule.
+- **The workshop probe:** the same on `main` for the Rural starter (390
+  fallback; 1280, 1920, 1080×1920, 768×1024 and the second 390 loaded). On
+  8d1 every pass measured fallback faces: the kit's sheet now loads
+  worn-only, so the module body yields once before its first paint — and a
+  yield alone does it (planted: a 50 ms timer in the sheet's place, no
+  sheet appended, gave the same `loading` everywhere). A web face resolved
+  from the memory cache becomes `loaded` within the task that first uses it
+  only when nothing yielded before; why, in Chrome's loader, was not read.
+- **What moved:** the Rural starter's names lay out 1–2 px apart between
+  the two faces (`Roasted Beans` 131 / 133 px at 1280), so the marquee's
+  travel differs (7267 / 7167 ms on `long-item-name`; 3348 / 3087 and
+  5261 / 5022 ms on `shop-window-browse`) and so do the hit-test points that
+  land behind a clip: desktop 518 / 4446 → 531 / 4453, canvas 30 / 1135 →
+  29 / 1131 (`crowded`, `item-unbuyable-fold`, `long-item-name`,
+  `shop-window-browse`). Every verdict held. The critic measured the
+  skeleton's and the Modern starter's counts unchanged and the Neo
+  starter's canvas moved the same way (1051 / 31 → 1048 / 30); only the
+  Rural starter was instrumented here.
+
+Not fixed, stated: the cure — paint each measured look once, then await
+`document.fonts.ready` (or load every face the sheets declare) before the
+synchronous loop — changes what the phone pass of the ordinary probe
+measures for the shipped looks, and may surface failures; it is its own
+change, with a red proof by a face that never loads.

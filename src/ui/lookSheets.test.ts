@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { LOOK_SHEET_PROPERTY, loadLookSheet, lookSheetState, sheetNamesItself } from './lookSheets';
+import { LOOK_SHEET_PROPERTY, askForLookSheet, loadLookSheet, lookSheetState, sheetNamesItself } from './lookSheets';
 
 /**
  * The worn-only loader (`lookSheets.ts`, step 8d1), over a page whose head
@@ -155,5 +155,58 @@ describe('a-sheet-that-loads-but-does-not-name-its-look-has-failed', () => {
             },
         } as unknown as CSSStyleSheet;
         expect(sheetNamesItself(unreadable, 't-x')).toBe(false);
+    });
+});
+
+/**
+ * The renderer's one road to the loader (`applyTheme` → `askForLookSheet`;
+ * CRITIC-STEP-8D1 item 4): it puts the row's sheet on the page — one link,
+ * with the row's URL, under the row's class — answers nothing and throws
+ * nothing, whatever the document does: a failure is held on the page's
+ * entry, never thrown on the paint path, and a document that will not take
+ * the link leaves the sheet `failed`, never `pending` for the page's life.
+ * Red: a no-op `askForLookSheet`; the URL and class swapped; the append
+ * outside its `try`.
+ */
+describe('the-renderers-ask-puts-one-link-on-the-page-and-never-throws', () => {
+    const SHEET = { url: '/assets/sheet-x-abc123.css', cls: 't-x' } as const;
+
+    it('puts one link for the row’s sheet on the page, however often it is asked', () => {
+        const { doc, appended } = page();
+        expect(askForLookSheet(SHEET, doc)).toBeUndefined();
+        askForLookSheet(SHEET, doc);
+        expect(appended).toHaveLength(1);
+        expect((appended[0] as HTMLLinkElement).getAttribute('href')).toBe(`${ORIGIN}${SHEET.url}`);
+        expect(lookSheetState(SHEET.url, doc)).toBe('pending');
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-x')) });
+        expect(lookSheetState(SHEET.url, doc)).toBe('ready');
+    });
+
+    it('holds a failure on the page and throws nothing, the answer or the ask', async () => {
+        const { doc, appended } = page();
+        askForLookSheet(SHEET, doc);
+        expect(() => answer(appended[0]!, 'error')).not.toThrow();
+        // Let the rejection settle: an unobserved one would fail this file.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(lookSheetState(SHEET.url, doc)).toBe('failed');
+        // A sheet refused before any link (another origin) is no throw either.
+        expect(() => askForLookSheet({ url: 'https://elsewhere.test/x.css', cls: 't-x' }, doc)).not.toThrow();
+        expect(appended).toHaveLength(1);
+    });
+
+    it('leaves a sheet the document would not take failed, and throws nothing', async () => {
+        for (const head of [
+            null,
+            {
+                append: () => {
+                    throw new DOMException('the document refused the node', 'HierarchyRequestError');
+                },
+            },
+        ]) {
+            const doc = { ...(page().doc as unknown as object), head } as unknown as Document;
+            expect(() => askForLookSheet(SHEET, doc), String(head)).not.toThrow();
+            expect(lookSheetState(SHEET.url, doc), String(head)).toBe('failed');
+            await expect(loadLookSheet(SHEET.url, SHEET.cls, doc)).rejects.toThrow(/could not be put on the page/);
+        }
     });
 });

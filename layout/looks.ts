@@ -59,7 +59,8 @@ let kit: Look | undefined;
  * sheet is its own file (`layout/workshopKitSheet.ts`, `?url`), loaded by
  * the app's loader before the page paints (`wornSheetsOf`), the road a
  * private look's sheet takes in the app — never in a kit page's entry CSS.
- * So its row is `sheetLoad: 'worn'` whatever its base's was.
+ * Its row says so already: `lookFromData` builds every look read from data
+ * `sheetLoad: 'worn'`.
  */
 export function registerWorkshopLook(
     look: {
@@ -77,7 +78,7 @@ export function registerWorkshopLook(
     kit = {
         id: look.theme.id,
         label: look.theme.label,
-        theme: { ...look.theme, sheetLoad: 'worn' },
+        theme: look.theme,
         rows: look.rows,
         sheetUrl,
     };

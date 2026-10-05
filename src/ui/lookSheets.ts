@@ -47,6 +47,8 @@
  * private look painted before this module existed.
  */
 
+import { LOOK_CLASS } from '../domain/lookClass';
+
 /** The custom property a look sheet names itself with (`LOOK_SHEET_PROPERTY` in `scripts/workshop-css.mjs`). */
 export const LOOK_SHEET_PROPERTY = '--look-sheet';
 
@@ -56,8 +58,6 @@ export type LookSheetState = 'pending' | 'ready' | 'failed';
 /** A look's sheet, as the look table hands it for a worn-only row (`lookSheetOf`). */
 export type LookSheet = { readonly url: string; readonly cls: string };
 
-/** One `t-` class token, as a look row writes one. */
-const LOOK_CLASS = /^t-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type Entry = {
     readonly cls: string;
@@ -142,33 +142,44 @@ export function loadLookSheet(url: string, cls: string, doc: Document = document
         done: settled(new Promise<HTMLLinkElement>((resolve, reject) => (answer = { resolve, reject }))),
     };
     page.set(href, entry);
-    const link = doc.createElement('link');
-    link.rel = 'stylesheet';
-    link.addEventListener(
-        'load',
-        () => {
-            if (sheetNamesItself(link.sheet, cls)) {
-                entry.state = 'ready';
-                answer.resolve(link);
-            } else {
+    // A document that will not take the link (no head, a head that throws)
+    // is a sheet that failed — never a throw on the renderer's paint path,
+    // and never an entry left `pending` for the page's life, which a hold
+    // would wait on until its cap (CRITIC-STEP-8D1 item 4).
+    try {
+        const link = doc.createElement('link');
+        link.rel = 'stylesheet';
+        link.addEventListener(
+            'load',
+            () => {
+                if (sheetNamesItself(link.sheet, cls)) {
+                    entry.state = 'ready';
+                    answer.resolve(link);
+                } else {
+                    entry.state = 'failed';
+                    answer.reject(new Error(`${url} loaded, and is not a sheet naming ${cls}`));
+                }
+            },
+            { once: true },
+        );
+        link.addEventListener(
+            'error',
+            () => {
                 entry.state = 'failed';
-                answer.reject(new Error(`${url} loaded, and is not a sheet naming ${cls}`));
-            }
-        },
-        { once: true },
-    );
-    link.addEventListener(
-        'error',
-        () => {
-            entry.state = 'failed';
-            answer.reject(new Error(`the look sheet at ${url} did not load`));
-        },
-        { once: true },
-    );
-    // Both attributes before the link is connected: a document asks for a
-    // stylesheet the moment it is in the tree with both.
-    link.href = href;
-    doc.head.append(link);
+                answer.reject(new Error(`the look sheet at ${url} did not load`));
+            },
+            { once: true },
+        );
+        // Both attributes before the link is connected: a document asks for a
+        // stylesheet the moment it is in the tree with both.
+        link.href = href;
+        doc.head.append(link);
+    } catch (err) {
+        entry.state = 'failed';
+        answer.reject(
+            new Error(`the look sheet at ${url} could not be put on the page: ${err instanceof Error ? err.message : String(err)}`),
+        );
+    }
     return entry.done;
 }
 

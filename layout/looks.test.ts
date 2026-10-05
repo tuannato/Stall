@@ -97,6 +97,10 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         expect(looksFor('offers')).toContain(skeleton);
         expect(looksFor('door')).not.toContain(skeleton);
 
+        // Every look read from data is worn-only from the row up (8d1):
+        // nothing that reads the kit's row before it is registered meets its
+        // base's `bundled`.
+        expect(parseWorkshopLook(lookFileText(KIT_SKELETON)).theme.sheetLoad).toBe('worn');
         registerWorkshopLook(parseWorkshopLook(lookFileText(KIT_SKELETON)), KIT_URL);
         const kit = kitLook()!;
         // The probe measures the kit ALONE, and the door not at all.

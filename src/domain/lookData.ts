@@ -604,6 +604,11 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
         id: place.id,
         known: true,
         sheetClass: place.sheetClass,
+        // Every look read from data is worn-only: its sheet is its own file
+        // (a private look's, the workshop kit's — 8d1), never the entry CSS
+        // its base's row is bundled in. Stamped here, where the row is
+        // built, so no reader meets the base's `bundled`.
+        sheetLoad: 'worn',
         label: label!,
         tierCeilings: tiers!,
         overlayTierCeilings: overlayTiers!,

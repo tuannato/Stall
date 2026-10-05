@@ -19,9 +19,12 @@ describe('a-kit-look-json-is-validated-and-every-fault-listed', () => {
         expect(look.theme.label).toBe(KIT_SKELETON.label);
         expect(look.theme.tierCeilings).toEqual([7, 9, 12]);
         expect(look.theme.overlayTierCeilings).toEqual([5, 7, 9]);
-        // Nothing restated: every other field is Modern's row.
-        const { id: _i, known: _k, sheetClass: _c, label: _l, ...rest } = look.theme;
-        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, ...modern } = DEFAULT_THEME;
+        // Worn-only, as every look read from data is (8d1): its sheet is its
+        // own file, never the entry CSS its base's row is bundled in.
+        expect(look.theme.sheetLoad).toBe('worn');
+        // Nothing else restated: every other field is Modern's row.
+        const { id: _i, known: _k, sheetClass: _c, label: _l, sheetLoad: _s, ...rest } = look.theme;
+        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, sheetLoad: _s2, ...modern } = DEFAULT_THEME;
         expect(rest).toEqual(modern);
         expect(look.rows).toEqual([]);
     });
